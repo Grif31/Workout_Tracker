@@ -11,10 +11,10 @@ export default function LoginScreen({ navigation }: Props) : JSX.Element {
 
     const handleLogin = async () => {
         try {
-            const res = await fetch('http://127.0.0.1:5000/login', {
-                method: 'POST', 
-                headers: {'Content-Type': 'application/json'}, 
-                body: JSON.stringify({email, password})
+            const res = await fetch('http://192.168.1.24:5000/api/login', {
+              method: 'POST', 
+              headers: {'Content-Type': 'application/json'}, 
+              body: JSON.stringify({email, password})
             });
 
             const data = await res.json();
@@ -24,7 +24,7 @@ export default function LoginScreen({ navigation }: Props) : JSX.Element {
                 Alert.alert('Login Failed', data.message || 'Invalid Credentials');
             }
         } catch(error){
-            Alert.alert('Error', 'Something went wrong, pleast try again');
+            Alert.alert('Error', 'Something went wrong, please try again');
 
         }
     }
@@ -47,6 +47,7 @@ export default function LoginScreen({ navigation }: Props) : JSX.Element {
         onChangeText={setPassword}
       />
       <Button title="Login" onPress={handleLogin} />
+      <Button title="Create Account " onPress={() => navigation.navigate('Signup')} />
     </View>
   );
 }

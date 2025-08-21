@@ -13,7 +13,7 @@ db.init_app(app)
 #create database
 with app.app_context():
     db.create_all()
-    
+        
 
 @app.route('/users')
 def get_users():
@@ -29,7 +29,7 @@ def add_workout():
     
     return jsonify({'message': 'New Workout Added'}), 201
 
-@app.post('/login')
+@app.post('/api/login')
 def login():
     data = request.get_json()
     email = data.get('email')
@@ -41,25 +41,40 @@ def login():
     else:
         return jsonify({'message': 'Invalid Credentials'}), 401
 
-@app.route('/register')
-def register():
-    data = request.get_json()
-    email = data.get('email')
-    username = data.get('username')
-    password = data.get('password')
+@app.post('/api/signup')
+def signup():
+    try:
+        data = request.get_json()
+        print(data)
+        username = data.get('username')
+        email = data.get('email')
+        password = data.get('password')
     
-    # Determines if email or username is taken
-    if User.query.filter_by(email=email).first():
-        return jsonify({'message': 'Email connected to another account'}), 400
-    if User.query.filter_by(username=username).first():
-        return jsonify({'message': 'Username Taken'}), 400
+        if not username or not email or not password:
+            return jsonify({'message': 'all fields required'}), 400
+        # Determines if email or username is taken
+        if User.query.filter_by(email=email).first():
+            return jsonify({'message': 'Email connected to another account'}), 400
+        if User.query.filter_by(username=username).first():
+            return jsonify({'message': 'Username Taken'}), 400
     
-    hashed_password = generate_password_hash(password, method="pbkdf2:sha256")
+        hashed_password = generate_password_hash(password, method="pbkdf2:sha256")
     
-    # create new user 
-    new_user = User(email=email, username=username, password=hashed_password)
-    db.session.add(new_user)
-    db.session.commit()
+        # create new user 
+        new_user = User(email=email, username=username, password=hashed_password)
+        db.session.add(new_user)
+        db.session.commit()
     
+        return jsonify({'message': 'User registered successfully'}), 201
+    except Exception as e:
+        # Log the error for debugging
+        print(f"Signup error: {e}")
+        return jsonify({'message': 'Internal server error'}), 500
+
+print("Registered routes:")
+for rule in app.url_map.iter_rules():
+    print(rule, rule.methods)
+
+
 if __name__ == '__main__':
-    app.run(debug=False)
+    app.run(debug=False, host="0.0.0.0")
