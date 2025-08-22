@@ -20,16 +20,10 @@ class Workout(db.Model):
     notes = db.Column(db.String(250))
     exercises = db.relationship('Exercise', backref='workout', lazy=True)
     
-class Exercise(db.Model):
+class ExerciseTemplate(db.Model):
     __tablename__ = "exercises"
     id = db.Column(db.Integer, primary_key=True)
-    workout_id = db.Column(db.Integer, db.ForeignKey('workouts.id'), nullable=False)
-    name = db.Column(db.String(250), nullable=False)
-    reps = db.Column(db.Integer)
-    sets = db.Column(db.Integer)
-    weight = db.Column(db.Float) 
-    duration = db.Column(db.Integer)
-    notes = db.Column(db.String(250))
+    name = db.Column ( db.String(250), unique=True, nullable=False)
     
     
     

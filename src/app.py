@@ -1,5 +1,5 @@
 from flask import Flask, redirect, render_template, url_for, request, jsonify
-from models import db, User, Workout, Exercise
+from models import db, User, Workout, ExerciseTemplate
 from flask_cors import CORS
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -14,13 +14,37 @@ db.init_app(app)
 with app.app_context():
     db.create_all()
         
-
+#Get all Users from db
 @app.route('/users')
 def get_users():
     users = User.query.all()
     return jsonify([{'id': user.id, 'username': user.username} for user in users])
 
-@app.post('/workouts')
+#Get all exercises from db
+@app.get('/api/exercises')
+def get_exercises():
+    exercises = ExerciseTemplate.query.all()
+    return jsonify([{'id': exercise.id, 'name':exercise.name} for exercise in exercises])
+
+# Add new workout to database
+@app.post('/api/exercises')
+def add_exercise():
+    data = request.get_json()
+    name = data.get('name', '').strip()
+    
+    if not name:
+        return jsonify({'message': 'Name Required'}), 400
+    if ExerciseTemplate.query.filter_by(name=name).first():
+        return jsonify({'message': 'Exercise Already Exists'}), 400
+    
+    new_exercise = ExerciseTemplate(name=name)
+    db.session.add(new_exercise)
+    db.session.commit()
+    
+    return jsonify({'message': 'New Exercise added'}), 201
+
+    
+@app.post('/api/workouts')
 def add_workout():
     data = request.get_json()
     new_workout = Workout(user_id=data['user.id'], name=data['name'], notes=data.get('notes', ''))
