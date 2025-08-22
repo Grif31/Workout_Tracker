@@ -1,13 +1,21 @@
 from flask import Flask, redirect, render_template, url_for, request, jsonify
-from models import db, User, Workout, ExerciseTemplate
+from models import db, User, Workout, ExerciseTemplate, Set, Exercise
 from flask_cors import CORS
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
+from flask_jwt_extended import JWTManager
+
+
 
 app = Flask(__name__)
 CORS(app)
+app.config['JWT_SECRET_KEY'] = 'super-secret-key'
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///workout_tracker.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+
+jwt = JWTManager(app)
+
 
 db.init_app(app)
 #create database
@@ -46,12 +54,36 @@ def add_exercise():
     
 @app.post('/api/workouts')
 def add_workout():
-    data = request.get_json()
-    new_workout = Workout(user_id=data['user.id'], name=data['name'], notes=data.get('notes', ''))
-    db.session.add(new_workout)
-    db.session.commit()
+    try:
+        data = request.get_json()
+        name = data.get('name')
+        user_id = data.get('user.id')
+        notes = data.get('notes')
+        exercises = data.get('exercises', [])
+        
+        if not user_id or not name:
+            return jsonify({'message': 'user_id and name required'}),400
+        
+        new_workout = Workout(user_id=user_id, name=name, notes=notes)
+        db.session.add(new_workout)
+        db.session.flush()
+        
+        for ex in exercises:
+            new_ex = Exercise(workout_id=new_workout.id, name=ex['name'])
+            db.session.add(new_ex)
+            db.session.flush()
+            
+            for s in ex.get('sets', []):
+                new_set = Set(exercise_id=new_ex.id, reps=s['reps'], weight=s['weight'])
+                db.session.add(new_set)
+        db.session.commit()
+                
+        return jsonify({'message': 'New Workout Added'}), 201
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error {e}")
+        return jsonify({'message':'Internal Server Error'}), 500
     
-    return jsonify({'message': 'New Workout Added'}), 201
 
 @app.post('/api/login')
 def login():

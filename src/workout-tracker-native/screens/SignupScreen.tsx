@@ -24,7 +24,6 @@ export default function SignupScreen({navigation}: Props): JSX.Element{
                 body: JSON.stringify({username, email, password})
             });
 
-            console.log(res);
             const data = await res.json();
             
             if(res.ok){
