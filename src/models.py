@@ -10,6 +10,8 @@ class User(db.Model):
     username = db.Column(db.String(250), unique =True, nullable=False)
     password = db.Column(db.String(250), nullable=False)
     workouts = db.relationship('Workout', backref='user', lazy=True)
+    
+    
 
 class Workout(db.Model):
     __tablename__ = "workouts"

@@ -2,6 +2,8 @@ import React, { JSX } from 'react';
 import { View, Text, Button, Alert, StyleSheet, TextInput } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
@@ -19,6 +21,7 @@ export default function LoginScreen({ navigation }: Props) : JSX.Element {
 
             const data = await res.json();
             if(res.ok){
+                await AsyncStorage.setItem('token', data.access_token);
                 navigation.navigate('Dashboard');
             }else {
                 Alert.alert('Login Failed', data.message || 'Invalid Credentials');

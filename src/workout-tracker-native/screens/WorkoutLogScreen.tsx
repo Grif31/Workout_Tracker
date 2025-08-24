@@ -3,10 +3,10 @@ import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, Modal, Scro
 import { Picker } from '@react-native-picker/picker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {Set} from '../types/models'
 
-type SetEntry = {reps: number, weight: number}
-type ExerciseEntry = { name: string, sets: SetEntry[]}
-
+type ExerciseEntry = {name: string, sets: Set[]}
 type Props = NativeStackScreenProps<RootStackParamList, 'WorkoutLog'>;
 
 export default function WorkoutLogScreen({navigation}: Props) {
@@ -18,16 +18,17 @@ export default function WorkoutLogScreen({navigation}: Props) {
   const [selectedExercise, setSelectedExercise] = useState('')
   const [newExercise, setNewExercise] = useState('')
   
-  const [currentSets, setCurrentSets] = useState<SetEntry[]>([]);
+  const [currentSets, setCurrentSets] = useState<Set[]>([]);
   const [reps, setReps] = useState('')
   const [weight, setWeight] = useState('')
 
-   const [exerciseModalVisible, setExerciseModalVisible] = useState(false);
+
+  const [exerciseModalVisible, setExerciseModalVisible] = useState(false);
 
   useEffect(() => {
     fetchExercises();
   }, []);
-
+// Updates master list of exercises
   const fetchExercises = async () => {
     try{
       const res = await fetch('http://192.168.1.24:5000/api/exercises');
@@ -40,7 +41,7 @@ export default function WorkoutLogScreen({navigation}: Props) {
       console.error(err)
     }
   }
-
+  //add a new Exercises to master list
   const addNewExercise = async () => {
     if (!newExercise.trim()) return;
     try { 
@@ -61,6 +62,7 @@ export default function WorkoutLogScreen({navigation}: Props) {
       Alert.alert('Error', 'Something went wrong')
     }
   }
+
   // Add set to current exercise
   const addSet = () => {
     if (!reps || !weight) return;
@@ -68,22 +70,30 @@ export default function WorkoutLogScreen({navigation}: Props) {
     setReps('');
     setWeight('');
   }
+
   //Saves exercise to the current workout with all of its sets
   const saveExToWorkout = () => {
     if(!selectedExercise || currentSets.length === 0) return;
     setExercises([...exercises, {name: selectedExercise, sets: currentSets}])
     setSelectedExercise(exerciseList.length > 0 ? exerciseList[0].name : '');
     setCurrentSets([]);
+    setExerciseModalVisible(false);
   }
+
   // submits workout 
   const submitWorkout = async () => {
     try {
+      const token = await AsyncStorage.getItem('token');
       const res = await fetch('http://192.168.1.24:5000/api/workouts', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({userid, workoutName, notes, exercises})
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({name:workoutName, notes:notes, exercises:exercises})
       });
       const data = await res.json();
+      console.log('Status:', res.status, 'Body:', data);
       if(res.ok){
         Alert.alert('Success', 'Workout Logged')
         navigation.navigate('Dashboard')
@@ -103,7 +113,7 @@ export default function WorkoutLogScreen({navigation}: Props) {
 
       <Button title="Add Exercise" onPress={() => setExerciseModalVisible(true)} />
 
-      <Text style={styles.subtitle}>Exercises in Workout</Text>
+      <Text style={styles.subtitle}> Exercises in Workout</Text>
       <FlatList
         data={exercises}
         keyExtractor={(_, index) => index.toString()}
