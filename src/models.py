@@ -33,6 +33,7 @@ class ExerciseTemplate(db.Model):
     __tablename__ = "exerciseTemplates"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column (db.String(250), unique=True, nullable=False)
+    muscle_group = db.Column(db.String(250), unique=True, nullable=False)
         
 class Set(db.Model):
     __tablename__ = "sets"

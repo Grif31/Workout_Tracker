@@ -1,27 +1,32 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, Modal, ScrollView, TouchableOpacity } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, Modal, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {Set} from '../types/models'
+import {Exercise, Set} from '../types/models'
+import Swipeable from 'react-native-gesture-handler/Swipeable';
+
 
 type ExerciseEntry = {name: string, sets: Set[]}
 type Props = NativeStackScreenProps<RootStackParamList, 'WorkoutLog'>;
+
+const muscleGroups = ['All', 'Chest', 'Back', 'Legs', 'Arms', 'Shoulders', 'Core','Other']
 
 export default function WorkoutLogScreen({navigation}: Props) {
   const [workoutName, setWorkoutName] = useState('')
   const [notes, setNotes] = useState('')
   const [exercises, setExercises] = useState<ExerciseEntry[]>([])
 
-  const [exerciseList, setExerciseList] = useState<{id: number, name: string}[]>([])
-  const [selectedExercise, setSelectedExercise] = useState('')
+  const [exerciseList, setExerciseList] = useState<{id: number, name: string, muscle_group: string}[]>([])
   const [newExercise, setNewExercise] = useState('')
+  const [newExMuscle, setNewExMuscle] = useState('')
   
   const [currentSets, setCurrentSets] = useState<Set[]>([]);
   const [reps, setReps] = useState('')
   const [weight, setWeight] = useState('')
-
+  
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedMuscle, setSelectedMuscle] = useState('All')
 
   const [exerciseModalVisible, setExerciseModalVisible] = useState(false);
 
@@ -35,8 +40,6 @@ export default function WorkoutLogScreen({navigation}: Props) {
       const data = await res.json();
       setExerciseList(data);
 
-      if(data.length > 0 ) setSelectedExercise(data[0].name)
-
     }catch(err){
       console.error(err)
     }
@@ -48,11 +51,12 @@ export default function WorkoutLogScreen({navigation}: Props) {
       const res = await fetch('http://192.168.1.24:5000/api/exercises', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name: newExercise})
+        body: JSON.stringify({name: newExercise, muscle_group: newExMuscle})
       })
       const data = await res.json();
       if (res.ok){
         setNewExercise('');
+        setNewExMuscle('')
         fetchExercises();
         Alert.alert('Success', 'New Exercise Added')
       }else{
@@ -64,21 +68,56 @@ export default function WorkoutLogScreen({navigation}: Props) {
   }
 
   // Add set to current exercise
-  const addSet = () => {
-    if (!reps || !weight) return;
-    setCurrentSets([...currentSets, {reps: Number(reps), weight: Number(weight)}]);
-    setReps('');
-    setWeight('');
-  }
+  const updateSetField = (exerciseIndex: number, setIndex: number, field: keyof Set, value: string) => {
+    const updated = [...exercises];
+    updated[exerciseIndex].sets[setIndex][field] = value;
+    setExercises(updated);
+  };
+  const addSetToExercise = (exerciseIndex: number) => {
+    const updated = [...exercises];
+    updated[exerciseIndex].sets.push({ reps: '', weight: '' });
+    setExercises(updated);
+  };
+  const deleteSet = (exerciseIndex: number, setIndex: number) => {
+    const updated = [...exercises];
+    updated[exerciseIndex].sets.splice(setIndex, 1);
+    setExercises(updated);
+  };
+  const deleteEx = (exIndex: number) => {
+    const updated = [...exercises];
+    updated.splice(exIndex, 1);
+    setExercises(updated);
+  };
 
-  //Saves exercise to the current workout with all of its sets
-  const saveExToWorkout = () => {
-    if(!selectedExercise || currentSets.length === 0) return;
-    setExercises([...exercises, {name: selectedExercise, sets: currentSets}])
-    setSelectedExercise(exerciseList.length > 0 ? exerciseList[0].name : '');
-    setCurrentSets([]);
+  const renderDeleteAction = (onDelete: () => void) => (
+  <TouchableOpacity
+    style={{
+      backgroundColor: 'red',
+      justifyContent: 'center',
+      alignItems: 'flex-end',
+      paddingHorizontal: 20,
+      borderRadius: 5
+    }}
+    onPress={onDelete}
+  >
+    <Text style={{ color: 'white', fontWeight: 'bold' }}>Delete</Text>
+  </TouchableOpacity>
+);
+
+
+  //Saves exercise to the current workout
+  const addExToWorkout = (exerciseName: string) => {
+    setExercises(prev => [
+      ...prev,
+      { name: exerciseName, sets: [{ reps: '', weight: '' }] }
+    ]);
     setExerciseModalVisible(false);
-  }
+  };
+  const filteredEx = exerciseList.filter(ex => {
+    const searchMatch = ex.name.toLowerCase().includes(searchQuery.toLowerCase())
+    const muscleMatch = selectedMuscle === 'All' || ex.muscle_group === selectedMuscle 
+    return searchMatch && muscleMatch;
+  });
 
   // submits workout 
   const submitWorkout = async () => {
@@ -106,91 +145,123 @@ export default function WorkoutLogScreen({navigation}: Props) {
   }
   
   return (
-     <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAvoidingView
+    style={{ flex: 1 }}
+    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0} 
+    >
+    <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Log Workout</Text>
-      <TextInput style={styles.input} placeholder="Workout Name" value={workoutName} onChangeText={setWorkoutName} />
-      <TextInput style={styles.input} placeholder="Notes" value={notes} onChangeText={setNotes} />
-
-      <Button title="Add Exercise" onPress={() => setExerciseModalVisible(true)} />
-
-      <Text style={styles.subtitle}> Exercises in Workout</Text>
-      <FlatList
-        data={exercises}
-        keyExtractor={(_, index) => index.toString()}
-        renderItem={({ item }) => (
-          <View style={styles.exerciseBlock}>
-            <Text style={{ fontWeight: 'bold' }}>{item.name}</Text>
-            {item.sets.map((s, i) => (
-              <Text key={i}>Set {i + 1}: {s.reps} reps @ {s.weight}kg</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Workout Name"
+        value={workoutName}
+        onChangeText={setWorkoutName}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Notes"
+        value={notes}
+        onChangeText={setNotes}
+      />
+      <Button title='Add Exercise' onPress={() => (setExerciseModalVisible(true))} />
+      <Modal visible={exerciseModalVisible} animationType='fade'>
+        <View style={styles.modal}>
+          <Text style={styles.subtitle}>Select Exercise</Text>
+          <TextInput style={styles.input} placeholder='search for exercise' value={searchQuery} onChangeText={setSearchQuery}/>
+          <View style={styles.muscleFilter}>
+            {muscleGroups.map(muscle => (
+              <TouchableOpacity key={muscle} style={[
+                  styles.muscleButton,
+                  selectedMuscle === muscle && styles.muscleButtonSelected
+                ]} onPress={() => setSelectedMuscle(muscle)}>
+                <Text>{muscle}</Text>
+              </TouchableOpacity>
             ))}
           </View>
-        )}
-      />
-
-      <Button title="Save Workout" onPress={submitWorkout} />
-
-      {/* Exercise Picker Modal */}
-      <Modal visible={exerciseModalVisible} animationType="slide">
-        <View style={styles.modalContainer}>
-          <Text style={styles.subtitle}>Select Exercise</Text>
-          <FlatList
-            data={exerciseList}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[
-                  styles.exerciseItem,
-                  selectedExercise === item.name && styles.selectedExercise
-                ]}
-                onPress={() => setSelectedExercise(item.name)}
-              >
+          <FlatList data={filteredEx} keyExtractor={(ex) => ex.id.toString()}
+            renderItem={({item}) => (
+              <TouchableOpacity style={styles.exerciseButton} onPress={() => addExToWorkout(item.name)}>
                 <Text>{item.name}</Text>
               </TouchableOpacity>
             )}
           />
-
           <Text style={styles.subtitle}>Add New Exercise</Text>
           <TextInput
             style={styles.input}
-            placeholder="New Exercise Name"
+            placeholder="Exercise Name"
             value={newExercise}
             onChangeText={setNewExercise}
           />
-          <Button title="Add to List" onPress={addNewExercise} />
-
-          {selectedExercise ? (
-            <>
-              <Text style={styles.subtitle}>Add Sets for {selectedExercise}</Text>
-              <TextInput style={styles.input} placeholder="Reps" keyboardType="numeric" value={reps} onChangeText={setReps} />
-              <TextInput style={styles.input} placeholder="Weight" keyboardType="numeric" value={weight} onChangeText={setWeight} />
-              <Button title="Add Set" onPress={addSet} />
-
-              <FlatList
-                data={currentSets}
-                keyExtractor={(_, index) => index.toString()}
-                renderItem={({ item, index }) => (
-                  <Text>Set {index + 1}: {item.reps} reps @ {item.weight}kg</Text>
-                )}
-              />
-
-              <Button title="Save Exercise to Workout" onPress={saveExToWorkout} />
-            </>
-          ) : null}
+          <TextInput
+            style={styles.input}
+            placeholder="Muscle Group"
+            value={newExMuscle}
+            onChangeText={setNewExMuscle}
+          />
+          <Button title="Save Exercise" onPress={addNewExercise} />
 
           <Button title="Close" onPress={() => setExerciseModalVisible(false)} />
         </View>
       </Modal>
+      <Text style={styles.subtitle}>Exercises</Text>
+      {exercises.map((exercise, exIndex) => (
+        
+
+        <View key={exIndex} style={styles.exerciseBlock}>
+          <Text style={styles.exerciseName}>{exercise.name}</Text>
+          {exercise.sets.map((set, setIndex) => (
+            <Swipeable
+              key={setIndex}
+              renderRightActions={() => renderDeleteAction(() => deleteSet(exIndex, setIndex))}
+            >
+            <View key={setIndex} style={styles.setRow}>
+              <Text>Set {setIndex + 1}:</Text>
+              <TextInput
+                style={styles.setInput}
+                placeholder="Reps"
+                keyboardType="numeric"
+                value={set.reps}
+                onChangeText={(val) => updateSetField(exIndex, setIndex, 'reps', val)}
+              />
+              <Text>x</Text>
+              <TextInput
+                style={styles.setInput}
+                placeholder="Weight"
+                keyboardType="numeric"
+                value={set.weight}
+                onChangeText={(val) => updateSetField(exIndex, setIndex, 'weight', val)}
+              /><Text>lbs</Text>
+              <TouchableOpacity onPress={() => deleteSet(exIndex, setIndex)}>
+                <Text style={{ color: 'red', marginLeft: 10 }}>❌</Text>
+              </TouchableOpacity>
+            
+            </View>
+            </Swipeable>
+          ))}
+          <Button title="Add Set" onPress={() => addSetToExercise(exIndex)} />
+        </View>
+      ))}
+
+      <Button title="Save Workout" onPress={submitWorkout} />
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
-const styles =StyleSheet.create({
-  container: { flex: 1, padding: 5 },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
-  subtitle: { fontSize: 18, fontWeight: 'bold', marginTop: 20, width: 1, borderColor: '#181717ff', padding: 10 },
-  input: { borderWidth: 1, marginBottom: 10, borderRadius: 5 },
-  exerciseBlock: { marginBottom: 15 },
-  modalContainer: { flex: 1, padding: 20 },
-  exerciseItem: { padding: 10, borderBottomWidth: 1, borderBottomColor: '#ccc' },
-  selectedExercise: { backgroundColor: '#e0e0e0' }
-});
 
+const styles = StyleSheet.create({
+  container: { padding: 20 },
+  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
+  subtitle: { fontSize: 18, fontWeight: 'bold', marginTop: 20, marginBottom: 10 },
+  input: { borderWidth: 1, borderColor: '#ccc', padding: 10, marginBottom: 10, borderRadius: 5, color:'#353434ff' },
+  exerciseButton: { padding: 10, backgroundColor: '#eee', marginBottom: 5, borderRadius: 5 },
+  exerciseBlock: { marginBottom: 20, padding: 10, backgroundColor: '#f9f9f9', borderRadius: 5 },
+  exerciseName: { fontWeight: 'bold', fontSize: 16, marginBottom: 5 },
+  setRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
+  setInput: { borderWidth: 1, borderColor: '#ccc', padding: 5, marginHorizontal: 5, width: 60, borderRadius: 5, marginBottom: 5 },
+  modal: { flex: 1, padding: 20 },
+  muscleFilter: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 10 },
+  muscleButton: { padding: 8, backgroundColor: '#eee', borderRadius: 5, margin: 3 },
+  muscleButtonSelected: { backgroundColor: '#cce5ff' },
+
+});
