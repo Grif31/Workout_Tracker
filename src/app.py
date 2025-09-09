@@ -29,6 +29,13 @@ def create_app():
         print(rule, rule.methods)
     return app
 
+def clear_all_data():
+    meta = db.metadata
+    for table in reversed(meta.sorted_tables):
+        db.session.execute(table.delete())
+    db.session.commit()
+
+
 if __name__ == '__main__':
     app = create_app()
     with app.app_context():

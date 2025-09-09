@@ -1,10 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, Modal, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, Modal, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, LayoutAnimation, UIManager} from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {Exercise, Set} from '../types/models'
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import {Set} from '../types/models'
+import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+import { colors } from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
+import ExerciseListModal from '../components/ExerciseList';
+import NewExerciseForm from '../components/NewExerciseForm';
+
+
 
 
 type ExerciseEntry = {name: string, sets: Set[]}
@@ -18,17 +26,15 @@ export default function WorkoutLogScreen({navigation}: Props) {
   const [exercises, setExercises] = useState<ExerciseEntry[]>([])
 
   const [exerciseList, setExerciseList] = useState<{id: number, name: string, muscle_group: string}[]>([])
-  const [newExercise, setNewExercise] = useState('')
-  const [newExMuscle, setNewExMuscle] = useState('')
+
+  const [exerciseModalVisible, setExerciseModalVisible] = useState(false);
+  const [newExerciseFormVisible, setNewExerciseFormVisible] = useState(false);
   
   const [currentSets, setCurrentSets] = useState<Set[]>([]);
   const [reps, setReps] = useState('')
   const [weight, setWeight] = useState('')
   
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedMuscle, setSelectedMuscle] = useState('All')
 
-  const [exerciseModalVisible, setExerciseModalVisible] = useState(false);
 
   useEffect(() => {
     fetchExercises();
@@ -36,7 +42,7 @@ export default function WorkoutLogScreen({navigation}: Props) {
 // Updates master list of exercises
   const fetchExercises = async () => {
     try{
-      const res = await fetch('http://192.168.1.24:5000/api/exercises');
+      const res = await fetch('http://192.168.68.55:5000/api/exercises');
       const data = await res.json();
       setExerciseList(data);
 
@@ -45,18 +51,16 @@ export default function WorkoutLogScreen({navigation}: Props) {
     }
   }
   //add a new Exercises to master list
-  const addNewExercise = async () => {
-    if (!newExercise.trim()) return;
+  const addNewExercise = async (name: string, muscle: string) => {
+    if (!name.trim()) return;
     try { 
-      const res = await fetch('http://192.168.1.24:5000/api/exercises', {
+      const res = await fetch('http://192.168.68.55:5000/api/exercises', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name: newExercise, muscle_group: newExMuscle})
+        body: JSON.stringify({name, muscle_group: muscle})
       })
       const data = await res.json();
       if (res.ok){
-        setNewExercise('');
-        setNewExMuscle('')
         fetchExercises();
         Alert.alert('Success', 'New Exercise Added')
       }else{
@@ -67,22 +71,25 @@ export default function WorkoutLogScreen({navigation}: Props) {
     }
   }
 
-  // Add set to current exercise
+  // Updates the reps and weight for current set
   const updateSetField = (exerciseIndex: number, setIndex: number, field: keyof Set, value: string) => {
     const updated = [...exercises];
     updated[exerciseIndex].sets[setIndex][field] = value;
     setExercises(updated);
   };
+  // adds a new blank set to exercise
   const addSetToExercise = (exerciseIndex: number) => {
     const updated = [...exercises];
     updated[exerciseIndex].sets.push({ reps: '', weight: '' });
     setExercises(updated);
   };
+  
   const deleteSet = (exerciseIndex: number, setIndex: number) => {
     const updated = [...exercises];
     updated[exerciseIndex].sets.splice(setIndex, 1);
     setExercises(updated);
   };
+
   const deleteEx = (exIndex: number) => {
     const updated = [...exercises];
     updated.splice(exIndex, 1);
@@ -95,15 +102,14 @@ export default function WorkoutLogScreen({navigation}: Props) {
       backgroundColor: 'red',
       justifyContent: 'center',
       alignItems: 'flex-end',
-      paddingHorizontal: 20,
-      borderRadius: 5
+      paddingHorizontal: spacing.lg,
+      borderRadius: spacing.sm,
     }}
     onPress={onDelete}
   >
     <Text style={{ color: 'white', fontWeight: 'bold' }}>Delete</Text>
   </TouchableOpacity>
 );
-
 
   //Saves exercise to the current workout
   const addExToWorkout = (exerciseName: string) => {
@@ -113,17 +119,14 @@ export default function WorkoutLogScreen({navigation}: Props) {
     ]);
     setExerciseModalVisible(false);
   };
-  const filteredEx = exerciseList.filter(ex => {
-    const searchMatch = ex.name.toLowerCase().includes(searchQuery.toLowerCase())
-    const muscleMatch = selectedMuscle === 'All' || ex.muscle_group === selectedMuscle 
-    return searchMatch && muscleMatch;
-  });
+
+
 
   // submits workout 
   const submitWorkout = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
-      const res = await fetch('http://192.168.1.24:5000/api/workouts', {
+      const res = await fetch('http://192.168.68.55:5000/api/workouts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -146,9 +149,9 @@ export default function WorkoutLogScreen({navigation}: Props) {
   
   return (
     <KeyboardAvoidingView
-    style={{ flex: 1 }}
-    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0} 
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0} 
     >
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Log Workout</Text>
@@ -165,56 +168,41 @@ export default function WorkoutLogScreen({navigation}: Props) {
         onChangeText={setNotes}
       />
       <Button title='Add Exercise' onPress={() => (setExerciseModalVisible(true))} />
-      <Modal visible={exerciseModalVisible} animationType='fade'>
-        <View style={styles.modal}>
-          <Text style={styles.subtitle}>Select Exercise</Text>
-          <TextInput style={styles.input} placeholder='search for exercise' value={searchQuery} onChangeText={setSearchQuery}/>
-          <View style={styles.muscleFilter}>
-            {muscleGroups.map(muscle => (
-              <TouchableOpacity key={muscle} style={[
-                  styles.muscleButton,
-                  selectedMuscle === muscle && styles.muscleButtonSelected
-                ]} onPress={() => setSelectedMuscle(muscle)}>
-                <Text>{muscle}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <FlatList data={filteredEx} keyExtractor={(ex) => ex.id.toString()}
-            renderItem={({item}) => (
-              <TouchableOpacity style={styles.exerciseButton} onPress={() => addExToWorkout(item.name)}>
-                <Text>{item.name}</Text>
-              </TouchableOpacity>
-            )}
-          />
-          <Text style={styles.subtitle}>Add New Exercise</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Exercise Name"
-            value={newExercise}
-            onChangeText={setNewExercise}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Muscle Group"
-            value={newExMuscle}
-            onChangeText={setNewExMuscle}
-          />
-          <Button title="Save Exercise" onPress={addNewExercise} />
+      <ExerciseListModal
+        visible={exerciseModalVisible}
+        onClose={() => setExerciseModalVisible(false)}
+        exercises={exerciseList}
+        onSelect={(name) => {
+          addExToWorkout(name);
+          setExerciseModalVisible(false);
+        }}
+        onAddExercise={(name, muscle) => {
+          addNewExercise(name, muscle);
+          setNewExerciseFormVisible(false);
+        }}
+        muscleGroups={muscleGroups}
+      />
 
-          <Button title="Close" onPress={() => setExerciseModalVisible(false)} />
-        </View>
-      </Modal>
+      <NewExerciseForm
+        visible={newExerciseFormVisible}
+        onClose={() => setNewExerciseFormVisible(false)}
+        onSave={(name, muscle) => {
+          addNewExercise(name, muscle);
+          setNewExerciseFormVisible(false);
+        }}
+        muscleGroups={muscleGroups}
+      />
+
       <Text style={styles.subtitle}>Exercises</Text>
       {exercises.map((exercise, exIndex) => (
-        
-
-        <View key={exIndex} style={styles.exerciseBlock}>
+         
+        <Swipeable
+          key={exIndex}
+          renderRightActions={() => renderDeleteAction(() => deleteEx(exIndex))}
+        >
+          <View key={exIndex} style={styles.exerciseBlock}>
           <Text style={styles.exerciseName}>{exercise.name}</Text>
           {exercise.sets.map((set, setIndex) => (
-            <Swipeable
-              key={setIndex}
-              renderRightActions={() => renderDeleteAction(() => deleteSet(exIndex, setIndex))}
-            >
             <View key={setIndex} style={styles.setRow}>
               <Text>Set {setIndex + 1}:</Text>
               <TextInput
@@ -235,12 +223,14 @@ export default function WorkoutLogScreen({navigation}: Props) {
               <TouchableOpacity onPress={() => deleteSet(exIndex, setIndex)}>
                 <Text style={{ color: 'red', marginLeft: 10 }}>❌</Text>
               </TouchableOpacity>
-            
             </View>
-            </Swipeable>
+            
           ))}
+          
           <Button title="Add Set" onPress={() => addSetToExercise(exIndex)} />
+        
         </View>
+        </Swipeable>
       ))}
 
       <Button title="Save Workout" onPress={submitWorkout} />
@@ -249,19 +239,20 @@ export default function WorkoutLogScreen({navigation}: Props) {
   );
 }
 
+
+
 const styles = StyleSheet.create({
-  container: { padding: 20 },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
-  subtitle: { fontSize: 18, fontWeight: 'bold', marginTop: 20, marginBottom: 10 },
-  input: { borderWidth: 1, borderColor: '#ccc', padding: 10, marginBottom: 10, borderRadius: 5, color:'#353434ff' },
-  exerciseButton: { padding: 10, backgroundColor: '#eee', marginBottom: 5, borderRadius: 5 },
-  exerciseBlock: { marginBottom: 20, padding: 10, backgroundColor: '#f9f9f9', borderRadius: 5 },
-  exerciseName: { fontWeight: 'bold', fontSize: 16, marginBottom: 5 },
-  setRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
-  setInput: { borderWidth: 1, borderColor: '#ccc', padding: 5, marginHorizontal: 5, width: 60, borderRadius: 5, marginBottom: 5 },
-  modal: { flex: 1, padding: 20 },
-  muscleFilter: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 10 },
-  muscleButton: { padding: 8, backgroundColor: '#eee', borderRadius: 5, margin: 3 },
-  muscleButtonSelected: { backgroundColor: '#cce5ff' },
+  container: { padding: spacing.lg },
+  title: { fontSize: typography.fontSize.lg, fontWeight: 'bold', marginBottom: spacing.lg },
+  subtitle: { fontSize: typography.fontSize.md, fontWeight: 'bold', marginTop: spacing.md, marginBottom: spacing.md },
+  input: { borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.sm, borderRadius: spacing.sm, color: colors.textPrimary, backgroundColor: colors.surface, fontSize: typography.fontSize.md, },
+  exerciseButton: { padding: spacing.md, backgroundColor: colors.surface, marginBottom: spacing.sm, borderRadius: spacing.sm },
+  exerciseBlock: { marginBottom: spacing.sm, padding: spacing.md, backgroundColor: colors.surface, borderRadius: spacing.sm, borderColor: colors.border},
+  exerciseName: { fontWeight: 'bold', fontSize: typography.fontSize.md, marginBottom: spacing.sm },
+  setRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
+  setInput: { borderWidth: 1, borderColor: colors.border, padding: spacing.sm, marginHorizontal: spacing.sm, width: 60, borderRadius: spacing.sm, marginBottom: spacing.sm },
+  
+
+
 
 });
