@@ -9,6 +9,9 @@ class User(db.Model):
     email = db.Column(db.String(250), unique=True, nullable=False)
     username = db.Column(db.String(250), unique =True, nullable=False)
     password = db.Column(db.String(250), nullable=False)
+    name = db.Column(db.String(100))
+    bio = db.Column(db.Text)
+    profile_pic_url = db.Column(db.Text)
     workouts = db.relationship('Workout', backref='user', lazy=True)
     
     

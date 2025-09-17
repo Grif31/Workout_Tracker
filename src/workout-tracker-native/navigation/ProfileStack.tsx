@@ -4,13 +4,18 @@ import ProfileScreen from '../screens/ProfileTab/ProfileScreen';
 import EditProfileScreen from '../screens/ProfileTab/EditProfileScreen';
 import ChangePasswordScreen from '../screens/ProfileTab/ChangePasswordScreen';
 import SettingsScreen from '../screens/ProfileTab/SettingsScreen';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from 'context/AuthContext';
 
 const Stack = createNativeStackNavigator<ProfileStackParamsList>();
 
 export function ProfileStack() {
+    const {user} = useAuth()
+
+
   return (
     <Stack.Navigator>
-      <Stack.Screen name="ProfileHome" component={ProfileScreen} options={{ title: 'Profile' }} />
+      <Stack.Screen name="ProfileHome" component={ProfileScreen} options={{ title: user?.username }} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: 'Edit Profile' }} />
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ title: 'Change Password' }} />
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />

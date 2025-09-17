@@ -6,9 +6,9 @@ export const typography = {
   },
   fontWeight: {
     regular: '400',
-    bold: '700'
+    bold: 'bold'
   },
-    title: { fontSize: 18, fontWeight: 'bold' },
+    title: { fontSize: 30, },
     body: { fontSize: 15 },
     button: { fontSize: 16, fontWeight: '600' }
 

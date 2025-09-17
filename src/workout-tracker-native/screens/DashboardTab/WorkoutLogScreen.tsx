@@ -118,7 +118,7 @@ export default function WorkoutLogScreen({navigation}: Props) {
   const submitWorkout = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
-      const res = await fetch('http://192.168.68.51:5000/api/workouts', {
+      const res = await fetch(`${API_URL}/api/workouts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

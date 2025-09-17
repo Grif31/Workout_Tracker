@@ -13,7 +13,14 @@ def get_workouts():
         current_user_id = get_jwt_identity()
         workouts = Workout.query.filter_by(user_id=current_user_id).all()
         
-        return jsonify({workouts}), 200
+        return jsonify([
+        {
+            'id': w.id,
+            'name': w.name,
+            'date': w.date.isoformat(),
+            'notes': w.notes
+        } for w in workouts
+    ]), 200
     
     except Exception as e:
         print(f"Error {e}")
