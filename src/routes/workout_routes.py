@@ -35,6 +35,7 @@ def get_recent_workouts():
     ]), 200
 
 @workout_bp.get('/api/workouts/<int:workout_id>')
+@jwt_required()
 def get_workout_details(workout_id):
     current_user_id = get_jwt_identity()
     workout = Workout.query.filter_by(user_id=current_user_id, id=workout_id).first()

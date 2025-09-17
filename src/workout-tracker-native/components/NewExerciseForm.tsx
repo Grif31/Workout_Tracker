@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import { View, Text, TextInput, Button, Modal, StyleSheet} from 'react-native';
+import { View, Text, TextInput, Button, Modal, StyleSheet, FlatList, TouchableOpacity} from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 
 import { colors } from '../theme/colors';
@@ -27,6 +27,15 @@ export default function NewExerciseForm({visible, onClose, onSave, muscleGroups}
     return (
         <Modal transparent animationType='fade' visible={visible} onRequestClose={onClose}>
             <View style={styles.overlay}>
+              <View style={styles.card}>
+                <View style={styles.topbar}>
+                  <TouchableOpacity onPress={onClose}>
+                    <Text style={styles.cancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleSave}>
+                    <Text style={styles.saveText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
                 <Text style={styles.title}>Add New Exercise</Text>
                 <TextInput
                     style={styles.input}
@@ -35,25 +44,45 @@ export default function NewExerciseForm({visible, onClose, onSave, muscleGroups}
                     value={name}
                     onChangeText={setName}
                   />
-                  <View style={styles.pickerContainer}>
-                    <Picker selectedValue={muscle} onValueChange={setMuscle}
-                      style={styles.picker} dropdownIconColor={colors.textPrimary}
-                    >
-                    {['Chest', 'Back', 'Legs', 'Arms', 'Shoulders','Core'].map((group) => (
-                      <Picker.Item  label={group} value={group} key={group}/>
-                    ))}
-                    </Picker>
+                  <Text style={styles.sectionTitle}>Select Muscle Group</Text>
+                  <FlatList
+                    data={muscleGroups}
+                    keyExtractor={(item) => item}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={[
+                          styles.muscleItem,
+                          muscle === item && styles.muscleItemSelected
+                        ]}
+                        onPress={() => setMuscle(item)}
+                      >
+                        <Text
+                          style={[
+                            styles.muscleText,
+                            muscle === item && styles.muscleTextSelected
+                          ]}
+                        >
+                          {item}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  />
                   </View>
-                <Button title='Cancel' onPress={onClose} color="#999"/>
-                <Button title="Save" onPress={handleSave} />
                   </View>
             </Modal>
     );
 }
 const styles = StyleSheet.create({
       overlay:{flex: 1, backgroundColor: colors.background, justifyContent:'center', alignItems: 'center'},
+      card:{width: '85%', maxHeight: '80%', backgroundColor: colors.surface, borderRadius: spacing.sm, elevation:spacing.xs, padding:spacing.md },
       title: { fontSize: typography.fontSize.lg, fontWeight: 'bold', marginBottom: spacing.lg },
       input: { borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.sm, borderRadius: spacing.sm, color: colors.textPrimary, backgroundColor: colors.surface, fontSize: typography.fontSize.md, },
-      picker: { color: colors.textPrimary, fontSize: typography.fontSize.md,},
-      pickerContainer: {  borderWidth: 1, borderColor: colors.border, borderRadius: spacing.sm, marginBottom: spacing.sm, backgroundColor: colors.surface, overflow: 'hidden',},
+      topbar: {flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.md},
+      cancelText: {color: colors.textSecondary, fontSize: spacing.md},
+      saveText: {color: colors.save, fontWeight: 'bold', fontSize: spacing.md},
+      muscleText: {fontSize: spacing.md, color: '#333'},
+      muscleTextSelected: {fontWeight: 'bold', color: '#0056b3'},
+      muscleItem: {paddingVertical: 10, paddingHorizontal: 12, borderRadius: 5,marginBottom: 6},
+      muscleItemSelected: {backgroundColor: '#b2d5fbff'},
+      sectionTitle:{fontSize: spacing.md, fontWeight: '600', marginBottom: 8}
     });

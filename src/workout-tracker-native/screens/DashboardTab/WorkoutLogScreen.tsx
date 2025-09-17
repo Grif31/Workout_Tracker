@@ -1,24 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, Modal, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, LayoutAnimation, UIManager} from 'react-native';
-import { Picker } from '@react-native-picker/picker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../navigation/AppNavigator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {Set} from '../types/models'
+import {Set} from '../../types/models'
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
-import { colors } from '../theme/colors';
-import { spacing } from '../theme/spacing';
-import { typography } from '../theme/typography';
-import ExerciseListModal from '../components/ExerciseList';
-import NewExerciseForm from '../components/NewExerciseForm';
-
-
-
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
+import ExerciseListModal from '../../components/ExerciseList';
+import NewExerciseForm from '../../components/NewExerciseForm';
+import { DashboardStackParamsList } from 'navigation/types';
 
 type ExerciseEntry = {name: string, sets: Set[]}
-type Props = NativeStackScreenProps<RootStackParamList, 'WorkoutLog'>;
+type Props =  NativeStackScreenProps<DashboardStackParamsList, 'WorkoutLog'>;
 
-const muscleGroups = ['All', 'Chest', 'Back', 'Legs', 'Arms', 'Shoulders', 'Core','Other']
+const muscleGroups = ['Chest', 'Back', 'Legs', 'Arms', 'Shoulders', 'Core','Other']
 
 export default function WorkoutLogScreen({navigation}: Props) {
   const [workoutName, setWorkoutName] = useState('')
@@ -30,19 +26,15 @@ export default function WorkoutLogScreen({navigation}: Props) {
   const [exerciseModalVisible, setExerciseModalVisible] = useState(false);
   const [newExerciseFormVisible, setNewExerciseFormVisible] = useState(false);
   
-  const [currentSets, setCurrentSets] = useState<Set[]>([]);
-  const [reps, setReps] = useState('')
-  const [weight, setWeight] = useState('')
+  const  API_URL = process.env.EXPO_PUBLIC_API_URL;
   
 
-
-  useEffect(() => {
-    fetchExercises();
-  }, []);
-// Updates master list of exercises
+  //Updates each time it loads 
+  useEffect(() => { fetchExercises(); }, []);
+  // Updates master list of exercises
   const fetchExercises = async () => {
     try{
-      const res = await fetch('http://192.168.68.55:5000/api/exercises');
+      const res = await fetch(`${API_URL}/api/exercises`);
       const data = await res.json();
       setExerciseList(data);
 
@@ -54,7 +46,7 @@ export default function WorkoutLogScreen({navigation}: Props) {
   const addNewExercise = async (name: string, muscle: string) => {
     if (!name.trim()) return;
     try { 
-      const res = await fetch('http://192.168.68.55:5000/api/exercises', {
+      const res = await fetch(`${API_URL}/api/exercises`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({name, muscle_group: muscle})
@@ -126,7 +118,7 @@ export default function WorkoutLogScreen({navigation}: Props) {
   const submitWorkout = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
-      const res = await fetch('http://192.168.68.55:5000/api/workouts', {
+      const res = await fetch('http://192.168.68.51:5000/api/workouts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -138,7 +130,7 @@ export default function WorkoutLogScreen({navigation}: Props) {
       console.log('Status:', res.status, 'Body:', data);
       if(res.ok){
         Alert.alert('Success', 'Workout Logged')
-        navigation.navigate('Dashboard')
+        navigation.navigate('DashboardHome')
       }else{
         Alert.alert('Error', data.message || 'Please try again')
       }

@@ -1,12 +1,14 @@
 import React, { JSX, useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../navigation/AppNavigator';
+import { AuthStackParamsList } from '../navigation/types';
+import { useAuth } from 'context/AuthContext';
+const  API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Signup'>; 
-
+type Props = NativeStackScreenProps<AuthStackParamsList, 'Signup'>;
 
 export default function SignupScreen({navigation}: Props): JSX.Element{
+    const {login} = useAuth();
     const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('')
@@ -18,7 +20,7 @@ export default function SignupScreen({navigation}: Props): JSX.Element{
             return; 
         }
         try {
-            const res = await fetch('http://192.168.1.24:5000/api/signup',{
+            const res = await fetch(`${API_URL}/api/signup`,{
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({username, email, password})
@@ -28,7 +30,7 @@ export default function SignupScreen({navigation}: Props): JSX.Element{
             
             if(res.ok){
                 Alert.alert('Success', 'Account Successfully Created!');
-                navigation.navigate('Login');
+                await login(data, data.access_token);
             }else{
                 Alert.alert('Error', data.message || 'Please try again');
             }

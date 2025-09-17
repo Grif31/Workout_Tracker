@@ -1,17 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Workout } from '../types/models';
+import { Workout } from '../../types/models';
+import { DashboardStackParamsList } from '../../navigation/types';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../navigation/AppNavigator';
+const  API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-type Props = NativeStackScreenProps<RootStackParamList, 'WorkoutDetails'>;
-
+type Props = NativeStackScreenProps<DashboardStackParamsList, 'WorkoutDetails'>;
 
 export default function WorkoutDetailsScreen({ route, navigation }: Props){
-  const workoutId  = route.params;
+  const { workoutId } = route.params;
   const [workout, setWorkout] = useState<Workout>();
-  const API_BASE = 'http://192.168.1.24:5000';
 
   useEffect(() => {
     fetchWorkout();
@@ -19,7 +18,7 @@ export default function WorkoutDetailsScreen({ route, navigation }: Props){
 
   const fetchWorkout = async () => {
     const token = await AsyncStorage.getItem('token');
-    const res = await fetch(`${API_BASE}/api/workouts/${workoutId}`, {
+    const res = await fetch(`${API_URL}/api/workouts/${workoutId}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     const data = await res.json();
@@ -42,7 +41,7 @@ export default function WorkoutDetailsScreen({ route, navigation }: Props){
           <View style={styles.exerciseBlock}>
             <Text style={styles.exerciseName}>{item.name}</Text>
             {item.sets.map((s, i) => (
-              <Text key={i}>Set {i + 1}: {s.reps} reps @ {s.weight}kg</Text>
+              <Text key={i}>Set {i + 1}: {s.reps} reps @ {s.weight}lbs</Text>
             ))}
           </View>
         )}

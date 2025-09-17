@@ -1,28 +1,29 @@
 import React, { JSX } from 'react';
 import { View, Text, Button, Alert, StyleSheet, TextInput } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../navigation/AppNavigator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { AuthStackParamsList } from '../navigation/types';
+import { useAuth } from 'context/AuthContext';
 
+type Props = NativeStackScreenProps<AuthStackParamsList, 'Login'>;
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
-
-export default function LoginScreen({ navigation }: Props) : JSX.Element {
+export default function LoginScreen({navigation}: Props){
+    const {login} = useAuth()
     const [email, setEmail] = React.useState('');
     const [password, setPassword] = React.useState('');
 
     const handleLogin = async () => {
         try {
-            const res = await fetch('http://192.168.68.55:5000/api/login', {
+            const res = await fetch(`${API_URL}/api/login`, {
               method: 'POST', 
               headers: {'Content-Type': 'application/json'}, 
               body: JSON.stringify({email, password})
             });
-
             const data = await res.json();
             if(res.ok){
-                await AsyncStorage.setItem('token', data.access_token);
-                navigation.navigate('Dashboard');
+                await login(data, data.access_token);
+
             }else {
                 Alert.alert('Login Failed', data.message || 'Invalid Credentials');
             }

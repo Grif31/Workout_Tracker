@@ -6,5 +6,6 @@ export const colors = {
   textSecondary: '#666',
   placeholder: '#888',
   accent: '#145609ff',
-  danger: '#d9534f'
+  danger: '#d9534f',
+  save: '#007AFF'
 };

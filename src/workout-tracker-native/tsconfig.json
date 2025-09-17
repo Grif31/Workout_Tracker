@@ -9,7 +9,12 @@
     "noEmit": true,
     "isolatedModules": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "types": ["node"],
+
+    
 },
+  "include": ["env.d.ts", "src", "App.tsx"],
   "extends": "expo/tsconfig.base"
 }

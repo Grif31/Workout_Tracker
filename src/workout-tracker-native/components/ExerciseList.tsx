@@ -29,7 +29,7 @@ export default function ExerciseListModal({visible, onClose, exercises, onSelect
     });
 
     return (
-        <Modal visible={formVisible} animationType='slide' onRequestClose={onClose} >
+        <Modal visible={visible} animationType='slide' onRequestClose={onClose} >
             <View style={styles.container}>
                 <Text style={styles.title}>Select Exercise</Text>
                 <TextInput

@@ -12,7 +12,6 @@ export type Workout = {
 };
 
 
-
 export type Exercise = {
   id: number
   name: string
