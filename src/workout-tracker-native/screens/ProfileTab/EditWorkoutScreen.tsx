@@ -1,11 +1,11 @@
 import React from 'react';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { DashboardStackParamsList } from '../../navigation/types';
+import { ProfileStackParamsList } from '../../navigation/types';
 import WorkoutLog from '../../components/WorkoutLog';
 
-type Props = NativeStackScreenProps<DashboardStackParamsList, 'WorkoutLog'>;
+type Props = NativeStackScreenProps<ProfileStackParamsList, 'EditWorkout'>;
 
-export default function WorkoutLogScreen({ route, navigation }: Props) {
+export default function EditWorkoutScreen({ route, navigation }: Props) {
   return (
     <WorkoutLog
       prefill={route.params?.prefill}

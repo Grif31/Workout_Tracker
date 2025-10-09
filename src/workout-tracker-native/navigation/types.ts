@@ -1,7 +1,9 @@
+import { PrefillWorkoutData } from "components/WorkoutDetails";
+
 export type DashboardStackParamsList = {
     DashboardHome: undefined;
     WorkoutDetails: { workoutId: number };
-    WorkoutLog: undefined;
+    WorkoutLog: {prefill?: PrefillWorkoutData, editMode?: boolean};
 };
 export type ExercisesStackParamsList = {
     ExercisesHome: undefined
@@ -12,6 +14,9 @@ export type ProfileStackParamsList = {
     EditProfile: undefined
     Settings: undefined
     ChangePassword: undefined
+    WorkoutDetails: { workoutId: number };
+    EditWorkout: {prefill?: PrefillWorkoutData, editMode?: boolean}
+
 };
 
 export type AppStack = {

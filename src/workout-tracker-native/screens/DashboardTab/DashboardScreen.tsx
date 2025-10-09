@@ -66,7 +66,7 @@ export default function DashboardScreen({ navigation }:Props){
       </View>
       
 
-      <Button title="Log Workout" onPress={() => navigation.navigate('WorkoutLog')} />
+      <Button title="Log Workout" onPress={() => navigation.navigate('WorkoutLog', {prefill: undefined, editMode:false})} />
       <Text>Recent Workouts</Text>
       <FlatList data={workouts}
         keyExtractor={(item) => item.id.toString()}

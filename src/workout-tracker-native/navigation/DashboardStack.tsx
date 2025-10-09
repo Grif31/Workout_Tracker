@@ -10,7 +10,7 @@ export function DashboardStack() {
   return (
     <Stack.Navigator>
       <Stack.Screen name="DashboardHome" component={DashboardScreen} options={{ title: 'Dashboard' }} />
-      <Stack.Screen name="WorkoutDetails" component={WorkoutDetailScreen} options={{ title: 'Workout Detail' }} />
+      <Stack.Screen name="WorkoutDetails" component={WorkoutDetailScreen} options={{ title: 'Workout Details' }} />
       <Stack.Screen name="WorkoutLog" component={LogWorkoutScreen} options={{ title: 'Log Workout' }} />
     </Stack.Navigator>
   );

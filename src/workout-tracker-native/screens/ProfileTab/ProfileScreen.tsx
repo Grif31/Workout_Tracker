@@ -3,7 +3,7 @@ import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator, To
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
 import { ProfileStackParamsList } from '../../navigation/types';
-import { ScrollView } from 'react-native-gesture-handler';
+import { FlatList, ScrollView } from 'react-native-gesture-handler';
 import { useFocusEffect } from '@react-navigation/native';
 import { typography } from 'theme/typography';
 import { colors } from 'theme/colors';
@@ -65,6 +65,16 @@ export default function ProfileScreen({navigation}: Props){
                         </View>
                     </View></TouchableOpacity>
                 )}
+                <FlatList data={workouts} keyExtractor={(item) => item.id.toString()} renderItem={({item}) => (
+                    <TouchableOpacity>
+                        <Text>{item.name}</Text>
+                        <Text>{new Date(item.date).toLocaleString()}</Text>
+                    </TouchableOpacity>
+                )}
+                ListEmptyComponent={<Text>No Workouts Logged</Text>}
+                />
+
+                
 
             </View>  
         </ScrollView>
@@ -77,5 +87,7 @@ const styles = StyleSheet.create({
     card: { shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,},
     label: { fontSize: 14, fontWeight: '500' },
     value: { fontSize: 16, fontWeight: '600' },
-    image: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#ffffffff'}
+    image: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#ffffffff'},
+    workoutcard: {},
+    workouttitle: {},
 });

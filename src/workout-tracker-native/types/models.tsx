@@ -18,6 +18,7 @@ export type Exercise = {
   sets: Set[]
 };
 export type Set = {
+  id?: string;
   reps: string
   weight: string
 }

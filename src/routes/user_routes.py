@@ -35,6 +35,6 @@ def update_user_info():
         user.profile_pic_url = data["profile_pic_url"]
 
     db.session.commit()
-    return jsonify('Updated user Info'), 200
+    return jsonify({'message': 'Updated user Info'}), 200
 
     

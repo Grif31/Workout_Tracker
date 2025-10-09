@@ -24,6 +24,19 @@ class Workout(db.Model):
     name = db.Column(db.String(250))
     notes = db.Column(db.String(250))
     exercises = db.relationship('Exercise', backref='workouts', cascade="all, delete-orphan", lazy=True)
+    
+    def to_dict(self, include_exercises=False):
+        data = {
+            "id": self.id,
+            "user_id": self.user_id,
+            "name": self.name,
+            "date": self.date.isoformat() if self.date else None,
+            "notes": self.notes,
+        }
+        if include_exercises:
+            data["exercises"] = [ex.to_dict(include_sets=True) for ex in self.exercises]
+        return data
+
 
 class Exercise(db.Model):
     __tablename__ = "exercises"
@@ -31,6 +44,17 @@ class Exercise(db.Model):
     workout_id = db.Column(db.Integer, db.ForeignKey('workouts.id'), nullable=False)
     name = db.Column (db.String(250), unique=True, nullable=False)
     sets = db.relationship('Set', backref='exercises', cascade="all, delete-orphan", lazy=True)
+    
+    def to_dict(self, include_sets=False):
+        data = {
+            "id": self.id,
+            "workout_id": self.workout_id,
+            "name": self.name,
+        }
+        if include_sets:
+            data["sets"] = [s.to_dict() for s in self.sets]
+        return data
+
     
 class ExerciseTemplate(db.Model):
     __tablename__ = "exerciseTemplates"
@@ -44,6 +68,15 @@ class Set(db.Model):
     exercise_id = db.Column(db.Integer, db.ForeignKey('exercises.id'), nullable=False)
     reps = db.Column(db.Integer, nullable=False)
     weight = db.Column(db.Float, nullable=False)
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "exercise_id": self.exercise_id,
+            "reps": self.reps,
+            "weight": self.weight,
+        }
+
     
     
     
