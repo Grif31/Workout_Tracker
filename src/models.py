@@ -42,7 +42,7 @@ class Exercise(db.Model):
     __tablename__ = "exercises"
     id = db.Column(db.Integer, primary_key=True)
     workout_id = db.Column(db.Integer, db.ForeignKey('workouts.id'), nullable=False)
-    name = db.Column (db.String(250), unique=True, nullable=False)
+    name = db.Column (db.String(250), nullable=False)
     sets = db.relationship('Set', backref='exercises', cascade="all, delete-orphan", lazy=True)
     
     def to_dict(self, include_sets=False):

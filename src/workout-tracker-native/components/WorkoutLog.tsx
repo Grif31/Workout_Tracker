@@ -14,7 +14,7 @@ type ExerciseEntry = {id?: string, name: string, sets: Set[]}
 type Props =  {
     prefill?: PrefillWorkoutData 
     editMode?: boolean
-    workoutId?: string
+    workoutId?: number
     onSubmit?: () => void
     onCancel?: () => void
 };
@@ -42,18 +42,23 @@ export default function WorkoutLog({prefill, editMode, workoutId, onSubmit, onCa
     if (prefill) {
       setWorkoutName(prefill.name);
       setNotes(prefill.notes);
-      setExercises(prefill.exercises);
-      exercises.map((exercise, exIndex) => (
-        exercise.sets.map((set, setIndex) => (
-            updateSetField(exIndex, setIndex, 'reps', set.reps)
-        ))
-      ));
-      exercises.map((exercise, exIndex) => (
-        exercise.sets.map((set, setIndex) => (
-            updateSetField(exIndex, setIndex, 'weight', set.weight)
-        ))
-      ));
+      setExercises(
+        prefill.exercises.map((ex: any) => ({
+        id: ex.id,
+        name: ex.name,
+        sets: ex.sets.map((s: any) => ({
+          id: s.id,
+          reps: String(s.reps ?? ''),   
+          weight: String(s.weight ?? '')
+          }))
+        }))
+      );
+    }else{
+      setWorkoutName('');
+      setNotes('');
+      setExercises([])
     }
+      
    }, [prefill]);
 
   // Updates master list of exercises
@@ -142,22 +147,22 @@ export default function WorkoutLog({prefill, editMode, workoutId, onSubmit, onCa
   // submits workout 
   const submitWorkout = async () => {
     const token = await AsyncStorage.getItem('token');
-    if (!!token) return;
+    if (!token) return;
     const payload = {
         workoutName, 
         notes,
         date:  selectedDate.toISOString().split('T')[0],
         exercises: exercises.map((ex) => ({
-          id: ex.id, // include if editing existing exercise, omit if new
+          id: ex.id, 
           name: ex.name,
           sets: ex.sets.map((s) => ({
-            id: s.id, // include if editing existing set, omit if new
-            reps: s.reps,
-            weight: s.weight,
+            id: s.id, 
+            reps: Number(s.reps),
+            weight: Number(s.weight),
           })),
         })),
       }
-      const isEditing = !!editMode && !!workoutId;
+      const isEditing = Boolean(editMode && workoutId);
       const url = isEditing 
         ? `${API_URL}/api/workouts/${workoutId}`
         : `${API_URL}/api/workouts`;
@@ -173,12 +178,13 @@ export default function WorkoutLog({prefill, editMode, workoutId, onSubmit, onCa
         });
         const data = await res.json();
         console.log('Status:', res.status, 'Body:', data);
-        if(res.ok){
-          Alert.alert('Success', 'Workout Logged')
-          onSubmit
-        }else{
+        if(!res.ok){
           Alert.alert('Error', data.message || 'Please try again')
         }
+        if (onSubmit) {
+          onSubmit();
+        }
+
       }catch(err){
         Alert.alert('Error', 'Something went wrong')
       }

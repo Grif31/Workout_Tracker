@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 from flask import Blueprint, request, jsonify
 from models import db, Workout, Set, Exercise
 from flask_jwt_extended import  jwt_required, get_jwt_identity
@@ -47,7 +47,7 @@ def add_workout():
     try:
         current_user_id = get_jwt_identity()
         data = request.get_json()
-        name = data.get('name')
+        name = data.get('workoutName')
         notes = data.get('notes')
         exercises = data.get('exercises', [])
         
@@ -95,13 +95,14 @@ def update_workout(workout_id):
     if  not workout :
         return jsonify({'error', 'workout not found'}), 404
     
-    data = request.json()
+    data = request.get_json()
     
     if 'name' in data:
         workout.name = data['name']
     if 'date' in data: 
         try: 
             workout.date = datetime.strptime(data['date'], "%Y-%m-%d").date()
+
         except ValueError:
             return jsonify({"error": "Invalid date format, use YYYY-MM-DD"}), 400
     if 'notes' in data: 
@@ -117,7 +118,7 @@ def update_workout(workout_id):
             
         for exData in data['exercises']:
             exId = exData.get('id')
-            if exId in exIds: # update exercise if it exists 
+            if exId and exId in exIds: # update exercise if it exists 
                 ex = next(e for e in workout.exercises if e.id == exId)
                 if "name" in exData:
                     ex.name = exData["name"]
@@ -140,12 +141,12 @@ def update_workout(workout_id):
                     else:
                         ex.sets.append(Set(reps=s_data["reps"], weight=s_data["weight"]))
             else:
-                new_ex = Exercise(name=exData["name"], workout=workout)
+                new_ex = Exercise(name=exData["name"], workout_id=workout_id)
                 for s in exData.get("sets", []):
                     new_ex.sets.append(Set(reps=s["reps"], weight=s["weight"]))
                 workout.exercises.append(new_ex)         
     
     db.session.commit()
-    return jsonify({'message': 'workout updated successfully', 'workout': workout.id}), 200
+    return jsonify(workout.to_dict(include_exercises=True)), 200
     
     

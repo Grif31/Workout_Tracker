@@ -10,6 +10,7 @@ export default function WorkoutLogScreen({ route, navigation }: Props) {
     <WorkoutLog
       prefill={route.params?.prefill}
       editMode={route.params?.editMode}
+      workoutId={route.params?.workoutId}
       onSubmit={() => navigation.goBack()}
       onCancel={() => navigation.goBack()}
     />

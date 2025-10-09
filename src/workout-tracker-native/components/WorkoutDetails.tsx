@@ -1,9 +1,11 @@
-import React, { useEffect, useLayoutEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Workout } from '../types/models';
 import { useActionSheet } from '@expo/react-native-action-sheet';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
+import {colors } from '../theme/colors'
 
 
 const  API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -27,9 +29,11 @@ export default function WorkoutDetailsScreen({ workoutId, onEdit, onDelete, onSa
   const { showActionSheetWithOptions } = useActionSheet();
 
 
-  useEffect(() => {
-    fetchWorkout();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchWorkout();
+    }, [workoutId])
+  );
 
   // Method to Prefill a blank workout form with the same exercises as the current workout
   // Edit will prefill the reps and weight 
@@ -89,15 +93,17 @@ export default function WorkoutDetailsScreen({ workoutId, onEdit, onDelete, onSa
   const confirmDelete = () => {
         Alert.alert('Delete Workout', 'Are you sure you want to delete this workout?', [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Delete', style: 'destructive', onPress: () => onDelete?.(workoutId) },
+            { text: 'Delete', style: 'destructive', onPress: () => deleteWorkout },
     ]);
   };
   const deleteWorkout = async () => {
     const token = await AsyncStorage.getItem('token');
-    await fetch(`${API_URL}/api/workouts/${workoutId}`, {
+    
+    const res = await fetch(`${API_URL}/api/workouts/${workoutId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });
+
   };
 
 
@@ -105,13 +111,14 @@ export default function WorkoutDetailsScreen({ workoutId, onEdit, onDelete, onSa
 
   return (
     <View style={styles.container}>
+      <View style={styles.topbar}>
       <Text style={styles.title}>{workout.name}</Text>
-      <Text>{new Date(workout.date).toLocaleDateString()}</Text>
-      <TouchableOpacity onPress={openMenu}>
+      <TouchableOpacity onPress={openMenu} style={{alignSelf:'flex-end'}}>
             <Ionicons name='ellipsis-vertical' size={24} color='black'/>
         </TouchableOpacity>
+      <Text>{new Date(workout.date).toLocaleDateString()}</Text>
       <Text style={{ marginBottom: 10 }}>{workout.notes}</Text>
-
+      </View>
       <FlatList
         data={workout.exercises}
         keyExtractor={(item) => item.id.toString()}
@@ -131,6 +138,8 @@ export default function WorkoutDetailsScreen({ workoutId, onEdit, onDelete, onSa
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20 },
   title: { fontSize: 22, fontWeight: 'bold', marginBottom: 5 },
-  exerciseBlock: { marginBottom: 15 },
-  exerciseName: { fontWeight: 'bold', fontSize: 16 }
+  exerciseBlock: { marginBottom: 15, color: colors.background },
+  exerciseName: { fontWeight: 'bold', fontSize: 16 },
+  topbar: {alignItems: 'center', }
+
 });
