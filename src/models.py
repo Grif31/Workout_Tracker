@@ -7,11 +7,13 @@ class User(db.Model):
     __tablename__ = "user"
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(250), unique=True, nullable=False)
-    username = db.Column(db.String(250), unique =True, nullable=False)
+    username = db.Column(db.String(250), unique=True, nullable=False)
     password = db.Column(db.String(250), nullable=False)
     name = db.Column(db.String(100))
     bio = db.Column(db.Text)
     profile_pic_url = db.Column(db.Text)
+    bodyweight = db.Column(db.Float, nullable=True)
+    height = db.Column(db.Float, nullable=True)
     workouts = db.relationship('Workout', backref='user', lazy=True)
     
     
@@ -23,6 +25,8 @@ class Workout(db.Model):
     date = db.Column(db.DateTime, default=datetime.now())
     name = db.Column(db.String(250))
     notes = db.Column(db.String(250))
+    duration = db.Column(db.Integer)
+    volume = db.Column(db.Float)
     exercises = db.relationship('Exercise', backref='workouts', cascade="all, delete-orphan", lazy=True)
     
     def to_dict(self, include_exercises=False):
@@ -32,10 +36,22 @@ class Workout(db.Model):
             "name": self.name,
             "date": self.date.isoformat() if self.date else None,
             "notes": self.notes,
+            "duration": self.duration,
+            "volume": self.volume,
         }
         if include_exercises:
             data["exercises"] = [ex.to_dict(include_sets=True) for ex in self.exercises]
         return data
+    
+    def calculate_volume(self):
+        """Helper to compute total weight lifted."""
+        total = 0
+        for ex in self.exercises:
+            for s in ex.sets:
+                total += (s.reps or 0) * (s.weight or 0)
+        self.volume = total
+        return total
+
 
 
 class Exercise(db.Model):

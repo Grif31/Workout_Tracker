@@ -1,9 +1,10 @@
-import React, { JSX, useEffect, useState } from 'react';
+import React, { JSX, useCallback, useEffect, useState } from 'react';
 import { View, Text, Button, TouchableOpacity, StyleSheet } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStack, DashboardStackParamsList } from '../../navigation/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FlatList } from 'react-native-gesture-handler';
+import { useFocusEffect } from '@react-navigation/native';
 const  API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 type User = {
@@ -37,10 +38,11 @@ export default function DashboardScreen({ navigation }:Props){
   const [workouts, setWorkouts] = useState<Workout[]>([])
   const [user, setUser] = useState<User>()
   
-  useEffect( () => {
+  useFocusEffect(useCallback(() => {
     fetchUser();
     fetchRecentWorkouts();
   }, [])
+  );
 
   const fetchUser = async () =>{
     const token = await AsyncStorage.getItem('token');

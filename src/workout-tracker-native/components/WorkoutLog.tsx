@@ -26,6 +26,9 @@ export default function WorkoutLog({prefill, editMode, workoutId, onSubmit, onCa
   const [notes, setNotes] = useState('')
   const [exercises, setExercises] = useState<ExerciseEntry[]>([])
   const [selectedDate, setSelectedDate] = useState(new Date())
+  const [startTime, setStartTime] = useState<Date|null>(null)
+  const [elapsed, setElapsed] = useState(0)
+
 
   const [exerciseList, setExerciseList] = useState<{id: number, name: string, muscle_group: string}[]>([])
 
@@ -34,6 +37,22 @@ export default function WorkoutLog({prefill, editMode, workoutId, onSubmit, onCa
   
   const  API_URL = process.env.EXPO_PUBLIC_API_URL;
   
+  //Sets new Start Time 
+  useEffect(() => {
+    if (!editMode) {
+     setStartTime(new Date()); // record the start time
+    }
+  }, [editMode]);
+
+  useEffect(() => {
+  if (startTime) {
+    const interval = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startTime.getTime()) / 1000 / 60));
+    }, 60000); // update every minute
+    return () => clearInterval(interval);
+  }
+}, [startTime]);
+
 
   //Updates each time it loads 
   useEffect(() => { fetchExercises();},[]);
@@ -148,10 +167,18 @@ export default function WorkoutLog({prefill, editMode, workoutId, onSubmit, onCa
   const submitWorkout = async () => {
     const token = await AsyncStorage.getItem('token');
     if (!token) return;
+    const endTime = new Date();
+    let durationMin: number | undefined = undefined;
+    if(startTime){
+      const diffms = endTime.getTime() - startTime.getTime();
+      durationMin = Math.floor(diffms / 1000 / 60);
+    }
+
     const payload = {
         workoutName, 
         notes,
         date:  selectedDate.toISOString().split('T')[0],
+        duration: durationMin,
         exercises: exercises.map((ex) => ({
           id: ex.id, 
           name: ex.name,
@@ -201,7 +228,7 @@ export default function WorkoutLog({prefill, editMode, workoutId, onSubmit, onCa
       <Text style={styles.title}>Log Workout</Text>
       <TextInput style={styles.input} placeholder="Workout Name" value={workoutName} onChangeText={setWorkoutName}/>
       <TextInput style={styles.input} placeholder="Notes" value={notes} onChangeText={setNotes}/>
-
+      <Text>Duration: {elapsed} min</Text>
       <Button title='Add Exercise' onPress={() => (setExerciseModalVisible(true))} />
       <ExerciseListModal
         visible={exerciseModalVisible}

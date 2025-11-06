@@ -50,6 +50,7 @@ def add_workout():
         name = data.get('workoutName')
         notes = data.get('notes')
         exercises = data.get('exercises', [])
+        duration = data.get('duration')
         
         if not name:
             return jsonify({'message': 'Name required'}),400
@@ -66,6 +67,7 @@ def add_workout():
             for s in ex.get('sets', []):
                 new_set = Set(exercise_id=new_ex.id, reps=s['reps'], weight=s['weight'])
                 db.session.add(new_set)
+        new_workout.calculate_volume()
         db.session.commit()
                 
         return jsonify({'message': 'New Workout Added'}), 201
@@ -76,13 +78,15 @@ def add_workout():
     
 # DELETE WORKOUT    
     
-@workout_bp.delete('/api/workouts/<int:workout_id>')
+@workout_bp.delete('/api/workouts/<int:workoutId>')
 @jwt_required()
 def delete_workout(workoutId):
     current_user_id = get_jwt_identity()
     workout = Workout.query.filter_by(user_id=current_user_id, id=workoutId).first()
     db.session.delete(workout)
     db.session.commit()
+    return jsonify({"message": "Workout deleted"}), 200
+
     
 # UPDATE WORKOUT    
 
@@ -92,7 +96,7 @@ def update_workout(workout_id):
     current_user_id = get_jwt_identity()
     workout = Workout.query.filter_by(user_id=current_user_id, id=workout_id).first()
     
-    if  not workout :
+    if not workout:
         return jsonify({'error', 'workout not found'}), 404
     
     data = request.get_json()
@@ -107,6 +111,10 @@ def update_workout(workout_id):
             return jsonify({"error": "Invalid date format, use YYYY-MM-DD"}), 400
     if 'notes' in data: 
         workout.notes = data['notes']
+    if "duration" in data:
+        workout.duration = data["duration"]
+
+
     
     if 'exercises' in data:
         exIds = {ex.id for ex in workout.exercises}
@@ -144,8 +152,9 @@ def update_workout(workout_id):
                 new_ex = Exercise(name=exData["name"], workout_id=workout_id)
                 for s in exData.get("sets", []):
                     new_ex.sets.append(Set(reps=s["reps"], weight=s["weight"]))
-                workout.exercises.append(new_ex)         
-    
+                workout.exercises.append(new_ex) 
+                        
+    workout.calculate_volume()
     db.session.commit()
     return jsonify(workout.to_dict(include_exercises=True)), 200
     

@@ -26,13 +26,10 @@ export default function SignupScreen({navigation}: Props): JSX.Element{
                 body: JSON.stringify({username, email, password})
             });
 
-            const data = await res.json();
-            
             if(res.ok){
-                Alert.alert('Success', 'Account Successfully Created!');
-                await login(data, data.access_token);
-            }else{
-                Alert.alert('Error', data.message || 'Please try again');
+                const data = await res.json();
+                await login(data.user, data.token);
+                
             }
         }catch(error){
             Alert.alert('Error', 'Something went wrong');

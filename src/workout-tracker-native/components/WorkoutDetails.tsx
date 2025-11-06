@@ -93,17 +93,27 @@ export default function WorkoutDetailsScreen({ workoutId, onEdit, onDelete, onSa
   const confirmDelete = () => {
         Alert.alert('Delete Workout', 'Are you sure you want to delete this workout?', [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Delete', style: 'destructive', onPress: () => deleteWorkout },
+            { text: 'Delete', style: 'destructive', onPress: () => deleteWorkout()},
     ]);
   };
   const deleteWorkout = async () => {
-    const token = await AsyncStorage.getItem('token');
-    
-    const res = await fetch(`${API_URL}/api/workouts/${workoutId}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    });
 
+    const token = await AsyncStorage.getItem('token');
+    if(!token) return;
+    try{
+      const res = await fetch(`${API_URL}/api/workouts/${workoutId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if(!res.ok){
+        const err = await res.json();
+        console.error("Error deleting workout:", err);
+        return;
+      }
+      onDelete;
+    }catch(err){
+       console.error("Network error:", err);
+    }
   };
 
 
