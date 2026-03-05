@@ -9,6 +9,7 @@ import { typography } from '../theme/typography';
 import ExerciseListModal from '../components/ExerciseList';
 import NewExerciseForm from '../components/NewExerciseForm';
 import {PrefillWorkoutData} from './WorkoutDetails'
+import { muscleGroups } from 'constants/muscleGroups';
 
 type ExerciseEntry = {id?: string, name: string, sets: Set[]}
 type Props =  {
@@ -18,8 +19,6 @@ type Props =  {
     onSubmit?: () => void
     onCancel?: () => void
 };
-
-const muscleGroups = ['Chest', 'Back', 'Legs', 'Arms', 'Shoulders', 'Core','Other']
 
 export default function WorkoutLog({prefill, editMode, workoutId, onSubmit, onCancel }: Props) {
   const [workoutName, setWorkoutName] = useState('')
@@ -84,11 +83,14 @@ export default function WorkoutLog({prefill, editMode, workoutId, onSubmit, onCa
   const fetchExercises = async () => {
     try{
       const res = await fetch(`${API_URL}/api/exercises`);
+      if (!res.ok) {
+        Alert.alert('Error', 'Failed to load exercises');
+        return;
+      }
       const data = await res.json();
       setExerciseList(data);
-
     }catch(err){
-      console.error(err)
+      Alert.alert('Error', 'Failed to load exercises');
     }
   }
   //add a new Exercises to master list

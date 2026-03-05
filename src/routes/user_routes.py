@@ -12,7 +12,10 @@ def get_current_user():
     workouts = Workout.query.filter_by(user_id=userId).all()
     if not user: 
         return jsonify({'message': 'User not found'}), 404
-    return jsonify({'id': user.id, 'username': user.username, 'email': user.email, 'name': user.name, 'bio': user.bio, 'profile_pic_url': user.profile_pic_url,
+    return jsonify({'id': user.id, 'username': user.username, 'email': user.email, 'name': user.name,
+                    'bio': user.bio, 'profile_pic_url': user.profile_pic_url,
+                    'bodyweight': user.bodyweight, 'height': user.height,
+                    'weight_unit': user.weight_unit or 'lbs',
                     'workouts': [{
                         'id': w.id,
                         'name': w.name,
@@ -33,8 +36,17 @@ def update_user_info():
         user.bio = data["bio"].strip() or None
     if "profile_pic_url" in data:
         user.profile_pic_url = data["profile_pic_url"]
+    if "bodyweight" in data:
+        user.bodyweight = float(data["bodyweight"]) if data["bodyweight"] not in (None, '') else None
+    if "height" in data:
+        user.height = float(data["height"]) if data["height"] not in (None, '') else None
+    if "weight_unit" in data:
+        user.weight_unit = data["weight_unit"] if data["weight_unit"] in ('lbs', 'kg') else 'lbs'
 
     db.session.commit()
-    return jsonify({'message': 'Updated user Info'}), 200
+    return jsonify({'id': user.id, 'username': user.username, 'email': user.email, 'name': user.name,
+                    'bio': user.bio, 'profile_pic_url': user.profile_pic_url,
+                    'bodyweight': user.bodyweight, 'height': user.height,
+                    'weight_unit': user.weight_unit or 'lbs'}), 200
 
     

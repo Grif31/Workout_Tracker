@@ -83,6 +83,8 @@ def add_workout():
 def delete_workout(workoutId):
     current_user_id = get_jwt_identity()
     workout = Workout.query.filter_by(user_id=current_user_id, id=workoutId).first()
+    if not workout:
+        return jsonify({'message': 'Workout not found'}), 404
     db.session.delete(workout)
     db.session.commit()
     return jsonify({"message": "Workout deleted"}), 200
@@ -97,7 +99,7 @@ def update_workout(workout_id):
     workout = Workout.query.filter_by(user_id=current_user_id, id=workout_id).first()
     
     if not workout:
-        return jsonify({'error', 'workout not found'}), 404
+        return jsonify({'error': 'workout not found'}), 404
     
     data = request.get_json()
     
@@ -154,6 +156,8 @@ def update_workout(workout_id):
                     new_ex.sets.append(Set(reps=s["reps"], weight=s["weight"]))
                 workout.exercises.append(new_ex) 
                         
+    db.session.flush()
+    db.session.expire(workout)
     workout.calculate_volume()
     db.session.commit()
     return jsonify(workout.to_dict(include_exercises=True)), 200

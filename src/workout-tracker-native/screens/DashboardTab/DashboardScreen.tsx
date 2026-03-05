@@ -1,5 +1,5 @@
 import React, { JSX, useCallback, useEffect, useState } from 'react';
-import { View, Text, Button, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, Button, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStack, DashboardStackParamsList } from '../../navigation/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -37,29 +37,42 @@ type Props = NativeStackScreenProps<DashboardStackParamsList, 'DashboardHome'>;
 export default function DashboardScreen({ navigation }:Props){
   const [workouts, setWorkouts] = useState<Workout[]>([])
   const [user, setUser] = useState<User>()
-  
+  const [loading, setLoading] = useState(true)
+
   useFocusEffect(useCallback(() => {
-    fetchUser();
-    fetchRecentWorkouts();
+    setLoading(true);
+    Promise.all([fetchUser(), fetchRecentWorkouts()]).finally(() => setLoading(false));
   }, [])
   );
 
   const fetchUser = async () =>{
-    const token = await AsyncStorage.getItem('token');
-    const res = await fetch(`${API_URL}/api/me`,{
-      headers: {'Authorization': `Bearer ${token}`},
-    });
-    const data = await res.json();
-    setUser(data);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/me`,{
+        headers: {'Authorization': `Bearer ${token}`},
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setUser(data);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to load user');
+    }
   };
   const fetchRecentWorkouts = async () => {
-    const token = await AsyncStorage.getItem('token');
-    const res = await fetch(`${API_URL}/api/workouts/recent`,{
-      headers: {'Authorization': `Bearer ${token}`},
-    });
-    const data = await res.json();
-    setWorkouts(data);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/workouts/recent`,{
+        headers: {'Authorization': `Bearer ${token}`},
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setWorkouts(data);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to load workouts');
+    }
   };
+
+  if (loading) return <ActivityIndicator size="large" style={{ flex: 1, marginTop: 50 }} />;
 
   return (
     <View style={styles.container}>

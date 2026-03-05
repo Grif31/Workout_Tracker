@@ -7,6 +7,7 @@ type AuthContextType = {
     token: string | null;
     login: (userData: any , token: string) => Promise<void>;
     logout: () => Promise<void>;
+    updateUser: (userData: any) => Promise<void>;
     loading: boolean;
 };
 
@@ -50,6 +51,11 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
         await AsyncStorage.setItem('user', JSON.stringify(userData));
     };
 
+    const updateUser = async (userData: any) => {
+        setUser((prev: any) => ({ ...prev, ...userData }));
+        await AsyncStorage.setItem('user', JSON.stringify({ ...user, ...userData }));
+    };
+
     const logout = async () => {
         setUser(null);
         setToken(null);
@@ -58,7 +64,7 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
 
     }
     return (
-        <AuthContext.Provider value={{ user, token, login, logout, loading }}>
+        <AuthContext.Provider value={{ user, token, login, logout, updateUser, loading }}>
             {children}
         </AuthContext.Provider>
     );

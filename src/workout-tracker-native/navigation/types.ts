@@ -6,8 +6,10 @@ export type DashboardStackParamsList = {
     WorkoutLog: {prefill?: PrefillWorkoutData, workoutId?:number, editMode?: boolean};
 };
 export type ExercisesStackParamsList = {
-    ExercisesHome: undefined
-    CreateRoutine: undefined
+    ExercisesHome: undefined;
+    CreateRoutine: undefined;
+    RoutineDetail: { routineId: number; routineName: string };
+    LogRoutine: { prefill?: PrefillWorkoutData };
 };
 export type ProfileStackParamsList = {
     ProfileHome: undefined

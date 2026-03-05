@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import React, { useCallback,useState } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Workout } from '../types/models';
@@ -56,12 +56,20 @@ export default function WorkoutDetailsScreen({ workoutId, onEdit, onDelete, onSa
 
 
   const fetchWorkout = async () => {
-    const token = await AsyncStorage.getItem('token');
-    const res = await fetch(`${API_URL}/api/workouts/${workoutId}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    const data = await res.json();
-    setWorkout(data);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/workouts/${workoutId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        Alert.alert('Error', 'Failed to load workout');
+        return;
+      }
+      const data = await res.json();
+      setWorkout(data);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to load workout');
+    }
   };
 
   const openMenu = () => {
@@ -107,12 +115,12 @@ export default function WorkoutDetailsScreen({ workoutId, onEdit, onDelete, onSa
       });
       if(!res.ok){
         const err = await res.json();
-        console.error("Error deleting workout:", err);
+        Alert.alert('Error', err.message || 'Failed to delete workout');
         return;
       }
-      onDelete;
+      onDelete?.(workoutId);
     }catch(err){
-       console.error("Network error:", err);
+      Alert.alert('Error', 'Failed to delete workout');
     }
   };
 
