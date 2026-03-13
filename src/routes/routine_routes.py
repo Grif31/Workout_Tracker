@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from models import db, Routine, RoutineDay, WorkoutTemplate, ExerciseTemplate
+from models import db, Routine, RoutineDay, WorkoutTemplate, ExerciseTemplate, User
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 routine_bp = Blueprint('routine_bp', __name__)
@@ -25,12 +25,10 @@ def create_routine():
 
     for order, day in enumerate(days_data):
         label = day.get('label') or f'Day {order + 1}'
+        ex_ids = day.get('exercise_template_ids', [])
+        exercises = ExerciseTemplate.query.filter(ExerciseTemplate.id.in_(ex_ids)).all() if ex_ids else []
         # Each day becomes its own WorkoutTemplate
-        template = WorkoutTemplate(user_id=user_id, name=f"{name} - {label}")
-        for ex_id in day.get('exercise_template_ids', []):
-            ex = ExerciseTemplate.query.get(ex_id)
-            if ex:
-                template.exercises.append(ex)
+        template = WorkoutTemplate(user_id=user_id, name=f"{name} - {label}", exercises=exercises)
         db.session.add(template)
         db.session.flush()
 
@@ -93,3 +91,26 @@ def delete_routine(routine_id):
     db.session.delete(routine)
     db.session.commit()
     return jsonify({'message': 'Routine deleted'}), 200
+
+
+@routine_bp.post('/api/routines/deactivate')
+@jwt_required()
+def deactivate_routine():
+    user_id = get_jwt_identity()
+    user = User.query.filter_by(id=user_id).first()
+    user.active_routine_id = None
+    db.session.commit()
+    return jsonify(user.to_dict()), 200
+
+
+@routine_bp.post('/api/routines/<int:routine_id>/activate')
+@jwt_required()
+def activate_routine(routine_id):
+    user_id = get_jwt_identity()
+    routine = Routine.query.filter_by(id=routine_id, user_id=user_id).first()
+    if not routine:
+        return jsonify({'message': 'Not found'}), 404
+    user = User.query.filter_by(id=user_id).first()
+    user.active_routine_id = routine_id
+    db.session.commit()
+    return jsonify(user.to_dict()), 200

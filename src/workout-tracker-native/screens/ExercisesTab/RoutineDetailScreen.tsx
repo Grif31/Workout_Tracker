@@ -36,9 +36,11 @@ type Routine = {
 
 export default function RoutineDetailScreen({ route, navigation }: Props) {
   const { routineId, routineName } = route.params;
-  const { token } = useAuth();
+  const { token, user, updateUser } = useAuth();
   const [routine, setRoutine] = useState<Routine | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const isActive = user?.active_routine_id === routineId;
 
   const fetchRoutine = async () => {
     setLoading(true);
@@ -85,6 +87,27 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
     ]);
   };
 
+  const handleToggleActive = async () => {
+    if (!token) return;
+    const url = isActive
+      ? `${API_URL}/api/routines/deactivate`
+      : `${API_URL}/api/routines/${routineId}/activate`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        updateUser({ active_routine_id: data.active_routine_id });
+      } else {
+        Alert.alert('Error', 'Failed to update active routine');
+      }
+    } catch {
+      Alert.alert('Error', 'Something went wrong');
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -107,9 +130,16 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
             {routine.days.length} {routine.days.length === 1 ? 'day' : 'days'}
           </Text>
         </View>
-        <TouchableOpacity onPress={handleDelete}>
-          <Text style={styles.deleteText}>Delete</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: spacing.md }}>
+          <TouchableOpacity onPress={handleToggleActive}>
+            <Text style={isActive ? styles.deactivateText : styles.activateText}>
+              {isActive ? 'Deactivate' : 'Set as Active'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleDelete}>
+            <Text style={styles.deleteText}>Delete</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList
@@ -167,6 +197,8 @@ const styles = StyleSheet.create({
   routineDesc: { fontSize: typography.fontSize.sm, color: '#ccc', marginTop: 2 },
   dayCount: { fontSize: typography.fontSize.sm, color: '#aaa', marginTop: spacing.xs },
   deleteText: { color: colors.danger, fontSize: typography.fontSize.sm, fontWeight: '600', marginTop: 4 },
+  activateText: { color: colors.save, fontSize: typography.fontSize.sm, fontWeight: '600', marginTop: 4 },
+  deactivateText: { color: colors.textSecondary, fontSize: typography.fontSize.sm, fontWeight: '600', marginTop: 4 },
   list: { paddingHorizontal: spacing.md, paddingBottom: spacing.lg },
   dayCard: {
     backgroundColor: colors.surface,

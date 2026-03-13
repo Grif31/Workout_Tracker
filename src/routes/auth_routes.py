@@ -15,17 +15,7 @@ def login():
 
     if user and check_password_hash(user.password, password):
         token = create_access_token(identity=str(user.id))
-        return jsonify({'access_token': token,
-            'id': user.id,
-            'username': user.username,
-            'email': user.email,
-            'name': user.name,
-            'bio': user.bio,
-            'profile_pic_url': user.profile_pic_url,
-            'bodyweight': user.bodyweight,
-            'height': user.height,
-            'weight_unit': user.weight_unit or 'lbs',
-        }), 200
+        return jsonify({'access_token': token, **user.to_dict()}), 200
     else:
         return jsonify({'message': 'Invalid Credentials'}), 401
 
@@ -57,7 +47,5 @@ def signup():
                 'user': {'id': new_user.id, 'username': new_user.username, 'email': new_user.email},
                 'token': token
         }), 201
-    except Exception as e:
-        # Log the error for debugging
-        print(f"Signup error: {e}")
+    except Exception:
         return jsonify({'message': 'Internal server error'}), 500

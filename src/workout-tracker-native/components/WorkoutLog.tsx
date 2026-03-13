@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, Modal, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, LayoutAnimation, UIManager} from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../context/AuthContext';
 import {Set} from '../types/models'
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { colors } from '../theme/colors';
@@ -21,6 +21,7 @@ type Props =  {
 };
 
 export default function WorkoutLog({prefill, editMode, workoutId, onSubmit, onCancel }: Props) {
+  const { token } = useAuth();
   const [workoutName, setWorkoutName] = useState('')
   const [notes, setNotes] = useState('')
   const [exercises, setExercises] = useState<ExerciseEntry[]>([])
@@ -167,7 +168,6 @@ export default function WorkoutLog({prefill, editMode, workoutId, onSubmit, onCa
 
   // submits workout 
   const submitWorkout = async () => {
-    const token = await AsyncStorage.getItem('token');
     if (!token) return;
     const endTime = new Date();
     let durationMin: number | undefined = undefined;

@@ -5,6 +5,8 @@ Tests for routine routes:
   GET    /api/routines/<id>
   PATCH  /api/routines/<id>
   DELETE /api/routines/<id>
+  POST   /api/routines/deactivate
+  POST   /api/routines/<id>/activate
 """
 
 
@@ -190,3 +192,51 @@ class TestDeleteRoutine:
         res = client.delete('/api/routines/99999',
                             headers={'Authorization': f'Bearer {auth_token}'})
         assert res.status_code == 404
+
+
+class TestActiveRoutine:
+
+    def test_activate_success(self, client, auth_token):
+        routine_id = create_routine(client, auth_token).get_json()['id']
+        res = client.post(f'/api/routines/{routine_id}/activate',
+                          headers={'Authorization': f'Bearer {auth_token}'})
+        assert res.status_code == 200
+        assert res.get_json()['active_routine_id'] == routine_id
+
+    def test_activate_other_users_routine_returns_404(self, client, auth_token, auth_token2):
+        routine_id = create_routine(client, auth_token).get_json()['id']
+        res = client.post(f'/api/routines/{routine_id}/activate',
+                          headers={'Authorization': f'Bearer {auth_token2}'})
+        assert res.status_code == 404
+
+    def test_activate_nonexistent_returns_404(self, client, auth_token):
+        res = client.post('/api/routines/9999/activate',
+                          headers={'Authorization': f'Bearer {auth_token}'})
+        assert res.status_code == 404
+
+    def test_deactivate_success(self, client, auth_token):
+        routine_id = create_routine(client, auth_token).get_json()['id']
+        client.post(f'/api/routines/{routine_id}/activate',
+                    headers={'Authorization': f'Bearer {auth_token}'})
+        res = client.post('/api/routines/deactivate',
+                          headers={'Authorization': f'Bearer {auth_token}'})
+        assert res.status_code == 200
+        assert res.get_json()['active_routine_id'] is None
+
+    def test_activate_replaces_previous_active(self, client, auth_token):
+        id1 = create_routine(client, auth_token, name='A').get_json()['id']
+        id2 = create_routine(client, auth_token, name='B').get_json()['id']
+        client.post(f'/api/routines/{id1}/activate',
+                    headers={'Authorization': f'Bearer {auth_token}'})
+        res = client.post(f'/api/routines/{id2}/activate',
+                          headers={'Authorization': f'Bearer {auth_token}'})
+        assert res.get_json()['active_routine_id'] == id2
+
+    def test_activate_requires_auth(self, client, auth_token):
+        routine_id = create_routine(client, auth_token).get_json()['id']
+        res = client.post(f'/api/routines/{routine_id}/activate')
+        assert res.status_code == 401
+
+    def test_deactivate_requires_auth(self, client):
+        res = client.post('/api/routines/deactivate')
+        assert res.status_code == 401

@@ -9,26 +9,21 @@ user_bp = Blueprint('user_bp', __name__)
 def get_current_user():
     userId = get_jwt_identity()
     user = User.query.filter_by(id=userId).first()
-    workouts = Workout.query.filter_by(user_id=userId).all()
-    if not user: 
+    if not user:
         return jsonify({'message': 'User not found'}), 404
-    return jsonify({'id': user.id, 'username': user.username, 'email': user.email, 'name': user.name,
-                    'bio': user.bio, 'profile_pic_url': user.profile_pic_url,
-                    'bodyweight': user.bodyweight, 'height': user.height,
-                    'weight_unit': user.weight_unit or 'lbs',
-                    'workouts': [{
-                        'id': w.id,
-                        'name': w.name,
-                        'date': w.date.isoformat(),
-                        'notes': w.notes
-                    } for w in workouts ]}
-    ), 200
+    workouts = Workout.query.filter_by(user_id=userId).all()
+    return jsonify({
+        **user.to_dict(),
+        'workouts': [{'id': w.id, 'name': w.name, 'date': w.date.isoformat(), 'notes': w.notes} for w in workouts],
+    }), 200
 
 @user_bp.patch('/api/me')
 @jwt_required()
 def update_user_info():
     userId = get_jwt_identity()
     user = User.query.filter_by(id=userId).first()
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
     data = request.get_json()
     if "name" in data:
         user.name = data["name"].strip() or None
@@ -44,9 +39,4 @@ def update_user_info():
         user.weight_unit = data["weight_unit"] if data["weight_unit"] in ('lbs', 'kg') else 'lbs'
 
     db.session.commit()
-    return jsonify({'id': user.id, 'username': user.username, 'email': user.email, 'name': user.name,
-                    'bio': user.bio, 'profile_pic_url': user.profile_pic_url,
-                    'bodyweight': user.bodyweight, 'height': user.height,
-                    'weight_unit': user.weight_unit or 'lbs'}), 200
-
-    
+    return jsonify(user.to_dict()), 200

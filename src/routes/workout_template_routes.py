@@ -15,12 +15,9 @@ def create_workout_template():
     if not name:
         return jsonify({'message': 'Name is required'}), 400
 
-    template = WorkoutTemplate(user_id=user_id, name=name)
-    for ex_id in data.get('exercise_template_ids', []):
-        ex = ExerciseTemplate.query.get(ex_id)
-        if ex:
-            template.exercises.append(ex)
-
+    ex_ids = data.get('exercise_template_ids', [])
+    exercises = ExerciseTemplate.query.filter(ExerciseTemplate.id.in_(ex_ids)).all() if ex_ids else []
+    template = WorkoutTemplate(user_id=user_id, name=name, exercises=exercises)
     db.session.add(template)
     db.session.commit()
     return jsonify(template.to_dict(include_exercises=True)), 201
@@ -56,11 +53,8 @@ def update_workout_template(template_id):
     if 'name' in data:
         template.name = data['name'].strip() or template.name
     if 'exercise_template_ids' in data:
-        template.exercises = []
-        for ex_id in data['exercise_template_ids']:
-            ex = ExerciseTemplate.query.get(ex_id)
-            if ex:
-                template.exercises.append(ex)
+        ex_ids = data['exercise_template_ids']
+        template.exercises = ExerciseTemplate.query.filter(ExerciseTemplate.id.in_(ex_ids)).all() if ex_ids else []
 
     db.session.commit()
     return jsonify(template.to_dict(include_exercises=True))

@@ -1,7 +1,7 @@
 import React, { useCallback,useState } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Workout } from '../types/models';
+import { useAuth } from '../context/AuthContext';
 import { useActionSheet } from '@expo/react-native-action-sheet';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -27,6 +27,7 @@ type Props = {
 export default function WorkoutDetailsScreen({ workoutId, onEdit, onDelete, onSaveAsRoutine, onPerformAgain }: Props){
   const [workout, setWorkout] = useState<Workout>();
   const { showActionSheetWithOptions } = useActionSheet();
+  const { token } = useAuth();
 
 
   useFocusEffect(
@@ -57,7 +58,6 @@ export default function WorkoutDetailsScreen({ workoutId, onEdit, onDelete, onSa
 
   const fetchWorkout = async () => {
     try {
-      const token = await AsyncStorage.getItem('token');
       const res = await fetch(`${API_URL}/api/workouts/${workoutId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -105,8 +105,6 @@ export default function WorkoutDetailsScreen({ workoutId, onEdit, onDelete, onSa
     ]);
   };
   const deleteWorkout = async () => {
-
-    const token = await AsyncStorage.getItem('token');
     if(!token) return;
     try{
       const res = await fetch(`${API_URL}/api/workouts/${workoutId}`, {

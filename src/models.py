@@ -15,7 +15,22 @@ class User(db.Model):
     bodyweight = db.Column(db.Float, nullable=True)
     height = db.Column(db.Float, nullable=True)
     weight_unit = db.Column(db.String(3), default='lbs', nullable=True)
+    active_routine_id = db.Column(db.Integer, nullable=True)
     workouts = db.relationship('Workout', backref='user', lazy=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'email': self.email,
+            'name': self.name,
+            'bio': self.bio,
+            'profile_pic_url': self.profile_pic_url,
+            'bodyweight': self.bodyweight,
+            'height': self.height,
+            'weight_unit': self.weight_unit or 'lbs',
+            'active_routine_id': self.active_routine_id,
+        }
 
 
 class Workout(db.Model):

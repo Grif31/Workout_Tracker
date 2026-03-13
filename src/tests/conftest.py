@@ -63,3 +63,19 @@ def auth_token(client, registered_user):
     })
     assert res.status_code == 200
     return res.get_json()['access_token']
+
+
+@pytest.fixture
+def auth_token2(client):
+    """Return a valid JWT token for a second distinct user."""
+    client.post('/api/signup', json={
+        'username': 'testuser2',
+        'email': 'test2@example.com',
+        'password': 'password123',
+    })
+    res = client.post('/api/login', json={
+        'email': 'test2@example.com',
+        'password': 'password123',
+    })
+    assert res.status_code == 200
+    return res.get_json()['access_token']
