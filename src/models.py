@@ -168,8 +168,14 @@ class RoutineDay(db.Model):
 class ExerciseTemplate(db.Model):
     __tablename__ = "exerciseTemplates"
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(250), unique=True, nullable=False)
+    name = db.Column(db.String(250), nullable=False)
     muscle_group = db.Column(db.String(250), nullable=False)
+    equipment = db.Column(db.String(100), nullable=True)
+    image_url = db.Column(db.Text, nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('name', 'equipment', name='uq_exercise_name_equipment'),
+    )
 
     workout_templates = db.relationship(
         "WorkoutTemplate",

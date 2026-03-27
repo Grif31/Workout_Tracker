@@ -4,27 +4,42 @@ from flask import Blueprint, request, jsonify
 exercise_bp = Blueprint('exercise_bp', __name__)
 
 
-#Get all exercises from db
+def exercise_to_dict(exercise):
+    return {
+        'id': exercise.id,
+        'name': exercise.name,
+        'muscle_group': exercise.muscle_group,
+        'equipment': exercise.equipment,
+        'image_url': exercise.image_url,
+    }
+
+
 @exercise_bp.get('/api/exercises')
 def get_exercises():
-    exercises = ExerciseTemplate.query.all()
-    return jsonify([{'id': exercise.id, 'name':exercise.name, 'muscle_group': exercise.muscle_group} for exercise in exercises])
+    equipment = request.args.get('equipment')
+    muscle = request.args.get('muscle_group')
+    query = ExerciseTemplate.query
+    if equipment:
+        query = query.filter_by(equipment=equipment)
+    if muscle:
+        query = query.filter_by(muscle_group=muscle)
+    return jsonify([exercise_to_dict(e) for e in query.order_by(ExerciseTemplate.name).all()])
 
-# Add new workout to database
+
 @exercise_bp.post('/api/exercises')
 def add_exercise():
     data = request.get_json()
     name = data.get('name', '').strip()
     muscle = data.get('muscle_group')
-    
+    equipment = data.get('equipment')
+
     if not name:
         return jsonify({'message': 'Name Required'}), 400
-    if ExerciseTemplate.query.filter_by(name=name).first():
+    if ExerciseTemplate.query.filter_by(name=name, equipment=equipment).first():
         return jsonify({'message': 'Exercise Already Exists'}), 400
-    
-    new_exercise = ExerciseTemplate(name=name, muscle_group=muscle)
+
+    new_exercise = ExerciseTemplate(name=name, muscle_group=muscle, equipment=equipment)
     db.session.add(new_exercise)
     db.session.commit()
-    
-    return jsonify({'message': 'New Exercise added'}), 201
 
+    return jsonify({'message': 'New Exercise added'}), 201

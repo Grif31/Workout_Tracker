@@ -4,12 +4,15 @@ import {
   Text,
   TextInput,
   FlatList,
+  SectionList,
   TouchableOpacity,
   StyleSheet,
   Alert,
   Modal,
   ScrollView,
+  Image,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
@@ -18,13 +21,14 @@ import { colors } from 'theme/colors';
 import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
+import { equipmentTypes } from '../../constants/equipmentTypes';
 import ExerciseListModal from '../../components/ExerciseList';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 type Props = NativeStackScreenProps<ExercisesStackParamsList, 'ExercisesHome'>;
 
-type Exercise = { id: number; name: string; muscle_group: string };
+type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; image_url?: string };
 type WorkoutTemplate = { id: number; name: string; exercises: Exercise[] };
 type RoutineDay = {
   id: number;
@@ -43,7 +47,11 @@ export default function ExercisesScreen({ navigation }: Props) {
   const [exerciseList, setExerciseList] = useState<Exercise[]>([]);
   const [search, setSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState('All');
+  const [selectedEquipment, setSelectedEquipment] = useState('All');
   const [showNewExerciseModal, setShowNewExerciseModal] = useState(false);
+  const [showMuscleDropdown, setShowMuscleDropdown] = useState(false);
+  const [showEquipmentDropdown, setShowEquipmentDropdown] = useState(false);
+  const [recentExercises, setRecentExercises] = useState<string[]>([]);
 
   // Training tab state
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
@@ -101,12 +109,28 @@ export default function ExercisesScreen({ navigation }: Props) {
     }
   };
 
+  const fetchRecentExercises = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/stats/recent-exercises`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRecentExercises(data.recent);
+      }
+    } catch {
+      // silently fail
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       fetchExercises();
       fetchTemplates();
       fetchRoutines();
       fetchActiveRoutine();
+      fetchRecentExercises();
     }, [token, user?.active_routine_id])
   );
 
@@ -157,8 +181,48 @@ export default function ExercisesScreen({ navigation }: Props) {
   const filteredExercises = useMemo(() => exerciseList.filter(ex => {
     const matchSearch = ex.name.toLowerCase().includes(search.toLowerCase());
     const matchMuscle = selectedMuscle === 'All' || ex.muscle_group === selectedMuscle;
-    return matchSearch && matchMuscle;
-  }), [exerciseList, search, selectedMuscle]);
+    const matchEquipment = selectedEquipment === 'All' || ex.equipment === selectedEquipment;
+    return matchSearch && matchMuscle && matchEquipment;
+  }), [exerciseList, search, selectedMuscle, selectedEquipment]);
+
+  const recentFiltered = useMemo(() => {
+    if (search) return [];
+    return recentExercises
+      .map(name => exerciseList.find(ex =>
+        `${ex.name}${ex.equipment ? ` (${ex.equipment})` : ''}` === name ||
+        ex.name === name
+      ))
+      .filter((ex): ex is Exercise => ex !== undefined)
+      .filter(ex => {
+        const matchMuscle = selectedMuscle === 'All' || ex.muscle_group === selectedMuscle;
+        const matchEquipment = selectedEquipment === 'All' || ex.equipment === selectedEquipment;
+        return matchMuscle && matchEquipment;
+      })
+      .slice(0, 5);
+  }, [recentExercises, exerciseList, search, selectedMuscle, selectedEquipment]);
+
+  const renderExerciseCard = ({ item }: { item: Exercise }) => (
+    <TouchableOpacity
+      style={styles.exerciseCard}
+      onPress={() => navigation.navigate('ExerciseDetail', {
+        exerciseId: item.id,
+        exerciseName: item.name,
+        equipment: item.equipment,
+        muscleGroup: item.muscle_group,
+        imageUrl: item.image_url,
+      })}
+    >
+      {item.image_url ? (
+        <Image source={{ uri: item.image_url }} style={styles.exerciseImage} />
+      ) : null}
+      <View style={item.image_url ? styles.exerciseCardRight : styles.exerciseCardLeft}>
+        <Text style={styles.exerciseName}>
+          {item.equipment ? `${item.name} (${item.equipment})` : item.name}
+        </Text>
+        <Text style={styles.exerciseMuscle}>{item.muscle_group}</Text>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={styles.container}>
@@ -184,47 +248,118 @@ export default function ExercisesScreen({ navigation }: Props) {
 
       {activeTab === 'exercises' ? (
         <View style={styles.tabContent}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search exercises..."
-            placeholderTextColor={colors.placeholder}
-            value={search}
-            onChangeText={setSearch}
-          />
+          {/* Top row: Create button + Search bar */}
+          <View style={styles.topRow}>
+            <TouchableOpacity style={styles.createBtn} onPress={() => setShowNewExerciseModal(true)}>
+              <Text style={styles.createBtnText}>Create</Text>
+            </TouchableOpacity>
+            <View style={styles.searchWrapper}>
+              <Ionicons name="search" size={16} color={colors.textSecondary} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search exercises..."
+                placeholderTextColor={colors.placeholder}
+                value={search}
+                onChangeText={setSearch}
+              />
+              {search !== '' && (
+                <TouchableOpacity onPress={() => setSearch('')} style={styles.clearBtn}>
+                  <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
 
-          <FlatList
-            data={['All', ...muscleGroups]}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={item => item}
-            style={styles.muscleFilter}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[styles.muscleChip, selectedMuscle === item && styles.muscleChipActive]}
-                onPress={() => setSelectedMuscle(item)}
-              >
-                <Text style={[styles.muscleChipText, selectedMuscle === item && styles.muscleChipTextActive]}>
-                  {item}
+          {/* Filter row: muscle picker + equipment picker each with clear X */}
+          <View style={styles.pickerRow}>
+            <View style={styles.pickerGroup}>
+              <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowMuscleDropdown(true)}>
+                <Text style={styles.dropdownBtnText} numberOfLines={1}>
+                  {selectedMuscle === 'All' ? 'All Muscles' : selectedMuscle}
                 </Text>
+                <Text style={styles.dropdownArrow}>▾</Text>
               </TouchableOpacity>
-            )}
-          />
+              {selectedMuscle !== 'All' && (
+                <TouchableOpacity onPress={() => setSelectedMuscle('All')} style={styles.pickerClear}>
+                  <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+            <View style={styles.pickerGroup}>
+              <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowEquipmentDropdown(true)}>
+                <Text style={styles.dropdownBtnText} numberOfLines={1}>
+                  {selectedEquipment === 'All' ? 'All Equipment' : selectedEquipment}
+                </Text>
+                <Text style={styles.dropdownArrow}>▾</Text>
+              </TouchableOpacity>
+              {selectedEquipment !== 'All' && (
+                <TouchableOpacity onPress={() => setSelectedEquipment('All')} style={styles.pickerClear}>
+                  <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
 
-          <FlatList
-            data={filteredExercises}
-            keyExtractor={item => item.id.toString()}
-            renderItem={({ item }) => (
-              <View style={styles.exerciseCard}>
-                <Text style={styles.exerciseName}>{item.name}</Text>
-                <Text style={styles.exerciseMuscle}>{item.muscle_group}</Text>
+          {/* Muscle dropdown modal */}
+          <Modal visible={showMuscleDropdown} transparent animationType="fade">
+            <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setShowMuscleDropdown(false)}>
+              <View style={styles.dropdownList}>
+                {['All', ...muscleGroups].map(item => (
+                  <TouchableOpacity
+                    key={item}
+                    style={[styles.dropdownItem, selectedMuscle === item && styles.dropdownItemActive]}
+                    onPress={() => { setSelectedMuscle(item); setShowMuscleDropdown(false); }}
+                  >
+                    <Text style={[styles.dropdownItemText, selectedMuscle === item && styles.dropdownItemTextActive]}>
+                      {item === 'All' ? 'All Muscles' : item}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-            )}
-            ListEmptyComponent={<Text style={styles.emptyText}>No exercises found</Text>}
-          />
+            </TouchableOpacity>
+          </Modal>
 
-          <TouchableOpacity style={styles.addButton} onPress={() => setShowNewExerciseModal(true)}>
-            <Text style={styles.addButtonText}>+ New Exercise</Text>
-          </TouchableOpacity>
+          {/* Equipment dropdown modal */}
+          <Modal visible={showEquipmentDropdown} transparent animationType="fade">
+            <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setShowEquipmentDropdown(false)}>
+              <View style={styles.dropdownList}>
+                {['All', ...equipmentTypes].map(item => (
+                  <TouchableOpacity
+                    key={item}
+                    style={[styles.dropdownItem, selectedEquipment === item && styles.dropdownItemActive]}
+                    onPress={() => { setSelectedEquipment(item); setShowEquipmentDropdown(false); }}
+                  >
+                    <Text style={[styles.dropdownItemText, selectedEquipment === item && styles.dropdownItemTextActive]}>
+                      {item === 'All' ? 'All Equipment' : item}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </TouchableOpacity>
+          </Modal>
+
+          {/* Exercise list - SectionList when no search, FlatList when searching */}
+          {search ? (
+            <FlatList
+              data={filteredExercises}
+              keyExtractor={item => item.id.toString()}
+              renderItem={renderExerciseCard}
+              ListEmptyComponent={<Text style={styles.emptyText}>No exercises found</Text>}
+            />
+          ) : (
+            <SectionList
+              sections={[
+                ...(recentFiltered.length > 0 ? [{ title: 'Recent Exercises', data: recentFiltered }] : []),
+                { title: 'All Exercises', data: filteredExercises },
+              ]}
+              keyExtractor={item => item.id.toString()}
+              renderItem={({ item }) => renderExerciseCard({ item })}
+              renderSectionHeader={({ section }) => (
+                <Text style={styles.sectionHeader}>{section.title}</Text>
+              )}
+              ListEmptyComponent={<Text style={styles.emptyText}>No exercises found</Text>}
+            />
+          )}
 
           <ExerciseListModal
             visible={showNewExerciseModal}
@@ -281,7 +416,7 @@ export default function ExercisesScreen({ navigation }: Props) {
           </TouchableOpacity>
 
           {/* Templates Section */}
-          <Text style={styles.sectionHeader}>Templates</Text>
+          <Text style={styles.trainingSectionHeader}>Templates</Text>
           {templates.length === 0 ? (
             <Text style={styles.emptyText}>No templates yet</Text>
           ) : (
@@ -307,7 +442,7 @@ export default function ExercisesScreen({ navigation }: Props) {
           )}
 
           {/* Routines Section */}
-          <Text style={[styles.sectionHeader, { marginTop: spacing.md }]}>Routines</Text>
+          <Text style={[styles.trainingSectionHeader, { marginTop: spacing.md }]}>Routines</Text>
           {routines.length === 0 ? (
             <Text style={styles.emptyText}>No routines yet</Text>
           ) : (
@@ -391,29 +526,117 @@ const styles = StyleSheet.create({
   tabBtnText: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textSecondary },
   tabBtnTextActive: { color: '#fff' },
   tabContent: { flex: 1, paddingHorizontal: spacing.md },
-  searchInput: {
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  createBtn: {
+    backgroundColor: colors.accent,
+    borderRadius: spacing.sm,
+    paddingHorizontal: spacing.md,
+    height: 36,
+    justifyContent: 'center',
+  },
+  createBtnText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: typography.fontSize.sm,
+  },
+  searchWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: spacing.sm,
-    padding: spacing.md,
-    fontSize: typography.fontSize.md,
+    height: 36,
+    paddingHorizontal: spacing.sm,
+  },
+  searchIcon: { marginRight: 4 },
+  searchInput: {
+    flex: 1,
+    fontSize: typography.fontSize.sm,
     color: colors.textPrimary,
+    height: 36,
+    padding: 0,
+  },
+  clearBtn: { padding: 2 },
+  pickerRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
     marginBottom: spacing.sm,
   },
-  muscleFilter: { marginBottom: spacing.sm, flexGrow: 0 },
-  muscleChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+  pickerGroup: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  pickerClear: { padding: 2 },
+  dropdownBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: colors.surface,
-    borderRadius: 20,
-    marginRight: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
+    borderRadius: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    height: 36,
   },
-  muscleChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  muscleChipText: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
-  muscleChipTextActive: { color: '#fff' },
+  dropdownBtnText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  dropdownArrow: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginLeft: 4,
+  },
+  dropdownOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dropdownList: {
+    backgroundColor: colors.surface,
+    borderRadius: spacing.sm,
+    width: '70%',
+    maxHeight: '60%',
+    overflow: 'hidden',
+  },
+  dropdownItem: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  dropdownItemActive: {
+    backgroundColor: colors.accent,
+  },
+  dropdownItemText: {
+    fontSize: typography.fontSize.md,
+    color: colors.textPrimary,
+  },
+  dropdownItemTextActive: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  sectionHeader: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.background,
+  },
   exerciseCard: {
     backgroundColor: colors.surface,
     borderRadius: spacing.sm,
@@ -425,14 +648,19 @@ const styles = StyleSheet.create({
   },
   exerciseName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
   exerciseMuscle: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
-  addButton: {
-    backgroundColor: colors.save,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    alignItems: 'center',
-    marginVertical: spacing.md,
+  exerciseImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: spacing.sm,
   },
-  addButtonText: { color: '#fff', fontSize: typography.fontSize.md, fontWeight: '600' },
+  exerciseCardLeft: {
+    flex: 1,
+  },
+  exerciseCardRight: {
+    flex: 1,
+    justifyContent: 'center',
+  },
   // Active Routine block
   activeBlock: {
     backgroundColor: colors.surface,
@@ -473,8 +701,8 @@ const styles = StyleSheet.create({
   },
   logDayBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.sm },
   noRoutineText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontStyle: 'italic' },
-  // Section headers
-  sectionHeader: {
+  // Training section headers
+  trainingSectionHeader: {
     fontSize: typography.fontSize.md,
     fontWeight: '700',
     color: colors.textPrimary,

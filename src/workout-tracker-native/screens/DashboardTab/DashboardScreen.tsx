@@ -10,6 +10,28 @@ import { typography } from '../../theme/typography';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
+const dailyGreetings = [
+    'Ready to workout',
+    'Welcome',
+    'Ready to Train',
+    "Let's Workout",
+    'Crush it today',
+    'Train hard today',
+    'Make today count',
+    'Stronger every day',
+    'Time to sweat',
+    'Bring your best',
+];
+
+const getDailyGreeting = () => {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    let hash = 0;
+    for (let i = 0; i < todayKey.length; i++) {
+        hash = (hash * 31 + todayKey.charCodeAt(i)) % 1e9;
+    }
+    return dailyGreetings[Math.abs(hash) % dailyGreetings.length];
+};
+
 type User = {
     id: number;
     username: string;
@@ -96,7 +118,7 @@ export default function DashboardScreen({ navigation }: Props) {
     return (
         <ScrollView style={styles.container} contentContainerStyle={styles.content}>
             <View style={styles.topbar}>
-                <Text style={styles.title}>Welcome {user?.username}</Text>
+                <Text style={styles.title}>{getDailyGreeting()}, {user?.username}</Text>
             </View>
 
             <TouchableOpacity

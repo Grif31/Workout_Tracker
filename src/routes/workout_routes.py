@@ -12,9 +12,10 @@ workout_bp = Blueprint('workout_bp', __name__)
 def get_workouts():
     try:
         current_user_id = get_jwt_identity()
+        include_exercises = request.args.get('include_exercises', 'false').lower() == 'true'
         workouts = Workout.query.filter_by(user_id=current_user_id).all()
         
-        return jsonify([ w.to_dict() for w in workouts]), 200
+        return jsonify([w.to_dict(include_exercises=include_exercises) for w in workouts]), 200
     
     except Exception as e:
         print(f"Error {e}")

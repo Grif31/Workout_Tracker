@@ -1,10 +1,10 @@
 export const colors = {
-  background: '#6a6b6cff',
-  surface: '#e3dfdfff',
-  border: '#050505ff',
-  textPrimary: '#222',
-  textSecondary: '#666',
-  placeholder: '#888',
+  background: '#ffffff',
+  surface: '#d9d9d9',
+  border: '#c1c1c1',
+  textPrimary: '#222222',
+  textSecondary: '#4f4f4f',
+  placeholder: '#888888',
   accent: '#145609ff',
   danger: '#d9534f',
   save: '#007AFF'

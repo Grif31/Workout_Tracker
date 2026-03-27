@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: typography.fontSize.lg,
     fontWeight: 'bold',
-    color: '#fff',
+    color: colors.textPrimary,
     marginBottom: spacing.md,
   },
   avatarContainer: {
@@ -251,13 +251,13 @@ const styles = StyleSheet.create({
   sectionHeader: {
     fontSize: typography.fontSize.md,
     fontWeight: '600',
-    color: '#fff',
+    color: colors.textPrimary,
     marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
   label: {
     fontSize: typography.fontSize.sm,
-    color: '#fff',
+    color: colors.textPrimary,
     marginBottom: spacing.xs,
   },
   input: {

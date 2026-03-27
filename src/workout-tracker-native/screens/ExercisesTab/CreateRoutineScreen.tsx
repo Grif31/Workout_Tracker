@@ -224,7 +224,7 @@ export default function CreateRoutineScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.md },
-  label: { color: '#fff', fontSize: typography.fontSize.sm, marginBottom: spacing.xs },
+  label: { color: colors.textPrimary, fontSize: typography.fontSize.sm, marginBottom: spacing.xs },
   input: {
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   },
   descInput: { height: 72, textAlignVertical: 'top' },
   sectionHeader: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: typography.fontSize.md,
     fontWeight: '600',
     marginBottom: spacing.sm,
@@ -287,13 +287,13 @@ const styles = StyleSheet.create({
   addExBtnText: { color: colors.save, fontWeight: '600', fontSize: typography.fontSize.sm },
   addDayBtn: {
     borderWidth: 1,
-    borderColor: '#fff',
+    borderColor: colors.save,
     borderRadius: spacing.sm,
     padding: spacing.md,
     alignItems: 'center',
     marginBottom: spacing.md,
   },
-  addDayBtnText: { color: '#fff', fontSize: typography.fontSize.md, fontWeight: '600' },
+  addDayBtnText: { color: colors.save, fontSize: typography.fontSize.md, fontWeight: '600' },
   saveBtn: {
     backgroundColor: colors.save,
     borderRadius: spacing.sm,
