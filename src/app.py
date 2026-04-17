@@ -12,6 +12,8 @@ from routes.exercise_routes import exercise_bp
 from routes.workout_template_routes import workout_template_bp
 from routes.routine_routes import routine_bp
 from routes.stats_routes import stats_bp
+from routes.bodyweight_routes import bodyweight_bp
+from routes.personal_record_routes import pr_bp
 
 load_dotenv()
 
@@ -38,6 +40,8 @@ def create_app(test_config=None):
     app.register_blueprint(workout_template_bp)
     app.register_blueprint(routine_bp)
     app.register_blueprint(stats_bp)
+    app.register_blueprint(bodyweight_bp)
+    app.register_blueprint(pr_bp)
 
     return app
 

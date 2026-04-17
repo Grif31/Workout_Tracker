@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -19,14 +19,21 @@ import { typography } from '../../theme/typography';
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 type Props = NativeStackScreenProps<ExercisesStackParamsList, 'ExerciseDetail'>;
-type WorkoutSet = { reps: number; weight: number };
-type WorkoutExercise = { id: number; name: string; sets: WorkoutSet[] };
-type WorkoutHistoryItem = {
-  workoutId: number;
-  workoutName: string;
+
+type ExerciseStats = {
+  estimatedOneRepMax: number;
+  totalSets: number;
+  workoutCount: number;
+  totalReps: number;
+  maxWeight: number;
+  maxReps: number;
+  maxVolume: number;
+};
+
+type HistorySession = {
   date: string;
-  exerciseName: string;
-  sets: WorkoutSet[];
+  workoutName: string;
+  sets: { reps: number; weight: number }[];
 };
 
 const exerciseDescriptions: Record<string, string> = {
@@ -59,10 +66,11 @@ const tabLabels: Array<{ key: 'about' | 'stats' | 'history'; label: string }> = 
   { key: 'history', label: 'History' },
 ];
 
+const fmt = (val: number, unit = 'lbs') => (val ? `${val.toFixed(0)} ${unit}` : '—');
+
 export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const { token } = useAuth();
   const {
-    exerciseId,
     exerciseName,
     equipment,
     muscleGroup,
@@ -73,42 +81,57 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
 
   const [activeTab, setActiveTab] = useState<'about' | 'stats' | 'history'>('about');
   const [loading, setLoading] = useState(true);
-  const [historyItems, setHistoryItems] = useState<WorkoutHistoryItem[]>([]);
+  const [stats, setStats] = useState<ExerciseStats>({
+    estimatedOneRepMax: 0,
+    totalSets: 0,
+    workoutCount: 0,
+    totalReps: 0,
+    maxWeight: 0,
+    maxReps: 0,
+    maxVolume: 0,
+  });
+  const [historySessions, setHistorySessions] = useState<HistorySession[]>([]);
   const [wgerDescription, setWgerDescription] = useState<string | null>(null);
   const [wgerLoading, setWgerLoading] = useState(false);
-  const [wgerError, setWgerError] = useState<string | null>(null);
 
   const stripHtml = (html: string) => html.replace(/<[^>]*>/g, '').trim();
 
-  const fetchExerciseHistory = useCallback(async () => {
-    if (!token) return;
+  const fetchExerciseData = useCallback(async () => {
+    if (!token || !exerciseName) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/workouts?include_exercises=true`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `${API_URL}/api/stats/exercise?name=${encodeURIComponent(exerciseName)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       if (!res.ok) return;
-      const workouts = await res.json();
-      const items: WorkoutHistoryItem[] = [];
+      const data = await res.json();
 
-      workouts.forEach((workout: any) => {
-        if (!workout.exercises) return;
-        workout.exercises.forEach((ex: WorkoutExercise) => {
-          if (exerciseName && ex.name !== exerciseName) return;
-          items.push({
-            workoutId: workout.id,
-            workoutName: workout.name || 'Workout',
-            date: workout.date,
-            exerciseName: ex.name,
-            sets: ex.sets || [],
-          });
+      let maxVolume = 0;
+      const sessions: HistorySession[] = (data.history ?? []).map((item: any) => {
+        (item.sets ?? []).forEach((s: { reps: number; weight: number }) => {
+          const vol = (s.reps || 0) * (s.weight || 0);
+          if (vol > maxVolume) maxVolume = vol;
         });
+        return {
+          date: item.date,
+          workoutName: item.workout_name || 'Workout',
+          sets: item.sets ?? [],
+        };
       });
 
-      items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setHistoryItems(items);
+      setHistorySessions(sessions);
+      setStats({
+        estimatedOneRepMax: data.personal_bests?.estimated_1rm ?? 0,
+        maxWeight: data.personal_bests?.max_weight ?? 0,
+        maxReps: data.personal_bests?.most_reps ?? 0,
+        totalSets: data.totals?.total_sets ?? 0,
+        totalReps: data.totals?.total_reps ?? 0,
+        workoutCount: data.totals?.total_workouts ?? 0,
+        maxVolume,
+      });
     } catch (err) {
-      console.error('Failed to load exercise history', err);
+      console.error('Failed to load exercise data', err);
     } finally {
       setLoading(false);
     }
@@ -117,94 +140,92 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const fetchWgerDetails = useCallback(async () => {
     if (!exerciseName) return;
     setWgerLoading(true);
-    setWgerError(null);
-
     try {
       const query = encodeURIComponent(exerciseName);
       const res = await fetch(`https://wger.de/api/v2/exercise?language=2&search=${query}`);
-      if (!res.ok) {
-        throw new Error('Wger API error');
+      if (res.ok) {
+        const data = await res.json();
+        const result = Array.isArray(data.results) ? data.results[0] : null;
+        if (result?.description) {
+          setWgerDescription(stripHtml(result.description));
+        }
       }
-
-      const data = await res.json();
-      const result = Array.isArray(data.results) ? data.results[0] : null;
-      if (result) {
-        const rawDescription = result.description || '';
-        setWgerDescription(stripHtml(rawDescription));
-      }
-    } catch (err) {
-      console.warn('Wger fetch failed:', err);
-      setWgerError('Exercise details are unavailable right now.');
+    } catch {
+      // silently fall back to local description
     } finally {
       setWgerLoading(false);
     }
   }, [exerciseName]);
 
   useEffect(() => {
-    fetchExerciseHistory();
+    fetchExerciseData();
     fetchWgerDetails();
-  }, [fetchExerciseHistory, fetchWgerDetails]);
-
-  const allSets = useMemo(() => {
-    return historyItems.flatMap(item =>
-      item.sets.map((set, index) => ({
-        ...set,
-        workoutId: item.workoutId,
-        workoutName: item.workoutName,
-        date: item.date,
-        setIndex: index + 1,
-        volume: (set.reps || 0) * (set.weight || 0),
-      }))
-    );
-  }, [historyItems]);
-
-  const stats = useMemo(() => {
-    const totalSets = allSets.length;
-    const totalReps = allSets.reduce((sum, set) => sum + (set.reps || 0), 0);
-    const workoutCount = new Set(allSets.map(set => set.workoutId)).size;
-    const maxWeight = allSets.reduce((max, set) => Math.max(max, set.weight || 0), 0);
-    const maxReps = allSets.reduce((max, set) => Math.max(max, set.reps || 0), 0);
-    const maxVolume = allSets.reduce((max, set) => Math.max(max, set.volume || 0), 0);
-    const estimatedOneRepMax = allSets.reduce((max, set) => {
-      const oneRm = set.weight * (1 + (set.reps || 0) / 30);
-      return Math.max(max, oneRm);
-    }, 0);
-
-    return {
-      totalSets,
-      totalReps,
-      workoutCount,
-      maxWeight,
-      maxReps,
-      maxVolume,
-      estimatedOneRepMax,
-    };
-  }, [allSets]);
+  }, [fetchExerciseData, fetchWgerDetails]);
 
   const exerciseDescription =
     wgerLoading
       ? 'Loading exercise details...'
       : wgerDescription || description || exerciseDescriptions[muscleGroup] || defaultDescription;
 
+  const renderStats = () => {
+    if (loading) {
+      return <ActivityIndicator size="large" color={colors.save} />;
+    }
+    if (stats.totalSets === 0) {
+      return <Text style={styles.emptyText}>Log this exercise to see your stats.</Text>;
+    }
+    return (
+      <View style={styles.statsGrid}>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Estimated 1RM</Text>
+          <Text style={styles.statValue}>{fmt(stats.estimatedOneRepMax)}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Max Weight</Text>
+          <Text style={styles.statValue}>{fmt(stats.maxWeight)}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Max Volume / Set</Text>
+          <Text style={styles.statValue}>{fmt(stats.maxVolume)}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Max Reps</Text>
+          <Text style={styles.statValue}>{stats.maxReps || '—'}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Total Sets</Text>
+          <Text style={styles.statValue}>{stats.totalSets}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Total Reps</Text>
+          <Text style={styles.statValue}>{stats.totalReps}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Workouts</Text>
+          <Text style={styles.statValue}>{stats.workoutCount}</Text>
+        </View>
+      </View>
+    );
+  };
+
   const renderHistory = () => {
     if (loading) {
       return <ActivityIndicator size="large" color={colors.save} />;
     }
-
-    if (allSets.length === 0) {
+    if (historySessions.length === 0) {
       return <Text style={styles.emptyText}>No recorded sets for this exercise yet.</Text>;
     }
-
-    return allSets.map((set, index) => (
-      <View key={`${set.workoutId}-${index}`} style={styles.historyRow}>
+    return historySessions.map((session, i) => (
+      <View key={i} style={styles.historySession}>
         <View style={styles.historyMeta}>
-          <Text style={styles.historyLabel}>{set.workoutName}</Text>
-          <Text style={styles.historyDate}>{new Date(set.date).toLocaleDateString()}</Text>
+          <Text style={styles.historyLabel}>{session.workoutName}</Text>
+          <Text style={styles.historyDate}>{new Date(session.date).toLocaleDateString()}</Text>
         </View>
-        <Text style={styles.historyDetail}>
-          Set {set.setIndex}: {set.reps} reps @ {set.weight} lbs
-        </Text>
-        <Text style={styles.historyDetail}>Volume: {set.volume}</Text>
+        {session.sets.map((set, j) => (
+          <Text key={j} style={styles.historyDetail}>
+            Set {j + 1}: {set.reps} reps @ {set.weight} lbs
+          </Text>
+        ))}
       </View>
     ));
   };
@@ -254,7 +275,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
               <View style={styles.diagramLabelRow}>
                 <Text style={styles.sectionTitle}>Muscle Diagram</Text>
               </View>
-              <View style={styles.diagram}> 
+              <View style={styles.diagram}>
                 <View style={[styles.muscleBubble, styles.primaryBubble]}>
                   <Text style={styles.bubbleText}>{muscleGroup}</Text>
                 </View>
@@ -268,47 +289,14 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
 
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>How to perform</Text>
-              {wgerError ? (
-                <Text style={styles.body}>{wgerError}</Text>
-              ) : (
-                <Text style={styles.body}>{exerciseDescription}</Text>
-              )}
+              <Text style={styles.body}>{exerciseDescription}</Text>
             </View>
           </View>
         )}
 
         {activeTab === 'stats' && (
           <View style={styles.section}>
-            <View style={styles.statsGrid}>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>Estimated 1RM</Text>
-                <Text style={styles.statValue}>{stats.estimatedOneRepMax ? `${stats.estimatedOneRepMax.toFixed(0)} lbs` : '—'}</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>Total Sets</Text>
-                <Text style={styles.statValue}>{stats.totalSets}</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>Workouts</Text>
-                <Text style={styles.statValue}>{stats.workoutCount}</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>Total Reps</Text>
-                <Text style={styles.statValue}>{stats.totalReps}</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>Max Volume</Text>
-                <Text style={styles.statValue}>{stats.maxVolume}</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>Max Reps</Text>
-                <Text style={styles.statValue}>{stats.maxReps}</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>Max Weight</Text>
-                <Text style={styles.statValue}>{stats.maxWeight.toFixed(0)} lbs</Text>
-              </View>
-            </View>
+            {renderStats()}
           </View>
         )}
 
@@ -479,7 +467,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: typography.fontSize.sm,
   },
-  historyRow: {
+  historySession: {
     backgroundColor: '#d1d1d1',
     borderRadius: 16,
     padding: spacing.md,
@@ -488,7 +476,7 @@ const styles = StyleSheet.create({
   historyMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   historyLabel: {
     color: colors.textPrimary,
@@ -501,5 +489,6 @@ const styles = StyleSheet.create({
   historyDetail: {
     color: colors.textSecondary,
     fontSize: typography.fontSize.sm,
+    paddingVertical: 2,
   },
 });

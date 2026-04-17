@@ -6,7 +6,8 @@ import EditProfileScreen from '../screens/ProfileTab/EditProfileScreen';
 import EditWorkoutScreen from '../screens/ProfileTab/EditWorkoutScreen';
 import ChangePasswordScreen from '../screens/ProfileTab/ChangePasswordScreen';
 import SettingsScreen from '../screens/ProfileTab/SettingsScreen';
-import WorkoutDetails from '../screens/ProfileTab/WorkoutDetails'
+import WorkoutDetails from '../screens/ProfileTab/WorkoutDetails';
+import BodyweightScreen from '../screens/ProfileTab/BodyweightScreen';
 import { useAuth } from 'context/AuthContext';
 
 const Stack = createNativeStackNavigator<ProfileStackParamsList>();
@@ -23,6 +24,7 @@ export function ProfileStack() {
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="WorkoutDetails" component={WorkoutDetails} />
       <Stack.Screen name="EditWorkout" component={EditWorkoutScreen} />
+      <Stack.Screen name="BodyweightLog" component={BodyweightScreen} />
     </Stack.Navigator>
   );
 }

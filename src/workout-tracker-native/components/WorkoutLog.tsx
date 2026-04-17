@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, Modal, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, LayoutAnimation, UIManager} from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import {Set} from '../types/models'
+import type {Set} from '../types/models'
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { colors } from '../theme/colors';
 import { spacing } from '../theme/spacing';
@@ -11,7 +11,7 @@ import NewExerciseForm from '../components/NewExerciseForm';
 import {PrefillWorkoutData} from './WorkoutDetails'
 import { muscleGroups } from 'constants/muscleGroups';
 
-type ExerciseEntry = {id?: string, name: string, sets: Set[]}
+type ExerciseEntry = { id?: string; name: string; exercise_template_id?: number; sets: Set[] }
 type Props =  {
     prefill?: PrefillWorkoutData 
     editMode?: boolean
@@ -158,10 +158,10 @@ export default function WorkoutLog({prefill, editMode, workoutId, onSubmit, onCa
 );
 
   //Saves exercise to the current workout
-  const addExToWorkout = (exerciseName: string) => {
+  const addExToWorkout = (exercise: { id: number; name: string }) => {
     setExercises(prev => [
       ...prev,
-      { name: exerciseName, sets: [{ reps: '', weight: '' }] }
+      { name: exercise.name, exercise_template_id: exercise.id, sets: [{ reps: '', weight: '' }] }
     ]);
     setExerciseModalVisible(false);
   };
@@ -181,18 +181,21 @@ export default function WorkoutLog({prefill, editMode, workoutId, onSubmit, onCa
         notes,
         date:  selectedDate.toISOString().split('T')[0],
         duration: durationMin,
-        exercises: exercises.map((ex) => ({
-          id: ex.id, 
+        exercises: exercises.map((ex, exIndex) => ({
+          id: ex.id,
           name: ex.name,
-          sets: ex.sets.map((s) => ({
-            id: s.id, 
+          exercise_template_id: ex.exercise_template_id,
+          order: exIndex,
+          sets: ex.sets.map((s, setIndex) => ({
+            id: s.id,
             reps: Number(s.reps),
             weight: Number(s.weight),
+            order: setIndex,
           })),
         })),
-      }
+      };
       const isEditing = Boolean(editMode && workoutId);
-      const url = isEditing 
+      const url = isEditing
         ? `${API_URL}/api/workouts/${workoutId}`
         : `${API_URL}/api/workouts`;
       const method = isEditing ? 'PATCH' : 'POST';
@@ -206,16 +209,17 @@ export default function WorkoutLog({prefill, editMode, workoutId, onSubmit, onCa
           body: JSON.stringify(payload)
         });
         const data = await res.json();
-        console.log('Status:', res.status, 'Body:', data);
-        if(!res.ok){
-          Alert.alert('Error', data.message || 'Please try again')
+        if (!res.ok) {
+          Alert.alert('Error', data.message || 'Please try again');
+          return;
         }
-        if (onSubmit) {
-          onSubmit();
+        if (!isEditing && data.new_prs?.length > 0) {
+          const exercises = [...new Set<string>(data.new_prs.map((pr: any) => pr.exercise_name as string))];
+          Alert.alert('New Personal Record! 🏆', exercises.map(n => `• ${n}`).join('\n'));
         }
-
-      }catch(err){
-        Alert.alert('Error', 'Something went wrong')
+        if (onSubmit) onSubmit();
+      } catch (err) {
+        Alert.alert('Error', 'Something went wrong');
       }
   }
   
@@ -236,8 +240,8 @@ export default function WorkoutLog({prefill, editMode, workoutId, onSubmit, onCa
         visible={exerciseModalVisible}
         onClose={() => setExerciseModalVisible(false)}
         exercises={exerciseList}
-        onSelect={(name) => {
-          addExToWorkout(name);
+        onSelect={(exercise) => {
+          addExToWorkout(exercise);
           setExerciseModalVisible(false);
         }}
         onAddExercise={(name, muscle) => {

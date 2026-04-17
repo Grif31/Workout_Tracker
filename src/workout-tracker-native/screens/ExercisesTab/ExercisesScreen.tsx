@@ -365,7 +365,7 @@ export default function ExercisesScreen({ navigation }: Props) {
             visible={showNewExerciseModal}
             onClose={() => setShowNewExerciseModal(false)}
             exercises={exerciseList}
-            onSelect={() => {}}
+            onSelect={(_exercise) => {}}
             onAddExercise={(name, muscle) => {
               addNewExercise(name, muscle);
               setShowNewExerciseModal(false);

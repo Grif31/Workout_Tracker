@@ -10,6 +10,7 @@ import {
   Image,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { ProfileStackParamsList } from '../../navigation/types';
 import { useFocusEffect } from '@react-navigation/native';
@@ -111,6 +112,19 @@ export default function ProfileScreen({ navigation }: Props) {
         </TouchableOpacity>
       )}
 
+      <TouchableOpacity
+        style={styles.weightRow}
+        onPress={() => navigation.navigate('BodyweightLog')}
+      >
+        <View>
+          <Text style={styles.weightRowLabel}>Bodyweight</Text>
+          <Text style={styles.weightRowValue}>
+            {user?.bodyweight ? `${user.bodyweight} ${user.weight_unit || 'lbs'}` : 'Tap to track'}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+      </TouchableOpacity>
+
       <Text style={styles.sectionTitle}>Workout History</Text>
     </View>
   );
@@ -199,4 +213,26 @@ const styles = StyleSheet.create({
   workoutName: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
   workoutDate: { fontSize: 13, color: colors.textSecondary, marginBottom: 2 },
   workoutNotes: { fontSize: 13, color: colors.textSecondary },
+  weightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: spacing.sm,
+    padding: spacing.md,
+  },
+  weightRowLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  weightRowValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
 });

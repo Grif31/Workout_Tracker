@@ -11,7 +11,7 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   exercises: Exercise[];
-  onSelect: (exerciseName: string) => void;
+  onSelect: (exercise: { id: number; name: string }) => void;
   onAddExercise: (name: string, muscle: string) => void;
   muscleGroups: string[];
 };
@@ -55,7 +55,7 @@ export default function ExerciseListModal({visible, onClose, exercises, onSelect
                 data={filteredEx}
                 keyExtractor={item => item.id.toString()}
                 renderItem={({ item }) => (
-                    <TouchableOpacity style={styles.item} onPress={() => onSelect(item.name)}>
+                    <TouchableOpacity style={styles.item} onPress={() => onSelect({ id: item.id, name: item.name })}>
                     <Text>{item.name} ({item.muscle_group})</Text>
                     </TouchableOpacity>
                 )}

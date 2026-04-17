@@ -27,7 +27,7 @@ export type ProfileStackParamsList = {
     ChangePassword: undefined
     WorkoutDetails: { workoutId: number };
     EditWorkout: {prefill?: PrefillWorkoutData, workoutId?:number, editMode?: boolean}
-
+    BodyweightLog: undefined;
 };
 
 export type AppStack = {

@@ -1,9 +1,72 @@
 from datetime import datetime
 from flask import Blueprint, request, jsonify
-from models import db, Workout, Set, Exercise
+from models import db, Workout, Set, Exercise, PersonalRecord, ExerciseTemplate
 from flask_jwt_extended import  jwt_required, get_jwt_identity
 
 workout_bp = Blueprint('workout_bp', __name__)
+
+
+def _compute_and_upsert_prs(user_id, exercise_set_pairs):
+    """Check if any sets in a workout beat existing personal records.
+
+    exercise_set_pairs: list of (Exercise, list[Set])
+    Returns a list of new PR dicts for exercises that set a new record.
+    """
+    new_prs = []
+    for exercise, sets in exercise_set_pairs:
+        if not exercise.exercise_template_id:
+            continue
+        valid = [(s.reps, s.weight, s.id) for s in sets if s.reps and s.weight]
+        if not valid:
+            continue
+
+        workout_max_weight = max(w for _, w, _ in valid)
+        workout_max_reps   = max(r for r, _, _ in valid)
+        workout_max_1rm    = max(w * (1 + r / 30) for r, w, _ in valid)
+
+        for pr_type, workout_value in [
+            ('max_weight',    workout_max_weight),
+            ('max_reps',      float(workout_max_reps)),
+            ('estimated_1rm', workout_max_1rm),
+        ]:
+            existing = PersonalRecord.query.filter_by(
+                user_id=user_id,
+                exercise_template_id=exercise.exercise_template_id,
+                pr_type=pr_type,
+            ).first()
+
+            if existing and workout_value <= existing.value:
+                continue
+
+            # Identify the set that produced this PR
+            if pr_type == 'max_weight':
+                pr_set_id = next((sid for _, w, sid in valid if w == workout_max_weight), None)
+            elif pr_type == 'max_reps':
+                pr_set_id = next((sid for r, _, sid in valid if r == workout_max_reps), None)
+            else:
+                pr_set_id = None
+
+            if existing:
+                existing.value       = round(workout_value, 1)
+                existing.achieved_at = datetime.now()
+                existing.set_id      = pr_set_id
+            else:
+                db.session.add(PersonalRecord(
+                    user_id=user_id,
+                    exercise_template_id=exercise.exercise_template_id,
+                    pr_type=pr_type,
+                    value=round(workout_value, 1),
+                    achieved_at=datetime.now(),
+                    set_id=pr_set_id,
+                ))
+
+            new_prs.append({
+                'exercise_name': exercise.name,
+                'pr_type': pr_type,
+                'value': round(workout_value, 1),
+            })
+
+    return new_prs
 
 
 # Get all workouts for current user
@@ -60,18 +123,35 @@ def add_workout():
         db.session.add(new_workout)
         db.session.flush()
         
-        for ex in exercises:
-            new_ex = Exercise(workout_id=new_workout.id, name=ex['name'])
+        exercise_set_pairs = []
+        for ex_index, ex in enumerate(exercises):
+            new_ex = Exercise(
+                workout_id=new_workout.id,
+                name=ex['name'],
+                exercise_template_id=ex.get('exercise_template_id'),
+                order=ex.get('order', ex_index),
+            )
             db.session.add(new_ex)
             db.session.flush()
-            
-            for s in ex.get('sets', []):
-                new_set = Set(exercise_id=new_ex.id, reps=s['reps'], weight=s['weight'])
+
+            new_sets = []
+            for set_index, s in enumerate(ex.get('sets', [])):
+                new_set = Set(
+                    exercise_id=new_ex.id,
+                    reps=s['reps'],
+                    weight=s['weight'],
+                    order=s.get('order', set_index),
+                )
                 db.session.add(new_set)
+                new_sets.append(new_set)
+            db.session.flush()
+            exercise_set_pairs.append((new_ex, new_sets))
+
         new_workout.calculate_volume()
+        new_prs = _compute_and_upsert_prs(current_user_id, exercise_set_pairs)
         db.session.commit()
-                
-        return jsonify({'message': 'New Workout Added'}), 201
+
+        return jsonify({'message': 'New Workout Added', 'new_prs': new_prs}), 201
     except Exception as e:
         db.session.rollback()
         print(f"Error {e}")
@@ -127,34 +207,51 @@ def update_workout(workout_id):
             if ex.id not in newExIds:
                 db.session.delete(ex)
             
-        for exData in data['exercises']:
+        for ex_index, exData in enumerate(data['exercises']):
             exId = exData.get('id')
-            if exId and exId in exIds: # update exercise if it exists 
+            if exId and exId in exIds: # update exercise if it exists
                 ex = next(e for e in workout.exercises if e.id == exId)
                 if "name" in exData:
                     ex.name = exData["name"]
-                
+                if "exercise_template_id" in exData:
+                    ex.exercise_template_id = exData["exercise_template_id"]
+                ex.order = exData.get('order', ex_index)
+
                 setIds = {s.id for s in ex.sets}
                 newSetIds = {s.get('id') for s in exData.get('sets', []) if s.get('id')}
-                
+
                 for s in ex.sets[:]:
                     if s.id not in newSetIds:
                         db.session.delete(s)
-                        
-                for s_data in exData.get("sets", []):
+
+                for set_index, s_data in enumerate(exData.get("sets", [])):
                     s_id = s_data.get("id")
-                    if s_id and s_id in newExIds:
+                    if s_id and s_id in setIds:
                         s = next(st for st in ex.sets if st.id == s_id)
                         if "reps" in s_data:
                             s.reps = s_data["reps"]
                         if "weight" in s_data:
                             s.weight = s_data["weight"]
+                        s.order = s_data.get('order', set_index)
                     else:
-                        ex.sets.append(Set(reps=s_data["reps"], weight=s_data["weight"]))
+                        ex.sets.append(Set(
+                            reps=s_data["reps"],
+                            weight=s_data["weight"],
+                            order=s_data.get('order', set_index),
+                        ))
             else:
-                new_ex = Exercise(name=exData["name"], workout_id=workout_id)
-                for s in exData.get("sets", []):
-                    new_ex.sets.append(Set(reps=s["reps"], weight=s["weight"]))
+                new_ex = Exercise(
+                    name=exData["name"],
+                    workout_id=workout_id,
+                    exercise_template_id=exData.get('exercise_template_id'),
+                    order=exData.get('order', ex_index),
+                )
+                for set_index, s in enumerate(exData.get("sets", [])):
+                    new_ex.sets.append(Set(
+                        reps=s["reps"],
+                        weight=s["weight"],
+                        order=s.get('order', set_index),
+                    ))
                 workout.exercises.append(new_ex) 
                         
     db.session.flush()

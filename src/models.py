@@ -15,7 +15,7 @@ class User(db.Model):
     bodyweight = db.Column(db.Float, nullable=True)
     height = db.Column(db.Float, nullable=True)
     weight_unit = db.Column(db.String(3), default='lbs', nullable=True)
-    active_routine_id = db.Column(db.Integer, nullable=True)
+    active_routine_id = db.Column(db.Integer, db.ForeignKey('routines.id', ondelete='SET NULL'), nullable=True)
     workouts = db.relationship('Workout', backref='user', lazy=True)
 
     def to_dict(self):
@@ -37,9 +37,9 @@ class Workout(db.Model):
     __tablename__ = "workouts"
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    date = db.Column(db.DateTime, default=datetime.now())
+    date = db.Column(db.DateTime, default=datetime.now)
     name = db.Column(db.String(250))
-    notes = db.Column(db.String(250))
+    notes = db.Column(db.Text)
     duration = db.Column(db.Integer)
     volume = db.Column(db.Float)
     exercises = db.relationship('Exercise', backref='workouts', cascade="all, delete-orphan", lazy=True)
@@ -71,20 +71,24 @@ class Exercise(db.Model):
     __tablename__ = "exercises"
     id = db.Column(db.Integer, primary_key=True)
     workout_id = db.Column(db.Integer, db.ForeignKey('workouts.id'), nullable=False)
-    name = db.Column (db.String(250), nullable=False)
-    sets = db.relationship('Set', backref='exercises', cascade="all, delete-orphan", lazy=True)
+    name = db.Column(db.String(250), nullable=False)
+    exercise_template_id = db.Column(db.Integer, db.ForeignKey('exerciseTemplates.id', ondelete='SET NULL'), nullable=True)
+    order = db.Column(db.Integer, nullable=True)
+    sets = db.relationship('Set', backref='exercises', cascade="all, delete-orphan", lazy=True, order_by='Set.order')
 
     def to_dict(self, include_sets=False):
         data = {
             "id": self.id,
             "workout_id": self.workout_id,
             "name": self.name,
+            "exercise_template_id": self.exercise_template_id,
+            "order": self.order,
         }
         if include_sets:
             data["sets"] = [s.to_dict() for s in self.sets]
         return data
 
-# ── WorkoutTemplate (was: Routine) ─────────────────────────────────────────
+# ── WorkoutTemplate ─────────────────────────────────────────
 # A single-day workout plan with a list of exercises.
 # Used as the building block for multi-day Routines.
 
@@ -146,7 +150,7 @@ class Routine(db.Model):
             data["days"] = [d.to_dict() for d in self.days]
         return data
 
-
+# Day in a Routine, which references a WorkoutTemplate. The day_order field determines the sequence of days in the routine.
 class RoutineDay(db.Model):
     __tablename__ = "routine_days"
     id = db.Column(db.Integer, primary_key=True)
@@ -164,7 +168,8 @@ class RoutineDay(db.Model):
             "workout_template": self.workout_template.to_dict(include_exercises=True),
         }
 
-
+# ── ExerciseTemplate ─────────────────────────────────────────
+# A master list of exercises with metadata (muscle group, equipment, etc).
 class ExerciseTemplate(db.Model):
     __tablename__ = "exerciseTemplates"
     id = db.Column(db.Integer, primary_key=True)
@@ -183,13 +188,15 @@ class ExerciseTemplate(db.Model):
         back_populates="exercises",
     )
 
-
+# ── Set ─────────────────────────────────────────────────────────────────
+# A single set of an exercise, with reps and weight. Linked to Exercise via exercise_id.
 class Set(db.Model):
     __tablename__ = "sets"
     id = db.Column(db.Integer, primary_key=True)
     exercise_id = db.Column(db.Integer, db.ForeignKey('exercises.id'), nullable=False)
-    reps = db.Column(db.Integer, nullable=False)
-    weight = db.Column(db.Float, nullable=False)
+    reps = db.Column(db.Integer, nullable=True)
+    weight = db.Column(db.Float, nullable=True)
+    order = db.Column(db.Integer, nullable=True)
 
     def to_dict(self):
         return {
@@ -197,4 +204,50 @@ class Set(db.Model):
             "exercise_id": self.exercise_id,
             "reps": self.reps,
             "weight": self.weight,
+            "order": self.order,
+        }
+
+# ── BodyweightLog ─────────────────────────────────────────
+# Logs of user's bodyweight over time, with timestamp. Linked to User via user_id.
+class BodyweightLog(db.Model):
+    __tablename__ = "bodyweight_logs"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
+    weight = db.Column(db.Float, nullable=False)
+    date = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "weight": self.weight,
+            "date": self.date.isoformat() if self.date else None,
+        }
+
+# ── PersonalRecord ─────────────────────────────────────────
+# User's personal record for a specific exercise and PR type (max weight, estimated 1RM, max reps).
+# Linked to User, ExerciseTemplate, and optionally the Set where the PR was achieved.
+class PersonalRecord(db.Model):
+    __tablename__ = "personal_records"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
+    exercise_template_id = db.Column(db.Integer, db.ForeignKey('exerciseTemplates.id', ondelete='CASCADE'), nullable=False)
+    pr_type = db.Column(db.String(20), nullable=False)  # 'max_weight', 'estimated_1rm', 'max_reps'
+    value = db.Column(db.Float, nullable=False)
+    achieved_at = db.Column(db.DateTime, nullable=False)
+    set_id = db.Column(db.Integer, db.ForeignKey('sets.id', ondelete='SET NULL'), nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'exercise_template_id', 'pr_type', name='uq_pr_user_exercise_type'),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "exercise_template_id": self.exercise_template_id,
+            "pr_type": self.pr_type,
+            "value": self.value,
+            "achieved_at": self.achieved_at.isoformat() if self.achieved_at else None,
+            "set_id": self.set_id,
         }
