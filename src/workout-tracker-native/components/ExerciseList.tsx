@@ -1,88 +1,324 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, Button, Modal, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { useTheme, type Colors } from '../context/ThemeContext';
+import {
+  View,
+  Text,
+  TextInput,
+  Modal,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  SectionList,
+  Image,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NewExerciseForm from './NewExerciseForm';
-import { colors } from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
-type Exercise = { id: number; name: string; muscle_group: string };
+type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; image_url?: string };
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   exercises: Exercise[];
+  recentExerciseNames?: string[];
   onSelect: (exercise: { id: number; name: string }) => void;
   onAddExercise: (name: string, muscle: string) => void;
   muscleGroups: string[];
 };
 
-export default function ExerciseListModal({visible, onClose, exercises, onSelect, onAddExercise, muscleGroups}: Props){
-    const [search, setSearch] = useState('');
-    const [selectedMuscle, setSelectedMuscle] = useState('All'); 
-    const [formVisible, setFormVisible] = useState(false)
+export default function ExerciseListModal({
+  visible,
+  onClose,
+  exercises,
+  recentExerciseNames = [],
+  onSelect,
+  onAddExercise,
+  muscleGroups,
+}: Props) {
+  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const [search, setSearch] = useState('');
+  const [selectedMuscle, setSelectedMuscle] = useState('All');
+  const [formVisible, setFormVisible] = useState(false);
 
-    // To Search for a exercise by name or muscle group
-    const filteredEx = exercises.filter(ex => {
-    const searchMatch = ex.name.toLowerCase().includes(search.toLowerCase())
-    const muscleMatch = selectedMuscle === 'All' || ex.muscle_group === selectedMuscle 
+  const displayName = (ex: Exercise) =>
+    ex.equipment ? `${ex.name} (${ex.equipment})` : ex.name;
+
+  const filtered = useMemo(() => exercises.filter(ex => {
+    const searchMatch = displayName(ex).toLowerCase().includes(search.toLowerCase());
+    const muscleMatch = selectedMuscle === 'All' || ex.muscle_group === selectedMuscle;
     return searchMatch && muscleMatch;
-    });
+  }), [exercises, search, selectedMuscle]);
 
-    return (
-        <Modal visible={visible} animationType='slide' onRequestClose={onClose} >
-            <View style={styles.container}>
-                <Text style={styles.title}>Select Exercise</Text>
-                <TextInput
-                style={styles.input}
-                placeholder="Search..."
-                placeholderTextColor="#666"
-                value={search}
-                onChangeText={setSearch}
-                />
-                <View style={styles.muscleFilter}>
-                {['All', ...muscleGroups].map(group => (
-                    <TouchableOpacity
-                    key={group}
-                    style={[styles.muscleButton, selectedMuscle === group && styles.selectedButton]}
-                    onPress={() => setSelectedMuscle(group)}
-                    >
-                    <Text>{group}</Text>
-                    </TouchableOpacity>
-                ))}
-                </View>
-                <Button title="➕ New Exercise" onPress={() => setFormVisible(true)} />
-                <FlatList
-                data={filteredEx}
-                keyExtractor={item => item.id.toString()}
-                renderItem={({ item }) => (
-                    <TouchableOpacity style={styles.item} onPress={() => onSelect({ id: item.id, name: item.name })}>
-                    <Text>{item.name} ({item.muscle_group})</Text>
-                    </TouchableOpacity>
-                )}
-                />
-                <Button title="Close" onPress={onClose} />
+  const recentFiltered = useMemo(() => {
+    if (search) return [];
+    return recentExerciseNames
+      .map(name => exercises.find(ex => displayName(ex) === name || ex.name === name))
+      .filter((ex): ex is Exercise => ex !== undefined)
+      .filter(ex => selectedMuscle === 'All' || ex.muscle_group === selectedMuscle)
+      .slice(0, 5);
+  }, [recentExerciseNames, exercises, search, selectedMuscle]);
 
-                <NewExerciseForm
-                visible={formVisible}
-                onClose={() => setFormVisible(false)}
-                onSave={(name, muscle) => {
-                    onAddExercise(name, muscle);
-                    setFormVisible(false);
-                }}
-                muscleGroups={muscleGroups}
-                />
-            </View>
+  const sections = useMemo(() => {
+    if (search) return [{ title: 'Results', data: filtered }];
+    return [
+      ...(recentFiltered.length > 0 ? [{ title: 'Recent', data: recentFiltered }] : []),
+      { title: 'All Exercises', data: filtered },
+    ];
+  }, [search, filtered, recentFiltered]);
 
-        </Modal>
-    );
+  const handleClose = () => {
+    setSearch('');
+    setSelectedMuscle('All');
+    onClose();
+  };
 
+  const handleSelect = (ex: Exercise) => {
+    onSelect({ id: ex.id, name: ex.name });
+    setSearch('');
+    setSelectedMuscle('All');
+  };
+
+  const renderCard = ({ item }: { item: Exercise }) => (
+    <TouchableOpacity style={styles.card} onPress={() => handleSelect(item)}>
+      {item.image_url ? (
+        <Image source={{ uri: item.image_url }} style={styles.cardImage} />
+      ) : (
+        <View style={styles.cardImagePlaceholder}>
+          <Ionicons name="barbell-outline" size={24} color={colors.textSecondary} />
+        </View>
+      )}
+      <View style={styles.cardInfo}>
+        <Text style={styles.cardName}>{displayName(item)}</Text>
+        <Text style={styles.cardMuscle}>{item.muscle_group}</Text>
+      </View>
+      <Ionicons name="add-circle-outline" size={22} color={colors.save} />
+    </TouchableOpacity>
+  );
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
+            <Ionicons name="close" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Select Exercise</Text>
+          <View style={styles.closeBtn} />
+        </View>
+
+        {/* Search row */}
+        <View style={styles.searchRow}>
+          <TouchableOpacity style={styles.createBtn} onPress={() => setFormVisible(true)}>
+            <Text style={styles.createBtnText}>+ Create</Text>
+          </TouchableOpacity>
+          <View style={styles.searchWrapper}>
+            <Ionicons name="search" size={16} color={colors.textSecondary} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search exercises..."
+              placeholderTextColor={colors.placeholder}
+              value={search}
+              onChangeText={setSearch}
+            />
+            {search !== '' && (
+              <TouchableOpacity onPress={() => setSearch('')}>
+                <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* Muscle filter chips */}
+        <View style={styles.chipContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}
+          >
+            {['All', ...muscleGroups].map(group => (
+              <TouchableOpacity
+                key={group}
+                style={[styles.chip, selectedMuscle === group && styles.chipActive]}
+                onPress={() => setSelectedMuscle(group)}
+              >
+                <Text style={[styles.chipText, selectedMuscle === group && styles.chipTextActive]}>
+                  {group}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Exercise list with Recent section */}
+        <SectionList
+          sections={sections}
+          keyExtractor={item => item.id.toString()}
+          contentContainerStyle={styles.listContent}
+          renderSectionHeader={({ section }) => (
+            <Text style={styles.sectionHeader}>{section.title}</Text>
+          )}
+          renderItem={renderCard}
+          ListEmptyComponent={<Text style={styles.emptyText}>No exercises found</Text>}
+          stickySectionHeadersEnabled={false}
+        />
+
+        <NewExerciseForm
+          visible={formVisible}
+          onClose={() => setFormVisible(false)}
+          onSave={(name, muscle) => {
+            onAddExercise(name, muscle);
+            setFormVisible(false);
+          }}
+          muscleGroups={muscleGroups}
+        />
+      </View>
+    </Modal>
+  );
 }
-const styles = StyleSheet.create({
-    title: { fontSize: typography.fontSize.lg, fontWeight: 'bold', marginBottom: spacing.lg },
-    input: { borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.sm, borderRadius: spacing.sm, color: colors.textPrimary, backgroundColor: colors.surface, fontSize: typography.fontSize.md, },
-    container: { padding: spacing.lg },
-    muscleFilter: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: spacing.md },
-    muscleButton: { padding: spacing.sm, backgroundColor: colors.surface, borderRadius: spacing.sm, margin: spacing.sm },
-    item: {padding: spacing.md, backgroundColor: colors.surface, marginBottom: spacing.sm, borderRadius: spacing.xs},
-    selectedButton: { backgroundColor: '#cce5ff' },
+
+const createStyles = (colors: Colors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  closeBtn: { padding: 4, width: 60 },
+  headerTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+  },
+  createBtn: {
+    backgroundColor: colors.accent,
+    borderRadius: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  createBtnText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: typography.fontSize.sm,
+  },
+  searchWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    height: 40,
+  },
+  searchIcon: { marginRight: 6 },
+  searchInput: {
+    flex: 1,
+    fontSize: typography.fontSize.sm,
+    color: colors.textPrimary,
+    height: 40,
+    padding: 0,
+  },
+  chipContainer: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+    height: 48,
+  },
+  chipRow: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    gap: spacing.xs,
+    alignItems: 'center',
+  },
+  chip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  chipActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  chipText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  chipTextActive: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  sectionHeader: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.background,
+  },
+  listContent: { padding: spacing.md, paddingBottom: spacing.xl },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: spacing.sm,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  cardImage: {
+    width: 56,
+    height: 56,
+    borderRadius: spacing.xs,
+    backgroundColor: colors.border,
+  },
+  cardImagePlaceholder: {
+    width: 56,
+    height: 56,
+    borderRadius: spacing.xs,
+    backgroundColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cardInfo: { flex: 1 },
+  cardName: {
+    fontSize: typography.fontSize.md,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  cardMuscle: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: colors.textSecondary,
+    marginTop: spacing.lg,
+    fontSize: typography.fontSize.sm,
+  },
 });

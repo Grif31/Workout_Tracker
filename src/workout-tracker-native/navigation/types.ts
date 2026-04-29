@@ -9,6 +9,7 @@ export type ExercisesStackParamsList = {
     ExercisesHome: undefined;
     CreateRoutine: undefined;
     RoutineDetail: { routineId: number; routineName: string };
+    TemplateDetail: { templateId: number };
     LogRoutine: { prefill?: PrefillWorkoutData; workoutId?: number; editMode?: boolean };
     ExerciseDetail: {
       exerciseId: number;
@@ -36,6 +37,8 @@ export type AppStack = {
   ExercisesTab: undefined
 };
 export type AuthStackParamsList = {
-    Login: undefined;
-    Signup: undefined;
+    Welcome:        undefined;
+    Login:          undefined;
+    Signup:         undefined;
+    ForgotPassword: undefined;
 }

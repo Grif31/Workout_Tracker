@@ -9,15 +9,17 @@ import SettingsScreen from '../screens/ProfileTab/SettingsScreen';
 import WorkoutDetails from '../screens/ProfileTab/WorkoutDetails';
 import BodyweightScreen from '../screens/ProfileTab/BodyweightScreen';
 import { useAuth } from 'context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 const Stack = createNativeStackNavigator<ProfileStackParamsList>();
 
 export function ProfileStack() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { paddingTop: insets.top } }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { paddingTop: insets.top, backgroundColor: colors.background } }}>
       <Stack.Screen name="ProfileHome" component={ProfileScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />

@@ -5,15 +5,21 @@ import { ProfileStack } from './ProfileStack';
 
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { AppStack } from './types';
+import { useTheme } from '../context/ThemeContext';
 
 const Tab = createBottomTabNavigator<AppStack>();
 
 export function AppTabs() {
+  const { colors } = useTheme();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarShowLabel: false,
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+        },
         tabBarIcon: ({ color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
           if (route.name === 'DashboardTab') iconName = 'home';
@@ -21,8 +27,8 @@ export function AppTabs() {
           else if (route.name === 'ProfileTab') iconName = 'person';
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#007AFF',
-        tabBarInactiveTintColor: 'gray',
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.textSecondary,
       })}
     >
       <Tab.Screen name="DashboardTab" component={DashboardStack} options={{ title: 'Dashboard' }} />

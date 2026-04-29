@@ -1,10 +1,9 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   TouchableOpacity,
   Image,
@@ -15,7 +14,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ProfileStackParamsList } from '../../navigation/types';
 import { useFocusEffect } from '@react-navigation/native';
 import { typography } from 'theme/typography';
-import { colors } from 'theme/colors';
+import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -29,51 +28,50 @@ type Workout = {
   notes?: string;
 };
 
+type ProfileStats = {
+  total_workouts: number;
+  longest_streak: number;
+  total_volume: number;
+};
+
 export default function ProfileScreen({ navigation }: Props) {
   const { user, token, logout, loading } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [stats, setStats] = useState<ProfileStats | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const displayName = user?.name?.trim() || user?.username;
-  const workoutCount = workouts.length;
 
-  // Fetch the user's workout history separately from AuthContext user data.
-  // AuthContext holds identity/auth state — workout history is screen-level data.
-  const fetchWorkouts = async () => {
+  const fetchAll = async () => {
     if (!token) return;
     try {
-      const res = await fetch(`${API_URL}/api/workouts`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setWorkouts(data);
-      } else if (res.status === 401) {
-        await logout();
-      }
+      const [workoutsRes, statsRes] = await Promise.all([
+        fetch(`${API_URL}/api/workouts`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/api/stats/profile`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (workoutsRes.ok) setWorkouts(await workoutsRes.json());
+      else if (workoutsRes.status === 401) await logout();
+      if (statsRes.ok) setStats(await statsRes.json());
     } catch (err) {
-      console.error('Failed to fetch workouts', err);
+      console.error('Failed to fetch profile data', err);
     } finally {
       setRefreshing(false);
     }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchWorkouts();
-    }, [token])
-  );
+  useFocusEffect(useCallback(() => { fetchAll(); }, [token]));
 
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchWorkouts();
+    fetchAll();
   };
 
-  const handleLogout = async () => {
-    Alert.alert('Log Out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Log Out', style: 'destructive', onPress: () => logout() },
-    ]);
+  const fmtVolume = (v: number) => {
+    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+    if (v >= 1_000) return `${(v / 1_000).toFixed(1)}k`;
+    return String(v);
   };
 
   // Rendered above the workout list via ListHeaderComponent
@@ -81,8 +79,8 @@ export default function ProfileScreen({ navigation }: Props) {
     <View>
       <View style={styles.titleRow}>
         <Text style={[styles.title, typography.title]}>Profile</Text>
-        <TouchableOpacity onPress={handleLogout}>
-          <Text style={styles.logoutText}>Log Out</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+          <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
@@ -106,11 +104,27 @@ export default function ProfileScreen({ navigation }: Props) {
               {displayName || '—'}
             </Text>
             <Text style={styles.workoutCount}>
-              {workoutCount} {workoutCount === 1 ? 'workout' : 'workouts'}
+              {workouts.length} {workouts.length === 1 ? 'workout' : 'workouts'}
             </Text>
           </View>
         </TouchableOpacity>
       )}
+
+      {/* Stats boxes */}
+      <View style={styles.statsRow}>
+        <View style={styles.statBox}>
+          <Text style={styles.statValue}>{stats?.total_workouts ?? '—'}</Text>
+          <Text style={styles.statLabel}>Workouts</Text>
+        </View>
+        <View style={[styles.statBox, styles.statBoxMiddle]}>
+          <Text style={styles.statValue}>{stats ? `${stats.longest_streak}d` : '—'}</Text>
+          <Text style={styles.statLabel}>Longest Streak</Text>
+        </View>
+        <View style={styles.statBox}>
+          <Text style={styles.statValue}>{stats ? fmtVolume(stats.total_volume) : '—'}</Text>
+          <Text style={styles.statLabel}>Total Volume</Text>
+        </View>
+      </View>
 
       <TouchableOpacity
         style={styles.weightRow}
@@ -161,8 +175,8 @@ export default function ProfileScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
+const createStyles = (colors: Colors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
   titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -171,7 +185,7 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
   },
   title: { fontWeight: 'bold', color: colors.textPrimary },
-  logoutText: { color: colors.danger, fontSize: 14 },
+
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -234,5 +248,34 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: colors.textPrimary,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  statBox: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: spacing.sm,
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+  statBoxMiddle: {
+    marginHorizontal: spacing.sm,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    textAlign: 'center',
   },
 });

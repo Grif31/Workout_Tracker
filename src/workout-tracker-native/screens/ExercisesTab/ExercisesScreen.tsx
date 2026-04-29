@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,11 +13,12 @@ import {
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { ExercisesStackParamsList } from 'navigation/types';
-import { colors } from 'theme/colors';
+import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
@@ -41,6 +42,8 @@ type ActiveRoutine = { id: number; name: string; days: RoutineDay[] };
 
 export default function ExercisesScreen({ navigation }: Props) {
   const { token, user, updateUser } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [activeTab, setActiveTab] = useState<'exercises' | 'training'>('exercises');
 
   // Exercises tab state
@@ -58,6 +61,58 @@ export default function ExercisesScreen({ navigation }: Props) {
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [activeRoutine, setActiveRoutine] = useState<ActiveRoutine | null>(null);
   const [selectModalVisible, setSelectModalVisible] = useState(false);
+
+  // Coach settings state
+  const [coachDays, setCoachDays] = useState(3);
+  const [coachGoal, setCoachGoal] = useState<'hypertrophy' | 'strength' | 'endurance' | 'general'>('general');
+  const [coachExp, setCoachExp] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
+  const [coachGenerating, setCoachGenerating] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem('coach_settings').then(raw => {
+      if (!raw) return;
+      try {
+        const s = JSON.parse(raw);
+        if (s.days) setCoachDays(s.days);
+        if (s.goal) setCoachGoal(s.goal);
+        if (s.exp) setCoachExp(s.exp);
+      } catch { /* ignore */ }
+    });
+  }, []);
+
+  const saveCoachSettings = (days: number, goal: typeof coachGoal, exp: typeof coachExp) => {
+    AsyncStorage.setItem('coach_settings', JSON.stringify({ days, goal, exp }));
+  };
+
+  const handleGenerate = async (type: 'routine' | 'template') => {
+    if (!token) return;
+    setCoachGenerating(true);
+    try {
+      const res = await fetch(`${API_URL}/api/ai/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          days_per_week: coachDays,
+          goal: coachGoal,
+          experience: coachExp,
+          generate_type: type,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { Alert.alert('Error', data.message || 'Generation failed'); return; }
+      await fetchTemplates();
+      await fetchRoutines();
+      if (data.type === 'routine') {
+        Alert.alert('Routine Created!', `"${data.name}" has been added to your routines.`);
+      } else {
+        Alert.alert('Template Created!', `"${data.name}" has been added to your templates.`);
+      }
+    } catch {
+      Alert.alert('Error', 'Could not reach AI service');
+    } finally {
+      setCoachGenerating(false);
+    }
+  };
 
   const fetchExercises = async () => {
     try {
@@ -424,19 +479,29 @@ export default function ExercisesScreen({ navigation }: Props) {
               <TouchableOpacity
                 key={t.id}
                 style={styles.card}
-                onPress={() => navigation.navigate('LogRoutine', {
-                  prefill: {
-                    name: t.name,
-                    notes: '',
-                    exercises: t.exercises.map(ex => ({
-                      name: ex.name,
-                      sets: [{ reps: '', weight: '' }],
-                    })),
-                  },
-                })}
+                onPress={() => navigation.navigate('TemplateDetail', { templateId: t.id })}
               >
-                <Text style={styles.cardName}>{t.name}</Text>
-                <Text style={styles.cardSub}>{t.exercises.length} exercise{t.exercises.length !== 1 ? 's' : ''}</Text>
+                <View style={styles.cardRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardName}>{t.name}</Text>
+                    <Text style={styles.cardSub}>{t.exercises.length} exercise{t.exercises.length !== 1 ? 's' : ''}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.logInlineBtn}
+                    onPress={() => navigation.navigate('LogRoutine', {
+                      prefill: {
+                        name: t.name,
+                        notes: '',
+                        exercises: t.exercises.map(ex => ({
+                          name: ex.name,
+                          sets: [{ reps: '', weight: '' }],
+                        })),
+                      },
+                    })}
+                  >
+                    <Text style={styles.logInlineBtnText}>Log</Text>
+                  </TouchableOpacity>
+                </View>
               </TouchableOpacity>
             ))
           )}
@@ -472,6 +537,81 @@ export default function ExercisesScreen({ navigation }: Props) {
           >
             <Text style={styles.newRoutineButtonText}>+ New Routine</Text>
           </TouchableOpacity>
+
+          {/* ── Coach Settings ── */}
+          <View style={styles.coachCard}>
+            <View style={styles.coachHeader}>
+              <Ionicons name="sparkles" size={16} color={colors.save} />
+              <Text style={styles.coachTitle}>AI Coach</Text>
+            </View>
+            <Text style={styles.coachDesc}>Set your preferences and generate a personalised routine or template.</Text>
+
+            {/* Days per week */}
+            <Text style={styles.coachLabel}>Days per week</Text>
+            <View style={styles.coachChipRow}>
+              {[1, 2, 3, 4, 5, 6, 7].map(d => (
+                <TouchableOpacity
+                  key={d}
+                  style={[styles.coachChip, coachDays === d && styles.coachChipActive]}
+                  onPress={() => { setCoachDays(d); saveCoachSettings(d, coachGoal, coachExp); }}
+                >
+                  <Text style={[styles.coachChipText, coachDays === d && styles.coachChipTextActive]}>{d}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Goal */}
+            <Text style={styles.coachLabel}>Training goal</Text>
+            <View style={styles.coachChipRow}>
+              {(['hypertrophy', 'strength', 'endurance', 'general'] as const).map(g => (
+                <TouchableOpacity
+                  key={g}
+                  style={[styles.coachChip, coachGoal === g && styles.coachChipActive]}
+                  onPress={() => { setCoachGoal(g); saveCoachSettings(coachDays, g, coachExp); }}
+                >
+                  <Text style={[styles.coachChipText, coachGoal === g && styles.coachChipTextActive]}>
+                    {g.charAt(0).toUpperCase() + g.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Experience */}
+            <Text style={styles.coachLabel}>Experience level</Text>
+            <View style={styles.coachChipRow}>
+              {(['beginner', 'intermediate', 'advanced'] as const).map(e => (
+                <TouchableOpacity
+                  key={e}
+                  style={[styles.coachChip, coachExp === e && styles.coachChipActive]}
+                  onPress={() => { setCoachExp(e); saveCoachSettings(coachDays, coachGoal, e); }}
+                >
+                  <Text style={[styles.coachChipText, coachExp === e && styles.coachChipTextActive]}>
+                    {e.charAt(0).toUpperCase() + e.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Generate buttons */}
+            <View style={styles.coachBtnRow}>
+              <TouchableOpacity
+                style={[styles.coachGenBtn, coachGenerating && { opacity: 0.6 }]}
+                onPress={() => handleGenerate('routine')}
+                disabled={coachGenerating}
+              >
+                <Ionicons name="calendar-outline" size={14} color="#fff" />
+                <Text style={styles.coachGenBtnText}>{coachGenerating ? 'Generating…' : 'Generate Routine'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.coachGenBtnOutline, coachGenerating && { opacity: 0.6 }]}
+                onPress={() => handleGenerate('template')}
+                disabled={coachGenerating}
+              >
+                <Ionicons name="list-outline" size={14} color={colors.save} />
+                <Text style={styles.coachGenBtnOutlineText}>{coachGenerating ? 'Generating…' : 'Generate Template'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </ScrollView>
       )}
 
@@ -506,7 +646,7 @@ export default function ExercisesScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   tabRow: {
     flexDirection: 'row',
@@ -715,8 +855,16 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
+  cardRow: { flexDirection: 'row', alignItems: 'center' },
   cardName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
   cardSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
+  logInlineBtn: {
+    backgroundColor: colors.save,
+    borderRadius: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  logInlineBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.sm },
   cardDesc: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
   newRoutineButton: {
     backgroundColor: colors.save,
@@ -760,4 +908,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalCancelText: { fontSize: typography.fontSize.md, color: colors.danger, fontWeight: '600' },
+
+  // Coach Settings
+  coachCard: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: spacing.sm,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  coachHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  coachTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
+  coachDesc: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginBottom: spacing.md },
+  coachLabel: {
+    fontSize: 11, fontWeight: '700', color: colors.textSecondary,
+    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.xs,
+  },
+  coachChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.md },
+  coachChip: {
+    paddingHorizontal: spacing.sm, paddingVertical: 6,
+    borderRadius: spacing.xs, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  coachChipActive: { backgroundColor: colors.save, borderColor: colors.save },
+  coachChipText: { fontSize: typography.fontSize.sm, fontWeight: '500', color: colors.textSecondary },
+  coachChipTextActive: { color: '#fff', fontWeight: '700' },
+  coachBtnRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  coachGenBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 5, backgroundColor: colors.save, borderRadius: spacing.sm, paddingVertical: spacing.sm,
+  },
+  coachGenBtnText: { color: '#fff', fontWeight: '700', fontSize: typography.fontSize.sm },
+  coachGenBtnOutline: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 5, borderWidth: 1, borderColor: colors.save,
+    borderRadius: spacing.sm, paddingVertical: spacing.sm,
+  },
+  coachGenBtnOutlineText: { color: colors.save, fontWeight: '700', fontSize: typography.fontSize.sm },
 });

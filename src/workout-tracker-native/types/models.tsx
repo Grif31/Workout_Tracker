@@ -19,6 +19,8 @@ export type Exercise = {
 };
 export type Set = {
   id?: string;
-  reps: string
-  weight: string
+  reps: string;
+  weight: string;
+  set_type?: string;
+  done?: boolean;
 }

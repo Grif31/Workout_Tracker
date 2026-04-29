@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
 import { ProfileStackParamsList } from 'navigation/types';
-import { colors } from 'theme/colors';
+import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
 
@@ -24,6 +24,8 @@ type Props = NativeStackScreenProps<ProfileStackParamsList, 'EditProfile'>;
 
 export default function EditProfileScreen({ navigation }: Props) {
   const { user, token, updateUser } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
@@ -221,7 +223,7 @@ export default function EditProfileScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Colors) => StyleSheet.create({
   container: {
     padding: spacing.md,
     backgroundColor: colors.background,

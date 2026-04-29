@@ -25,12 +25,18 @@ def create_routine():
 
     for order, day in enumerate(days_data):
         label = day.get('label') or f'Day {order + 1}'
-        ex_ids = day.get('exercise_template_ids', [])
-        exercises = ExerciseTemplate.query.filter(ExerciseTemplate.id.in_(ex_ids)).all() if ex_ids else []
-        # Each day becomes its own WorkoutTemplate
-        template = WorkoutTemplate(user_id=user_id, name=f"{name} - {label}", exercises=exercises)
-        db.session.add(template)
-        db.session.flush()
+
+        existing_id = day.get('workout_template_id')
+        if existing_id:
+            template = WorkoutTemplate.query.filter_by(id=existing_id, user_id=user_id).first()
+            if not template:
+                return jsonify({'message': f'Template {existing_id} not found'}), 404
+        else:
+            ex_ids = day.get('exercise_template_ids', [])
+            exercises = ExerciseTemplate.query.filter(ExerciseTemplate.id.in_(ex_ids)).all() if ex_ids else []
+            template = WorkoutTemplate(user_id=user_id, name=f"{name} - {label}", exercises=exercises)
+            db.session.add(template)
+            db.session.flush()
 
         routine_day = RoutineDay(
             routine_id=routine.id,

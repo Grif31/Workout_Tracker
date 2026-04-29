@@ -9,3 +9,7 @@ python-dotenv
 werkzeug
 pytest
 pytest-flask
+anthropic
+PyJWT
+cryptography
+requests

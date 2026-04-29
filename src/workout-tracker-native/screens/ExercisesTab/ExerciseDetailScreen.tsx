@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -7,14 +7,19 @@ import {
   StyleSheet,
   ActivityIndicator,
   Image,
+  Dimensions,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { LineChart } from 'react-native-gifted-charts';
 import { useAuth } from '../../context/AuthContext';
 import { ExercisesStackParamsList } from '../../navigation/types';
-import { colors } from '../../theme/colors';
+import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
+import { toDisplayWeight, toDisplayVolume, convertWeight, WeightUnit } from 'utils/units';
+
+const CHART_WIDTH = Dimensions.get('window').width - spacing.md * 4;
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -34,7 +39,11 @@ type HistorySession = {
   date: string;
   workoutName: string;
   sets: { reps: number; weight: number }[];
+  best1rm: number;
+  bestWeight: number;
 };
+
+type ChartPoint = { value: number; label: string; dataPointText: string };
 
 const exerciseDescriptions: Record<string, string> = {
   Chest:
@@ -66,10 +75,11 @@ const tabLabels: Array<{ key: 'about' | 'stats' | 'history'; label: string }> = 
   { key: 'history', label: 'History' },
 ];
 
-const fmt = (val: number, unit = 'lbs') => (val ? `${val.toFixed(0)} ${unit}` : '—');
-
 export default function ExerciseDetailScreen({ route, navigation }: Props) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const weightUnit: WeightUnit = (user?.weight_unit as WeightUnit) || 'lbs';
   const {
     exerciseName,
     equipment,
@@ -91,6 +101,8 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     maxVolume: 0,
   });
   const [historySessions, setHistorySessions] = useState<HistorySession[]>([]);
+  const [chart1RM, setChart1RM] = useState<ChartPoint[]>([]);
+  const [chartMaxWeight, setChartMaxWeight] = useState<ChartPoint[]>([]);
   const [wgerDescription, setWgerDescription] = useState<string | null>(null);
   const [wgerLoading, setWgerLoading] = useState(false);
 
@@ -117,9 +129,28 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           date: item.date,
           workoutName: item.workout_name || 'Workout',
           sets: item.sets ?? [],
+          best1rm: item.best_1rm ?? 0,
+          bestWeight: item.best_set?.weight ?? 0,
         };
       });
 
+      // Chart data: history arrives newest-first; reverse for left→right chronological order
+      const chronological = [...sessions].reverse().slice(-12);
+      const buildPoints = (items: HistorySession[], getter: (s: HistorySession) => number): ChartPoint[] =>
+        items
+          .filter(s => getter(s) > 0)
+          .map(s => {
+            const d = new Date(s.date);
+            const val = parseFloat(convertWeight(getter(s), weightUnit).toFixed(1));
+            return {
+              value: val,
+              label: `${d.getMonth() + 1}/${d.getDate()}`,
+              dataPointText: `${Math.round(val)}`,
+            };
+          });
+
+      setChart1RM(buildPoints(chronological, s => s.best1rm));
+      setChartMaxWeight(buildPoints(chronological, s => s.bestWeight));
       setHistorySessions(sessions);
       setStats({
         estimatedOneRepMax: data.personal_bests?.estimated_1rm ?? 0,
@@ -167,51 +198,91 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
       ? 'Loading exercise details...'
       : wgerDescription || description || exerciseDescriptions[muscleGroup] || defaultDescription;
 
+  const renderChart = (points: ChartPoint[], title: string) => {
+    if (points.length < 2) return null;
+    const maxVal = Math.max(...points.map(p => p.value));
+    return (
+      <View style={styles.chartCard}>
+        <Text style={styles.chartTitle}>{title}</Text>
+        <LineChart
+          data={points}
+          width={CHART_WIDTH}
+          height={140}
+          spacing={Math.max(30, Math.floor(CHART_WIDTH / points.length))}
+          color={colors.save}
+          thickness={2}
+          hideDataPoints={false}
+          dataPointsColor={colors.save}
+          startFillColor={colors.save}
+          endFillColor="#fff"
+          startOpacity={0.15}
+          endOpacity={0}
+          areaChart
+          curved
+          hideRules
+          hideYAxisText
+          xAxisLabelTextStyle={styles.axisLabel}
+          noOfSections={4}
+          maxValue={maxVal * 1.2}
+          initialSpacing={10}
+          endSpacing={10}
+          textShiftY={-8}
+          textFontSize={10}
+          textColor={colors.textSecondary}
+          xAxisThickness={1}
+          xAxisColor={colors.border}
+          yAxisThickness={0}
+          isAnimated
+        />
+      </View>
+    );
+  };
+
   const renderStats = () => {
-    if (loading) {
-      return <ActivityIndicator size="large" color={colors.save} />;
-    }
+    if (loading) return <ActivityIndicator size="large" color={colors.save} />;
     if (stats.totalSets === 0) {
       return <Text style={styles.emptyText}>Log this exercise to see your stats.</Text>;
     }
     return (
-      <View style={styles.statsGrid}>
-        <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Estimated 1RM</Text>
-          <Text style={styles.statValue}>{fmt(stats.estimatedOneRepMax)}</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Max Weight</Text>
-          <Text style={styles.statValue}>{fmt(stats.maxWeight)}</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Max Volume / Set</Text>
-          <Text style={styles.statValue}>{fmt(stats.maxVolume)}</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Max Reps</Text>
-          <Text style={styles.statValue}>{stats.maxReps || '—'}</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Total Sets</Text>
-          <Text style={styles.statValue}>{stats.totalSets}</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Total Reps</Text>
-          <Text style={styles.statValue}>{stats.totalReps}</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Workouts</Text>
-          <Text style={styles.statValue}>{stats.workoutCount}</Text>
+      <View>
+        {renderChart(chart1RM, `Estimated 1RM over time (${weightUnit})`)}
+        {renderChart(chartMaxWeight, `Max weight over time (${weightUnit})`)}
+        <View style={styles.statsGrid}>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Estimated 1RM</Text>
+            <Text style={styles.statValue}>{toDisplayWeight(stats.estimatedOneRepMax, weightUnit)}</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Max Weight</Text>
+            <Text style={styles.statValue}>{toDisplayWeight(stats.maxWeight, weightUnit)}</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Max Volume / Set</Text>
+            <Text style={styles.statValue}>{toDisplayVolume(stats.maxVolume, weightUnit)}</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Max Reps</Text>
+            <Text style={styles.statValue}>{stats.maxReps || '—'}</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Total Sets</Text>
+            <Text style={styles.statValue}>{stats.totalSets}</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Total Reps</Text>
+            <Text style={styles.statValue}>{stats.totalReps}</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Workouts</Text>
+            <Text style={styles.statValue}>{stats.workoutCount}</Text>
+          </View>
         </View>
       </View>
     );
   };
 
   const renderHistory = () => {
-    if (loading) {
-      return <ActivityIndicator size="large" color={colors.save} />;
-    }
+    if (loading) return <ActivityIndicator size="large" color={colors.save} />;
     if (historySessions.length === 0) {
       return <Text style={styles.emptyText}>No recorded sets for this exercise yet.</Text>;
     }
@@ -223,7 +294,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         </View>
         {session.sets.map((set, j) => (
           <Text key={j} style={styles.historyDetail}>
-            Set {j + 1}: {set.reps} reps @ {set.weight} lbs
+            Set {j + 1}: {set.reps} reps @ {toDisplayWeight(set.weight, weightUnit)}
           </Text>
         ))}
       </View>
@@ -310,10 +381,10 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Colors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -491,4 +562,20 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     paddingVertical: 2,
   },
+  chartCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  chartTitle: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
+  axisLabel: { fontSize: 9, color: colors.textSecondary },
 });

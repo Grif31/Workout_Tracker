@@ -197,6 +197,7 @@ class Set(db.Model):
     reps = db.Column(db.Integer, nullable=True)
     weight = db.Column(db.Float, nullable=True)
     order = db.Column(db.Integer, nullable=True)
+    set_type = db.Column(db.String(1), default='N', nullable=True)  # N=Normal W=Warmup D=Drop F=Failure
 
     def to_dict(self):
         return {
@@ -205,6 +206,7 @@ class Set(db.Model):
             "reps": self.reps,
             "weight": self.weight,
             "order": self.order,
+            "set_type": self.set_type or 'N',
         }
 
 # ── BodyweightLog ─────────────────────────────────────────

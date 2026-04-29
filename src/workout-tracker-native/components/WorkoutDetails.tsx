@@ -1,11 +1,14 @@
-import React, { useCallback,useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+
+const SET_TYPE_LABELS: Record<string, string> = { W: 'Warmup', D: 'Drop Set', F: 'Failure' };
+const SET_TYPE_COLORS: Record<string, string> = { W: '#FF9500', D: '#AF52DE', F: '#FF3B30' };
 import { Workout } from '../types/models';
 import { useAuth } from '../context/AuthContext';
 import { useActionSheet } from '@expo/react-native-action-sheet';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import {colors } from '../theme/colors'
+import { useTheme, type Colors } from '../context/ThemeContext';
 
 
 const  API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -25,9 +28,12 @@ type Props = {
  };
 
 export default function WorkoutDetailsScreen({ workoutId, onEdit, onDelete, onSaveAsRoutine, onPerformAgain }: Props){
+  const { colors } = useTheme();
   const [workout, setWorkout] = useState<Workout>();
   const { showActionSheetWithOptions } = useActionSheet();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const weightUnit = user?.weight_unit === 'kg' ? 'kg' : 'lbs';
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
 
   useFocusEffect(
@@ -142,7 +148,15 @@ export default function WorkoutDetailsScreen({ workoutId, onEdit, onDelete, onSa
           <View style={styles.exerciseBlock}>
             <Text style={styles.exerciseName}>{item.name}</Text>
             {item.sets.map((s, i) => (
-              <Text key={i}>Set {i + 1}: {s.reps} reps @ {s.weight}lbs</Text>
+              <View key={i} style={styles.setRow}>
+                <Text style={styles.setText}>Set {i + 1}</Text>
+                {s.set_type && s.set_type !== 'N' && (
+                  <View style={[styles.setTypeBadge, { backgroundColor: SET_TYPE_COLORS[s.set_type] }]}>
+                    <Text style={styles.setTypeBadgeText}>{SET_TYPE_LABELS[s.set_type]}</Text>
+                  </View>
+                )}
+                <Text style={styles.setText}>: {s.reps} reps @ {s.weight} {weightUnit}</Text>
+              </View>
             ))}
           </View>
         )}
@@ -151,11 +165,14 @@ export default function WorkoutDetailsScreen({ workoutId, onEdit, onDelete, onSa
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 5 },
-  exerciseBlock: { marginBottom: 15, color: colors.background },
-  exerciseName: { fontWeight: 'bold', fontSize: 16 },
-  topbar: {alignItems: 'center', }
-
+const createStyles = (colors: Colors) => StyleSheet.create({
+  container: { flex: 1, padding: 20, backgroundColor: colors.background },
+  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 5, color: colors.textPrimary },
+  exerciseBlock: { marginBottom: 15 },
+  exerciseName: { fontWeight: 'bold', fontSize: 16, color: colors.textPrimary },
+  topbar: { alignItems: 'center' },
+  setRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  setText: { color: colors.textSecondary, fontSize: 14 },
+  setTypeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  setTypeBadgeText: { color: '#fff', fontSize: 11, fontWeight: '600' },
 });

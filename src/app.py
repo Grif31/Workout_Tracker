@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from dotenv import load_dotenv
 from flask import Flask
 from flask_migrate import Migrate
@@ -14,6 +15,7 @@ from routes.routine_routes import routine_bp
 from routes.stats_routes import stats_bp
 from routes.bodyweight_routes import bodyweight_bp
 from routes.personal_record_routes import pr_bp
+from routes.ai_routes import ai_bp
 
 load_dotenv()
 
@@ -21,6 +23,7 @@ def create_app(test_config=None):
     app = Flask(__name__)
 
     app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'dev-secret-key')
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=30)
     app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///workout_tracker.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['JWT_TOKEN_LOCATION'] = ['headers']
@@ -42,6 +45,7 @@ def create_app(test_config=None):
     app.register_blueprint(stats_bp)
     app.register_blueprint(bodyweight_bp)
     app.register_blueprint(pr_bp)
+    app.register_blueprint(ai_bp)
 
     return app
 

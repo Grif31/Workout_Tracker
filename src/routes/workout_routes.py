@@ -76,13 +76,23 @@ def get_workouts():
     try:
         current_user_id = get_jwt_identity()
         include_exercises = request.args.get('include_exercises', 'false').lower() == 'true'
-        workouts = Workout.query.filter_by(user_id=current_user_id).all()
-        
+        date_filter = request.args.get('date')  # optional YYYY-MM-DD
+
+        query = Workout.query.filter_by(user_id=current_user_id)
+        if date_filter:
+            from datetime import date as date_type
+            try:
+                target = date_type.fromisoformat(date_filter)
+                query = query.filter(db.func.date(Workout.date) == target)
+            except ValueError:
+                return jsonify({'message': 'Invalid date format, use YYYY-MM-DD'}), 400
+
+        workouts = query.order_by(Workout.date.desc()).all()
         return jsonify([w.to_dict(include_exercises=include_exercises) for w in workouts]), 200
-    
+
     except Exception as e:
         print(f"Error {e}")
-        return jsonify({'message':'Internal Server Error'}), 500
+        return jsonify({'message': 'Internal Server Error'}), 500
 
 # GET LAST 3 WORKOUTS
 
@@ -90,9 +100,41 @@ def get_workouts():
 @jwt_required()
 def get_recent_workouts():
     current_user_id = get_jwt_identity()
-    workouts = Workout.query.filter_by(user_id=current_user_id).order_by(Workout.date.desc()).limit(3).all()
-    
-    return jsonify([w.to_dict() for w in workouts]), 200
+    workouts = Workout.query.filter_by(user_id=current_user_id).order_by(Workout.date.desc()).limit(5).all()
+
+    result = []
+    for w in workouts:
+        total_reps = 0
+        total_volume = 0.0
+        muscles = []
+        set_ids = []
+
+        for ex in w.exercises:
+            # muscle group via ExerciseTemplate if linked
+            if ex.exercise_template_id:
+                tmpl = ExerciseTemplate.query.get(ex.exercise_template_id)
+                if tmpl and tmpl.muscle_group and tmpl.muscle_group not in muscles:
+                    muscles.append(tmpl.muscle_group)
+            for s in ex.sets:
+                set_ids.append(s.id)
+                if s.reps:
+                    total_reps += s.reps
+                if s.reps and s.weight:
+                    total_volume += s.reps * s.weight
+
+        pr_count = PersonalRecord.query.filter(
+            PersonalRecord.set_id.in_(set_ids)
+        ).count() if set_ids else 0
+
+        data = w.to_dict()
+        data['total_reps'] = total_reps
+        data['volume'] = round(total_volume)
+        data['num_exercises'] = len(w.exercises)
+        data['muscles'] = muscles
+        data['pr_count'] = pr_count
+        result.append(data)
+
+    return jsonify(result), 200
 
 # GET WORKOUT DETAILS
 
@@ -141,6 +183,7 @@ def add_workout():
                     reps=s['reps'],
                     weight=s['weight'],
                     order=s.get('order', set_index),
+                    set_type=s.get('set_type', 'N'),
                 )
                 db.session.add(new_set)
                 new_sets.append(new_set)
@@ -232,12 +275,15 @@ def update_workout(workout_id):
                             s.reps = s_data["reps"]
                         if "weight" in s_data:
                             s.weight = s_data["weight"]
+                        if "set_type" in s_data:
+                            s.set_type = s_data["set_type"]
                         s.order = s_data.get('order', set_index)
                     else:
                         ex.sets.append(Set(
                             reps=s_data["reps"],
                             weight=s_data["weight"],
                             order=s_data.get('order', set_index),
+                            set_type=s_data.get('set_type', 'N'),
                         ))
             else:
                 new_ex = Exercise(
@@ -251,6 +297,7 @@ def update_workout(workout_id):
                         reps=s["reps"],
                         weight=s["weight"],
                         order=s.get('order', set_index),
+                        set_type=s.get('set_type', 'N'),
                     ))
                 workout.exercises.append(new_ex) 
                         
