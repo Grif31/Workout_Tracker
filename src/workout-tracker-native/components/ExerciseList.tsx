@@ -18,14 +18,21 @@ import NewExerciseForm from './NewExerciseForm';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
-type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; image_url?: string };
+type Exercise = {
+  id: number;
+  name: string;
+  muscle_group: string;
+  equipment?: string;
+  image_url?: string;
+  exercise_type?: string;
+};
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   exercises: Exercise[];
   recentExerciseNames?: string[];
-  onSelect: (exercise: { id: number; name: string }) => void;
+  onSelect: (exercise: { id: number; name: string; equipment?: string; image_url?: string; exercise_type?: string }) => void;
   onAddExercise: (name: string, muscle: string) => void;
   muscleGroups: string[];
 };
@@ -49,28 +56,53 @@ export default function ExerciseListModal({
   const displayName = (ex: Exercise) =>
     ex.equipment ? `${ex.name} (${ex.equipment})` : ex.name;
 
-  const filtered = useMemo(() => exercises.filter(ex => {
-    const searchMatch = displayName(ex).toLowerCase().includes(search.toLowerCase());
-    const muscleMatch = selectedMuscle === 'All' || ex.muscle_group === selectedMuscle;
-    return searchMatch && muscleMatch;
-  }), [exercises, search, selectedMuscle]);
+  const strengthExercises = useMemo(
+    () => exercises.filter(ex => (ex.exercise_type || 'strength') === 'strength'),
+    [exercises],
+  );
+  const cardioExercises = useMemo(
+    () => exercises.filter(ex => ex.exercise_type === 'cardio'),
+    [exercises],
+  );
+
+  const strengthFiltered = useMemo(() => {
+    if (selectedMuscle === 'Cardio') return [];
+    return strengthExercises.filter(ex => {
+      const searchMatch = displayName(ex).toLowerCase().includes(search.toLowerCase());
+      const muscleMatch = selectedMuscle === 'All' || ex.muscle_group === selectedMuscle;
+      return searchMatch && muscleMatch;
+    });
+  }, [strengthExercises, search, selectedMuscle]);
+
+  const cardioFiltered = useMemo(() => cardioExercises.filter(ex =>
+    displayName(ex).toLowerCase().includes(search.toLowerCase())
+  ), [cardioExercises, search]);
 
   const recentFiltered = useMemo(() => {
     if (search) return [];
     return recentExerciseNames
       .map(name => exercises.find(ex => displayName(ex) === name || ex.name === name))
       .filter((ex): ex is Exercise => ex !== undefined)
-      .filter(ex => selectedMuscle === 'All' || ex.muscle_group === selectedMuscle)
+      .filter(ex => {
+        if (selectedMuscle === 'Cardio') return ex.exercise_type === 'cardio';
+        return selectedMuscle === 'All' || ex.muscle_group === selectedMuscle || ex.exercise_type === 'cardio';
+      })
       .slice(0, 5);
   }, [recentExerciseNames, exercises, search, selectedMuscle]);
 
   const sections = useMemo(() => {
-    if (search) return [{ title: 'Results', data: filtered }];
+    if (search) {
+      const allResults = selectedMuscle === 'Cardio'
+        ? cardioFiltered
+        : [...strengthFiltered, ...cardioFiltered];
+      return [{ title: 'Results', data: allResults }];
+    }
     return [
       ...(recentFiltered.length > 0 ? [{ title: 'Recent', data: recentFiltered }] : []),
-      { title: 'All Exercises', data: filtered },
+      ...(strengthFiltered.length > 0 ? [{ title: 'All Exercises', data: strengthFiltered }] : []),
+      ...(cardioFiltered.length > 0 ? [{ title: 'Cardio', data: cardioFiltered }] : []),
     ];
-  }, [search, filtered, recentFiltered]);
+  }, [search, strengthFiltered, cardioFiltered, recentFiltered, selectedMuscle]);
 
   const handleClose = () => {
     setSearch('');
@@ -79,27 +111,40 @@ export default function ExerciseListModal({
   };
 
   const handleSelect = (ex: Exercise) => {
-    onSelect({ id: ex.id, name: ex.name });
+    onSelect({
+      id: ex.id,
+      name: ex.name,
+      equipment: ex.equipment,
+      image_url: ex.image_url,
+      exercise_type: ex.exercise_type,
+    });
     setSearch('');
     setSelectedMuscle('All');
   };
 
-  const renderCard = ({ item }: { item: Exercise }) => (
-    <TouchableOpacity style={styles.card} onPress={() => handleSelect(item)}>
-      {item.image_url ? (
-        <Image source={{ uri: item.image_url }} style={styles.cardImage} />
-      ) : (
-        <View style={styles.cardImagePlaceholder}>
-          <Ionicons name="barbell-outline" size={24} color={colors.textSecondary} />
+  const renderCard = ({ item }: { item: Exercise }) => {
+    const isCardio = item.exercise_type === 'cardio';
+    return (
+      <TouchableOpacity style={styles.card} onPress={() => handleSelect(item)}>
+        {item.image_url ? (
+          <Image source={{ uri: item.image_url }} style={styles.cardImage} />
+        ) : (
+          <View style={styles.cardImagePlaceholder}>
+            <Ionicons
+              name={isCardio ? 'bicycle-outline' : 'barbell-outline'}
+              size={24}
+              color={colors.textSecondary}
+            />
+          </View>
+        )}
+        <View style={styles.cardInfo}>
+          <Text style={styles.cardName}>{displayName(item)}</Text>
+          <Text style={styles.cardMuscle}>{isCardio ? 'Cardio' : item.muscle_group}</Text>
         </View>
-      )}
-      <View style={styles.cardInfo}>
-        <Text style={styles.cardName}>{displayName(item)}</Text>
-        <Text style={styles.cardMuscle}>{item.muscle_group}</Text>
-      </View>
-      <Ionicons name="add-circle-outline" size={22} color={colors.save} />
-    </TouchableOpacity>
-  );
+        <Ionicons name="add-circle-outline" size={22} color={colors.save} />
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
@@ -135,14 +180,14 @@ export default function ExerciseListModal({
           </View>
         </View>
 
-        {/* Muscle filter chips */}
+        {/* Muscle filter chips (strength only) */}
         <View style={styles.chipContainer}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chipRow}
           >
-            {['All', ...muscleGroups].map(group => (
+            {['All', 'Cardio', ...muscleGroups].map(group => (
               <TouchableOpacity
                 key={group}
                 style={[styles.chip, selectedMuscle === group && styles.chipActive]}
@@ -156,7 +201,7 @@ export default function ExerciseListModal({
           </ScrollView>
         </View>
 
-        {/* Exercise list with Recent section */}
+        {/* Exercise list */}
         <SectionList
           sections={sections}
           keyExtractor={item => item.id.toString()}

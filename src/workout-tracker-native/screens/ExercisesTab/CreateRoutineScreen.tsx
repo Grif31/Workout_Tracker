@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Alert, ScrollView, ActivityIndicator, Modal, FlatList,
+  Alert, ActivityIndicator, Modal, FlatList,
 } from 'react-native';
+import {
+  RenderItemParams, ScaleDecorator, NestableScrollContainer, NestableDraggableFlatList,
+} from 'react-native-draggable-flatlist';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
@@ -156,7 +159,7 @@ export default function CreateRoutineScreen({ navigation }: Props) {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <NestableScrollContainer style={styles.container} contentContainerStyle={styles.content}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -227,17 +230,31 @@ export default function CreateRoutineScreen({ navigation }: Props) {
             </TouchableOpacity>
           ) : (
             <>
-              {day.exercises.map(ex => (
-                <View key={ex.id} style={styles.exerciseRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.exerciseRowName}>{ex.name}</Text>
-                    <Text style={styles.exerciseRowMuscle}>{ex.muscle_group}</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => removeExerciseFromDay(dayIdx, ex.id)}>
-                    <Ionicons name="remove-circle-outline" size={20} color={colors.danger} />
-                  </TouchableOpacity>
-                </View>
-              ))}
+              <NestableDraggableFlatList
+                data={day.exercises}
+                keyExtractor={(item: Exercise) => item.id.toString()}
+                onDragEnd={({ data }: { data: Exercise[] }) =>
+                  setDays(prev => prev.map((d, i) =>
+                    i !== dayIdx || d.mode !== 'new' ? d : { ...d, exercises: data }
+                  ))
+                }
+                renderItem={({ item: ex, drag, isActive }: RenderItemParams<Exercise>) => (
+                  <ScaleDecorator activeScale={0.98}>
+                    <View style={[styles.exerciseRow, isActive && { opacity: 0.85 }]}>
+                      <TouchableOpacity onLongPress={drag} delayLongPress={150} style={styles.dragHandle}>
+                        <Ionicons name="menu-outline" size={18} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.exerciseRowName}>{ex.name}</Text>
+                        <Text style={styles.exerciseRowMuscle}>{ex.muscle_group}</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => removeExerciseFromDay(dayIdx, ex.id)}>
+                        <Ionicons name="remove-circle-outline" size={20} color={colors.danger} />
+                      </TouchableOpacity>
+                    </View>
+                  </ScaleDecorator>
+                )}
+              />
               <TouchableOpacity style={styles.addExBtn} onPress={() => setExPickerDay(dayIdx)}>
                 <Text style={styles.addExBtnText}>+ Add Exercise</Text>
               </TouchableOpacity>
@@ -300,7 +317,7 @@ export default function CreateRoutineScreen({ navigation }: Props) {
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </NestableScrollContainer>
   );
 }
 
@@ -405,6 +422,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  dragHandle: { paddingRight: spacing.sm },
   exerciseRowName: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
   exerciseRowMuscle: { fontSize: 12, color: colors.textSecondary, marginTop: 1 },
   addExBtn: {

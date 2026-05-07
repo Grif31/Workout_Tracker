@@ -8,6 +8,8 @@ export type Workout = {
   name: string
   notes?: string
   date: string
+  duration?: number
+  volume?: number
   exercises: Exercise[]
 };
 
@@ -15,12 +17,19 @@ export type Workout = {
 export type Exercise = {
   id: number
   name: string
+  exercise_template_id?: number
+  exercise_type?: 'strength' | 'cardio'
+  route_polyline?: string
   sets: Set[]
 };
 export type Set = {
   id?: string;
-  reps: string;
-  weight: string;
+  reps?: string;
+  weight?: string;
   set_type?: string;
   done?: boolean;
+  cardio_duration?: string;
+  distance?: string;
+  distance_unit?: string;
+  intensity?: string;
 }

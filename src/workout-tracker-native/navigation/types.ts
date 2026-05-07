@@ -1,9 +1,21 @@
 import { PrefillWorkoutData } from "components/WorkoutDetails";
 
+export type ExerciseDetailParams = {
+  exerciseId: number;
+  exerciseName: string;
+  equipment?: string;
+  muscleGroup?: string;
+  secondaryMuscleGroup?: string;
+  description?: string;
+  imageUrl?: string;
+};
+
 export type DashboardStackParamsList = {
     DashboardHome: undefined;
     WorkoutDetails: { workoutId: number };
     WorkoutLog: {prefill?: PrefillWorkoutData, workoutId?:number, editMode?: boolean};
+    GPSCardio: undefined;
+    ExerciseDetail: ExerciseDetailParams;
 };
 export type ExercisesStackParamsList = {
     ExercisesHome: undefined;
@@ -11,15 +23,7 @@ export type ExercisesStackParamsList = {
     RoutineDetail: { routineId: number; routineName: string };
     TemplateDetail: { templateId: number };
     LogRoutine: { prefill?: PrefillWorkoutData; workoutId?: number; editMode?: boolean };
-    ExerciseDetail: {
-      exerciseId: number;
-      exerciseName: string;
-      equipment?: string;
-      muscleGroup: string;
-      secondaryMuscleGroup?: string;
-      description?: string;
-      imageUrl?: string;
-    };
+    ExerciseDetail: ExerciseDetailParams;
 };
 export type ProfileStackParamsList = {
     ProfileHome: undefined
@@ -29,6 +33,7 @@ export type ProfileStackParamsList = {
     WorkoutDetails: { workoutId: number };
     EditWorkout: {prefill?: PrefillWorkoutData, workoutId?:number, editMode?: boolean}
     BodyweightLog: undefined;
+    PersonalRecords: undefined;
 };
 
 export type AppStack = {

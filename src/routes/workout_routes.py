@@ -6,11 +6,108 @@ from flask_jwt_extended import  jwt_required, get_jwt_identity
 workout_bp = Blueprint('workout_bp', __name__)
 
 
+CARDIO_DISTANCE_MILESTONES = [
+    (0.4,     '400m'),
+    (0.8,     '800m'),
+    (1.0,     '1K'),
+    (1.60934, '1 Mile'),
+    (5.0,     '5K'),
+    (10.0,    '10K'),
+    (21.0975, 'Half Marathon'),
+    (42.195,  'Marathon'),
+]
+
+CARDIO_DURATION_MILESTONES = [
+    (10.0,  '10 min'),
+    (20.0,  '20 min'),
+    (30.0,  '30 min'),
+    (60.0,  '60 min'),
+]
+
+
+def _compute_and_upsert_cardio_prs(user_id, exercise_set_pairs):
+    """Compute best_time and best_distance PRs for cardio exercises.
+
+    best_time: weight_context = target distance km, value = time in minutes (lower is better)
+    best_distance: weight_context = target duration min, value = distance km (higher is better)
+    """
+    new_prs = []
+    for exercise, sets in exercise_set_pairs:
+        if not exercise.exercise_template_id:
+            continue
+        bouts = []
+        for s in sets:
+            if s.distance and s.cardio_duration and s.distance > 0 and s.cardio_duration > 0:
+                dist_km = s.distance if (s.distance_unit or 'km') == 'km' else s.distance * 1.60934
+                bouts.append((dist_km, s.cardio_duration))
+        if not bouts:
+            continue
+
+        for dist_km, duration in bouts:
+            for target_km, label in CARDIO_DISTANCE_MILESTONES:
+                if dist_km < target_km:
+                    continue
+                est_time = round(duration * (target_km / dist_km), 4)
+                existing = PersonalRecord.query.filter_by(
+                    user_id=user_id,
+                    exercise_template_id=exercise.exercise_template_id,
+                    pr_type='best_time',
+                    weight_context=target_km,
+                ).first()
+                if existing and est_time >= existing.value:
+                    continue
+                if existing:
+                    existing.value = est_time
+                    existing.achieved_at = datetime.now()
+                else:
+                    db.session.add(PersonalRecord(
+                        user_id=user_id,
+                        exercise_template_id=exercise.exercise_template_id,
+                        pr_type='best_time',
+                        value=est_time,
+                        achieved_at=datetime.now(),
+                        weight_context=target_km,
+                    ))
+                new_prs.append({'exercise_name': exercise.name, 'pr_type': 'best_time',
+                                'label': label, 'value': est_time})
+
+            for target_min, label in CARDIO_DURATION_MILESTONES:
+                if duration < target_min:
+                    continue
+                est_dist = round(dist_km * (target_min / duration), 4)
+                existing = PersonalRecord.query.filter_by(
+                    user_id=user_id,
+                    exercise_template_id=exercise.exercise_template_id,
+                    pr_type='best_distance',
+                    weight_context=target_min,
+                ).first()
+                if existing and est_dist <= existing.value:
+                    continue
+                if existing:
+                    existing.value = est_dist
+                    existing.achieved_at = datetime.now()
+                else:
+                    db.session.add(PersonalRecord(
+                        user_id=user_id,
+                        exercise_template_id=exercise.exercise_template_id,
+                        pr_type='best_distance',
+                        value=est_dist,
+                        achieved_at=datetime.now(),
+                        weight_context=target_min,
+                    ))
+                new_prs.append({'exercise_name': exercise.name, 'pr_type': 'best_distance',
+                                'label': label, 'value': est_dist})
+    return new_prs
+
+
 def _compute_and_upsert_prs(user_id, exercise_set_pairs):
     """Check if any sets in a workout beat existing personal records.
 
     exercise_set_pairs: list of (Exercise, list[Set])
     Returns a list of new PR dicts for exercises that set a new record.
+
+    max_weight / estimated_1rm: one record per exercise (weight_context = -1).
+    max_reps: one record per exercise PER WEIGHT (weight_context = the weight used).
     """
     new_prs = []
     for exercise, sets in exercise_set_pairs:
@@ -21,30 +118,23 @@ def _compute_and_upsert_prs(user_id, exercise_set_pairs):
             continue
 
         workout_max_weight = max(w for _, w, _ in valid)
-        workout_max_reps   = max(r for r, _, _ in valid)
         workout_max_1rm    = max(w * (1 + r / 30) for r, w, _ in valid)
 
-        for pr_type, workout_value in [
-            ('max_weight',    workout_max_weight),
-            ('max_reps',      float(workout_max_reps)),
-            ('estimated_1rm', workout_max_1rm),
+        # ── max_weight and estimated_1rm: single record per exercise ──────────
+        for pr_type, workout_value, pr_set_id in [
+            ('max_weight',    workout_max_weight,
+             next((sid for _, w, sid in valid if w == workout_max_weight), None)),
+            ('estimated_1rm', workout_max_1rm, None),
         ]:
             existing = PersonalRecord.query.filter_by(
                 user_id=user_id,
                 exercise_template_id=exercise.exercise_template_id,
                 pr_type=pr_type,
+                weight_context=-1.0,
             ).first()
 
             if existing and workout_value <= existing.value:
                 continue
-
-            # Identify the set that produced this PR
-            if pr_type == 'max_weight':
-                pr_set_id = next((sid for _, w, sid in valid if w == workout_max_weight), None)
-            elif pr_type == 'max_reps':
-                pr_set_id = next((sid for r, _, sid in valid if r == workout_max_reps), None)
-            else:
-                pr_set_id = None
 
             if existing:
                 existing.value       = round(workout_value, 1)
@@ -58,12 +148,51 @@ def _compute_and_upsert_prs(user_id, exercise_set_pairs):
                     value=round(workout_value, 1),
                     achieved_at=datetime.now(),
                     set_id=pr_set_id,
+                    weight_context=-1.0,
                 ))
 
             new_prs.append({
                 'exercise_name': exercise.name,
                 'pr_type': pr_type,
                 'value': round(workout_value, 1),
+            })
+
+        # ── max_reps: one record per weight used in this workout ───────────────
+        for weight in set(w for _, w, _ in valid):
+            sets_at_weight = [(r, sid) for r, w, sid in valid if w == weight]
+            best_reps = int(max(r for r, _ in sets_at_weight))
+            pr_set_id = next(sid for r, sid in sets_at_weight if r == best_reps)
+
+            existing = PersonalRecord.query.filter_by(
+                user_id=user_id,
+                exercise_template_id=exercise.exercise_template_id,
+                pr_type='max_reps',
+                weight_context=weight,
+            ).first()
+
+            if existing and best_reps <= existing.value:
+                continue
+
+            if existing:
+                existing.value       = float(best_reps)
+                existing.achieved_at = datetime.now()
+                existing.set_id      = pr_set_id
+            else:
+                db.session.add(PersonalRecord(
+                    user_id=user_id,
+                    exercise_template_id=exercise.exercise_template_id,
+                    pr_type='max_reps',
+                    value=float(best_reps),
+                    achieved_at=datetime.now(),
+                    set_id=pr_set_id,
+                    weight_context=weight,
+                ))
+
+            new_prs.append({
+                'exercise_name': exercise.name,
+                'pr_type': 'max_reps',
+                'value': best_reps,
+                'weight_context': weight,
             })
 
     return new_prs
@@ -172,6 +301,8 @@ def add_workout():
                 name=ex['name'],
                 exercise_template_id=ex.get('exercise_template_id'),
                 order=ex.get('order', ex_index),
+                exercise_type=ex.get('exercise_type', 'strength'),
+                route_polyline=ex.get('route_polyline'),
             )
             db.session.add(new_ex)
             db.session.flush()
@@ -180,10 +311,14 @@ def add_workout():
             for set_index, s in enumerate(ex.get('sets', [])):
                 new_set = Set(
                     exercise_id=new_ex.id,
-                    reps=s['reps'],
-                    weight=s['weight'],
+                    reps=s.get('reps'),
+                    weight=s.get('weight'),
                     order=s.get('order', set_index),
                     set_type=s.get('set_type', 'N'),
+                    cardio_duration=s.get('cardio_duration'),
+                    distance=s.get('distance'),
+                    distance_unit=s.get('distance_unit'),
+                    intensity=s.get('intensity'),
                 )
                 db.session.add(new_set)
                 new_sets.append(new_set)
@@ -191,7 +326,10 @@ def add_workout():
             exercise_set_pairs.append((new_ex, new_sets))
 
         new_workout.calculate_volume()
-        new_prs = _compute_and_upsert_prs(current_user_id, exercise_set_pairs)
+        strength_pairs = [(ex, s) for ex, s in exercise_set_pairs if (ex.exercise_type or 'strength') == 'strength']
+        cardio_pairs   = [(ex, s) for ex, s in exercise_set_pairs if (ex.exercise_type or 'strength') == 'cardio']
+        new_prs = _compute_and_upsert_prs(current_user_id, strength_pairs)
+        new_prs += _compute_and_upsert_cardio_prs(current_user_id, cardio_pairs)
         db.session.commit()
 
         return jsonify({'message': 'New Workout Added', 'new_prs': new_prs}), 201
@@ -258,6 +396,10 @@ def update_workout(workout_id):
                     ex.name = exData["name"]
                 if "exercise_template_id" in exData:
                     ex.exercise_template_id = exData["exercise_template_id"]
+                if "exercise_type" in exData:
+                    ex.exercise_type = exData["exercise_type"]
+                if "route_polyline" in exData:
+                    ex.route_polyline = exData["route_polyline"]
                 ex.order = exData.get('order', ex_index)
 
                 setIds = {s.id for s in ex.sets}
@@ -277,13 +419,25 @@ def update_workout(workout_id):
                             s.weight = s_data["weight"]
                         if "set_type" in s_data:
                             s.set_type = s_data["set_type"]
+                        if "cardio_duration" in s_data:
+                            s.cardio_duration = s_data["cardio_duration"]
+                        if "distance" in s_data:
+                            s.distance = s_data["distance"]
+                        if "distance_unit" in s_data:
+                            s.distance_unit = s_data["distance_unit"]
+                        if "intensity" in s_data:
+                            s.intensity = s_data["intensity"]
                         s.order = s_data.get('order', set_index)
                     else:
                         ex.sets.append(Set(
-                            reps=s_data["reps"],
-                            weight=s_data["weight"],
+                            reps=s_data.get("reps"),
+                            weight=s_data.get("weight"),
                             order=s_data.get('order', set_index),
                             set_type=s_data.get('set_type', 'N'),
+                            cardio_duration=s_data.get('cardio_duration'),
+                            distance=s_data.get('distance'),
+                            distance_unit=s_data.get('distance_unit'),
+                            intensity=s_data.get('intensity'),
                         ))
             else:
                 new_ex = Exercise(
@@ -291,15 +445,21 @@ def update_workout(workout_id):
                     workout_id=workout_id,
                     exercise_template_id=exData.get('exercise_template_id'),
                     order=exData.get('order', ex_index),
+                    exercise_type=exData.get('exercise_type', 'strength'),
+                    route_polyline=exData.get('route_polyline'),
                 )
                 for set_index, s in enumerate(exData.get("sets", [])):
                     new_ex.sets.append(Set(
-                        reps=s["reps"],
-                        weight=s["weight"],
+                        reps=s.get("reps"),
+                        weight=s.get("weight"),
                         order=s.get('order', set_index),
                         set_type=s.get('set_type', 'N'),
+                        cardio_duration=s.get('cardio_duration'),
+                        distance=s.get('distance'),
+                        distance_unit=s.get('distance_unit'),
+                        intensity=s.get('intensity'),
                     ))
-                workout.exercises.append(new_ex) 
+                workout.exercises.append(new_ex)
                         
     db.session.flush()
     db.session.expire(workout)

@@ -9,21 +9,24 @@ import {
   Image,
   Dimensions,
 } from 'react-native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-gifted-charts';
 import { useAuth } from '../../context/AuthContext';
-import { ExercisesStackParamsList } from '../../navigation/types';
+import { ExerciseDetailParams } from '../../navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { toDisplayWeight, toDisplayVolume, convertWeight, WeightUnit } from 'utils/units';
+import MuscleDiagram from '../../components/MuscleDiagram';
 
 const CHART_WIDTH = Dimensions.get('window').width - spacing.md * 4;
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-type Props = NativeStackScreenProps<ExercisesStackParamsList, 'ExerciseDetail'>;
+type Props = {
+  route: { params: ExerciseDetailParams };
+  navigation: { goBack: () => void };
+};
 
 type ExerciseStats = {
   estimatedOneRepMax: number;
@@ -44,6 +47,26 @@ type HistorySession = {
 };
 
 type ChartPoint = { value: number; label: string; dataPointText: string };
+
+type CardioStats = {
+  total_distance: number;
+  total_duration: number;
+  session_count: number;
+  avg_pace: number | null;
+};
+
+type CardioBout = {
+  cardio_duration: number;
+  distance: number;
+  distance_unit: string;
+  intensity: number | null;
+};
+
+type CardioSession = {
+  date: string;
+  workout_name: string;
+  bouts: CardioBout[];
+};
 
 const exerciseDescriptions: Record<string, string> = {
   Chest:
@@ -84,13 +107,13 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     exerciseName,
     equipment,
     muscleGroup,
-    secondaryMuscleGroup,
     description,
     imageUrl,
   } = route.params;
 
   const [activeTab, setActiveTab] = useState<'about' | 'stats' | 'history'>('about');
   const [loading, setLoading] = useState(true);
+  const [exerciseType, setExerciseType] = useState<'strength' | 'cardio'>('strength');
   const [stats, setStats] = useState<ExerciseStats>({
     estimatedOneRepMax: 0,
     totalSets: 0,
@@ -100,7 +123,9 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     maxReps: 0,
     maxVolume: 0,
   });
+  const [cardioStats, setCardioStats] = useState<CardioStats | null>(null);
   const [historySessions, setHistorySessions] = useState<HistorySession[]>([]);
+  const [cardioHistory, setCardioHistory] = useState<CardioSession[]>([]);
   const [chart1RM, setChart1RM] = useState<ChartPoint[]>([]);
   const [chartMaxWeight, setChartMaxWeight] = useState<ChartPoint[]>([]);
   const [wgerDescription, setWgerDescription] = useState<string | null>(null);
@@ -119,6 +144,19 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
       if (!res.ok) return;
       const data = await res.json();
 
+      if (data.exercise_type === 'cardio') {
+        setExerciseType('cardio');
+        setCardioStats({
+          total_distance: data.totals?.total_distance ?? 0,
+          total_duration: data.totals?.total_duration ?? 0,
+          session_count: data.totals?.session_count ?? 0,
+          avg_pace: data.avg_pace ?? null,
+        });
+        setCardioHistory(data.history ?? []);
+        return;
+      }
+
+      setExerciseType('strength');
       let maxVolume = 0;
       const sessions: HistorySession[] = (data.history ?? []).map((item: any) => {
         (item.sets ?? []).forEach((s: { reps: number; weight: number }) => {
@@ -134,7 +172,6 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         };
       });
 
-      // Chart data: history arrives newest-first; reverse for left→right chronological order
       const chronological = [...sessions].reverse().slice(-12);
       const buildPoints = (items: HistorySession[], getter: (s: HistorySession) => number): ChartPoint[] =>
         items
@@ -166,7 +203,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [exerciseName, token]);
+  }, [exerciseName, token, weightUnit]);
 
   const fetchWgerDetails = useCallback(async () => {
     if (!exerciseName) return;
@@ -196,7 +233,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const exerciseDescription =
     wgerLoading
       ? 'Loading exercise details...'
-      : wgerDescription || description || exerciseDescriptions[muscleGroup] || defaultDescription;
+      : wgerDescription || description || (muscleGroup ? exerciseDescriptions[muscleGroup] : null) || defaultDescription;
 
   const renderChart = (points: ChartPoint[], title: string) => {
     if (points.length < 2) return null;
@@ -238,15 +275,76 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     );
   };
 
+  const fmtPace = (pace: number) => {
+    const m = Math.floor(pace);
+    const s = Math.round((pace - m) * 60);
+    return `${m}:${String(s).padStart(2, '0')} /km`;
+  };
+
+  const renderCardioStats = () => {
+    if (loading) return <ActivityIndicator size="large" color={colors.save} />;
+    if (!cardioStats || cardioStats.session_count === 0) {
+      return <Text style={styles.emptyText}>Log this exercise to see your stats.</Text>;
+    }
+    const { total_distance, total_duration, session_count, avg_pace } = cardioStats;
+    return (
+      <View style={styles.statsGrid}>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Total Distance</Text>
+          <Text style={styles.statValue}>{total_distance.toFixed(2)} km</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Total Time</Text>
+          <Text style={styles.statValue}>{Math.round(total_duration)} min</Text>
+        </View>
+        {avg_pace != null && (
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Avg Pace</Text>
+            <Text style={styles.statValue}>{fmtPace(avg_pace)}</Text>
+          </View>
+        )}
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Sessions</Text>
+          <Text style={styles.statValue}>{session_count}</Text>
+        </View>
+      </View>
+    );
+  };
+
+  const renderCardioHistory = () => {
+    if (loading) return <ActivityIndicator size="large" color={colors.save} />;
+    if (cardioHistory.length === 0) {
+      return <Text style={styles.emptyText}>No recorded sessions for this exercise yet.</Text>;
+    }
+    return cardioHistory.map((session, i) => (
+      <View key={i} style={styles.historySession}>
+        <View style={styles.historyMeta}>
+          <Text style={styles.historyLabel}>{session.workout_name}</Text>
+          <Text style={styles.historyDate}>{new Date(session.date).toLocaleDateString()}</Text>
+        </View>
+        {session.bouts.map((bout, j) => {
+          const parts: string[] = [];
+          if (bout.cardio_duration) parts.push(`${Math.round(bout.cardio_duration)} min`);
+          if (bout.distance) parts.push(`${bout.distance.toFixed(2)} ${bout.distance_unit}`);
+          if (bout.intensity) parts.push(`@ ${fmtPace(bout.intensity)}`);
+          return (
+            <Text key={j} style={styles.historyDetail}>
+              Bout {j + 1}: {parts.join(' · ')}
+            </Text>
+          );
+        })}
+      </View>
+    ));
+  };
+
   const renderStats = () => {
+    if (exerciseType === 'cardio') return renderCardioStats();
     if (loading) return <ActivityIndicator size="large" color={colors.save} />;
     if (stats.totalSets === 0) {
       return <Text style={styles.emptyText}>Log this exercise to see your stats.</Text>;
     }
     return (
       <View>
-        {renderChart(chart1RM, `Estimated 1RM over time (${weightUnit})`)}
-        {renderChart(chartMaxWeight, `Max weight over time (${weightUnit})`)}
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Estimated 1RM</Text>
@@ -277,11 +375,14 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
             <Text style={styles.statValue}>{stats.workoutCount}</Text>
           </View>
         </View>
+        {renderChart(chart1RM, `Estimated 1RM over time (${weightUnit})`)}
+        {renderChart(chartMaxWeight, `Max weight over time (${weightUnit})`)}
       </View>
     );
   };
 
   const renderHistory = () => {
+    if (exerciseType === 'cardio') return renderCardioHistory();
     if (loading) return <ActivityIndicator size="large" color={colors.save} />;
     if (historySessions.length === 0) {
       return <Text style={styles.emptyText}>No recorded sets for this exercise yet.</Text>;
@@ -342,21 +443,11 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
 
         {activeTab === 'about' && (
           <View style={styles.section}>
-            <View style={styles.diagramCard}>
-              <View style={styles.diagramLabelRow}>
-                <Text style={styles.sectionTitle}>Muscle Diagram</Text>
+            {exerciseType !== 'cardio' && (
+              <View style={styles.diagramCard}>
+                <MuscleDiagram primaryMuscle={muscleGroup} />
               </View>
-              <View style={styles.diagram}>
-                <View style={[styles.muscleBubble, styles.primaryBubble]}>
-                  <Text style={styles.bubbleText}>{muscleGroup}</Text>
-                </View>
-                {secondaryMuscleGroup ? (
-                  <View style={[styles.muscleBubble, styles.secondaryBubble]}>
-                    <Text style={styles.bubbleText}>{secondaryMuscleGroup}</Text>
-                  </View>
-                ) : null}
-              </View>
-            </View>
+            )}
 
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>How to perform</Text>
@@ -404,7 +495,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     height: 200,
     borderRadius: 20,
     marginBottom: spacing.md,
-    backgroundColor: '#f2f2f2',
+    backgroundColor: colors.border,
   },
   title: {
     fontSize: typography.fontSize.lg,
@@ -419,7 +510,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   metaPill: {
     flex: 1,
-    backgroundColor: '#d1d1d1',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: spacing.sm,
     borderRadius: 14,
   },
@@ -443,16 +536,19 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flex: 1,
     paddingVertical: spacing.sm,
     borderRadius: 14,
-    backgroundColor: '#ededed',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
     marginHorizontal: spacing.xs / 2,
     alignItems: 'center',
   },
   tabBtnActive: {
     backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   tabBtnText: {
     fontSize: typography.fontSize.sm,
-    color: colors.textPrimary,
+    color: colors.textSecondary,
     fontWeight: '600',
   },
   tabBtnTextActive: {
@@ -468,43 +564,20 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.sm,
   },
   card: {
-    backgroundColor: '#d1d1d1',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: 16,
     padding: spacing.md,
     marginBottom: spacing.md,
   },
   diagramCard: {
-    backgroundColor: '#d1d1d1',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: 16,
     padding: spacing.md,
     marginBottom: spacing.md,
-  },
-  diagramLabelRow: {
-    marginBottom: spacing.sm,
-  },
-  diagram: {
-    minHeight: 140,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  muscleBubble: {
-    minWidth: 120,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: 999,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  primaryBubble: {
-    backgroundColor: '#ff6b6b',
-  },
-  secondaryBubble: {
-    backgroundColor: '#4a90e2',
-  },
-  bubbleText: {
-    color: '#fff',
-    fontWeight: '700',
   },
   body: {
     fontSize: typography.fontSize.sm,
@@ -514,32 +587,43 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: spacing.md,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   statCard: {
-    flexBasis: '48%',
-    backgroundColor: '#d1d1d1',
-    borderRadius: 16,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    flexBasis: '31%',
+    flexGrow: 1,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
   },
   statLabel: {
-    color: colors.textPrimary,
-    marginBottom: spacing.sm,
-    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 2,
+    textAlign: 'center',
   },
   statValue: {
-    fontSize: typography.fontSize.lg,
+    fontSize: typography.fontSize.md,
     fontWeight: '700',
     color: colors.textPrimary,
+    textAlign: 'center',
   },
   emptyText: {
     color: colors.textSecondary,
     fontSize: typography.fontSize.sm,
   },
   historySession: {
-    backgroundColor: '#d1d1d1',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: 16,
     padding: spacing.md,
     marginBottom: spacing.md,

@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { ActivityIndicator, View } from 'react-native';
 import {AppTabs} from './AppTabs'
 import {AuthStackScreen} from './AuthStack'
+import { WorkoutSessionProvider } from '../context/WorkoutSessionContext';
+import { navigationRef } from './navigationRef';
 
 
 
@@ -21,8 +23,10 @@ export default function RootNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
+      <WorkoutSessionProvider>
         {user ? <AppTabs /> : <AuthStackScreen />}
+      </WorkoutSessionProvider>
     </NavigationContainer>
   );
 }

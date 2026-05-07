@@ -1,178 +1,495 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-
-const SET_TYPE_LABELS: Record<string, string> = { W: 'Warmup', D: 'Drop Set', F: 'Failure' };
-const SET_TYPE_COLORS: Record<string, string> = { W: '#FF9500', D: '#AF52DE', F: '#FF3B30' };
-import { Workout } from '../types/models';
-import { useAuth } from '../context/AuthContext';
-import { useActionSheet } from '@expo/react-native-action-sheet';
+import {
+  View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { useActionSheet } from '@expo/react-native-action-sheet';
+import polylineLib from '@mapbox/polyline';
+
+// react-native-maps is only available in dev/production builds, not Expo Go.
+// Guard the require so a missing native module never crashes the app at startup.
+let _MapsModule: any = null;
+try { _MapsModule = require('react-native-maps'); } catch {}
+const MapView: React.ComponentType<any> | null = _MapsModule?.default ?? null;
+const Polyline: React.ComponentType<any> | null = _MapsModule?.Polyline ?? null;
+import { Workout } from '../types/models';
+import { useAuth } from '../context/AuthContext';
 import { useTheme, type Colors } from '../context/ThemeContext';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
+import { estimateCalories } from '../utils/cardioCalories';
 
-
-const  API_URL = process.env.EXPO_PUBLIC_API_URL;
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export type PrefillWorkoutData = {
-    name: string;
-    notes: string;
-    exercises: { name: string; sets: { reps: string ; weight: string }[];}[];
+  name: string;
+  notes: string;
+  exercises: { name: string; sets: { reps: string; weight: string }[] }[];
 };
 
 type Props = {
-    workoutId: number,
-    onEdit?: (prefill: PrefillWorkoutData) => void;
-    onDelete?: (workoutId: number) => void;
-    onSaveAsRoutine?: (workout: Workout) => void;
-    onPerformAgain?: (prefill: PrefillWorkoutData) => void;
- };
+  workoutId: number;
+  onEdit?: (prefill: PrefillWorkoutData) => void;
+  onDelete?: (workoutId: number) => void;
+  onSaveAsTemplate?: () => void;
+  onPerformAgain?: (prefill: PrefillWorkoutData) => void;
+};
 
-export default function WorkoutDetailsScreen({ workoutId, onEdit, onDelete, onSaveAsRoutine, onPerformAgain }: Props){
+const SET_TYPE_COLORS_STATIC = { W: '#FF9500', D: '#AF52DE' };
+
+function fmtVolume(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}k`;
+  return String(Math.round(v));
+}
+
+function fmtDuration(mins: number): string {
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+export default function WorkoutDetailsScreen({
+  workoutId, onEdit, onDelete, onSaveAsTemplate, onPerformAgain,
+}: Props) {
   const { colors } = useTheme();
-  const [workout, setWorkout] = useState<Workout>();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const SET_TYPE_COLORS = useMemo(() => ({
+    N: colors.textSecondary,
+    W: '#FF9500',
+    D: '#AF52DE',
+    F: colors.danger,
+  }), [colors]);
+
   const { showActionSheetWithOptions } = useActionSheet();
   const { token, user } = useAuth();
   const weightUnit = user?.weight_unit === 'kg' ? 'kg' : 'lbs';
-  const styles = useMemo(() => createStyles(colors), [colors]);
 
+  const [workout, setWorkout] = useState<Workout | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchWorkout();
-    }, [workoutId])
-  );
-
-  // Method to Prefill a blank workout form with the same exercises as the current workout
-  // Edit will prefill the reps and weight 
-  // perform will leave them empty 
-  const buildPrefill = (mode: 'perform' | 'edit') : PrefillWorkoutData => {
-    if(!workout){ throw new Error('no workout loaded')}
-    return{
-        name: workout.name,
-        notes: workout.notes || '',
-        exercises: workout.exercises.map((e) => ({
-            name: e.name,
-            sets: e.sets.map((s) => ({
-                reps: mode === 'edit' ? s.reps : '',
-                weight: mode === 'edit' ? s.weight : '',
-            })),
-            
-        }))
-    };
-  };
-
+  useFocusEffect(useCallback(() => { fetchWorkout(); }, [workoutId]));
 
   const fetchWorkout = async () => {
+    setLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/workouts/${workoutId}`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) {
-        Alert.alert('Error', 'Failed to load workout');
-        return;
-      }
-      const data = await res.json();
-      setWorkout(data);
-    } catch (err) {
+      if (!res.ok) { Alert.alert('Error', 'Failed to load workout'); return; }
+      setWorkout(await res.json());
+    } catch {
       Alert.alert('Error', 'Failed to load workout');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const openMenu = () => {
-    const options = ['Edit Workout', 'Perform Again', 'Save as Rountine', 'Delete Workout']
-    const destructiveButtonIndex = 3
-
-    showActionSheetWithOptions( { options, destructiveButtonIndex },
-
-        (buttonIndex) => {
-            if(!workout) return;
-            switch(buttonIndex){
-                case 0: 
-                    onEdit?.(buildPrefill('edit'))
-                    break;
-                case 1:
-                    onPerformAgain?.(buildPrefill('perform'))
-                    break;
-                case 2:
-                    onSaveAsRoutine?.(workout)
-                    break;
-                case 3:
-                    confirmDelete();
-                    break;
-                
-            }
-        }
-    )
+  const buildPrefill = (mode: 'perform' | 'edit'): PrefillWorkoutData => {
+    if (!workout) throw new Error('no workout loaded');
+    return {
+      name: workout.name,
+      notes: workout.notes || '',
+      exercises: workout.exercises.map(e => ({
+        name: e.name,
+        sets: e.sets.map(s => ({
+          reps: mode === 'edit' ? (s.reps ?? '') : '',
+          weight: mode === 'edit' ? (s.weight ?? '') : '',
+        })),
+      })),
+    };
   };
+
   const confirmDelete = () => {
-        Alert.alert('Delete Workout', 'Are you sure you want to delete this workout?', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Delete', style: 'destructive', onPress: () => deleteWorkout()},
+    Alert.alert('Delete Workout', 'Are you sure you want to delete this workout?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: deleteWorkout },
     ]);
   };
+
   const deleteWorkout = async () => {
-    if(!token) return;
-    try{
+    if (!token) return;
+    try {
       const res = await fetch(`${API_URL}/api/workouts/${workoutId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
-      if(!res.ok){
+      if (!res.ok) {
         const err = await res.json();
         Alert.alert('Error', err.message || 'Failed to delete workout');
         return;
       }
       onDelete?.(workoutId);
-    }catch(err){
+    } catch {
       Alert.alert('Error', 'Failed to delete workout');
     }
   };
 
+  const openMenu = () => {
+    if (!workout) return;
+    const options: string[] = [];
+    const handlers: (() => void)[] = [];
 
-  if (!workout) return <Text>Loading...</Text>;
+    if (onEdit) {
+      options.push('Edit Workout');
+      handlers.push(() => onEdit(buildPrefill('edit')));
+    }
+    options.push('Perform Again');
+    handlers.push(() => onPerformAgain?.(buildPrefill('perform')));
+
+    if (onSaveAsTemplate) {
+      options.push('Save as Template');
+      handlers.push(async () => {
+        try {
+          const ids = workout.exercises
+            .map(e => e.exercise_template_id)
+            .filter((id): id is number => id != null);
+          const res = await fetch(`${API_URL}/api/workout-templates`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ name: workout.name, exercise_template_ids: ids }),
+          });
+          if (res.ok) {
+            Alert.alert('Template Saved', `"${workout.name}" saved as a template`);
+            onSaveAsTemplate();
+          } else {
+            Alert.alert('Error', 'Failed to save template');
+          }
+        } catch {
+          Alert.alert('Error', 'Something went wrong');
+        }
+      });
+    }
+    options.push('Delete Workout');
+    handlers.push(confirmDelete);
+    options.push('Cancel');
+    handlers.push(() => {});
+
+    showActionSheetWithOptions(
+      { options, destructiveButtonIndex: options.indexOf('Delete Workout'), cancelButtonIndex: options.length - 1 },
+      (i) => { if (i !== undefined) handlers[i]?.(); }
+    );
+  };
+
+  if (loading || !workout) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={colors.accent} />
+      </View>
+    );
+  }
+
+  const totalSets = workout.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+  const totalVolume = workout.volume ?? workout.exercises.reduce((sum, ex) =>
+    sum + ex.sets.reduce((s, set) => s + (parseFloat(set.reps ?? '0') || 0) * (parseFloat(set.weight ?? '0') || 0), 0), 0);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.topbar}>
-      <Text style={styles.title}>{workout.name}</Text>
-      <TouchableOpacity onPress={openMenu} style={{alignSelf:'flex-end'}}>
-            <Ionicons name='ellipsis-vertical' size={24} color='black'/>
-        </TouchableOpacity>
-      <Text>{new Date(workout.date).toLocaleDateString()}</Text>
-      <Text style={{ marginBottom: 10 }}>{workout.notes}</Text>
-      </View>
-      <FlatList
-        data={workout.exercises}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <View style={styles.exerciseBlock}>
-            <Text style={styles.exerciseName}>{item.name}</Text>
-            {item.sets.map((s, i) => (
-              <View key={i} style={styles.setRow}>
-                <Text style={styles.setText}>Set {i + 1}</Text>
-                {s.set_type && s.set_type !== 'N' && (
-                  <View style={[styles.setTypeBadge, { backgroundColor: SET_TYPE_COLORS[s.set_type] }]}>
-                    <Text style={styles.setTypeBadgeText}>{SET_TYPE_LABELS[s.set_type]}</Text>
-                  </View>
-                )}
-                <Text style={styles.setText}>: {s.reps} reps @ {s.weight} {weightUnit}</Text>
-              </View>
-            ))}
+    <FlatList
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      data={workout.exercises}
+      keyExtractor={item => item.id.toString()}
+      ListHeaderComponent={
+        <View>
+          {/* Title row */}
+          <View style={styles.titleRow}>
+            <Text style={styles.title} numberOfLines={2}>{workout.name}</Text>
+            <TouchableOpacity onPress={openMenu} style={styles.menuBtn}>
+              <Ionicons name="ellipsis-vertical" size={22} color={colors.textPrimary} />
+            </TouchableOpacity>
           </View>
-        )}
-      />
-    </View>
+
+          {/* Metadata: date + duration */}
+          <View style={styles.metaRow}>
+            <Text style={styles.metaText}>
+              {new Date(workout.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+            </Text>
+            {workout.duration ? (
+              <>
+                <Text style={styles.metaDot}>·</Text>
+                <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
+                <Text style={styles.metaText}>{fmtDuration(workout.duration)}</Text>
+              </>
+            ) : null}
+          </View>
+
+          {/* Notes */}
+          {workout.notes ? (
+            <Text style={styles.notes}>{workout.notes}</Text>
+          ) : null}
+
+          {/* Summary bar */}
+          <View style={styles.summaryBar}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{workout.exercises.length}</Text>
+              <Text style={styles.summaryLabel}>{workout.exercises.length === 1 ? 'Exercise' : 'Exercises'}</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{totalSets}</Text>
+              <Text style={styles.summaryLabel}>{totalSets === 1 ? 'Set' : 'Sets'}</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{fmtVolume(totalVolume)}</Text>
+              <Text style={styles.summaryLabel}>Volume ({weightUnit})</Text>
+            </View>
+          </View>
+        </View>
+      }
+      renderItem={({ item: exercise }) => {
+        const isCardio = exercise.exercise_type === 'cardio';
+
+        if (isCardio) {
+          const bodyKg = user?.bodyweight
+            ? (user.weight_unit === 'kg' ? user.bodyweight : user.bodyweight / 2.205)
+            : 70;
+          const totalDur = exercise.sets.reduce((s, b) => s + (Number(b.cardio_duration) || 0), 0);
+          const totalDistKm = exercise.sets.reduce((s, b) => {
+            const d = Number(b.distance) || 0;
+            return s + ((b.distance_unit === 'mi' ? d * 1.60934 : d));
+          }, 0);
+          const kcal = estimateCalories(exercise.name, totalDur, bodyKg);
+
+          let routeCoords: { latitude: number; longitude: number }[] | null = null;
+          if (exercise.route_polyline) {
+            try {
+              const decoded = polylineLib.decode(exercise.route_polyline);
+              routeCoords = decoded.map(([lat, lng]: [number, number]) => ({ latitude: lat, longitude: lng }));
+            } catch {}
+          }
+
+          const region = routeCoords && routeCoords.length > 0 ? (() => {
+            const lats = routeCoords!.map(c => c.latitude);
+            const lngs = routeCoords!.map(c => c.longitude);
+            const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+            const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+            return {
+              latitude: (minLat + maxLat) / 2,
+              longitude: (minLng + maxLng) / 2,
+              latitudeDelta: Math.max(maxLat - minLat, 0.01) * 1.3,
+              longitudeDelta: Math.max(maxLng - minLng, 0.01) * 1.3,
+            };
+          })() : null;
+
+          return (
+            <View style={styles.exerciseCard}>
+              <Text style={styles.exerciseName}>{exercise.name}</Text>
+
+              {MapView && Polyline && routeCoords && region && (
+                <MapView
+                  style={styles.routeMap}
+                  region={region}
+                  scrollEnabled={false}
+                  zoomEnabled={false}
+                  pitchEnabled={false}
+                  rotateEnabled={false}
+                >
+                  <Polyline
+                    coordinates={routeCoords}
+                    strokeColor={colors.accent}
+                    strokeWidth={3}
+                  />
+                </MapView>
+              )}
+
+              {exercise.sets.map((s, i) => {
+                const dur = Number(s.cardio_duration) || 0;
+                const dist = Number(s.distance) || 0;
+                const intensity = Number(s.intensity) || 0;
+                const durStr = dur > 0
+                  ? `${Math.floor(dur)}:${String(Math.round((dur % 1) * 60)).padStart(2, '0')} min`
+                  : null;
+                const distStr = dist > 0 ? `${dist} ${s.distance_unit || 'km'}` : null;
+                const paceStr = intensity > 0 ? `${intensity.toFixed(2)} min/km` : null;
+                return (
+                  <View key={i} style={styles.cardioBoutRow}>
+                    <Text style={[styles.setNumText, { color: colors.textSecondary, width: 20 }]}>{i + 1}</Text>
+                    <Text style={styles.cardioBoutText}>
+                      {[durStr, distStr, paceStr].filter(Boolean).join(' · ') || '—'}
+                    </Text>
+                  </View>
+                );
+              })}
+
+              <View style={styles.cardioSummaryBar}>
+                <Text style={styles.cardioSummaryText}>
+                  🔥 ~{kcal} kcal  ·  {totalDur.toFixed(0)} min  ·  {totalDistKm.toFixed(2)} km
+                </Text>
+              </View>
+            </View>
+          );
+        }
+
+        return (
+          <View style={styles.exerciseCard}>
+            <Text style={styles.exerciseName}>{exercise.name}</Text>
+
+            {/* Column headers */}
+            <View style={styles.setHeaderRow}>
+              <View style={styles.colBadge} />
+              <Text style={[styles.setHeaderCell, styles.colReps]}>Reps</Text>
+              <Text style={[styles.setHeaderCell, styles.colWeight]}>{weightUnit}</Text>
+            </View>
+
+            {exercise.sets.map((s, i) => {
+              const type = (s.set_type ?? 'N') as keyof typeof SET_TYPE_COLORS;
+              const tc = SET_TYPE_COLORS[type] ?? colors.textSecondary;
+              return (
+                <View key={i} style={styles.setRow}>
+                  <View style={[styles.setNumBadge, styles.colBadge, { borderColor: tc }]}>
+                    <Text style={[styles.setNumText, { color: tc }]}>{i + 1}</Text>
+                    {type !== 'N' && <Text style={[styles.setTypeText, { color: tc }]}>{type}</Text>}
+                  </View>
+                  <Text style={[styles.setCellText, styles.colReps]}>{s.reps}</Text>
+                  <Text style={[styles.setCellText, styles.colWeight]}>{s.weight}</Text>
+                </View>
+              );
+            })}
+          </View>
+        );
+      }}
+      ListEmptyComponent={
+        <Text style={styles.emptyText}>No exercises recorded</Text>
+      }
+    />
   );
 }
 
 const createStyles = (colors: Colors) => StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: colors.background },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 5, color: colors.textPrimary },
-  exerciseBlock: { marginBottom: 15 },
-  exerciseName: { fontWeight: 'bold', fontSize: 16, color: colors.textPrimary },
-  topbar: { alignItems: 'center' },
-  setRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
-  setText: { color: colors.textSecondary, fontSize: 14 },
-  setTypeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  setTypeBadgeText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.md, paddingBottom: spacing.xl },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  title: {
+    flex: 1,
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginRight: spacing.sm,
+  },
+  menuBtn: { padding: spacing.xs },
+
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  metaText: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+  metaDot: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+
+  notes: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+    marginBottom: spacing.md,
+  },
+
+  summaryBar: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderRadius: spacing.sm,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  summaryItem: { flex: 1, alignItems: 'center' },
+  summaryValue: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },
+  summaryLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 2, textAlign: 'center' },
+  summaryDivider: { width: 1, backgroundColor: colors.border, marginVertical: spacing.xs },
+
+  exerciseCard: {
+    backgroundColor: colors.surface,
+    borderRadius: spacing.sm,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  exerciseName: {
+    fontSize: typography.fontSize.md,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+  },
+
+  setHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  setHeaderCell: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    textAlign: 'center',
+  },
+
+  setRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  colBadge: { width: 36, marginRight: spacing.sm },
+  colReps: { flex: 1, textAlign: 'center' },
+  colWeight: { flex: 1, textAlign: 'center' },
+
+  setNumBadge: {
+    borderWidth: 1.5,
+    borderRadius: 6,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  setNumText: { fontSize: 13, fontWeight: '700', lineHeight: 15 },
+  setTypeText: { fontSize: 10, fontWeight: '600', lineHeight: 11 },
+
+  setCellText: {
+    fontSize: typography.fontSize.md,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    textAlign: 'center',
+  },
+
+  emptyText: {
+    textAlign: 'center',
+    color: colors.textSecondary,
+    marginTop: spacing.lg,
+  },
+
+  routeMap: {
+    height: 200,
+    borderRadius: spacing.sm,
+    marginBottom: spacing.sm,
+    overflow: 'hidden',
+  },
+  cardioBoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  cardioBoutText: {
+    flex: 1,
+    fontSize: typography.fontSize.sm,
+    color: colors.textPrimary,
+    fontWeight: '500',
+  },
+  cardioSummaryBar: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  cardioSummaryText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
 });

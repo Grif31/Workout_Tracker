@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, TextInput, Modal, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, Modal, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -15,50 +16,76 @@ export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [name, setName] = useState('');
-  const [muscle, setMuscle] = useState('Chest');
+  const [selected, setSelected] = useState<string[]>([]);
+
+  const toggle = (group: string) => {
+    setSelected(prev =>
+      prev.includes(group) ? prev.filter(g => g !== group) : [...prev, group]
+    );
+  };
 
   const handleSave = () => {
-    if (!name.trim()) return;
-    onSave(name, muscle);
+    if (!name.trim() || selected.length === 0) return;
+    onSave(name.trim(), selected.join(', '));
     setName('');
-    setMuscle('Chest');
+    setSelected([]);
+  };
+
+  const handleClose = () => {
+    setName('');
+    setSelected([]);
+    onClose();
   };
 
   return (
-    <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
+    <Modal transparent animationType="fade" visible={visible} onRequestClose={handleClose}>
       <View style={styles.overlay}>
         <View style={styles.card}>
           <View style={styles.topbar}>
-            <TouchableOpacity onPress={onClose}>
+            <TouchableOpacity onPress={handleClose}>
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleSave}>
-              <Text style={styles.saveText}>Save</Text>
+            <Text style={styles.title}>New Exercise</Text>
+            <TouchableOpacity onPress={handleSave} disabled={!name.trim() || selected.length === 0}>
+              <Text style={[styles.saveText, (!name.trim() || selected.length === 0) && styles.saveTextDisabled]}>
+                Save
+              </Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.title}>Add New Exercise</Text>
+
           <TextInput
             style={styles.input}
-            placeholder="Exercise Name"
+            placeholder="Exercise name"
             placeholderTextColor={colors.placeholder}
             value={name}
             onChangeText={setName}
+            autoFocus
           />
-          <Text style={styles.sectionTitle}>Select Muscle Group</Text>
-          <FlatList
-            data={muscleGroups}
-            keyExtractor={item => item}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[styles.muscleItem, muscle === item && styles.muscleItemSelected]}
-                onPress={() => setMuscle(item)}
-              >
-                <Text style={[styles.muscleText, muscle === item && styles.muscleTextSelected]}>
-                  {item}
-                </Text>
-              </TouchableOpacity>
+
+          <Text style={styles.sectionTitle}>
+            Muscle Groups
+            {selected.length > 0 && (
+              <Text style={styles.selectedCount}> · {selected.length} selected</Text>
             )}
-          />
+          </Text>
+
+          <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
+            {muscleGroups.map(group => {
+              const active = selected.includes(group);
+              return (
+                <TouchableOpacity
+                  key={group}
+                  style={[styles.muscleItem, active && { backgroundColor: colors.accent + '20', borderColor: colors.accent }]}
+                  onPress={() => toggle(group)}
+                >
+                  <Text style={[styles.muscleText, active && { color: colors.accent, fontWeight: '700' }]}>
+                    {group}
+                  </Text>
+                  {active && <Ionicons name="checkmark" size={18} color={colors.accent} />}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -66,16 +93,85 @@ export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups
 }
 
 const createStyles = (colors: Colors) => StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  card: { width: '85%', maxHeight: '80%', backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md },
-  title: { fontSize: typography.fontSize.lg, fontWeight: 'bold', marginBottom: spacing.lg, color: colors.textPrimary },
-  input: { borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.sm, borderRadius: spacing.sm, color: colors.textPrimary, backgroundColor: colors.background, fontSize: typography.fontSize.md },
-  topbar: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.md },
-  cancelText: { color: colors.textSecondary, fontSize: typography.fontSize.md },
-  saveText: { color: colors.accent, fontWeight: 'bold', fontSize: typography.fontSize.md },
-  muscleText: { fontSize: typography.fontSize.md, color: colors.textPrimary },
-  muscleTextSelected: { fontWeight: 'bold', color: colors.accent },
-  muscleItem: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 5, marginBottom: 6 },
-  muscleItemSelected: { backgroundColor: colors.accent + '30' },
-  sectionTitle: { fontSize: typography.fontSize.md, fontWeight: '600', marginBottom: 8, color: colors.textPrimary },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  card: {
+    width: '88%',
+    maxHeight: '80%',
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: spacing.md,
+  },
+  topbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  title: {
+    fontSize: typography.fontSize.md,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  cancelText: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.md,
+    minWidth: 52,
+  },
+  saveText: {
+    color: colors.accent,
+    fontWeight: '700',
+    fontSize: typography.fontSize.md,
+    minWidth: 52,
+    textAlign: 'right',
+  },
+  saveTextDisabled: {
+    opacity: 0.35,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
+    borderRadius: spacing.sm,
+    color: colors.textPrimary,
+    backgroundColor: colors.background,
+    fontSize: typography.fontSize.md,
+  },
+  sectionTitle: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: spacing.sm,
+  },
+  selectedCount: {
+    color: colors.accent,
+    fontWeight: '600',
+    textTransform: 'none',
+    letterSpacing: 0,
+  },
+  list: {
+    flexGrow: 0,
+  },
+  muscleItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 6,
+  },
+  muscleText: {
+    fontSize: typography.fontSize.md,
+    color: colors.textPrimary,
+  },
 });

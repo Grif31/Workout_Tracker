@@ -71,6 +71,21 @@ export default function EditProfileScreen({ navigation }: Props) {
     }
   };
 
+  const uploadAvatarIfLocal = async (uri: string): Promise<string> => {
+    if (!uri.startsWith('file://') && !uri.startsWith('content://')) return uri;
+    const ext = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
+    const formData = new FormData();
+    formData.append('avatar', { uri, type: `image/${ext}`, name: `avatar.${ext}` } as any);
+    const res = await fetch(`${API_URL}/api/me/avatar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) throw new Error('Avatar upload failed');
+    const data = await res.json();
+    return data.avatar_url as string;
+  };
+
   const handleSave = async () => {
     const totalInches =
       heightFt || heightIn
@@ -79,6 +94,11 @@ export default function EditProfileScreen({ navigation }: Props) {
 
     setSaving(true);
     try {
+      let resolvedPicUrl = profilePicUri;
+      if (profilePicUri) {
+        resolvedPicUrl = await uploadAvatarIfLocal(profilePicUri);
+      }
+
       const res = await fetch(`${API_URL}/api/me`, {
         method: 'PATCH',
         headers: {
@@ -88,7 +108,7 @@ export default function EditProfileScreen({ navigation }: Props) {
         body: JSON.stringify({
           name,
           bio,
-          profile_pic_url: profilePicUri,
+          profile_pic_url: resolvedPicUrl,
           height: totalInches,
           bodyweight: bodyweight || null,
           weight_unit: weightUnit,

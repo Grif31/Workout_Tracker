@@ -59,9 +59,10 @@ class Workout(db.Model):
         return data
 
     def calculate_volume(self):
-        """Helper to compute total weight lifted."""
         total = 0
         for ex in self.exercises:
+            if (ex.exercise_type or 'strength') == 'cardio':
+                continue
             for s in ex.sets:
                 total += (s.reps or 0) * (s.weight or 0)
         self.volume = total
@@ -74,6 +75,8 @@ class Exercise(db.Model):
     name = db.Column(db.String(250), nullable=False)
     exercise_template_id = db.Column(db.Integer, db.ForeignKey('exerciseTemplates.id', ondelete='SET NULL'), nullable=True)
     order = db.Column(db.Integer, nullable=True)
+    exercise_type = db.Column(db.String(10), nullable=False, server_default='strength')
+    route_polyline = db.Column(db.Text, nullable=True)
     sets = db.relationship('Set', backref='exercises', cascade="all, delete-orphan", lazy=True, order_by='Set.order')
 
     def to_dict(self, include_sets=False):
@@ -83,6 +86,8 @@ class Exercise(db.Model):
             "name": self.name,
             "exercise_template_id": self.exercise_template_id,
             "order": self.order,
+            "exercise_type": self.exercise_type or 'strength',
+            "route_polyline": self.route_polyline,
         }
         if include_sets:
             data["sets"] = [s.to_dict() for s in self.sets]
@@ -177,6 +182,7 @@ class ExerciseTemplate(db.Model):
     muscle_group = db.Column(db.String(250), nullable=False)
     equipment = db.Column(db.String(100), nullable=True)
     image_url = db.Column(db.Text, nullable=True)
+    exercise_type = db.Column(db.String(10), nullable=False, server_default='strength')
 
     __table_args__ = (
         db.UniqueConstraint('name', 'equipment', name='uq_exercise_name_equipment'),
@@ -198,6 +204,10 @@ class Set(db.Model):
     weight = db.Column(db.Float, nullable=True)
     order = db.Column(db.Integer, nullable=True)
     set_type = db.Column(db.String(1), default='N', nullable=True)  # N=Normal W=Warmup D=Drop F=Failure
+    cardio_duration = db.Column(db.Float, nullable=True)   # minutes
+    distance = db.Column(db.Float, nullable=True)
+    distance_unit = db.Column(db.String(5), nullable=True)  # 'km' or 'mi'
+    intensity = db.Column(db.Float, nullable=True)          # pace or watts
 
     def to_dict(self):
         return {
@@ -207,6 +217,10 @@ class Set(db.Model):
             "weight": self.weight,
             "order": self.order,
             "set_type": self.set_type or 'N',
+            "cardio_duration": self.cardio_duration,
+            "distance": self.distance,
+            "distance_unit": self.distance_unit,
+            "intensity": self.intensity,
         }
 
 # ── BodyweightLog ─────────────────────────────────────────
@@ -236,11 +250,17 @@ class PersonalRecord(db.Model):
     exercise_template_id = db.Column(db.Integer, db.ForeignKey('exerciseTemplates.id', ondelete='CASCADE'), nullable=False)
     pr_type = db.Column(db.String(20), nullable=False)  # 'max_weight', 'estimated_1rm', 'max_reps'
     value = db.Column(db.Float, nullable=False)
+    # For max_reps: the weight at which these reps were achieved.
+    # For max_weight / estimated_1rm: -1.0 (sentinel, no weight context needed).
+    weight_context = db.Column(db.Float, nullable=False, default=-1.0)
     achieved_at = db.Column(db.DateTime, nullable=False)
     set_id = db.Column(db.Integer, db.ForeignKey('sets.id', ondelete='SET NULL'), nullable=True)
 
     __table_args__ = (
-        db.UniqueConstraint('user_id', 'exercise_template_id', 'pr_type', name='uq_pr_user_exercise_type'),
+        db.UniqueConstraint(
+            'user_id', 'exercise_template_id', 'pr_type', 'weight_context',
+            name='uq_pr_user_exercise_type_weight',
+        ),
     )
 
     def to_dict(self):
@@ -250,6 +270,7 @@ class PersonalRecord(db.Model):
             "exercise_template_id": self.exercise_template_id,
             "pr_type": self.pr_type,
             "value": self.value,
+            "weight_context": None if self.weight_context < 0 else self.weight_context,
             "achieved_at": self.achieved_at.isoformat() if self.achieved_at else None,
             "set_id": self.set_id,
         }

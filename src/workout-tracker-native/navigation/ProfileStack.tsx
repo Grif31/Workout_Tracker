@@ -8,6 +8,7 @@ import ChangePasswordScreen from '../screens/ProfileTab/ChangePasswordScreen';
 import SettingsScreen from '../screens/ProfileTab/SettingsScreen';
 import WorkoutDetails from '../screens/ProfileTab/WorkoutDetails';
 import BodyweightScreen from '../screens/ProfileTab/BodyweightScreen';
+import PersonalRecordsScreen from '../screens/ProfileTab/PersonalRecordsScreen';
 import { useAuth } from 'context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -27,6 +28,7 @@ export function ProfileStack() {
       <Stack.Screen name="WorkoutDetails" component={WorkoutDetails} />
       <Stack.Screen name="EditWorkout" component={EditWorkoutScreen} />
       <Stack.Screen name="BodyweightLog" component={BodyweightScreen} />
+      <Stack.Screen name="PersonalRecords" component={PersonalRecordsScreen} />
     </Stack.Navigator>
   );
 }

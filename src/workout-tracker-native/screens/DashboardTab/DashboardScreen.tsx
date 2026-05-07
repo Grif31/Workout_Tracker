@@ -1,8 +1,9 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert,
-  ActivityIndicator, ScrollView, Dimensions,
+  ActivityIndicator, ScrollView, Dimensions, Image,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { DashboardStackParamsList } from '../../navigation/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -36,7 +37,7 @@ type DashboardStats = {
   last_7_days: { workouts: number; volume: number; sets: number };
   this_week_dates: string[];
 };
-type User = { id: number; username: string; email: string; active_routine_id?: number | null };
+type User = { id: number; username: string; email: string; active_routine_id?: number | null; profile_pic_url?: string | null };
 type Workout = {
   id: number; name: string; notes: string; date: Date;
   duration?: number; volume?: number; total_reps?: number;
@@ -111,12 +112,7 @@ const createCalStyles = (colors: Colors) => StyleSheet.create({
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderRadius: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
     marginBottom: spacing.md,
   },
   cell: {
@@ -151,6 +147,7 @@ export default function DashboardScreen({ navigation }: Props) {
   const [user, setUser] = useState<User>();
   const weightUnit: WeightUnit = (user as any)?.weight_unit === 'kg' ? 'kg' : 'lbs';
   const [activeRoutine, setActiveRoutine] = useState<ActiveRoutine | null>(null);
+  const [daysVisible, setDaysVisible] = useState(false);
   const [dashStats, setDashStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'log' | 'progress'>('log');
@@ -254,6 +251,11 @@ export default function DashboardScreen({ navigation }: Props) {
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.topbar}>
             <Text style={styles.title}>{getDailyGreeting()}, {user?.username}</Text>
+            {user?.profile_pic_url ? (
+              <Image source={{ uri: user.profile_pic_url }} style={styles.avatar} />
+            ) : (
+              <Image source={require('../../assets/profile-placeholder.png')} style={styles.avatar} />
+            )}
           </View>
 
           <TouchableOpacity
@@ -263,13 +265,36 @@ export default function DashboardScreen({ navigation }: Props) {
             <Text style={styles.logButtonText}>+ Log Workout</Text>
           </TouchableOpacity>
 
+          <TouchableOpacity
+            style={styles.trackButton}
+            onPress={() => navigation.navigate('GPSCardio')}
+          >
+            <Ionicons name="location-outline" size={16} color={colors.accent} style={{ marginRight: 4 }} />
+            <Text style={styles.trackButtonText}>Track Activity</Text>
+          </TouchableOpacity>
+
           {/* Active Routine */}
           <View style={styles.activeBlock}>
             <Text style={styles.sectionLabel}>Active Routine</Text>
             {activeRoutine ? (
               <>
-                <Text style={styles.activeRoutineName}>{activeRoutine.name}</Text>
-                {activeRoutine.days.map(day => (
+                <View style={styles.activeRoutineNameRow}>
+                  <Text style={styles.activeRoutineName}>{activeRoutine.name}</Text>
+                  <TouchableOpacity
+                    style={styles.toggleDaysBtn}
+                    onPress={() => setDaysVisible(v => !v)}
+                  >
+                    <Text style={[styles.toggleDaysBtnText, { color: colors.accent }]}>
+                      {daysVisible ? 'Hide' : 'Show'}
+                    </Text>
+                    <Ionicons
+                      name={daysVisible ? 'chevron-up' : 'chevron-down'}
+                      size={14}
+                      color={colors.accent}
+                    />
+                  </TouchableOpacity>
+                </View>
+                {daysVisible && activeRoutine.days.map(day => (
                   <View key={day.id} style={styles.dayRow}>
                     <Text style={styles.dayLabel}>{day.label}</Text>
                     <TouchableOpacity
@@ -468,17 +493,30 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   tabBtnTextActive: { color: '#fff' },
 
   content: { padding: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xl },
-  topbar: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.md },
-  title: { fontSize: typography.fontSize.lg, fontWeight: 'bold', color: colors.textPrimary },
+  topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  title: { fontSize: typography.fontSize.lg, fontWeight: 'bold', color: colors.textPrimary, flex: 1 },
+  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.border },
 
   logButton: {
     backgroundColor: colors.save,
     borderRadius: spacing.sm,
     padding: spacing.md,
     alignItems: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   logButtonText: { color: '#fff', fontSize: typography.fontSize.md, fontWeight: '600' },
+  trackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: spacing.sm,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    backgroundColor: colors.surface,
+  },
+  trackButtonText: { color: colors.accent, fontSize: typography.fontSize.sm, fontWeight: '600' },
 
   // Active Routine
   activeBlock: {
@@ -497,8 +535,24 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     letterSpacing: 1,
     marginBottom: spacing.sm,
   },
+  activeRoutineNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
   activeRoutineName: {
-    fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.sm,
+    fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, flex: 1,
+  },
+  toggleDaysBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingLeft: spacing.sm,
+  },
+  toggleDaysBtnText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
   },
   dayRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',

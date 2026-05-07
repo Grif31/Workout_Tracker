@@ -1,8 +1,9 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Alert, FlatList, ActivityIndicator,
+  Alert, ActivityIndicator,
 } from 'react-native';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -150,10 +151,11 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      <FlatList
+      <DraggableFlatList
         data={exercises}
         keyExtractor={item => item.id.toString()}
         contentContainerStyle={styles.content}
+        onDragEnd={({ data }) => setExercises(data)}
         ListHeaderComponent={
           <View>
             {/* Editable name */}
@@ -186,16 +188,21 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         ListEmptyComponent={
           <Text style={styles.emptyText}>No exercises yet — tap Add to get started</Text>
         }
-        renderItem={({ item }) => (
-          <View style={styles.exerciseRow}>
-            <View style={styles.exerciseInfo}>
-              <Text style={styles.exerciseName}>{item.name}</Text>
-              <Text style={styles.exerciseMuscle}>{item.muscle_group}</Text>
+        renderItem={({ item, drag, isActive }: RenderItemParams<Exercise>) => (
+          <ScaleDecorator activeScale={0.98}>
+            <View style={[styles.exerciseRow, isActive && { opacity: 0.85 }]}>
+              <TouchableOpacity onLongPress={drag} delayLongPress={150} style={styles.dragHandle}>
+                <Ionicons name="menu-outline" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+              <View style={styles.exerciseInfo}>
+                <Text style={styles.exerciseName}>{item.name}</Text>
+                <Text style={styles.exerciseMuscle}>{item.muscle_group}</Text>
+              </View>
+              <TouchableOpacity onPress={() => removeExercise(item.id)}>
+                <Ionicons name="remove-circle-outline" size={22} color={colors.danger} />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={() => removeExercise(item.id)}>
-              <Ionicons name="remove-circle-outline" size={22} color={colors.danger} />
-            </TouchableOpacity>
-          </View>
+          </ScaleDecorator>
         )}
         ListFooterComponent={
           <TouchableOpacity style={styles.addBtn} onPress={() => setPickerVisible(true)}>
@@ -288,6 +295,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
+  dragHandle: { paddingRight: spacing.sm },
   exerciseInfo: { flex: 1 },
   exerciseName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
   exerciseMuscle: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },

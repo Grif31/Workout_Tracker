@@ -31,7 +31,9 @@ def create_app(test_config=None):
     if test_config:
         app.config.update(test_config)
 
-    CORS(app)
+    _raw_origins = os.environ.get('CORS_ORIGINS', '*')
+    _origins = [o.strip() for o in _raw_origins.split(',')] if _raw_origins != '*' else '*'
+    CORS(app, origins=_origins)
     JWTManager(app)
     db.init_app(app)
     Migrate(app, db)

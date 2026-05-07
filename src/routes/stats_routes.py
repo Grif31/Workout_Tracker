@@ -13,7 +13,6 @@ def exercise_stats():
     if not name:
         return jsonify({'message': 'name param required'}), 400
 
-    # All exercises matching the name for this user's workouts
     rows = (
         db.session.query(Exercise, Workout)
         .join(Workout, Exercise.workout_id == Workout.id)
@@ -23,7 +22,15 @@ def exercise_stats():
         .all()
     )
 
-    # Group by workout
+    if not rows:
+        return jsonify({'exercise_name': name, 'personal_bests': {}, 'totals': {}, 'history': []})
+
+    # Determine exercise type from first row
+    exercise_type = (rows[0][0].exercise_type or 'strength')
+
+    if exercise_type == 'cardio':
+        return _cardio_exercise_stats(name, rows)
+
     from collections import defaultdict
     workout_map = defaultdict(lambda: {'workout': None, 'sets': []})
     for exercise, workout in rows:
@@ -82,10 +89,76 @@ def exercise_stats():
     }
 
     return jsonify({
+        'exercise_type': 'strength',
         'exercise_name': name,
         'personal_bests': personal_bests,
         'totals': totals,
-        'history': list(reversed(history)),  # newest first
+        'history': list(reversed(history)),
+    })
+
+
+def _cardio_exercise_stats(name, rows):
+    from collections import defaultdict
+    workout_map = defaultdict(lambda: {'workout': None, 'bouts': []})
+    for exercise, workout in rows:
+        key = workout.id
+        workout_map[key]['workout'] = workout
+        for s in exercise.sets:
+            if s.cardio_duration and s.cardio_duration > 0:
+                dist_km = None
+                if s.distance and s.distance > 0:
+                    dist_km = s.distance if (s.distance_unit or 'km') == 'km' else s.distance * 1.60934
+                workout_map[key]['bouts'].append({
+                    'cardio_duration': s.cardio_duration,
+                    'distance': s.distance,
+                    'distance_unit': s.distance_unit or 'km',
+                    'intensity': s.intensity,
+                    'dist_km': dist_km,
+                })
+
+    history = []
+    total_distance = 0.0
+    total_duration = 0.0
+    pace_points = []
+
+    for wid, data in sorted(workout_map.items(), key=lambda x: x[1]['workout'].date):
+        workout = data['workout']
+        bouts = data['bouts']
+        if not bouts:
+            continue
+        session_dist = sum(b['dist_km'] for b in bouts if b['dist_km'])
+        session_dur = sum(b['cardio_duration'] for b in bouts)
+        total_distance += session_dist
+        total_duration += session_dur
+        if session_dist > 0:
+            pace_points.append(session_dur / session_dist)
+
+        history.append({
+            'date': workout.date.strftime('%Y-%m-%d'),
+            'workout_name': workout.name or '',
+            'bouts': [
+                {
+                    'cardio_duration': b['cardio_duration'],
+                    'distance': b['distance'],
+                    'distance_unit': b['distance_unit'],
+                    'intensity': b['intensity'],
+                }
+                for b in bouts
+            ],
+        })
+
+    avg_pace = round(sum(pace_points) / len(pace_points), 4) if pace_points else None
+
+    return jsonify({
+        'exercise_type': 'cardio',
+        'exercise_name': name,
+        'totals': {
+            'total_distance': round(total_distance, 2),
+            'total_duration': round(total_duration, 1),
+            'session_count': len(workout_map),
+        },
+        'avg_pace': avg_pace,
+        'history': list(reversed(history)),
     })
 
 
@@ -221,15 +294,17 @@ def exercise_last_session():
     name = request.args.get('name', '').strip()
     if not name:
         return jsonify({'message': 'name param required'}), 400
+    template_id = request.args.get('exercise_template_id', type=int)
 
-    row = (
+    query = (
         db.session.query(Exercise, Workout)
         .join(Workout, Exercise.workout_id == Workout.id)
         .filter(Workout.user_id == user_id)
         .filter(db.func.lower(Exercise.name) == name.lower())
-        .order_by(Workout.date.desc())
-        .first()
     )
+    if template_id:
+        query = query.filter(Exercise.exercise_template_id == template_id)
+    row = query.order_by(Workout.date.desc()).first()
 
     if not row:
         return jsonify({'sets': []}), 200

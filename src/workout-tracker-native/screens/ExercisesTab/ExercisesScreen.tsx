@@ -23,13 +23,13 @@ import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { equipmentTypes } from '../../constants/equipmentTypes';
-import ExerciseListModal from '../../components/ExerciseList';
+import NewExerciseForm from '../../components/NewExerciseForm';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 type Props = NativeStackScreenProps<ExercisesStackParamsList, 'ExercisesHome'>;
 
-type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; image_url?: string };
+type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; image_url?: string; exercise_type?: string };
 type WorkoutTemplate = { id: number; name: string; exercises: Exercise[] };
 type RoutineDay = {
   id: number;
@@ -61,6 +61,7 @@ export default function ExercisesScreen({ navigation }: Props) {
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [activeRoutine, setActiveRoutine] = useState<ActiveRoutine | null>(null);
   const [selectModalVisible, setSelectModalVisible] = useState(false);
+  const [daysVisible, setDaysVisible] = useState(false);
 
   // Coach settings state
   const [coachDays, setCoachDays] = useState(3);
@@ -225,6 +226,25 @@ export default function ExercisesScreen({ navigation }: Props) {
     }
   };
 
+  const createTemplate = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/workout-templates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: 'New Template' }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        navigation.navigate('TemplateDetail', { templateId: data.id });
+      } else {
+        Alert.alert('Error', 'Failed to create template');
+      }
+    } catch {
+      Alert.alert('Error', 'Something went wrong');
+    }
+  };
+
   const handleActiveBlockPress = () => {
     if (routines.length === 0) {
       navigation.navigate('CreateRoutine');
@@ -235,6 +255,8 @@ export default function ExercisesScreen({ navigation }: Props) {
 
   const filteredExercises = useMemo(() => exerciseList.filter(ex => {
     const matchSearch = ex.name.toLowerCase().includes(search.toLowerCase());
+    if (selectedMuscle === 'Cardio') return matchSearch && ex.exercise_type === 'cardio';
+    if (ex.exercise_type === 'cardio') return false; // hide cardio from strength filters
     const matchMuscle = selectedMuscle === 'All' || ex.muscle_group === selectedMuscle;
     const matchEquipment = selectedEquipment === 'All' || ex.equipment === selectedEquipment;
     return matchSearch && matchMuscle && matchEquipment;
@@ -249,6 +271,8 @@ export default function ExercisesScreen({ navigation }: Props) {
       ))
       .filter((ex): ex is Exercise => ex !== undefined)
       .filter(ex => {
+        if (selectedMuscle === 'Cardio') return ex.exercise_type === 'cardio';
+        if (ex.exercise_type === 'cardio') return false;
         const matchMuscle = selectedMuscle === 'All' || ex.muscle_group === selectedMuscle;
         const matchEquipment = selectedEquipment === 'All' || ex.equipment === selectedEquipment;
         return matchMuscle && matchEquipment;
@@ -256,28 +280,38 @@ export default function ExercisesScreen({ navigation }: Props) {
       .slice(0, 5);
   }, [recentExercises, exerciseList, search, selectedMuscle, selectedEquipment]);
 
-  const renderExerciseCard = ({ item }: { item: Exercise }) => (
-    <TouchableOpacity
-      style={styles.exerciseCard}
-      onPress={() => navigation.navigate('ExerciseDetail', {
-        exerciseId: item.id,
-        exerciseName: item.name,
-        equipment: item.equipment,
-        muscleGroup: item.muscle_group,
-        imageUrl: item.image_url,
-      })}
-    >
-      {item.image_url ? (
-        <Image source={{ uri: item.image_url }} style={styles.exerciseImage} />
-      ) : null}
-      <View style={item.image_url ? styles.exerciseCardRight : styles.exerciseCardLeft}>
-        <Text style={styles.exerciseName}>
-          {item.equipment ? `${item.name} (${item.equipment})` : item.name}
-        </Text>
-        <Text style={styles.exerciseMuscle}>{item.muscle_group}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderExerciseCard = ({ item }: { item: Exercise }) => {
+    const isCardio = item.exercise_type === 'cardio';
+    return (
+      <TouchableOpacity
+        style={styles.exerciseCard}
+        onPress={() => navigation.navigate('ExerciseDetail', {
+          exerciseId: item.id,
+          exerciseName: item.name,
+          equipment: item.equipment,
+          muscleGroup: isCardio ? 'Cardio' : item.muscle_group,
+          imageUrl: item.image_url,
+        })}
+      >
+        {item.image_url ? (
+          <Image source={{ uri: item.image_url }} style={styles.exerciseImage} resizeMode="cover" />
+        ) : (
+          <View style={[styles.exerciseImage, styles.exerciseImagePlaceholder]}>
+            <Ionicons
+              name={isCardio ? 'bicycle-outline' : 'barbell-outline'}
+              size={26}
+              color={colors.textSecondary}
+            />
+          </View>
+        )}
+        <View style={styles.exerciseCardRight}>
+          <Text style={styles.exerciseName}>{item.name}</Text>
+          {!!item.equipment && <Text style={styles.exerciseEquipment}>{item.equipment}</Text>}
+          <Text style={styles.exerciseMuscle}>{isCardio ? 'Cardio' : item.muscle_group}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -340,26 +374,28 @@ export default function ExercisesScreen({ navigation }: Props) {
                 </TouchableOpacity>
               )}
             </View>
-            <View style={styles.pickerGroup}>
-              <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowEquipmentDropdown(true)}>
-                <Text style={styles.dropdownBtnText} numberOfLines={1}>
-                  {selectedEquipment === 'All' ? 'All Equipment' : selectedEquipment}
-                </Text>
-                <Text style={styles.dropdownArrow}>▾</Text>
-              </TouchableOpacity>
-              {selectedEquipment !== 'All' && (
-                <TouchableOpacity onPress={() => setSelectedEquipment('All')} style={styles.pickerClear}>
-                  <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
+            {selectedMuscle !== 'Cardio' && (
+              <View style={styles.pickerGroup}>
+                <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowEquipmentDropdown(true)}>
+                  <Text style={styles.dropdownBtnText} numberOfLines={1}>
+                    {selectedEquipment === 'All' ? 'All Equipment' : selectedEquipment}
+                  </Text>
+                  <Text style={styles.dropdownArrow}>▾</Text>
                 </TouchableOpacity>
-              )}
-            </View>
+                {selectedEquipment !== 'All' && (
+                  <TouchableOpacity onPress={() => setSelectedEquipment('All')} style={styles.pickerClear}>
+                    <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
           </View>
 
           {/* Muscle dropdown modal */}
           <Modal visible={showMuscleDropdown} transparent animationType="fade">
             <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setShowMuscleDropdown(false)}>
               <View style={styles.dropdownList}>
-                {['All', ...muscleGroups].map(item => (
+                {['All', 'Cardio', ...muscleGroups].map(item => (
                   <TouchableOpacity
                     key={item}
                     style={[styles.dropdownItem, selectedMuscle === item && styles.dropdownItemActive]}
@@ -416,12 +452,10 @@ export default function ExercisesScreen({ navigation }: Props) {
             />
           )}
 
-          <ExerciseListModal
+          <NewExerciseForm
             visible={showNewExerciseModal}
             onClose={() => setShowNewExerciseModal(false)}
-            exercises={exerciseList}
-            onSelect={(_exercise) => {}}
-            onAddExercise={(name, muscle) => {
+            onSave={(name, muscle) => {
               addNewExercise(name, muscle);
               setShowNewExerciseModal(false);
             }}
@@ -439,8 +473,23 @@ export default function ExercisesScreen({ navigation }: Props) {
             <Text style={styles.sectionLabel}>Active Routine</Text>
             {activeRoutine ? (
               <>
-                <Text style={styles.activeRoutineName}>{activeRoutine.name}</Text>
-                {activeRoutine.days.map(day => (
+                <View style={styles.activeRoutineNameRow}>
+                  <Text style={styles.activeRoutineName}>{activeRoutine.name}</Text>
+                  <TouchableOpacity
+                    style={styles.toggleDaysBtn}
+                    onPress={() => setDaysVisible(v => !v)}
+                  >
+                    <Text style={[styles.toggleDaysBtnText, { color: colors.accent }]}>
+                      {daysVisible ? 'Hide' : 'Show'}
+                    </Text>
+                    <Ionicons
+                      name={daysVisible ? 'chevron-up' : 'chevron-down'}
+                      size={14}
+                      color={colors.accent}
+                    />
+                  </TouchableOpacity>
+                </View>
+                {daysVisible && activeRoutine.days.map(day => (
                   <View key={day.id} style={styles.dayRow}>
                     <Text style={styles.dayLabel}>{day.label}</Text>
                     <TouchableOpacity
@@ -471,7 +520,13 @@ export default function ExercisesScreen({ navigation }: Props) {
           </TouchableOpacity>
 
           {/* Templates Section */}
-          <Text style={styles.trainingSectionHeader}>Templates</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.trainingSectionHeader, { marginBottom: 0 }]}>Templates</Text>
+            <TouchableOpacity onPress={createTemplate} style={styles.newTemplateBtn}>
+              <Ionicons name="add" size={16} color={colors.save} />
+              <Text style={styles.newTemplateBtnText}>New</Text>
+            </TouchableOpacity>
+          </View>
           {templates.length === 0 ? (
             <Text style={styles.emptyText}>No templates yet</Text>
           ) : (
@@ -787,15 +842,18 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     alignItems: 'center',
   },
   exerciseName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
-  exerciseMuscle: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+  exerciseMuscle: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 1 },
+  exerciseEquipment: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 1 },
   exerciseImage: {
-    width: 60,
-    height: 60,
+    width: 64,
+    height: 64,
     borderRadius: 8,
     marginRight: spacing.sm,
   },
-  exerciseCardLeft: {
-    flex: 1,
+  exerciseImagePlaceholder: {
+    backgroundColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   exerciseCardRight: {
     flex: 1,
@@ -818,11 +876,27 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     letterSpacing: 1,
     marginBottom: spacing.sm,
   },
+  activeRoutineNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
   activeRoutineName: {
     fontSize: typography.fontSize.md,
     fontWeight: '700',
     color: colors.textPrimary,
-    marginBottom: spacing.sm,
+    flex: 1,
+  },
+  toggleDaysBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingLeft: spacing.sm,
+  },
+  toggleDaysBtnText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
   },
   dayRow: {
     flexDirection: 'row',
@@ -841,6 +915,22 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   logDayBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.sm },
   noRoutineText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontStyle: 'italic' },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  newTemplateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  newTemplateBtnText: {
+    color: colors.save,
+    fontWeight: '600',
+    fontSize: typography.fontSize.sm,
+  },
   // Training section headers
   trainingSectionHeader: {
     fontSize: typography.fontSize.md,

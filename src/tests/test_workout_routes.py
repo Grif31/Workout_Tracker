@@ -104,13 +104,13 @@ class TestGetWorkouts:
 
 class TestGetRecentWorkouts:
 
-    def test_returns_at_most_3(self, client, auth_token):
-        for i in range(5):
+    def test_returns_at_most_5(self, client, auth_token):
+        for i in range(7):
             create_workout(client, auth_token, {**WORKOUT_PAYLOAD, 'workoutName': f'Workout {i}'})
 
         res = client.get('/api/workouts/recent', headers={'Authorization': f'Bearer {auth_token}'})
         assert res.status_code == 200
-        assert len(res.get_json()) <= 3
+        assert len(res.get_json()) <= 5
 
     def test_returns_empty_when_no_workouts(self, client, auth_token):
         res = client.get('/api/workouts/recent', headers={'Authorization': f'Bearer {auth_token}'})

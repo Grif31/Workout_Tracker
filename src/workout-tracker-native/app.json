@@ -32,7 +32,9 @@
     },
     "plugins": [
       "expo-asset",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-location",
+      "react-native-maps"
     ]
   }
 }

@@ -147,6 +147,22 @@ EXERCISES = [
     ('Decline Crunch', 'Core', 'Bodyweight'),
 ]
 
+# Cardio exercises: (name, equipment)
+CARDIO_EXERCISES = [
+    ('Running', None),
+    ('Running', 'Treadmill'),
+    ('Cycling', None),
+    ('Cycling', 'Stationary Bike'),
+    ('Rowing', 'Rowing Machine'),
+    ('Swimming', None),
+    ('Elliptical', 'Machine'),
+    ('Stair Climber', 'Machine'),
+    ('Jump Rope', None),
+    ('Walking', None),
+    ('Walking', 'Treadmill'),
+    ('Hiking', None),
+]
+
 
 def fetch_image_url(name: str) -> str | None:
     """Try to fetch an exercise image URL from the Wger public API."""
@@ -207,8 +223,9 @@ def main():
     with app.app_context():
         added = 0
         skipped = 0
-        total = len(EXERCISES)
 
+        # ── Strength exercises ────────────────────────────────────────────────
+        total = len(EXERCISES)
         for i, (name, muscle_group, equipment) in enumerate(EXERCISES, start=1):
             existing = ExerciseTemplate.query.filter_by(
                 name=name, equipment=equipment
@@ -227,13 +244,33 @@ def main():
             else:
                 print(f'[{i}/{total}] Adding: {name} ({equipment})')
 
-            exercise = ExerciseTemplate(
+            db.session.add(ExerciseTemplate(
                 name=name,
                 muscle_group=muscle_group,
                 equipment=equipment,
                 image_url=image_url,
-            )
-            db.session.add(exercise)
+                exercise_type='strength',
+            ))
+            added += 1
+
+        # ── Cardio exercises ──────────────────────────────────────────────────
+        ctotal = len(CARDIO_EXERCISES)
+        for i, (name, equipment) in enumerate(CARDIO_EXERCISES, start=1):
+            existing = ExerciseTemplate.query.filter_by(
+                name=name, equipment=equipment, exercise_type='cardio'
+            ).first()
+            if existing:
+                print(f'[C {i}/{ctotal}] Skipping (exists): {name} ({equipment})')
+                skipped += 1
+                continue
+
+            print(f'[C {i}/{ctotal}] Adding cardio: {name} ({equipment or "Outdoor"})')
+            db.session.add(ExerciseTemplate(
+                name=name,
+                muscle_group='Cardio',
+                equipment=equipment,
+                exercise_type='cardio',
+            ))
             added += 1
 
         db.session.commit()

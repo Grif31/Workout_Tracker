@@ -6,7 +6,13 @@ import WorkoutDetails from '../../components/WorkoutDetails';
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'WorkoutDetails'>;
 
 export default function WorkoutDetailScreen({ route, navigation }: Props) {
-  return <WorkoutDetails workoutId={route.params.workoutId} onEdit={(prefill) => navigation.navigate('EditWorkout', { prefill: prefill, editMode: true })}
-  onDelete={() => navigation.goBack()}
-  onPerformAgain={(prefill) => navigation.navigate('EditWorkout', { prefill: prefill, editMode: false })}/>;
+  return (
+    <WorkoutDetails
+      workoutId={route.params.workoutId}
+      onEdit={(prefill) => navigation.navigate('EditWorkout', { prefill, editMode: true })}
+      onDelete={() => navigation.goBack()}
+      onPerformAgain={(prefill) => navigation.navigate('EditWorkout', { prefill, editMode: false })}
+      onSaveAsTemplate={() => {}}
+    />
+  );;
 }

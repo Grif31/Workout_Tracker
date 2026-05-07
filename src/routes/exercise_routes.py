@@ -11,6 +11,7 @@ def exercise_to_dict(exercise):
         'muscle_group': exercise.muscle_group,
         'equipment': exercise.equipment,
         'image_url': exercise.image_url,
+        'exercise_type': exercise.exercise_type or 'strength',
     }
 
 
@@ -33,13 +34,16 @@ def add_exercise():
     muscle = data.get('muscle_group')
     equipment = data.get('equipment')
 
+    exercise_type = data.get('exercise_type', 'strength')
+
     if not name:
         return jsonify({'message': 'Name Required'}), 400
     if ExerciseTemplate.query.filter_by(name=name, equipment=equipment).first():
         return jsonify({'message': 'Exercise Already Exists'}), 400
 
-    new_exercise = ExerciseTemplate(name=name, muscle_group=muscle, equipment=equipment)
+    new_exercise = ExerciseTemplate(name=name, muscle_group=muscle, equipment=equipment,
+                                    exercise_type=exercise_type)
     db.session.add(new_exercise)
     db.session.commit()
 
-    return jsonify({'message': 'New Exercise added'}), 201
+    return jsonify({'message': 'New Exercise added', 'id': new_exercise.id}), 201

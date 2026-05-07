@@ -14,6 +14,12 @@ export default function WorkoutLogScreen({ route, navigation }: Props) {
       workoutId={route.params?.workoutId}
       onSubmit={() => navigation.goBack()}
       onCancel={() => navigation.goBack()}
+      onViewExerciseHistory={(exerciseName, exerciseTemplateId) => {
+        navigation.navigate('ExerciseDetail', {
+          exerciseId: exerciseTemplateId ?? 0,
+          exerciseName,
+        });
+      }}
     />
   );
 }

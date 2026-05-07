@@ -1,16 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, Alert, ScrollView,
-  TouchableOpacity, KeyboardAvoidingView, Platform, Vibration,
-  InputAccessoryView, Keyboard, Switch,
+  View, Text, TextInput, StyleSheet, Alert, TouchableOpacity,
+  KeyboardAvoidingView, Platform, Vibration,
+  InputAccessoryView, Keyboard, Switch, Image, Modal, Dimensions,
 } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
+import { ScrollView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '../context/AuthContext';
-import { useActionSheet } from '@expo/react-native-action-sheet';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -18,6 +20,7 @@ import ExerciseListModal from '../components/ExerciseList';
 import NewExerciseForm from '../components/NewExerciseForm';
 import { PrefillWorkoutData } from './WorkoutDetails';
 import { muscleGroups } from 'constants/muscleGroups';
+import { useWorkoutSession } from '../context/WorkoutSessionContext';
 
 const REST_TIMER_KEY = 'default_rest_timer';
 const AUTO_REST_KEY = 'workout_auto_rest';
@@ -33,28 +36,44 @@ type WorkoutSet = {
   weight: string;
   set_type: SetType;
   done?: boolean;
+  cardio_duration?: string;
+  distance?: string;
+  distance_unit?: string;
+  intensity?: string;
 };
 
 type EditableSetField = 'reps' | 'weight';
 
 type PreviousSet = { reps: string; weight: string; set_type: string };
 type ExerciseEntry = {
+  uid: string;
   id?: string;
   name: string;
   exercise_template_id?: number;
+  exercise_type?: 'strength' | 'cardio';
+  equipment?: string;
+  image_url?: string;
   sets: WorkoutSet[];
   previousSets?: PreviousSet[];
+  currentPR?: {
+    max_weight?: number | null;
+    estimated_1rm?: number | null;
+    per_weight_reps?: { weight: number; max_reps: number }[];
+  };
+  notes?: string;
 };
+
+const makeUid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 
 type Props = {
   prefill?: PrefillWorkoutData;
   editMode?: boolean;
   workoutId?: number;
-  onSubmit?: () => void;
+  onSubmit?: (workoutId?: number) => void;
   onCancel?: () => void;
+  onViewExerciseHistory?: (exerciseName: string, exerciseTemplateId?: number) => void;
 };
 
-// Formats seconds into a human-readable elapsed time (e.g. "42:05", "1h 3m")
 function fmtElapsed(secs: number): string {
   if (secs < 60) return `${secs}s`;
   const m = Math.floor(secs / 60);
@@ -64,16 +83,15 @@ function fmtElapsed(secs: number): string {
   return `${h}h ${(m % 60)}m`;
 }
 
-// Formats seconds as mm:ss for the rest countdown display
 function fmtCountdown(secs: number): string {
   const m = Math.floor(secs / 60);
   const s = secs % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onCancel }: Props) {
+export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onCancel, onViewExerciseHistory }: Props) {
   const { token, user } = useAuth();
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const SET_TYPE_COLORS = useMemo<Record<SetType, string>>(() => ({
     N: colors.textSecondary,
@@ -81,44 +99,47 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     D: '#AF52DE',
     F: colors.danger,
   }), [colors]);
-  const { showActionSheetWithOptions } = useActionSheet();
   const weightUnit = user?.weight_unit === 'kg' ? 'kg' : 'lbs';
   const insets = useSafeAreaInsets();
+  const { session, saveSession, clearSession } = useWorkoutSession();
 
   const [workoutName, setWorkoutName] = useState('');
   const [notes, setNotes] = useState('');
   const [exercises, setExercises] = useState<ExerciseEntry[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
-  // Workout elapsed timer
+
   const [elapsed, setElapsed] = useState(0);
   const startRef = useRef<Date>(new Date());
   const baseRef = useRef(0);
 
-  // Rest timer
   const [defaultRest, setDefaultRest] = useState(90);
   const [restActive, setRestActive] = useState(false);
+  const [restPaused, setRestPaused] = useState(false);
   const [restRemaining, setRestRemaining] = useState(90);
   const [restTotal, setRestTotal] = useState(90);
   const restRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Session settings
   const [autoStartRest, setAutoStartRest] = useState(false);
   const [vibrateOnComplete, setVibrateOnComplete] = useState(true);
   const [settingsExpanded, setSettingsExpanded] = useState(false);
-  // Ref so the rest-timer interval always reads the latest vibrate preference
   const vibrateRef = useRef(true);
   vibrateRef.current = vibrateOnComplete;
 
-  // Exercise list & modals
-  const [exerciseList, setExerciseList] = useState<{ id: number; name: string; muscle_group: string; equipment?: string; image_url?: string }[]>([]);
+  const [exerciseList, setExerciseList] = useState<{ id: number; name: string; muscle_group: string; equipment?: string; image_url?: string; exercise_type?: string }[]>([]);
   const [recentExerciseNames, setRecentExerciseNames] = useState<string[]>([]);
   const [exerciseModalVisible, setExerciseModalVisible] = useState(false);
   const [newExerciseFormVisible, setNewExerciseFormVisible] = useState(false);
+  const [replacingExIndex, setReplacingExIndex] = useState<number | null>(null);
+
+  // Which exercise's 3-dot menu is open
+  const [openMenuIdx, setOpenMenuIdx] = useState<number | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+  // Whether any drag is in progress (collapses all cards)
+  const [isDragging, setIsDragging] = useState(false);
 
   const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-  // Load the user's saved rest timer duration and session settings on mount
   useEffect(() => {
     Promise.all([
       AsyncStorage.getItem(REST_TIMER_KEY),
@@ -132,7 +153,20 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     });
   }, []);
 
-  // Tick the elapsed workout timer every second (skipped in edit mode)
+  // Restore from minimized session if no prefill
+  useEffect(() => {
+    if (!prefill && !editMode && session) {
+      setWorkoutName(session.workoutName);
+      setNotes(session.notes);
+      setExercises(session.exercises as ExerciseEntry[]);
+      setSelectedDate(session.selectedDate);
+      baseRef.current = session.baseElapsed + Math.floor((Date.now() - session.startedAt.getTime()) / 1000);
+      startRef.current = new Date();
+      clearSession();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (editMode) return;
     startRef.current = new Date();
@@ -142,25 +176,19 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     return () => clearInterval(id);
   }, [editMode]);
 
-  // Resets the elapsed timer back to zero without stopping it
   const resetTimer = () => {
     baseRef.current = 0;
     startRef.current = new Date();
     setElapsed(0);
   };
 
-  // Starts (or restarts) the rest countdown; vibrates when it reaches zero
-  const startRest = () => {
-    if (restRef.current) clearInterval(restRef.current);
-    const duration = defaultRest;
-    setRestTotal(duration);
-    setRestRemaining(duration);
-    setRestActive(true);
+  const _runRestInterval = () => {
     restRef.current = setInterval(() => {
       setRestRemaining(prev => {
         if (prev <= 1) {
           clearInterval(restRef.current!);
           setRestActive(false);
+          setRestPaused(false);
           if (vibrateRef.current) Vibration.vibrate([0, 300, 100, 300]);
           return 0;
         }
@@ -169,24 +197,43 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     }, 1000);
   };
 
-  // Cancels the rest countdown early (Skip button)
+  const startRest = () => {
+    if (restRef.current) clearInterval(restRef.current);
+    const duration = defaultRest;
+    setRestTotal(duration);
+    setRestRemaining(duration);
+    setRestActive(true);
+    setRestPaused(false);
+    _runRestInterval();
+  };
+
+  const pauseRest = () => {
+    if (restRef.current) clearInterval(restRef.current);
+    setRestPaused(true);
+  };
+
+  const resumeRest = () => {
+    setRestPaused(false);
+    _runRestInterval();
+  };
+
   const stopRest = () => {
     if (restRef.current) clearInterval(restRef.current);
     setRestActive(false);
+    setRestPaused(false);
   };
 
   useEffect(() => () => { if (restRef.current) clearInterval(restRef.current); }, []);
 
-  // Fetch the exercise library and the user's recently used exercises on mount
   useEffect(() => { fetchExercises(); fetchRecentExercises(); }, []);
 
-  // When a prefill object is passed (edit or perform-again), hydrate the form fields
   useEffect(() => {
     if (prefill) {
       setWorkoutName(prefill.name);
       setNotes(prefill.notes);
       setExercises(
         prefill.exercises.map((ex: any) => ({
+          uid: makeUid(),
           id: ex.id,
           name: ex.name,
           sets: ex.sets.map((s: any) => ({
@@ -197,14 +244,13 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           })),
         }))
       );
-    } else {
+    } else if (!session) {
       setWorkoutName('');
       setNotes('');
       setExercises([]);
     }
   }, [prefill]);
 
-  // Loads the 10 most recently used exercise names to surface them at the top of the picker
   const fetchRecentExercises = async () => {
     if (!token) return;
     try {
@@ -215,7 +261,6 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     } catch {}
   };
 
-  // Loads the full exercise library for the picker modal
   const fetchExercises = async () => {
     try {
       const res = await fetch(`${API_URL}/api/exercises`);
@@ -223,7 +268,6 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     } catch {}
   };
 
-  // Creates a new custom exercise in the library and refreshes the list
   const addNewExercise = async (name: string, muscle: string) => {
     if (!name.trim()) return;
     try {
@@ -238,7 +282,6 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     } catch { Alert.alert('Error', 'Something went wrong'); }
   };
 
-  // Updates a single reps or weight field on a set; no-ops if the set is already marked done
   const updateSetField = (exIndex: number, setIndex: number, field: EditableSetField, value: string) => {
     const updated = [...exercises];
     if (updated[exIndex].sets[setIndex].done) return;
@@ -246,7 +289,6 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     setExercises(updated);
   };
 
-  // Cycles the set type badge through N → W → D → F on tap
   const cycleSetType = (exIndex: number, setIndex: number) => {
     const updated = [...exercises];
     const current = (updated[exIndex].sets[setIndex].set_type as SetType) ?? 'N';
@@ -255,84 +297,178 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     setExercises(updated);
   };
 
-  // Marks a set as completed (locks inputs + green highlight); toggling again unlocks it
-  // Requires both reps and weight to have a value before allowing check-off
   const toggleSetDone = (exIndex: number, setIndex: number) => {
-    const set = exercises[exIndex].sets[setIndex];
+    const ex = exercises[exIndex];
+    const set = ex.sets[setIndex];
     if (!set.done && (!set.reps.trim() || !set.weight.trim())) return;
     const nowDone = !set.done;
     const updated = [...exercises];
     updated[exIndex].sets[setIndex].done = nowDone;
     setExercises(updated);
     if (nowDone && autoStartRest) startRest();
+    if (nowDone && ex.currentPR && ex.exercise_type !== 'cardio') {
+      const w = parseFloat(set.weight);
+      const r = parseFloat(set.reps);
+      const e1rm = w * (1 + r / 30);
+      const pr = ex.currentPR;
+      const perWeightEntry = pr.per_weight_reps?.find(e => Math.abs(e.weight - w) < 0.01);
+      const isNewRepsPR =
+        !isNaN(r) && !isNaN(w) &&
+        pr.per_weight_reps != null &&
+        r > (perWeightEntry?.max_reps ?? 0);
+      const isNewPR =
+        (!isNaN(w) && pr.max_weight != null && w > pr.max_weight) ||
+        (!isNaN(e1rm) && pr.estimated_1rm != null && e1rm > pr.estimated_1rm) ||
+        isNewRepsPR;
+      if (isNewPR) Alert.alert('New Personal Record! 🏆', `• ${ex.name}`);
+    }
   };
 
-  // Appends a blank set row to an exercise
   const addSetToExercise = (exIndex: number) => {
     const updated = [...exercises];
-    updated[exIndex].sets.push({ reps: '', weight: '', set_type: 'N' });
+    const ex = updated[exIndex];
+    if (ex.exercise_type === 'cardio') {
+      updated[exIndex].sets.push({ reps: '', weight: '', set_type: 'N', cardio_duration: '', distance: '', distance_unit: 'km', intensity: '' });
+    } else {
+      updated[exIndex].sets.push({ reps: '', weight: '', set_type: 'N' });
+    }
     setExercises(updated);
   };
 
-  // Removes a single set row from an exercise
   const deleteSet = (exIndex: number, setIndex: number) => {
     const updated = [...exercises];
     updated[exIndex].sets.splice(setIndex, 1);
     setExercises(updated);
   };
 
-  // Removes an entire exercise block
   const deleteEx = (exIndex: number) => {
+    setOpenMenuIdx(null);
     const updated = [...exercises];
     updated.splice(exIndex, 1);
     setExercises(updated);
   };
 
-  // Shows a 3-dot action sheet with a Remove option for the exercise
-  const openExMenu = (exIndex: number) => {
-    showActionSheetWithOptions(
-      { options: ['Remove Exercise', 'Cancel'], destructiveButtonIndex: 0, cancelButtonIndex: 1 },
-      (i) => { if (i === 0) deleteEx(exIndex); }
-    );
+  const toggleExMenu = (exIndex: number) => {
+    setOpenMenuIdx(prev => (prev === exIndex ? null : exIndex));
   };
 
-  // Adds an exercise to the log immediately with one empty set, then fetches the last
-  // session's sets in the background and pre-fills them if any exist
-  const addExToWorkout = async (exercise: { id: number; name: string }) => {
+  const openAddNotes = (exIndex: number) => {
+    setOpenMenuIdx(null);
+    setExercises(prev => prev.map((ex, i) =>
+      i === exIndex && ex.notes === undefined ? { ...ex, notes: '' } : ex
+    ));
+  };
+
+  const startReplaceExercise = (exIndex: number) => {
+    setOpenMenuIdx(null);
+    setReplacingExIndex(exIndex);
+    setExerciseModalVisible(true);
+  };
+
+  const addExToWorkout = async (exercise: { id: number; name: string; equipment?: string; image_url?: string; exercise_type?: string }) => {
+    const isCardio = exercise.exercise_type === 'cardio';
+    const initialSet: WorkoutSet = isCardio
+      ? { reps: '', weight: '', set_type: 'N', cardio_duration: '', distance: '', distance_unit: 'km', intensity: '' }
+      : { reps: '', weight: '', set_type: 'N' };
+
+    if (replacingExIndex !== null) {
+      const targetIdx = replacingExIndex;
+      setExercises(prev => prev.map((ex, i) =>
+        i === targetIdx
+          ? { uid: ex.uid, name: exercise.name, exercise_template_id: exercise.id, exercise_type: exercise.exercise_type as ExerciseEntry['exercise_type'], equipment: exercise.equipment, image_url: exercise.image_url, sets: [initialSet] }
+          : ex
+      ));
+      setReplacingExIndex(null);
+      setExerciseModalVisible(false);
+
+      // Fetch previous session + PR for the new exercise
+      try {
+        const lastSessionParams = new URLSearchParams({ name: exercise.name });
+        if (exercise.id) lastSessionParams.set('exercise_template_id', String(exercise.id));
+        const fetches: Promise<Response>[] = [
+          fetch(`${API_URL}/api/stats/exercise/last-session?${lastSessionParams}`,
+            { headers: { Authorization: `Bearer ${token}` } }),
+        ];
+        if (exercise.id) {
+          fetches.push(fetch(`${API_URL}/api/personal-records/${exercise.id}`, { headers: { Authorization: `Bearer ${token}` } }));
+        }
+        const [lastRes, prRes] = await Promise.all(fetches);
+        let prData: ExerciseEntry['currentPR'] | undefined;
+        if (prRes?.ok) {
+          const pr = await prRes.json();
+          prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps };
+        }
+        if (lastRes.ok) {
+          const data = await lastRes.json();
+          setExercises(prev => prev.map((ex, i) => {
+            if (i !== targetIdx || ex.name !== exercise.name) return ex;
+            if (data.sets?.length > 0) {
+              return {
+                ...ex,
+                sets: data.sets.map((s: any) => ({ reps: s.reps, weight: s.weight, set_type: s.set_type ?? 'N' })),
+                previousSets: data.sets,
+                currentPR: prData,
+              };
+            }
+            return prData ? { ...ex, currentPR: prData } : ex;
+          }));
+        }
+      } catch {}
+      return;
+    }
+
+    const newUid = makeUid();
     setExercises(prev => [
       ...prev,
-      { name: exercise.name, exercise_template_id: exercise.id, sets: [{ reps: '', weight: '', set_type: 'N' }] },
+      { uid: newUid, name: exercise.name, exercise_template_id: exercise.id, exercise_type: exercise.exercise_type as ExerciseEntry['exercise_type'], equipment: exercise.equipment, image_url: exercise.image_url, sets: [initialSet] },
     ]);
     setExerciseModalVisible(false);
 
     try {
-      const res = await fetch(
-        `${API_URL}/api/stats/exercise/last-session?name=${encodeURIComponent(exercise.name)}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (res.ok) {
-        const data = await res.json();
+      const lastSessionParams = new URLSearchParams({ name: exercise.name });
+      if (exercise.id) lastSessionParams.set('exercise_template_id', String(exercise.id));
+      const fetches: Promise<Response>[] = [
+        fetch(
+          `${API_URL}/api/stats/exercise/last-session?${lastSessionParams}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        ),
+      ];
+      if (exercise.id) {
+        fetches.push(
+          fetch(`${API_URL}/api/personal-records/${exercise.id}`, { headers: { Authorization: `Bearer ${token}` } })
+        );
+      }
+      const [lastRes, prRes] = await Promise.all(fetches);
+
+      let prData: ExerciseEntry['currentPR'] | undefined;
+      if (prRes?.ok) {
+        const pr = await prRes.json();
+        prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps };
+      }
+
+      if (lastRes.ok) {
+        const data = await lastRes.json();
         if (data.sets?.length > 0) {
           setExercises(prev => {
+            const idx = prev.findIndex(ex => ex.uid === newUid);
+            if (idx === -1) return prev;
             const updated = [...prev];
-            let idx = -1;
-            for (let i = updated.length - 1; i >= 0; i--) {
-              if (updated[i].name === exercise.name && updated[i].sets.length === 1 && updated[i].sets[0].reps === '') {
-                idx = i;
-                break;
-              }
-            }
-            if (idx !== -1) {
-              updated[idx] = {
-                ...updated[idx],
-                sets: data.sets.map((s: any) => ({
-                  reps: s.reps,
-                  weight: s.weight,
-                  set_type: s.set_type ?? 'N',
-                })),
-                previousSets: data.sets,
-              };
-            }
+            updated[idx] = {
+              ...updated[idx],
+              sets: data.sets.map((s: any) => ({
+                reps: s.reps, weight: s.weight, set_type: s.set_type ?? 'N',
+              })),
+              previousSets: data.sets,
+              currentPR: prData,
+            };
+            return updated;
+          });
+        } else if (prData) {
+          setExercises(prev => {
+            const idx = prev.findIndex(ex => ex.uid === newUid);
+            if (idx === -1) return prev;
+            const updated = [...prev];
+            updated[idx] = { ...updated[idx], currentPR: prData };
             return updated;
           });
         }
@@ -340,7 +476,6 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     } catch {}
   };
 
-  // Validates and POSTs (or PATCHes) the workout; shows a PR alert if any records were broken
   const submitWorkout = async () => {
     if (!token) return;
     const payload = {
@@ -352,14 +487,30 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         id: ex.id,
         name: ex.name,
         exercise_template_id: ex.exercise_template_id,
+        exercise_type: ex.exercise_type || 'strength',
         order: exIndex,
-        sets: ex.sets.map((s, setIndex) => ({
-          id: s.id,
-          reps: Number(s.reps),
-          weight: Number(s.weight),
-          order: setIndex,
-          set_type: s.set_type ?? 'N',
-        })),
+        sets: ex.sets.map((s, setIndex) => {
+          if (ex.exercise_type === 'cardio') {
+            return {
+              id: s.id,
+              order: setIndex,
+              set_type: 'N',
+              reps: null,
+              weight: null,
+              cardio_duration: Number(s.cardio_duration) || null,
+              distance: Number(s.distance) || null,
+              distance_unit: s.distance_unit || 'km',
+              intensity: Number(s.intensity) || null,
+            };
+          }
+          return {
+            id: s.id,
+            reps: Number(s.reps),
+            weight: Number(s.weight),
+            order: setIndex,
+            set_type: s.set_type ?? 'N',
+          };
+        }),
       })),
     };
     const isEditing = Boolean(editMode && workoutId);
@@ -374,15 +525,25 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       );
       const data = await res.json();
       if (!res.ok) { Alert.alert('Error', data.message || 'Please try again'); return; }
-      if (!isEditing && data.new_prs?.length > 0) {
-        const names = [...new Set<string>(data.new_prs.map((pr: any) => pr.exercise_name as string))];
-        Alert.alert('New Personal Record! 🏆', names.map(n => `• ${n}`).join('\n'));
-      }
-      if (onSubmit) onSubmit();
+      clearSession();
+      if (onSubmit) onSubmit(isEditing ? workoutId : data.id);
     } catch { Alert.alert('Error', 'Something went wrong'); }
   };
 
-  // Renders the red "Delete" action revealed when swiping a set left
+  const minimizeWorkout = () => {
+    saveSession({
+      workoutName,
+      notes,
+      exercises,
+      selectedDate,
+      startedAt: startRef.current,
+      baseElapsed: baseRef.current + Math.floor((Date.now() - startRef.current.getTime()) / 1000),
+      editMode,
+      workoutId,
+    });
+    onCancel?.();
+  };
+
   const renderSetDeleteAction = (onDelete: () => void) => (
     <TouchableOpacity style={styles.swipeDelete} onPress={onDelete}>
       <Text style={styles.swipeDeleteText}>Delete</Text>
@@ -399,19 +560,29 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     >
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        {onCancel ? (
-          <TouchableOpacity onPress={onCancel} style={styles.headerBtn}>
-            <Ionicons name="close" size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
-        ) : <View style={styles.headerBtn} />}
+        <View style={{ flexDirection: 'row', gap: 4 }}>
+          {onCancel && !editMode ? (
+            <TouchableOpacity onPress={minimizeWorkout} style={styles.headerBtn}>
+              <Ionicons name="chevron-down" size={24} color={colors.textPrimary} />
+            </TouchableOpacity>
+          ) : onCancel ? (
+            <TouchableOpacity onPress={onCancel} style={styles.headerBtn}>
+              <Ionicons name="close" size={24} color={colors.textPrimary} />
+            </TouchableOpacity>
+          ) : <View style={styles.headerBtn} />}
+        </View>
         <Text style={styles.headerTitle}>{editMode ? 'Edit Workout' : 'Log Workout'}</Text>
         <TouchableOpacity onPress={submitWorkout} style={styles.headerBtn}>
           <Text style={styles.saveText}>{editMode ? 'Update' : 'Save'}</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        onScrollBeginDrag={() => setOpenMenuIdx(null)}
+      >
+        <View style={styles.formSection}>
         <TextInput
           style={styles.titleInput}
           placeholder="Workout Name"
@@ -428,26 +599,36 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           multiline
         />
 
-        {/* Date selector */}
-        <TouchableOpacity style={styles.dateRow} onPress={() => setShowDatePicker(true)}>
-          <Ionicons name="calendar-outline" size={16} color={colors.textSecondary} />
-          <Text style={styles.dateText}>
-            {selectedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-          </Text>
-          <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
-        </TouchableOpacity>
+        {/* Date + Settings row */}
+        <View style={styles.dateSettingsRow}>
+          <TouchableOpacity style={styles.datePart} onPress={() => setShowDatePicker(true)}>
+            <Ionicons name="calendar-outline" size={16} color={colors.textSecondary} />
+            <Text style={styles.dateText}>
+              {selectedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+            </Text>
+            <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setSettingsExpanded(e => !e)} style={styles.settingsGearBtn} activeOpacity={0.7}>
+            <Ionicons name="settings-outline" size={18} color={settingsExpanded ? colors.accent : colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
 
         {showDatePicker && (
-          <DateTimePicker
-            value={selectedDate}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'inline' : 'default'}
-            maximumDate={new Date()}
-            onChange={(_event: any, date?: Date) => {
-              setShowDatePicker(Platform.OS === 'ios');
-              if (date) setSelectedDate(date);
-            }}
-          />
+          <View style={{ backgroundColor: colors.surface, borderRadius: spacing.sm, overflow: 'hidden', marginBottom: spacing.sm }}>
+            <DateTimePicker
+              value={selectedDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              maximumDate={new Date()}
+              themeVariant={mode === 'dark' ? 'dark' : 'light'}
+              textColor={colors.textPrimary}
+              accentColor={colors.accent}
+              onChange={(_event: any, date?: Date) => {
+                setShowDatePicker(false);
+                if (date) setSelectedDate(date);
+              }}
+            />
+          </View>
         )}
 
         {!editMode && (
@@ -461,21 +642,6 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             </TouchableOpacity>
           </View>
         )}
-
-        {/* Workout Settings */}
-        <TouchableOpacity
-          style={styles.settingsRow}
-          onPress={() => setSettingsExpanded(e => !e)}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="settings-outline" size={15} color={colors.textSecondary} />
-          <Text style={styles.settingsRowLabel}>Workout Settings</Text>
-          <Ionicons
-            name={settingsExpanded ? 'chevron-up' : 'chevron-down'}
-            size={14}
-            color={colors.textSecondary}
-          />
-        </TouchableOpacity>
 
         {settingsExpanded && (
           <View style={styles.settingsPanel}>
@@ -512,7 +678,6 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           </View>
         )}
 
-        {/* Workout summary: exercise count + total volume */}
         {exercises.length > 0 && (() => {
           const totalVolume = exercises.reduce((sum, ex) =>
             sum + ex.sets.reduce((s, set) => {
@@ -537,7 +702,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
         <ExerciseListModal
           visible={exerciseModalVisible}
-          onClose={() => setExerciseModalVisible(false)}
+          onClose={() => { setExerciseModalVisible(false); setReplacingExIndex(null); }}
           exercises={exerciseList}
           recentExerciseNames={recentExerciseNames}
           onSelect={addExToWorkout}
@@ -553,128 +718,309 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         />
 
         {exercises.length > 0 && <Text style={styles.sectionLabel}>Exercises</Text>}
+        </View>
 
-        {exercises.map((exercise, exIndex) => {
-          return (
-            <View key={exIndex} style={styles.exerciseBlock}>
+        <DraggableFlatList
+          data={exercises}
+          keyExtractor={(item) => item.uid}
+          scrollEnabled={false}
+          onDragBegin={() => { setIsDragging(true); setOpenMenuIdx(null); }}
+          onDragEnd={({ data }) => { setExercises(data); setIsDragging(false); }}
+          renderItem={({ item: exercise, getIndex, drag, isActive }: RenderItemParams<ExerciseEntry>) => {
+            const exIndex = getIndex() ?? 0;
+            const collapsed = isDragging || isActive;
+            return (
+              <View style={[styles.exerciseBlock, isActive && styles.exerciseBlockActive]}>
 
-                {/* Exercise header: name, rest timer, 3-dot menu */}
-                <View style={styles.exHeaderRow}>
-                  <Text style={styles.exerciseName}>{exercise.name}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <TouchableOpacity onPress={startRest} style={styles.exTimerBtn}>
-                      <Ionicons name="timer-outline" size={20} color={colors.save} />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => openExMenu(exIndex)} style={styles.exTimerBtn}>
-                      <Ionicons name="ellipsis-vertical" size={20} color={colors.textSecondary} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <>
-                    {/* Column headers */}
-                    <View style={styles.setHeaderRow}>
-                      <Text style={[styles.setHeaderCell, styles.colSetType]}>#</Text>
-                      <Text style={[styles.setHeaderCell, styles.colPrev]}>Prev</Text>
-                      <Text style={[styles.setHeaderCell, styles.colInput]}>Reps</Text>
-                      <Text style={[styles.setHeaderCell, styles.colInput]}>{weightUnit}</Text>
-                      <View style={styles.colCheck} />
-                    </View>
-
-                    {exercise.sets.map((set, setIndex) => {
-                      const type = (set.set_type as SetType) ?? 'N';
-                      const tc = SET_TYPE_COLORS[type];
-                      const isDone = set.done ?? false;
-                      const prev = exercise.previousSets?.[setIndex];
-                      const prevText = prev ? `${prev.reps} x ${prev.weight}` : '—';
-                      return (
-                        <Swipeable
-                          key={setIndex}
-                          renderRightActions={() => renderSetDeleteAction(() => deleteSet(exIndex, setIndex))}
-                        >
-                        <View style={[styles.setRow, isDone && styles.setRowDone]}>
-
-                          {/* Combined set# / type badge */}
-                          <TouchableOpacity
-                            style={[styles.setTypeBadge, styles.colSetType, { borderColor: tc }]}
-                            onPress={() => !isDone && cycleSetType(exIndex, setIndex)}
-                          >
-                            <Text style={[styles.setTypeBadgeNum, { color: tc }]}>{setIndex + 1}</Text>
-                            {type !== 'N' && <Text style={[styles.setTypeBadgeLabel, { color: tc }]}>{type}</Text>}
-                          </TouchableOpacity>
-
-                          {/* Previous cell */}
-                          <Text style={[styles.prevCellText, styles.colPrev]}>{prevText}</Text>
-
-                          {/* Reps input */}
-                          <TextInput
-                            style={[styles.setInput, styles.colInput, isDone && styles.setInputDone]}
-                            placeholder="—"
-                            placeholderTextColor={colors.placeholder}
-                            keyboardType="numeric"
-                            inputAccessoryViewID={Platform.OS === 'ios' ? NUMERIC_ACCESSORY_ID : undefined}
-                            editable={!isDone}
-                            value={set.reps}
-                            onChangeText={val => updateSetField(exIndex, setIndex, 'reps', val)}
-                          />
-
-                          {/* Weight input */}
-                          <TextInput
-                            style={[styles.setInput, styles.colInput, isDone && styles.setInputDone]}
-                            placeholder="—"
-                            placeholderTextColor={colors.placeholder}
-                            keyboardType="numeric"
-                            editable={!isDone}
-                            value={set.weight}
-                            onChangeText={val => updateSetField(exIndex, setIndex, 'weight', val)}
-                          />
-
-                          {/* Done checkbox */}
-                          <TouchableOpacity
-                            style={[styles.colCheck, { alignItems: 'center' }]}
-                            onPress={() => toggleSetDone(exIndex, setIndex)}
-                          >
-                            <Ionicons
-                              name={isDone ? 'checkmark-circle' : 'ellipse-outline'}
-                              size={30}
-                              color={isDone ? colors.save : colors.textSecondary}
-                            />
-                          </TouchableOpacity>
+                  {/* Exercise header */}
+                  <View style={styles.exHeaderRow}>
+                    <TouchableOpacity onLongPress={drag} delayLongPress={150} style={styles.exDiagramBtn}>
+                      {exercise.image_url ? (
+                        <Image source={{ uri: exercise.image_url }} style={styles.exDiagram} resizeMode="cover" />
+                      ) : (
+                        <View style={[styles.exDiagram, styles.exDiagramPlaceholder]}>
+                          <Ionicons name="barbell-outline" size={22} color={colors.textSecondary} />
                         </View>
-                        </Swipeable>
-                      );
-                    })}
-
-                    <TouchableOpacity style={styles.addSetBtn} onPress={() => addSetToExercise(exIndex)}>
-                      <Ionicons name="add" size={15} color={colors.save} />
-                      <Text style={styles.addSetText}>Add Set</Text>
+                      )}
                     </TouchableOpacity>
-                  </>
-            </View>
-          );
-        })}
+                    <TouchableOpacity onLongPress={drag} delayLongPress={150} style={{ flex: 1 }}>
+                      <Text style={styles.exerciseName}>{exercise.name}</Text>
+                      {!!exercise.equipment && (
+                        <Text style={[styles.exerciseEquipment, { color: colors.textSecondary }]}>{exercise.equipment}</Text>
+                      )}
+                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <TouchableOpacity onPress={startRest} style={styles.exIconBtn}>
+                        <Ionicons name="timer-outline" size={20} color={colors.save} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={(e) => {
+                          const { pageX, pageY } = e.nativeEvent;
+                          const screenWidth = Dimensions.get('window').width;
+                          setMenuPosition({ top: pageY + 12, right: screenWidth - pageX - 4 });
+                          toggleExMenu(exIndex);
+                        }}
+                        style={styles.exIconBtn}
+                      >
+                        <Ionicons name="ellipsis-vertical" size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
 
+                  {/* Inline exercise notes */}
+                  {exercise.notes !== undefined && !collapsed && (
+                    <TextInput
+                      style={[styles.exNotesInput, { borderColor: colors.border, color: colors.textPrimary, backgroundColor: colors.background }]}
+                      placeholder="Exercise notes..."
+                      placeholderTextColor={colors.placeholder}
+                      value={exercise.notes}
+                      onChangeText={val => setExercises(prev => prev.map((ex, i) =>
+                        i === exIndex ? { ...ex, notes: val } : ex
+                      ))}
+                      multiline
+                    />
+                  )}
+
+                  {!collapsed && (
+                    <>
+                      {exercise.exercise_type === 'cardio' ? (
+                        // ── Cardio sets ──────────────────────────────────────
+                        <>
+                          {exercise.sets.map((set, setIndex) => (
+                            <CardioSetRow
+                              key={setIndex}
+                              set={set}
+                              setIndex={setIndex}
+                              colors={colors}
+                              styles={styles}
+                              onChangeField={(field, value) => {
+                                const updated = [...exercises];
+                                (updated[exIndex].sets[setIndex] as any)[field] = value;
+                                setExercises(updated);
+                              }}
+                              onDelete={() => deleteSet(exIndex, setIndex)}
+                            />
+                          ))}
+                          <TouchableOpacity style={styles.addSetBtn} onPress={() => addSetToExercise(exIndex)}>
+                            <Ionicons name="add" size={15} color={colors.save} />
+                            <Text style={styles.addSetText}>Add Bout</Text>
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        // ── Strength sets ─────────────────────────────────────
+                        <>
+                          {/* Column headers */}
+                          <View style={styles.setHeaderRow}>
+                            <Text style={[styles.setHeaderCell, styles.colSetType]}>#</Text>
+                            <Text style={[styles.setHeaderCell, styles.colPrev]}>Prev</Text>
+                            <Text style={[styles.setHeaderCell, styles.colInput]}>Reps</Text>
+                            <Text style={[styles.setHeaderCell, styles.colInput]}>{weightUnit}</Text>
+                            <View style={styles.colCheck} />
+                          </View>
+
+                          {exercise.sets.map((set, setIndex) => {
+                            const type = (set.set_type as SetType) ?? 'N';
+                            const tc = SET_TYPE_COLORS[type];
+                            const isDone = set.done ?? false;
+                            const prev = exercise.previousSets?.[setIndex];
+                            const prevText = prev ? `${prev.reps} x ${prev.weight}` : '—';
+                            return (
+                              <Swipeable
+                                key={setIndex}
+                                renderRightActions={() => renderSetDeleteAction(() => deleteSet(exIndex, setIndex))}
+                              >
+                                <View style={[styles.setRow, isDone && styles.setRowDone]}>
+                                  <TouchableOpacity
+                                    style={[styles.setTypeBadge, styles.colSetType, { borderColor: tc }]}
+                                    onPress={() => !isDone && cycleSetType(exIndex, setIndex)}
+                                  >
+                                    <Text style={[styles.setTypeBadgeNum, { color: tc }]}>{setIndex + 1}</Text>
+                                    {type !== 'N' && <Text style={[styles.setTypeBadgeLabel, { color: tc }]}>{type}</Text>}
+                                  </TouchableOpacity>
+
+                                  <Text style={[styles.prevCellText, styles.colPrev]}>{prevText}</Text>
+
+                                  <TextInput
+                                    style={[styles.setInput, styles.colInput, isDone && styles.setInputDone]}
+                                    placeholder="—"
+                                    placeholderTextColor={colors.placeholder}
+                                    keyboardType="numeric"
+                                    inputAccessoryViewID={Platform.OS === 'ios' ? NUMERIC_ACCESSORY_ID : undefined}
+                                    editable={!isDone}
+                                    value={set.reps}
+                                    onChangeText={val => updateSetField(exIndex, setIndex, 'reps', val)}
+                                  />
+
+                                  <TextInput
+                                    style={[styles.setInput, styles.colInput, isDone && styles.setInputDone]}
+                                    placeholder="—"
+                                    placeholderTextColor={colors.placeholder}
+                                    keyboardType="numeric"
+                                    editable={!isDone}
+                                    value={set.weight}
+                                    onChangeText={val => updateSetField(exIndex, setIndex, 'weight', val)}
+                                  />
+
+                                  <TouchableOpacity
+                                    style={[styles.colCheck, { alignItems: 'center' }]}
+                                    onPress={() => toggleSetDone(exIndex, setIndex)}
+                                  >
+                                    <Ionicons
+                                      name={isDone ? 'checkmark-circle' : 'ellipse-outline'}
+                                      size={30}
+                                      color={isDone ? colors.save : colors.textSecondary}
+                                    />
+                                  </TouchableOpacity>
+                                </View>
+                              </Swipeable>
+                            );
+                          })}
+
+                          <TouchableOpacity style={styles.addSetBtn} onPress={() => addSetToExercise(exIndex)}>
+                            <Ionicons name="add" size={15} color={colors.save} />
+                            <Text style={styles.addSetText}>Add Set</Text>
+                          </TouchableOpacity>
+                        </>
+                      )}
+                    </>
+                  )}
+                </View>
+            );
+          }}
+        />
+
+        <View style={styles.formSection}>
         <TouchableOpacity style={styles.addExBtn} onPress={() => setExerciseModalVisible(true)}>
           <Ionicons name="add" size={18} color="#fff" />
           <Text style={styles.addExBtnText}>Add Exercise</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.discardBtn}
+          onPress={() => Alert.alert(
+            'Discard Workout',
+            'Are you sure you want to discard this workout?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Discard', style: 'destructive', onPress: () => { clearSession(); onCancel?.(); } },
+            ]
+          )}
+        >
+          <Text style={[styles.discardBtnText, { color: colors.danger }]}>Discard Workout</Text>
+        </TouchableOpacity>
+        </View>
       </ScrollView>
 
       {/* Rest timer overlay */}
       {restActive && (
-        <View style={[styles.restOverlay, { paddingBottom: insets.bottom + spacing.md }]}>
-          <View style={styles.restCard}>
-            <Text style={styles.restTitle}>Rest</Text>
-            <Text style={styles.restCountdown}>{fmtCountdown(restRemaining)}</Text>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${progress * 100}%` as any }]} />
-            </View>
-            <TouchableOpacity style={styles.restSkipBtn} onPress={stopRest}>
-              <Text style={styles.restSkipText}>Skip</Text>
+        <View style={styles.restOverlay}>
+          <View style={styles.restBackdrop} />
+          <View style={[styles.restModal, { backgroundColor: colors.surface }]}>
+            <TouchableOpacity style={styles.restCloseBtn} onPress={stopRest} hitSlop={8}>
+              <Ionicons name="close" size={22} color={colors.textSecondary} />
             </TouchableOpacity>
+
+            <Text style={[styles.restLabel, { color: colors.textSecondary }]}>Rest</Text>
+
+            <View style={styles.restCircleContainer}>
+              <Svg width={200} height={200} viewBox="0 0 200 200">
+                <Circle
+                  cx={100} cy={100} r={85}
+                  stroke={colors.border}
+                  strokeWidth={10}
+                  fill="none"
+                />
+                <Circle
+                  cx={100} cy={100} r={85}
+                  stroke={restPaused ? colors.textSecondary : colors.accent}
+                  strokeWidth={10}
+                  fill="none"
+                  strokeDasharray={`${2 * Math.PI * 85}`}
+                  strokeDashoffset={`${2 * Math.PI * 85 * (1 - progress)}`}
+                  strokeLinecap="round"
+                  transform="rotate(-90 100 100)"
+                />
+              </Svg>
+              <View style={styles.restTimeCenter}>
+                <Text style={[styles.restCountdown, { color: colors.textPrimary }]}>
+                  {fmtCountdown(restRemaining)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.restControls}>
+              <TouchableOpacity
+                style={[styles.restAdjBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => setRestRemaining(r => Math.max(5, r - 30))}
+              >
+                <Text style={[styles.restAdjText, { color: colors.textPrimary }]}>−30s</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.restPauseBtn, { backgroundColor: colors.accent }]}
+                onPress={restPaused ? resumeRest : pauseRest}
+              >
+                <Ionicons name={restPaused ? 'play' : 'pause'} size={26} color="#fff" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.restAdjBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => setRestRemaining(r => r + 30)}
+              >
+                <Text style={[styles.restAdjText, { color: colors.textPrimary }]}>+30s</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       )}
+
+      {/* Exercise 3-dot menu — rendered as Modal so it floats above DraggableFlatList */}
+      <Modal
+        visible={openMenuIdx !== null}
+        transparent
+        animationType="none"
+        onRequestClose={() => setOpenMenuIdx(null)}
+      >
+        <TouchableOpacity
+          style={StyleSheet.absoluteFillObject}
+          activeOpacity={1}
+          onPress={() => setOpenMenuIdx(null)}
+        />
+        {openMenuIdx !== null && (
+          <View style={[styles.exMenu, { top: menuPosition.top, right: menuPosition.right, backgroundColor: colors.background, borderColor: colors.border }]}>
+            <TouchableOpacity style={styles.exMenuItem} onPress={() => openAddNotes(openMenuIdx)}>
+              <Ionicons name="create-outline" size={15} color={colors.textPrimary} />
+              <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>Add Notes</Text>
+            </TouchableOpacity>
+            <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
+            <TouchableOpacity style={styles.exMenuItem} onPress={() => {
+              const idx = openMenuIdx;
+              setOpenMenuIdx(null);
+              onViewExerciseHistory?.(exercises[idx].name, exercises[idx].exercise_template_id);
+            }}>
+              <Ionicons name="bar-chart-outline" size={15} color={colors.textPrimary} />
+              <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>View History</Text>
+            </TouchableOpacity>
+            <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
+            <TouchableOpacity style={styles.exMenuItem} onPress={() => startReplaceExercise(openMenuIdx)}>
+              <Ionicons name="swap-horizontal-outline" size={15} color={colors.textPrimary} />
+              <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>Replace Exercise</Text>
+            </TouchableOpacity>
+            <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
+            <View style={[styles.exMenuItem, { opacity: 0.4 }]}>
+              <Ionicons name="git-branch-outline" size={15} color={colors.textPrimary} />
+              <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>Superset</Text>
+              <Text style={[styles.exMenuSoon, { color: colors.accent }]}>Soon</Text>
+            </View>
+            <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
+            <TouchableOpacity style={styles.exMenuItem} onPress={() => deleteEx(openMenuIdx)}>
+              <Ionicons name="trash-outline" size={15} color={colors.danger} />
+              <Text style={[styles.exMenuText, { color: colors.danger }]}>Remove</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </Modal>
+
       {Platform.OS === 'ios' && (
         <InputAccessoryView nativeID={NUMERIC_ACCESSORY_ID}>
           <View style={styles.keyboardAccessory}>
@@ -688,8 +1034,122 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   );
 }
 
+// ── CardioSetRow ─────────────────────────────────────────────────────────────
+
+type CardioSetRowProps = {
+  set: WorkoutSet;
+  setIndex: number;
+  colors: Colors;
+  styles: ReturnType<typeof createStyles>;
+  onChangeField: (field: string, value: string) => void;
+  onDelete: () => void;
+};
+
+function CardioSetRow({ set, setIndex, colors, styles, onChangeField, onDelete }: CardioSetRowProps) {
+  const [running, setRunning] = useState(false);
+  const [elapsedSecs, setElapsedSecs] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startRef = useRef(0);
+
+  const fmtWatch = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const startWatch = () => {
+    startRef.current = Date.now() - elapsedSecs * 1000;
+    timerRef.current = setInterval(() => {
+      setElapsedSecs(Math.floor((Date.now() - startRef.current) / 1000));
+    }, 1000);
+    setRunning(true);
+  };
+
+  const stopWatch = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setRunning(false);
+    onChangeField('cardio_duration', (elapsedSecs / 60).toFixed(2));
+  };
+
+  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
+
+  return (
+    <Swipeable renderRightActions={() => (
+      <TouchableOpacity style={styles.swipeDelete} onPress={onDelete}>
+        <Text style={styles.swipeDeleteText}>Delete</Text>
+      </TouchableOpacity>
+    )}>
+      <View style={styles.cardioSetBlock}>
+        <Text style={[styles.setTypeBadgeNum, { color: colors.textSecondary, width: 20, textAlign: 'center' }]}>
+          {setIndex + 1}
+        </Text>
+        <View style={{ flex: 1, gap: 6 }}>
+          {/* Row 1: Duration + stopwatch */}
+          <View style={styles.cardioRow}>
+            <TextInput
+              style={[styles.setInput, { flex: 1 }]}
+              placeholder="min"
+              placeholderTextColor={colors.placeholder}
+              keyboardType="decimal-pad"
+              value={running ? fmtWatch(elapsedSecs) : (set.cardio_duration || '')}
+              onChangeText={val => !running && onChangeField('cardio_duration', val)}
+              editable={!running}
+            />
+            <TouchableOpacity
+              style={[styles.cardioTimerBtn, { borderColor: running ? colors.danger : colors.save }]}
+              onPress={running ? stopWatch : startWatch}
+            >
+              <Ionicons
+                name={running ? 'stop' : 'play'}
+                size={14}
+                color={running ? colors.danger : colors.save}
+              />
+              <Text style={{ fontSize: 12, fontWeight: '600', color: running ? colors.danger : colors.save }}>
+                {running ? fmtWatch(elapsedSecs) : 'Start'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {/* Row 2: Distance + unit toggle + pace */}
+          <View style={styles.cardioRow}>
+            <TextInput
+              style={[styles.setInput, { flex: 1 }]}
+              placeholder="dist"
+              placeholderTextColor={colors.placeholder}
+              keyboardType="decimal-pad"
+              value={set.distance || ''}
+              onChangeText={val => onChangeField('distance', val)}
+            />
+            <View style={styles.cardioUnitToggle}>
+              {['km', 'mi'].map(u => (
+                <TouchableOpacity
+                  key={u}
+                  style={[styles.cardioUnitBtn, (set.distance_unit || 'km') === u && { backgroundColor: colors.accent }]}
+                  onPress={() => onChangeField('distance_unit', u)}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: (set.distance_unit || 'km') === u ? '#fff' : colors.textSecondary }}>
+                    {u}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TextInput
+              style={[styles.setInput, { width: 64 }]}
+              placeholder="pace"
+              placeholderTextColor={colors.placeholder}
+              keyboardType="decimal-pad"
+              value={set.intensity || ''}
+              onChangeText={val => onChangeField('intensity', val)}
+            />
+          </View>
+        </View>
+      </View>
+    </Swipeable>
+  );
+}
+
 const createStyles = (colors: Colors) => StyleSheet.create({
-  container: { padding: spacing.md, paddingBottom: spacing.xl * 2 },
+  container: { paddingBottom: spacing.xl * 2 },
+  formSection: { paddingHorizontal: spacing.md },
 
   header: {
     flexDirection: 'row',
@@ -734,20 +1194,29 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   timerResetBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: spacing.sm },
   timerResetText: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
 
-  dateRow: {
+  dateSettingsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
     paddingVertical: spacing.sm,
     marginBottom: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  datePart: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   dateText: {
     flex: 1,
     fontSize: typography.fontSize.sm,
     color: colors.textPrimary,
     fontWeight: '500',
+  },
+  settingsGearBtn: {
+    padding: spacing.xs,
+    marginLeft: spacing.sm,
   },
 
   summaryBar: {
@@ -774,6 +1243,13 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   addExBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.md },
 
+  discardBtn: {
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  discardBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600' },
+
   sectionLabel: {
     fontSize: typography.fontSize.sm,
     fontWeight: '700',
@@ -785,9 +1261,31 @@ const createStyles = (colors: Colors) => StyleSheet.create({
 
   exerciseBlock: {
     backgroundColor: colors.surface,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
+    borderRadius: 0,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     marginBottom: spacing.sm,
+    overflow: 'visible',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+  },
+  exerciseBlockActive: {
+    backgroundColor: colors.surface,
+    borderRadius: 0,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+    overflow: 'visible',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+    opacity: 0.9,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
   },
 
   exHeaderRow: {
@@ -796,32 +1294,55 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.sm,
   },
-  exerciseName: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
-  exTimerBtn: { padding: 4 },
-
-  exTabBar: {
-    flexDirection: 'row',
-    marginBottom: spacing.sm,
-    borderRadius: 6,
-    overflow: 'hidden',
+  exDiagramBtn: {
+    marginRight: spacing.sm,
+  },
+  exDiagram: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+    marginRight: spacing.sm,
+  },
+  exDiagramPlaceholder: {
     backgroundColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  exTab: { flex: 1, paddingVertical: 6, alignItems: 'center' },
-  exTabActive: { backgroundColor: colors.background },
-  exTabText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
-  exTabTextActive: { color: colors.textPrimary },
+  exerciseName: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
+  exerciseEquipment: { fontSize: typography.fontSize.sm, marginTop: 1 },
+  exIconBtn: { padding: 4 },
 
-  prevRow: {
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+  // Exercise 3-dot popup menu
+  exMenu: {
+    position: 'absolute',
+    width: 180,
+    borderRadius: 10,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 8,
   },
-  prevRowText: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
-  noHistoryText: {
+  exMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  exMenuText: { fontSize: 14, fontWeight: '500', flex: 1 },
+  exMenuSoon: { fontSize: 10, fontWeight: '700', letterSpacing: 0.4 },
+  exMenuDivider: { height: 1, marginHorizontal: 0 },
+
+  exNotesInput: {
+    borderWidth: 1,
+    borderRadius: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
     fontSize: typography.fontSize.sm,
-    color: colors.placeholder,
-    textAlign: 'center',
-    paddingVertical: spacing.md,
+    marginBottom: spacing.sm,
+    minHeight: 36,
   },
 
   colSetType: { width: 40 },
@@ -909,56 +1430,83 @@ const createStyles = (colors: Colors) => StyleSheet.create({
 
   restOverlay: {
     position: 'absolute',
-    bottom: 0,
+    top: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: spacing.md,
-  },
-  restCard: {
-    backgroundColor: colors.textPrimary,
-    borderRadius: spacing.md,
-    padding: spacing.lg,
+    bottom: 0,
+    justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
   },
-  restTitle: {
+  restBackdrop: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  restModal: {
+    borderRadius: 24,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.xl,
+    alignItems: 'center',
+    width: 280,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  restCloseBtn: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
+    padding: spacing.xs,
+  },
+  restLabel: {
     fontSize: typography.fontSize.sm,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 4,
+    letterSpacing: 1.5,
+    marginBottom: spacing.md,
+  },
+  restCircleContainer: {
+    width: 200,
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  restTimeCenter: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   restCountdown: {
     fontSize: 48,
     fontWeight: '700',
-    color: '#fff',
-    marginBottom: spacing.sm,
   },
-  progressTrack: {
-    height: 4,
-    width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 2,
-    marginBottom: spacing.md,
-    overflow: 'hidden',
+  restControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
   },
-  progressFill: {
-    height: 4,
-    backgroundColor: colors.save,
-    borderRadius: 2,
+  restPauseBtn: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  restSkipBtn: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
+  restAdjBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs + 2,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  restSkipText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.sm },
+  restAdjText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+  },
 
   keyboardAccessory: {
     backgroundColor: colors.surface,
@@ -970,21 +1518,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   keyboardDismissBtn: { padding: spacing.xs },
 
-  settingsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    marginBottom: spacing.xs,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  settingsRowLabel: {
-    flex: 1,
-    fontSize: typography.fontSize.sm,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
   settingsPanel: {
     backgroundColor: colors.surface,
     borderRadius: spacing.sm,
@@ -1007,5 +1540,39 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: 11,
     color: colors.textSecondary,
     lineHeight: 16,
+  },
+
+  cardioSetBlock: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: spacing.sm,
+    paddingTop: spacing.xs,
+  },
+  cardioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  cardioTimerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    height: 44,
+  },
+  cardioUnitToggle: {
+    flexDirection: 'row',
+    borderRadius: spacing.xs,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  cardioUnitBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: colors.surface,
   },
 });

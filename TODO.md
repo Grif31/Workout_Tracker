@@ -81,18 +81,38 @@ Check off items as you complete them.
   - [x] Send `set_type` to backend (column added in future migration)
   - [x] Display set type labels in WorkoutDetails and ExerciseDetail history
 
+- [x] **Drag-to-reorder exercises in workout log**
+  - [x] Long-press an exercise name to enter drag mode and reorder exercises
+  - [x] Update the `order` field on each exercise when the list is reordered
+  - [x] Use `react-native-draggable-flatlist` (already compatible with the gesture handler setup)
+
+- [x] **Drag-to-reorder exercises when creating a template or routine**
+  - [x] Long-press an exercise row in `CreateRoutineScreen` to drag and reorder it
+  - [x] Long-press an exercise row in `TemplateDetailScreen` to drag and reorder it
+  - [x] Persist the updated order when saving the template / routine day
+
+- [x] **Create workout template button missing**
+  - [x] Add a "New Template" button to the Exercises screen so users can create a standalone template without going through a routine
+  - [x] Navigates to a blank `TemplateDetailScreen` (or a dedicated create flow) with an empty exercise list
+
+
+- [x] **Workout details visual polish**
+  - [x] Add a summary bar showing total exercises, total sets, and total volume for the workout
+  - [x] Render each exercise as a card (matching the workout log form style) instead of a plain text block
+  - [x] Style each set row inside the card consistently with the log form (set number badge, reps, weight columns)
+
 - [x] **Workout settings panel in log form**
   - [x] Add a settings/gear section at the top of the WorkoutLog form for session-level preferences
   - [x] Toggle: auto-start rest timer when a set is checked off
   - [x] Toggle: vibrate on rest timer complete (vs. silent)
 
-- [ ] **Cardio workout support**
-  - [ ] Add a "Cardio" exercise type to the workout log (alongside strength sets)
-  - [ ] Cardio entries track: activity (Run / Bike / Row / etc.), duration (minutes), distance, and optional intensity (pace or watts)
-  - [ ] Add `exercise_type` column (`strength` / `cardio`) to the Exercise model
-  - [ ] Update `POST /api/workouts` and `PUT/PATCH /api/workouts/<id>` to accept cardio entries
-  - [ ] Show cardio rows in WorkoutDetails and ExerciseDetail history (distance + duration instead of reps/weight)
-  - [ ] Add cardio stats to Exercise Detail screen (total distance, avg pace over time)
+- [x] **Cardio workout support**
+  - [x] Add a "Cardio" exercise type to the workout log (alongside strength sets)
+  - [x] Cardio entries track: activity (Run / Bike / Row / etc.), duration (minutes), distance, and optional intensity (pace or watts)
+  - [x] Add `exercise_type` column (`strength` / `cardio`) to the Exercise model
+  - [x] Update `POST /api/workouts` and `PUT/PATCH /api/workouts/<id>` to accept cardio entries
+  - [x] Show cardio rows in WorkoutDetails and ExerciseDetail history (distance + duration instead of reps/weight)
+  - [x] Add cardio stats to Exercise Detail screen (total distance, avg pace over time)
 
 ---
 
@@ -105,26 +125,26 @@ Check off items as you complete them.
   - [x] Account section: change password link, logout button
   - [x] App version display
 
-- [ ] **Profile picture upload**
+- [x] **Profile picture upload**
   - [x] Use `expo-image-picker` to select a photo
-  - [ ] Upload to backend (add `POST /api/me/avatar` endpoint or store base64)
-  - [ ] Display profile picture on ProfileScreen and DashboardScreen
+  - [x] Upload to backend (add `POST /api/me/avatar` endpoint or store base64)
+  - [x] Display profile picture on ProfileScreen and DashboardScreen
 
 - [x] **Profile stats summary**
   - [x] Total workouts, total volume lifted, longest streak on ProfileScreen
 
-- [ ] **Personal records tab on Profile**
-  - [ ] Add a "Records" section to ProfileScreen listing all-time bests per exercise
-  - [ ] Wire `GET /api/personal-records` (already exists) into the Profile screen UI
+- [x] **Personal records tab on Profile**
+  - [x] Add a "Records" section to ProfileScreen listing all-time bests per exercise
+  - [x] Wire `GET /api/personal-records` (already exists) into the Profile screen UI
 
 ---
 
 ## 🔒 5. Security & Production Readiness
 > Required before real users are on the app.
 
-- [ ] **CORS lockdown**
+- [x] **CORS lockdown**
   > Right now the Flask backend accepts requests from *any* website or app. Once deployed, a bad actor could build a site that calls your API using a logged-in user's credentials from their browser. Locking CORS to your app's production domain means only your Expo app (and your own domains) can talk to the backend.
-  - [ ] Replace `CORS(app)` (allows all origins) with a whitelist of your production domain(s)
+  - [x] Replace `CORS(app)` (allows all origins) with a whitelist of your production domain(s) via `CORS_ORIGINS` env var
 
 - [ ] **Rate limiting**
   > Without rate limiting, an attacker can try thousands of username/password combinations per second against `/api/login` until they get in (a "brute force" attack). `flask-limiter` adds a simple rule like "max 10 login attempts per minute per IP", making brute force attacks impractical.
