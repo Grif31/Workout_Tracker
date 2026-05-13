@@ -1,21 +1,19 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert,
-  ActivityIndicator, ScrollView, Dimensions, Image,
+  ActivityIndicator, ScrollView, PanResponder, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { DashboardStackParamsList } from '../../navigation/types';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { BarChart } from 'react-native-gifted-charts';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { toDisplayVolume, WeightUnit } from 'utils/units';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
-const SCREEN_WIDTH = Dimensions.get('window').width;
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiFetch } from '../../utils/api';
 
 const GREETINGS = [
   'Ready to workout', 'Welcome', 'Ready to Train', "Let's Workout",
@@ -31,13 +29,7 @@ function getDailyGreeting() {
 }
 
 
-type WeekStat = { label: string; volume: number; count: number };
-type DashboardStats = {
-  weekly: WeekStat[];
-  last_7_days: { workouts: number; volume: number; sets: number };
-  this_week_dates: string[];
-};
-type User = { id: number; username: string; email: string; active_routine_id?: number | null; profile_pic_url?: string | null };
+type User = { id: number; username: string; email: string; active_routine_id?: number | null };
 type Workout = {
   id: number; name: string; notes: string; date: Date;
   duration?: number; volume?: number; total_reps?: number;
@@ -64,51 +56,97 @@ function WeekCalendar({
 }) {
   const { colors } = useTheme();
   const calStyles = useMemo(() => createCalStyles(colors), [colors]);
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = current week, -1 = last week
+
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
   const dayOfWeek = today.getDay();
   const monday = new Date(today);
-  monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7));
+  monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7) + weekOffset * 7);
 
   const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   const workoutSet = new Set(workoutDates);
 
-  return (
-    <View style={calStyles.row}>
-      {DAY_LETTERS.map((letter, i) => {
-        const d = new Date(monday);
-        d.setDate(monday.getDate() + i);
-        const dateStr = d.toISOString().slice(0, 10);
-        const isToday = dateStr === todayStr;
-        const hasWorkout = workoutSet.has(dateStr);
-        const isSelected = dateStr === selectedDate;
+  const goBack = () => setWeekOffset(o => o - 1);
+  const goForward = () => setWeekOffset(o => Math.min(0, o + 1));
 
-        return (
-          <TouchableOpacity
-            key={i}
-            onPress={() => onSelectDate(dateStr)}
-            style={[
-              calStyles.cell,
-              isToday && calStyles.cellToday,
-              hasWorkout && calStyles.cellWorkout,
-              isSelected && calStyles.cellSelected,
-            ]}
-          >
-            <Text style={[calStyles.letter, isToday && calStyles.letterToday, hasWorkout && calStyles.letterWorkout, isSelected && calStyles.letterSelected]}>
-              {letter}
-            </Text>
-            <Text style={[calStyles.num, isToday && calStyles.numToday, hasWorkout && calStyles.numWorkout, isSelected && calStyles.numSelected]}>
-              {d.getDate()}
-            </Text>
-            {hasWorkout && <View style={[calStyles.dot, isSelected && calStyles.dotSelected]} />}
-          </TouchableOpacity>
-        );
-      })}
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderRelease: (_, g) => {
+        if (g.dx < -40) goForward();
+        else if (g.dx > 40) goBack();
+      },
+    })
+  ).current;
+
+  const weekLabel = weekOffset === 0
+    ? 'This Week'
+    : weekOffset === -1
+    ? 'Last Week'
+    : `Week of ${monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+
+  return (
+    <View>
+      <View style={calStyles.weekNav}>
+        <TouchableOpacity onPress={goBack} hitSlop={8}>
+          <Ionicons name="chevron-back" size={18} color={colors.textSecondary} />
+        </TouchableOpacity>
+        <Text style={calStyles.weekLabel}>{weekLabel}</Text>
+        <TouchableOpacity onPress={goForward} hitSlop={8} disabled={weekOffset === 0}>
+          <Ionicons name="chevron-forward" size={18} color={weekOffset === 0 ? colors.border : colors.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={calStyles.row} {...panResponder.panHandlers}>
+        {DAY_LETTERS.map((letter, i) => {
+          const d = new Date(monday);
+          d.setDate(monday.getDate() + i);
+          const dateStr = d.toISOString().slice(0, 10);
+          const isToday = dateStr === todayStr;
+          const hasWorkout = workoutSet.has(dateStr);
+          const isSelected = dateStr === selectedDate;
+
+          return (
+            <TouchableOpacity
+              key={i}
+              onPress={() => onSelectDate(dateStr)}
+              style={[
+                calStyles.cell,
+                isToday && calStyles.cellToday,
+                hasWorkout && calStyles.cellWorkout,
+                isSelected && calStyles.cellSelected,
+              ]}
+            >
+              <Text style={[calStyles.letter, isToday && calStyles.letterToday, hasWorkout && calStyles.letterWorkout, isSelected && calStyles.letterSelected]}>
+                {letter}
+              </Text>
+              <Text style={[calStyles.num, isToday && calStyles.numToday, hasWorkout && calStyles.numWorkout, isSelected && calStyles.numSelected]}>
+                {d.getDate()}
+              </Text>
+              {hasWorkout && <View style={[calStyles.dot, isSelected && calStyles.dotSelected]} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
 const createCalStyles = (colors: Colors) => StyleSheet.create({
+  weekNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  weekLabel: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -148,46 +186,45 @@ export default function DashboardScreen({ navigation }: Props) {
   const weightUnit: WeightUnit = (user as any)?.weight_unit === 'kg' ? 'kg' : 'lbs';
   const [activeRoutine, setActiveRoutine] = useState<ActiveRoutine | null>(null);
   const [daysVisible, setDaysVisible] = useState(false);
-  const [dashStats, setDashStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'log' | 'progress'>('log');
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null);
   const [dateWorkouts, setDateWorkouts] = useState<Workout[]>([]);
+  const [allWorkoutDates, setAllWorkoutDates] = useState<string[]>([]);
+  const [weeklyStreak, setWeeklyStreak] = useState(0);
+  const [monthlyStreak, setMonthlyStreak] = useState(0);
+  const [dailyStreak, setDailyStreak] = useState(0);
+  const [longestDailyStreak, setLongestDailyStreak] = useState(0);
+  const [streakType, setStreakType] = useState<'weekly' | 'monthly' | 'daily'>('weekly');
+  const [streakModalVisible, setStreakModalVisible] = useState(false);
 
   useFocusEffect(useCallback(() => {
     setLoading(true);
-    Promise.all([fetchUser(), fetchRecentWorkouts(), fetchDashStats()]).finally(() => setLoading(false));
+    Promise.all([fetchUser(), fetchRecentWorkouts(), fetchAllWorkoutDates(), fetchStreak()]).finally(() => setLoading(false));
   }, []));
 
   const fetchUser = async () => {
     try {
-      const token = await AsyncStorage.getItem('token');
-      const res = await fetch(`${API_URL}/api/me`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await apiFetch('/api/me');
       if (!res.ok) return;
       const data = await res.json();
       setUser(data);
-      if (data.active_routine_id) fetchActiveRoutine(data.active_routine_id, token!);
+      if (data.active_routine_id) fetchActiveRoutine(data.active_routine_id);
       else setActiveRoutine(null);
     } catch {
       Alert.alert('Error', 'Failed to load user');
     }
   };
 
-  const fetchActiveRoutine = async (routineId: number, token: string) => {
+  const fetchActiveRoutine = async (routineId: number) => {
     try {
-      const res = await fetch(`${API_URL}/api/routines/${routineId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch(`/api/routines/${routineId}`);
       if (res.ok) setActiveRoutine(await res.json());
     } catch { /* silently fail */ }
   };
 
   const fetchRecentWorkouts = async () => {
     try {
-      const token = await AsyncStorage.getItem('token');
-      const res = await fetch(`${API_URL}/api/workouts/recent`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch('/api/workouts/recent');
       if (res.ok) setWorkouts(await res.json());
     } catch {
       Alert.alert('Error', 'Failed to load workouts');
@@ -203,10 +240,7 @@ export default function DashboardScreen({ navigation }: Props) {
     }
     setSelectedCalDate(dateStr);
     try {
-      const token = await AsyncStorage.getItem('token');
-      const res = await fetch(`${API_URL}/api/workouts?date=${dateStr}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch(`/api/workouts?date=${dateStr}`);
       if (res.ok) setDateWorkouts(await res.json());
       else setDateWorkouts([]);
     } catch {
@@ -214,49 +248,56 @@ export default function DashboardScreen({ navigation }: Props) {
     }
   };
 
-  const fetchDashStats = async () => {
+  const fetchAllWorkoutDates = async () => {
     try {
-      const token = await AsyncStorage.getItem('token');
-      const res = await fetch(`${API_URL}/api/stats/dashboard`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) setDashStats(await res.json());
+      const res = await apiFetch('/api/workouts/dates');
+      if (res.ok) {
+        const data = await res.json();
+        setAllWorkoutDates(data.dates ?? []);
+      }
+    } catch { /* silently fail */ }
+  };
+
+  const fetchStreak = async () => {
+    try {
+      const goalRaw = await AsyncStorage.getItem('workout_weekly_goal');
+      const weeklyGoal = goalRaw ? (parseInt(goalRaw, 10) || 3) : 3;
+      const res = await apiFetch(`/api/stats/profile?weekly_goal=${weeklyGoal}`);
+      if (res.ok) {
+        const data = await res.json();
+        const ws = data.current_streak ?? 0;
+        setWeeklyStreak(ws);
+        setMonthlyStreak(data.current_monthly_streak ?? 0);
+        setDailyStreak(data.current_daily_streak ?? 0);
+        setLongestDailyStreak(data.longest_daily_streak ?? 0);
+      }
     } catch { /* silently fail */ }
   };
 
   if (loading) return <ActivityIndicator size="large" style={{ flex: 1, marginTop: 50 }} />;
 
-  const CHART_BAR_WIDTH = Math.floor((SCREEN_WIDTH - spacing.lg * 2 - spacing.md * 2 - 40) / 8) - 4;
-
   return (
     <View style={styles.container}>
-      {/* Tab Row */}
-      <View style={styles.tabRow}>
-        <TouchableOpacity
-          style={[styles.tabBtn, activeTab === 'log' && styles.tabBtnActive]}
-          onPress={() => setActiveTab('log')}
-        >
-          <Text style={[styles.tabBtnText, activeTab === 'log' && styles.tabBtnTextActive]}>Log</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabBtn, activeTab === 'progress' && styles.tabBtnActive]}
-          onPress={() => setActiveTab('progress')}
-        >
-          <Text style={[styles.tabBtnText, activeTab === 'progress' && styles.tabBtnTextActive]}>Progress</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── LOG TAB ── */}
-      {activeTab === 'log' && (
-        <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.topbar}>
-            <Text style={styles.title}>{getDailyGreeting()}, {user?.username}</Text>
-            {user?.profile_pic_url ? (
-              <Image source={{ uri: user.profile_pic_url }} style={styles.avatar} />
-            ) : (
-              <Image source={require('../../assets/profile-placeholder.png')} style={styles.avatar} />
-            )}
-          </View>
+      <ScrollView contentContainerStyle={styles.content}>
+          {(() => {
+            const streakDisplay = streakType === 'weekly'
+              ? { emoji: '🔥', value: weeklyStreak, unit: 'w' }
+              : streakType === 'monthly'
+              ? { emoji: '📅', value: monthlyStreak, unit: 'mo' }
+              : { emoji: '⚡', value: dailyStreak, unit: 'd' };
+            const anyStreak = weeklyStreak > 0 || monthlyStreak > 0 || dailyStreak > 0;
+            return (
+              <View style={styles.topbar}>
+                <Text style={styles.title}>{getDailyGreeting()}, {user?.username}</Text>
+                {anyStreak && (
+                  <TouchableOpacity onPress={() => setStreakModalVisible(true)} style={styles.streakBadge}>
+                    <Text style={styles.streakEmoji}>{streakDisplay.emoji}</Text>
+                    <Text style={styles.streakText}>{streakDisplay.value}{streakDisplay.unit}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            );
+          })()}
 
           <TouchableOpacity
             style={styles.logButton}
@@ -319,10 +360,9 @@ export default function DashboardScreen({ navigation }: Props) {
             )}
           </View>
 
-          {/* This Week Calendar */}
-          <Text style={styles.sectionLabel}>This Week</Text>
+          {/* Week Calendar */}
           <WeekCalendar
-            workoutDates={dashStats?.this_week_dates ?? []}
+            workoutDates={allWorkoutDates}
             selectedDate={selectedCalDate}
             onSelectDate={handleCalendarSelect}
           />
@@ -382,93 +422,37 @@ export default function DashboardScreen({ navigation }: Props) {
             ));
           })()}
         </ScrollView>
-      )}
-
-      {/* ── PROGRESS TAB ── */}
-      {activeTab === 'progress' && (
-        <ScrollView contentContainerStyle={styles.content}>
-          {dashStats ? (
-            <>
-              {/* Last 7 Days summary */}
-              <Text style={styles.sectionLabel}>Last 7 Days</Text>
-              <View style={styles.summaryRow}>
-                <View style={styles.summaryBox}>
-                  <Text style={styles.summaryValue}>{dashStats.last_7_days.workouts}</Text>
-                  <Text style={styles.summaryLabel}>Workouts</Text>
+      {/* Streak selector modal */}
+      <Modal visible={streakModalVisible} transparent animationType="fade">
+        <TouchableOpacity style={styles.streakOverlay} activeOpacity={1} onPress={() => setStreakModalVisible(false)}>
+          <View style={styles.streakModalBox}>
+            <Text style={styles.streakModalTitle}>Streak Type</Text>
+            {([
+              { key: 'weekly' as const, emoji: '🔥', label: 'Weekly', value: weeklyStreak, unit: 'w', sub: null },
+              { key: 'monthly' as const, emoji: '📅', label: 'Monthly', value: monthlyStreak, unit: 'mo', sub: null },
+              { key: 'daily' as const, emoji: '⚡', label: 'Daily', value: dailyStreak, unit: 'd', sub: `longest: ${longestDailyStreak}d` },
+            ] as const).map(row => (
+              <TouchableOpacity
+                key={row.key}
+                style={[styles.streakRow, streakType === row.key && styles.streakRowActive]}
+                onPress={() => setStreakType(row.key)}
+              >
+                <Text style={styles.streakRowEmoji}>{row.emoji}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.streakRowLabel, streakType === row.key && { color: colors.accent }]}>{row.label}</Text>
+                  {row.sub && <Text style={styles.streakRowSub}>{row.sub}</Text>}
                 </View>
-                <View style={styles.summaryBox}>
-                  <Text style={styles.summaryValue}>{toDisplayVolume(dashStats.last_7_days.volume, weightUnit)}</Text>
-                  <Text style={styles.summaryLabel}>Volume</Text>
-                </View>
-                <View style={styles.summaryBox}>
-                  <Text style={styles.summaryValue}>{dashStats.last_7_days.sets}</Text>
-                  <Text style={styles.summaryLabel}>Sets</Text>
-                </View>
-              </View>
-
-              {/* Weekly Volume Chart */}
-              <View style={styles.chartCard}>
-                <Text style={styles.chartTitle}>Weekly Volume (lbs)</Text>
-                <BarChart
-                  data={dashStats.weekly.map(w => ({
-                    value: w.volume,
-                    label: w.label,
-                    frontColor: colors.save,
-                    topLabelComponent: w.volume > 0
-                      ? () => <Text style={styles.barTopLabel}>{toDisplayVolume(w.volume, weightUnit)}</Text>
-                      : undefined,
-                  }))}
-                  barWidth={CHART_BAR_WIDTH}
-                  spacing={4}
-                  roundedTop
-                  hideRules
-                  hideYAxisText
-                  xAxisLabelTextStyle={styles.axisLabel}
-                  noOfSections={4}
-                  maxValue={Math.max(...dashStats.weekly.map(w => w.volume), 1) * 1.25}
-                  height={140}
-                  barBorderRadius={3}
-                  xAxisThickness={1}
-                  xAxisColor={colors.border}
-                  yAxisThickness={0}
-                  isAnimated
-                />
-              </View>
-
-              {/* Weekly Frequency Chart */}
-              <View style={styles.chartCard}>
-                <Text style={styles.chartTitle}>Workouts per Week</Text>
-                <BarChart
-                  data={dashStats.weekly.map(w => ({
-                    value: w.count,
-                    label: w.label,
-                    frontColor: colors.accent,
-                    topLabelComponent: w.count > 0
-                      ? () => <Text style={styles.barTopLabel}>{w.count}</Text>
-                      : undefined,
-                  }))}
-                  barWidth={CHART_BAR_WIDTH}
-                  spacing={4}
-                  roundedTop
-                  hideRules
-                  hideYAxisText
-                  xAxisLabelTextStyle={styles.axisLabel}
-                  maxValue={Math.max(...dashStats.weekly.map(w => w.count), 1) + 1}
-                  stepValue={1}
-                  height={140}
-                  barBorderRadius={3}
-                  xAxisThickness={1}
-                  xAxisColor={colors.border}
-                  yAxisThickness={0}
-                  isAnimated
-                />
-              </View>
-            </>
-          ) : (
-            <Text style={styles.emptyText}>No stats yet — log some workouts first</Text>
-          )}
-        </ScrollView>
-      )}
+                <Text style={[styles.streakRowValue, streakType === row.key && { color: colors.accent }]}>
+                  {row.value}{row.unit}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.streakModalDone} onPress={() => setStreakModalVisible(false)}>
+              <Text style={styles.streakModalDoneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -476,26 +460,9 @@ export default function DashboardScreen({ navigation }: Props) {
 const createStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
-  // Tabs
-  tabRow: {
-    flexDirection: 'row',
-    marginHorizontal: spacing.md,
-    marginTop: spacing.lg + 30,
-    marginBottom: 0,
-    borderRadius: spacing.sm,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  tabBtn: { flex: 1, paddingVertical: spacing.sm, alignItems: 'center', backgroundColor: colors.surface },
-  tabBtnActive: { backgroundColor: colors.save },
-  tabBtnText: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textSecondary },
-  tabBtnTextActive: { color: '#fff' },
-
-  content: { padding: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xl },
+  content: { padding: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xl },
   topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   title: { fontSize: typography.fontSize.lg, fontWeight: 'bold', color: colors.textPrimary, flex: 1 },
-  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.border },
 
   logButton: {
     backgroundColor: colors.save,
@@ -593,23 +560,35 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   muscles: { fontSize: 12, color: colors.textSecondary, marginTop: 2, fontStyle: 'italic' },
   emptyText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontStyle: 'italic' },
 
-  // Progress tab
-  summaryRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  summaryBox: {
-    flex: 1, backgroundColor: colors.surface, borderRadius: spacing.sm,
-    padding: spacing.sm, alignItems: 'center', borderWidth: 1, borderColor: colors.border,
+  streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
-  summaryValue: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
-  summaryLabel: {
-    fontSize: 10, color: colors.textSecondary, marginTop: 2,
-    textTransform: 'uppercase', letterSpacing: 0.5,
+  streakEmoji: { fontSize: 14 },
+  streakText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
+
+  streakOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
+  streakModalBox: {
+    backgroundColor: colors.surface, borderRadius: spacing.md,
+    padding: spacing.lg, width: '100%',
+    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12, elevation: 10,
+    borderWidth: 1, borderColor: colors.border,
   },
-  chartCard: {
-    backgroundColor: colors.surface, borderRadius: spacing.sm,
-    padding: spacing.md, marginBottom: spacing.md,
-    borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
+  streakModalTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.md },
+  streakRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    paddingVertical: spacing.sm, borderRadius: spacing.xs,
+    paddingHorizontal: spacing.xs,
   },
-  chartTitle: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary, marginBottom: spacing.sm },
-  axisLabel: { fontSize: 9, color: colors.textSecondary },
-  barTopLabel: { fontSize: 9, color: colors.textSecondary, marginBottom: 2 },
+  streakRowActive: { backgroundColor: colors.accent + '18' },
+  streakRowEmoji: { fontSize: 20, width: 28, textAlign: 'center' },
+  streakRowLabel: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
+  streakRowSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 1 },
+  streakRowValue: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textSecondary, minWidth: 40, textAlign: 'right' },
+  streakModalDone: {
+    marginTop: spacing.md, backgroundColor: colors.save,
+    borderRadius: spacing.sm, padding: spacing.sm, alignItems: 'center',
+  },
+  streakModalDoneText: { color: '#fff', fontWeight: '700', fontSize: typography.fontSize.sm },
 });

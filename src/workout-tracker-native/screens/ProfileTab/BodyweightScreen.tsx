@@ -19,15 +19,14 @@ import { ProfileStackParamsList } from '../../navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { apiFetch } from '../../utils/api';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'BodyweightLog'>;
 
 type LogEntry = { id: number; weight: number; date: string };
 
 export default function BodyweightScreen({ navigation }: Props) {
-  const { token, user, updateUser } = useAuth();
+  const { user, updateUser } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -39,11 +38,8 @@ export default function BodyweightScreen({ navigation }: Props) {
   const weightUnit = user?.weight_unit || 'lbs';
 
   const fetchLogs = async () => {
-    if (!token) return;
     try {
-      const res = await fetch(`${API_URL}/api/bodyweight`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch('/api/bodyweight');
       if (res.ok) setLogs(await res.json());
     } catch (err) {
       console.error('Failed to fetch bodyweight logs', err);
@@ -52,7 +48,7 @@ export default function BodyweightScreen({ navigation }: Props) {
     }
   };
 
-  useFocusEffect(useCallback(() => { fetchLogs(); }, [token]));
+  useFocusEffect(useCallback(() => { fetchLogs(); }, []));
 
   const handleSave = async () => {
     const weight = parseFloat(weightInput);
@@ -62,9 +58,9 @@ export default function BodyweightScreen({ navigation }: Props) {
     }
     setSaving(true);
     try {
-      const res = await fetch(`${API_URL}/api/bodyweight`, {
+      const res = await apiFetch('/api/bodyweight', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ weight }),
       });
       if (res.ok) {
@@ -91,10 +87,7 @@ export default function BodyweightScreen({ navigation }: Props) {
         style: 'destructive',
         onPress: async () => {
           try {
-            const res = await fetch(`${API_URL}/api/bodyweight/${id}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bearer ${token}` },
-            });
+            const res = await apiFetch(`/api/bodyweight/${id}`, { method: 'DELETE' });
             if (res.ok) {
               const remaining = logs.filter(l => l.id !== id);
               setLogs(remaining);

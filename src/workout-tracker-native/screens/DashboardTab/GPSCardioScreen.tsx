@@ -16,13 +16,13 @@ import polylineLib from '@mapbox/polyline';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
+import { apiFetch } from '../../utils/api';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { DashboardStackParamsList } from '../../navigation/types';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { estimateCalories } from '../../utils/cardioCalories';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'GPSCardio'>;
 
@@ -61,7 +61,7 @@ function fmtPace(paceMinPerKm: number): string {
 }
 
 export default function GPSCardioScreen({ navigation }: Props) {
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -167,7 +167,6 @@ export default function GPSCardioScreen({ navigation }: Props) {
   };
 
   const handleSave = async () => {
-    if (!token) return;
     setSaving(true);
     try {
       const durationMin = elapsedSec / 60;
@@ -196,9 +195,9 @@ export default function GPSCardioScreen({ navigation }: Props) {
         }],
       };
 
-      const res = await fetch(`${API_URL}/api/workouts`, {
+      const res = await apiFetch('/api/workouts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
 

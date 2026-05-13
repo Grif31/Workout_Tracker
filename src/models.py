@@ -16,6 +16,9 @@ class User(db.Model):
     height = db.Column(db.Float, nullable=True)
     weight_unit = db.Column(db.String(3), default='lbs', nullable=True)
     active_routine_id = db.Column(db.Integer, db.ForeignKey('routines.id', ondelete='SET NULL'), nullable=True)
+    reset_otp_hash    = db.Column(db.String(64), nullable=True)
+    reset_otp_expiry  = db.Column(db.DateTime,   nullable=True)
+    is_social_only    = db.Column(db.Boolean,    default=False, nullable=False)
     workouts = db.relationship('Workout', backref='user', lazy=True)
 
     def to_dict(self):
@@ -41,8 +44,12 @@ class Workout(db.Model):
     name = db.Column(db.String(250))
     notes = db.Column(db.Text)
     duration = db.Column(db.Integer)
-    volume = db.Column(db.Float)
+    volume = db.Column(db.Float)  # always stored in lbs; convert on display
     exercises = db.relationship('Exercise', backref='workouts', cascade="all, delete-orphan", lazy=True)
+
+    __table_args__ = (
+        db.Index('ix_workouts_user_date', 'user_id', 'date'),
+    )
 
     def to_dict(self, include_exercises=False):
         data = {
@@ -58,20 +65,26 @@ class Workout(db.Model):
             data["exercises"] = [ex.to_dict(include_sets=True) for ex in self.exercises]
         return data
 
-    def calculate_volume(self):
-        total = 0
+    def calculate_volume(self, weight_unit: str = 'lbs') -> float:
+        """Sum reps × weight across all strength sets. Always stored in lbs.
+        Pass the user's weight_unit so kg entries are normalised before storing."""
+        kg_to_lbs = 2.20462
+        total = 0.0
         for ex in self.exercises:
-            if (ex.exercise_type or 'strength') == 'cardio':
+            if (ex.exercise_type or 'strength').lower() == 'cardio':
                 continue
             for s in ex.sets:
-                total += (s.reps or 0) * (s.weight or 0)
+                w = s.weight or 0.0
+                if weight_unit == 'kg':
+                    w *= kg_to_lbs
+                total += (s.reps or 0) * w
         self.volume = total
         return total
 
 class Exercise(db.Model):
     __tablename__ = "exercises"
     id = db.Column(db.Integer, primary_key=True)
-    workout_id = db.Column(db.Integer, db.ForeignKey('workouts.id'), nullable=False)
+    workout_id = db.Column(db.Integer, db.ForeignKey('workouts.id'), nullable=False, index=True)
     name = db.Column(db.String(250), nullable=False)
     exercise_template_id = db.Column(db.Integer, db.ForeignKey('exerciseTemplates.id', ondelete='SET NULL'), nullable=True)
     order = db.Column(db.Integer, nullable=True)
@@ -80,14 +93,16 @@ class Exercise(db.Model):
     sets = db.relationship('Set', backref='exercises', cascade="all, delete-orphan", lazy=True, order_by='Set.order')
 
     def to_dict(self, include_sets=False):
+        tmpl = db.session.get(ExerciseTemplate, self.exercise_template_id) if self.exercise_template_id else None
         data = {
             "id": self.id,
             "workout_id": self.workout_id,
             "name": self.name,
             "exercise_template_id": self.exercise_template_id,
             "order": self.order,
-            "exercise_type": self.exercise_type or 'strength',
+            "exercise_type": (self.exercise_type or 'strength').lower(),
             "route_polyline": self.route_polyline,
+            "equipment": tmpl.equipment if tmpl else None,
         }
         if include_sets:
             data["sets"] = [s.to_dict() for s in self.sets]
@@ -199,7 +214,7 @@ class ExerciseTemplate(db.Model):
 class Set(db.Model):
     __tablename__ = "sets"
     id = db.Column(db.Integer, primary_key=True)
-    exercise_id = db.Column(db.Integer, db.ForeignKey('exercises.id'), nullable=False)
+    exercise_id = db.Column(db.Integer, db.ForeignKey('exercises.id'), nullable=False, index=True)
     reps = db.Column(db.Integer, nullable=True)
     weight = db.Column(db.Float, nullable=True)
     order = db.Column(db.Integer, nullable=True)
@@ -208,6 +223,7 @@ class Set(db.Model):
     distance = db.Column(db.Float, nullable=True)
     distance_unit = db.Column(db.String(5), nullable=True)  # 'km' or 'mi'
     intensity = db.Column(db.Float, nullable=True)          # pace or watts
+    rpe = db.Column(db.Integer, nullable=True)               # 1-10 rating of perceived exertion
 
     def to_dict(self):
         return {
@@ -221,7 +237,23 @@ class Set(db.Model):
             "distance": self.distance,
             "distance_unit": self.distance_unit,
             "intensity": self.intensity,
+            "rpe": self.rpe,
         }
+
+# ── DeviceToken ─────────────────────────────────────────────
+class DeviceToken(db.Model):
+    __tablename__ = "device_tokens"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
+    token = db.Column(db.Text, nullable=False)
+    platform = db.Column(db.String(10), nullable=False)  # 'ios' | 'android'
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (db.UniqueConstraint('user_id', name='uq_device_token_user'),)
+
+    def to_dict(self):
+        return {"id": self.id, "user_id": self.user_id, "platform": self.platform}
+
 
 # ── BodyweightLog ─────────────────────────────────────────
 # Logs of user's bodyweight over time, with timestamp. Linked to User via user_id.
@@ -232,6 +264,10 @@ class BodyweightLog(db.Model):
     weight = db.Column(db.Float, nullable=False)
     date = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
+    __table_args__ = (
+        db.Index('ix_bodyweight_user_date', 'user_id', 'date'),
+    )
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -239,6 +275,52 @@ class BodyweightLog(db.Model):
             "weight": self.weight,
             "date": self.date.isoformat() if self.date else None,
         }
+
+# ── BodyMeasurement ─────────────────────────────────────────
+class BodyMeasurement(db.Model):
+    __tablename__ = "body_measurements"
+    id      = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
+    date    = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    waist   = db.Column(db.Float, nullable=True)
+    chest   = db.Column(db.Float, nullable=True)
+    arms    = db.Column(db.Float, nullable=True)
+    legs    = db.Column(db.Float, nullable=True)
+
+    __table_args__ = (db.Index('ix_measurements_user_date', 'user_id', 'date'),)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "date": self.date.isoformat() if self.date else None,
+            "waist": self.waist,
+            "chest": self.chest,
+            "arms": self.arms,
+            "legs": self.legs,
+        }
+
+
+# ── ProgressPhoto ─────────────────────────────────────────
+class ProgressPhoto(db.Model):
+    __tablename__ = "progress_photos"
+    id        = db.Column(db.Integer, primary_key=True)
+    user_id   = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
+    date      = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    photo_url = db.Column(db.Text, nullable=False)
+    notes     = db.Column(db.String(250), nullable=True)
+
+    __table_args__ = (db.Index('ix_progress_photos_user_date', 'user_id', 'date'),)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "date": self.date.isoformat() if self.date else None,
+            "photo_url": self.photo_url,
+            "notes": self.notes,
+        }
+
 
 # ── PersonalRecord ─────────────────────────────────────────
 # User's personal record for a specific exercise and PR type (max weight, estimated 1RM, max reps).

@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import WelcomeScreen from '../screens/WelcomeScreen';
+import WelcomeScreen from '../screens/Auth/WelcomeScreen';
 import { createMockNavigation, createMockRoute } from './testUtils';
 
 jest.mock('../hooks/useSocialAuth', () => ({

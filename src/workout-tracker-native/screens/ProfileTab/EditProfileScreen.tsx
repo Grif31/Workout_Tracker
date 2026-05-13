@@ -17,13 +17,12 @@ import { ProfileStackParamsList } from 'navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { apiFetch, resolveMediaUrl } from '../../utils/api';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'EditProfile'>;
 
 export default function EditProfileScreen({ navigation }: Props) {
-  const { user, token, updateUser } = useAuth();
+  const { user, updateUser } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -32,8 +31,6 @@ export default function EditProfileScreen({ navigation }: Props) {
   const [profilePicUri, setProfilePicUri] = useState('');
   const [heightFt, setHeightFt] = useState('');
   const [heightIn, setHeightIn] = useState('');
-  const [bodyweight, setBodyweight] = useState('');
-  const [weightUnit, setWeightUnit] = useState<'lbs' | 'kg'>('lbs');
   const [saving, setSaving] = useState(false);
 
   // Prefill from user whenever user data loads (handles async auth state)
@@ -45,12 +42,6 @@ export default function EditProfileScreen({ navigation }: Props) {
     if (user.height != null) {
       setHeightFt(String(Math.floor(user.height / 12)));
       setHeightIn(String(Math.round(user.height % 12)));
-    }
-    if (user.bodyweight != null) {
-      setBodyweight(String(user.bodyweight));
-    }
-    if (user.weight_unit) {
-      setWeightUnit(user.weight_unit);
     }
   }, [user]);
 
@@ -76,14 +67,14 @@ export default function EditProfileScreen({ navigation }: Props) {
     const ext = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
     const formData = new FormData();
     formData.append('avatar', { uri, type: `image/${ext}`, name: `avatar.${ext}` } as any);
-    const res = await fetch(`${API_URL}/api/me/avatar`, {
+    const res = await apiFetch('/api/me/avatar', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
       body: formData,
     });
     if (!res.ok) throw new Error('Avatar upload failed');
     const data = await res.json();
-    return data.avatar_url as string;
+    // Extract just the path so we never store a host-specific URL in the DB.
+    try { return new URL(data.avatar_url as string).pathname; } catch { return data.avatar_url as string; }
   };
 
   const handleSave = async () => {
@@ -99,19 +90,14 @@ export default function EditProfileScreen({ navigation }: Props) {
         resolvedPicUrl = await uploadAvatarIfLocal(profilePicUri);
       }
 
-      const res = await fetch(`${API_URL}/api/me`, {
+      const res = await apiFetch('/api/me', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
           bio,
           profile_pic_url: resolvedPicUrl,
           height: totalInches,
-          bodyweight: bodyweight || null,
-          weight_unit: weightUnit,
         }),
       });
 
@@ -139,7 +125,7 @@ export default function EditProfileScreen({ navigation }: Props) {
         <Image
           source={
             profilePicUri
-              ? { uri: profilePicUri }
+              ? { uri: resolveMediaUrl(profilePicUri) }
               : require('../../assets/profile-placeholder.png')
           }
           style={styles.avatar}
@@ -190,38 +176,6 @@ export default function EditProfileScreen({ navigation }: Props) {
             onChangeText={setHeightIn}
             keyboardType="decimal-pad"
           />
-        </View>
-      </View>
-
-      <Text style={styles.label}>Bodyweight</Text>
-      <View style={styles.row}>
-        <View style={{ flex: 1 }}>
-          <TextInput
-            style={styles.input}
-            placeholder={weightUnit === 'lbs' ? 'e.g. 185' : 'e.g. 84'}
-            placeholderTextColor={colors.placeholder}
-            value={bodyweight}
-            onChangeText={setBodyweight}
-            keyboardType="decimal-pad"
-          />
-        </View>
-        <View style={styles.unitToggle}>
-          <TouchableOpacity
-            style={[styles.unitBtn, weightUnit === 'lbs' && styles.unitBtnActive]}
-            onPress={() => setWeightUnit('lbs')}
-          >
-            <Text style={[styles.unitBtnText, weightUnit === 'lbs' && styles.unitBtnTextActive]}>
-              lbs
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.unitBtn, weightUnit === 'kg' && styles.unitBtnActive]}
-            onPress={() => setWeightUnit('kg')}
-          >
-            <Text style={[styles.unitBtnText, weightUnit === 'kg' && styles.unitBtnTextActive]}>
-              kg
-            </Text>
-          </TouchableOpacity>
         </View>
       </View>
 

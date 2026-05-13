@@ -10,9 +10,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { AuthStackParamsList } from '../navigation/types';
-import { useSocialAuth } from '../hooks/useSocialAuth';
-import { AUTH } from '../theme/authColors';
+import { AuthStackParamsList } from '../../navigation/types';
+import { useSocialAuth } from '../../hooks/useSocialAuth';
+import { AUTH } from '../../theme/authColors';
 
 type Props = NativeStackScreenProps<AuthStackParamsList, 'Welcome'>;
 
@@ -28,8 +28,8 @@ export default function WelcomeScreen({ navigation }: Props) {
         <View style={styles.logoCircle}>
           <Ionicons name="barbell-outline" size={40} color={AUTH.accent} />
         </View>
-        <Text style={styles.title}>Welcome</Text>
-        <Text style={styles.tagline}>One day or Day One.</Text>
+        <Text style={styles.title}>Aretē</Text>
+        <Text style={styles.tagline}>Strive for Excellence</Text>
       </View>
 
       {/* ── bottom actions ── */}

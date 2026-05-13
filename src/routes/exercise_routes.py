@@ -11,7 +11,7 @@ def exercise_to_dict(exercise):
         'muscle_group': exercise.muscle_group,
         'equipment': exercise.equipment,
         'image_url': exercise.image_url,
-        'exercise_type': exercise.exercise_type or 'strength',
+        'exercise_type': (exercise.exercise_type or 'strength').lower(),
     }
 
 

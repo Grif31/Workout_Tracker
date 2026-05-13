@@ -11,9 +11,18 @@ export default function WorkoutLogScreen({ route, navigation }: Props) {
       prefill={route.params?.prefill}
       editMode={route.params?.editMode}
       workoutId={route.params?.workoutId}
-      onSubmit={(newId) => {
-        if (!route.params?.editMode && newId) {
-          navigation.replace('WorkoutDetails', { workoutId: newId });
+      onSubmit={(newId, summary) => {
+        if (!route.params?.editMode && newId && summary) {
+          navigation.replace('WorkoutSummary', {
+            workoutId: newId,
+            workoutName: summary.workoutName,
+            prs: summary.prs,
+            totalVolume: summary.totalVolume,
+            totalReps: summary.totalReps,
+            totalSets: summary.totalSets,
+            muscles: summary.muscles,
+            isFirstWorkout: summary.isFirstWorkout,
+          });
         } else {
           navigation.goBack();
         }

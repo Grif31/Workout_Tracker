@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Alert,
   TextInput,
+  Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,27 +18,63 @@ import { useTheme, ACCENT_PRESETS, type Colors } from '../../context/ThemeContex
 import { ProfileStackParamsList } from '../../navigation/types';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
+import { apiFetch } from '../../utils/api';
+import {
+  requestNotificationPermission,
+  scheduleWorkoutReminder,
+  cancelWorkoutReminder,
+} from '../../utils/notifications';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
 const APP_VERSION = '1.0.0';
 const REST_TIMER_KEY = 'default_rest_timer';
+const REMINDERS_KEY = 'workout_reminders_enabled';
+const REST_ALERTS_KEY = 'rest_timer_alerts_enabled';
+const LIVE_NOTIF_KEY = 'live_workout_notif_enabled';
+const REMINDER_HOUR_KEY = 'workout_reminder_hour';
+const REMINDER_MIN_KEY = 'workout_reminder_minute';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'Settings'>;
 
 export default function SettingsScreen({ navigation }: Props) {
-  const { user, token, logout, updateUser } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const { colors, mode, accentPreset, toggleMode, setAccentPreset } = useTheme();
 
   const [unitIsKg, setUnitIsKg]             = useState(user?.weight_unit === 'kg');
   const [restTimerSeconds, setRestTimerSeconds] = useState('90');
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [savingUnit, setSavingUnit]         = useState(false);
 
+  // Notification settings
+  const [remindersOn, setRemindersOn]   = useState(false);
+  const [restAlertsOn, setRestAlertsOn] = useState(true);
+  const [liveNotifOn, setLiveNotifOn]   = useState(true);
+  const [reminderHour, setReminderHour] = useState('9');
+  const [reminderMin, setReminderMin]   = useState('00');
+
   useEffect(() => {
-    AsyncStorage.getItem(REST_TIMER_KEY).then(val => {
-      if (val) setRestTimerSeconds(val);
+    AsyncStorage.multiGet([
+      REST_TIMER_KEY, REMINDERS_KEY, REST_ALERTS_KEY, LIVE_NOTIF_KEY,
+      REMINDER_HOUR_KEY, REMINDER_MIN_KEY,
+    ]).then(pairs => {
+      const map = Object.fromEntries(pairs.map(([k, v]) => [k, v]));
+      if (map[REST_TIMER_KEY]) setRestTimerSeconds(map[REST_TIMER_KEY]!);
+      if (map[REMINDERS_KEY] !== null) setRemindersOn(map[REMINDERS_KEY] === 'true');
+      if (map[REST_ALERTS_KEY] !== null) setRestAlertsOn(map[REST_ALERTS_KEY] !== 'false');
+      if (map[LIVE_NOTIF_KEY] !== null) setLiveNotifOn(map[LIVE_NOTIF_KEY] !== 'false');
+      if (map[REMINDER_HOUR_KEY]) setReminderHour(map[REMINDER_HOUR_KEY]!);
+      if (map[REMINDER_MIN_KEY]) setReminderMin(map[REMINDER_MIN_KEY]!);
     });
   }, []);
+
+  const ensurePermission = async (): Promise<boolean> => {
+    const granted = await requestNotificationPermission();
+    if (!granted) {
+      Alert.alert(
+        'Permission Required',
+        'Allow notifications in your device settings to enable this feature.',
+      );
+    }
+    return granted;
+  };
 
   const handleUnitToggle = async (value: boolean) => {
     setUnitIsKg(value);
@@ -45,9 +82,9 @@ export default function SettingsScreen({ navigation }: Props) {
     setSavingUnit(true);
     try {
       await updateUser({ weight_unit: newUnit });
-      await fetch(`${API_URL}/api/me`, {
+      await apiFetch('/api/me', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ weight_unit: newUnit }),
       });
     } catch {
@@ -213,21 +250,118 @@ export default function SettingsScreen({ navigation }: Props) {
       {/* ── Notifications ── */}
       <Text style={styles.sectionLabel}>Notifications</Text>
       <View style={styles.group}>
+
+        {/* Workout Reminders */}
         <View style={styles.row}>
           <View style={styles.rowLeft}>
             <Ionicons name="notifications-outline" size={20} color={colors.textSecondary} />
             <Text style={styles.rowLabel}>Workout Reminders</Text>
           </View>
           <Switch
-            value={notificationsEnabled}
-            onValueChange={setNotificationsEnabled}
+            value={remindersOn}
+            onValueChange={async (v) => {
+              if (v) {
+                if (!(await ensurePermission())) return;
+                setRemindersOn(true);
+                await AsyncStorage.setItem(REMINDERS_KEY, 'true');
+                const h = parseInt(reminderHour, 10) || 9;
+                const m = parseInt(reminderMin, 10) || 0;
+                scheduleWorkoutReminder(h, m);
+              } else {
+                setRemindersOn(false);
+                await AsyncStorage.setItem(REMINDERS_KEY, 'false');
+                cancelWorkoutReminder();
+              }
+            }}
             trackColor={{ false: colors.border, true: colors.accent }}
             thumbColor="#fff"
           />
         </View>
-        {notificationsEnabled && (
-          <Text style={styles.comingSoon}>Push notification support coming soon.</Text>
+        {remindersOn && (
+          <View style={[styles.row, { paddingTop: 0, minHeight: 0 }]}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="time-outline" size={20} color={colors.textSecondary} />
+              <Text style={styles.rowLabel}>Reminder Time</Text>
+            </View>
+            <View style={styles.timerInput}>
+              <TextInput
+                style={styles.timerField}
+                value={reminderHour}
+                onChangeText={setReminderHour}
+                keyboardType="number-pad"
+                maxLength={2}
+                placeholder="9"
+                placeholderTextColor={colors.placeholder}
+              />
+              <Text style={styles.timerUnit}>h</Text>
+              <TextInput
+                style={styles.timerField}
+                value={reminderMin}
+                onChangeText={setReminderMin}
+                keyboardType="number-pad"
+                maxLength={2}
+                placeholder="00"
+                placeholderTextColor={colors.placeholder}
+              />
+              <Text style={styles.timerUnit}>m</Text>
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={async () => {
+                  const h = Math.min(23, Math.max(0, parseInt(reminderHour, 10) || 9));
+                  const m = Math.min(59, Math.max(0, parseInt(reminderMin, 10) || 0));
+                  setReminderHour(String(h));
+                  setReminderMin(String(m).padStart(2, '0'));
+                  await AsyncStorage.multiSet([[REMINDER_HOUR_KEY, String(h)], [REMINDER_MIN_KEY, String(m)]]);
+                  await scheduleWorkoutReminder(h, m);
+                  Alert.alert('Saved', `Daily reminder set for ${h}:${String(m).padStart(2, '0')}`);
+                }}
+              >
+                <Text style={styles.saveBtnText}>Set</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
+
+        <View style={styles.divider} />
+
+        {/* Rest Timer Alerts */}
+        <View style={styles.row}>
+          <View style={styles.rowLeft}>
+            <Ionicons name="timer-outline" size={20} color={colors.textSecondary} />
+            <Text style={styles.rowLabel}>Rest Timer Alerts</Text>
+          </View>
+          <Switch
+            value={restAlertsOn}
+            onValueChange={async (v) => {
+              if (v && !(await ensurePermission())) return;
+              setRestAlertsOn(v);
+              await AsyncStorage.setItem(REST_ALERTS_KEY, String(v));
+            }}
+            trackColor={{ false: colors.border, true: colors.accent }}
+            thumbColor="#fff"
+          />
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* Live Workout Notification */}
+        <View style={styles.row}>
+          <View style={styles.rowLeft}>
+            <Ionicons name="fitness-outline" size={20} color={colors.textSecondary} />
+            <Text style={styles.rowLabel}>Live Workout Notification</Text>
+          </View>
+          <Switch
+            value={liveNotifOn}
+            onValueChange={async (v) => {
+              if (v && !(await ensurePermission())) return;
+              setLiveNotifOn(v);
+              await AsyncStorage.setItem(LIVE_NOTIF_KEY, String(v));
+            }}
+            trackColor={{ false: colors.border, true: colors.accent }}
+            thumbColor="#fff"
+          />
+        </View>
+
       </View>
 
       {/* ── App Info ── */}
@@ -240,6 +374,45 @@ export default function SettingsScreen({ navigation }: Props) {
           </View>
           <Text style={styles.rowValue}>{APP_VERSION}</Text>
         </View>
+
+        <View style={styles.divider} />
+
+        <TouchableOpacity
+          style={styles.row}
+          onPress={() => Linking.openURL('https://aretefitnessapp.com/terms')}
+        >
+          <View style={styles.rowLeft}>
+            <Ionicons name="document-text-outline" size={20} color={colors.textSecondary} />
+            <Text style={styles.rowLabel}>Terms of Service</Text>
+          </View>
+          <Ionicons name="open-outline" size={18} color={colors.textSecondary} />
+        </TouchableOpacity>
+
+        <View style={styles.divider} />
+
+        <TouchableOpacity
+          style={styles.row}
+          onPress={() => Linking.openURL('https://aretefitnessapp.com/privacy')}
+        >
+          <View style={styles.rowLeft}>
+            <Ionicons name="shield-checkmark-outline" size={20} color={colors.textSecondary} />
+            <Text style={styles.rowLabel}>Privacy Policy</Text>
+          </View>
+          <Ionicons name="open-outline" size={18} color={colors.textSecondary} />
+        </TouchableOpacity>
+
+        <View style={styles.divider} />
+
+        <TouchableOpacity
+          style={styles.row}
+          onPress={() => Linking.openURL('mailto:support@aretefitnessapp.com')}
+        >
+          <View style={styles.rowLeft}>
+            <Ionicons name="mail-outline" size={20} color={colors.textSecondary} />
+            <Text style={styles.rowLabel}>Contact Support</Text>
+          </View>
+          <Ionicons name="open-outline" size={18} color={colors.textSecondary} />
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -377,12 +550,5 @@ const createStyles = (colors: Colors) =>
       color: colors.accentText,
       fontSize: typography.fontSize.sm,
       fontWeight: '600',
-    },
-    comingSoon: {
-      fontSize: typography.fontSize.sm,
-      color: colors.textSecondary,
-      paddingHorizontal: spacing.md,
-      paddingBottom: spacing.sm,
-      fontStyle: 'italic',
     },
   });

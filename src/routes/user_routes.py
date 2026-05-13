@@ -1,7 +1,8 @@
 import os
 from flask import Blueprint, jsonify, request, current_app
 from werkzeug.utils import secure_filename
-from models import Workout, db, User
+from datetime import datetime
+from models import Workout, db, User, DeviceToken
 from flask_jwt_extended import  jwt_required, get_jwt_identity
 
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
@@ -85,9 +86,38 @@ def upload_avatar():
 
     file.save(os.path.join(avatars_dir, filename))
 
-    host = request.host_url.rstrip('/')
-    avatar_url = f'{host}/static/avatars/{filename}'
-    user.profile_pic_url = avatar_url
+    relative_path = f'/static/avatars/{filename}'
+    user.profile_pic_url = relative_path
     db.session.commit()
 
+    avatar_url = f'{request.host_url.rstrip("/")}{relative_path}'
     return jsonify({'avatar_url': avatar_url}), 200
+
+
+@user_bp.post('/api/me/device-token')
+@jwt_required()
+def register_device_token():
+    user_id = get_jwt_identity()
+    data = request.get_json() or {}
+    token = data.get('token')
+    platform = data.get('platform', 'unknown')
+    if not token:
+        return jsonify({'message': 'token required'}), 400
+    existing = DeviceToken.query.filter_by(user_id=user_id).first()
+    if existing:
+        existing.token = token
+        existing.platform = platform
+        existing.updated_at = datetime.now()
+    else:
+        db.session.add(DeviceToken(user_id=user_id, token=token, platform=platform))
+    db.session.commit()
+    return jsonify({'message': 'ok'}), 200
+
+
+@user_bp.delete('/api/me/device-token')
+@jwt_required()
+def deregister_device_token():
+    user_id = get_jwt_identity()
+    DeviceToken.query.filter_by(user_id=user_id).delete()
+    db.session.commit()
+    return jsonify({'message': 'ok'}), 200

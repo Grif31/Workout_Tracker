@@ -1,18 +1,32 @@
 import React from 'react';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ExercisesStackParamsList } from '../../navigation/types';
+import { TrainingStackParamsList } from '../../navigation/types';
 import WorkoutLog from '../../components/WorkoutLog';
 
-type Props = NativeStackScreenProps<ExercisesStackParamsList, 'LogRoutine'>;
+type Props = NativeStackScreenProps<TrainingStackParamsList, 'LogRoutine'>;
 
-
-export default function WorkoutLogScreen({ route, navigation }: Props) {
+export default function LogRoutineScreen({ route, navigation }: Props) {
   return (
     <WorkoutLog
       prefill={route.params?.prefill}
       editMode={route.params?.editMode}
       workoutId={route.params?.workoutId}
-      onSubmit={() => navigation.goBack()}
+      onSubmit={(newId, summary) => {
+        if (!route.params?.editMode && newId && summary) {
+          navigation.replace('WorkoutSummary', {
+            workoutId: newId,
+            workoutName: summary.workoutName,
+            prs: summary.prs,
+            totalVolume: summary.totalVolume,
+            totalReps: summary.totalReps,
+            totalSets: summary.totalSets,
+            muscles: summary.muscles,
+            isFirstWorkout: summary.isFirstWorkout,
+          });
+        } else {
+          navigation.goBack();
+        }
+      }}
       onCancel={() => navigation.goBack()}
       onViewExerciseHistory={(exerciseName, exerciseTemplateId) => {
         navigation.navigate('ExerciseDetail', {

@@ -1,6 +1,6 @@
 from datetime import datetime
-from flask import Blueprint, request, jsonify
-from models import db, Workout, Set, Exercise, PersonalRecord, ExerciseTemplate
+from flask import Blueprint, request, jsonify, current_app
+from models import db, Workout, Set, Exercise, PersonalRecord, ExerciseTemplate, User
 from flask_jwt_extended import  jwt_required, get_jwt_identity
 
 workout_bp = Blueprint('workout_bp', __name__)
@@ -206,6 +206,8 @@ def get_workouts():
         current_user_id = get_jwt_identity()
         include_exercises = request.args.get('include_exercises', 'false').lower() == 'true'
         date_filter = request.args.get('date')  # optional YYYY-MM-DD
+        page = request.args.get('page', type=int)
+        per_page = min(request.args.get('per_page', 20, type=int), 100)
 
         query = Workout.query.filter_by(user_id=current_user_id)
         if date_filter:
@@ -216,12 +218,24 @@ def get_workouts():
             except ValueError:
                 return jsonify({'message': 'Invalid date format, use YYYY-MM-DD'}), 400
 
-        workouts = query.order_by(Workout.date.desc()).all()
-        return jsonify([w.to_dict(include_exercises=include_exercises) for w in workouts]), 200
+        query = query.order_by(Workout.date.desc())
 
-    except Exception as e:
-        print(f"Error {e}")
-        return jsonify({'message': 'Internal Server Error'}), 500
+        # Paginated response when ?page= is supplied; plain array otherwise (backwards-compat).
+        if page is not None:
+            pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+            return jsonify({
+                'workouts': [w.to_dict(include_exercises=include_exercises) for w in pagination.items],
+                'page': page,
+                'per_page': per_page,
+                'total': pagination.total,
+                'has_more': pagination.has_next,
+            }), 200
+
+        return jsonify([w.to_dict(include_exercises=include_exercises) for w in query.all()]), 200
+
+    except Exception:
+        current_app.logger.exception('GET /api/workouts failed')
+        return jsonify({'message': 'Internal server error'}), 500
 
 # GET LAST 3 WORKOUTS
 
@@ -265,6 +279,20 @@ def get_recent_workouts():
 
     return jsonify(result), 200
 
+# GET ALL WORKOUT DATES (for calendar view)
+
+@workout_bp.get('/api/workouts/dates')
+@jwt_required()
+def get_workout_dates():
+    current_user_id = get_jwt_identity()
+    rows = db.session.query(Workout.date).filter_by(user_id=current_user_id).all()
+    dates = sorted({
+        (r.date.date() if hasattr(r.date, 'date') else r.date).isoformat()
+        for r in rows
+    })
+    return jsonify({'dates': dates}), 200
+
+
 # GET WORKOUT DETAILS
 
 @workout_bp.get('/api/workouts/<int:workout_id>')
@@ -272,7 +300,20 @@ def get_recent_workouts():
 def get_workout_details(workout_id):
     current_user_id = get_jwt_identity()
     workout = Workout.query.filter_by(user_id=current_user_id, id=workout_id).first()
-    return jsonify(workout.to_dict(include_exercises=True)), 200
+    if not workout:
+        return jsonify({'message': 'Workout not found'}), 404
+    data = workout.to_dict(include_exercises=True)
+    # Annotate each set with which PR types it holds
+    all_set_ids = [s.id for ex in workout.exercises for s in ex.sets]
+    if all_set_ids:
+        pr_rows = PersonalRecord.query.filter(PersonalRecord.set_id.in_(all_set_ids)).all()
+        pr_by_set: dict[int, list[str]] = {}
+        for pr in pr_rows:
+            pr_by_set.setdefault(pr.set_id, []).append(pr.pr_type)
+        for ex_data, ex in zip(data['exercises'], workout.exercises):
+            for set_data, s in zip(ex_data['sets'], ex.sets):
+                set_data['pr_types'] = pr_by_set.get(s.id, [])
+    return jsonify(data), 200
 
 # CREATE WORKOUT 
 
@@ -319,24 +360,53 @@ def add_workout():
                     distance=s.get('distance'),
                     distance_unit=s.get('distance_unit'),
                     intensity=s.get('intensity'),
+                    rpe=s.get('rpe'),
                 )
                 db.session.add(new_set)
                 new_sets.append(new_set)
             db.session.flush()
             exercise_set_pairs.append((new_ex, new_sets))
 
-        new_workout.calculate_volume()
-        strength_pairs = [(ex, s) for ex, s in exercise_set_pairs if (ex.exercise_type or 'strength') == 'strength']
-        cardio_pairs   = [(ex, s) for ex, s in exercise_set_pairs if (ex.exercise_type or 'strength') == 'cardio']
+        user = db.session.get(User, int(current_user_id))
+        new_workout.calculate_volume(weight_unit=user.weight_unit or 'lbs')
+        strength_pairs = [(ex, s) for ex, s in exercise_set_pairs if (ex.exercise_type or 'strength').lower() == 'strength']
+        cardio_pairs   = [(ex, s) for ex, s in exercise_set_pairs if (ex.exercise_type or 'strength').lower() == 'cardio']
         new_prs = _compute_and_upsert_prs(current_user_id, strength_pairs)
         new_prs += _compute_and_upsert_cardio_prs(current_user_id, cardio_pairs)
         db.session.commit()
 
-        return jsonify({'message': 'New Workout Added', 'new_prs': new_prs}), 201
-    except Exception as e:
+        total_volume = 0
+        total_reps = 0
+        total_sets = 0
+        muscles_worked = []
+        for ex, sets in exercise_set_pairs:
+            if ex.exercise_template_id:
+                tmpl = db.session.get(ExerciseTemplate, ex.exercise_template_id)
+                if tmpl and tmpl.muscle_group and tmpl.muscle_group not in muscles_worked:
+                    muscles_worked.append(tmpl.muscle_group)
+            for s in sets:
+                if s.reps:
+                    total_reps += s.reps
+                    total_sets += 1
+                    if s.weight:
+                        total_volume += s.reps * s.weight
+
+        is_first = Workout.query.filter_by(user_id=current_user_id).count() == 1
+
+        return jsonify({
+            'id': new_workout.id,
+            'message': 'New Workout Added',
+            'new_prs': new_prs,
+            'total_volume': round(total_volume),
+            'total_reps': total_reps,
+            'total_sets': total_sets,
+            'muscles': muscles_worked,
+            'is_first_workout': is_first,
+        }), 201
+    except Exception:
         db.session.rollback()
-        print(f"Error {e}")
-        return jsonify({'message':'Internal Server Error'}), 500
+        current_app.logger.exception('POST /api/workouts failed')
+        return jsonify({'message': 'Internal server error'}), 500
     
 # DELETE WORKOUT    
     
@@ -427,6 +497,8 @@ def update_workout(workout_id):
                             s.distance_unit = s_data["distance_unit"]
                         if "intensity" in s_data:
                             s.intensity = s_data["intensity"]
+                        if "rpe" in s_data:
+                            s.rpe = s_data["rpe"]
                         s.order = s_data.get('order', set_index)
                     else:
                         ex.sets.append(Set(
@@ -438,6 +510,7 @@ def update_workout(workout_id):
                             distance=s_data.get('distance'),
                             distance_unit=s_data.get('distance_unit'),
                             intensity=s_data.get('intensity'),
+                            rpe=s_data.get('rpe'),
                         ))
             else:
                 new_ex = Exercise(
@@ -458,12 +531,14 @@ def update_workout(workout_id):
                         distance=s.get('distance'),
                         distance_unit=s.get('distance_unit'),
                         intensity=s.get('intensity'),
+                        rpe=s.get('rpe'),
                     ))
                 workout.exercises.append(new_ex)
                         
     db.session.flush()
     db.session.expire(workout)
-    workout.calculate_volume()
+    user = db.session.get(User, int(current_user_id))
+    workout.calculate_volume(weight_unit=user.weight_unit or 'lbs')
     db.session.commit()
     return jsonify(workout.to_dict(include_exercises=True)), 200
     

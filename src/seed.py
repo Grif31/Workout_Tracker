@@ -4,6 +4,7 @@ Seed script for ExerciseTemplate data.
 Usage:
     python seed.py              # Seeds exercises and fetches images from Wger API
     python seed.py --no-images  # Seeds exercises without fetching images
+    python seed.py --backfill   # Update existing exercises that have no image_url
 """
 
 import sys
@@ -15,6 +16,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from app import create_app
 from models import db, ExerciseTemplate
+
+WGER_BASE = 'https://wger.de'
 
 # ---------------------------------------------------------------------------
 # Exercise data: (name, muscle_group, equipment)
@@ -164,63 +167,168 @@ CARDIO_EXERCISES = [
 ]
 
 
-def fetch_image_url(name: str) -> str | None:
-    """Try to fetch an exercise image URL from the Wger public API."""
-    try:
-        import urllib.request
-        import urllib.parse
-        import json
+_wger_cache: tuple | None = None  # (name_to_base, base_to_image)
 
-        # Step 1: search for the exercise by name
-        search_term = urllib.parse.quote(name)
-        search_url = (
-            f'https://wger.de/api/v2/exercise/search/'
-            f'?term={search_term}&language=english&format=json'
-        )
-        with urllib.request.urlopen(search_url, timeout=10) as resp:
-            search_data = json.loads(resp.read().decode())
+# Map our equipment labels to words wger uses in exercise names
+_EQUIP_WORDS = {
+    'barbell':      ['barbell'],
+    'dumbbell':     ['dumbbell'],
+    'cable':        ['cable'],
+    'machine':      ['machine'],
+    'bodyweight':   ['bodyweight'],
+    'smith machine':['smith'],
+    'ez bar':       ['ez', 'curl'],
+    'kettlebell':   ['kettlebell'],
+}
 
-        suggestions = search_data.get('suggestions', [])
-        if not suggestions:
-            return None
 
-        first = suggestions[0]
-        data = first.get('data', {})
-        image = data.get('image')
-        if image:
-            return image
+def _normalize(text: str) -> list:
+    """Lowercase word list, no punctuation."""
+    import re
+    return re.sub(r'[^a-z0-9 ]', ' ', text.lower()).split()
 
-        base_id = data.get('base_id')
-        if not base_id:
-            return None
 
-        time.sleep(0.3)
+def _load_wger() -> tuple:
+    """
+    Download all wger English exercise names and images in bulk (≈24 requests).
+    Returns (name_to_base, base_to_image).
+      name_to_base  : {lowercase_name: base_id}
+      base_to_image : {base_id: absolute_image_url}
+    """
+    global _wger_cache
+    if _wger_cache is not None:
+        return _wger_cache
 
-        # Step 2: fetch images for the exercise base
-        images_url = (
-            f'https://wger.de/api/v2/exerciseimage/'
-            f'?exercise_base_id={base_id}&format=json'
-        )
-        with urllib.request.urlopen(images_url, timeout=10) as resp:
-            images_data = json.loads(resp.read().decode())
+    import urllib.request, json
 
-        results = images_data.get('results', [])
-        if results:
-            return results[0].get('image')
+    name_to_base: dict[str, int] = {}
+    base_to_image: dict[int, str] = {}
 
-    except Exception:
-        pass
+    print('Fetching wger exercise names...', flush=True)
+    offset, limit = 0, 100
+    while True:
+        url = (f'{WGER_BASE}/api/v2/exercise-translation/'
+               f'?format=json&language=2&limit={limit}&offset={offset}')
+        with urllib.request.urlopen(url, timeout=15) as r:
+            data = json.loads(r.read().decode())
+        for item in data['results']:
+            name_to_base[item['name'].lower().strip()] = item['exercise']
+        if not data.get('next'):
+            break
+        offset += limit
+        time.sleep(0.15)
+    print(f'  {len(name_to_base)} exercise names loaded.', flush=True)
 
+    print('Fetching wger exercise images...', flush=True)
+    offset = 0
+    while True:
+        url = (f'{WGER_BASE}/api/v2/exerciseimage/'
+               f'?format=json&limit={limit}&offset={offset}')
+        with urllib.request.urlopen(url, timeout=15) as r:
+            data = json.loads(r.read().decode())
+        for item in data['results']:
+            bid = item['exercise']
+            img = item.get('image', '')
+            if not img:
+                continue
+            url_abs = img if img.startswith('http') else f'{WGER_BASE}{img}'
+            # Prefer is_main; keep first otherwise
+            if bid not in base_to_image or item.get('is_main'):
+                base_to_image[bid] = url_abs
+        if not data.get('next'):
+            break
+        offset += limit
+        time.sleep(0.15)
+    print(f'  {len(base_to_image)} exercise images loaded.\n', flush=True)
+
+    _wger_cache = (name_to_base, base_to_image)
+    return _wger_cache
+
+
+def _word_score(query_words: list, candidate_name: str) -> float:
+    """Fraction of query words that appear in the candidate name."""
+    cand = candidate_name.lower()
+    if not query_words:
+        return 0.0
+    hits = sum(1 for w in query_words if w in cand)
+    return hits / len(query_words)
+
+
+def _find_wger_image(name: str, equipment: str = '') -> str | None:
+    """Find the best wger diagram for the given exercise name + equipment."""
+    name_to_base, base_to_image = _load_wger()
+
+    equip_lower = equipment.lower()
+    equip_words = _EQUIP_WORDS.get(equip_lower, [equip_lower] if equip_lower else [])
+
+    # Build query word list: exercise name words + equipment words
+    base_words = _normalize(name)
+    query_with_equip = base_words + equip_words
+
+    best_score, best_bid = 0.0, None
+
+    for wger_name, bid in name_to_base.items():
+        if bid not in base_to_image:
+            continue
+        # Score against (name + equipment) query first
+        score = _word_score(query_with_equip, wger_name)
+        if score > best_score:
+            best_score = score
+            best_bid = bid
+
+    # Require at least the base exercise words to match
+    base_threshold = len(base_words) / max(len(query_with_equip), 1) * 0.7
+    if best_bid and best_score >= max(0.5, base_threshold):
+        return base_to_image[best_bid]
     return None
+
+
+def fetch_image_url(name: str, equipment: str = '') -> str | None:
+    """Return a wger diagram URL for the given exercise, or None."""
+    try:
+        return _find_wger_image(name, equipment)
+    except Exception:
+        return None
+
+
+def backfill_images():
+    """Update all ExerciseTemplate rows that have no image_url using wger diagrams."""
+    # Pre-load all wger data once
+    _load_wger()
+
+    exercises = ExerciseTemplate.query.filter(
+        (ExerciseTemplate.image_url == None) | (ExerciseTemplate.image_url == '')
+    ).all()
+    total = len(exercises)
+    print(f'Found {total} exercises without images.\n')
+    updated = 0
+    for i, ex in enumerate(exercises, start=1):
+        label = f'{ex.name} ({ex.equipment or "—"})'
+        print(f'[{i}/{total}] {label} ...', end=' ', flush=True)
+        url = fetch_image_url(ex.name, ex.equipment or '')
+        if url:
+            ex.image_url = url
+            db.session.commit()
+            updated += 1
+            print('OK')
+        else:
+            print('no match')
+    print(f'\nBackfill complete. Updated: {updated}/{total}')
 
 
 def main():
     parser = argparse.ArgumentParser(description='Seed exercise templates.')
     parser.add_argument('--no-images', action='store_true', help='Skip Wger image fetching')
+    parser.add_argument('--backfill', action='store_true',
+                        help='Update existing exercises that have no image_url')
     args = parser.parse_args()
 
     app = create_app()
     with app.app_context():
+        if args.backfill:
+            backfill_images()
+            return
+
         added = 0
         skipped = 0
 
@@ -237,10 +345,9 @@ def main():
 
             image_url = None
             if not args.no_images:
-                print(f'[{i}/{total}] Fetching image for: {name} ...', end=' ', flush=True)
-                image_url = fetch_image_url(name)
-                print('got image' if image_url else 'no image')
-                time.sleep(0.3)
+                print(f'[{i}/{total}] Fetching image for: {name} ({equipment}) ...', end=' ', flush=True)
+                image_url = fetch_image_url(name, equipment or '')
+                print('OK' if image_url else 'no image')
             else:
                 print(f'[{i}/{total}] Adding: {name} ({equipment})')
 

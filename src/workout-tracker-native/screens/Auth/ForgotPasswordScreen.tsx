@@ -12,17 +12,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { AuthStackParamsList } from '../navigation/types';
-import { AUTH } from '../theme/authColors';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { AuthStackParamsList } from '../../navigation/types';
+import { AUTH } from '../../theme/authColors';
+import { apiFetch } from '../../utils/api';
 
 type Props = NativeStackScreenProps<AuthStackParamsList, 'ForgotPassword'>;
 
 export default function ForgotPasswordScreen({ navigation }: Props) {
   const [email, setEmail]       = useState('');
   const [loading, setLoading]   = useState(false);
-  const [success, setSuccess]   = useState(false);
   const [error, setError]       = useState('');
 
   const handleSubmit = async () => {
@@ -33,13 +31,13 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/forgot-password`, {
+      const res = await apiFetch('/api/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim() }),
       });
       if (res.ok) {
-        setSuccess(true);
+        navigation.navigate('ResetPassword', { email: email.trim() });
       } else {
         const data = await res.json();
         setError(data.message || 'Something went wrong.');
@@ -73,54 +71,35 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
           {/* Header */}
           <Text style={styles.title}>Reset Password</Text>
           <Text style={styles.subtitle}>
-            Enter your email and we'll send you a reset link.
+            Enter your email and we'll send you a 6-digit code.
           </Text>
 
-          {success ? (
-            /* ── Success state ── */
-            <View style={styles.successBox}>
-              <Ionicons name="checkmark-circle" size={28} color={AUTH.accent} style={{ marginBottom: 10 }} />
-              <Text style={styles.successText}>
-                If that email is registered, a reset link has been sent. Check your inbox.
-              </Text>
-              <TouchableOpacity
-                style={styles.backToLoginBtn}
-                onPress={() => navigation.navigate('Login')}
-              >
-                <Text style={styles.backToLoginText}>Back to Log In</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            /* ── Form state ── */
-            <>
-              {!!error && <Text style={styles.errorText}>{error}</Text>}
+          {!!error && <Text style={styles.errorText}>{error}</Text>}
 
-              <View style={styles.inputWrapper}>
-                <Ionicons name="mail-outline" size={18} color={AUTH.subtext} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. john@example.com"
-                  placeholderTextColor={AUTH.placeholder}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  keyboardAppearance="dark"
-                  value={email}
-                  onChangeText={setEmail}
-                />
-              </View>
+          <View style={styles.inputWrapper}>
+            <Ionicons name="mail-outline" size={18} color={AUTH.subtext} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="e.g. john@example.com"
+              placeholderTextColor={AUTH.placeholder}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              keyboardAppearance="dark"
+              value={email}
+              onChangeText={setEmail}
+            />
+          </View>
 
-              <TouchableOpacity
-                style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
-                onPress={handleSubmit}
-                disabled={loading}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.primaryBtnText}>
-                  {loading ? 'Sending…' : 'Send Reset Link'}
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
+          <TouchableOpacity
+            style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
+            onPress={handleSubmit}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.primaryBtnText}>
+              {loading ? 'Sending…' : 'Send Code'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -183,26 +162,4 @@ const styles = StyleSheet.create({
   primaryBtnDisabled: { opacity: 0.6 },
   primaryBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },
 
-  successBox: {
-    backgroundColor: AUTH.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: AUTH.border,
-    padding: 24,
-    alignItems: 'center',
-  },
-  successText: {
-    color: AUTH.subtext,
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 20,
-  },
-  backToLoginBtn: {
-    backgroundColor: AUTH.accent,
-    borderRadius: 12,
-    paddingVertical: 13,
-    paddingHorizontal: 32,
-  },
-  backToLoginText: { fontSize: 15, fontWeight: '700', color: '#000' },
 });

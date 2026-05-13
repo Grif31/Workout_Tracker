@@ -2,7 +2,7 @@
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { mockFetch, createMockNavigation, createMockRoute } from './testUtils';
 import { useAuth } from '../context/AuthContext';
-import SignupScreen from '../screens/SignupScreen';
+import SignupScreen from '../screens/Auth/SignupScreen';
 
 jest.mock('../hooks/useSocialAuth', () => ({
   useSocialAuth: () => ({ handleApple: jest.fn(), handleGoogle: jest.fn(), handleFacebook: jest.fn() }),

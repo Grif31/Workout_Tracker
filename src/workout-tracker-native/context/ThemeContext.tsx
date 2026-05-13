@@ -46,7 +46,7 @@ const LIGHT_BASE = {
 };
 
 const DARK_BASE = {
-  background:    '#000000',
+  background:    '#141416',
   surface:       '#1C1C1E',
   border:        '#38383A',
   textPrimary:   '#FFFFFF',

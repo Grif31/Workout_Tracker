@@ -15,12 +15,12 @@ const MapView: React.ComponentType<any> | null = _MapsModule?.default ?? null;
 const Polyline: React.ComponentType<any> | null = _MapsModule?.Polyline ?? null;
 import { Workout } from '../types/models';
 import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../utils/api';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { estimateCalories } from '../utils/cardioCalories';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export type PrefillWorkoutData = {
   name: string;
@@ -62,7 +62,7 @@ export default function WorkoutDetailsScreen({
   }), [colors]);
 
   const { showActionSheetWithOptions } = useActionSheet();
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const weightUnit = user?.weight_unit === 'kg' ? 'kg' : 'lbs';
 
   const [workout, setWorkout] = useState<Workout | null>(null);
@@ -73,9 +73,7 @@ export default function WorkoutDetailsScreen({
   const fetchWorkout = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/workouts/${workoutId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch(`/api/workouts/${workoutId}`);
       if (!res.ok) { Alert.alert('Error', 'Failed to load workout'); return; }
       setWorkout(await res.json());
     } catch {
@@ -108,11 +106,9 @@ export default function WorkoutDetailsScreen({
   };
 
   const deleteWorkout = async () => {
-    if (!token) return;
     try {
-      const res = await fetch(`${API_URL}/api/workouts/${workoutId}`, {
+      const res = await apiFetch(`/api/workouts/${workoutId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
         const err = await res.json();
@@ -144,9 +140,9 @@ export default function WorkoutDetailsScreen({
           const ids = workout.exercises
             .map(e => e.exercise_template_id)
             .filter((id): id is number => id != null);
-          const res = await fetch(`${API_URL}/api/workout-templates`, {
+          const res = await apiFetch('/api/workout-templates', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: workout.name, exercise_template_ids: ids }),
           });
           if (res.ok) {
@@ -321,20 +317,26 @@ export default function WorkoutDetailsScreen({
           );
         }
 
+        const hasPr = exercise.sets.some(s => s.pr_types && s.pr_types.length > 0);
         return (
           <View style={styles.exerciseCard}>
             <Text style={styles.exerciseName}>{exercise.name}</Text>
+            {exercise.equipment ? (
+              <Text style={styles.equipmentText}>{exercise.equipment}</Text>
+            ) : null}
 
             {/* Column headers */}
             <View style={styles.setHeaderRow}>
               <View style={styles.colBadge} />
               <Text style={[styles.setHeaderCell, styles.colReps]}>Reps</Text>
               <Text style={[styles.setHeaderCell, styles.colWeight]}>{weightUnit}</Text>
+              {hasPr && <View style={styles.colPr} />}
             </View>
 
             {exercise.sets.map((s, i) => {
               const type = (s.set_type ?? 'N') as keyof typeof SET_TYPE_COLORS;
               const tc = SET_TYPE_COLORS[type] ?? colors.textSecondary;
+              const isPr = s.pr_types && s.pr_types.length > 0;
               return (
                 <View key={i} style={styles.setRow}>
                   <View style={[styles.setNumBadge, styles.colBadge, { borderColor: tc }]}>
@@ -343,6 +345,11 @@ export default function WorkoutDetailsScreen({
                   </View>
                   <Text style={[styles.setCellText, styles.colReps]}>{s.reps}</Text>
                   <Text style={[styles.setCellText, styles.colWeight]}>{s.weight}</Text>
+                  {hasPr && (
+                    isPr
+                      ? <View style={[styles.colPr, styles.prChip]}><Text style={styles.prChipText}>PR</Text></View>
+                      : <View style={styles.colPr} />
+                  )}
                 </View>
               );
             })}
@@ -414,6 +421,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.md,
     fontWeight: '700',
     color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  equipmentText: {
+    fontSize: 12,
+    color: colors.textSecondary,
     marginBottom: spacing.sm,
   },
 
@@ -439,6 +451,19 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   colBadge: { width: 36, marginRight: spacing.sm },
   colReps: { flex: 1, textAlign: 'center' },
   colWeight: { flex: 1, textAlign: 'center' },
+  colPr: { width: 32, alignItems: 'center' },
+  prChip: {
+    backgroundColor: '#FFD700',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  prChipText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#7A5800',
+    letterSpacing: 0.3,
+  },
 
   setNumBadge: {
     borderWidth: 1.5,

@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert } from 'react
 import { createBottomTabNavigator, BottomTabBar, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { DashboardStack } from './DashboardStack';
 import { ExercisesStack } from './ExercisesStack';
+import { TrainingStack } from './TrainingStack';
 import { ProfileStack } from './ProfileStack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { AppStack } from './types';
@@ -42,6 +43,9 @@ function MiniWorkoutBar() {
 
   if (!session) return null;
 
+  const setsDone = session.exercises.flatMap(e => e.sets).filter(s => s.done).length;
+  const setsTotal = session.exercises.flatMap(e => e.sets).length;
+
   const handleResume = () => {
     if (navigationRef.isReady()) {
       navigationRef.navigate('DashboardTab', { screen: 'WorkoutLog', params: {} });
@@ -58,8 +62,8 @@ function MiniWorkoutBar() {
         <Text style={[styles.miniName, { color: colors.textPrimary }]} numberOfLines={1}>
           {session.workoutName || 'Workout'}
         </Text>
-        <Text style={[styles.miniTimer, { color: colors.textSecondary }]}>
-          {fmtElapsed(elapsed)}
+        <Text style={[styles.miniSub, { color: colors.textSecondary }]}>
+          {fmtElapsed(elapsed)} · {setsDone}/{setsTotal} sets
         </Text>
       </View>
       <TouchableOpacity
@@ -89,6 +93,8 @@ function MiniWorkoutBar() {
 }
 
 function CustomTabBar(props: BottomTabBarProps) {
+  const { isWorkoutOpen } = useWorkoutSession();
+  if (isWorkoutOpen) return null;
   return (
     <View>
       <MiniWorkoutBar />
@@ -117,6 +123,7 @@ export function AppTabs() {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
           if (route.name === 'DashboardTab') iconName = 'home';
           else if (route.name === 'ExercisesTab') iconName = 'barbell';
+          else if (route.name === 'TrainingTab') iconName = 'trophy';
           else if (route.name === 'ProfileTab') iconName = 'person';
           return <Ionicons name={iconName} size={size} color={color} />;
         },
@@ -126,6 +133,7 @@ export function AppTabs() {
     >
       <Tab.Screen name="DashboardTab" component={DashboardStack} options={{ title: 'Dashboard' }} />
       <Tab.Screen name="ExercisesTab" component={ExercisesStack} options={{ title: 'Exercises' }} />
+      <Tab.Screen name="TrainingTab" component={TrainingStack} options={{ title: 'Training' }} />
       <Tab.Screen name="ProfileTab" component={ProfileStack} options={{ title: 'Profile' }} />
     </Tab.Navigator>
   );
@@ -141,7 +149,7 @@ const styles = StyleSheet.create({
   },
   miniLeft: { flex: 1, justifyContent: 'center' },
   miniName: { fontSize: 14, fontWeight: '700' },
-  miniTimer: { fontSize: 12, marginTop: 1 },
+  miniSub: { fontSize: 12, marginTop: 1 },
   miniBtn: {
     flexDirection: 'row',
     alignItems: 'center',

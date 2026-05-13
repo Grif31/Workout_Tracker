@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -9,13 +9,10 @@ import {
   StyleSheet,
   Alert,
   Modal,
-  ScrollView,
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useAuth } from '../../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { ExercisesStackParamsList } from 'navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
@@ -24,29 +21,16 @@ import { typography } from 'theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { equipmentTypes } from '../../constants/equipmentTypes';
 import NewExerciseForm from '../../components/NewExerciseForm';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { apiFetch } from '../../utils/api';
 
 type Props = NativeStackScreenProps<ExercisesStackParamsList, 'ExercisesHome'>;
 
 type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; image_url?: string; exercise_type?: string };
-type WorkoutTemplate = { id: number; name: string; exercises: Exercise[] };
-type RoutineDay = {
-  id: number;
-  day_order: number;
-  label: string;
-  workout_template: { id: number; name: string; exercises: Exercise[] };
-};
-type Routine = { id: number; name: string; description?: string; day_count: number };
-type ActiveRoutine = { id: number; name: string; days: RoutineDay[] };
 
 export default function ExercisesScreen({ navigation }: Props) {
-  const { token, user, updateUser } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const [activeTab, setActiveTab] = useState<'exercises' | 'training'>('exercises');
 
-  // Exercises tab state
   const [exerciseList, setExerciseList] = useState<Exercise[]>([]);
   const [search, setSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState('All');
@@ -56,68 +40,9 @@ export default function ExercisesScreen({ navigation }: Props) {
   const [showEquipmentDropdown, setShowEquipmentDropdown] = useState(false);
   const [recentExercises, setRecentExercises] = useState<string[]>([]);
 
-  // Training tab state
-  const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
-  const [routines, setRoutines] = useState<Routine[]>([]);
-  const [activeRoutine, setActiveRoutine] = useState<ActiveRoutine | null>(null);
-  const [selectModalVisible, setSelectModalVisible] = useState(false);
-  const [daysVisible, setDaysVisible] = useState(false);
-
-  // Coach settings state
-  const [coachDays, setCoachDays] = useState(3);
-  const [coachGoal, setCoachGoal] = useState<'hypertrophy' | 'strength' | 'endurance' | 'general'>('general');
-  const [coachExp, setCoachExp] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
-  const [coachGenerating, setCoachGenerating] = useState(false);
-
-  useEffect(() => {
-    AsyncStorage.getItem('coach_settings').then(raw => {
-      if (!raw) return;
-      try {
-        const s = JSON.parse(raw);
-        if (s.days) setCoachDays(s.days);
-        if (s.goal) setCoachGoal(s.goal);
-        if (s.exp) setCoachExp(s.exp);
-      } catch { /* ignore */ }
-    });
-  }, []);
-
-  const saveCoachSettings = (days: number, goal: typeof coachGoal, exp: typeof coachExp) => {
-    AsyncStorage.setItem('coach_settings', JSON.stringify({ days, goal, exp }));
-  };
-
-  const handleGenerate = async (type: 'routine' | 'template') => {
-    if (!token) return;
-    setCoachGenerating(true);
-    try {
-      const res = await fetch(`${API_URL}/api/ai/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          days_per_week: coachDays,
-          goal: coachGoal,
-          experience: coachExp,
-          generate_type: type,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) { Alert.alert('Error', data.message || 'Generation failed'); return; }
-      await fetchTemplates();
-      await fetchRoutines();
-      if (data.type === 'routine') {
-        Alert.alert('Routine Created!', `"${data.name}" has been added to your routines.`);
-      } else {
-        Alert.alert('Template Created!', `"${data.name}" has been added to your templates.`);
-      }
-    } catch {
-      Alert.alert('Error', 'Could not reach AI service');
-    } finally {
-      setCoachGenerating(false);
-    }
-  };
-
   const fetchExercises = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/exercises`);
+      const res = await apiFetch('/api/exercises');
       if (!res.ok) { Alert.alert('Error', 'Failed to load exercises'); return; }
       setExerciseList(await res.json());
     } catch {
@@ -125,74 +50,24 @@ export default function ExercisesScreen({ navigation }: Props) {
     }
   };
 
-  const fetchTemplates = async () => {
-    if (!token) return;
-    try {
-      const res = await fetch(`${API_URL}/api/workout-templates`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) setTemplates(await res.json());
-    } catch {
-      // silently fail
-    }
-  };
-
-  const fetchRoutines = async () => {
-    if (!token) return;
-    try {
-      const res = await fetch(`${API_URL}/api/routines`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return;
-      setRoutines(await res.json());
-    } catch {
-      // silently fail
-    }
-  };
-
-  const fetchActiveRoutine = async () => {
-    if (!token || !user?.active_routine_id) {
-      setActiveRoutine(null);
-      return;
-    }
-    try {
-      const res = await fetch(`${API_URL}/api/routines/${user.active_routine_id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) setActiveRoutine(await res.json());
-    } catch {
-      // silently fail
-    }
-  };
-
   const fetchRecentExercises = async () => {
-    if (!token) return;
     try {
-      const res = await fetch(`${API_URL}/api/stats/recent-exercises`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch('/api/stats/recent-exercises');
       if (res.ok) {
         const data = await res.json();
         setRecentExercises(data.recent);
       }
-    } catch {
-      // silently fail
-    }
+    } catch { }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchExercises();
-      fetchTemplates();
-      fetchRoutines();
-      fetchActiveRoutine();
-      fetchRecentExercises();
-    }, [token, user?.active_routine_id])
-  );
+  useFocusEffect(useCallback(() => {
+    fetchExercises();
+    fetchRecentExercises();
+  }, []));
 
   const addNewExercise = async (name: string, muscle: string) => {
     try {
-      const res = await fetch(`${API_URL}/api/exercises`, {
+      const res = await apiFetch('/api/exercises', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, muscle_group: muscle }),
@@ -209,54 +84,10 @@ export default function ExercisesScreen({ navigation }: Props) {
     }
   };
 
-  const activateRoutine = async (routineId: number) => {
-    if (!token) return;
-    try {
-      const res = await fetch(`${API_URL}/api/routines/${routineId}/activate`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        updateUser({ active_routine_id: data.active_routine_id });
-        setSelectModalVisible(false);
-      }
-    } catch {
-      Alert.alert('Error', 'Failed to set active routine');
-    }
-  };
-
-  const createTemplate = async () => {
-    if (!token) return;
-    try {
-      const res = await fetch(`${API_URL}/api/workout-templates`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: 'New Template' }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        navigation.navigate('TemplateDetail', { templateId: data.id });
-      } else {
-        Alert.alert('Error', 'Failed to create template');
-      }
-    } catch {
-      Alert.alert('Error', 'Something went wrong');
-    }
-  };
-
-  const handleActiveBlockPress = () => {
-    if (routines.length === 0) {
-      navigation.navigate('CreateRoutine');
-    } else {
-      setSelectModalVisible(true);
-    }
-  };
-
   const filteredExercises = useMemo(() => exerciseList.filter(ex => {
     const matchSearch = ex.name.toLowerCase().includes(search.toLowerCase());
     if (selectedMuscle === 'Cardio') return matchSearch && ex.exercise_type === 'cardio';
-    if (ex.exercise_type === 'cardio') return false; // hide cardio from strength filters
+    if (ex.exercise_type === 'cardio') return false;
     const matchMuscle = selectedMuscle === 'All' || ex.muscle_group === selectedMuscle;
     const matchEquipment = selectedEquipment === 'All' || ex.equipment === selectedEquipment;
     return matchSearch && matchMuscle && matchEquipment;
@@ -266,8 +97,7 @@ export default function ExercisesScreen({ navigation }: Props) {
     if (search) return [];
     return recentExercises
       .map(name => exerciseList.find(ex =>
-        `${ex.name}${ex.equipment ? ` (${ex.equipment})` : ''}` === name ||
-        ex.name === name
+        `${ex.name}${ex.equipment ? ` (${ex.equipment})` : ''}` === name || ex.name === name
       ))
       .filter((ex): ex is Exercise => ex !== undefined)
       .filter(ex => {
@@ -297,11 +127,7 @@ export default function ExercisesScreen({ navigation }: Props) {
           <Image source={{ uri: item.image_url }} style={styles.exerciseImage} resizeMode="cover" />
         ) : (
           <View style={[styles.exerciseImage, styles.exerciseImagePlaceholder]}>
-            <Ionicons
-              name={isCardio ? 'bicycle-outline' : 'barbell-outline'}
-              size={26}
-              color={colors.textSecondary}
-            />
+            <Ionicons name={isCardio ? 'bicycle-outline' : 'barbell-outline'} size={26} color={colors.textSecondary} />
           </View>
         )}
         <View style={styles.exerciseCardRight}>
@@ -315,725 +141,185 @@ export default function ExercisesScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {/* Outer tab toggle */}
-      <View style={styles.tabRow}>
-        <TouchableOpacity
-          style={[styles.tabBtn, activeTab === 'exercises' && styles.tabBtnActive]}
-          onPress={() => setActiveTab('exercises')}
-        >
-          <Text style={[styles.tabBtnText, activeTab === 'exercises' && styles.tabBtnTextActive]}>
-            Exercises
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabBtn, activeTab === 'training' && styles.tabBtnActive]}
-          onPress={() => setActiveTab('training')}
-        >
-          <Text style={[styles.tabBtnText, activeTab === 'training' && styles.tabBtnTextActive]}>
-            Training
-          </Text>
+      {/* Title row */}
+      <View style={styles.titleRow}>
+        <Text style={styles.screenTitle}>Exercises</Text>
+        <TouchableOpacity style={styles.createBtn} onPress={() => setShowNewExerciseModal(true)}>
+          <Text style={styles.createBtnText}>Create</Text>
         </TouchableOpacity>
       </View>
 
-      {activeTab === 'exercises' ? (
-        <View style={styles.tabContent}>
-          {/* Top row: Create button + Search bar */}
-          <View style={styles.topRow}>
-            <TouchableOpacity style={styles.createBtn} onPress={() => setShowNewExerciseModal(true)}>
-              <Text style={styles.createBtnText}>Create</Text>
-            </TouchableOpacity>
-            <View style={styles.searchWrapper}>
-              <Ionicons name="search" size={16} color={colors.textSecondary} style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search exercises..."
-                placeholderTextColor={colors.placeholder}
-                value={search}
-                onChangeText={setSearch}
-              />
-              {search !== '' && (
-                <TouchableOpacity onPress={() => setSearch('')} style={styles.clearBtn}>
-                  <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-
-          {/* Filter row: muscle picker + equipment picker each with clear X */}
-          <View style={styles.pickerRow}>
-            <View style={styles.pickerGroup}>
-              <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowMuscleDropdown(true)}>
-                <Text style={styles.dropdownBtnText} numberOfLines={1}>
-                  {selectedMuscle === 'All' ? 'All Muscles' : selectedMuscle}
-                </Text>
-                <Text style={styles.dropdownArrow}>▾</Text>
-              </TouchableOpacity>
-              {selectedMuscle !== 'All' && (
-                <TouchableOpacity onPress={() => setSelectedMuscle('All')} style={styles.pickerClear}>
-                  <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
-                </TouchableOpacity>
-              )}
-            </View>
-            {selectedMuscle !== 'Cardio' && (
-              <View style={styles.pickerGroup}>
-                <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowEquipmentDropdown(true)}>
-                  <Text style={styles.dropdownBtnText} numberOfLines={1}>
-                    {selectedEquipment === 'All' ? 'All Equipment' : selectedEquipment}
-                  </Text>
-                  <Text style={styles.dropdownArrow}>▾</Text>
-                </TouchableOpacity>
-                {selectedEquipment !== 'All' && (
-                  <TouchableOpacity onPress={() => setSelectedEquipment('All')} style={styles.pickerClear}>
-                    <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </View>
-
-          {/* Muscle dropdown modal */}
-          <Modal visible={showMuscleDropdown} transparent animationType="fade">
-            <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setShowMuscleDropdown(false)}>
-              <View style={styles.dropdownList}>
-                {['All', 'Cardio', ...muscleGroups].map(item => (
-                  <TouchableOpacity
-                    key={item}
-                    style={[styles.dropdownItem, selectedMuscle === item && styles.dropdownItemActive]}
-                    onPress={() => { setSelectedMuscle(item); setShowMuscleDropdown(false); }}
-                  >
-                    <Text style={[styles.dropdownItemText, selectedMuscle === item && styles.dropdownItemTextActive]}>
-                      {item === 'All' ? 'All Muscles' : item}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </TouchableOpacity>
-          </Modal>
-
-          {/* Equipment dropdown modal */}
-          <Modal visible={showEquipmentDropdown} transparent animationType="fade">
-            <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setShowEquipmentDropdown(false)}>
-              <View style={styles.dropdownList}>
-                {['All', ...equipmentTypes].map(item => (
-                  <TouchableOpacity
-                    key={item}
-                    style={[styles.dropdownItem, selectedEquipment === item && styles.dropdownItemActive]}
-                    onPress={() => { setSelectedEquipment(item); setShowEquipmentDropdown(false); }}
-                  >
-                    <Text style={[styles.dropdownItemText, selectedEquipment === item && styles.dropdownItemTextActive]}>
-                      {item === 'All' ? 'All Equipment' : item}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </TouchableOpacity>
-          </Modal>
-
-          {/* Exercise list - SectionList when no search, FlatList when searching */}
-          {search ? (
-            <FlatList
-              data={filteredExercises}
-              keyExtractor={item => item.id.toString()}
-              renderItem={renderExerciseCard}
-              ListEmptyComponent={<Text style={styles.emptyText}>No exercises found</Text>}
-            />
-          ) : (
-            <SectionList
-              sections={[
-                ...(recentFiltered.length > 0 ? [{ title: 'Recent Exercises', data: recentFiltered }] : []),
-                { title: 'All Exercises', data: filteredExercises },
-              ]}
-              keyExtractor={item => item.id.toString()}
-              renderItem={({ item }) => renderExerciseCard({ item })}
-              renderSectionHeader={({ section }) => (
-                <Text style={styles.sectionHeader}>{section.title}</Text>
-              )}
-              ListEmptyComponent={<Text style={styles.emptyText}>No exercises found</Text>}
-            />
-          )}
-
-          <NewExerciseForm
-            visible={showNewExerciseModal}
-            onClose={() => setShowNewExerciseModal(false)}
-            onSave={(name, muscle) => {
-              addNewExercise(name, muscle);
-              setShowNewExerciseModal(false);
-            }}
-            muscleGroups={muscleGroups}
+      {/* Search */}
+      <View style={styles.topRow}>
+        <View style={styles.searchWrapper}>
+          <Ionicons name="search" size={16} color={colors.textSecondary} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search exercises..."
+            placeholderTextColor={colors.placeholder}
+            value={search}
+            onChangeText={setSearch}
           />
-        </View>
-      ) : (
-        <ScrollView style={styles.tabContent} contentContainerStyle={{ paddingBottom: spacing.lg }}>
-          {/* Active Routine Block */}
-          <TouchableOpacity
-            style={styles.activeBlock}
-            onPress={!activeRoutine ? handleActiveBlockPress : undefined}
-            activeOpacity={activeRoutine ? 1 : 0.7}
-          >
-            <Text style={styles.sectionLabel}>Active Routine</Text>
-            {activeRoutine ? (
-              <>
-                <View style={styles.activeRoutineNameRow}>
-                  <Text style={styles.activeRoutineName}>{activeRoutine.name}</Text>
-                  <TouchableOpacity
-                    style={styles.toggleDaysBtn}
-                    onPress={() => setDaysVisible(v => !v)}
-                  >
-                    <Text style={[styles.toggleDaysBtnText, { color: colors.accent }]}>
-                      {daysVisible ? 'Hide' : 'Show'}
-                    </Text>
-                    <Ionicons
-                      name={daysVisible ? 'chevron-up' : 'chevron-down'}
-                      size={14}
-                      color={colors.accent}
-                    />
-                  </TouchableOpacity>
-                </View>
-                {daysVisible && activeRoutine.days.map(day => (
-                  <View key={day.id} style={styles.dayRow}>
-                    <Text style={styles.dayLabel}>{day.label}</Text>
-                    <TouchableOpacity
-                      style={styles.logDayBtn}
-                      onPress={() => navigation.navigate('LogRoutine', {
-                        prefill: {
-                          name: day.label,
-                          notes: '',
-                          exercises: day.workout_template.exercises.map(ex => ({
-                            name: ex.name,
-                            sets: [{ reps: '', weight: '' }],
-                          })),
-                        },
-                      })}
-                    >
-                      <Text style={styles.logDayBtnText}>Log</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </>
-            ) : (
-              <Text style={styles.noRoutineText}>
-                {routines.length === 0
-                  ? 'No routines yet — tap to create one'
-                  : 'No active routine — tap to select one'}
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          {/* Templates Section */}
-          <View style={styles.sectionHeaderRow}>
-            <Text style={[styles.trainingSectionHeader, { marginBottom: 0 }]}>Templates</Text>
-            <TouchableOpacity onPress={createTemplate} style={styles.newTemplateBtn}>
-              <Ionicons name="add" size={16} color={colors.save} />
-              <Text style={styles.newTemplateBtnText}>New</Text>
+          {search !== '' && (
+            <TouchableOpacity onPress={() => setSearch('')} style={styles.clearBtn}>
+              <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
             </TouchableOpacity>
-          </View>
-          {templates.length === 0 ? (
-            <Text style={styles.emptyText}>No templates yet</Text>
-          ) : (
-            templates.map(t => (
-              <TouchableOpacity
-                key={t.id}
-                style={styles.card}
-                onPress={() => navigation.navigate('TemplateDetail', { templateId: t.id })}
-              >
-                <View style={styles.cardRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.cardName}>{t.name}</Text>
-                    <Text style={styles.cardSub}>{t.exercises.length} exercise{t.exercises.length !== 1 ? 's' : ''}</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.logInlineBtn}
-                    onPress={() => navigation.navigate('LogRoutine', {
-                      prefill: {
-                        name: t.name,
-                        notes: '',
-                        exercises: t.exercises.map(ex => ({
-                          name: ex.name,
-                          sets: [{ reps: '', weight: '' }],
-                        })),
-                      },
-                    })}
-                  >
-                    <Text style={styles.logInlineBtnText}>Log</Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
-            ))
           )}
+        </View>
+      </View>
 
-          {/* Routines Section */}
-          <Text style={[styles.trainingSectionHeader, { marginTop: spacing.md }]}>Routines</Text>
-          {routines.length === 0 ? (
-            <Text style={styles.emptyText}>No routines yet</Text>
-          ) : (
-            routines.map(item => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.card}
-                onPress={() => navigation.navigate('RoutineDetail', {
-                  routineId: item.id,
-                  routineName: item.name,
-                })}
-              >
-                <Text style={styles.cardName}>{item.name}</Text>
-                <Text style={styles.cardSub}>
-                  {item.day_count} {item.day_count === 1 ? 'day' : 'days'}
-                </Text>
-                {item.description ? (
-                  <Text style={styles.cardDesc} numberOfLines={1}>{item.description}</Text>
-                ) : null}
-              </TouchableOpacity>
-            ))
-          )}
-
-          <TouchableOpacity
-            style={styles.newRoutineButton}
-            onPress={() => navigation.navigate('CreateRoutine')}
-          >
-            <Text style={styles.newRoutineButtonText}>+ New Routine</Text>
+      {/* Filter row */}
+      <View style={styles.pickerRow}>
+        <View style={styles.pickerGroup}>
+          <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowMuscleDropdown(true)}>
+            <Text style={styles.dropdownBtnText} numberOfLines={1}>
+              {selectedMuscle === 'All' ? 'All Muscles' : selectedMuscle}
+            </Text>
+            <Text style={styles.dropdownArrow}>▾</Text>
           </TouchableOpacity>
-
-          {/* ── Coach Settings ── */}
-          <View style={styles.coachCard}>
-            <View style={styles.coachHeader}>
-              <Ionicons name="sparkles" size={16} color={colors.save} />
-              <Text style={styles.coachTitle}>AI Coach</Text>
-            </View>
-            <Text style={styles.coachDesc}>Set your preferences and generate a personalised routine or template.</Text>
-
-            {/* Days per week */}
-            <Text style={styles.coachLabel}>Days per week</Text>
-            <View style={styles.coachChipRow}>
-              {[1, 2, 3, 4, 5, 6, 7].map(d => (
-                <TouchableOpacity
-                  key={d}
-                  style={[styles.coachChip, coachDays === d && styles.coachChipActive]}
-                  onPress={() => { setCoachDays(d); saveCoachSettings(d, coachGoal, coachExp); }}
-                >
-                  <Text style={[styles.coachChipText, coachDays === d && styles.coachChipTextActive]}>{d}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Goal */}
-            <Text style={styles.coachLabel}>Training goal</Text>
-            <View style={styles.coachChipRow}>
-              {(['hypertrophy', 'strength', 'endurance', 'general'] as const).map(g => (
-                <TouchableOpacity
-                  key={g}
-                  style={[styles.coachChip, coachGoal === g && styles.coachChipActive]}
-                  onPress={() => { setCoachGoal(g); saveCoachSettings(coachDays, g, coachExp); }}
-                >
-                  <Text style={[styles.coachChipText, coachGoal === g && styles.coachChipTextActive]}>
-                    {g.charAt(0).toUpperCase() + g.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Experience */}
-            <Text style={styles.coachLabel}>Experience level</Text>
-            <View style={styles.coachChipRow}>
-              {(['beginner', 'intermediate', 'advanced'] as const).map(e => (
-                <TouchableOpacity
-                  key={e}
-                  style={[styles.coachChip, coachExp === e && styles.coachChipActive]}
-                  onPress={() => { setCoachExp(e); saveCoachSettings(coachDays, coachGoal, e); }}
-                >
-                  <Text style={[styles.coachChipText, coachExp === e && styles.coachChipTextActive]}>
-                    {e.charAt(0).toUpperCase() + e.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Generate buttons */}
-            <View style={styles.coachBtnRow}>
-              <TouchableOpacity
-                style={[styles.coachGenBtn, coachGenerating && { opacity: 0.6 }]}
-                onPress={() => handleGenerate('routine')}
-                disabled={coachGenerating}
-              >
-                <Ionicons name="calendar-outline" size={14} color="#fff" />
-                <Text style={styles.coachGenBtnText}>{coachGenerating ? 'Generating…' : 'Generate Routine'}</Text>
+          {selectedMuscle !== 'All' && (
+            <TouchableOpacity onPress={() => setSelectedMuscle('All')} style={styles.pickerClear}>
+              <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
+        {selectedMuscle !== 'Cardio' && (
+          <View style={styles.pickerGroup}>
+            <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowEquipmentDropdown(true)}>
+              <Text style={styles.dropdownBtnText} numberOfLines={1}>
+                {selectedEquipment === 'All' ? 'All Equipment' : selectedEquipment}
+              </Text>
+              <Text style={styles.dropdownArrow}>▾</Text>
+            </TouchableOpacity>
+            {selectedEquipment !== 'All' && (
+              <TouchableOpacity onPress={() => setSelectedEquipment('All')} style={styles.pickerClear}>
+                <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.coachGenBtnOutline, coachGenerating && { opacity: 0.6 }]}
-                onPress={() => handleGenerate('template')}
-                disabled={coachGenerating}
-              >
-                <Ionicons name="list-outline" size={14} color={colors.save} />
-                <Text style={styles.coachGenBtnOutlineText}>{coachGenerating ? 'Generating…' : 'Generate Template'}</Text>
-              </TouchableOpacity>
-            </View>
+            )}
           </View>
-        </ScrollView>
+        )}
+      </View>
+
+      {/* Muscle dropdown */}
+      <Modal visible={showMuscleDropdown} transparent animationType="fade">
+        <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setShowMuscleDropdown(false)}>
+          <View style={styles.dropdownList}>
+            {['All', 'Cardio', ...muscleGroups].map(item => (
+              <TouchableOpacity
+                key={item}
+                style={[styles.dropdownItem, selectedMuscle === item && styles.dropdownItemActive]}
+                onPress={() => { setSelectedMuscle(item); setShowMuscleDropdown(false); }}
+              >
+                <Text style={[styles.dropdownItemText, selectedMuscle === item && styles.dropdownItemTextActive]}>
+                  {item === 'All' ? 'All Muscles' : item}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Equipment dropdown */}
+      <Modal visible={showEquipmentDropdown} transparent animationType="fade">
+        <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setShowEquipmentDropdown(false)}>
+          <View style={styles.dropdownList}>
+            {['All', ...equipmentTypes].map(item => (
+              <TouchableOpacity
+                key={item}
+                style={[styles.dropdownItem, selectedEquipment === item && styles.dropdownItemActive]}
+                onPress={() => { setSelectedEquipment(item); setShowEquipmentDropdown(false); }}
+              >
+                <Text style={[styles.dropdownItemText, selectedEquipment === item && styles.dropdownItemTextActive]}>
+                  {item === 'All' ? 'All Equipment' : item}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Exercise list */}
+      {search ? (
+        <FlatList
+          data={filteredExercises}
+          keyExtractor={item => item.id.toString()}
+          renderItem={renderExerciseCard}
+          ListEmptyComponent={<Text style={styles.emptyText}>No exercises found</Text>}
+        />
+      ) : (
+        <SectionList
+          sections={[
+            ...(recentFiltered.length > 0 ? [{ title: 'Recent Exercises', data: recentFiltered }] : []),
+            { title: 'All Exercises', data: filteredExercises },
+          ]}
+          keyExtractor={item => item.id.toString()}
+          renderItem={({ item }) => renderExerciseCard({ item })}
+          renderSectionHeader={({ section }) => (
+            <Text style={styles.sectionHeader}>{section.title}</Text>
+          )}
+          ListEmptyComponent={<Text style={styles.emptyText}>No exercises found</Text>}
+        />
       )}
 
-      {/* Routine Picker Modal */}
-      <Modal visible={selectModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Select Active Routine</Text>
-            <FlatList
-              data={routines}
-              keyExtractor={item => item.id.toString()}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItem}
-                  onPress={() => activateRoutine(item.id)}
-                >
-                  <Text style={styles.modalItemName}>{item.name}</Text>
-                  <Text style={styles.modalItemSub}>{item.day_count} {item.day_count === 1 ? 'day' : 'days'}</Text>
-                </TouchableOpacity>
-              )}
-            />
-            <TouchableOpacity
-              style={styles.modalCancel}
-              onPress={() => setSelectModalVisible(false)}
-            >
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <NewExerciseForm
+        visible={showNewExerciseModal}
+        onClose={() => setShowNewExerciseModal(false)}
+        onSave={(name, muscle) => { addNewExercise(name, muscle); setShowNewExerciseModal(false); }}
+        muscleGroups={muscleGroups}
+      />
     </View>
   );
 }
 
 const createStyles = (colors: Colors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  tabRow: {
-    flexDirection: 'row',
-    margin: spacing.md,
-    borderRadius: spacing.sm,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  tabBtn: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-  },
-  tabBtnActive: { backgroundColor: colors.accent },
-  tabBtnText: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textSecondary },
-  tabBtnTextActive: { color: '#fff' },
-  tabContent: { flex: 1, paddingHorizontal: spacing.md },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
+  container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.md, paddingTop: spacing.md },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+  screenTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   createBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: spacing.sm,
-    paddingHorizontal: spacing.md,
-    height: 36,
-    justifyContent: 'center',
+    backgroundColor: colors.accent, borderRadius: spacing.sm,
+    paddingHorizontal: spacing.md, height: 36, justifyContent: 'center',
   },
-  createBtnText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: typography.fontSize.sm,
-  },
+  createBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.sm },
   searchWrapper: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: spacing.sm,
-    height: 36,
-    paddingHorizontal: spacing.sm,
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+    borderRadius: spacing.sm, height: 36, paddingHorizontal: spacing.sm,
   },
   searchIcon: { marginRight: 4 },
-  searchInput: {
-    flex: 1,
-    fontSize: typography.fontSize.sm,
-    color: colors.textPrimary,
-    height: 36,
-    padding: 0,
-  },
+  searchInput: { flex: 1, fontSize: typography.fontSize.sm, color: colors.textPrimary, height: 36, padding: 0 },
   clearBtn: { padding: 2 },
-  pickerRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  pickerGroup: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
+  pickerRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
+  pickerGroup: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
   pickerClear: { padding: 2 },
   dropdownBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    height: 36,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+    borderRadius: spacing.sm, paddingHorizontal: spacing.sm, height: 36,
   },
-  dropdownBtnText: {
-    fontSize: typography.fontSize.sm,
-    color: colors.textPrimary,
-    flex: 1,
-  },
-  dropdownArrow: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginLeft: 4,
-  },
-  dropdownOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dropdownList: {
-    backgroundColor: colors.surface,
-    borderRadius: spacing.sm,
-    width: '70%',
-    maxHeight: '60%',
-    overflow: 'hidden',
-  },
-  dropdownItem: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  dropdownItemActive: {
-    backgroundColor: colors.accent,
-  },
-  dropdownItemText: {
-    fontSize: typography.fontSize.md,
-    color: colors.textPrimary,
-  },
-  dropdownItemTextActive: {
-    color: '#fff',
-    fontWeight: '600',
-  },
+  dropdownBtnText: { fontSize: typography.fontSize.sm, color: colors.textPrimary, flex: 1 },
+  dropdownArrow: { fontSize: 12, color: colors.textSecondary, marginLeft: 4 },
+  dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+  dropdownList: { backgroundColor: colors.surface, borderRadius: spacing.sm, width: '70%', maxHeight: '60%', overflow: 'hidden' },
+  dropdownItem: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  dropdownItemActive: { backgroundColor: colors.accent },
+  dropdownItemText: { fontSize: typography.fontSize.md, color: colors.textPrimary },
+  dropdownItemTextActive: { color: '#fff', fontWeight: '600' },
   sectionHeader: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    paddingVertical: spacing.xs,
-    backgroundColor: colors.background,
+    fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary,
+    textTransform: 'uppercase', letterSpacing: 0.8,
+    paddingVertical: spacing.xs, backgroundColor: colors.background,
   },
   exerciseCard: {
-    backgroundColor: colors.surface,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    backgroundColor: colors.surface, borderRadius: spacing.sm,
+    padding: spacing.md, marginBottom: spacing.sm,
+    flexDirection: 'row', alignItems: 'center',
   },
   exerciseName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
   exerciseMuscle: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 1 },
   exerciseEquipment: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 1 },
-  exerciseImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
-    marginRight: spacing.sm,
-  },
-  exerciseImagePlaceholder: {
-    backgroundColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  exerciseCardRight: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  // Active Routine block
-  activeBlock: {
-    backgroundColor: colors.surface,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  sectionLabel: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: spacing.sm,
-  },
-  activeRoutineNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
-  activeRoutineName: {
-    fontSize: typography.fontSize.md,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    flex: 1,
-  },
-  toggleDaysBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingLeft: spacing.sm,
-  },
-  toggleDaysBtnText: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '600',
-  },
-  dayRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing.xs,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  dayLabel: { fontSize: typography.fontSize.md, color: colors.textPrimary },
-  logDayBtn: {
-    backgroundColor: colors.save,
-    borderRadius: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  logDayBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.sm },
-  noRoutineText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontStyle: 'italic' },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
-  newTemplateBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  newTemplateBtnText: {
-    color: colors.save,
-    fontWeight: '600',
-    fontSize: typography.fontSize.sm,
-  },
-  // Training section headers
-  trainingSectionHeader: {
-    fontSize: typography.fontSize.md,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: spacing.sm,
-  },
-  // Template/Routine cards
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  cardRow: { flexDirection: 'row', alignItems: 'center' },
-  cardName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
-  cardSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
-  logInlineBtn: {
-    backgroundColor: colors.save,
-    borderRadius: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  logInlineBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.sm },
-  cardDesc: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
-  newRoutineButton: {
-    backgroundColor: colors.save,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    alignItems: 'center',
-    marginTop: spacing.sm,
-  },
-  newRoutineButtonText: { color: '#fff', fontSize: typography.fontSize.md, fontWeight: '600' },
+  exerciseImage: { width: 64, height: 64, borderRadius: 8, marginRight: spacing.sm },
+  exerciseImagePlaceholder: { backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  exerciseCardRight: { flex: 1, justifyContent: 'center' },
   emptyText: { textAlign: 'center', color: colors.textSecondary, marginVertical: spacing.sm, fontSize: typography.fontSize.sm },
-  // Picker modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-  },
-  modalBox: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: spacing.md,
-    borderTopRightRadius: spacing.md,
-    padding: spacing.lg,
-    maxHeight: '60%',
-  },
-  modalTitle: {
-    fontSize: typography.fontSize.md,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: spacing.md,
-    textAlign: 'center',
-  },
-  modalItem: {
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  modalItemName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
-  modalItemSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
-  modalCancel: {
-    marginTop: spacing.md,
-    padding: spacing.md,
-    alignItems: 'center',
-  },
-  modalCancelText: { fontSize: typography.fontSize.md, color: colors.danger, fontWeight: '600' },
-
-  // Coach Settings
-  coachCard: {
-    marginTop: spacing.lg,
-    backgroundColor: colors.surface,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  coachHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  coachTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
-  coachDesc: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginBottom: spacing.md },
-  coachLabel: {
-    fontSize: 11, fontWeight: '700', color: colors.textSecondary,
-    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.xs,
-  },
-  coachChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.md },
-  coachChip: {
-    paddingHorizontal: spacing.sm, paddingVertical: 6,
-    borderRadius: spacing.xs, borderWidth: 1, borderColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  coachChipActive: { backgroundColor: colors.save, borderColor: colors.save },
-  coachChipText: { fontSize: typography.fontSize.sm, fontWeight: '500', color: colors.textSecondary },
-  coachChipTextActive: { color: '#fff', fontWeight: '700' },
-  coachBtnRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
-  coachGenBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 5, backgroundColor: colors.save, borderRadius: spacing.sm, paddingVertical: spacing.sm,
-  },
-  coachGenBtnText: { color: '#fff', fontWeight: '700', fontSize: typography.fontSize.sm },
-  coachGenBtnOutline: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 5, borderWidth: 1, borderColor: colors.save,
-    borderRadius: spacing.sm, paddingVertical: spacing.sm,
-  },
-  coachGenBtnOutlineText: { color: colors.save, fontWeight: '700', fontSize: typography.fontSize.sm },
 });

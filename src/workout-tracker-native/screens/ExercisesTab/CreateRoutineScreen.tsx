@@ -8,7 +8,6 @@ import {
 } from 'react-native-draggable-flatlist';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useAuth } from '../../context/AuthContext';
 import { ExercisesStackParamsList } from 'navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
@@ -16,7 +15,7 @@ import { typography } from 'theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
 import ExerciseListModal from '../../components/ExerciseList';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { apiFetch } from '../../utils/api';
 
 type Props = NativeStackScreenProps<ExercisesStackParamsList, 'CreateRoutine'>;
 
@@ -29,7 +28,6 @@ type DayEntry =
   | { mode: 'new'; label: string; exercises: Exercise[] };
 
 export default function CreateRoutineScreen({ navigation }: Props) {
-  const { token } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [routineName, setRoutineName] = useState('');
@@ -50,24 +48,21 @@ export default function CreateRoutineScreen({ navigation }: Props) {
 
   const fetchExercises = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/exercises`);
+      const res = await apiFetch('/api/exercises');
       if (res.ok) setExerciseList(await res.json());
     } catch {}
   };
 
   const fetchTemplates = async () => {
-    if (!token) return;
     try {
-      const res = await fetch(`${API_URL}/api/workout-templates`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch('/api/workout-templates');
       if (res.ok) setTemplates(await res.json());
     } catch {}
   };
 
   const addNewExerciseToLib = async (name: string, muscle: string) => {
     try {
-      const res = await fetch(`${API_URL}/api/exercises`, {
+      const res = await apiFetch('/api/exercises', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, muscle_group: muscle }),
@@ -130,9 +125,9 @@ export default function CreateRoutineScreen({ navigation }: Props) {
 
     setSaving(true);
     try {
-      const res = await fetch(`${API_URL}/api/routines`, {
+      const res = await apiFetch('/api/routines', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: routineName.trim(),
           description: description.trim() || null,

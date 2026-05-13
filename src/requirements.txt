@@ -1,4 +1,5 @@
 flask
+flask-limiter
 Flask-SQLAlchemy
 SQLAlchemy
 Flask-JWT-Extended
@@ -13,3 +14,5 @@ anthropic
 PyJWT
 cryptography
 requests
+Flask-Mail
+APScheduler

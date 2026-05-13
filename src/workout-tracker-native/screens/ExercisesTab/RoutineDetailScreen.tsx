@@ -16,7 +16,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { apiFetch } from '../../utils/api';
 
 type Props = NativeStackScreenProps<ExercisesStackParamsList, 'RoutineDetail'>;
 
@@ -36,7 +36,7 @@ type Routine = {
 
 export default function RoutineDetailScreen({ route, navigation }: Props) {
   const { routineId, routineName } = route.params;
-  const { token, user, updateUser } = useAuth();
+  const { user, updateUser } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [routine, setRoutine] = useState<Routine | null>(null);
@@ -47,9 +47,7 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
   const fetchRoutine = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/routines/${routineId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch(`/api/routines/${routineId}`);
       if (res.ok) {
         setRoutine(await res.json());
       } else {
@@ -62,7 +60,7 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
     }
   };
 
-  useFocusEffect(useCallback(() => { fetchRoutine(); }, [routineId, token]));
+  useFocusEffect(useCallback(() => { fetchRoutine(); }, [routineId]));
 
   const handleDelete = () => {
     Alert.alert('Delete Routine', `Delete "${routineName}"?`, [
@@ -72,9 +70,8 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
         style: 'destructive',
         onPress: async () => {
           try {
-            const res = await fetch(`${API_URL}/api/routines/${routineId}`, {
+            const res = await apiFetch(`/api/routines/${routineId}`, {
               method: 'DELETE',
-              headers: { Authorization: `Bearer ${token}` },
             });
             if (res.ok) {
               navigation.goBack();
@@ -90,15 +87,9 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
   };
 
   const handleToggleActive = async () => {
-    if (!token) return;
-    const url = isActive
-      ? `${API_URL}/api/routines/deactivate`
-      : `${API_URL}/api/routines/${routineId}/activate`;
+    const url = isActive ? '/api/routines/deactivate' : `/api/routines/${routineId}/activate`;
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch(url, { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
         updateUser({ active_routine_id: data.active_routine_id });

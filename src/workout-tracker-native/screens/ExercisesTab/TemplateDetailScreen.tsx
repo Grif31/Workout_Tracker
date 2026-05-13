@@ -7,7 +7,6 @@ import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-nativ
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useAuth } from '../../context/AuthContext';
 import { ExercisesStackParamsList } from 'navigation/types';
 import ExerciseListModal from '../../components/ExerciseList';
 import { useTheme, type Colors } from '../../context/ThemeContext';
@@ -15,7 +14,7 @@ import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { apiFetch } from '../../utils/api';
 
 type Props = NativeStackScreenProps<ExercisesStackParamsList, 'TemplateDetail'>;
 type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; image_url?: string };
@@ -23,7 +22,6 @@ type Template = { id: number; name: string; exercises: Exercise[] };
 
 export default function TemplateDetailScreen({ route, navigation }: Props) {
   const { templateId } = route.params;
-  const { token } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -38,10 +36,8 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
   const fetchTemplate = async () => {
     try {
       const [tmplRes, exRes] = await Promise.all([
-        fetch(`${API_URL}/api/workout-templates/${templateId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${API_URL}/api/exercises`),
+        apiFetch(`/api/workout-templates/${templateId}`),
+        apiFetch('/api/exercises'),
       ]);
       if (tmplRes.ok) {
         const data: Template = await tmplRes.json();
@@ -78,9 +74,9 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
     if (!name.trim()) { Alert.alert('Error', 'Template name is required'); return; }
     setSaving(true);
     try {
-      const res = await fetch(`${API_URL}/api/workout-templates/${templateId}`, {
+      const res = await apiFetch(`/api/workout-templates/${templateId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
           exercise_template_ids: exercises.map(e => e.id),
@@ -106,9 +102,8 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         text: 'Delete', style: 'destructive',
         onPress: async () => {
           try {
-            const res = await fetch(`${API_URL}/api/workout-templates/${templateId}`, {
+            const res = await apiFetch(`/api/workout-templates/${templateId}`, {
               method: 'DELETE',
-              headers: { Authorization: `Bearer ${token}` },
             });
             if (res.ok) navigation.goBack();
             else Alert.alert('Error', 'Failed to delete template');
@@ -218,12 +213,12 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         exercises={allExercises}
         onSelect={addExercise}
         onAddExercise={async (name, muscle) => {
-          const res = await fetch(`${API_URL}/api/exercises`, {
+          const res = await apiFetch('/api/exercises', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, muscle_group: muscle }),
           });
-          if (res.ok) setAllExercises(await (await fetch(`${API_URL}/api/exercises`)).json());
+          if (res.ok) setAllExercises(await (await apiFetch('/api/exercises')).json());
         }}
         muscleGroups={muscleGroups}
       />

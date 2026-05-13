@@ -1,16 +1,24 @@
+import hashlib
 import json
 import os
 import secrets
 import requests as http_requests
-from flask import Blueprint, request, jsonify
+from datetime import datetime, timedelta, timezone
+from flask import Blueprint, request, jsonify, current_app
+from flask_mail import Message
 from models import db, User
 from werkzeug.security import check_password_hash, generate_password_hash
-from flask_jwt_extended import create_access_token
+from flask_jwt_extended import (
+    create_access_token, create_refresh_token, jwt_required, get_jwt_identity,
+)
+from limiter import limiter
+from mail_ext import mail
 
 auth_bp = Blueprint('auth_bp', __name__)
 
 
 @auth_bp.route('/api/login', methods=['POST'])
+@limiter.limit('10 per minute')
 def login():
     data = request.get_json()
     # Accept either 'identifier' (new clients) or 'email' (backwards compat)
@@ -22,12 +30,14 @@ def login():
     ).first()
 
     if user and check_password_hash(user.password, password):
-        token = create_access_token(identity=str(user.id))
-        return jsonify({'access_token': token, **user.to_dict()}), 200
+        access  = create_access_token(identity=str(user.id))
+        refresh = create_refresh_token(identity=str(user.id))
+        return jsonify({'access_token': access, 'refresh_token': refresh, **user.to_dict()}), 200
     return jsonify({'message': 'Invalid credentials'}), 401
 
 
 @auth_bp.post('/api/signup')
+@limiter.limit('5 per minute')
 def signup():
     try:
         data = request.get_json()
@@ -49,17 +59,97 @@ def signup():
         db.session.add(new_user)
         db.session.commit()
 
-        token = create_access_token(identity=str(new_user.id))
-        return jsonify({'user': new_user.to_dict(), 'token': token, 'access_token': token}), 201
+        access  = create_access_token(identity=str(new_user.id))
+        refresh = create_refresh_token(identity=str(new_user.id))
+        return jsonify({'user': new_user.to_dict(), 'token': access, 'access_token': access, 'refresh_token': refresh}), 201
     except Exception:
         db.session.rollback()
+        current_app.logger.exception('Signup failed')
         return jsonify({'message': 'Internal server error'}), 500
 
 
+@auth_bp.post('/api/refresh')
+@jwt_required(refresh=True)
+def refresh():
+    user_id = get_jwt_identity()
+    new_access = create_access_token(identity=user_id)
+    return jsonify({'access_token': new_access}), 200
+
+
 @auth_bp.post('/api/forgot-password')
+@limiter.limit('5 per hour')
 def forgot_password():
-    # Stub — always returns 200 (email delivery deferred)
-    return jsonify({'message': 'If that email exists, a reset link has been sent.'}), 200
+    data  = request.get_json(silent=True) or {}
+    email = data.get('email', '').strip().lower()
+    # Always return the same message to prevent email enumeration
+    SAFE  = jsonify({'message': 'If that email is registered, a code has been sent.'}), 200
+    if not email:
+        return SAFE
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return SAFE
+    raw_otp = str(secrets.randbelow(900000) + 100000)  # always 6 digits: 100000–999999
+    user.reset_otp_hash   = hashlib.sha256(raw_otp.encode()).hexdigest()
+    user.reset_otp_expiry = datetime.now(timezone.utc) + timedelta(minutes=15)
+    db.session.commit()
+    _send_otp_email(user.email, raw_otp)
+    return SAFE
+
+
+@auth_bp.post('/api/reset-password')
+@limiter.limit('10 per hour')
+def reset_password():
+    data         = request.get_json(silent=True) or {}
+    email        = data.get('email', '').strip().lower()
+    otp          = str(data.get('otp', '')).strip()
+    new_password = data.get('new_password', '')
+    if not email or not otp or not new_password:
+        return jsonify({'message': 'Email, code, and new password are required.'}), 400
+    if len(new_password) < 6:
+        return jsonify({'message': 'Password must be at least 6 characters.'}), 400
+    user = User.query.filter_by(email=email).first()
+    INVALID = jsonify({'message': 'Invalid or expired code.'}), 400
+    if not user or not user.reset_otp_hash or not user.reset_otp_expiry:
+        return INVALID
+    if datetime.now(timezone.utc) > user.reset_otp_expiry.replace(tzinfo=timezone.utc):
+        return INVALID
+    if not secrets.compare_digest(hashlib.sha256(otp.encode()).hexdigest(), user.reset_otp_hash):
+        return INVALID
+    user.password         = generate_password_hash(new_password, method='pbkdf2:sha256')
+    user.reset_otp_hash   = None
+    user.reset_otp_expiry = None
+    user.is_social_only   = False
+    db.session.commit()
+    return jsonify({'message': 'Password reset successfully.'}), 200
+
+
+@auth_bp.post('/api/me/change-password')
+@jwt_required()
+@limiter.limit('10 per hour')
+def change_password():
+    user_id = int(get_jwt_identity())
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'message': 'User not found.'}), 404
+    if user.is_social_only:
+        return jsonify({'message': 'Your account uses social sign-in. Use Forgot Password to set a password.'}), 400
+    data       = request.get_json(silent=True) or {}
+    current_pw = data.get('current_password', '')
+    new_pw     = data.get('new_password', '')
+    confirm_pw = data.get('confirm_password', '')
+    if not current_pw or not new_pw or not confirm_pw:
+        return jsonify({'message': 'All fields are required.'}), 400
+    if new_pw != confirm_pw:
+        return jsonify({'message': 'New passwords do not match.'}), 400
+    if len(new_pw) < 6:
+        return jsonify({'message': 'Password must be at least 6 characters.'}), 400
+    if not check_password_hash(user.password, current_pw):
+        return jsonify({'message': 'Current password is incorrect.'}), 400
+    if current_pw == new_pw:
+        return jsonify({'message': 'New password must differ from your current password.'}), 400
+    user.password = generate_password_hash(new_pw, method='pbkdf2:sha256')
+    db.session.commit()
+    return jsonify({'message': 'Password changed successfully.'}), 200
 
 
 @auth_bp.post('/api/auth/social')
@@ -76,6 +166,7 @@ def social_auth():
     except ValueError as e:
         return jsonify({'message': str(e)}), 401
     except Exception:
+        current_app.logger.exception('Social token verification failed')
         return jsonify({'message': 'Could not verify social token'}), 401
 
     if not email:
@@ -87,15 +178,59 @@ def social_auth():
         base = email.split('@')[0]
         username = _unique_username(base)
         hashed = generate_password_hash(secrets.token_hex(32), method='pbkdf2:sha256')
-        user = User(email=email, username=username, password=hashed, name=display_name)
+        user = User(email=email, username=username, password=hashed, name=display_name, is_social_only=True)
         db.session.add(user)
         db.session.commit()
 
-    token_jwt = create_access_token(identity=str(user.id))
-    return jsonify({'access_token': token_jwt, **user.to_dict()}), 200
+    access  = create_access_token(identity=str(user.id))
+    refresh = create_refresh_token(identity=str(user.id))
+    return jsonify({'access_token': access, 'refresh_token': refresh, **user.to_dict()}), 200
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _send_otp_email(recipient: str, otp: str) -> None:
+    html = f"""<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#0D0D0D;font-family:-apple-system,sans-serif;">
+  <table width="100%" style="background:#0D0D0D;padding:40px 0;"><tr><td align="center">
+  <table width="480" style="background:#1C1C1E;border-radius:16px;border:1px solid #2C2C2E;">
+    <tr><td style="padding:32px 40px 0;text-align:center;">
+      <p style="font-size:12px;color:#8E8E93;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px;">Arete Fitness</p>
+      <h1 style="color:#fff;font-size:22px;font-weight:700;margin:0 0 8px;">Password Reset Code</h1>
+      <p style="color:#8E8E93;font-size:15px;margin:0;">Enter this code in the app to reset your password.</p>
+    </td></tr>
+    <tr><td style="padding:32px 40px;text-align:center;">
+      <div style="background:#0D0D0D;border-radius:12px;border:1px solid #2C2C2E;display:inline-block;padding:20px 48px;">
+        <span style="font-size:40px;font-weight:700;color:#30D158;letter-spacing:10px;">{otp}</span>
+      </div>
+      <p style="color:#8E8E93;font-size:13px;margin:16px 0 0;">Expires in <strong style="color:#fff;">15 minutes</strong></p>
+    </td></tr>
+    <tr><td style="border-top:1px solid #2C2C2E;padding:20px 40px;text-align:center;">
+      <p style="color:#636366;font-size:12px;margin:0;">If you didn&#39;t request this, ignore this email.</p>
+      <p style="color:#636366;font-size:12px;margin:6px 0 0;">
+        <a href="mailto:support@aretefitnessapp.com" style="color:#30D158;">support@aretefitnessapp.com</a>
+      </p>
+    </td></tr>
+  </table></td></tr></table>
+</body></html>"""
+    plain = (
+        f"Your Arete Fitness reset code: {otp}\n\n"
+        f"Expires in 15 minutes.\n"
+        f"If you didn't request this, ignore this email."
+    )
+    current_app.logger.info('OTP for %s: %s', recipient, otp)
+    try:
+        msg = Message(
+            subject='Your Arete Fitness reset code',
+            recipients=[recipient],
+            body=plain,
+            html=html,
+        )
+        mail.send(msg)
+    except Exception:
+        current_app.logger.exception('OTP email send failed for %s', recipient)
+
+
 
 def _extract_social_identity(provider: str, token: str):
     """Return (email, display_name) for the given OAuth token."""

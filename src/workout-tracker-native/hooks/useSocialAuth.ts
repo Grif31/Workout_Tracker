@@ -4,8 +4,7 @@ import * as Google from 'expo-auth-session/providers/google';
 import * as Facebook from 'expo-auth-session/providers/facebook';
 import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from '../context/AuthContext';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { apiFetch } from '../utils/api';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -32,14 +31,14 @@ export function useSocialAuth() {
 
   const socialLogin = async (provider: string, token: string) => {
     try {
-      const res = await fetch(`${API_URL}/api/auth/social`, {
+      const res = await apiFetch('/api/auth/social', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider, token }),
       });
       const data = await res.json();
       if (res.ok) {
-        await login(data, data.access_token);
+        await login(data, data.access_token, data.refresh_token);
       } else {
         Alert.alert('Sign In Failed', data.message || 'Could not sign in with social account.');
       }

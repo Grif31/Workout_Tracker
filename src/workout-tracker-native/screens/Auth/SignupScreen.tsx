@@ -9,18 +9,17 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Platform,
-  Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { AuthStackParamsList } from '../navigation/types';
-import { useAuth } from '../context/AuthContext';
-import SocialAuthButtons from '../components/SocialAuthButtons';
-import { useSocialAuth } from '../hooks/useSocialAuth';
-import { AUTH } from '../theme/authColors';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { AuthStackParamsList } from '../../navigation/types';
+import { useAuth } from '../../context/AuthContext';
+import SocialAuthButtons from '../../components/SocialAuthButtons';
+import { useSocialAuth } from '../../hooks/useSocialAuth';
+import { AUTH } from '../../theme/authColors';
+import { apiFetch } from '../../utils/api';
 
 type Props = NativeStackScreenProps<AuthStackParamsList, 'Signup'>;
 
@@ -53,14 +52,14 @@ export default function SignupScreen({ navigation }: Props) {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/signup`, {
+      const res = await apiFetch('/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username.trim(), email: email.trim(), password }),
       });
       const data = await res.json();
       if (res.ok) {
-        await login(data.user ?? data, data.token ?? data.access_token);
+        await login(data.user ?? data, data.token ?? data.access_token, data.refresh_token);
       } else {
         setError(data.message || 'Could not create account.');
       }
@@ -183,11 +182,11 @@ export default function SignupScreen({ navigation }: Props) {
           {/* Disclaimer */}
           <Text style={styles.disclaimer}>
             By creating an account, you agree to our{' '}
-            <Text style={styles.disclaimerLink} onPress={() => Alert.alert('Coming Soon', 'Terms & Conditions will be available soon.')}>
-              Terms &amp; Conditions
+            <Text style={styles.disclaimerLink} onPress={() => Linking.openURL(`${process.env.EXPO_PUBLIC_API_URL}/terms`)}>
+              Terms of Service
             </Text>
             {' '}and{' '}
-            <Text style={styles.disclaimerLink} onPress={() => Alert.alert('Coming Soon', 'Privacy Policy will be available soon.')}>
+            <Text style={styles.disclaimerLink} onPress={() => Linking.openURL(`${process.env.EXPO_PUBLIC_API_URL}/privacy`)}>
               Privacy Policy
             </Text>
           </Text>

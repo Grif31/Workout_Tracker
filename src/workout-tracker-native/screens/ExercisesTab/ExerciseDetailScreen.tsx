@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-gifted-charts';
 import { useAuth } from '../../context/AuthContext';
+import { apiFetch } from '../../utils/api';
 import { ExerciseDetailParams } from '../../navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
@@ -21,7 +22,6 @@ import MuscleDiagram from '../../components/MuscleDiagram';
 
 const CHART_WIDTH = Dimensions.get('window').width - spacing.md * 4;
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 type Props = {
   route: { params: ExerciseDetailParams };
@@ -99,7 +99,7 @@ const tabLabels: Array<{ key: 'about' | 'stats' | 'history'; label: string }> = 
 ];
 
 export default function ExerciseDetailScreen({ route, navigation }: Props) {
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const weightUnit: WeightUnit = (user?.weight_unit as WeightUnit) || 'lbs';
@@ -134,13 +134,10 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const stripHtml = (html: string) => html.replace(/<[^>]*>/g, '').trim();
 
   const fetchExerciseData = useCallback(async () => {
-    if (!token || !exerciseName) return;
+    if (!exerciseName) return;
     setLoading(true);
     try {
-      const res = await fetch(
-        `${API_URL}/api/stats/exercise?name=${encodeURIComponent(exerciseName)}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await apiFetch(`/api/stats/exercise?name=${encodeURIComponent(exerciseName)}`);
       if (!res.ok) return;
       const data = await res.json();
 
@@ -203,7 +200,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [exerciseName, token, weightUnit]);
+  }, [exerciseName, weightUnit]);
 
   const fetchWgerDetails = useCallback(async () => {
     if (!exerciseName) return;

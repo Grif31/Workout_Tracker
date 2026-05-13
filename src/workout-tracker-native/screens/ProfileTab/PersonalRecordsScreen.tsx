@@ -10,8 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { ProfileStackParamsList } from '../../navigation/types';
 import { spacing } from 'theme/spacing';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { apiFetch } from '../../utils/api';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'PersonalRecords'>;
 
@@ -43,7 +42,7 @@ type CardioEntry =
 type CardioSection = { title: string; exercise_template_id: number; data: CardioEntry[] };
 
 export default function PersonalRecordsScreen({ navigation }: Props) {
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const unit = user?.weight_unit || 'lbs';
@@ -55,17 +54,14 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
   useFocusEffect(useCallback(() => {
     let alive = true;
     (async () => {
-      if (!token) return;
       try {
-        const res = await fetch(`${API_URL}/api/personal-records`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await apiFetch('/api/personal-records');
         if (res.ok && alive) setPrs(await res.json());
       } catch {}
       if (alive) setLoading(false);
     })();
     return () => { alive = false; };
-  }, [token]));
+  }, []));
 
   // ── Max Weight tab data ────────────────────────────────────────────────────
   const weightRows = useMemo(() =>

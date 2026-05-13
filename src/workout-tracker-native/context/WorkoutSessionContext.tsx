@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useState } from 'react';
+import { cancelLiveWorkoutNotification } from '../utils/notifications';
 
 export type SessionSet = {
   id?: number;
@@ -38,20 +39,28 @@ type WorkoutSessionCtx = {
   session: MinimizedSession | null;
   saveSession: (s: MinimizedSession) => void;
   clearSession: () => void;
+  isWorkoutOpen: boolean;
+  setWorkoutOpen: (open: boolean) => void;
 };
 
 const WorkoutSessionContext = createContext<WorkoutSessionCtx>({
   session: null,
   saveSession: () => {},
   clearSession: () => {},
+  isWorkoutOpen: false,
+  setWorkoutOpen: () => {},
 });
 
 export function WorkoutSessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<MinimizedSession | null>(null);
+  const [isWorkoutOpen, setWorkoutOpen] = useState(false);
   const saveSession = useCallback((s: MinimizedSession) => setSession(s), []);
-  const clearSession = useCallback(() => setSession(null), []);
+  const clearSession = useCallback(() => {
+    cancelLiveWorkoutNotification();
+    setSession(null);
+  }, []);
   return (
-    <WorkoutSessionContext.Provider value={{ session, saveSession, clearSession }}>
+    <WorkoutSessionContext.Provider value={{ session, saveSession, clearSession, isWorkoutOpen, setWorkoutOpen }}>
       {children}
     </WorkoutSessionContext.Provider>
   );

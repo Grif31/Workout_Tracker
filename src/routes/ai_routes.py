@@ -1,6 +1,6 @@
 import os
 import json
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, WorkoutTemplate, ExerciseTemplate, Routine, RoutineDay
 
@@ -128,5 +128,6 @@ def generate_workout():
         return jsonify({'message': 'anthropic package not installed — run pip install anthropic'}), 503
     except json.JSONDecodeError as e:
         return jsonify({'message': f'AI returned malformed JSON: {e}'}), 500
-    except Exception as e:
-        return jsonify({'message': f'Generation failed: {e}'}), 500
+    except Exception:
+        current_app.logger.exception('AI generation failed')
+        return jsonify({'message': 'Generation failed'}), 500

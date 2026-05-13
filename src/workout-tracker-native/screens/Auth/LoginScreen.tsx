@@ -13,13 +13,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { AuthStackParamsList } from '../navigation/types';
-import { useAuth } from '../context/AuthContext';
-import SocialAuthButtons from '../components/SocialAuthButtons';
-import { useSocialAuth } from '../hooks/useSocialAuth';
-import { AUTH } from '../theme/authColors';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { AuthStackParamsList } from '../../navigation/types';
+import { useAuth } from '../../context/AuthContext';
+import SocialAuthButtons from '../../components/SocialAuthButtons';
+import { useSocialAuth } from '../../hooks/useSocialAuth';
+import { AUTH } from '../../theme/authColors';
+import { apiFetch } from '../../utils/api';
 
 type Props = NativeStackScreenProps<AuthStackParamsList, 'Login'>;
 
@@ -41,14 +40,14 @@ export default function LoginScreen({ navigation }: Props) {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/login`, {
+      const res = await apiFetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier: identifier.trim(), password }),
       });
       const data = await res.json();
       if (res.ok) {
-        await login(data, data.access_token);
+        await login(data, data.access_token, data.refresh_token);
       } else {
         setError(data.message || 'Invalid credentials.');
       }
