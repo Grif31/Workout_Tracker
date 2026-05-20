@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Dimensions, ActivityIndicator,
@@ -7,7 +7,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import ConfettiCannon from 'react-native-confetti-cannon';
-import { useTheme } from '../../context/ThemeContext';
+import { useTheme, type Colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
 import MuscleDiagram from '../../components/MuscleDiagram';
@@ -23,6 +23,7 @@ type ExerciseData = { id: number; name: string; sets: SetData[] };
 export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const { workoutId, workoutName, prs, totalVolume, totalReps, totalSets, muscles, isFirstWorkout } = route.params;
   const { colors } = useTheme();
+  const s = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
   const weightUnit = user?.weight_unit ?? 'lbs';
   const confettiRef = useRef<ConfettiCannon>(null);
@@ -50,34 +51,6 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
     }
   }, []);
 
-  const s = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.background },
-    header: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20, paddingTop: 56, paddingBottom: 8 },
-    closeBtn: { padding: 8 },
-    closeText: { fontSize: 22, color: colors.textSecondary },
-    hero: { alignItems: 'center', paddingHorizontal: 24, paddingBottom: 20 },
-    trophy: { fontSize: 48, marginBottom: 8 },
-    headline: { fontSize: 22, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
-    subline: { fontSize: 15, color: colors.textSecondary, marginTop: 4, textAlign: 'center' },
-    section: { paddingHorizontal: 20, marginBottom: 20 },
-    prDropdownHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFD700', borderRadius: 10, padding: 12, marginBottom: 8 },
-    prBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF3C4', borderRadius: 10, padding: 12, marginBottom: 8 },
-    prIcon: { fontSize: 18, marginRight: 8 },
-    prText: { fontSize: 14, fontWeight: '600', color: '#000', flex: 1 },
-    prChevron: { fontSize: 13, color: '#7A5800', marginLeft: 4 },
-    statsRow: { flexDirection: 'row', gap: 10 },
-    statBox: { flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 14, alignItems: 'center' },
-    statValue: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
-    statLabel: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-    diagramCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 16, alignItems: 'center' },
-    diagramTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 12 },
-    exCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 10 },
-    exName: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
-    setBadge: { backgroundColor: colors.background, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-    setBadgeText: { fontSize: 12, color: colors.textSecondary },
-    detailsBtn: { backgroundColor: colors.accent, borderRadius: 12, margin: 20, marginTop: 4, padding: 16, alignItems: 'center' },
-    detailsBtnText: { color: colors.accentText, fontSize: 16, fontWeight: '600' },
-  });
 
   function goToDetails() {
     navigation.replace('WorkoutDetails', { workoutId });
@@ -211,3 +184,32 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
     </View>
   );
 }
+
+const createStyles = (colors: Colors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
+  header: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20, paddingTop: 56, paddingBottom: 8 },
+  closeBtn: { padding: 8 },
+  closeText: { fontSize: 22, color: colors.textSecondary },
+  hero: { alignItems: 'center', paddingHorizontal: 24, paddingBottom: 20 },
+  trophy: { fontSize: 48, marginBottom: 8 },
+  headline: { fontSize: 22, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
+  subline: { fontSize: 15, color: colors.textSecondary, marginTop: 4, textAlign: 'center' },
+  section: { paddingHorizontal: 20, marginBottom: 20 },
+  prDropdownHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFD700', borderRadius: 10, padding: 12, marginBottom: 8 },
+  prBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF3C4', borderRadius: 10, padding: 12, marginBottom: 8 },
+  prIcon: { fontSize: 18, marginRight: 8 },
+  prText: { fontSize: 14, fontWeight: '600', color: '#7A5800', flex: 1 },
+  prChevron: { fontSize: 13, color: '#7A5800', marginLeft: 4 },
+  statsRow: { flexDirection: 'row', gap: 10 },
+  statBox: { flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 14, alignItems: 'center' },
+  statValue: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
+  statLabel: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  diagramCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 16, alignItems: 'center' },
+  diagramTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 12 },
+  exCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 10 },
+  exName: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
+  setBadge: { backgroundColor: colors.background, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  setBadgeText: { fontSize: 12, color: colors.textSecondary },
+  detailsBtn: { backgroundColor: colors.accent, borderRadius: 12, margin: 20, marginTop: 4, padding: 16, alignItems: 'center' },
+  detailsBtnText: { color: colors.accentText, fontSize: 16, fontWeight: '600' },
+});

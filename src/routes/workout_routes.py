@@ -1,9 +1,14 @@
 from datetime import datetime
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, g
 from models import db, Workout, Set, Exercise, PersonalRecord, ExerciseTemplate, User
 from flask_jwt_extended import  jwt_required, get_jwt_identity
+from schemas import WorkoutSchema, UpdateWorkoutSchema
+from utils.validation import validate_body
 
 workout_bp = Blueprint('workout_bp', __name__)
+
+_workout_schema        = WorkoutSchema()
+_update_workout_schema = UpdateWorkoutSchema()
 
 
 CARDIO_DISTANCE_MILESTONES = [
@@ -256,8 +261,11 @@ def get_recent_workouts():
             # muscle group via ExerciseTemplate if linked
             if ex.exercise_template_id:
                 tmpl = ExerciseTemplate.query.get(ex.exercise_template_id)
-                if tmpl and tmpl.muscle_group and tmpl.muscle_group not in muscles:
-                    muscles.append(tmpl.muscle_group)
+                if tmpl and tmpl.muscle_group:
+                    for m in tmpl.muscle_group.split(','):
+                        m = m.strip()
+                        if m and m not in muscles:
+                            muscles.append(m)
             for s in ex.sets:
                 set_ids.append(s.id)
                 if s.reps:
@@ -319,10 +327,11 @@ def get_workout_details(workout_id):
 
 @workout_bp.post('/api/workouts')
 @jwt_required()
+@validate_body(_workout_schema)
 def add_workout():
     try:
         current_user_id = get_jwt_identity()
-        data = request.get_json()
+        data = g.validated
         name = data.get('workoutName')
         notes = data.get('notes')
         exercises = data.get('exercises', [])
@@ -344,6 +353,7 @@ def add_workout():
                 order=ex.get('order', ex_index),
                 exercise_type=ex.get('exercise_type', 'strength'),
                 route_polyline=ex.get('route_polyline'),
+                notes=ex.get('notes'),
             )
             db.session.add(new_ex)
             db.session.flush()
@@ -382,8 +392,11 @@ def add_workout():
         for ex, sets in exercise_set_pairs:
             if ex.exercise_template_id:
                 tmpl = db.session.get(ExerciseTemplate, ex.exercise_template_id)
-                if tmpl and tmpl.muscle_group and tmpl.muscle_group not in muscles_worked:
-                    muscles_worked.append(tmpl.muscle_group)
+                if tmpl and tmpl.muscle_group:
+                    for m in tmpl.muscle_group.split(','):
+                        m = m.strip()
+                        if m and m not in muscles_worked:
+                            muscles_worked.append(m)
             for s in sets:
                 if s.reps:
                     total_reps += s.reps
@@ -426,17 +439,18 @@ def delete_workout(workoutId):
 
 @workout_bp.route('/api/workouts/<int:workout_id>', methods=['PUT', 'PATCH'])
 @jwt_required()
+@validate_body(_update_workout_schema)
 def update_workout(workout_id):
     current_user_id = get_jwt_identity()
     workout = Workout.query.filter_by(user_id=current_user_id, id=workout_id).first()
-    
+
     if not workout:
         return jsonify({'error': 'workout not found'}), 404
+
+    data = g.validated
     
-    data = request.get_json()
-    
-    if 'name' in data:
-        workout.name = data['name']
+    if 'workoutName' in data:
+        workout.name = data['workoutName']
     if 'date' in data: 
         try: 
             workout.date = datetime.strptime(data['date'], "%Y-%m-%d").date()
@@ -470,6 +484,8 @@ def update_workout(workout_id):
                     ex.exercise_type = exData["exercise_type"]
                 if "route_polyline" in exData:
                     ex.route_polyline = exData["route_polyline"]
+                if "notes" in exData:
+                    ex.notes = exData.get("notes")
                 ex.order = exData.get('order', ex_index)
 
                 setIds = {s.id for s in ex.sets}
@@ -520,6 +536,7 @@ def update_workout(workout_id):
                     order=exData.get('order', ex_index),
                     exercise_type=exData.get('exercise_type', 'strength'),
                     route_polyline=exData.get('route_polyline'),
+                    notes=exData.get('notes'),
                 )
                 for set_index, s in enumerate(exData.get("sets", [])):
                     new_ex.sets.append(Set(

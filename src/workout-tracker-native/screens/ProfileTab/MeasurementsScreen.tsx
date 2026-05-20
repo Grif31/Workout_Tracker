@@ -28,7 +28,7 @@ import { apiFetch } from '../../utils/api';
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'Measurements'>;
 
 type BWLog      = { id: number; weight: number; date: string };
-type Measurement = { id: number; date: string; waist: number|null; chest: number|null; Rarm: number|null; Larm: number|null; Rleg: number|null; Lleg: number|null };
+type Measurement = { id: number; date: string; waist: number|null; chest: number|null; right_arm: number|null; left_arm: number|null; right_leg: number|null; left_leg: number|null };
 type Photo       = { id: number; date: string; photo_url: string; notes: string|null };
 
 type Tab = 'bodyweight' | 'measurements' | 'photos';
@@ -147,14 +147,14 @@ export default function MeasurementsScreen({ navigation }: Props) {
 
   // ── Measurements handlers ──────────────────────────────────
   const handleMSave = async () => {
-    const waist = mWaist ? parseFloat(mWaist) : null;
-    const chest = mChest ? parseFloat(mChest) : null;
-    const Rarm  = mRArm  ? parseFloat(mRArm)  : null;
-    const Larm = mLArm ? parseFloat(mLArm) : null;
-    const Rleg  = mRLeg  ? parseFloat(mRLeg)  : null;
-    const Lleg = mLLeg ? parseFloat(mLLeg) : null;
+    const waist     = mWaist ? parseFloat(mWaist) : null;
+    const chest     = mChest ? parseFloat(mChest) : null;
+    const right_arm = mRArm  ? parseFloat(mRArm)  : null;
+    const left_arm  = mLArm  ? parseFloat(mLArm)  : null;
+    const right_leg = mRLeg  ? parseFloat(mRLeg)  : null;
+    const left_leg  = mLLeg  ? parseFloat(mLLeg)  : null;
 
-    if ([waist, chest, Rarm, Larm, Rleg, Lleg].every(v => v === null)) {
+    if ([waist, chest, right_arm, left_arm, right_leg, left_leg].every(v => v === null)) {
       Alert.alert('Empty', 'Enter at least one measurement.');
       return;
     }
@@ -163,7 +163,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
       const res = await apiFetch('/api/measurements', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ waist, chest, Rarm, Larm, Rleg, Lleg }),
+        body: JSON.stringify({ waist, chest, right_arm, left_arm, right_leg, left_leg }),
       });
       if (res.ok) {
         const entry = await res.json();
@@ -340,9 +340,16 @@ export default function MeasurementsScreen({ navigation }: Props) {
           <View>
             {/* Latest values */}
             <View style={styles.statsGrid}>
-              {(['waist', 'chest', 'Rarm', 'Larm', 'Rleg', 'Lleg'] as const).map(key => (
+              {([
+                ['waist', 'Waist'],
+                ['chest', 'Chest'],
+                ['right_arm', 'R Arm'],
+                ['left_arm', 'L Arm'],
+                ['right_leg', 'R Leg'],
+                ['left_leg', 'L Leg'],
+              ] as [keyof Measurement, string][]).map(([key, label]) => (
                 <View key={key} style={styles.statBox}>
-                  <Text style={styles.statBoxLabel}>{key.charAt(0).toUpperCase() + key.slice(1)}</Text>
+                  <Text style={styles.statBoxLabel}>{label}</Text>
                   <Text style={styles.statBoxValue}>
                     {latestM?.[key] != null ? `${latestM[key]}` : '—'}
                   </Text>
@@ -356,9 +363,15 @@ export default function MeasurementsScreen({ navigation }: Props) {
           <Text style={styles.emptyText}>No measurements yet — tap + to log.</Text>
         }
         renderItem={({ item }) => {
-          const parts = (['waist', 'chest', 'Rarm', 'Larm', 'Rleg', 'Lleg'] as const)
+          const LABELS: Record<keyof Measurement, string> = {
+            id: '', user_id: '', date: '',
+            waist: 'Waist', chest: 'Chest',
+            right_arm: 'R Arm', left_arm: 'L Arm',
+            right_leg: 'R Leg', left_leg: 'L Leg',
+          };
+          const parts = (['waist', 'chest', 'right_arm', 'left_arm', 'right_leg', 'left_leg'] as const)
             .filter(k => item[k] != null)
-            .map(k => `${k}: ${item[k]}`);
+            .map(k => `${LABELS[k]}: ${item[k]}`);
           return (
             <View style={styles.logRow}>
               <View style={{ flex: 1 }}>
@@ -504,22 +517,24 @@ export default function MeasurementsScreen({ navigation }: Props) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Log Measurements</Text>
-            {(['Waist', 'Chest', 'Arms', 'Legs'] as const).map((label) => {
-              const key = label.toLowerCase() as 'waist' | 'chest' | 'Rarm' | 'legs';
-              const vals: Record<string, string> = { waist: mWaist, chest: mChest, Rarm: mRArm, Larm: mLArm, Rleg: mRLeg, Lleg: mLLeg };
-              const setters: Record<string, (v: string) => void> = { waist: setMWaist, chest: setMChest, Rarm: setMRArm, Larm: setMLArm, Rleg: setMRLeg, Lleg: setMLLeg };
-              return (
-                <TextInput
-                  key={key}
-                  style={[styles.modalInput, { marginBottom: spacing.sm }]}
-                  placeholder={`${label} (optional)`}
-                  placeholderTextColor={colors.placeholder}
-                  keyboardType="decimal-pad"
-                  value={vals[key]}
-                  onChangeText={setters[key]}
-                />
-              );
-            })}
+            {([
+              ['Waist', mWaist, setMWaist],
+              ['Chest', mChest, setMChest],
+              ['Right Arm', mRArm, setMRArm],
+              ['Left Arm', mLArm, setMLArm],
+              ['Right Leg', mRLeg, setMRLeg],
+              ['Left Leg', mLLeg, setMLLeg],
+            ] as [string, string, (v: string) => void][]).map(([label, value, setter]) => (
+              <TextInput
+                key={label}
+                style={[styles.modalInput, { marginBottom: spacing.sm }]}
+                placeholder={`${label} (optional)`}
+                placeholderTextColor={colors.placeholder}
+                keyboardType="decimal-pad"
+                value={value}
+                onChangeText={setter}
+              />
+            ))}
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={[styles.modalBtn, styles.cancelBtn]}

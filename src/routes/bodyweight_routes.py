@@ -1,9 +1,13 @@
 from datetime import datetime
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, BodyweightLog, User
+from schemas import BodyweightSchema
+from utils.validation import validate_body
 
 bodyweight_bp = Blueprint('bodyweight_bp', __name__)
+
+_bodyweight_schema = BodyweightSchema()
 
 
 @bodyweight_bp.get('/api/bodyweight')
@@ -21,13 +25,14 @@ def get_bodyweight_logs():
 
 @bodyweight_bp.post('/api/bodyweight')
 @jwt_required()
+@validate_body(_bodyweight_schema)
 def log_bodyweight():
     user_id = get_jwt_identity()
-    data = request.get_json()
-    weight = data.get('weight')
+    data = g.validated
+    weight = data['weight']
     date_str = data.get('date')
 
-    if not weight or float(weight) <= 0:
+    if weight <= 0:
         return jsonify({'message': 'A valid weight is required'}), 400
 
     date = datetime.fromisoformat(date_str) if date_str else datetime.now()

@@ -10,9 +10,10 @@ Tests for routine routes:
 """
 
 
-def create_exercise(client, name='Squat', muscle='Quads'):
-    client.post('/api/exercises', json={'name': name, 'muscle_group': muscle})
-    exercises = client.get('/api/exercises').get_json()
+def create_exercise(client, auth_token, name='Squat', muscle='Quads'):
+    hdrs = {'Authorization': f'Bearer {auth_token}'}
+    client.post('/api/exercises', json={'name': name, 'muscle_group': muscle}, headers=hdrs)
+    exercises = client.get('/api/exercises', headers=hdrs).get_json()
     return next(e['id'] for e in exercises if e['name'] == name)
 
 
@@ -45,7 +46,7 @@ class TestCreateRoutine:
         assert res.get_json()['day_count'] == 3
 
     def test_create_days_with_exercises(self, client, auth_token):
-        ex_id = create_exercise(client, 'Bench Press', 'Chest')
+        ex_id = create_exercise(client, auth_token, 'Bench Press', 'Chest')
         days = [{'label': 'Push', 'exercise_template_ids': [ex_id]}]
         res = create_routine(client, auth_token, 'Push Routine', days)
         assert res.status_code == 201

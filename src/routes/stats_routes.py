@@ -32,10 +32,12 @@ def exercise_stats():
         return _cardio_exercise_stats(name, rows)
 
     from collections import defaultdict
-    workout_map = defaultdict(lambda: {'workout': None, 'sets': []})
+    workout_map = defaultdict(lambda: {'workout': None, 'sets': [], 'notes': None})
     for exercise, workout in rows:
         key = workout.id
         workout_map[key]['workout'] = workout
+        if exercise.notes and workout_map[key]['notes'] is None:
+            workout_map[key]['notes'] = exercise.notes
         for s in exercise.sets:
             workout_map[key]['sets'].append({'reps': s.reps, 'weight': s.weight, 'set_type': s.set_type or 'N'})
 
@@ -75,6 +77,7 @@ def exercise_stats():
             'volume': round(session_volume, 1),
             'best_set': best_set,
             'sets': sets,
+            'notes': data.get('notes'),
         })
 
     personal_bests = {

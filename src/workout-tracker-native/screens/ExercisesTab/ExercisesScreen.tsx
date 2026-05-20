@@ -65,12 +65,12 @@ export default function ExercisesScreen({ navigation }: Props) {
     fetchRecentExercises();
   }, []));
 
-  const addNewExercise = async (name: string, muscle: string) => {
+  const addNewExercise = async (name: string, muscle: string, equipment: string) => {
     try {
       const res = await apiFetch('/api/exercises', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, muscle_group: muscle }),
+        body: JSON.stringify({ name, muscle_group: muscle, equipment }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -88,7 +88,7 @@ export default function ExercisesScreen({ navigation }: Props) {
     const matchSearch = ex.name.toLowerCase().includes(search.toLowerCase());
     if (selectedMuscle === 'Cardio') return matchSearch && ex.exercise_type === 'cardio';
     if (ex.exercise_type === 'cardio') return false;
-    const matchMuscle = selectedMuscle === 'All' || ex.muscle_group === selectedMuscle;
+    const matchMuscle = selectedMuscle === 'All' || ex.muscle_group?.split(',').map(m => m.trim()).includes(selectedMuscle);
     const matchEquipment = selectedEquipment === 'All' || ex.equipment === selectedEquipment;
     return matchSearch && matchMuscle && matchEquipment;
   }), [exerciseList, search, selectedMuscle, selectedEquipment]);
@@ -103,7 +103,7 @@ export default function ExercisesScreen({ navigation }: Props) {
       .filter(ex => {
         if (selectedMuscle === 'Cardio') return ex.exercise_type === 'cardio';
         if (ex.exercise_type === 'cardio') return false;
-        const matchMuscle = selectedMuscle === 'All' || ex.muscle_group === selectedMuscle;
+        const matchMuscle = selectedMuscle === 'All' || ex.muscle_group?.split(',').map(m => m.trim()).includes(selectedMuscle);
         const matchEquipment = selectedEquipment === 'All' || ex.equipment === selectedEquipment;
         return matchMuscle && matchEquipment;
       })
@@ -264,7 +264,7 @@ export default function ExercisesScreen({ navigation }: Props) {
       <NewExerciseForm
         visible={showNewExerciseModal}
         onClose={() => setShowNewExerciseModal(false)}
-        onSave={(name, muscle) => { addNewExercise(name, muscle); setShowNewExerciseModal(false); }}
+        onSave={(name, muscle, equipment) => { addNewExercise(name, muscle, equipment); setShowNewExerciseModal(false); }}
         muscleGroups={muscleGroups}
       />
     </View>

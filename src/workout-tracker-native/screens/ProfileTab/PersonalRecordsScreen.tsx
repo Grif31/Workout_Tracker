@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  View, Text, FlatList, SectionList,
+  View, Text, FlatList, SectionList, ScrollView,
   TouchableOpacity, StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -23,6 +23,7 @@ export type PR = {
   value: number;
   weight_context: number | null;
   achieved_at: string;
+  muscle_group: string;
 };
 
 const TABS = [
@@ -31,11 +32,14 @@ const TABS = [
   { key: 'cardio'     as const, label: 'Cardio'      },
 ];
 
-// One entry in the per-exercise reps list
 type RepsEntry = { weight: number; reps: number; achieved_at: string };
-type RepsSection = { title: string; exercise_template_id: number; data: RepsEntry[] };
+type RepsSection = {
+  title: string;
+  exercise_template_id: number;
+  muscle_group: string;
+  data: RepsEntry[];
+};
 
-// Cardio PR section data
 type CardioEntry =
   | { kind: 'time'; label: string; time_min: number; achieved_at: string }
   | { kind: 'distance'; label: string; distance_km: number; achieved_at: string };
@@ -50,6 +54,16 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
   const [prs, setPrs]             = useState<PR[]>([]);
   const [loading, setLoading]     = useState(true);
   const [activeTab, setActiveTab] = useState<'max_weight' | 'max_reps' | 'cardio'>('max_weight');
+  const [sortBy, setSortBy]       = useState<'default' | 'muscle'>('default');
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+
+  const toggleExpanded = (id: number) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   useFocusEffect(useCallback(() => {
     let alive = true;
@@ -63,22 +77,31 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
     return () => { alive = false; };
   }, []));
 
-  // ── Max Weight tab data ────────────────────────────────────────────────────
+  // ── Max Weight ─────────────────────────────────────────────────────────────
   const weightRows = useMemo(() =>
-    prs
-      .filter(p => p.pr_type === 'max_weight')
-      .sort((a, b) => b.value - a.value),
+    prs.filter(p => p.pr_type === 'max_weight').sort((a, b) => b.value - a.value),
     [prs],
   );
 
-  // Estimated 1RM lookup for secondary display
+  const weightByMuscle = useMemo(() => {
+    const map = new Map<string, PR[]>();
+    weightRows.forEach(pr => {
+      const m = pr.muscle_group || 'Other';
+      if (!map.has(m)) map.set(m, []);
+      map.get(m)!.push(pr);
+    });
+    return [...map.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([title, data]) => ({ title, data }));
+  }, [weightRows]);
+
   const est1rmMap = useMemo(() => {
     const m: Record<number, number> = {};
     prs.filter(p => p.pr_type === 'estimated_1rm').forEach(p => { m[p.exercise_template_id] = p.value; });
     return m;
   }, [prs]);
 
-  // ── Max Reps tab data (grouped by exercise) ────────────────────────────────
+  // ── Max Reps ───────────────────────────────────────────────────────────────
   const repsSections: RepsSection[] = useMemo(() => {
     const map = new Map<number, RepsSection>();
     prs
@@ -88,6 +111,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
           map.set(p.exercise_template_id, {
             title: p.exercise_name,
             exercise_template_id: p.exercise_template_id,
+            muscle_group: p.muscle_group || 'Other',
             data: [],
           });
         }
@@ -97,44 +121,37 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
           achieved_at: p.achieved_at,
         });
       });
-
-    // Sort sections alphabetically; within each, sort by weight descending
     return [...map.values()]
       .sort((a, b) => a.title.localeCompare(b.title))
-      .map(s => ({
-        ...s,
-        data: s.data.sort((a, b) => b.weight - a.weight),
-      }));
+      .map(s => ({ ...s, data: s.data.sort((a, b) => b.weight - a.weight) }));
   }, [prs]);
 
-  // ── Cardio tab data ───────────────────────────────────────────────────────
+  const repsByMuscle = useMemo(() => {
+    const map = new Map<string, RepsSection[]>();
+    repsSections.forEach(s => {
+      const m = s.muscle_group || 'Other';
+      if (!map.has(m)) map.set(m, []);
+      map.get(m)!.push(s);
+    });
+    return [...map.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([muscle, sections]) => ({ muscle, sections }));
+  }, [repsSections]);
+
+  // ── Cardio ─────────────────────────────────────────────────────────────────
   const cardioSections: CardioSection[] = useMemo(() => {
     const map = new Map<number, CardioSection>();
-
     prs
       .filter(p => p.pr_type === 'best_time' || p.pr_type === 'best_distance')
       .forEach(p => {
         const key = p.exercise_template_id;
-        if (!map.has(key)) {
-          map.set(key, { title: p.exercise_name, exercise_template_id: key, data: [] });
-        }
+        if (!map.has(key)) map.set(key, { title: p.exercise_name, exercise_template_id: key, data: [] });
         if (p.pr_type === 'best_time') {
-          map.get(key)!.data.push({
-            kind: 'time',
-            label: p.pr_label.replace(' Best Time', ''),
-            time_min: p.value,
-            achieved_at: p.achieved_at,
-          });
+          map.get(key)!.data.push({ kind: 'time', label: p.pr_label.replace(' Best Time', ''), time_min: p.value, achieved_at: p.achieved_at });
         } else {
-          map.get(key)!.data.push({
-            kind: 'distance',
-            label: p.pr_label.replace(' Best Distance', ''),
-            distance_km: p.value,
-            achieved_at: p.achieved_at,
-          });
+          map.get(key)!.data.push({ kind: 'distance', label: p.pr_label.replace(' Best Distance', ''), distance_km: p.value, achieved_at: p.achieved_at });
         }
       });
-
     return [...map.values()].sort((a, b) => a.title.localeCompare(b.title));
   }, [prs]);
 
@@ -146,6 +163,49 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
 
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
+  const renderAccordionExercise = (section: RepsSection) => {
+    const isExpanded = expandedIds.has(section.exercise_template_id);
+    const best = section.data[0];
+    return (
+      <View key={section.exercise_template_id} style={[styles.accordionCard, { backgroundColor: colors.surface }]}>
+        <TouchableOpacity
+          style={styles.accordionHeader}
+          onPress={() => toggleExpanded(section.exercise_template_id)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.rowInfo}>
+            <Text style={[styles.rowName, { color: colors.textPrimary }]}>{section.title}</Text>
+            <Text style={styles.rowDate}>
+              Best: {best.weight} {unit} × {best.reps} reps
+            </Text>
+          </View>
+          <Ionicons
+            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color={colors.textSecondary}
+          />
+        </TouchableOpacity>
+        {isExpanded && section.data.map((item, index) => {
+          const isTop = index === 0;
+          return (
+            <View key={`${item.weight}-${index}`} style={[styles.repsRow, { borderTopColor: colors.border }]}>
+              <View style={styles.rowInfo}>
+                <Text style={[styles.repsWeight, { color: colors.textSecondary }]}>{item.weight} {unit}</Text>
+                <Text style={styles.rowDate}>{fmtDate(item.achieved_at)}</Text>
+              </View>
+              <View style={styles.rowRight}>
+                {isTop && <Ionicons name="trophy" size={13} color="#FFD700" style={{ marginBottom: 2 }} />}
+                <Text style={[styles.rowValue, isTop && { color: colors.accent }]}>{item.reps} reps</Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
+  const showSortToggle = activeTab !== 'cardio';
 
   return (
     <View style={styles.container}>
@@ -176,91 +236,105 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
         })}
       </View>
 
+      {/* Sort toggle */}
+      {showSortToggle && (
+        <View style={[styles.sortBar, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity
+            style={[styles.sortBtn, sortBy === 'default' && { backgroundColor: colors.accent + '20' }]}
+            onPress={() => setSortBy('default')}
+          >
+            <Text style={[styles.sortBtnText, { color: sortBy === 'default' ? colors.accent : colors.textSecondary }]}>
+              {activeTab === 'max_weight' ? 'By Value' : 'A–Z'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.sortBtn, sortBy === 'muscle' && { backgroundColor: colors.accent + '20' }]}
+            onPress={() => setSortBy('muscle')}
+          >
+            <Ionicons name="body-outline" size={14} color={sortBy === 'muscle' ? colors.accent : colors.textSecondary} style={{ marginRight: 4 }} />
+            <Text style={[styles.sortBtnText, { color: sortBy === 'muscle' ? colors.accent : colors.textSecondary }]}>
+              By Muscle
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {loading ? (
         <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: spacing.xl }} />
       ) : activeTab === 'max_weight' ? (
-        /* ── Max Weight flat list ───────────────────────────────────────────── */
-        <FlatList
-          data={weightRows}
-          keyExtractor={item => item.id.toString()}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={
-            <Text style={styles.empty}>No max-weight records yet.</Text>
-          }
-          renderItem={({ item, index }) => (
-            <View style={[styles.row, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.rank, index < 3 && { color: colors.accent }]}>
-                #{index + 1}
-              </Text>
-              <View style={styles.rowInfo}>
-                <Text style={[styles.rowName, { color: colors.textPrimary }]}>
-                  {item.exercise_name}
-                </Text>
-                <Text style={styles.rowDate}>{fmtDate(item.achieved_at)}</Text>
-                {est1rmMap[item.exercise_template_id] && (
-                  <Text style={styles.est1rm}>
-                    Est. 1RM · {est1rmMap[item.exercise_template_id].toFixed(1)} {unit}
-                  </Text>
-                )}
+        sortBy === 'muscle' ? (
+          /* Max Weight — grouped by muscle */
+          <SectionList
+            sections={weightByMuscle}
+            keyExtractor={item => item.id.toString()}
+            contentContainerStyle={styles.list}
+            ListEmptyComponent={<Text style={styles.empty}>No max-weight records yet.</Text>}
+            renderSectionHeader={({ section }) => (
+              <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
+                <Text style={[styles.sectionHeaderText, { color: colors.textPrimary }]}>{section.title}</Text>
               </View>
-              <View style={styles.rowRight}>
-                <Ionicons
-                  name="trophy"
-                  size={13}
-                  color={index === 0 ? '#FFD700' : colors.border}
-                  style={{ marginBottom: 2 }}
-                />
-                <Text style={[styles.rowValue, index === 0 && { color: colors.accent }]}>
-                  {item.value} {unit}
-                </Text>
-              </View>
-            </View>
-          )}
-        />
-      ) : activeTab === 'max_reps' ? (
-        /* ── Max Reps section list, grouped by exercise ─────────────────────── */
-        <SectionList
-          sections={repsSections}
-          keyExtractor={(item, i) => `${item.weight}-${i}`}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={
-            <Text style={styles.empty}>No per-weight rep records yet.{'\n'}Log some workouts to build your records.</Text>
-          }
-          renderSectionHeader={({ section }) => (
-            <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
-              <Text style={[styles.sectionHeaderText, { color: colors.textPrimary }]}>
-                {section.title}
-              </Text>
-            </View>
-          )}
-          renderItem={({ item, index, section }) => {
-            const isTop = index === 0;
-            return (
-              <View style={[
-                styles.repsRow,
-                { backgroundColor: colors.surface },
-                index === section.data.length - 1 && styles.repsRowLast,
-              ]}>
+            )}
+            renderItem={({ item, index }) => (
+              <View style={[styles.row, { backgroundColor: colors.surface }]}>
                 <View style={styles.rowInfo}>
-                  <Text style={[styles.repsWeight, { color: colors.textSecondary }]}>
-                    {item.weight} {unit}
-                  </Text>
+                  <Text style={[styles.rowName, { color: colors.textPrimary }]}>{item.exercise_name}</Text>
                   <Text style={styles.rowDate}>{fmtDate(item.achieved_at)}</Text>
+                  {est1rmMap[item.exercise_template_id] != null && (
+                    <Text style={styles.est1rm}>Est. 1RM · {est1rmMap[item.exercise_template_id].toFixed(1)} {unit}</Text>
+                  )}
                 </View>
                 <View style={styles.rowRight}>
-                  {isTop && (
-                    <Ionicons name="trophy" size={13} color="#FFD700" style={{ marginBottom: 2 }} />
-                  )}
-                  <Text style={[styles.rowValue, isTop && { color: colors.accent }]}>
-                    {item.reps} reps
-                  </Text>
+                  <Ionicons name="trophy" size={13} color={index === 0 ? '#FFD700' : colors.border} style={{ marginBottom: 2 }} />
+                  <Text style={[styles.rowValue, index === 0 && { color: colors.accent }]}>{item.value} {unit}</Text>
                 </View>
               </View>
-            );
-          }}
-        />
+            )}
+          />
+        ) : (
+          /* Max Weight — by value with rank */
+          <FlatList
+            data={weightRows}
+            keyExtractor={item => item.id.toString()}
+            contentContainerStyle={styles.list}
+            ListEmptyComponent={<Text style={styles.empty}>No max-weight records yet.</Text>}
+            renderItem={({ item, index }) => (
+              <View style={[styles.row, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.rank, index < 3 && { color: colors.accent }]}>#{index + 1}</Text>
+                <View style={styles.rowInfo}>
+                  <Text style={[styles.rowName, { color: colors.textPrimary }]}>{item.exercise_name}</Text>
+                  <Text style={styles.rowDate}>{fmtDate(item.achieved_at)}</Text>
+                  {est1rmMap[item.exercise_template_id] != null && (
+                    <Text style={styles.est1rm}>Est. 1RM · {est1rmMap[item.exercise_template_id].toFixed(1)} {unit}</Text>
+                  )}
+                </View>
+                <View style={styles.rowRight}>
+                  <Ionicons name="trophy" size={13} color={index === 0 ? '#FFD700' : colors.border} style={{ marginBottom: 2 }} />
+                  <Text style={[styles.rowValue, index === 0 && { color: colors.accent }]}>{item.value} {unit}</Text>
+                </View>
+              </View>
+            )}
+          />
+        )
+      ) : activeTab === 'max_reps' ? (
+        /* Max Reps — accordion per exercise, optional muscle grouping */
+        <ScrollView contentContainerStyle={styles.list}>
+          {repsSections.length === 0 && (
+            <Text style={styles.empty}>No per-weight rep records yet.{'\n'}Log some workouts to build your records.</Text>
+          )}
+          {sortBy === 'muscle'
+            ? repsByMuscle.map(({ muscle, sections }) => (
+                <View key={muscle}>
+                  <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
+                    <Text style={[styles.sectionHeaderText, { color: colors.textPrimary }]}>{muscle}</Text>
+                  </View>
+                  {sections.map(renderAccordionExercise)}
+                </View>
+              ))
+            : repsSections.map(renderAccordionExercise)
+          }
+        </ScrollView>
       ) : (
-        /* ── Cardio section list, grouped by exercise ────────────────────────── */
+        /* Cardio */
         <SectionList
           sections={cardioSections}
           keyExtractor={(item, i) => `cardio-${i}`}
@@ -270,9 +344,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
           }
           renderSectionHeader={({ section }) => (
             <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
-              <Text style={[styles.sectionHeaderText, { color: colors.textPrimary }]}>
-                {section.title}
-              </Text>
+              <Text style={[styles.sectionHeaderText, { color: colors.textPrimary }]}>{section.title}</Text>
             </View>
           )}
           renderItem={({ item, index, section }) => {
@@ -281,23 +353,17 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             return (
               <View style={[
                 styles.repsRow,
-                { backgroundColor: colors.surface },
+                { backgroundColor: colors.surface, borderTopColor: colors.border },
                 isLast && styles.repsRowLast,
               ]}>
                 <View style={styles.rowInfo}>
-                  <Text style={[styles.repsWeight, { color: colors.textSecondary }]}>
-                    {item.label}
-                  </Text>
+                  <Text style={[styles.repsWeight, { color: colors.textSecondary }]}>{item.label}</Text>
                   <Text style={styles.rowDate}>{fmtDate(item.achieved_at)}</Text>
                 </View>
                 <View style={styles.rowRight}>
-                  {isTop && (
-                    <Ionicons name="trophy" size={13} color="#FFD700" style={{ marginBottom: 2 }} />
-                  )}
+                  {isTop && <Ionicons name="trophy" size={13} color="#FFD700" style={{ marginBottom: 2 }} />}
                   <Text style={[styles.rowValue, isTop && { color: colors.accent }]}>
-                    {item.kind === 'time'
-                      ? fmtTime(item.time_min)
-                      : `${item.distance_km.toFixed(2)} km`}
+                    {item.kind === 'time' ? fmtTime(item.time_min) : `${item.distance_km.toFixed(2)} km`}
                   </Text>
                 </View>
               </View>
@@ -334,6 +400,21 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabText: { fontSize: 15, fontWeight: '600' },
+  sortBar: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  sortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: 20,
+  },
+  sortBtnText: { fontSize: 13, fontWeight: '600' },
   list: { padding: spacing.md, gap: spacing.sm },
   empty: {
     textAlign: 'center',
@@ -343,7 +424,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
 
-  // Shared row
+  // Max weight flat row
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -359,25 +440,37 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   rowRight: { alignItems: 'flex-end' },
   rowValue: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
 
-  // Reps section list
-  sectionHeader: {
-    paddingHorizontal: spacing.sm,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xs,
+  // Accordion (max reps)
+  accordionCard: {
+    borderRadius: 10,
+    overflow: 'hidden',
   },
-  sectionHeaderText: { fontSize: 14, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  accordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+
+  // Reps rows inside accordion + cardio section rows
   repsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
-    marginHorizontal: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
   },
   repsRowLast: {
     borderBottomLeftRadius: 10,
     borderBottomRightRadius: 10,
   },
   repsWeight: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
+
+  // Section headers (muscle groups + cardio exercises)
+  sectionHeader: {
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  sectionHeaderText: { fontSize: 14, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
 });

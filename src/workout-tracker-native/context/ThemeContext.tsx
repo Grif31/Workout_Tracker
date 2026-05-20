@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { Appearance } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ── Accent presets ────────────────────────────────────────────────────────────
@@ -31,6 +32,8 @@ export type Colors = {
   accentText: string; // text on an accent-colored background
   save: string;       // alias for accent (backwards compat)
   danger: string;
+  warmup: string;     // warm-up set indicator
+  dropset: string;    // drop set indicator
 };
 
 // ── Base palettes (no accent) ─────────────────────────────────────────────────
@@ -43,6 +46,8 @@ const LIGHT_BASE = {
   textSecondary: '#6C6C70',
   placeholder:   '#AEAEB2',
   danger:        '#FF3B30',
+  warmup:        '#FF9500',
+  dropset:       '#AF52DE',
 };
 
 const DARK_BASE = {
@@ -53,6 +58,8 @@ const DARK_BASE = {
   textSecondary: '#8E8E93',
   placeholder:   '#636366',
   danger:        '#FF453A',
+  warmup:        '#FF9500',
+  dropset:       '#AF52DE',
 };
 
 function buildColors(mode: 'light' | 'dark', preset: AccentPreset): Colors {
@@ -64,6 +71,7 @@ function buildColors(mode: 'light' | 'dark', preset: AccentPreset): Colors {
     save:       preset.value,
   };
 }
+
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
@@ -85,6 +93,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setMode]               = useState<'light' | 'dark'>('light');
   const [accentPreset, setAccentState] = useState<AccentPreset>(ACCENT_PRESETS[0]);
   const [ready, setReady]             = useState(false);
+  // null = user has never explicitly chosen; follow system. 'light'|'dark' = pinned.
+  const [pinnedMode, setPinnedMode]   = useState<'light' | 'dark' | null>(null);
 
   // Load persisted preferences on mount
   useEffect(() => {
@@ -93,7 +103,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         AsyncStorage.getItem(KEY_MODE),
         AsyncStorage.getItem(KEY_ACCENT),
       ]);
-      if (savedMode === 'light' || savedMode === 'dark') setMode(savedMode);
+      if (savedMode === 'light' || savedMode === 'dark') {
+        setPinnedMode(savedMode);
+        setMode(savedMode);
+      } else {
+        // No saved preference — use the system setting
+        const system = Appearance.getColorScheme();
+        setMode(system === 'dark' ? 'dark' : 'light');
+      }
       if (savedAccent) {
         const found = ACCENT_PRESETS.find(p => p.name === savedAccent);
         if (found) setAccentState(found);
@@ -102,9 +119,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
+  // Follow system changes only when the user hasn't pinned a preference
+  useEffect(() => {
+    const sub = Appearance.addChangeListener(({ colorScheme }) => {
+      if (pinnedMode === null) {
+        setMode(colorScheme === 'dark' ? 'dark' : 'light');
+      }
+    });
+    return () => sub.remove();
+  }, [pinnedMode]);
+
   const toggleMode = () => {
     const next = mode === 'light' ? 'dark' : 'light';
     setMode(next);
+    setPinnedMode(next);
     AsyncStorage.setItem(KEY_MODE, next);
   };
 

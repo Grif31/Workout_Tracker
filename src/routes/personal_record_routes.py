@@ -48,7 +48,7 @@ def get_personal_records():
     """
     user_id = get_jwt_identity()
     rows = (
-        db.session.query(PersonalRecord, ExerciseTemplate.name)
+        db.session.query(PersonalRecord, ExerciseTemplate)
         .join(ExerciseTemplate, PersonalRecord.exercise_template_id == ExerciseTemplate.id)
         .filter(PersonalRecord.user_id == user_id)
         .filter(
@@ -59,12 +59,18 @@ def get_personal_records():
     )
 
     result = []
-    for pr, name in rows:
+    for pr, tmpl in rows:
         if pr.pr_type in ('best_time', 'best_distance'):
             label = _cardio_pr_label(pr)
         else:
             label = PR_LABELS.get(pr.pr_type, pr.pr_type)
-        result.append({**pr.to_dict(), 'exercise_name': name, 'pr_label': label})
+        primary_muscle = (tmpl.muscle_group or '').split(',')[0].strip()
+        result.append({
+            **pr.to_dict(),
+            'exercise_name': tmpl.name,
+            'pr_label': label,
+            'muscle_group': primary_muscle,
+        })
     return jsonify(result)
 
 

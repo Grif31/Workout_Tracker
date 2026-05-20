@@ -9,6 +9,7 @@ import {
   Alert,
   TextInput,
   Linking,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +25,8 @@ import {
   scheduleWorkoutReminder,
   cancelWorkoutReminder,
 } from '../../utils/notifications';
+import { HEALTH_SYNC_KEY, requestHealthKitPermission } from '../../utils/healthKit';
+import { requestHealthConnectPermission } from '../../utils/healthConnect';
 
 const APP_VERSION = '1.0.0';
 const REST_TIMER_KEY = 'default_rest_timer';
@@ -50,10 +53,13 @@ export default function SettingsScreen({ navigation }: Props) {
   const [reminderHour, setReminderHour] = useState('9');
   const [reminderMin, setReminderMin]   = useState('00');
 
+  // Health sync
+  const [healthSyncOn, setHealthSyncOn] = useState(false);
+
   useEffect(() => {
     AsyncStorage.multiGet([
       REST_TIMER_KEY, REMINDERS_KEY, REST_ALERTS_KEY, LIVE_NOTIF_KEY,
-      REMINDER_HOUR_KEY, REMINDER_MIN_KEY,
+      REMINDER_HOUR_KEY, REMINDER_MIN_KEY, HEALTH_SYNC_KEY,
     ]).then(pairs => {
       const map = Object.fromEntries(pairs.map(([k, v]) => [k, v]));
       if (map[REST_TIMER_KEY]) setRestTimerSeconds(map[REST_TIMER_KEY]!);
@@ -62,6 +68,7 @@ export default function SettingsScreen({ navigation }: Props) {
       if (map[LIVE_NOTIF_KEY] !== null) setLiveNotifOn(map[LIVE_NOTIF_KEY] !== 'false');
       if (map[REMINDER_HOUR_KEY]) setReminderHour(map[REMINDER_HOUR_KEY]!);
       if (map[REMINDER_MIN_KEY]) setReminderMin(map[REMINDER_MIN_KEY]!);
+      if (map[HEALTH_SYNC_KEY] !== null) setHealthSyncOn(map[HEALTH_SYNC_KEY] === 'true');
     });
   }, []);
 
@@ -362,6 +369,40 @@ export default function SettingsScreen({ navigation }: Props) {
           />
         </View>
 
+      </View>
+
+      {/* ── Health Sync ── */}
+      <Text style={styles.sectionLabel}>Health</Text>
+      <View style={styles.group}>
+        <View style={styles.row}>
+          <View style={styles.rowLeft}>
+            <Ionicons name="heart-outline" size={20} color={colors.textSecondary} />
+            <Text style={styles.rowLabel}>
+              {Platform.OS === 'ios' ? 'Sync to Apple Health' : 'Sync to Health Connect'}
+            </Text>
+          </View>
+          <Switch
+            value={healthSyncOn}
+            onValueChange={async (v) => {
+              if (v) {
+                const granted = Platform.OS === 'ios'
+                  ? await requestHealthKitPermission()
+                  : await requestHealthConnectPermission();
+                if (!granted) {
+                  Alert.alert(
+                    'Permission Required',
+                    `Allow ${Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect'} access in your device settings to enable this feature.`,
+                  );
+                  return;
+                }
+              }
+              setHealthSyncOn(v);
+              await AsyncStorage.setItem(HEALTH_SYNC_KEY, String(v));
+            }}
+            trackColor={{ false: colors.border, true: colors.accent }}
+            thumbColor="#fff"
+          />
+        </View>
       </View>
 
       {/* ── App Info ── */}

@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, AppState } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { postLiveWorkoutNotification, cancelLiveWorkoutNotification } from '../utils/notifications';
+import { onPendingCountChange, initPendingCount } from '../utils/offlineQueue';
 import { createBottomTabNavigator, BottomTabBar, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { DashboardStack } from './DashboardStack';
 import { ExercisesStack } from './ExercisesStack';
@@ -39,6 +42,33 @@ function MiniWorkoutBar() {
     setElapsed(compute());
     tickRef.current = setInterval(() => setElapsed(compute()), 1000);
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
+  }, [session]);
+
+  // Post live notification when app is backgrounded while workout is minimized
+  useEffect(() => {
+    if (!session) return;
+    const sub = AppState.addEventListener('change', async (nextState) => {
+      if (nextState === 'background') {
+        const liveOff = await AsyncStorage.getItem('live_workout_notif_enabled');
+        if (liveOff === 'false') return;
+        const done = session.exercises.flatMap(e => e.sets).filter(s => s.done).length;
+        const total = session.exercises.flatMap(e => e.sets).length;
+        const secs = session.baseElapsed + Math.floor((Date.now() - session.startedAt.getTime()) / 1000);
+        const currentExercise = (
+          [...session.exercises].reverse().find(e => e.sets.some(s => s.done)) ?? session.exercises[0]
+        )?.name;
+        postLiveWorkoutNotification({
+          workoutName: session.workoutName || 'Workout',
+          elapsed: fmtElapsed(secs),
+          setsDone: done,
+          setsTotal: total,
+          currentExercise,
+        });
+      } else if (nextState === 'active') {
+        cancelLiveWorkoutNotification();
+      }
+    });
+    return () => sub.remove();
   }, [session]);
 
   if (!session) return null;
@@ -105,6 +135,12 @@ function CustomTabBar(props: BottomTabBarProps) {
 
 export function AppTabs() {
   const { colors } = useTheme();
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    initPendingCount();
+    return onPendingCountChange(setPendingCount);
+  }, []);
 
   // On iOS 18+, remove the top border so the tab bar blends cleanly with
   // the system's adaptive appearance. On Android / older iOS keep the border.
@@ -125,7 +161,16 @@ export function AppTabs() {
           else if (route.name === 'ExercisesTab') iconName = 'barbell';
           else if (route.name === 'TrainingTab') iconName = 'trophy';
           else if (route.name === 'ProfileTab') iconName = 'person';
-          return <Ionicons name={iconName} size={size} color={color} />;
+          const icon = <Ionicons name={iconName} size={size} color={color} />;
+          if (route.name === 'DashboardTab' && pendingCount > 0) {
+            return (
+              <View>
+                {icon}
+                <View style={styles.syncDot} />
+              </View>
+            );
+          }
+          return icon;
         },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textSecondary,
@@ -159,4 +204,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   miniBtnText: { fontSize: 13, fontWeight: '600' },
+  syncDot: {
+    position: 'absolute',
+    top: 0,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF9500',
+  },
 });

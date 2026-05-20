@@ -4,7 +4,7 @@ import os
 import secrets
 import requests as http_requests
 from datetime import datetime, timedelta, timezone
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, g
 from flask_mail import Message
 from models import db, User
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -13,8 +13,14 @@ from flask_jwt_extended import (
 )
 from limiter import limiter
 from mail_ext import mail
+from schemas import SignupSchema, ResetPasswordSchema, ChangePasswordSchema
+from utils.validation import validate_body
 
 auth_bp = Blueprint('auth_bp', __name__)
+
+_signup_schema          = SignupSchema()
+_reset_password_schema  = ResetPasswordSchema()
+_change_password_schema = ChangePasswordSchema()
 
 
 @auth_bp.route('/api/login', methods=['POST'])
@@ -38,9 +44,10 @@ def login():
 
 @auth_bp.post('/api/signup')
 @limiter.limit('5 per minute')
+@validate_body(_signup_schema)
 def signup():
     try:
-        data = request.get_json()
+        data = g.validated
         username = data.get('username', '').strip()
         email = data.get('email', '').strip()
         password = data.get('password', '')
@@ -98,8 +105,9 @@ def forgot_password():
 
 @auth_bp.post('/api/reset-password')
 @limiter.limit('10 per hour')
+@validate_body(_reset_password_schema)
 def reset_password():
-    data         = request.get_json(silent=True) or {}
+    data         = g.validated
     email        = data.get('email', '').strip().lower()
     otp          = str(data.get('otp', '')).strip()
     new_password = data.get('new_password', '')
@@ -126,6 +134,7 @@ def reset_password():
 @auth_bp.post('/api/me/change-password')
 @jwt_required()
 @limiter.limit('10 per hour')
+@validate_body(_change_password_schema)
 def change_password():
     user_id = int(get_jwt_identity())
     user = db.session.get(User, user_id)
@@ -133,7 +142,7 @@ def change_password():
         return jsonify({'message': 'User not found.'}), 404
     if user.is_social_only:
         return jsonify({'message': 'Your account uses social sign-in. Use Forgot Password to set a password.'}), 400
-    data       = request.get_json(silent=True) or {}
+    data       = g.validated
     current_pw = data.get('current_password', '')
     new_pw     = data.get('new_password', '')
     confirm_pw = data.get('confirm_password', '')

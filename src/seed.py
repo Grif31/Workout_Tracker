@@ -4,7 +4,9 @@ Seed script for ExerciseTemplate data.
 Usage:
     python seed.py              # Seeds exercises and fetches images from Wger API
     python seed.py --no-images  # Seeds exercises without fetching images
-    python seed.py --backfill   # Update existing exercises that have no image_url
+    python seed.py --backfill       # Update existing exercises that have no image_url
+    python seed.py --refetch-images # Re-fetch wger images for ALL exercises (overwrites existing)
+    python seed.py --update-muscles # Update muscle_group on existing exercises to match list
 """
 
 import sys
@@ -15,139 +17,181 @@ import time
 sys.path.insert(0, os.path.dirname(__file__))
 
 from app import create_app
-from models import db, ExerciseTemplate
+from models import db, ExerciseTemplate, ExerciseMuscleMapping
 
 WGER_BASE = 'https://wger.de'
 
 # ---------------------------------------------------------------------------
 # Exercise data: (name, muscle_group, equipment)
+# muscle_group is comma-separated when an exercise works multiple muscles.
 # ---------------------------------------------------------------------------
 EXERCISES = [
     # Chest
-    ('Bench Press', 'Chest', 'Barbell'),
-    ('Bench Press', 'Chest', 'Dumbbell'),
-    ('Bench Press', 'Chest', 'Smith Machine'),
-    ('Bench Press', 'Chest', 'Cable'),
-    ('Incline Bench Press', 'Chest', 'Barbell'),
-    ('Incline Bench Press', 'Chest', 'Dumbbell'),
-    ('Incline Bench Press', 'Chest', 'Smith Machine'),
-    ('Incline Bench Press', 'Chest', 'Cable'),
-    ('Decline Bench Press', 'Chest', 'Barbell'),
-    ('Decline Bench Press', 'Chest', 'Dumbbell'),
-    ('Decline Bench Press', 'Chest', 'Smith Machine'),
-    ('Push Up', 'Chest', 'Bodyweight'),
-    ('Chest Fly', 'Chest', 'Dumbbell'),
-    ('Chest Fly', 'Chest', 'Cable'),
-    ('Chest Fly', 'Chest', 'Machine'),
-    ('Cable Crossover', 'Chest', 'Cable'),
+    ('Bench Press',             'Chest, Triceps, Shoulders', 'Barbell'),
+    ('Bench Press',             'Chest, Triceps, Shoulders', 'Dumbbell'),
+    ('Bench Press',             'Chest, Triceps, Shoulders', 'Smith Machine'),
+    ('Bench Press',             'Chest, Triceps, Shoulders', 'Cable'),
+    ('Incline Bench Press',     'Chest, Triceps, Shoulders', 'Barbell'),
+    ('Incline Bench Press',     'Chest, Triceps, Shoulders', 'Dumbbell'),
+    ('Incline Bench Press',     'Chest, Triceps, Shoulders', 'Smith Machine'),
+    ('Incline Bench Press',     'Chest, Triceps, Shoulders', 'Cable'),
+    ('Decline Bench Press',     'Chest, Triceps, Shoulders', 'Barbell'),
+    ('Decline Bench Press',     'Chest, Triceps, Shoulders', 'Dumbbell'),
+    ('Decline Bench Press',     'Chest, Triceps, Shoulders', 'Smith Machine'),
+    ('Push Up',                 'Chest, Triceps, Shoulders', 'Bodyweight'),
+    ('Chest Fly',               'Chest, Shoulders',          'Dumbbell'),
+    ('Chest Fly',               'Chest, Shoulders',          'Cable'),
+    ('Chest Fly',               'Chest, Shoulders',          'Machine'),
+    ('Cable Crossover',         'Chest, Shoulders',          'Cable'),
 
     # Back
-    ('Pull Up', 'Back', 'Bodyweight'),
-    ('Lat Pulldown', 'Back', 'Cable'),
-    ('Lat Pulldown', 'Back', 'Machine'),
-    ('Bent Over Row', 'Back', 'Barbell'),
-    ('Bent Over Row', 'Back', 'Dumbbell'),
-    ('Bent Over Row', 'Back', 'Cable'),
-    ('Seated Cable Row', 'Back', 'Cable'),
-    ('Deadlift', 'Back', 'Barbell'),
-    ('Deadlift', 'Back', 'Smith Machine'),
-    ('T-Bar Row', 'Back', 'Barbell'),
-    ('Single Arm Row', 'Back', 'Dumbbell'),
+    ('Pull Up',                 'Back, Biceps',              'Bodyweight'),
+    ('Lat Pulldown',            'Back, Biceps',              'Cable'),
+    ('Lat Pulldown',            'Back, Biceps',              'Machine'),
+    ('Bent Over Row',           'Back, Biceps',              'Barbell'),
+    ('Bent Over Row',           'Back, Biceps',              'Dumbbell'),
+    ('Bent Over Row',           'Back, Biceps',              'Cable'),
+    ('Seated Cable Row',        'Back, Biceps',              'Cable'),
+    ('Deadlift',                'Back, Hamstrings, Quads',   'Barbell'),
+    ('Deadlift',                'Back, Hamstrings, Quads',   'Smith Machine'),
+    ('T-Bar Row',               'Back, Biceps',              'Barbell'),
+    ('Single Arm Row',          'Back, Biceps',              'Dumbbell'),
 
     # Shoulders
-    ('Overhead Press', 'Shoulders', 'Barbell'),
-    ('Overhead Press', 'Shoulders', 'Dumbbell'),
-    ('Overhead Press', 'Shoulders', 'Smith Machine'),
-    ('Overhead Press', 'Shoulders', 'Machine'),
-    ('Lateral Raise', 'Shoulders', 'Dumbbell'),
-    ('Lateral Raise', 'Shoulders', 'Cable'),
-    ('Lateral Raise', 'Shoulders', 'Machine'),
-    ('Front Raise', 'Shoulders', 'Barbell'),
-    ('Front Raise', 'Shoulders', 'Dumbbell'),
-    ('Front Raise', 'Shoulders', 'Cable'),
-    ('Face Pull', 'Shoulders', 'Cable'),
-    ('Arnold Press', 'Shoulders', 'Dumbbell'),
-    ('Rear Delt Fly', 'Shoulders', 'Dumbbell'),
-    ('Rear Delt Fly', 'Shoulders', 'Cable'),
-    ('Rear Delt Fly', 'Shoulders', 'Machine'),
+    ('Overhead Press',          'Shoulders, Triceps',        'Barbell'),
+    ('Overhead Press',          'Shoulders, Triceps',        'Dumbbell'),
+    ('Overhead Press',          'Shoulders, Triceps',        'Smith Machine'),
+    ('Overhead Press',          'Shoulders, Triceps',        'Machine'),
+    ('Lateral Raise',           'Shoulders',                 'Dumbbell'),
+    ('Lateral Raise',           'Shoulders',                 'Cable'),
+    ('Lateral Raise',           'Shoulders',                 'Machine'),
+    ('Front Raise',             'Shoulders',                 'Barbell'),
+    ('Front Raise',             'Shoulders',                 'Dumbbell'),
+    ('Front Raise',             'Shoulders',                 'Cable'),
+    ('Face Pull',               'Shoulders, Back',           'Cable'),
+    ('Arnold Press',            'Shoulders, Triceps',        'Dumbbell'),
+    ('Rear Delt Fly',           'Shoulders, Back',           'Dumbbell'),
+    ('Rear Delt Fly',           'Shoulders, Back',           'Cable'),
+    ('Rear Delt Fly',           'Shoulders, Back',           'Machine'),
 
     # Biceps
-    ('Bicep Curl', 'Biceps', 'Barbell'),
-    ('Bicep Curl', 'Biceps', 'Dumbbell'),
-    ('Bicep Curl', 'Biceps', 'EZ Bar'),
-    ('Bicep Curl', 'Biceps', 'Cable'),
-    ('Bicep Curl', 'Biceps', 'Machine'),
-    ('Hammer Curl', 'Biceps', 'Dumbbell'),
-    ('Hammer Curl', 'Biceps', 'Cable'),
-    ('Preacher Curl', 'Biceps', 'Barbell'),
-    ('Preacher Curl', 'Biceps', 'Dumbbell'),
-    ('Preacher Curl', 'Biceps', 'EZ Bar'),
-    ('Preacher Curl', 'Biceps', 'Machine'),
-    ('Concentration Curl', 'Biceps', 'Dumbbell'),
-    ('Incline Curl', 'Biceps', 'Dumbbell'),
+    ('Bicep Curl',              'Biceps, Forearms',          'Barbell'),
+    ('Bicep Curl',              'Biceps, Forearms',          'Dumbbell'),
+    ('Bicep Curl',              'Biceps, Forearms',          'EZ Bar'),
+    ('Bicep Curl',              'Biceps, Forearms',          'Cable'),
+    ('Bicep Curl',              'Biceps, Forearms',          'Machine'),
+    ('Hammer Curl',             'Biceps, Forearms',          'Dumbbell'),
+    ('Hammer Curl',             'Biceps, Forearms',          'Cable'),
+    ('Preacher Curl',           'Biceps',                    'Barbell'),
+    ('Preacher Curl',           'Biceps',                    'Dumbbell'),
+    ('Preacher Curl',           'Biceps',                    'EZ Bar'),
+    ('Preacher Curl',           'Biceps',                    'Machine'),
+    ('Concentration Curl',      'Biceps',                    'Dumbbell'),
+    ('Incline Curl',            'Biceps',                    'Dumbbell'),
+
+    # Forearms
+    ('Wrist Curl',              'Forearms',                  'Barbell'),
+    ('Wrist Curl',              'Forearms',                  'Dumbbell'),
+    ('Wrist Curl',              'Forearms',                  'Cable'),
+    ('Reverse Wrist Curl',      'Forearms',                  'Barbell'),
+    ('Reverse Wrist Curl',      'Forearms',                  'Dumbbell'),
+    ('Reverse Wrist Curl',      'Forearms',                  'Cable'),
+    ('Reverse Curl',            'Forearms, Biceps',          'Barbell'),
+    ('Reverse Curl',            'Forearms, Biceps',          'Dumbbell'),
+    ('Reverse Curl',            'Forearms, Biceps',          'EZ Bar'),
+    ('Reverse Curl',            'Forearms, Biceps',          'Cable'),
+    ('Farmer Walk',             'Forearms, Core',            'Dumbbell'),
+    ('Farmer Walk',             'Forearms, Core',            'Kettlebell'),
+    ('Dead Hang',               'Forearms, Back',            'Bodyweight'),
+    ('Wrist Roller',            'Forearms',                  'Other'),
+    ('Plate Pinch',             'Forearms',                  'Other'),
 
     # Triceps
-    ('Tricep Pushdown', 'Triceps', 'Cable'),
-    ('Tricep Pushdown', 'Triceps', 'Machine'),
-    ('Skull Crusher', 'Triceps', 'Barbell'),
-    ('Skull Crusher', 'Triceps', 'Dumbbell'),
-    ('Skull Crusher', 'Triceps', 'EZ Bar'),
-    ('Overhead Tricep Extension', 'Triceps', 'Barbell'),
-    ('Overhead Tricep Extension', 'Triceps', 'Dumbbell'),
-    ('Overhead Tricep Extension', 'Triceps', 'EZ Bar'),
-    ('Overhead Tricep Extension', 'Triceps', 'Cable'),
-    ('Close Grip Bench Press', 'Triceps', 'Barbell'),
-    ('Close Grip Bench Press', 'Triceps', 'Smith Machine'),
-    ('Dips', 'Triceps', 'Bodyweight'),
-    ('Tricep Kickback', 'Triceps', 'Dumbbell'),
-    ('Tricep Kickback', 'Triceps', 'Cable'),
+    ('Tricep Pushdown',         'Triceps',                   'Cable'),
+    ('Tricep Pushdown',         'Triceps',                   'Machine'),
+    ('Skull Crusher',           'Triceps',                   'Barbell'),
+    ('Skull Crusher',           'Triceps',                   'Dumbbell'),
+    ('Skull Crusher',           'Triceps',                   'EZ Bar'),
+    ('Overhead Tricep Extension', 'Triceps',                 'Barbell'),
+    ('Overhead Tricep Extension', 'Triceps',                 'Dumbbell'),
+    ('Overhead Tricep Extension', 'Triceps',                 'EZ Bar'),
+    ('Overhead Tricep Extension', 'Triceps',                 'Cable'),
+    ('Close Grip Bench Press',  'Triceps, Chest',            'Barbell'),
+    ('Close Grip Bench Press',  'Triceps, Chest',            'Smith Machine'),
+    ('Dips',                    'Triceps, Chest, Shoulders', 'Bodyweight'),
+    ('Tricep Kickback',         'Triceps',                   'Dumbbell'),
+    ('Tricep Kickback',         'Triceps',                   'Cable'),
 
     # Quads
-    ('Squat', 'Quads', 'Barbell'),
-    ('Squat', 'Quads', 'Dumbbell'),
-    ('Squat', 'Quads', 'Smith Machine'),
-    ('Squat', 'Quads', 'Bodyweight'),
-    ('Leg Press', 'Quads', 'Machine'),
-    ('Leg Extension', 'Quads', 'Machine'),
-    ('Hack Squat', 'Quads', 'Barbell'),
-    ('Hack Squat', 'Quads', 'Machine'),
-    ('Hack Squat', 'Quads', 'Smith Machine'),
-    ('Lunges', 'Quads', 'Barbell'),
-    ('Lunges', 'Quads', 'Dumbbell'),
-    ('Lunges', 'Quads', 'Bodyweight'),
-    ('Bulgarian Split Squat', 'Quads', 'Barbell'),
-    ('Bulgarian Split Squat', 'Quads', 'Dumbbell'),
-    ('Bulgarian Split Squat', 'Quads', 'Bodyweight'),
+    ('Squat',                   'Quads, Hamstrings, Glutes', 'Barbell'),
+    ('Squat',                   'Quads, Hamstrings, Glutes', 'Dumbbell'),
+    ('Squat',                   'Quads, Hamstrings, Glutes', 'Smith Machine'),
+    ('Squat',                   'Quads, Hamstrings, Glutes', 'Bodyweight'),
+    ('Sissy Squat',             'Quads',                     'Bodyweight'),
+    ('Leg Press',               'Quads, Hamstrings, Glutes', 'Machine'),
+    ('Leg Extension',           'Quads',                     'Machine'),
+    ('Hack Squat',              'Quads, Hamstrings, Glutes', 'Barbell'),
+    ('Hack Squat',              'Quads, Hamstrings, Glutes', 'Machine'),
+    ('Hack Squat',              'Quads, Hamstrings, Glutes', 'Smith Machine'),
+    ('Lunges',                  'Quads, Hamstrings, Glutes', 'Barbell'),
+    ('Lunges',                  'Quads, Hamstrings, Glutes', 'Dumbbell'),
+    ('Lunges',                  'Quads, Hamstrings, Glutes', 'Bodyweight'),
+    ('Bulgarian Split Squat',   'Quads, Hamstrings, Glutes', 'Barbell'),
+    ('Bulgarian Split Squat',   'Quads, Hamstrings, Glutes', 'Dumbbell'),
+    ('Bulgarian Split Squat',   'Quads, Hamstrings, Glutes', 'Smith Machine'),
+    ('Bulgarian Split Squat',   'Quads, Hamstrings, Glutes', 'Bodyweight'),
 
     # Hamstrings
-    ('Romanian Deadlift', 'Hamstrings', 'Barbell'),
-    ('Romanian Deadlift', 'Hamstrings', 'Dumbbell'),
-    ('Leg Curl', 'Hamstrings', 'Machine'),
-    ('Leg Curl', 'Hamstrings', 'Dumbbell'),
-    ('Sumo Deadlift', 'Hamstrings', 'Barbell'),
-    ('Sumo Deadlift', 'Hamstrings', 'Dumbbell'),
-    ('Good Morning', 'Hamstrings', 'Barbell'),
+    ('Romanian Deadlift',       'Hamstrings, Glutes, Back',  'Barbell'),
+    ('Romanian Deadlift',       'Hamstrings, Glutes, Back',  'Dumbbell'),
+    ('Leg Curl',                'Hamstrings',                'Machine'),
+    ('Leg Curl',                'Hamstrings',                'Dumbbell'),
+    ('Sumo Deadlift',           'Hamstrings, Glutes, Back, Quads', 'Barbell'),
+    ('Sumo Deadlift',           'Hamstrings, Glutes, Back, Quads', 'Dumbbell'),
+    ('Good Morning',            'Hamstrings, Glutes, Back',  'Barbell'),
 
     # Calves
-    ('Calf Raise', 'Calves', 'Barbell'),
-    ('Calf Raise', 'Calves', 'Dumbbell'),
-    ('Calf Raise', 'Calves', 'Smith Machine'),
-    ('Calf Raise', 'Calves', 'Machine'),
-    ('Calf Raise', 'Calves', 'Bodyweight'),
-    ('Seated Calf Raise', 'Calves', 'Machine'),
-    ('Seated Calf Raise', 'Calves', 'Dumbbell'),
-    ('Donkey Calf Raise', 'Calves', 'Machine'),
-    ('Donkey Calf Raise', 'Calves', 'Bodyweight'),
+    ('Calf Raise',              'Calves',                    'Barbell'),
+    ('Calf Raise',              'Calves',                    'Dumbbell'),
+    ('Calf Raise',              'Calves',                    'Smith Machine'),
+    ('Calf Raise',              'Calves',                    'Machine'),
+    ('Calf Raise',              'Calves',                    'Bodyweight'),
+    ('Seated Calf Raise',       'Calves',                    'Machine'),
+    ('Seated Calf Raise',       'Calves',                    'Dumbbell'),
+    ('Donkey Calf Raise',       'Calves',                    'Machine'),
+    ('Donkey Calf Raise',       'Calves',                    'Bodyweight'),
+
+    # Glutes
+    ('Hip Thrust',              'Glutes, Hamstrings',        'Barbell'),
+    ('Hip Thrust',              'Glutes, Hamstrings',        'Dumbbell'),
+    ('Hip Thrust',              'Glutes, Hamstrings',        'Smith Machine'),
+    ('Hip Thrust',              'Glutes, Hamstrings',        'Machine'),
+    ('Glute Bridge',            'Glutes, Hamstrings',        'Barbell'),
+    ('Glute Bridge',            'Glutes, Hamstrings',        'Bodyweight'),
+    ('Cable Kickback',          'Glutes',                    'Cable'),
+    ('Donkey Kick',             'Glutes',                    'Bodyweight'),
+    ('Donkey Kick',             'Glutes',                    'Cable'),
+    ('Abductor Machine',        'Glutes',                    'Machine'),
+    ('Step Up',                 'Glutes, Quads',             'Barbell'),
+    ('Step Up',                 'Glutes, Quads',             'Dumbbell'),
+    ('Step Up',                 'Glutes, Quads',             'Bodyweight'),
+    ('Lateral Band Walk',       'Glutes',                    'Other'),
+    ('Clamshell',               'Glutes',                    'Bodyweight'),
+    ('Fire Hydrant',            'Glutes',                    'Bodyweight'),
+    ('Single Leg Deadlift',     'Glutes, Hamstrings',        'Barbell'),
+    ('Single Leg Deadlift',     'Glutes, Hamstrings',        'Dumbbell'),
+    ('Single Leg Deadlift',     'Glutes, Hamstrings',        'Kettlebell'),
 
     # Core
-    ('Plank', 'Core', 'Bodyweight'),
-    ('Crunch', 'Core', 'Bodyweight'),
-    ('Hanging Leg Raise', 'Core', 'Bodyweight'),
-    ('Russian Twist', 'Core', 'Dumbbell'),
-    ('Russian Twist', 'Core', 'Bodyweight'),
-    ('Ab Wheel Rollout', 'Core', 'Bodyweight'),
-    ('Cable Crunch', 'Core', 'Cable'),
-    ('Decline Crunch', 'Core', 'Bodyweight'),
+    ('Plank',                   'Core, Shoulders',           'Bodyweight'),
+    ('Crunch',                  'Core',                      'Bodyweight'),
+    ('Hanging Leg Raise',       'Core',                      'Bodyweight'),
+    ('Russian Twist',           'Core',                      'Dumbbell'),
+    ('Russian Twist',           'Core',                      'Bodyweight'),
+    ('Ab Wheel Rollout',        'Core, Shoulders',           'Bodyweight'),
+    ('Cable Crunch',            'Core',                      'Cable'),
+    ('Machine Crunch',          'Core',                      'Machine'),
+    ('Decline Crunch',          'Core',                      'Bodyweight'),
 ]
 
 # Cardio exercises: (name, equipment)
@@ -245,40 +289,36 @@ def _load_wger() -> tuple:
     return _wger_cache
 
 
-def _word_score(query_words: list, candidate_name: str) -> float:
-    """Fraction of query words that appear in the candidate name."""
-    cand = candidate_name.lower()
-    if not query_words:
-        return 0.0
-    hits = sum(1 for w in query_words if w in cand)
-    return hits / len(query_words)
-
-
 def _find_wger_image(name: str, equipment: str = '') -> str | None:
-    """Find the best wger diagram for the given exercise name + equipment."""
+    """Find the best wger diagram for the given exercise name + equipment.
+
+    Ranks candidates by (base_word_hits, equip_word_hits) so exercise identity
+    is the primary key and equipment specificity is the tie-breaker. An entry
+    like 'Barbell Bench Press' will beat 'Bench Press' when equipment='Barbell'.
+    """
     name_to_base, base_to_image = _load_wger()
 
     equip_lower = equipment.lower()
     equip_words = _EQUIP_WORDS.get(equip_lower, [equip_lower] if equip_lower else [])
-
-    # Build query word list: exercise name words + equipment words
     base_words = _normalize(name)
-    query_with_equip = base_words + equip_words
 
-    best_score, best_bid = 0.0, None
+    best_base = 0
+    best_equip = -1
+    best_bid = None
 
     for wger_name, bid in name_to_base.items():
         if bid not in base_to_image:
             continue
-        # Score against (name + equipment) query first
-        score = _word_score(query_with_equip, wger_name)
-        if score > best_score:
-            best_score = score
+        cand = wger_name.lower()
+        base_hits = sum(1 for w in base_words if w in cand)
+        equip_hits = sum(1 for w in equip_words if w in cand)
+        if (base_hits, equip_hits) > (best_base, best_equip):
+            best_base = base_hits
+            best_equip = equip_hits
             best_bid = bid
 
-    # Require at least the base exercise words to match
-    base_threshold = len(base_words) / max(len(query_with_equip), 1) * 0.7
-    if best_bid and best_score >= max(0.5, base_threshold):
+    # Require at least 70% of base exercise words to match
+    if best_bid and best_base >= len(base_words) * 0.7:
         return base_to_image[best_bid]
     return None
 
@@ -316,17 +356,86 @@ def backfill_images():
     print(f'\nBackfill complete. Updated: {updated}/{total}')
 
 
+def refetch_images():
+    """Re-fetch wger diagram URLs for ALL exercises, overwriting any existing image_url."""
+    _load_wger()
+
+    exercises = ExerciseTemplate.query.filter(
+        ExerciseTemplate.exercise_type != 'cardio'
+    ).all()
+    total = len(exercises)
+    print(f'Re-fetching images for {total} strength exercises.\n')
+    updated = 0
+    cleared = 0
+    for i, ex in enumerate(exercises, start=1):
+        label = f'{ex.name} ({ex.equipment or "—"})'
+        print(f'[{i}/{total}] {label} ...', end=' ', flush=True)
+        url = fetch_image_url(ex.name, ex.equipment or '')
+        if url:
+            ex.image_url = url
+            db.session.commit()
+            updated += 1
+            print('OK')
+        else:
+            ex.image_url = None
+            db.session.commit()
+            cleared += 1
+            print('no match')
+    print(f'\nDone. Updated: {updated}, Cleared: {cleared}')
+
+
+def update_muscles():
+    """Update muscle mappings on existing exercises to match the EXERCISES list."""
+    total = len(EXERCISES)
+    updated = 0
+    skipped = 0
+    for i, (name, muscle_group, equipment) in enumerate(EXERCISES, start=1):
+        ex = ExerciseTemplate.query.filter_by(name=name, equipment=equipment).first()
+        if not ex:
+            print(f'[{i}/{total}] Not found (skipping): {name} ({equipment})')
+            skipped += 1
+            continue
+        if ex.muscle_group == muscle_group:
+            print(f'[{i}/{total}] Already up to date: {name} ({equipment})')
+            skipped += 1
+            continue
+        print(f'[{i}/{total}] Updating: {name} ({equipment})  {ex.muscle_group!r} -> {muscle_group!r}')
+        ExerciseMuscleMapping.query.filter_by(exercise_template_id=ex.id).delete()
+        parts = [p.strip() for p in muscle_group.split(',') if p.strip()]
+        for j, mg in enumerate(parts):
+            db.session.add(ExerciseMuscleMapping(
+                exercise_template_id=ex.id,
+                muscle_group=mg,
+                is_primary=(j == 0),
+            ))
+        updated += 1
+    db.session.commit()
+    print(f'\nDone. Updated: {updated}, Skipped: {skipped}')
+
+
 def main():
     parser = argparse.ArgumentParser(description='Seed exercise templates.')
     parser.add_argument('--no-images', action='store_true', help='Skip Wger image fetching')
     parser.add_argument('--backfill', action='store_true',
                         help='Update existing exercises that have no image_url')
+    parser.add_argument('--refetch-images', action='store_true',
+                        help='Re-fetch wger images for ALL exercises, overwriting existing image_url')
+    parser.add_argument('--update-muscles', action='store_true',
+                        help='Update muscle_group on existing exercises to match the list')
     args = parser.parse_args()
 
     app = create_app()
     with app.app_context():
         if args.backfill:
             backfill_images()
+            return
+
+        if args.refetch_images:
+            refetch_images()
+            return
+
+        if args.update_muscles:
+            update_muscles()
             return
 
         added = 0
@@ -351,13 +460,21 @@ def main():
             else:
                 print(f'[{i}/{total}] Adding: {name} ({equipment})')
 
-            db.session.add(ExerciseTemplate(
+            new_ex = ExerciseTemplate(
                 name=name,
-                muscle_group=muscle_group,
                 equipment=equipment,
                 image_url=image_url,
                 exercise_type='strength',
-            ))
+            )
+            db.session.add(new_ex)
+            db.session.flush()
+            parts = [p.strip() for p in muscle_group.split(',') if p.strip()]
+            for j, mg in enumerate(parts):
+                db.session.add(ExerciseMuscleMapping(
+                    exercise_template_id=new_ex.id,
+                    muscle_group=mg,
+                    is_primary=(j == 0),
+                ))
             added += 1
 
         # ── Cardio exercises ──────────────────────────────────────────────────
@@ -372,11 +489,17 @@ def main():
                 continue
 
             print(f'[C {i}/{ctotal}] Adding cardio: {name} ({equipment or "Outdoor"})')
-            db.session.add(ExerciseTemplate(
+            new_ex = ExerciseTemplate(
                 name=name,
-                muscle_group='Cardio',
                 equipment=equipment,
                 exercise_type='cardio',
+            )
+            db.session.add(new_ex)
+            db.session.flush()
+            db.session.add(ExerciseMuscleMapping(
+                exercise_template_id=new_ex.id,
+                muscle_group='Cardio',
+                is_primary=True,
             ))
             added += 1
 

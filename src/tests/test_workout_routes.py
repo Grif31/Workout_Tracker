@@ -256,7 +256,7 @@ class TestUpdateWorkout:
 
         res = client.patch(
             f'/api/workouts/{workout_id}',
-            json={'name': 'Updated Name'},
+            json={'workoutName': 'Updated Name'},
             headers={'Authorization': f'Bearer {auth_token}'},
         )
         assert res.status_code == 200

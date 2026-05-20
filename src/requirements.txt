@@ -16,3 +16,4 @@ cryptography
 requests
 Flask-Mail
 APScheduler
+marshmallow

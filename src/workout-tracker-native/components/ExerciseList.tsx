@@ -27,14 +27,17 @@ type Exercise = {
   exercise_type?: string;
 };
 
+type SelectedExercise = { id: number; name: string; equipment?: string; image_url?: string; exercise_type?: string };
+
 type Props = {
   visible: boolean;
   onClose: () => void;
   exercises: Exercise[];
   recentExerciseNames?: string[];
-  onSelect: (exercise: { id: number; name: string; equipment?: string; image_url?: string; exercise_type?: string }) => void;
-  onAddExercise: (name: string, muscle: string) => void;
+  onSelect: (exercise: SelectedExercise) => void;
+  onAddExercise: (name: string, muscle: string, equipment: string) => void;
   muscleGroups: string[];
+  multiSelect?: boolean;
 };
 
 export default function ExerciseListModal({
@@ -45,6 +48,7 @@ export default function ExerciseListModal({
   onSelect,
   onAddExercise,
   muscleGroups,
+  multiSelect = false,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
@@ -52,6 +56,7 @@ export default function ExerciseListModal({
   const [search, setSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState('All');
   const [formVisible, setFormVisible] = useState(false);
+  const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
 
   const displayName = (ex: Exercise) =>
     ex.equipment ? `${ex.name} (${ex.equipment})` : ex.name;
@@ -69,7 +74,7 @@ export default function ExerciseListModal({
     if (selectedMuscle === 'Cardio') return [];
     return strengthExercises.filter(ex => {
       const searchMatch = displayName(ex).toLowerCase().includes(search.toLowerCase());
-      const muscleMatch = selectedMuscle === 'All' || ex.muscle_group === selectedMuscle;
+      const muscleMatch = selectedMuscle === 'All' || ex.muscle_group?.split(',').map(m => m.trim()).includes(selectedMuscle);
       return searchMatch && muscleMatch;
     });
   }, [strengthExercises, search, selectedMuscle]);
@@ -85,47 +90,71 @@ export default function ExerciseListModal({
       .filter((ex): ex is Exercise => ex !== undefined)
       .filter(ex => {
         if (selectedMuscle === 'Cardio') return ex.exercise_type === 'cardio';
-        return selectedMuscle === 'All' || ex.muscle_group === selectedMuscle || ex.exercise_type === 'cardio';
+        return selectedMuscle === 'All' || ex.muscle_group?.split(',').map(m => m.trim()).includes(selectedMuscle);
       })
       .slice(0, 5);
   }, [recentExerciseNames, exercises, search, selectedMuscle]);
+
+  const showCardio = selectedMuscle === 'All' || selectedMuscle === 'Cardio';
 
   const sections = useMemo(() => {
     if (search) {
       const allResults = selectedMuscle === 'Cardio'
         ? cardioFiltered
-        : [...strengthFiltered, ...cardioFiltered];
+        : showCardio
+          ? [...strengthFiltered, ...cardioFiltered]
+          : strengthFiltered;
       return [{ title: 'Results', data: allResults }];
     }
     return [
       ...(recentFiltered.length > 0 ? [{ title: 'Recent', data: recentFiltered }] : []),
       ...(strengthFiltered.length > 0 ? [{ title: 'All Exercises', data: strengthFiltered }] : []),
-      ...(cardioFiltered.length > 0 ? [{ title: 'Cardio', data: cardioFiltered }] : []),
+      ...(showCardio && cardioFiltered.length > 0 ? [{ title: 'Cardio', data: cardioFiltered }] : []),
     ];
-  }, [search, strengthFiltered, cardioFiltered, recentFiltered, selectedMuscle]);
+  }, [search, strengthFiltered, cardioFiltered, recentFiltered, selectedMuscle, showCardio]);
 
   const handleClose = () => {
     setSearch('');
     setSelectedMuscle('All');
+    setPendingIds(new Set());
     onClose();
   };
 
   const handleSelect = (ex: Exercise) => {
-    onSelect({
-      id: ex.id,
-      name: ex.name,
-      equipment: ex.equipment,
-      image_url: ex.image_url,
-      exercise_type: ex.exercise_type,
-    });
+    if (multiSelect) {
+      setPendingIds(prev => {
+        const next = new Set(prev);
+        if (next.has(ex.id)) next.delete(ex.id);
+        else next.add(ex.id);
+        return next;
+      });
+      return;
+    }
+    onSelect({ id: ex.id, name: ex.name, equipment: ex.equipment, image_url: ex.image_url, exercise_type: ex.exercise_type });
+    setSearch('');
+    setSelectedMuscle('All');
+  };
+
+  const handleAddPending = () => {
+    const toAdd = [...pendingIds]
+      .map(id => exercises.find(ex => ex.id === id))
+      .filter((ex): ex is Exercise => ex !== undefined);
+    toAdd.forEach(ex =>
+      onSelect({ id: ex.id, name: ex.name, equipment: ex.equipment, image_url: ex.image_url, exercise_type: ex.exercise_type })
+    );
+    setPendingIds(new Set());
     setSearch('');
     setSelectedMuscle('All');
   };
 
   const renderCard = ({ item }: { item: Exercise }) => {
     const isCardio = item.exercise_type === 'cardio';
+    const isPending = multiSelect && pendingIds.has(item.id);
     return (
-      <TouchableOpacity style={styles.card} onPress={() => handleSelect(item)}>
+      <TouchableOpacity
+        style={[styles.card, isPending && { borderWidth: 1.5, borderColor: colors.save }]}
+        onPress={() => handleSelect(item)}
+      >
         {item.image_url ? (
           <Image source={{ uri: item.image_url }} style={styles.cardImage} />
         ) : (
@@ -141,7 +170,11 @@ export default function ExerciseListModal({
           <Text style={styles.cardName}>{displayName(item)}</Text>
           <Text style={styles.cardMuscle}>{isCardio ? 'Cardio' : item.muscle_group}</Text>
         </View>
-        <Ionicons name="add-circle-outline" size={22} color={colors.save} />
+        <Ionicons
+          name={isPending ? 'checkmark-circle' : 'add-circle-outline'}
+          size={22}
+          color={colors.save}
+        />
       </TouchableOpacity>
     );
   };
@@ -214,11 +247,24 @@ export default function ExerciseListModal({
           stickySectionHeadersEnabled={false}
         />
 
+        {multiSelect && pendingIds.size > 0 && (
+          <View style={[styles.addPendingBar, { borderTopColor: colors.border, paddingBottom: insets.bottom || spacing.md }]}>
+            <TouchableOpacity
+              style={[styles.addPendingBtn, { backgroundColor: colors.accent }]}
+              onPress={handleAddPending}
+            >
+              <Text style={styles.addPendingText}>
+                Add {pendingIds.size} Exercise{pendingIds.size !== 1 ? 's' : ''}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <NewExerciseForm
           visible={formVisible}
           onClose={() => setFormVisible(false)}
-          onSave={(name, muscle) => {
-            onAddExercise(name, muscle);
+          onSave={(name, muscle, equipment) => {
+            onAddExercise(name, muscle, equipment);
             setFormVisible(false);
           }}
           muscleGroups={muscleGroups}
@@ -365,5 +411,20 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.lg,
     fontSize: typography.fontSize.sm,
+  },
+  addPendingBar: {
+    borderTopWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+  },
+  addPendingBtn: {
+    borderRadius: spacing.sm,
+    paddingVertical: spacing.sm + 2,
+    alignItems: 'center',
+  },
+  addPendingText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: typography.fontSize.md,
   },
 });

@@ -1,10 +1,14 @@
 import os
 import json
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, WorkoutTemplate, ExerciseTemplate, Routine, RoutineDay
+from schemas import AiGenerateSchema
+from utils.validation import validate_body
 
 ai_bp = Blueprint('ai_bp', __name__)
+
+_ai_generate_schema = AiGenerateSchema()
 
 
 def _match_exercise_ids(names: list[str]) -> list[int]:
@@ -38,14 +42,15 @@ def _parse_ai_json(raw: str) -> dict:
 
 @ai_bp.post('/api/ai/generate')
 @jwt_required()
+@validate_body(_ai_generate_schema)
 def generate_workout():
-    data = request.get_json()
+    data = g.validated
     user_id = get_jwt_identity()
 
-    days_per_week = int(data.get('days_per_week', 3))
-    goal = data.get('goal', 'general')
-    experience = data.get('experience', 'beginner')
-    generate_type = data.get('generate_type', 'routine')
+    days_per_week = data['days_per_week']
+    goal = data['goal']
+    experience = data['experience']
+    generate_type = data['generate_type']
 
     api_key = os.environ.get('ANTHROPIC_API_KEY')
     if not api_key:

@@ -16,6 +16,11 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "grifvondeben31@gmail.com",
+        "language": "en-US"
+      }
+    }
   }
 }

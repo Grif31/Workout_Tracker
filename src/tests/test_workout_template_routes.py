@@ -8,9 +8,10 @@ Tests for workout template routes:
 """
 
 
-def create_exercise(client, name='Squat', muscle='Quads'):
-    client.post('/api/exercises', json={'name': name, 'muscle_group': muscle})
-    exercises = client.get('/api/exercises').get_json()
+def create_exercise(client, auth_token, name='Squat', muscle='Quads'):
+    hdrs = {'Authorization': f'Bearer {auth_token}'}
+    client.post('/api/exercises', json={'name': name, 'muscle_group': muscle}, headers=hdrs)
+    exercises = client.get('/api/exercises', headers=hdrs).get_json()
     return next(e['id'] for e in exercises if e['name'] == name)
 
 
@@ -31,7 +32,7 @@ class TestCreateWorkoutTemplate:
         assert 'id' in data
 
     def test_create_with_exercises(self, client, auth_token):
-        ex_id = create_exercise(client, 'Bench Press', 'Chest')
+        ex_id = create_exercise(client, auth_token, 'Bench Press', 'Chest')
         res = create_template(client, auth_token, 'Chest Day', [ex_id])
         assert res.status_code == 201
         data = res.get_json()
@@ -103,7 +104,7 @@ class TestUpdateWorkoutTemplate:
         assert res.get_json()['name'] == 'New Name'
 
     def test_update_exercises(self, client, auth_token):
-        ex_id = create_exercise(client, 'Deadlift', 'Back')
+        ex_id = create_exercise(client, auth_token, 'Deadlift', 'Back')
         template_id = create_template(client, auth_token, 'Back Day').get_json()['id']
         res = client.patch(f'/api/workout-templates/{template_id}',
                            json={'exercise_template_ids': [ex_id]},

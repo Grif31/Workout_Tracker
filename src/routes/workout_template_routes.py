@@ -1,14 +1,19 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from models import db, WorkoutTemplate, ExerciseTemplate
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from schemas import WorkoutTemplateSchema
+from utils.validation import validate_body
 
 workout_template_bp = Blueprint('workout_template_bp', __name__)
+
+_workout_template_schema = WorkoutTemplateSchema()
 
 
 @workout_template_bp.post('/api/workout-templates')
 @jwt_required()
+@validate_body(_workout_template_schema)
 def create_workout_template():
-    data = request.get_json()
+    data = g.validated
     user_id = get_jwt_identity()
 
     name = data.get('name', '').strip()

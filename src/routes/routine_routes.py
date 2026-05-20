@@ -1,14 +1,19 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from models import db, Routine, RoutineDay, WorkoutTemplate, ExerciseTemplate, User
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from schemas import RoutineSchema
+from utils.validation import validate_body
 
 routine_bp = Blueprint('routine_bp', __name__)
+
+_routine_schema = RoutineSchema()
 
 
 @routine_bp.post('/api/routines')
 @jwt_required()
+@validate_body(_routine_schema)
 def create_routine():
-    data = request.get_json()
+    data = g.validated
     user_id = get_jwt_identity()
 
     name = data.get('name', '').strip()

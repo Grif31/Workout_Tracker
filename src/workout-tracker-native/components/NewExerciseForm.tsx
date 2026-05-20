@@ -4,11 +4,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import { equipmentTypes } from '../constants/equipmentTypes';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onSave: (name: string, muscle: string) => void;
+  onSave: (name: string, muscle: string, equipment: string) => void;
   muscleGroups: string[];
 };
 
@@ -17,6 +18,7 @@ export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [name, setName] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
+  const [equipment, setEquipment] = useState('');
 
   const toggle = (group: string) => {
     setSelected(prev =>
@@ -24,16 +26,20 @@ export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups
     );
   };
 
+  const canSave = name.trim().length > 0 && selected.length > 0 && equipment.length > 0;
+
   const handleSave = () => {
-    if (!name.trim() || selected.length === 0) return;
-    onSave(name.trim(), selected.join(', '));
+    if (!canSave) return;
+    onSave(name.trim(), selected.join(', '), equipment);
     setName('');
     setSelected([]);
+    setEquipment('');
   };
 
   const handleClose = () => {
     setName('');
     setSelected([]);
+    setEquipment('');
     onClose();
   };
 
@@ -46,10 +52,8 @@ export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
             <Text style={styles.title}>New Exercise</Text>
-            <TouchableOpacity onPress={handleSave} disabled={!name.trim() || selected.length === 0}>
-              <Text style={[styles.saveText, (!name.trim() || selected.length === 0) && styles.saveTextDisabled]}>
-                Save
-              </Text>
+            <TouchableOpacity onPress={handleSave} disabled={!canSave}>
+              <Text style={[styles.saveText, !canSave && styles.saveTextDisabled]}>Save</Text>
             </TouchableOpacity>
           </View>
 
@@ -61,6 +65,24 @@ export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups
             onChangeText={setName}
             autoFocus
           />
+
+          <Text style={styles.sectionTitle}>Equipment</Text>
+          <View style={styles.equipmentGrid}>
+            {equipmentTypes.map(eq => {
+              const active = equipment === eq;
+              return (
+                <TouchableOpacity
+                  key={eq}
+                  style={[styles.equipmentChip, active && { backgroundColor: colors.accent + '20', borderColor: colors.accent }]}
+                  onPress={() => setEquipment(active ? '' : eq)}
+                >
+                  <Text style={[styles.equipmentChipText, active && { color: colors.accent, fontWeight: '700' }]}>
+                    {eq}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
           <Text style={styles.sectionTitle}>
             Muscle Groups
@@ -101,7 +123,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   card: {
     width: '88%',
-    maxHeight: '80%',
+    maxHeight: '85%',
     backgroundColor: colors.surface,
     borderRadius: 14,
     padding: spacing.md,
@@ -155,6 +177,23 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '600',
     textTransform: 'none',
     letterSpacing: 0,
+  },
+  equipmentGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  equipmentChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  equipmentChipText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textPrimary,
   },
   list: {
     flexGrow: 0,

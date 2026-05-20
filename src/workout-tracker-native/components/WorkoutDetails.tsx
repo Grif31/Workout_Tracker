@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator,
+  Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -25,7 +26,24 @@ import { estimateCalories } from '../utils/cardioCalories';
 export type PrefillWorkoutData = {
   name: string;
   notes: string;
-  exercises: { name: string; sets: { reps: string; weight: string }[] }[];
+  exercises: {
+    id?: number;
+    name: string;
+    exercise_template_id?: number;
+    exercise_type?: string;
+    notes?: string;
+    sets: {
+      id?: number;
+      reps: string;
+      weight: string;
+      set_type?: string;
+      rpe?: string;
+      cardio_duration?: string;
+      distance?: string;
+      distance_unit?: string;
+      intensity?: string;
+    }[];
+  }[];
 };
 
 type Props = {
@@ -35,8 +53,6 @@ type Props = {
   onSaveAsTemplate?: () => void;
   onPerformAgain?: (prefill: PrefillWorkoutData) => void;
 };
-
-const SET_TYPE_COLORS_STATIC = { W: '#FF9500', D: '#AF52DE' };
 
 function fmtVolume(v: number): string {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
@@ -56,8 +72,8 @@ export default function WorkoutDetailsScreen({
   const styles = useMemo(() => createStyles(colors), [colors]);
   const SET_TYPE_COLORS = useMemo(() => ({
     N: colors.textSecondary,
-    W: '#FF9500',
-    D: '#AF52DE',
+    W: colors.warmup,
+    D: colors.dropset,
     F: colors.danger,
   }), [colors]);
 
@@ -67,6 +83,9 @@ export default function WorkoutDetailsScreen({
 
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [loading, setLoading] = useState(true);
+  const [templateModal, setTemplateModal] = useState<{ visible: boolean; name: string; excluded: number }>({
+    visible: false, name: '', excluded: 0,
+  });
 
   useFocusEffect(useCallback(() => { fetchWorkout(); }, [workoutId]));
 
@@ -89,10 +108,21 @@ export default function WorkoutDetailsScreen({
       name: workout.name,
       notes: workout.notes || '',
       exercises: workout.exercises.map(e => ({
+        id: mode === 'edit' ? e.id : undefined,
         name: e.name,
+        exercise_template_id: e.exercise_template_id,
+        exercise_type: e.exercise_type,
+        notes: mode === 'edit' ? (e.notes ?? '') : undefined,
         sets: e.sets.map(s => ({
+          id: mode === 'edit' ? s.id : undefined,
           reps: mode === 'edit' ? (s.reps ?? '') : '',
           weight: mode === 'edit' ? (s.weight ?? '') : '',
+          set_type: mode === 'edit' ? (s.set_type ?? 'N') : 'N',
+          rpe: mode === 'edit' ? (s.rpe != null ? String(s.rpe) : '') : '',
+          cardio_duration: mode === 'edit' ? (s.cardio_duration ?? '') : '',
+          distance: mode === 'edit' ? (s.distance ?? '') : '',
+          distance_unit: mode === 'edit' ? (s.distance_unit ?? 'km') : 'km',
+          intensity: mode === 'edit' ? (s.intensity ?? '') : '',
         })),
       })),
     };
@@ -121,6 +151,29 @@ export default function WorkoutDetailsScreen({
     }
   };
 
+  const doSaveTemplate = async () => {
+    const name = templateModal.name.trim() || workout!.name;
+    const ids = workout!.exercises
+      .map(e => e.exercise_template_id)
+      .filter((id): id is number => id != null);
+    setTemplateModal(m => ({ ...m, visible: false }));
+    try {
+      const res = await apiFetch('/api/workout-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, exercise_template_ids: ids }),
+      });
+      if (res.ok) {
+        Alert.alert('Template Saved', `"${name}" saved as a template.`);
+        onSaveAsTemplate?.();
+      } else {
+        Alert.alert('Error', 'Failed to save template');
+      }
+    } catch {
+      Alert.alert('Error', 'Something went wrong');
+    }
+  };
+
   const openMenu = () => {
     if (!workout) return;
     const options: string[] = [];
@@ -135,25 +188,22 @@ export default function WorkoutDetailsScreen({
 
     if (onSaveAsTemplate) {
       options.push('Save as Template');
-      handlers.push(async () => {
-        try {
-          const ids = workout.exercises
-            .map(e => e.exercise_template_id)
-            .filter((id): id is number => id != null);
-          const res = await apiFetch('/api/workout-templates', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: workout.name, exercise_template_ids: ids }),
-          });
-          if (res.ok) {
-            Alert.alert('Template Saved', `"${workout.name}" saved as a template`);
-            onSaveAsTemplate();
-          } else {
-            Alert.alert('Error', 'Failed to save template');
-          }
-        } catch {
-          Alert.alert('Error', 'Something went wrong');
+      handlers.push(() => {
+        const ids = workout.exercises
+          .map(e => e.exercise_template_id)
+          .filter((id): id is number => id != null);
+        if (ids.length === 0) {
+          Alert.alert(
+            'Cannot Save Template',
+            'None of the exercises in this workout were selected from the exercise library. To create a template, use exercises from the library when logging.',
+          );
+          return;
         }
+        setTemplateModal({
+          visible: true,
+          name: workout.name,
+          excluded: workout.exercises.length - ids.length,
+        });
       });
     }
     options.push('Delete Workout');
@@ -180,6 +230,7 @@ export default function WorkoutDetailsScreen({
     sum + ex.sets.reduce((s, set) => s + (parseFloat(set.reps ?? '0') || 0) * (parseFloat(set.weight ?? '0') || 0), 0), 0);
 
   return (
+    <>
     <FlatList
       style={styles.container}
       contentContainerStyle={styles.content}
@@ -324,6 +375,9 @@ export default function WorkoutDetailsScreen({
             {exercise.equipment ? (
               <Text style={styles.equipmentText}>{exercise.equipment}</Text>
             ) : null}
+            {exercise.notes ? (
+              <Text style={styles.exerciseNotes}>{exercise.notes}</Text>
+            ) : null}
 
             {/* Column headers */}
             <View style={styles.setHeaderRow}>
@@ -360,6 +414,48 @@ export default function WorkoutDetailsScreen({
         <Text style={styles.emptyText}>No exercises recorded</Text>
       }
     />
+
+    <Modal
+      visible={templateModal.visible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setTemplateModal(m => ({ ...m, visible: false }))}
+    >
+      <KeyboardAvoidingView
+        style={styles.modalBackdrop}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Save as Template</Text>
+          <TextInput
+            style={styles.modalInput}
+            value={templateModal.name}
+            onChangeText={v => setTemplateModal(m => ({ ...m, name: v }))}
+            placeholder="Template name"
+            placeholderTextColor={colors.placeholder}
+            autoFocus
+            returnKeyType="done"
+          />
+          {templateModal.excluded > 0 && (
+            <Text style={styles.modalWarning}>
+              {templateModal.excluded} exercise{templateModal.excluded > 1 ? 's' : ''} not from the library will be excluded.
+            </Text>
+          )}
+          <View style={styles.modalBtns}>
+            <TouchableOpacity
+              style={styles.modalCancelBtn}
+              onPress={() => setTemplateModal(m => ({ ...m, visible: false }))}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalSaveBtn} onPress={doSaveTemplate}>
+              <Text style={styles.modalSaveText}>Save</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  </>
   );
 }
 
@@ -422,6 +518,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
     marginBottom: 2,
+  },
+  exerciseNotes: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+    marginBottom: spacing.xs,
   },
   equipmentText: {
     fontSize: 12,
@@ -486,6 +588,72 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     textAlign: 'center',
     color: colors.textSecondary,
     marginTop: spacing.lg,
+  },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: colors.surface,
+    borderRadius: spacing.md,
+    padding: spacing.lg,
+  },
+  modalTitle: {
+    fontSize: typography.fontSize.md,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: spacing.md,
+  },
+  modalInput: {
+    backgroundColor: colors.background,
+    borderRadius: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: typography.fontSize.md,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+  },
+  modalWarning: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
+  },
+  modalBtns: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: typography.fontSize.md,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  modalSaveBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.xs,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+  },
+  modalSaveText: {
+    fontSize: typography.fontSize.md,
+    color: colors.accentText,
+    fontWeight: '600',
   },
 
   routeMap: {

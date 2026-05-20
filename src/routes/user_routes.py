@@ -1,12 +1,17 @@
 import os
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, jsonify, request, current_app, g
 from werkzeug.utils import secure_filename
 from datetime import datetime
 from models import Workout, db, User, DeviceToken
 from flask_jwt_extended import  jwt_required, get_jwt_identity
+from schemas import UpdateProfileSchema, DeviceTokenSchema
+from utils.validation import validate_body
 
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
 MAX_AVATAR_BYTES = 5 * 1024 * 1024  # 5 MB
+
+_update_profile_schema = UpdateProfileSchema()
+_device_token_schema   = DeviceTokenSchema()
 
 def _allowed(filename: str) -> bool:
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -28,12 +33,13 @@ def get_current_user():
 
 @user_bp.patch('/api/me')
 @jwt_required()
+@validate_body(_update_profile_schema)
 def update_user_info():
     userId = get_jwt_identity()
     user = User.query.filter_by(id=userId).first()
     if not user:
         return jsonify({'message': 'User not found'}), 404
-    data = request.get_json()
+    data = g.validated
     if "name" in data:
         user.name = data["name"].strip() or None
     if "bio" in data:
@@ -96,13 +102,12 @@ def upload_avatar():
 
 @user_bp.post('/api/me/device-token')
 @jwt_required()
+@validate_body(_device_token_schema)
 def register_device_token():
     user_id = get_jwt_identity()
-    data = request.get_json() or {}
-    token = data.get('token')
-    platform = data.get('platform', 'unknown')
-    if not token:
-        return jsonify({'message': 'token required'}), 400
+    data = g.validated
+    token = data['token']
+    platform = data['platform']
     existing = DeviceToken.query.filter_by(user_id=user_id).first()
     if existing:
         existing.token = token

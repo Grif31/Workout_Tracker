@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Aretē",
-    "slug": "arete-fitness",
+    "slug": "workout-tracker-native",
     "scheme": "aretefitness",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -19,7 +19,8 @@
       "buildNumber": "1",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Aretē uses your location to track GPS cardio workouts.",
-        "NSPhotoLibraryUsageDescription": "Aretē accesses your photos to set a profile picture and add progress photos."
+        "NSPhotoLibraryUsageDescription": "Aretē accesses your photos to set a profile picture and add progress photos.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -37,7 +38,8 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -71,7 +73,15 @@
           "color": "#ffffff",
           "defaultChannel": "default"
         }
-      ]
+      ],
+      [
+        "react-native-health",
+        {
+          "NSHealthShareUsageDescription": "Aretē reads health data to display workout metrics.",
+          "NSHealthUpdateUsageDescription": "Aretē writes workout sessions to Apple Health."
+        }
+      ],
+      "react-native-health-connect"
     ]
   }
 }

@@ -90,6 +90,7 @@ class Exercise(db.Model):
     order = db.Column(db.Integer, nullable=True)
     exercise_type = db.Column(db.String(10), nullable=False, server_default='strength')
     route_polyline = db.Column(db.Text, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
     sets = db.relationship('Set', backref='exercises', cascade="all, delete-orphan", lazy=True, order_by='Set.order')
 
     def to_dict(self, include_sets=False):
@@ -102,6 +103,7 @@ class Exercise(db.Model):
             "order": self.order,
             "exercise_type": (self.exercise_type or 'strength').lower(),
             "route_polyline": self.route_polyline,
+            "notes": self.notes,
             "equipment": tmpl.equipment if tmpl else None,
         }
         if include_sets:
@@ -194,7 +196,6 @@ class ExerciseTemplate(db.Model):
     __tablename__ = "exerciseTemplates"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(250), nullable=False)
-    muscle_group = db.Column(db.String(250), nullable=False)
     equipment = db.Column(db.String(100), nullable=True)
     image_url = db.Column(db.Text, nullable=True)
     exercise_type = db.Column(db.String(10), nullable=False, server_default='strength')
@@ -203,10 +204,42 @@ class ExerciseTemplate(db.Model):
         db.UniqueConstraint('name', 'equipment', name='uq_exercise_name_equipment'),
     )
 
+    muscle_mappings = db.relationship(
+        'ExerciseMuscleMapping',
+        cascade='all, delete-orphan',
+        lazy='select',
+    )
+
     workout_templates = db.relationship(
         "WorkoutTemplate",
         secondary="workout_template_exercises",
         back_populates="exercises",
+    )
+
+    @property
+    def muscle_group(self) -> str:
+        """Assembles the comma-separated muscle string from the join table: primary first."""
+        primaries = [m.muscle_group for m in self.muscle_mappings if m.is_primary]
+        secondaries = [m.muscle_group for m in self.muscle_mappings if not m.is_primary]
+        return ', '.join(primaries + secondaries)
+
+
+# ── ExerciseMuscleMapping ─────────────────────────────────────
+# Join table: one row per (exercise, muscle). is_primary=True marks the main mover.
+class ExerciseMuscleMapping(db.Model):
+    __tablename__ = "exercise_muscle_mappings"
+    id = db.Column(db.Integer, primary_key=True)
+    exercise_template_id = db.Column(
+        db.Integer,
+        db.ForeignKey('exerciseTemplates.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+    )
+    muscle_group = db.Column(db.String(50), nullable=False)
+    is_primary = db.Column(db.Boolean, nullable=False, default=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('exercise_template_id', 'muscle_group', name='uq_exercise_muscle'),
     )
 
 # ── Set ─────────────────────────────────────────────────────────────────
@@ -282,10 +315,12 @@ class BodyMeasurement(db.Model):
     id      = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
     date    = db.Column(db.DateTime, default=datetime.now, nullable=False)
-    waist   = db.Column(db.Float, nullable=True)
-    chest   = db.Column(db.Float, nullable=True)
-    arms    = db.Column(db.Float, nullable=True)
-    legs    = db.Column(db.Float, nullable=True)
+    waist     = db.Column(db.Float, nullable=True)
+    chest     = db.Column(db.Float, nullable=True)
+    right_arm = db.Column(db.Float, nullable=True)
+    left_arm  = db.Column(db.Float, nullable=True)
+    right_leg = db.Column(db.Float, nullable=True)
+    left_leg  = db.Column(db.Float, nullable=True)
 
     __table_args__ = (db.Index('ix_measurements_user_date', 'user_id', 'date'),)
 
@@ -296,8 +331,10 @@ class BodyMeasurement(db.Model):
             "date": self.date.isoformat() if self.date else None,
             "waist": self.waist,
             "chest": self.chest,
-            "arms": self.arms,
-            "legs": self.legs,
+            "right_arm": self.right_arm,
+            "left_arm": self.left_arm,
+            "right_leg": self.right_leg,
+            "left_leg": self.left_leg,
         }
 
 

@@ -4,8 +4,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from './api';
 
 const PROJECT_ID = '356b88e9-4302-43fc-b50a-6d83030b8fa6';
-const REMINDER_NOTIF_KEY = 'workout_reminder_notif_id';
+const REMINDER_NOTIF_KEY    = 'workout_reminder_notif_id';
+const REST_TIMER_NOTIF_KEY  = 'rest_timer_notif_id';
+const LIVE_WORKOUT_NOTIF_KEY = 'live_workout_notif_id';
 
+// In-memory cache — avoids AsyncStorage reads while the app is running.
+// On restart the cache is empty; functions fall back to AsyncStorage.
 let restTimerNotifId: string | null = null;
 let liveWorkoutNotifId: string | null = null;
 
@@ -54,40 +58,60 @@ export async function scheduleRestTimerAlert(seconds: number): Promise<void> {
       seconds,
     },
   });
+  await AsyncStorage.setItem(REST_TIMER_NOTIF_KEY, restTimerNotifId);
 }
 
 export async function cancelRestTimerAlert(): Promise<void> {
-  if (restTimerNotifId) {
-    await Notifications.cancelScheduledNotificationAsync(restTimerNotifId).catch(() => {});
+  const id = restTimerNotifId ?? await AsyncStorage.getItem(REST_TIMER_NOTIF_KEY);
+  if (id) {
+    await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
     restTimerNotifId = null;
+    await AsyncStorage.removeItem(REST_TIMER_NOTIF_KEY);
   }
 }
 
 // ── Live Workout Notification ────────────────────────────────
+
+const LIVE_WORKOUT_CATEGORY = 'live_workout';
+
+export async function setUpLiveWorkoutCategory(): Promise<void> {
+  await Notifications.setNotificationCategoryAsync(LIVE_WORKOUT_CATEGORY, [
+    {
+      identifier: 'resume_workout',
+      buttonTitle: 'Resume',
+      options: { opensAppToForeground: true },
+    },
+  ]);
+}
 
 export async function postLiveWorkoutNotification(opts: {
   workoutName: string;
   elapsed: string;
   setsDone: number;
   setsTotal: number;
+  currentExercise?: string;
 }): Promise<void> {
   await cancelLiveWorkoutNotification();
   liveWorkoutNotifId = await Notifications.scheduleNotificationAsync({
     content: {
-      title: `🏋️ ${opts.workoutName}`,
-      body: `${opts.elapsed} · ${opts.setsDone}/${opts.setsTotal} sets done`,
+      title: `${opts.workoutName}  ·  ${opts.elapsed}  —  ${opts.setsDone}/${opts.setsTotal} sets`,
+      body: opts.currentExercise ?? '',
+      categoryIdentifier: LIVE_WORKOUT_CATEGORY,
       data: { type: 'live_workout' },
       autoDismiss: false,
       sticky: true,
     } as any,
     trigger: null,
   });
+  await AsyncStorage.setItem(LIVE_WORKOUT_NOTIF_KEY, liveWorkoutNotifId);
 }
 
 export async function cancelLiveWorkoutNotification(): Promise<void> {
-  if (liveWorkoutNotifId) {
-    await Notifications.dismissNotificationAsync(liveWorkoutNotifId).catch(() => {});
+  const id = liveWorkoutNotifId ?? await AsyncStorage.getItem(LIVE_WORKOUT_NOTIF_KEY);
+  if (id) {
+    await Notifications.dismissNotificationAsync(id).catch(() => {});
     liveWorkoutNotifId = null;
+    await AsyncStorage.removeItem(LIVE_WORKOUT_NOTIF_KEY);
   }
 }
 

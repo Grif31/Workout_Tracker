@@ -231,7 +231,7 @@ export default function TrainingScreen({ navigation }: Props) {
             // screenWidth minus content padding (2×24) minus card padding (2×16) minus y-axis (35) minus initial+end spacing (2×20)
             const availableForBars = Dimensions.get('window').width - 48 - 32 - 35 - 40;
             const barWidth = Math.max(8, Math.floor((availableForBars - (N - 1) * BAR_GAP) / N));
-            const spacing  = BAR_GAP;
+            const chartSpacing = BAR_GAP;
 
             const maxVal = Math.max(...progressData.map(getValue), 1);
 
@@ -279,10 +279,10 @@ export default function TrainingScreen({ navigation }: Props) {
                 {/* Chart */}
                 {hasData ? (
                   <BarChart
-                    key={chartRange}
+                    key={`${chartRange}-${chartMetric}`}
                     data={barData}
                     barWidth={barWidth}
-                    spacing={spacing}
+                    spacing={chartSpacing}
                     roundedTop
                     hideRules
                     xAxisLabelTextStyle={styles.axisLabel}

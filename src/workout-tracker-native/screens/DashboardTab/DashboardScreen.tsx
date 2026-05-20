@@ -545,10 +545,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
   workoutName: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, flex: 1 },
   prBadge: {
-    backgroundColor: '#FFF3CD', borderRadius: 10,
+    backgroundColor: '#FFF3C4', borderRadius: 10,
     paddingHorizontal: spacing.sm, paddingVertical: 2, marginLeft: spacing.xs,
   },
-  prBadgeText: { fontSize: 11, fontWeight: '700', color: '#856404' },
+  prBadgeText: { fontSize: 11, fontWeight: '700', color: '#7A5800' },
   workoutDate: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginBottom: spacing.sm },
   statPills: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xs },
   pill: {

@@ -66,10 +66,10 @@ class TestUpdateUserInfo:
         assert res.status_code == 200
         assert res.get_json()['weight_unit'] == 'kg'
 
-    def test_invalid_weight_unit_defaults_to_lbs(self, client, auth_token):
+    def test_invalid_weight_unit_rejected(self, client, auth_token):
         res = client.patch('/api/me', json={'weight_unit': 'stones'}, headers=auth_headers(auth_token))
-        assert res.status_code == 200
-        assert res.get_json()['weight_unit'] == 'lbs'
+        assert res.status_code == 400
+        assert 'message' in res.get_json()
 
     def test_update_bodyweight(self, client, auth_token):
         res = client.patch('/api/me', json={'bodyweight': 185.5}, headers=auth_headers(auth_token))

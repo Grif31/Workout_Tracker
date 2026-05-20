@@ -1,12 +1,16 @@
 import os
 import time
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, jsonify, request, current_app, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.utils import secure_filename
 from models import db, BodyMeasurement, ProgressPhoto
+from schemas import MeasurementSchema
+from utils.validation import validate_body
 
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
 MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
+
+_measurement_schema = MeasurementSchema()
 
 def _allowed(filename: str) -> bool:
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -29,23 +33,25 @@ def get_measurements():
 
 @measurement_bp.post('/api/measurements')
 @jwt_required()
+@validate_body(_measurement_schema)
 def create_measurement():
     user_id = get_jwt_identity()
-    data = request.get_json() or {}
-    waist = data.get('waist')
-    chest = data.get('chest')
-    arms  = data.get('arms')
-    legs  = data.get('legs')
-
-    if all(v is None for v in [waist, chest, arms, legs]):
-        return jsonify({'message': 'At least one measurement field required'}), 400
+    data      = g.validated
+    waist     = data.get('waist')
+    chest     = data.get('chest')
+    right_arm = data.get('right_arm')
+    left_arm  = data.get('left_arm')
+    right_leg = data.get('right_leg')
+    left_leg  = data.get('left_leg')
 
     entry = BodyMeasurement(
         user_id=user_id,
         waist=float(waist) if waist is not None else None,
         chest=float(chest) if chest is not None else None,
-        arms=float(arms) if arms is not None else None,
-        legs=float(legs) if legs is not None else None,
+        right_arm=float(right_arm) if right_arm is not None else None,
+        left_arm=float(left_arm) if left_arm is not None else None,
+        right_leg=float(right_leg) if right_leg is not None else None,
+        left_leg=float(left_leg) if left_leg is not None else None,
     )
     db.session.add(entry)
     db.session.commit()

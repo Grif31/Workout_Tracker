@@ -11,7 +11,7 @@ export type SessionSet = {
 
 export type SessionExercise = {
   uid: string;
-  id?: string;
+  id?: number;
   name: string;
   exercise_template_id?: number;
   sets: SessionSet[];

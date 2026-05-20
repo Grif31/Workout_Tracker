@@ -242,7 +242,7 @@ class TestProfileStats:
                 ))
             db.session.commit()
         data = client.get('/api/stats/profile', headers=auth_headers(auth_token)).get_json()
-        assert data['longest_streak'] == 4
+        assert data['longest_daily_streak'] == 4
 
     def test_streak_resets_on_gap(self, client, auth_token, app):
         user_id = get_user_id(client, auth_token)
@@ -257,7 +257,7 @@ class TestProfileStats:
                 ))
             db.session.commit()
         data = client.get('/api/stats/profile', headers=auth_headers(auth_token)).get_json()
-        assert data['longest_streak'] == 3
+        assert data['longest_daily_streak'] == 3
 
     def test_does_not_include_other_users(self, client, auth_token, auth_token2):
         create_workout(client, auth_token)

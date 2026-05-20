@@ -44,6 +44,7 @@ type HistorySession = {
   sets: { reps: number; weight: number }[];
   best1rm: number;
   bestWeight: number;
+  notes?: string;
 };
 
 type ChartPoint = { value: number; label: string; dataPointText: string };
@@ -166,6 +167,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           sets: item.sets ?? [],
           best1rm: item.best_1rm ?? 0,
           bestWeight: item.best_set?.weight ?? 0,
+          notes: item.notes || undefined,
         };
       });
 
@@ -390,6 +392,9 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           <Text style={styles.historyLabel}>{session.workoutName}</Text>
           <Text style={styles.historyDate}>{new Date(session.date).toLocaleDateString()}</Text>
         </View>
+        {session.notes ? (
+          <Text style={styles.historyNotes}>{session.notes}</Text>
+        ) : null}
         {session.sets.map((set, j) => (
           <Text key={j} style={styles.historyDetail}>
             Set {j + 1}: {set.reps} reps @ {toDisplayWeight(set.weight, weightUnit)}
@@ -413,16 +418,32 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         ) : null}
 
         <Text style={styles.title}>{exerciseName}</Text>
-        <View style={styles.metaRow}>
-          <View style={styles.metaPill}>
-            <Text style={styles.metaLabel}>Primary</Text>
-            <Text style={styles.metaValue}>{muscleGroup}</Text>
-          </View>
-          <View style={styles.metaPill}>
-            <Text style={styles.metaLabel}>Equipment</Text>
-            <Text style={styles.metaValue}>{equipment ?? 'Bodyweight'}</Text>
-          </View>
-        </View>
+        {(() => {
+          const isCardio = muscleGroup === 'Cardio';
+          const muscles = isCardio ? [] : (muscleGroup?.split(',').map((m: string) => m.trim()).filter(Boolean) ?? []);
+          const primary = muscles[0] ?? muscleGroup;
+          const secondary = muscles.slice(1);
+          return (
+            <View style={styles.metaRow}>
+              {!isCardio && (
+                <View style={styles.metaPill}>
+                  <Text style={styles.metaLabel}>Primary</Text>
+                  <Text style={styles.metaValue}>{primary}</Text>
+                </View>
+              )}
+              {!isCardio && secondary.length > 0 && (
+                <View style={styles.metaPill}>
+                  <Text style={styles.metaLabel}>Also Works</Text>
+                  <Text style={styles.metaValue}>{secondary.join(', ')}</Text>
+                </View>
+              )}
+              <View style={styles.metaPill}>
+                <Text style={styles.metaLabel}>Equipment</Text>
+                <Text style={styles.metaValue}>{equipment ?? 'Bodyweight'}</Text>
+              </View>
+            </View>
+          );
+        })()}
 
         <View style={styles.tabRow}>
           {tabLabels.map(tab => (
@@ -440,9 +461,9 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
 
         {activeTab === 'about' && (
           <View style={styles.section}>
-            {exerciseType !== 'cardio' && (
+            {muscleGroup !== 'Cardio' && (
               <View style={styles.diagramCard}>
-                <MuscleDiagram primaryMuscle={muscleGroup} />
+                <MuscleDiagram muscles={muscleGroup?.split(',').map((m: string) => m.trim()).filter(Boolean)} />
               </View>
             )}
 
@@ -637,6 +658,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   historyDate: {
     color: colors.textSecondary,
     fontSize: typography.fontSize.sm,
+  },
+  historyNotes: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+    marginBottom: spacing.xs,
   },
   historyDetail: {
     color: colors.textSecondary,

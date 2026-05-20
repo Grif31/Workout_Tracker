@@ -107,6 +107,11 @@ def create_app(test_config=None):
     app.register_blueprint(ai_bp)
     app.register_blueprint(measurement_bp)
 
+    if not app.config.get('TESTING'):
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(_send_reengagement_pushes, 'cron', hour=9, minute=0, args=[app])
+        scheduler.start()
+
     return app
 
 
@@ -138,10 +143,4 @@ if __name__ == '__main__':
     app = create_app()
     with app.app_context():
         db.create_all()
-
-    if not app.config.get('TESTING'):
-        scheduler = BackgroundScheduler()
-        scheduler.add_job(_send_reengagement_pushes, 'cron', hour=9, minute=0, args=[app])
-        scheduler.start()
-
     app.run(debug=False, host='0.0.0.0')
