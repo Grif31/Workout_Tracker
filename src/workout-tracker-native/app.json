@@ -51,6 +51,7 @@
       }
     },
     "plugins": [
+      "expo-dev-client",
       "expo-asset",
       "expo-web-browser",
       [
