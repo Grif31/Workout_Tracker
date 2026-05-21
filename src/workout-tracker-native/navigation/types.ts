@@ -66,3 +66,8 @@ export type AuthStackParamsList = {
     ForgotPassword: undefined;
     ResetPassword:  { email: string };
 }
+
+export type OnboardingStackParamsList = {
+    Onboarding:         undefined;
+    OnboardingTutorial: undefined;
+}

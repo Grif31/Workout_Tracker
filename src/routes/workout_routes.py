@@ -1,6 +1,9 @@
+import csv
 from datetime import datetime
-from flask import Blueprint, request, jsonify, current_app, g
+from io import StringIO
+from flask import Blueprint, request, jsonify, current_app, g, make_response
 from models import db, Workout, Set, Exercise, PersonalRecord, ExerciseTemplate, User
+from sqlalchemy.orm import selectinload
 from flask_jwt_extended import  jwt_required, get_jwt_identity
 from schemas import WorkoutSchema, UpdateWorkoutSchema
 from utils.validation import validate_body
@@ -558,5 +561,52 @@ def update_workout(workout_id):
     workout.calculate_volume(weight_unit=user.weight_unit or 'lbs')
     db.session.commit()
     return jsonify(workout.to_dict(include_exercises=True)), 200
-    
+
+
+@workout_bp.route('/api/workouts/export', methods=['GET'])
+@jwt_required()
+def export_workouts():
+    current_user_id = get_jwt_identity()
+    workouts = (
+        Workout.query
+        .filter_by(user_id=current_user_id)
+        .options(selectinload(Workout.exercises).selectinload(Exercise.sets))
+        .order_by(Workout.date.asc())
+        .all()
+    )
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        'date', 'workout_name', 'duration_min',
+        'exercise_name', 'set_number', 'set_type',
+        'reps', 'weight', 'volume',
+    ])
+
+    for workout in workouts:
+        date_str = workout.date.strftime('%Y-%m-%d') if workout.date else ''
+        duration_min = round(workout.duration / 60, 1) if workout.duration else ''
+        for exercise in workout.exercises:
+            for i, s in enumerate(exercise.sets, start=1):
+                reps = s.reps if s.reps is not None else ''
+                weight = s.weight if s.weight is not None else ''
+                volume = round(s.reps * s.weight, 2) if s.reps and s.weight else ''
+                writer.writerow([
+                    date_str,
+                    workout.name,
+                    duration_min,
+                    exercise.name,
+                    i,
+                    s.set_type,
+                    reps,
+                    weight,
+                    volume,
+                ])
+
+    csv_data = output.getvalue()
+    response = make_response(csv_data)
+    response.headers['Content-Type'] = 'text/csv'
+    response.headers['Content-Disposition'] = 'attachment; filename="workouts.csv"'
+    return response
+
     

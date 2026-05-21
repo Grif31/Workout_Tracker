@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert,
-  ScrollView, FlatList, Modal, Dimensions,
+  ScrollView, FlatList, Modal, Dimensions, Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -37,6 +37,18 @@ export default function TrainingScreen({ navigation }: Props) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [activeTab, setActiveTab] = useState<'progress' | 'training'>('progress');
   const weightUnit: WeightUnit = (user as any)?.weight_unit === 'kg' ? 'kg' : 'lbs';
+
+  const METRICS: ChartMetric[] = ['volume', 'sets', 'workouts'];
+  const metricAnimRef = useRef(new Animated.Value(0)).current;
+  const { width: SCREEN_WIDTH } = Dimensions.get('window');
+  const METRIC_SLIDE_WIDTH = (SCREEN_WIDTH - spacing.lg * 2 - spacing.md * 2) / 3;
+
+  const handleMetricChange = (m: ChartMetric) => {
+    const idx = METRICS.indexOf(m);
+    Animated.timing(metricAnimRef, { toValue: idx, duration: 200, useNativeDriver: true }).start();
+    setChartMetric(m);
+    setSelectedBarIndex(null);
+  };
 
   // Progress tab state
   const [progressData, setProgressData] = useState<ProgressBucket[]>([]);
@@ -262,7 +274,6 @@ export default function TrainingScreen({ navigation }: Props) {
               : '';
 
             const RANGE_SHORT: Record<ChartRange, string> = { '30d': '30D', '6m': '6M', '1y': '1Y' };
-            const METRICS: ChartMetric[] = ['volume', 'sets', 'workouts'];
 
             return (
               <>
@@ -321,18 +332,30 @@ export default function TrainingScreen({ navigation }: Props) {
                 )}
 
                 {/* Metric selector below chart */}
-                <View style={styles.metricRow}>
-                  {METRICS.map(m => (
-                    <TouchableOpacity
-                      key={m}
-                      style={[styles.metricBtn, chartMetric === m && styles.metricBtnActive]}
-                      onPress={() => { setChartMetric(m); setSelectedBarIndex(null); }}
-                    >
-                      <Text style={[styles.metricBtnText, chartMetric === m && styles.metricBtnTextActive]}>
-                        {m.charAt(0).toUpperCase() + m.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
+                <View style={styles.metricBar}>
+                  {METRICS.map((m, idx) => (
+                    <React.Fragment key={m}>
+                      {idx > 0 && <View style={styles.metricDivider} />}
+                      <TouchableOpacity
+                        style={styles.metricItem}
+                        onPress={() => handleMetricChange(m)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.metricText, chartMetric === m && { color: colors.accent, fontWeight: '700' }]}>
+                          {m.charAt(0).toUpperCase() + m.slice(1)}
+                        </Text>
+                      </TouchableOpacity>
+                    </React.Fragment>
                   ))}
+                  <Animated.View
+                    style={[styles.metricSlider, {
+                      width: METRIC_SLIDE_WIDTH,
+                      transform: [{ translateX: metricAnimRef.interpolate({
+                        inputRange: [0, 1, 2],
+                        outputRange: [0, METRIC_SLIDE_WIDTH, METRIC_SLIDE_WIDTH * 2],
+                      }) }],
+                    }]}
+                  />
                 </View>
 
               </View>
@@ -650,11 +673,18 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   rangePickerItemText: { fontSize: typography.fontSize.sm, color: colors.textPrimary },
   rangePickerItemTextActive: { color: colors.accent, fontWeight: '600' },
   chartEmpty: { height: 150, justifyContent: 'center', alignItems: 'center' },
-  metricRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, justifyContent: 'center' },
-  metricBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
-  metricBtnActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  metricBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
-  metricBtnTextActive: { color: colors.accentText },
+  metricBar: {
+    flexDirection: 'row', marginTop: spacing.md,
+    borderWidth: 1, borderColor: colors.border, borderRadius: spacing.sm,
+    overflow: 'hidden', position: 'relative',
+  },
+  metricItem: { flex: 1, paddingVertical: 9, alignItems: 'center', justifyContent: 'center' },
+  metricDivider: { width: 1, backgroundColor: colors.border, marginVertical: 8 },
+  metricText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
+  metricSlider: {
+    position: 'absolute', bottom: 0, height: 2,
+    backgroundColor: colors.accent, borderRadius: 1,
+  },
   goalCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border },
   goalCardLeft: { flex: 1, marginRight: spacing.md },
   goalCardTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, marginBottom: 3 },

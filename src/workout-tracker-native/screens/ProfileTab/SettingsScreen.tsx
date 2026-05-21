@@ -10,7 +10,11 @@ import {
   TextInput,
   Linking,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import { showToast } from '../../utils/toast';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -45,6 +49,7 @@ export default function SettingsScreen({ navigation }: Props) {
   const [unitIsKg, setUnitIsKg]             = useState(user?.weight_unit === 'kg');
   const [restTimerSeconds, setRestTimerSeconds] = useState('90');
   const [savingUnit, setSavingUnit]         = useState(false);
+  const [exporting, setExporting]           = useState(false);
 
   // Notification settings
   const [remindersOn, setRemindersOn]   = useState(false);
@@ -120,6 +125,27 @@ export default function SettingsScreen({ navigation }: Props) {
     ]);
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await apiFetch('/api/workouts/export');
+      if (!res.ok) throw new Error('Export failed');
+      const csvText = await res.text();
+      const fileUri = FileSystem.documentDirectory + 'aretefitnessapp_workouts.csv';
+      await FileSystem.writeAsStringAsync(fileUri, csvText, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      await Sharing.shareAsync(fileUri, {
+        mimeType: 'text/csv',
+        dialogTitle: 'Export Workout Data',
+      });
+    } catch {
+      showToast('Export failed. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
@@ -187,6 +213,18 @@ export default function SettingsScreen({ navigation }: Props) {
       {/* ── Account ── */}
       <Text style={styles.sectionLabel}>Account</Text>
       <View style={styles.group}>
+        <TouchableOpacity style={styles.row} onPress={handleExport} disabled={exporting}>
+          <View style={styles.rowLeft}>
+            <Ionicons name="download-outline" size={20} color={colors.textSecondary} />
+            <Text style={styles.rowLabel}>Export Data</Text>
+          </View>
+          {exporting
+            ? <ActivityIndicator size="small" color={colors.textSecondary} />
+            : <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />}
+        </TouchableOpacity>
+
+        <View style={styles.divider} />
+
         <TouchableOpacity
           style={styles.row}
           onPress={() => navigation.navigate('ChangePassword')}

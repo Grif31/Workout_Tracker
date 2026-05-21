@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
+  Animated,
   Image,
   Dimensions,
 } from 'react-native';
@@ -20,7 +21,9 @@ import { typography } from '../../theme/typography';
 import { toDisplayWeight, toDisplayVolume, convertWeight, WeightUnit } from 'utils/units';
 import MuscleDiagram from '../../components/MuscleDiagram';
 
-const CHART_WIDTH = Dimensions.get('window').width - spacing.md * 4;
+const SCREEN_WIDTH  = Dimensions.get('window').width;
+const CHART_WIDTH   = SCREEN_WIDTH - spacing.md * 4;
+const TAB_SLIDE_WIDTH = (SCREEN_WIDTH - spacing.md * 2) / 3;
 
 
 type Props = {
@@ -105,6 +108,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const weightUnit: WeightUnit = (user?.weight_unit as WeightUnit) || 'lbs';
   const {
+    exerciseId,
     exerciseName,
     equipment,
     muscleGroup,
@@ -132,13 +136,25 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const [wgerDescription, setWgerDescription] = useState<string | null>(null);
   const [wgerLoading, setWgerLoading] = useState(false);
 
+  const tabAnimRef = useRef(new Animated.Value(0)).current;
+  const sliderX = tabAnimRef.interpolate({
+    inputRange: [0, 1, 2],
+    outputRange: [0, TAB_SLIDE_WIDTH, TAB_SLIDE_WIDTH * 2],
+  });
+
+  const handleTabChange = (tab: 'about' | 'stats' | 'history') => {
+    const idx = tab === 'about' ? 0 : tab === 'stats' ? 1 : 2;
+    Animated.timing(tabAnimRef, { toValue: idx, duration: 200, useNativeDriver: true }).start();
+    setActiveTab(tab);
+  };
+
   const stripHtml = (html: string) => html.replace(/<[^>]*>/g, '').trim();
 
   const fetchExerciseData = useCallback(async () => {
     if (!exerciseName) return;
     setLoading(true);
     try {
-      const res = await apiFetch(`/api/stats/exercise?name=${encodeURIComponent(exerciseName)}`);
+      const res = await apiFetch(`/api/stats/exercise?name=${encodeURIComponent(exerciseName)}&exercise_template_id=${exerciseId}`);
       if (!res.ok) return;
       const data = await res.json();
 
@@ -197,12 +213,11 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         workoutCount: data.totals?.total_workouts ?? 0,
         maxVolume,
       });
-    } catch (err) {
-      console.error('Failed to load exercise data', err);
+    } catch {
     } finally {
       setLoading(false);
     }
-  }, [exerciseName, weightUnit]);
+  }, [exerciseId, exerciseName, weightUnit]);
 
   const fetchWgerDetails = useCallback(async () => {
     if (!exerciseName) return;
@@ -228,6 +243,11 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     fetchExerciseData();
     fetchWgerDetails();
   }, [fetchExerciseData, fetchWgerDetails]);
+
+  const isCardio = muscleGroup === 'Cardio';
+  const muscles = isCardio ? [] : (muscleGroup?.split(',').map((m: string) => m.trim()).filter(Boolean) ?? []);
+  const primaryMuscle = muscles[0] ?? muscleGroup ?? '';
+  const secondaryMuscles = muscles.slice(1);
 
   const exerciseDescription =
     wgerLoading
@@ -406,64 +426,75 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.closeButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="close" size={28} color={colors.textPrimary} />
-        </TouchableOpacity>
-      </View>
+      {/* Close button — fixed overlay, always visible */}
+      <TouchableOpacity style={styles.closeBtn} onPress={() => navigation.goBack()}>
+        <Ionicons name="close" size={18} color="#fff" />
+      </TouchableOpacity>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {imageUrl ? (
-          <Image source={{ uri: imageUrl }} style={styles.exerciseImage} />
-        ) : null}
-
-        <Text style={styles.title}>{exerciseName}</Text>
-        {(() => {
-          const isCardio = muscleGroup === 'Cardio';
-          const muscles = isCardio ? [] : (muscleGroup?.split(',').map((m: string) => m.trim()).filter(Boolean) ?? []);
-          const primary = muscles[0] ?? muscleGroup;
-          const secondary = muscles.slice(1);
-          return (
-            <View style={styles.metaRow}>
-              {!isCardio && (
-                <View style={styles.metaPill}>
-                  <Text style={styles.metaLabel}>Primary</Text>
-                  <Text style={styles.metaValue}>{primary}</Text>
-                </View>
-              )}
-              {!isCardio && secondary.length > 0 && (
-                <View style={styles.metaPill}>
-                  <Text style={styles.metaLabel}>Also Works</Text>
-                  <Text style={styles.metaValue}>{secondary.join(', ')}</Text>
-                </View>
-              )}
-              <View style={styles.metaPill}>
-                <Text style={styles.metaLabel}>Equipment</Text>
-                <Text style={styles.metaValue}>{equipment ?? 'Bodyweight'}</Text>
-              </View>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Hero image — scrolls with content */}
+        <View style={styles.heroContainer}>
+          {imageUrl ? (
+            <Image source={{ uri: imageUrl }} style={styles.heroImage} resizeMode="cover" />
+          ) : (
+            <View style={styles.heroPlaceholder}>
+              <Ionicons
+                name={isCardio ? 'bicycle-outline' : 'barbell-outline'}
+                size={52}
+                color={colors.textSecondary}
+              />
             </View>
-          );
-        })()}
+          )}
+        </View>
+        <View style={styles.content}>
+        {/* Title + equipment in parentheses */}
+        <Text style={styles.title}>
+          {exerciseName}
+          {equipment ? <Text style={styles.titleEquipment}> ({equipment})</Text> : null}
+        </Text>
 
-        <View style={styles.tabRow}>
-          {tabLabels.map(tab => (
-            <TouchableOpacity
-              key={tab.key}
-              style={[styles.tabBtn, activeTab === tab.key && styles.tabBtnActive]}
-              onPress={() => setActiveTab(tab.key)}
-            >
-              <Text style={[styles.tabBtnText, activeTab === tab.key && styles.tabBtnTextActive]}>
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
+        {/* Animated tab bar */}
+        <View style={styles.tabBar}>
+          {tabLabels.map((tab, idx) => (
+            <React.Fragment key={tab.key}>
+              {idx > 0 && <View style={styles.tabDivider} />}
+              <TouchableOpacity
+                style={styles.tabItem}
+                onPress={() => handleTabChange(tab.key)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.tabText, activeTab === tab.key && { color: colors.accent, fontWeight: '700' }]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            </React.Fragment>
           ))}
+          <Animated.View style={[styles.tabSlider, { backgroundColor: colors.accent, transform: [{ translateX: sliderX }] }]} />
         </View>
 
         {activeTab === 'about' && (
           <View style={styles.section}>
-            {muscleGroup !== 'Cardio' && (
+            {/* Primary / secondary muscles */}
+            {!isCardio && (primaryMuscle || secondaryMuscles.length > 0) && (
+              <View style={styles.muscleRow}>
+                {primaryMuscle ? (
+                  <View style={styles.musclePill}>
+                    <Text style={styles.musclePillLabel}>Primary</Text>
+                    <Text style={styles.musclePillValue}>{primaryMuscle}</Text>
+                  </View>
+                ) : null}
+                {secondaryMuscles.length > 0 && (
+                  <View style={styles.musclePill}>
+                    <Text style={styles.musclePillLabel}>Also Works</Text>
+                    <Text style={styles.musclePillValue}>{secondaryMuscles.join(', ')}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {!isCardio && (
               <View style={styles.diagramCard}>
-                <MuscleDiagram muscles={muscleGroup?.split(',').map((m: string) => m.trim()).filter(Boolean)} />
+                <MuscleDiagram muscles={muscles} />
               </View>
             )}
 
@@ -485,6 +516,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
             {renderHistory()}
           </View>
         )}
+        </View>
       </ScrollView>
     </View>
   );
@@ -495,38 +527,93 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    padding: spacing.md,
-    paddingTop: spacing.lg,
+
+  // Hero
+  heroContainer: {
+    height: 280,
+    width: '100%',
   },
-  closeButton: {
-    padding: spacing.sm,
+  heroImage: {
+    width: '100%',
+    height: '100%',
   },
+  heroPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeBtn: {
+    position: 'absolute',
+    zIndex: 10,
+    top: 52,
+    right: spacing.md,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   content: {
     padding: spacing.md,
     paddingBottom: spacing.lg,
-  },
-  exerciseImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 20,
-    marginBottom: spacing.md,
-    backgroundColor: colors.border,
   },
   title: {
     fontSize: typography.fontSize.lg,
     color: colors.textPrimary,
     fontWeight: '700',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
-  metaRow: {
+  titleEquipment: {
+    fontSize: typography.fontSize.lg,
+    color: colors.textSecondary,
+    fontWeight: '400',
+  },
+
+  // Animated tab bar
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+    height: 44,
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabDivider: {
+    width: 1,
+    backgroundColor: colors.border,
+    marginVertical: 8,
+  },
+  tabText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  tabSlider: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    width: TAB_SLIDE_WIDTH,
+    height: 2,
+  },
+
+  // Primary / secondary pills (About tab)
+  muscleRow: {
     flexDirection: 'row',
     gap: spacing.sm,
     marginBottom: spacing.md,
   },
-  metaPill: {
+  musclePill: {
     flex: 1,
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -534,43 +621,16 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     padding: spacing.sm,
     borderRadius: 14,
   },
-  metaLabel: {
+  musclePillLabel: {
     fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
     marginBottom: spacing.xs,
     textTransform: 'uppercase',
   },
-  metaValue: {
+  musclePillValue: {
     fontSize: typography.fontSize.md,
     color: colors.textPrimary,
     fontWeight: '600',
-  },
-  tabRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-  },
-  tabBtn: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    borderRadius: 14,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginHorizontal: spacing.xs / 2,
-    alignItems: 'center',
-  },
-  tabBtnActive: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  tabBtnText: {
-    fontSize: typography.fontSize.sm,
-    color: colors.textSecondary,
-    fontWeight: '600',
-  },
-  tabBtnTextActive: {
-    color: '#fff',
   },
   section: {
     marginBottom: spacing.lg,

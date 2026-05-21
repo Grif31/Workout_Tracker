@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { postLiveWorkoutNotification, cancelLiveWorkoutNotification } from '../utils/notifications';
 import { onPendingCountChange, initPendingCount } from '../utils/offlineQueue';
 import { createBottomTabNavigator, BottomTabBar, BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { DashboardStack } from './DashboardStack';
 import { ExercisesStack } from './ExercisesStack';
 import { TrainingStack } from './TrainingStack';
@@ -15,6 +16,13 @@ import { useWorkoutSession } from '../context/WorkoutSessionContext';
 import { navigationRef } from './navigationRef';
 
 const Tab = createBottomTabNavigator<AppStack>();
+
+const ROOT_SCREENS: Record<string, string> = {
+  DashboardTab: 'DashboardHome',
+  ExercisesTab: 'ExercisesHome',
+  TrainingTab:  'TrainingHome',
+  ProfileTab:   'ProfileHome',
+};
 
 const isIOS = Platform.OS === 'ios';
 const iosVersion = isIOS ? parseInt(String(Platform.Version), 10) : 0;
@@ -124,11 +132,18 @@ function MiniWorkoutBar() {
 
 function CustomTabBar(props: BottomTabBarProps) {
   const { isWorkoutOpen } = useWorkoutSession();
+
+  const activeRoute = props.state.routes[props.state.index];
+  const focusedRoute = getFocusedRouteNameFromRoute(activeRoute);
+  const isOnSubScreen = focusedRoute !== undefined && focusedRoute !== ROOT_SCREENS[activeRoute.name];
+
   if (isWorkoutOpen) return null;
   return (
     <View>
       <MiniWorkoutBar />
-      <BottomTabBar {...props} />
+      <View style={isOnSubScreen ? { display: 'none' } : undefined}>
+        <BottomTabBar {...props} />
+      </View>
     </View>
   );
 }

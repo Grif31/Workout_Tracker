@@ -1,10 +1,11 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   TextInput,
   FlatList,
   SectionList,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -39,6 +40,25 @@ export default function ExercisesScreen({ navigation }: Props) {
   const [showMuscleDropdown, setShowMuscleDropdown] = useState(false);
   const [showEquipmentDropdown, setShowEquipmentDropdown] = useState(false);
   const [recentExercises, setRecentExercises] = useState<string[]>([]);
+
+  const muscleRef = useRef<TouchableOpacity>(null);
+  const equipRef  = useRef<TouchableOpacity>(null);
+  const [muscleAnchor, setMuscleAnchor] = useState({ x: 0, y: 0, width: 0 });
+  const [equipAnchor,  setEquipAnchor]  = useState({ x: 0, y: 0, width: 0 });
+
+  const openMuscle = () => {
+    muscleRef.current?.measure((_fx, _fy, width, height, px, py) => {
+      setMuscleAnchor({ x: px, y: py + height + 4, width });
+      setShowMuscleDropdown(true);
+    });
+  };
+
+  const openEquip = () => {
+    equipRef.current?.measure((_fx, _fy, width, height, px, py) => {
+      setEquipAnchor({ x: px, y: py + height + 4, width });
+      setShowEquipmentDropdown(true);
+    });
+  };
 
   const fetchExercises = async () => {
     try {
@@ -171,7 +191,7 @@ export default function ExercisesScreen({ navigation }: Props) {
       {/* Filter row */}
       <View style={styles.pickerRow}>
         <View style={styles.pickerGroup}>
-          <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowMuscleDropdown(true)}>
+          <TouchableOpacity ref={muscleRef} style={styles.dropdownBtn} onPress={openMuscle}>
             <Text style={styles.dropdownBtnText} numberOfLines={1}>
               {selectedMuscle === 'All' ? 'All Muscles' : selectedMuscle}
             </Text>
@@ -185,7 +205,7 @@ export default function ExercisesScreen({ navigation }: Props) {
         </View>
         {selectedMuscle !== 'Cardio' && (
           <View style={styles.pickerGroup}>
-            <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowEquipmentDropdown(true)}>
+            <TouchableOpacity ref={equipRef} style={styles.dropdownBtn} onPress={openEquip}>
               <Text style={styles.dropdownBtnText} numberOfLines={1}>
                 {selectedEquipment === 'All' ? 'All Equipment' : selectedEquipment}
               </Text>
@@ -203,18 +223,20 @@ export default function ExercisesScreen({ navigation }: Props) {
       {/* Muscle dropdown */}
       <Modal visible={showMuscleDropdown} transparent animationType="fade">
         <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setShowMuscleDropdown(false)}>
-          <View style={styles.dropdownList}>
-            {['All', 'Cardio', ...muscleGroups].map(item => (
-              <TouchableOpacity
-                key={item}
-                style={[styles.dropdownItem, selectedMuscle === item && styles.dropdownItemActive]}
-                onPress={() => { setSelectedMuscle(item); setShowMuscleDropdown(false); }}
-              >
-                <Text style={[styles.dropdownItemText, selectedMuscle === item && styles.dropdownItemTextActive]}>
-                  {item === 'All' ? 'All Muscles' : item}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          <View style={[styles.dropdownList, { top: muscleAnchor.y, left: muscleAnchor.x, width: muscleAnchor.width }]}>
+            <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
+              {['All', 'Cardio', ...muscleGroups].map(item => (
+                <TouchableOpacity
+                  key={item}
+                  style={[styles.dropdownItem, selectedMuscle === item && styles.dropdownItemActive]}
+                  onPress={() => { setSelectedMuscle(item); setShowMuscleDropdown(false); }}
+                >
+                  <Text style={[styles.dropdownItemText, selectedMuscle === item && styles.dropdownItemTextActive]}>
+                    {item === 'All' ? 'All Muscles' : item}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -222,18 +244,20 @@ export default function ExercisesScreen({ navigation }: Props) {
       {/* Equipment dropdown */}
       <Modal visible={showEquipmentDropdown} transparent animationType="fade">
         <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setShowEquipmentDropdown(false)}>
-          <View style={styles.dropdownList}>
-            {['All', ...equipmentTypes].map(item => (
-              <TouchableOpacity
-                key={item}
-                style={[styles.dropdownItem, selectedEquipment === item && styles.dropdownItemActive]}
-                onPress={() => { setSelectedEquipment(item); setShowEquipmentDropdown(false); }}
-              >
-                <Text style={[styles.dropdownItemText, selectedEquipment === item && styles.dropdownItemTextActive]}>
-                  {item === 'All' ? 'All Equipment' : item}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          <View style={[styles.dropdownList, { top: equipAnchor.y, left: equipAnchor.x, width: equipAnchor.width }]}>
+            <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
+              {['All', ...equipmentTypes].map(item => (
+                <TouchableOpacity
+                  key={item}
+                  style={[styles.dropdownItem, selectedEquipment === item && styles.dropdownItemActive]}
+                  onPress={() => { setSelectedEquipment(item); setShowEquipmentDropdown(false); }}
+                >
+                  <Text style={[styles.dropdownItemText, selectedEquipment === item && styles.dropdownItemTextActive]}>
+                    {item === 'All' ? 'All Equipment' : item}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -299,8 +323,21 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   dropdownBtnText: { fontSize: typography.fontSize.sm, color: colors.textPrimary, flex: 1 },
   dropdownArrow: { fontSize: 12, color: colors.textSecondary, marginLeft: 4 },
-  dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
-  dropdownList: { backgroundColor: colors.surface, borderRadius: spacing.sm, width: '70%', maxHeight: '60%', overflow: 'hidden' },
+  dropdownOverlay: { flex: 1 },
+  dropdownList: {
+    position: 'absolute',
+    backgroundColor: colors.surface,
+    borderRadius: spacing.sm,
+    maxHeight: 260,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   dropdownItem: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   dropdownItemActive: { backgroundColor: colors.accent },
   dropdownItemText: { fontSize: typography.fontSize.md, color: colors.textPrimary },

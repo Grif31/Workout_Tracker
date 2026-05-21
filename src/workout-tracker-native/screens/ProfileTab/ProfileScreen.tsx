@@ -135,8 +135,7 @@ export default function ProfileScreen({ navigation }: Props) {
           }
         });
       }
-    } catch (err) {
-      console.error('Failed to fetch profile data', err);
+    } catch {
     } finally {
       setRefreshing(false);
     }
@@ -156,8 +155,7 @@ export default function ProfileScreen({ navigation }: Props) {
         setHasMore(data.has_more);
         setPage(nextPage);
       }
-    } catch (err) {
-      console.error('Failed to load more workouts', err);
+    } catch {
     } finally {
       loadingMoreRef.current = false;
       setLoadingMore(false);

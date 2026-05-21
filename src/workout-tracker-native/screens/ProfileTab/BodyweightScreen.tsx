@@ -41,8 +41,7 @@ export default function BodyweightScreen({ navigation }: Props) {
     try {
       const res = await apiFetch('/api/bodyweight');
       if (res.ok) setLogs(await res.json());
-    } catch (err) {
-      console.error('Failed to fetch bodyweight logs', err);
+    } catch {
     } finally {
       setLoading(false);
     }

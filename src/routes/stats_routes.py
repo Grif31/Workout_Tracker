@@ -12,15 +12,17 @@ def exercise_stats():
     name = request.args.get('name', '').strip()
     if not name:
         return jsonify({'message': 'name param required'}), 400
+    template_id = request.args.get('exercise_template_id', type=int)
 
-    rows = (
+    query = (
         db.session.query(Exercise, Workout)
         .join(Workout, Exercise.workout_id == Workout.id)
         .filter(Workout.user_id == user_id)
         .filter(db.func.lower(Exercise.name) == name.lower())
-        .order_by(Workout.date.asc())
-        .all()
     )
+    if template_id:
+        query = query.filter(Exercise.exercise_template_id == template_id)
+    rows = query.order_by(Workout.date.asc()).all()
 
     if not rows:
         return jsonify({'exercise_name': name, 'personal_bests': {}, 'totals': {}, 'history': []})

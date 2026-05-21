@@ -7,10 +7,14 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import ConfettiCannon from 'react-native-confetti-cannon';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
 import MuscleDiagram from '../../components/MuscleDiagram';
+import WorkoutShareCard from '../../components/WorkoutShareCard';
 import { DashboardStackParamsList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WorkoutSummary'>;
@@ -27,10 +31,12 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const { user } = useAuth();
   const weightUnit = user?.weight_unit ?? 'lbs';
   const confettiRef = useRef<ConfettiCannon>(null);
+  const shareCardRef = useRef<View>(null);
 
   const [exercises, setExercises] = useState<ExerciseData[]>([]);
   const [loading, setLoading] = useState(true);
   const [prExpanded, setPrExpanded] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const filteredPrs = prs.filter(pr => pr.pr_type !== 'estimated_1rm');
 
@@ -56,6 +62,18 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
     navigation.replace('WorkoutDetails', { workoutId });
   }
 
+  async function handleShare() {
+    setSharing(true);
+    try {
+      const uri = await captureRef(shareCardRef, { format: 'jpg', quality: 0.95 });
+      await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: 'Share your workout' });
+    } catch {
+      // user cancelled or capture failed — no-op
+    } finally {
+      setSharing(false);
+    }
+  }
+
   function formatSet(set: SetData) {
     if (set.cardio_duration) {
       const parts = [];
@@ -68,8 +86,31 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
     return '—';
   }
 
+  const shareDate = new Date().toLocaleDateString('en-US', {
+    month: 'long', day: 'numeric', year: 'numeric',
+  });
+
   return (
     <View style={s.container}>
+      {/* Off-screen card for screenshot capture */}
+      <View
+        ref={shareCardRef}
+        style={{ position: 'absolute', left: -9999, top: -9999 }}
+        collapsable={false}
+      >
+        <WorkoutShareCard
+          workoutName={workoutName}
+          date={shareDate}
+          totalVolume={totalVolume}
+          totalSets={totalSets}
+          totalReps={totalReps}
+          weightUnit={weightUnit}
+          exerciseNames={exercises.slice(0, 3).map(e => e.name)}
+          prs={filteredPrs}
+          accentColor={colors.accent}
+        />
+      </View>
+
       {isFirstWorkout && (
         <ConfettiCannon
           ref={confettiRef}
@@ -180,6 +221,24 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
             <Text style={s.detailsBtnText}>View Full Details</Text>
           </TouchableOpacity>
         </Animated.View>
+
+        <Animated.View entering={FadeInDown.delay(550).duration(400)}>
+          <TouchableOpacity
+            style={s.shareBtn}
+            onPress={handleShare}
+            disabled={sharing || loading}
+            activeOpacity={0.85}
+          >
+            {sharing ? (
+              <ActivityIndicator color={colors.textPrimary} size="small" />
+            ) : (
+              <>
+                <Ionicons name="share-outline" size={18} color={colors.textPrimary} />
+                <Text style={s.shareBtnText}>Share Workout</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </Animated.View>
       </ScrollView>
     </View>
   );
@@ -212,4 +271,18 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   setBadgeText: { fontSize: 12, color: colors.textSecondary },
   detailsBtn: { backgroundColor: colors.accent, borderRadius: 12, margin: 20, marginTop: 4, padding: 16, alignItems: 'center' },
   detailsBtnText: { color: colors.accentText, fontSize: 16, fontWeight: '600' },
+  shareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 12,
+    margin: 20,
+    marginTop: 0,
+    padding: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  shareBtnText: { color: colors.textPrimary, fontSize: 16, fontWeight: '600' },
 });

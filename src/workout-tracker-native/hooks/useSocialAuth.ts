@@ -10,19 +10,20 @@ WebBrowser.maybeCompleteAuthSession();
 
 // Fallback prevents expo-auth-session from throwing during hook init
 // when credentials aren't configured yet.
-const GOOGLE_ID  = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID  ?? 'not-configured';
-const FACEBOOK_ID = process.env.EXPO_PUBLIC_FACEBOOK_APP_ID  ?? 'not-configured';
-const googleReady  = GOOGLE_ID  !== 'not-configured';
+const GOOGLE_IOS_ID     = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID     ?? 'not-configured';
+const GOOGLE_ANDROID_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? 'not-configured';
+const GOOGLE_WEB_ID     = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID     ?? 'not-configured';
+const FACEBOOK_ID       = process.env.EXPO_PUBLIC_FACEBOOK_APP_ID          ?? 'not-configured';
+const googleReady   = GOOGLE_IOS_ID !== 'not-configured' || GOOGLE_ANDROID_ID !== 'not-configured';
 const facebookReady = FACEBOOK_ID !== 'not-configured';
 
 export function useSocialAuth() {
   const { login } = useAuth();
 
-  // expo-auth-session requires platform-specific IDs on iOS/Android
   const [, googleResponse, promptGoogleAsync] = Google.useAuthRequest({
-    clientId:        GOOGLE_ID,
-    iosClientId:     GOOGLE_ID,
-    androidClientId: GOOGLE_ID,
+    clientId:        GOOGLE_WEB_ID,
+    iosClientId:     GOOGLE_IOS_ID,
+    androidClientId: GOOGLE_ANDROID_ID,
   });
 
   const [, fbResponse, promptFbAsync] = Facebook.useAuthRequest({

@@ -1,7 +1,7 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View, Text, FlatList, SectionList, ScrollView,
-  TouchableOpacity, StyleSheet, ActivityIndicator,
+  TouchableOpacity, StyleSheet, ActivityIndicator, TextInput,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,6 +56,19 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
   const [activeTab, setActiveTab] = useState<'max_weight' | 'max_reps' | 'cardio'>('max_weight');
   const [sortBy, setSortBy]       = useState<'default' | 'muscle'>('default');
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery]           = useState('');
+  const searchRef = useRef<TextInput>(null);
+
+  const toggleSearch = () => {
+    if (searchOpen) {
+      setQuery('');
+      setSearchOpen(false);
+    } else {
+      setSearchOpen(true);
+      setTimeout(() => searchRef.current?.focus(), 50);
+    }
+  };
 
   const toggleExpanded = (id: number) => {
     setExpandedIds(prev => {
@@ -155,6 +168,40 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
     return [...map.values()].sort((a, b) => a.title.localeCompare(b.title));
   }, [prs]);
 
+  const filteredWeightRows = useMemo(() => {
+    if (!query) return weightRows;
+    const q = query.toLowerCase();
+    return weightRows.filter(p => p.exercise_name.toLowerCase().includes(q));
+  }, [weightRows, query]);
+
+  const filteredWeightByMuscle = useMemo(() => {
+    if (!query) return weightByMuscle;
+    const q = query.toLowerCase();
+    return weightByMuscle
+      .map(s => ({ ...s, data: s.data.filter(p => p.exercise_name.toLowerCase().includes(q)) }))
+      .filter(s => s.data.length > 0);
+  }, [weightByMuscle, query]);
+
+  const filteredRepsSections = useMemo(() => {
+    if (!query) return repsSections;
+    const q = query.toLowerCase();
+    return repsSections.filter(s => s.title.toLowerCase().includes(q));
+  }, [repsSections, query]);
+
+  const filteredRepsByMuscle = useMemo(() => {
+    if (!query) return repsByMuscle;
+    const q = query.toLowerCase();
+    return repsByMuscle
+      .map(m => ({ ...m, sections: m.sections.filter(s => s.title.toLowerCase().includes(q)) }))
+      .filter(m => m.sections.length > 0);
+  }, [repsByMuscle, query]);
+
+  const filteredCardioSections = useMemo(() => {
+    if (!query) return cardioSections;
+    const q = query.toLowerCase();
+    return cardioSections.filter(s => s.title.toLowerCase().includes(q));
+  }, [cardioSections, query]);
+
   const fmtTime = (mins: number) => {
     const m = Math.floor(mins);
     const s = Math.round((mins - m) * 60);
@@ -236,26 +283,60 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
         })}
       </View>
 
-      {/* Sort toggle */}
-      {showSortToggle && (
-        <View style={[styles.sortBar, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity
-            style={[styles.sortBtn, sortBy === 'default' && { backgroundColor: colors.accent + '20' }]}
-            onPress={() => setSortBy('default')}
-          >
-            <Text style={[styles.sortBtnText, { color: sortBy === 'default' ? colors.accent : colors.textSecondary }]}>
-              {activeTab === 'max_weight' ? 'By Value' : 'A–Z'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.sortBtn, sortBy === 'muscle' && { backgroundColor: colors.accent + '20' }]}
-            onPress={() => setSortBy('muscle')}
-          >
-            <Ionicons name="body-outline" size={14} color={sortBy === 'muscle' ? colors.accent : colors.textSecondary} style={{ marginRight: 4 }} />
-            <Text style={[styles.sortBtnText, { color: sortBy === 'muscle' ? colors.accent : colors.textSecondary }]}>
-              By Muscle
-            </Text>
-          </TouchableOpacity>
+      {/* Sort + Search bar */}
+      <View style={[styles.sortBar, { borderBottomColor: colors.border }]}>
+        {showSortToggle && (
+          <>
+            <TouchableOpacity
+              style={[styles.sortBtn, sortBy === 'default' && { backgroundColor: colors.accent + '20' }]}
+              onPress={() => setSortBy('default')}
+            >
+              <Text style={[styles.sortBtnText, { color: sortBy === 'default' ? colors.accent : colors.textSecondary }]}>
+                {activeTab === 'max_weight' ? 'By Value' : 'A–Z'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sortBtn, sortBy === 'muscle' && { backgroundColor: colors.accent + '20' }]}
+              onPress={() => setSortBy('muscle')}
+            >
+              <Ionicons name="body-outline" size={14} color={sortBy === 'muscle' ? colors.accent : colors.textSecondary} style={{ marginRight: 4 }} />
+              <Text style={[styles.sortBtnText, { color: sortBy === 'muscle' ? colors.accent : colors.textSecondary }]}>
+                By Muscle
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
+        <TouchableOpacity
+          style={[styles.searchIconBtn, searchOpen && { backgroundColor: colors.accent + '20' }]}
+          onPress={toggleSearch}
+        >
+          <Ionicons
+            name={searchOpen ? 'close' : 'search'}
+            size={18}
+            color={searchOpen ? colors.accent : colors.textSecondary}
+          />
+        </TouchableOpacity>
+      </View>
+
+      {/* Search input */}
+      {searchOpen && (
+        <View style={[styles.searchRow, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
+          <Ionicons name="search" size={16} color={colors.textSecondary} />
+          <TextInput
+            ref={searchRef}
+            style={[styles.searchInput, { color: colors.textPrimary }]}
+            placeholder="Search exercises…"
+            placeholderTextColor={colors.textSecondary}
+            value={query}
+            onChangeText={setQuery}
+            autoCapitalize="none"
+            returnKeyType="search"
+          />
+          {query.length > 0 && (
+            <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}>
+              <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -265,7 +346,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
         sortBy === 'muscle' ? (
           /* Max Weight — grouped by muscle */
           <SectionList
-            sections={weightByMuscle}
+            sections={filteredWeightByMuscle}
             keyExtractor={item => item.id.toString()}
             contentContainerStyle={styles.list}
             ListEmptyComponent={<Text style={styles.empty}>No max-weight records yet.</Text>}
@@ -293,7 +374,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
         ) : (
           /* Max Weight — by value with rank */
           <FlatList
-            data={weightRows}
+            data={filteredWeightRows}
             keyExtractor={item => item.id.toString()}
             contentContainerStyle={styles.list}
             ListEmptyComponent={<Text style={styles.empty}>No max-weight records yet.</Text>}
@@ -322,7 +403,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             <Text style={styles.empty}>No per-weight rep records yet.{'\n'}Log some workouts to build your records.</Text>
           )}
           {sortBy === 'muscle'
-            ? repsByMuscle.map(({ muscle, sections }) => (
+            ? filteredRepsByMuscle.map(({ muscle, sections }) => (
                 <View key={muscle}>
                   <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
                     <Text style={[styles.sectionHeaderText, { color: colors.textPrimary }]}>{muscle}</Text>
@@ -330,13 +411,13 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                   {sections.map(renderAccordionExercise)}
                 </View>
               ))
-            : repsSections.map(renderAccordionExercise)
+            : filteredRepsSections.map(renderAccordionExercise)
           }
         </ScrollView>
       ) : (
         /* Cardio */
         <SectionList
-          sections={cardioSections}
+          sections={filteredCardioSections}
           keyExtractor={(item, i) => `cardio-${i}`}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
@@ -415,6 +496,24 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: 20,
   },
   sortBtnText: { fontSize: 13, fontWeight: '600' },
+  searchIconBtn: {
+    marginLeft: 'auto',
+    padding: spacing.xs + 2,
+    borderRadius: 20,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    gap: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: spacing.xs,
+  },
   list: { padding: spacing.md, gap: spacing.sm },
   empty: {
     textAlign: 'center',

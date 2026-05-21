@@ -82,8 +82,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
       if (bwRes.ok) setBwLogs(await bwRes.json());
       if (mRes.ok) setMLogs(await mRes.json());
       if (pRes.ok) setPhotos(await pRes.json());
-    } catch (err) {
-      console.error('Failed to fetch measurements data', err);
+    } catch {
     } finally {
       setBwLoading(false);
       setMLoading(false);
@@ -364,7 +363,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
         }
         renderItem={({ item }) => {
           const LABELS: Record<keyof Measurement, string> = {
-            id: '', user_id: '', date: '',
+            id: '', date: '',
             waist: 'Waist', chest: 'Chest',
             right_arm: 'R Arm', left_arm: 'L Arm',
             right_leg: 'R Leg', left_leg: 'L Leg',

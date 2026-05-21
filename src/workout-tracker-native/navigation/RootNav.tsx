@@ -1,20 +1,41 @@
+import React, { useCallback, useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { ActivityIndicator, View } from 'react-native';
-import {AppTabs} from './AppTabs'
-import {AuthStackScreen} from './AuthStack'
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppTabs } from './AppTabs';
+import { AuthStackScreen } from './AuthStack';
 import { WorkoutSessionProvider } from '../context/WorkoutSessionContext';
 import { navigationRef } from './navigationRef';
+import { OnboardingStackParamsList } from './types';
+import OnboardingScreen from '../screens/Auth/OnboardingScreen';
+import OnboardingTutorialScreen from '../screens/Auth/OnboardingTutorialScreen';
 
-
-
-const Stack = createNativeStackNavigator();
+const OnboardingStack = createNativeStackNavigator<OnboardingStackParamsList>();
 
 export default function RootNavigator() {
-  const { user, loading } = useAuth(); // null if not logged in
+  const { user, loading } = useAuth();
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
-  if (loading) {
+  useEffect(() => {
+    if (!user) {
+      setOnboardingChecked(true);
+      setNeedsOnboarding(false);
+      return;
+    }
+    AsyncStorage.getItem('onboarding_complete').then(val => {
+      setNeedsOnboarding(val !== 'true');
+      setOnboardingChecked(true);
+    });
+  }, [user]);
+
+  const handleOnboardingComplete = useCallback(() => {
+    setNeedsOnboarding(false);
+  }, []);
+
+  if (loading || !onboardingChecked) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" />
@@ -25,7 +46,21 @@ export default function RootNavigator() {
   return (
     <NavigationContainer ref={navigationRef}>
       <WorkoutSessionProvider>
-        {user ? <AppTabs /> : <AuthStackScreen />}
+        {!user ? (
+          <AuthStackScreen />
+        ) : needsOnboarding ? (
+          <OnboardingStack.Navigator screenOptions={{ headerShown: false }}>
+            <OnboardingStack.Screen name="Onboarding" component={OnboardingScreen} />
+            <OnboardingStack.Screen
+              name="OnboardingTutorial"
+              children={(props) => (
+                <OnboardingTutorialScreen {...props} onComplete={handleOnboardingComplete} />
+              )}
+            />
+          </OnboardingStack.Navigator>
+        ) : (
+          <AppTabs />
+        )}
       </WorkoutSessionProvider>
     </NavigationContainer>
   );

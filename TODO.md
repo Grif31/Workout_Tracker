@@ -236,64 +236,57 @@ Check off items as you complete them.
 ### 4. Onboarding Flow
 > First-run experience to capture goals, walk through key features, and optionally generate a starter routine via AI. Critical for 7-day retention.
 
-- [ ] **OnboardingScreen** (`screens/Auth/OnboardingScreen.tsx`)
-  - [ ] Step 1 — Goal: Build Muscle / Get Stronger / Lose Weight / Stay Active (chip selector)
-  - [ ] Step 2 — Experience: Beginner / Intermediate / Advanced
-  - [ ] Step 3 — Weekly frequency: days per week picker (1–7)
-  - [ ] Step 4 — Optional AI routine: "Generate my first routine" calls `POST /api/ai/generate`; show a preview before saving; "Skip" bypasses this step
+- [x] **OnboardingScreen** (`screens/Auth/OnboardingScreen.tsx`)
+  - [x] Step 1 — Goal: chip selector (chat UI)
+  - [x] Step 2 — Experience: Beginner / Intermediate / Advanced
+  - [x] Step 3 — Weekly frequency: days per week picker
+  - [x] Step 4 — Optional AI routine: calls `POST /api/ai/generate`; "Skip" bypasses
 
-- [ ] **Feature tutorial** (`screens/Auth/OnboardingTutorialScreen.tsx`)
-  > Shown after goal setup, before the app opens. Each slide is full-screen with an illustration/screenshot, title, and 1–2 sentence description. "Skip Tutorial" button is always visible in the top-right corner.
-  - [ ] Slide 1 — **Log a Workout**: "Tap + Log Workout on the dashboard, add exercises, and check off sets as you go."
-  - [ ] Slide 2 — **Track Cardio**: "Use Track Activity to record a GPS run, ride, or walk with live pace and route."
-  - [ ] Slide 3 — **Rest Timer**: "After each set, tap the timer icon to start a rest countdown — it notifies you when you're ready."
-  - [ ] Slide 4 — **Personal Records**: "Aretē detects PRs automatically. Your bests are tracked per exercise and shown on your profile."
-  - [ ] Slide 5 — **Plate Calculator**: "Tap the barbell icon on any weight field to see exactly how to load the bar."
-  - [ ] Slide 6 — **AI Coach**: "Let the AI build you a personalised routine — head to the Training tab whenever you're ready."
-  - [ ] Dot pagination indicator at the bottom; swipe or tap Next to advance
-  - [ ] "Skip Tutorial" visible on every slide; "Done" replaces "Next" on the last slide
-  - [ ] Both Skip and Done navigate to AppTabs and mark `onboarding_tutorial_done = 'true'` in AsyncStorage
+- [x] **Feature tutorial** (`screens/Auth/OnboardingTutorialScreen.tsx`)
+  - [x] 6 slides with icon, title, body text
+  - [x] Dot pagination indicator at the bottom; Next to advance
+  - [x] "Skip" visible on every slide; "Get Started" replaces "Next" on the last slide
+  - [x] Skip and Get Started set `onboarding_complete = 'true'` and navigate to AppTabs
 
-- [ ] **Persistence**
-  - [ ] Store `onboarding_complete`, `user_goal`, `user_experience`, `user_days_per_week` in AsyncStorage
-  - [ ] Store `onboarding_tutorial_done` separately so the tutorial can be re-shown independently if needed
-  - [ ] Pre-populate AI generation defaults from these values (already used in TrainingScreen)
+- [x] **Persistence**
+  - [x] Store `onboarding_complete`, `user_goal`, `user_experience`, `user_days_per_week` in AsyncStorage
+  - [x] Pre-populate AI generation defaults via `coach_settings` key (already used in TrainingScreen)
 
-- [ ] **Navigation gate** (`navigation/RootNav.tsx`)
-  - [ ] On first login, if `onboarding_complete` is not set, show OnboardingScreen before AppTabs
-  - [ ] After goal steps complete, show OnboardingTutorialScreen (unless `onboarding_tutorial_done` is already set)
-  - [ ] On complete or skip, set `onboarding_complete = 'true'` and navigate to AppTabs
+- [x] **Navigation gate** (`navigation/RootNav.tsx`)
+  - [x] On first login, if `onboarding_complete` is not set, show OnboardingScreen before AppTabs
+  - [x] After goal steps complete, show OnboardingTutorialScreen
+  - [x] On complete or skip, set `onboarding_complete = 'true'` and navigate to AppTabs
 
 ---
 
 ### 5. Workout Share Image
 > Branded card users can post to Instagram / X after a workout. High viral potential, low effort.
 
-- [ ] **Install** `react-native-view-shot`
+- [x] **Install** `react-native-view-shot` + `expo-sharing`
 
-- [ ] **WorkoutShareCard component** (`components/WorkoutShareCard.tsx`)
-  - [ ] Styled card: Aretē branding, workout name, date, duration, volume, top 3 exercises, PR badge if any PRs set
-  - [ ] Uses theme accent color and looks good as a screenshot on a white or dark background
+- [x] **WorkoutShareCard component** (`components/WorkoutShareCard.tsx`)
+  - [x] Styled card: Aretē branding, workout name, date, volume, top 3 exercises, PR badge if any PRs set
+  - [x] Always dark card with theme accent color for stats and accent bar
 
-- [ ] **Share button on WorkoutSummaryScreen**
-  - [ ] Add "Share Workout" button below existing action buttons
-  - [ ] Tap: capture `WorkoutShareCard` with `react-native-view-shot` → open native share sheet via `Share.share()`
-  - [ ] Brief loading state while capturing
+- [x] **Share button on WorkoutSummaryScreen**
+  - [x] Add "Share Workout" button below "View Full Details"
+  - [x] Tap: capture `WorkoutShareCard` with `react-native-view-shot` → open native share sheet via `expo-sharing`
+  - [x] Brief loading state while capturing
 
 ---
 
 ### 6. Data Export (CSV)
 > Lets users download their full workout history — builds trust and removes "data lock-in" concern.
 
-- [ ] **Backend** (`routes/workout_routes.py`)
-  - [ ] Add `GET /api/workouts/export` — `@jwt_required()`
-  - [ ] Returns CSV: `date, workout_name, duration_min, exercise_name, set_number, set_type, reps, weight, volume` — one row per set
-  - [ ] Response headers: `Content-Type: text/csv`, `Content-Disposition: attachment; filename="workouts.csv"`
+- [x] **Backend** (`routes/workout_routes.py`)
+  - [x] Add `GET /api/workouts/export` — `@jwt_required()`
+  - [x] Returns CSV: `date, workout_name, duration_min, exercise_name, set_number, set_type, reps, weight, volume` — one row per set
+  - [x] Response headers: `Content-Type: text/csv`, `Content-Disposition: attachment; filename="workouts.csv"`
 
-- [ ] **Frontend** (`screens/ProfileTab/SettingsScreen.tsx`)
-  - [ ] Add "Export Data" row in the account section of Settings
-  - [ ] Tap: fetch `/api/workouts/export`, write to file via `expo-file-system`, open share sheet via `expo-sharing`
-  - [ ] Show activity indicator while downloading; toast on success or error
+- [x] **Frontend** (`screens/ProfileTab/SettingsScreen.tsx`)
+  - [x] Add "Export Data" row in the account section of Settings
+  - [x] Tap: fetch `/api/workouts/export`, write to file via `expo-file-system`, open share sheet via `expo-sharing`
+  - [x] Show activity indicator while downloading; toast on error
 
 ---
 
@@ -341,22 +334,22 @@ Check off items as you complete them.
   - [ ] Design splash screen
   - [ ] Add all required icon sizes via Expo config
 
-- [ ] **app.json / app.config.js**
-  - [ ] Set proper `bundleIdentifier` (iOS) and `package` (Android)
-  - [ ] Set `version` and `buildNumber` / `versionCode`
-  - [ ] Declare required permissions (only what's actually needed)
-  - [ ] Set `scheme` for deep linking
+- [x] **app.json / app.config.js**
+  - [x] Set proper `bundleIdentifier` (iOS) and `package` (Android)
+  - [x] Set `version` and `buildNumber` / `versionCode`
+  - [x] Declare required permissions (only what's actually needed)
+  - [x] Set `scheme` for deep linking
 
-- [ ] **EAS Build setup**
-  - [ ] Install and configure EAS CLI (`npm install -g eas-cli`)
-  - [ ] Run `eas build:configure`
-  - [ ] Set up build profiles for preview and production
+- [x] **EAS Build setup**
+  - [x] Install and configure EAS CLI (`npm install -g eas-cli`)
+  - [x] Run `eas build:configure`
+  - [x] Set up build profiles for preview and production
   - [ ] Test a production build on a real device
 
-- [ ] **Legal requirements (both stores require these)**
-  - [ ] Write and host a Privacy Policy (what data is collected and why)
-  - [ ] Write Terms of Service
-  - [ ] Link to both in the Settings screen and in store listing
+- [x] **Legal requirements (both stores require these)**
+  - [x] Write and host a Privacy Policy (what data is collected and why)
+  - [x] Write Terms of Service
+  - [x] Link to both in the Settings screen and in store listing
 
 - [ ] **Store listings**
   - [ ] Write App Store description (short + long)
@@ -393,7 +386,46 @@ Check off items as you complete them.
 
 ---
 
-## ✨ 8. Future Features
+## 💪 8. Strength Score
+> Percentile-based strength ranking that tells users where they rank among all lifters. Pro feature.
+
+- [ ] **Add gender to User model**
+  - [ ] Add `gender` column (`'male'` | `'female'` | `null`) to `User` in `models.py`
+  - [ ] Generate and apply migration
+  - [ ] Add gender field to `SettingsScreen` (Male / Female / Prefer not to say) — required to see strength score
+  - [ ] `PATCH /api/me` to save gender
+
+- [ ] **Strength standards data** (`src/utils/strength_standards.py`)
+  - [ ] Percentile lookup tables for all major exercises (male + female), based on bodyweight ratio
+  - [ ] Big 6: Squat, Bench Press, Deadlift, Overhead Press, Barbell Row, Pull-up
+  - [ ] All other tracked lifts: Front Squat, Sumo Deadlift, Romanian Deadlift, Incline Bench, Close Grip Bench, Power Clean, Hip Thrust, Dumbbell Bench, Dumbbell Row, Dips, etc.
+  - [ ] Epley 1RM estimation formula: `weight × (1 + reps / 30)`
+  - [ ] Percentile interpolation function given a bodyweight ratio + gender + exercise
+
+- [ ] **`StrengthScoreSnapshot` model** (`models.py`)
+  - [ ] Fields: `id`, `user_id` (FK), `score` (float — overall percentile 0–100), `created_at`
+  - [ ] Write a snapshot whenever the score endpoint is called (max once per 24h per user)
+  - [ ] Migration for new table
+
+- [ ] **Backend endpoint** (`src/routes/stats_routes.py`)
+  - [ ] `GET /api/stats/strength-score` — requires gender + bodyweight set; returns per-exercise percentiles + overall
+  - [ ] Overall = Big 6 average (equal weight, skip exercises with no data); supplemental lifts averaged separately; final = 70% Big 6 + 30% supplemental (if no supplemental, 100% Big 6)
+  - [ ] `GET /api/stats/strength-score/history` — returns `[{ date, score }]` from `StrengthScoreSnapshot`
+
+- [ ] **`StrengthScoreScreen`** (`screens/TrainingTab/StrengthScoreScreen.tsx`)
+  - [ ] Overall percentile hero at top: "Top X% of lifters"
+  - [ ] Gender gate: if gender not set, show prompt to add gender in Settings
+  - [ ] Big 6 section: each exercise shows name, estimated 1RM, percentile rank, progress bar — "No data" grayed out if not logged
+  - [ ] Supplemental exercises section below (collapsed "More lifts")
+  - [ ] Score-over-time line chart at bottom
+  - [ ] Add to `TrainingStack` + `navigation/types.ts`
+
+- [ ] **Entry point in Training tab**
+  - [ ] Add a Strength Score card in the Training tab progress section that navigates to `StrengthScoreScreen`
+
+---
+
+## ✨ 9. Future Features
 > Not needed for launch, but good to keep in mind.
 
 - [x] **Dark mode — auto-detect system setting**
@@ -421,7 +453,7 @@ Check off items as you complete them.
 
 ---
 
-## 👥 9. Social & Followers
+## 👥 10. Social & Followers
 > Follower system, leaderboards, and activity feed. Build in this order — each subsection depends on the one above.
 >
 > **Design choice: followers (asymmetric), not friends (mutual).** You follow someone with one tap — no request/accept flow. Privacy is handled by `profile_visibility` per user. Feed and leaderboard show people you follow.
