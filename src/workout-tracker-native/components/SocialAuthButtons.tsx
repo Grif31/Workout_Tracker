@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AUTH } from '../theme/authColors';
+import { spacing, radius } from '../theme/spacing';
+import { typography } from '../theme/typography';
 
 type Props = {
   onApple:    () => void;
@@ -48,7 +50,7 @@ const styles = StyleSheet.create({
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: spacing.lg,
     gap: 10,
   },
   line: { flex: 1, height: 1, backgroundColor: AUTH.border },
@@ -64,16 +66,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: spacing.sm,
     paddingVertical: 13,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: AUTH.border,
     backgroundColor: AUTH.card,
   },
   btnText: {
     color: AUTH.text,
-    fontSize: 14,
+    fontSize: typography.fontSize.sm,
     fontWeight: '500',
   },
 });

@@ -10,6 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { ProfileStackParamsList } from '../../navigation/types';
 import { spacing } from 'theme/spacing';
+import { typography } from 'theme/typography';
 import { apiFetch } from '../../utils/api';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'PersonalRecords'>;
@@ -563,7 +564,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderBottomLeftRadius: 10,
     borderBottomRightRadius: 10,
   },
-  repsWeight: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
+  repsWeight: { fontSize: typography.fontSize.sm, fontWeight: '600', marginBottom: 2 },
 
   // Section headers (muscle groups + cardio exercises)
   sectionHeader: {
@@ -571,5 +572,5 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.xs,
   },
-  sectionHeaderText: { fontSize: 14, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionHeaderText: { fontSize: typography.fontSize.sm, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
 });

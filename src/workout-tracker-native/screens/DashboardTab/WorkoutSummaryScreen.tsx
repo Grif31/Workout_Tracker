@@ -10,12 +10,17 @@ import ConfettiCannon from 'react-native-confetti-cannon';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
+import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
+import { GREEK_RANKS } from '../ProfileTab/GreekRankScreen';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import WorkoutShareCard from '../../components/WorkoutShareCard';
 import { DashboardStackParamsList } from '../../navigation/types';
+import { spacing, radius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WorkoutSummary'>;
 
@@ -37,8 +42,18 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [prExpanded, setPrExpanded] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [greekRank, setGreekRank] = useState<string | null>(null);
+  const [selectedFrame, setSelectedFrame] = useState('Neophyte');
 
   const filteredPrs = prs.filter(pr => pr.pr_type !== 'estimated_1rm');
+
+  useEffect(() => {
+    AsyncStorage.multiGet(['greek_rank_cached', 'profile_frame_rank']).then(pairs => {
+      const [rankRaw, frameRaw] = pairs.map(p => p[1]);
+      if (rankRaw) setGreekRank(rankRaw);
+      if (frameRaw) setSelectedFrame(frameRaw);
+    });
+  }, []);
 
   useEffect(() => {
     apiFetch(`/api/workouts/${workoutId}`)
@@ -171,6 +186,31 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           </Animated.View>
         )}
 
+        {greekRank && (() => {
+          const rankColor = GREEK_RANK_COLORS[greekRank] ?? '#888';
+          const rankIdx = GREEK_RANKS.findIndex(r => r.name === greekRank);
+          const nextRank = GREEK_RANKS[rankIdx + 1];
+          return (
+            <Animated.View entering={FadeInDown.delay(150).duration(400)} style={s.section}>
+              <View style={[s.rankBadgeCard, { backgroundColor: rankColor + '15', borderColor: rankColor + '44' }]}>
+                <View style={s.rankBadgeLeft}>
+                  <View style={s.rankAvatarWrap}>
+                    <ProfileAvatarFrame rankName={selectedFrame} size={44} avatarSize={36} />
+                  </View>
+                  <View>
+                    <Text style={[s.rankBadgeName, { color: rankColor }]}>{greekRank}</Text>
+                    <Text style={s.rankBadgeSub}>
+                      {nextRank
+                        ? `Keep training to reach ${nextRank.name}`
+                        : "You've reached the highest rank!"}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </Animated.View>
+          );
+        })()}
+
         <Animated.View entering={FadeInDown.delay(200).duration(400)} style={s.section}>
           <View style={s.statsRow}>
             <View style={s.statBox}>
@@ -247,42 +287,47 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
 const createStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20, paddingTop: 56, paddingBottom: 8 },
-  closeBtn: { padding: 8 },
-  closeText: { fontSize: 22, color: colors.textSecondary },
-  hero: { alignItems: 'center', paddingHorizontal: 24, paddingBottom: 20 },
+  closeBtn: { padding: spacing.sm },
+  closeText: { fontSize: typography.fontSize.xl, color: colors.textSecondary },
+  hero: { alignItems: 'center', paddingHorizontal: spacing.lg, paddingBottom: 20 },
   trophy: { fontSize: 48, marginBottom: 8 },
-  headline: { fontSize: 22, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
+  headline: { fontSize: typography.fontSize.xl, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
   subline: { fontSize: 15, color: colors.textSecondary, marginTop: 4, textAlign: 'center' },
   section: { paddingHorizontal: 20, marginBottom: 20 },
   prDropdownHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFD700', borderRadius: 10, padding: 12, marginBottom: 8 },
   prBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF3C4', borderRadius: 10, padding: 12, marginBottom: 8 },
   prIcon: { fontSize: 18, marginRight: 8 },
-  prText: { fontSize: 14, fontWeight: '600', color: '#7A5800', flex: 1 },
+  prText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: '#7A5800', flex: 1 },
   prChevron: { fontSize: 13, color: '#7A5800', marginLeft: 4 },
   statsRow: { flexDirection: 'row', gap: 10 },
-  statBox: { flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 14, alignItems: 'center' },
-  statValue: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
+  statBox: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: 14, alignItems: 'center' },
+  statValue: { fontSize: typography.fontSize.xl, fontWeight: '700', color: colors.textPrimary },
   statLabel: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  diagramCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 16, alignItems: 'center' },
+  diagramCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
   diagramTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 12 },
-  exCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 10 },
+  exCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: 14, marginBottom: 10 },
   exName: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
-  setBadge: { backgroundColor: colors.background, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  setBadge: { backgroundColor: colors.background, borderRadius: 6, paddingHorizontal: spacing.sm, paddingVertical: 3 },
   setBadgeText: { fontSize: 12, color: colors.textSecondary },
-  detailsBtn: { backgroundColor: colors.accent, borderRadius: 12, margin: 20, marginTop: 4, padding: 16, alignItems: 'center' },
-  detailsBtnText: { color: colors.accentText, fontSize: 16, fontWeight: '600' },
+  rankBadgeCard: { borderRadius: radius.md, padding: 14, borderWidth: 1 },
+  rankBadgeLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  rankAvatarWrap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.surface },
+  rankBadgeName: { fontSize: typography.fontSize.md, fontWeight: '800', letterSpacing: 0.5 },
+  rankBadgeSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  detailsBtn: { backgroundColor: colors.accent, borderRadius: radius.md, margin: 20, marginTop: spacing.xs, padding: spacing.md, alignItems: 'center' },
+  detailsBtnText: { color: colors.accentText, fontSize: typography.fontSize.md, fontWeight: '600' },
   shareBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    borderRadius: 12,
+    gap: spacing.sm,
+    borderRadius: radius.md,
     margin: 20,
     marginTop: 0,
-    padding: 16,
+    padding: spacing.md,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  shareBtnText: { color: colors.textPrimary, fontSize: 16, fontWeight: '600' },
+  shareBtnText: { color: colors.textPrimary, fontSize: typography.fontSize.md, fontWeight: '600' },
 });

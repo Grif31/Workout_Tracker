@@ -19,7 +19,7 @@ import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { DashboardStackParamsList } from '../../navigation/types';
-import { spacing } from '../../theme/spacing';
+import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { estimateCalories } from '../../utils/cardioCalories';
 
@@ -228,7 +228,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
   if (!MAPS_AVAILABLE) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', gap: 16 }]}>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', gap: spacing.md }]}>
         <Ionicons name="map-outline" size={48} color={colors.textSecondary} />
         <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700' }}>GPS Tracking Unavailable</Text>
         <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center', paddingHorizontal: 32 }}>
@@ -444,8 +444,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
   },
   statItem: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 22, fontWeight: '700' },
-  statLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  statValue: { fontSize: typography.fontSize.xl, fontWeight: '700' },
+  statLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
   statSep: { width: 1, height: 40, backgroundColor: colors.border },
 
   controls: {
@@ -503,18 +503,18 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flex: 1,
     minWidth: '45%',
     backgroundColor: colors.background,
-    borderRadius: 12,
+    borderRadius: radius.md,
     padding: spacing.sm,
     alignItems: 'center',
   },
   modalStatValue: { fontSize: 18, fontWeight: '700' },
-  modalStatLabel: { fontSize: 11, marginTop: 2 },
-  modalMap: { width: '100%', height: 120, borderRadius: 12, overflow: 'hidden' },
+  modalStatLabel: { fontSize: typography.fontSize.xs, marginTop: 2 },
+  modalMap: { width: '100%', height: 120, borderRadius: radius.md, overflow: 'hidden' },
   modalActions: { flexDirection: 'row', gap: spacing.md },
   modalBtn: {
     flex: 1,
     paddingVertical: spacing.md,
-    borderRadius: 12,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },

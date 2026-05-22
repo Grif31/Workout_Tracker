@@ -19,6 +19,7 @@ class User(db.Model):
     reset_otp_hash    = db.Column(db.String(64), nullable=True)
     reset_otp_expiry  = db.Column(db.DateTime,   nullable=True)
     is_social_only    = db.Column(db.Boolean,    default=False, nullable=False)
+    gender            = db.Column(db.String(10),  nullable=True)   # 'male' | 'female' | None
     workouts = db.relationship('Workout', backref='user', lazy=True)
 
     def to_dict(self):
@@ -33,6 +34,7 @@ class User(db.Model):
             'height': self.height,
             'weight_unit': self.weight_unit or 'lbs',
             'active_routine_id': self.active_routine_id,
+            'gender': self.gender,
         }
 
 
@@ -392,4 +394,21 @@ class PersonalRecord(db.Model):
             "weight_context": None if self.weight_context < 0 else self.weight_context,
             "achieved_at": self.achieved_at.isoformat() if self.achieved_at else None,
             "set_id": self.set_id,
+        }
+
+
+# ── StrengthScoreSnapshot ─────────────────────────────────────
+# Records the user's overall strength percentile score once per day.
+class StrengthScoreSnapshot(db.Model):
+    __tablename__ = 'strength_score_snapshots'
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    score      = db.Column(db.Float, nullable=False)   # overall percentile 0–100
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'score': self.score,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }

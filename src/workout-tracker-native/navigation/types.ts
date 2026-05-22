@@ -32,15 +32,29 @@ export type ExercisesStackParamsList = {
     ExercisesHome: undefined;
     ExerciseDetail: ExerciseDetailParams;
 };
+export type PreviewExercise = { id: number; name: string; muscle_group: string };
+export type PreviewDay = { label: string; exercises: PreviewExercise[] };
+
 export type TrainingStackParamsList = {
     TrainingHome: undefined;
     CreateRoutine: undefined;
     RoutineDetail: { routineId: number; routineName: string };
-    TemplateDetail: { templateId: number };
+    TemplateDetail: { templateId: number; muscleGroups?: string[] };
     LogRoutine: { prefill?: PrefillWorkoutData; workoutId?: number; editMode?: boolean };
     WorkoutDetails: { workoutId: number };
     WorkoutSummary: WorkoutSummaryParams;
     ExerciseDetail: ExerciseDetailParams;
+    StrengthScore: undefined;
+    AIWorkoutPreview: {
+        generateType: 'routine' | 'template';
+        name: string;
+        description?: string;
+        exercises?: PreviewExercise[];
+        days?: PreviewDay[];
+        coachDays: number;
+        coachGoal: string;
+        coachExp: string;
+    };
 };
 export type ProfileStackParamsList = {
     ProfileHome: undefined
@@ -51,6 +65,7 @@ export type ProfileStackParamsList = {
     EditWorkout: {prefill?: PrefillWorkoutData, workoutId?:number, editMode?: boolean}
     Measurements: undefined;
     PersonalRecords: undefined;
+    GreekRank: undefined;
 };
 
 export type AppStack = {

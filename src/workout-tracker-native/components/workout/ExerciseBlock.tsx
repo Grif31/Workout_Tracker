@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
-import { spacing } from '../../theme/spacing';
+import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { type ExerciseEntry, type SetType, colStyles } from './types';
 import SetRow from './SetRow';
@@ -22,7 +22,6 @@ type Props = {
   onBlurInput: () => void;
   onToggleSetDone: (setIdx: number) => void;
   onOpenRpePicker: (setIdx: number) => void;
-  onOpenPlateCalc: (setIdx: number) => void;
   onDeleteSet: (setIdx: number) => void;
   onAddSet: () => void;
   onStartRest: () => void;
@@ -44,7 +43,6 @@ export default function ExerciseBlock({
   onBlurInput,
   onToggleSetDone,
   onOpenRpePicker,
-  onOpenPlateCalc,
   onDeleteSet,
   onAddSet,
   onStartRest,
@@ -74,7 +72,7 @@ export default function ExerciseBlock({
               <Text style={[styles.exerciseEquipment, { color: colors.textSecondary }]}>{exercise.equipment}</Text>
             )}
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
             <TouchableOpacity onPress={onStartRest} style={styles.exIconBtn}>
               <Ionicons name="timer-outline" size={20} color={colors.save} />
             </TouchableOpacity>
@@ -152,7 +150,6 @@ export default function ExerciseBlock({
                       onBlur={onBlurInput}
                       onToggleDone={() => onToggleSetDone(setIndex)}
                       onOpenRpePicker={() => onOpenRpePicker(setIndex)}
-                      onOpenPlateCalc={() => onOpenPlateCalc(setIndex)}
                       onDelete={() => onDeleteSet(setIndex)}
                     />
                   );
@@ -194,7 +191,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   exDiagram: {
     width: 52,
     height: 52,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     marginRight: spacing.sm,
   },
   exDiagramPlaceholder: {
@@ -204,7 +201,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   exerciseName: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
   exerciseEquipment: { fontSize: typography.fontSize.sm, marginTop: 1 },
-  exIconBtn: { padding: 4 },
+  exIconBtn: { padding: spacing.xs },
 
   exNotesInput: {
     borderWidth: 1,
@@ -223,7 +220,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingHorizontal: 2,
   },
   setHeaderCell: {
-    fontSize: 11,
+    fontSize: typography.fontSize.xs,
     fontWeight: '600',
     color: colors.textSecondary,
     textTransform: 'uppercase',

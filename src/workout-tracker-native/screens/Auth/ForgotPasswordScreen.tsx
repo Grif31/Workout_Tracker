@@ -15,6 +15,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamsList } from '../../navigation/types';
 import { AUTH } from '../../theme/authColors';
 import { apiFetch } from '../../utils/api';
+import { spacing, radius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 
 type Props = NativeStackScreenProps<AuthStackParamsList, 'ForgotPassword'>;
 
@@ -108,9 +110,9 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: AUTH.bg },
-  inner:     { flex: 1, paddingHorizontal: 24, paddingTop: 8 },
+  inner:     { flex: 1, paddingHorizontal: spacing.lg, paddingTop: 8 },
 
-  backBtn: { alignSelf: 'flex-start', padding: 4, marginBottom: 32 },
+  backBtn: { alignSelf: 'flex-start', padding: 4, marginBottom: spacing.xl },
 
   iconCircle: {
     width: 72,
@@ -121,16 +123,16 @@ const styles = StyleSheet.create({
     borderColor: AUTH.border,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.lg,
     alignSelf: 'center',
   },
 
-  title:    { fontSize: 28, fontWeight: '700', color: AUTH.text, marginBottom: 8, textAlign: 'center' },
+  title:    { fontSize: typography.fontSize.xxl, fontWeight: '700', color: AUTH.text, marginBottom: 8, textAlign: 'center' },
   subtitle: { fontSize: 15, color: AUTH.subtext, textAlign: 'center', lineHeight: 22, marginBottom: 36 },
 
   errorText: {
     color: AUTH.danger,
-    fontSize: 14,
+    fontSize: typography.fontSize.sm,
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -139,7 +141,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: AUTH.inputBg,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: AUTH.border,
     marginBottom: 20,
@@ -156,10 +158,10 @@ const styles = StyleSheet.create({
   primaryBtn: {
     backgroundColor: AUTH.accent,
     borderRadius: 14,
-    paddingVertical: 16,
+    paddingVertical: spacing.md,
     alignItems: 'center',
   },
   primaryBtnDisabled: { opacity: 0.6 },
-  primaryBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },
+  primaryBtnText: { fontSize: typography.fontSize.md, fontWeight: '700', color: '#000' },
 
 });

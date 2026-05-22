@@ -207,7 +207,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   formSection: { paddingHorizontal: spacing.md },
 
   titleInput: {
-    fontSize: 22,
+    fontSize: typography.fontSize.xl,
     fontWeight: '700',
     color: colors.textPrimary,
     paddingVertical: spacing.sm,
@@ -280,7 +280,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: 2,
   },
   settingsHint: {
-    fontSize: 11,
+    fontSize: typography.fontSize.xs,
     color: colors.textSecondary,
     lineHeight: 16,
   },
@@ -313,7 +313,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '700',
   },
   templateChipSub: {
-    fontSize: 11,
+    fontSize: typography.fontSize.xs,
     marginTop: 2,
   },
 
@@ -326,7 +326,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   summaryItem: { flex: 1, alignItems: 'center' },
   summaryValue: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },
-  summaryLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  summaryLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
   summaryDivider: { width: 1, backgroundColor: colors.border, marginVertical: spacing.xs },
 
   sectionLabel: {

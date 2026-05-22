@@ -28,6 +28,7 @@ import { spacing } from 'theme/spacing';
 import type { PR } from './PersonalRecordsScreen';
 import { toDisplayVolume, type WeightUnit } from 'utils/units';
 import { apiFetch, resolveMediaUrl } from '../../utils/api';
+import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
 const PR_PINS_KEY = '@pr_pins';
 const DEFAULT_PIN_COUNT = 3;
 const PAGE_SIZE = 20;
@@ -59,6 +60,9 @@ export default function ProfileScreen({ navigation }: Props) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const unit = user?.weight_unit || 'lbs';
 
+  const [selectedFrame, setSelectedFrame] = useState('Neophyte');
+  const [greekRank, setGreekRank]         = useState<string | null>(null);
+
   const [calendarVisible, setCalendarVisible]       = useState(false);
   const [calendarMonth, setCalendarMonth]           = useState(new Date());
   const [calView, setCalView]                       = useState<'month' | 'year' | 'multiyear'>('month');
@@ -86,12 +90,13 @@ export default function ProfileScreen({ navigation }: Props) {
   const displayName = user?.name?.trim() || user?.username;
   const weightUnit: WeightUnit = user?.weight_unit === 'kg' ? 'kg' : 'lbs';
 
-  // Load saved pins from AsyncStorage once on mount
+  // Load saved pins + profile frame + cached Greek rank from AsyncStorage once on mount
   useEffect(() => {
-    AsyncStorage.getItem(PR_PINS_KEY).then(raw => {
-      if (raw) {
-        try { setPins(JSON.parse(raw)); } catch {}
-      }
+    AsyncStorage.multiGet([PR_PINS_KEY, 'profile_frame_rank', 'greek_rank_cached']).then(pairs => {
+      const [pinsRaw, frameRaw, rankRaw] = pairs.map(p => p[1]);
+      if (pinsRaw) { try { setPins(JSON.parse(pinsRaw)); } catch {} }
+      if (frameRaw) setSelectedFrame(frameRaw);
+      if (rankRaw) setGreekRank(rankRaw);
     });
   }, []);
 
@@ -105,10 +110,11 @@ export default function ProfileScreen({ navigation }: Props) {
       const goalRaw = await AsyncStorage.getItem('workout_weekly_goal');
       const weeklyGoal = goalRaw ? (parseInt(goalRaw, 10) || 3) : 3;
 
-      const [workoutsRes, statsRes, prsRes] = await Promise.all([
+      const [workoutsRes, statsRes, prsRes, scoreRes] = await Promise.all([
         apiFetch(`/api/workouts?page=1&per_page=${PAGE_SIZE}`),
         apiFetch(`/api/stats/profile?weekly_goal=${weeklyGoal}`),
         apiFetch('/api/personal-records'),
+        apiFetch('/api/stats/strength-score'),
       ]);
       if (workoutsRes.ok) {
         const data = await workoutsRes.json();
@@ -118,6 +124,13 @@ export default function ProfileScreen({ navigation }: Props) {
         setPage(1);
       }
       if (statsRes.ok) setStats(await statsRes.json());
+      if (scoreRes.ok) {
+        const d = await scoreRes.json();
+        if (d.greek_rank) {
+          setGreekRank(d.greek_rank);
+          AsyncStorage.setItem('greek_rank_cached', d.greek_rank);
+        }
+      }
       if (prsRes.ok) {
         const data: PR[] = await prsRes.json();
         setPrs(data);
@@ -318,14 +331,17 @@ export default function ProfileScreen({ navigation }: Props) {
           style={[styles.card, { backgroundColor: colors.surface, padding: spacing.md }]}
           onPress={() => navigation.navigate('EditProfile')}
         >
-          <Image
-            source={
-              user?.profile_pic_url
-                ? { uri: resolveMediaUrl(user.profile_pic_url) }
-                : require('../../assets/profile-placeholder.png')
-            }
-            style={styles.image}
-          />
+          <View style={styles.avatarContainer}>
+            <Image
+              source={
+                user?.profile_pic_url
+                  ? { uri: resolveMediaUrl(user.profile_pic_url) }
+                  : require('../../assets/profile-placeholder.png')
+              }
+              style={styles.image}
+            />
+            <ProfileAvatarFrame rankName={selectedFrame} size={72} avatarSize={64} />
+          </View>
           <View style={styles.userInfo}>
             <Text style={[styles.value, { color: colors.textPrimary }]}>
               {displayName || '—'}
@@ -352,6 +368,20 @@ export default function ProfileScreen({ navigation }: Props) {
           <Text style={styles.statLabel}>Total Volume</Text>
         </View>
       </View>
+
+      {greekRank && (
+        <TouchableOpacity
+          style={styles.rankBadgeRow}
+          onPress={() => navigation.navigate('GreekRank')}
+        >
+          <View style={[styles.rankBadgePill, { backgroundColor: (GREEK_RANK_COLORS[greekRank] ?? '#888') + '22', borderColor: GREEK_RANK_COLORS[greekRank] ?? '#888' }]}>
+            <Text style={[styles.rankBadgeText, { color: GREEK_RANK_COLORS[greekRank] ?? '#888' }]}>
+              {greekRank}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={GREEK_RANK_COLORS[greekRank] ?? '#888'} />
+        </TouchableOpacity>
+      )}
 
       <TouchableOpacity
         style={styles.weightRow}
@@ -387,7 +417,7 @@ export default function ProfileScreen({ navigation }: Props) {
         ListEmptyComponent={
           <Text style={styles.emptyText}>No workouts logged yet</Text>
         }
-        ListFooterComponent={loadingMore ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null}
+        ListFooterComponent={loadingMore ? <ActivityIndicator style={{ marginVertical: spacing.md }} /> : null}
         refreshing={refreshing}
         onRefresh={handleRefresh}
         onEndReached={fetchMoreWorkouts}
@@ -571,7 +601,7 @@ export default function ProfileScreen({ navigation }: Props) {
                         for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
                         return (
                           <View key={mi} style={{ width: miniW }}>
-                            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textSecondary, textAlign: 'center', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                            <Text style={{ fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary, textAlign: 'center', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                               {mname}
                             </Text>
                             {rows.map((row, ri) => (
@@ -721,18 +751,39 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  avatarContainer: {
+    width: 72,
+    height: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+  },
   image: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#eee',
-    marginRight: spacing.md,
+    backgroundColor: colors.border,
   },
+  rankBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  rankBadgePill: {
+    borderRadius: 20,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderWidth: 1.5,
+  },
+  rankBadgeText: { fontSize: typography.fontSize.sm, fontWeight: '700', letterSpacing: 0.5 },
   userInfo: { flex: 1 },
-  value: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  workoutCount: { fontSize: 14, color: colors.textSecondary },
+  value: { fontSize: typography.fontSize.md, fontWeight: '600', marginBottom: 4 },
+  workoutCount: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: typography.fontSize.md,
     fontWeight: '600',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -753,7 +804,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderColor: colors.border,
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
-  workoutName: { fontSize: 14, fontWeight: '700', color: colors.textPrimary, flex: 1 },
+  workoutName: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, flex: 1 },
   workoutDate: { fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   pill: {
@@ -764,7 +815,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  pillText: { fontSize: 11, fontWeight: '500', color: colors.textSecondary },
+  pillText: { fontSize: typography.fontSize.xs, fontWeight: '500', color: colors.textSecondary },
   weightRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -801,13 +852,13 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   statBoxMiddle: { marginHorizontal: spacing.sm },
   statValue: {
-    fontSize: 20,
+    fontSize: typography.fontSize.lg,
     fontWeight: '700',
     color: colors.textPrimary,
     marginBottom: 2,
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: typography.fontSize.xs,
     fontWeight: '600',
     color: colors.textSecondary,
     textTransform: 'uppercase',
@@ -825,7 +876,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingTop: spacing.sm,
     paddingBottom: spacing.xs,
   },
-  seeAll: { fontSize: 14, fontWeight: '600' },
+  seeAll: { fontSize: typography.fontSize.sm, fontWeight: '600' },
   prCards: {
     flexDirection: 'row',
     paddingHorizontal: spacing.md,
@@ -860,7 +911,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginTop: 2,
   },
   prCardEmpty: {
-    fontSize: 11,
+    fontSize: typography.fontSize.xs,
     color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.xs,
@@ -869,7 +920,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     position: 'absolute',
     bottom: spacing.xs,
     right: spacing.xs,
-    padding: 4,
+    padding: spacing.xs,
     borderRadius: 6,
   },
 
@@ -899,7 +950,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     justifyContent: 'space-between',
     paddingRight: spacing.md,
   },
-  calendarIconBtn: { padding: 4 },
+  calendarIconBtn: { padding: spacing.xs },
 
   // Calendar modal
   calModal: { flex: 1 },
@@ -934,7 +985,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.md,
   },
   calNavBtn: { padding: spacing.xs },
-  calMonthLabel: { fontSize: 16, fontWeight: '700' },
+  calMonthLabel: { fontSize: typography.fontSize.md, fontWeight: '700' },
   calDowRow: {
     flexDirection: 'row',
     marginBottom: spacing.xs,
@@ -964,7 +1015,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     justifyContent: 'center',
   },
   calDayText: {
-    fontSize: 14,
+    fontSize: typography.fontSize.sm,
     fontWeight: '500',
   },
   calLegend: {
@@ -1000,5 +1051,5 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   calWorkoutName: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
   calWorkoutMeta: { fontSize: 13 },
-  calEmptyText: { fontSize: 14, textAlign: 'center', marginTop: spacing.sm },
+  calEmptyText: { fontSize: typography.fontSize.sm, textAlign: 'center', marginTop: spacing.sm },
 });

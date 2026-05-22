@@ -472,7 +472,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   title: {
     flex: 1,
-    fontSize: 22,
+    fontSize: typography.fontSize.xl,
     fontWeight: '700',
     color: colors.textPrimary,
     marginRight: spacing.sm,
@@ -504,7 +504,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   summaryItem: { flex: 1, alignItems: 'center' },
   summaryValue: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },
-  summaryLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 2, textAlign: 'center' },
+  summaryLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2, textAlign: 'center' },
   summaryDivider: { width: 1, backgroundColor: colors.border, marginVertical: spacing.xs },
 
   exerciseCard: {
@@ -537,7 +537,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.xs,
   },
   setHeaderCell: {
-    fontSize: 11,
+    fontSize: typography.fontSize.xs,
     fontWeight: '700',
     color: colors.textSecondary,
     textTransform: 'uppercase',

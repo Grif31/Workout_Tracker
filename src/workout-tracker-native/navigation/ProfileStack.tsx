@@ -9,6 +9,7 @@ import SettingsScreen from '../screens/ProfileTab/SettingsScreen';
 import WorkoutDetails from '../screens/ProfileTab/WorkoutDetails';
 import MeasurementsScreen from '../screens/ProfileTab/MeasurementsScreen';
 import PersonalRecordsScreen from '../screens/ProfileTab/PersonalRecordsScreen';
+import GreekRankScreen from '../screens/ProfileTab/GreekRankScreen';
 import { useAuth } from 'context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -29,6 +30,7 @@ export function ProfileStack() {
       <Stack.Screen name="EditWorkout" component={EditWorkoutScreen} />
       <Stack.Screen name="Measurements" component={MeasurementsScreen} />
       <Stack.Screen name="PersonalRecords" component={PersonalRecordsScreen} />
+      <Stack.Screen name="GreekRank" component={GreekRankScreen} />
     </Stack.Navigator>
   );
 }

@@ -9,6 +9,7 @@ import {
   Alert,
   TextInput,
   Linking,
+  Modal,
   Platform,
   ActivityIndicator,
 } from 'react-native';
@@ -21,7 +22,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, ACCENT_PRESETS, type Colors } from '../../context/ThemeContext';
 import { ProfileStackParamsList } from '../../navigation/types';
-import { spacing } from '../../theme/spacing';
+import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import {
@@ -50,6 +51,8 @@ export default function SettingsScreen({ navigation }: Props) {
   const [restTimerSeconds, setRestTimerSeconds] = useState('90');
   const [savingUnit, setSavingUnit]         = useState(false);
   const [exporting, setExporting]           = useState(false);
+  const [gender, setGender]                 = useState<'male' | 'female' | null>((user as any)?.gender ?? null);
+  const [genderModalVisible, setGenderModalVisible] = useState(false);
 
   // Notification settings
   const [remindersOn, setRemindersOn]   = useState(false);
@@ -118,6 +121,21 @@ export default function SettingsScreen({ navigation }: Props) {
     Alert.alert('Saved', `Default rest timer set to ${secs}s.`);
   };
 
+  const handleGenderChange = async (val: 'male' | 'female' | null) => {
+    setGender(val);
+    setGenderModalVisible(false);
+    updateUser({ gender: val } as any);
+    try {
+      await apiFetch('/api/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gender: val }),
+      });
+    } catch {
+      showToast('Failed to save gender preference.');
+    }
+  };
+
   const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -149,6 +167,7 @@ export default function SettingsScreen({ navigation }: Props) {
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
+    <>
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Header */}
       <View style={styles.header}>
@@ -221,6 +240,22 @@ export default function SettingsScreen({ navigation }: Props) {
           {exporting
             ? <ActivityIndicator size="small" color={colors.textSecondary} />
             : <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />}
+        </TouchableOpacity>
+
+        <View style={styles.divider} />
+
+        {/* Gender */}
+        <TouchableOpacity style={styles.row} onPress={() => setGenderModalVisible(true)}>
+          <View style={styles.rowLeft}>
+            <Ionicons name="person-outline" size={20} color={colors.textSecondary} />
+            <Text style={styles.rowLabel}>Gender</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={styles.rowValue}>
+              {gender === 'male' ? 'Male' : gender === 'female' ? 'Female' : 'Not set'}
+            </Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+          </View>
         </TouchableOpacity>
 
         <View style={styles.divider} />
@@ -494,6 +529,43 @@ export default function SettingsScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
     </ScrollView>
+
+    {/* Gender Picker Modal */}
+    <Modal
+      visible={genderModalVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setGenderModalVisible(false)}
+    >
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={() => setGenderModalVisible(false)}
+      >
+        <View style={styles.modalSheet}>
+          <Text style={styles.modalTitle}>Gender</Text>
+          {([
+            { label: 'Male', value: 'male' as const },
+            { label: 'Female', value: 'female' as const },
+            { label: 'Prefer not to say', value: null },
+          ] as const).map(opt => (
+            <TouchableOpacity
+              key={opt.label}
+              style={styles.modalOption}
+              onPress={() => handleGenderChange(opt.value)}
+            >
+              <Text style={[styles.modalOptionText, gender === opt.value && { color: colors.accent, fontWeight: '700' }]}>
+                {opt.label}
+              </Text>
+              {gender === opt.value && (
+                <Ionicons name="checkmark" size={18} color={colors.accent} />
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </TouchableOpacity>
+    </Modal>
+    </>
   );
 }
 
@@ -570,7 +642,9 @@ const createStyles = (colors: Colors) =>
     },
     accentPresets: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       gap: 10,
+      justifyContent: 'flex-end',
     },
     accentCircle: {
       width: 30,
@@ -629,5 +703,38 @@ const createStyles = (colors: Colors) =>
       color: colors.accentText,
       fontSize: typography.fontSize.sm,
       fontWeight: '600',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      justifyContent: 'flex-end',
+    },
+    modalSheet: {
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: radius.lg,
+      borderTopRightRadius: radius.lg,
+      paddingBottom: spacing.xl,
+      paddingTop: spacing.md,
+    },
+    modalTitle: {
+      fontSize: typography.fontSize.md,
+      fontWeight: '700',
+      color: colors.textSecondary,
+      textAlign: 'center',
+      paddingBottom: spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      marginBottom: spacing.xs,
+    },
+    modalOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+    },
+    modalOptionText: {
+      fontSize: typography.fontSize.md,
+      color: colors.textPrimary,
     },
   });

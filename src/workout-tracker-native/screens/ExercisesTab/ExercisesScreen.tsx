@@ -17,7 +17,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { ExercisesStackParamsList } from 'navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
-import { spacing } from 'theme/spacing';
+import { spacing, radius } from 'theme/spacing';
 import { typography } from 'theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { equipmentTypes } from '../../constants/equipmentTypes';
@@ -355,7 +355,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   exerciseName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
   exerciseMuscle: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 1 },
   exerciseEquipment: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 1 },
-  exerciseImage: { width: 64, height: 64, borderRadius: 8, marginRight: spacing.sm },
+  exerciseImage: { width: 64, height: 64, borderRadius: radius.sm, marginRight: spacing.sm },
   exerciseImagePlaceholder: { backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   exerciseCardRight: { flex: 1, justifyContent: 'center' },
   emptyText: { textAlign: 'center', color: colors.textSecondary, marginVertical: spacing.sm, fontSize: typography.fontSize.sm },

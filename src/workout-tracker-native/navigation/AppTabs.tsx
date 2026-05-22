@@ -14,6 +14,8 @@ import { AppStack } from './types';
 import { useTheme } from '../context/ThemeContext';
 import { useWorkoutSession } from '../context/WorkoutSessionContext';
 import { navigationRef } from './navigationRef';
+import { spacing, radius } from '../theme/spacing';
+import { typography } from '../theme/typography';
 
 const Tab = createBottomTabNavigator<AppStack>();
 
@@ -203,20 +205,20 @@ const styles = StyleSheet.create({
   miniBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    gap: 8,
+    gap: spacing.sm,
   },
   miniLeft: { flex: 1, justifyContent: 'center' },
-  miniName: { fontSize: 14, fontWeight: '700' },
+  miniName: { fontSize: typography.fontSize.sm, fontWeight: '700' },
   miniSub: { fontSize: 12, marginTop: 1 },
   miniBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
   },
   miniBtnText: { fontSize: 13, fontWeight: '600' },
   syncDot: {

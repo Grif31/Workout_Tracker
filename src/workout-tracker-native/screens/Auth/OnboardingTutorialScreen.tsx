@@ -13,6 +13,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OnboardingStackParamsList } from '../../navigation/types';
 import { AUTH } from '../../theme/authColors';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 
 type Props = NativeStackScreenProps<OnboardingStackParamsList, 'OnboardingTutorial'> & {
   onComplete: () => void;
@@ -131,9 +133,9 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     minHeight: 48,
   },
   headerSpacer: { width: 56 },
@@ -143,20 +145,20 @@ const styles = StyleSheet.create({
   slide: {
     width: SCREEN_WIDTH,
     flex: 1,
-    paddingHorizontal: 32,
+    paddingHorizontal: spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
+    gap: spacing.md,
   },
   slideIcon: { fontSize: 72, marginBottom: 8 },
   slideTitle: {
-    fontSize: 28,
+    fontSize: typography.fontSize.xxl,
     fontWeight: '700',
     color: AUTH.text,
     textAlign: 'center',
   },
   slideBody: {
-    fontSize: 16,
+    fontSize: typography.fontSize.md,
     color: AUTH.subtext,
     textAlign: 'center',
     lineHeight: 24,
@@ -164,12 +166,12 @@ const styles = StyleSheet.create({
   },
 
   footer: {
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.lg,
     paddingBottom: 12,
-    paddingTop: 8,
+    paddingTop: spacing.sm,
     gap: 20,
   },
-  dotsRow: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  dotsRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.sm },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: AUTH.border },
   dotActive: { backgroundColor: AUTH.accent, width: 24, borderRadius: 4 },
   nextBtn: {
@@ -178,5 +180,5 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: 'center',
   },
-  nextBtnText: { fontSize: 16, fontWeight: '700', color: AUTH.bg },
+  nextBtnText: { fontSize: typography.fontSize.md, fontWeight: '700', color: AUTH.bg },
 });

@@ -22,7 +22,6 @@ type Props = {
   onBlur: () => void;
   onToggleDone: () => void;
   onOpenRpePicker: () => void;
-  onOpenPlateCalc?: () => void;
   onDelete: () => void;
 };
 
@@ -41,7 +40,6 @@ export default function SetRow({
   onBlur,
   onToggleDone,
   onOpenRpePicker,
-  onOpenPlateCalc,
   onDelete,
 }: Props) {
   const { colors } = useTheme();
@@ -81,29 +79,18 @@ export default function SetRow({
           onBlur={onBlur}
         />
 
-        <View style={[colStyles.input, styles.weightCell]}>
-          <TextInput
-            style={[styles.setInput, styles.weightInput, isDone && styles.setInputDone]}
-            placeholder="—"
-            placeholderTextColor={colors.placeholder}
-            keyboardType="numeric"
-            inputAccessoryViewID={Platform.OS === 'ios' ? NUMERIC_ACCESSORY_ID : undefined}
-            editable={!isDone}
-            value={set.weight}
-            onChangeText={onChangeWeight}
-            onFocus={onFocusWeight}
-            onBlur={onBlur}
-          />
-          {!!set.weight && !isDone && !!onOpenPlateCalc && (
-            <TouchableOpacity
-              style={styles.plateIcon}
-              onPress={onOpenPlateCalc}
-              hitSlop={6}
-            >
-              <Ionicons name="barbell-outline" size={11} color={colors.textSecondary} />
-            </TouchableOpacity>
-          )}
-        </View>
+        <TextInput
+          style={[styles.setInput, colStyles.input, isDone && styles.setInputDone]}
+          placeholder="—"
+          placeholderTextColor={colors.placeholder}
+          keyboardType="numeric"
+          inputAccessoryViewID={Platform.OS === 'ios' ? NUMERIC_ACCESSORY_ID : undefined}
+          editable={!isDone}
+          value={set.weight}
+          onChangeText={onChangeWeight}
+          onFocus={onFocusWeight}
+          onBlur={onBlur}
+        />
 
         {showRpe && (
           <TouchableOpacity
@@ -155,7 +142,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   setTypeBadgeLabel: { fontSize: 10, fontWeight: '600', lineHeight: 12 },
 
   prevCellText: {
-    fontSize: 11,
+    fontSize: typography.fontSize.xs,
     color: colors.textSecondary,
     textAlign: 'center',
     marginHorizontal: 4,
@@ -184,18 +171,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.md,
     fontWeight: '600',
     color: colors.textPrimary,
-  },
-
-  weightCell: {
-    position: 'relative',
-  },
-  weightInput: {
-    flex: 1,
-  },
-  plateIcon: {
-    position: 'absolute',
-    bottom: 3,
-    right: 3,
   },
 
   swipeDelete: {

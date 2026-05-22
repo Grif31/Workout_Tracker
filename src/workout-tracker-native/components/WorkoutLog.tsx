@@ -883,7 +883,6 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             onBlurInput={() => setFocusedInput(null)}
             onToggleSetDone={setIdx => toggleSetDone(exIndex, setIdx)}
             onOpenRpePicker={setIdx => setRpePickerTarget({ exIdx: exIndex, setIdx })}
-            onOpenPlateCalc={setIdx => setPlateCalcTarget({ exIdx: exIndex, setIdx })}
             onDeleteSet={setIdx => deleteSet(exIndex, setIdx)}
             onAddSet={() => addSetToExercise(exIndex)}
             onStartRest={startRest}
@@ -1000,6 +999,14 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                     {focusedInput.field === 'weight' ? `+${weightDelta}` : '+1 rep'}
                   </Text>
                 </TouchableOpacity>
+                {focusedInput.field === 'weight' && (
+                  <TouchableOpacity
+                    style={styles.keyboardAdjBtn}
+                    onPress={() => { setPlateCalcTarget(focusedInput); Keyboard.dismiss(); }}
+                  >
+                    <Ionicons name="barbell-outline" size={16} color={colors.textPrimary} />
+                  </TouchableOpacity>
+                )}
               </View>
             )}
             <TouchableOpacity onPress={() => Keyboard.dismiss()} style={styles.keyboardDismissBtn}>
@@ -1028,6 +1035,14 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                 {focusedInput.field === 'weight' ? `+${weightDelta}` : '+1 rep'}
               </Text>
             </TouchableOpacity>
+            {focusedInput.field === 'weight' && (
+              <TouchableOpacity
+                style={styles.keyboardAdjBtn}
+                onPress={() => { setPlateCalcTarget(focusedInput); Keyboard.dismiss(); }}
+              >
+                <Ionicons name="barbell-outline" size={16} color={colors.textPrimary} />
+              </TouchableOpacity>
+            )}
           </View>
           <TouchableOpacity onPress={() => Keyboard.dismiss()} style={styles.keyboardDismissBtn}>
             <Ionicons name="chevron-down" size={20} color={colors.textPrimary} />
@@ -1190,11 +1205,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   exMenuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
     paddingHorizontal: 14,
     paddingVertical: 11,
   },
-  exMenuText: { fontSize: 14, fontWeight: '500', flex: 1 },
+  exMenuText: { fontSize: typography.fontSize.sm, fontWeight: '500', flex: 1 },
   exMenuSoon: { fontSize: 10, fontWeight: '700', letterSpacing: 0.4 },
   exMenuDivider: { height: 1, marginHorizontal: 0 },
 
@@ -1287,7 +1302,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     lineHeight: 38,
   },
   rpeItemDesc: {
-    fontSize: 11,
+    fontSize: typography.fontSize.xs,
     textAlign: 'center',
     lineHeight: 14,
   },
@@ -1299,7 +1314,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: '#FFD700',
     borderRadius: 14,

@@ -9,6 +9,8 @@ import LogRoutineScreen from '../screens/ExercisesTab/LogRoutineScreen';
 import WorkoutDetailScreen from '../screens/DashboardTab/WorkoutDetailsScreen';
 import WorkoutSummaryScreen from '../screens/DashboardTab/WorkoutSummaryScreen';
 import ExerciseDetailScreen from '../screens/ExercisesTab/ExerciseDetailScreen';
+import StrengthScoreScreen from '../screens/TrainingTab/StrengthScoreScreen';
+import AIWorkoutPreviewScreen from '../screens/TrainingTab/AIWorkoutPreviewScreen';
 import { useTheme } from '../context/ThemeContext';
 
 const Stack = createNativeStackNavigator<TrainingStackParamsList>();
@@ -26,6 +28,8 @@ export function TrainingStack() {
       <Stack.Screen name="WorkoutDetails" component={WorkoutDetailScreen} />
       <Stack.Screen name="WorkoutSummary" component={WorkoutSummaryScreen} options={{ contentStyle: { paddingTop: 0 } }} />
       <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen} options={{ presentation: 'modal', contentStyle: { paddingTop: 0 } }} />
+      <Stack.Screen name="StrengthScore" component={StrengthScoreScreen} />
+      <Stack.Screen name="AIWorkoutPreview" component={AIWorkoutPreviewScreen} />
     </Stack.Navigator>
   );
 }

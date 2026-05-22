@@ -18,6 +18,8 @@ import { useAuth } from '../../context/AuthContext';
 import SocialAuthButtons from '../../components/SocialAuthButtons';
 import { useSocialAuth } from '../../hooks/useSocialAuth';
 import { AUTH } from '../../theme/authColors';
+import { spacing, radius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 
 type Props = NativeStackScreenProps<AuthStackParamsList, 'Login'>;
@@ -155,7 +157,7 @@ export default function LoginScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: AUTH.bg },
-  scroll:    { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 40 },
+  scroll:    { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 40 },
 
   backBtn: { marginBottom: 28, alignSelf: 'flex-start', padding: 4 },
 
@@ -164,7 +166,7 @@ const styles = StyleSheet.create({
 
   errorText: {
     color: AUTH.danger,
-    fontSize: 14,
+    fontSize: typography.fontSize.sm,
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -173,7 +175,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: AUTH.inputBg,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: AUTH.border,
     marginBottom: 14,
@@ -189,18 +191,18 @@ const styles = StyleSheet.create({
   eyeBtn: { padding: 4 },
 
   forgotRow: { alignItems: 'flex-end', marginBottom: 24 },
-  forgotText: { color: AUTH.accent, fontSize: 14, fontWeight: '500' },
+  forgotText: { color: AUTH.accent, fontSize: typography.fontSize.sm, fontWeight: '500' },
 
   primaryBtn: {
     backgroundColor: AUTH.accent,
     borderRadius: 14,
-    paddingVertical: 16,
+    paddingVertical: spacing.md,
     alignItems: 'center',
   },
   primaryBtnDisabled: { opacity: 0.6 },
-  primaryBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },
+  primaryBtnText: { fontSize: typography.fontSize.md, fontWeight: '700', color: '#000' },
 
-  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
-  footerText: { fontSize: 14, color: AUTH.subtext },
-  footerLink: { fontSize: 14, color: AUTH.accent, fontWeight: '600' },
+  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: spacing.lg },
+  footerText: { fontSize: typography.fontSize.sm, color: AUTH.subtext },
+  footerLink: { fontSize: typography.fontSize.sm, color: AUTH.accent, fontWeight: '600' },
 });

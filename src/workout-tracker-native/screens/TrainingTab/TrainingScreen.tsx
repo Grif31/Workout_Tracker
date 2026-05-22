@@ -15,6 +15,8 @@ import { typography } from '../../theme/typography';
 import { WeightUnit } from '../../utils/units';
 import { apiFetch } from '../../utils/api';
 import { TrainingStackParamsList } from '../../navigation/types';
+import { muscleGroups } from '../../constants/muscleGroups';
+import { radius } from '../../theme/spacing';
 
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'TrainingHome'>;
@@ -55,6 +57,7 @@ export default function TrainingScreen({ navigation }: Props) {
   const [chartRange, setChartRange] = useState<ChartRange>('30d');
   const [chartMetric, setChartMetric] = useState<ChartMetric>('volume');
   const [weeklyGoal, setWeeklyGoal] = useState(3);
+  const [strengthPercentile, setStrengthPercentile] = useState<number | null>(null);
   const [rangePickerVisible, setRangePickerVisible] = useState(false);
   const [goalModalVisible, setGoalModalVisible] = useState(false);
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
@@ -69,6 +72,8 @@ export default function TrainingScreen({ navigation }: Props) {
   const [coachGoal, setCoachGoal] = useState<'hypertrophy' | 'strength' | 'endurance' | 'general'>('general');
   const [coachExp, setCoachExp] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
   const [coachGenerating, setCoachGenerating] = useState(false);
+  const [musclePickerVisible, setMusclePickerVisible] = useState(false);
+  const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
 
   useEffect(() => {
     AsyncStorage.getItem('coach_settings').then(raw => {
@@ -136,11 +141,22 @@ export default function TrainingScreen({ navigation }: Props) {
     } catch { }
   };
 
+  const fetchStrengthScore = async () => {
+    try {
+      const res = await apiFetch('/api/stats/strength-score');
+      if (res.ok) {
+        const data = await res.json();
+        setStrengthPercentile(data.overall ?? null);
+      }
+    } catch { }
+  };
+
   useFocusEffect(useCallback(() => {
     fetchProgressData(chartRange);
     fetchTemplates();
     fetchRoutines();
     fetchActiveRoutine();
+    fetchStrengthScore();
   }, [user?.active_routine_id, chartRange]));
 
   const handleGenerate = async (type: 'routine' | 'template') => {
@@ -153,12 +169,16 @@ export default function TrainingScreen({ navigation }: Props) {
       });
       const data = await res.json();
       if (!res.ok) { Alert.alert('Error', data.message || 'Generation failed'); return; }
-      await fetchTemplates();
-      await fetchRoutines();
-      Alert.alert(
-        data.type === 'routine' ? 'Routine Created!' : 'Template Created!',
-        `"${data.name}" has been added to your ${data.type === 'routine' ? 'routines' : 'templates'}.`,
-      );
+      navigation.navigate('AIWorkoutPreview', {
+        generateType: data.type,
+        name: data.name,
+        description: data.description,
+        exercises: data.exercises,
+        days: data.days,
+        coachDays,
+        coachGoal,
+        coachExp,
+      });
     } catch {
       Alert.alert('Error', 'Could not reach AI service');
     } finally {
@@ -179,7 +199,13 @@ export default function TrainingScreen({ navigation }: Props) {
     }
   };
 
-  const createTemplate = async () => {
+  const createTemplate = () => {
+    setSelectedMuscles([]);
+    setMusclePickerVisible(true);
+  };
+
+  const handleCreateTemplateWithMuscles = async () => {
+    setMusclePickerVisible(false);
     try {
       const res = await apiFetch('/api/workout-templates', {
         method: 'POST',
@@ -188,7 +214,10 @@ export default function TrainingScreen({ navigation }: Props) {
       });
       if (res.ok) {
         const data = await res.json();
-        navigation.navigate('TemplateDetail', { templateId: data.id });
+        navigation.navigate('TemplateDetail', {
+          templateId: data.id,
+          muscleGroups: selectedMuscles.length > 0 ? selectedMuscles : undefined,
+        });
       } else {
         Alert.alert('Error', 'Failed to create template');
       }
@@ -370,6 +399,19 @@ export default function TrainingScreen({ navigation }: Props) {
                 <Text style={styles.goalCardValue}>{weeklyGoal}</Text>
                 <Text style={styles.goalCardUnit}>/ week</Text>
               </View>
+            </TouchableOpacity>
+
+            {/* Strength Score card */}
+            <TouchableOpacity style={styles.scoreCard} onPress={() => navigation.navigate('StrengthScore')}>
+              <View style={styles.scoreCardLeft}>
+                <Text style={styles.scoreCardTitle}>Strength Score</Text>
+                <Text style={styles.scoreCardSub}>
+                  {strengthPercentile != null
+                    ? `Top ${Math.round(100 - strengthPercentile)}% of lifters`
+                    : 'See how you rank'}
+                </Text>
+              </View>
+              <Ionicons name="trophy-outline" size={24} color={colors.accent} />
             </TouchableOpacity>
             </>
             );
@@ -603,6 +645,57 @@ export default function TrainingScreen({ navigation }: Props) {
         </TouchableOpacity>
       </Modal>
 
+      {/* Muscle Picker Modal — shown before creating a new template */}
+      <Modal visible={musclePickerVisible} transparent animationType="slide">
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setMusclePickerVisible(false)}
+        >
+          <View style={[styles.musclePickerSheet, { backgroundColor: colors.surface }]}>
+            <View style={[styles.musclePickerHandle, { backgroundColor: colors.border }]} />
+            <Text style={[styles.musclePickerTitle, { color: colors.textPrimary }]}>
+              What muscles are you training?
+            </Text>
+            <Text style={[styles.musclePickerSub, { color: colors.textSecondary }]}>
+              Select any that apply — we'll pre-filter your exercise list.
+            </Text>
+            <View style={styles.muscleChips}>
+              {muscleGroups.map(mg => {
+                const on = selectedMuscles.includes(mg);
+                return (
+                  <TouchableOpacity
+                    key={mg}
+                    style={[
+                      styles.muscleChip,
+                      { borderColor: on ? colors.accent : colors.border,
+                        backgroundColor: on ? colors.accent + '22' : colors.background },
+                    ]}
+                    onPress={() =>
+                      setSelectedMuscles(prev =>
+                        on ? prev.filter(m => m !== mg) : [...prev, mg]
+                      )
+                    }
+                  >
+                    <Text style={[styles.muscleChipText, { color: on ? colors.accent : colors.textSecondary }]}>
+                      {mg}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity
+              style={[styles.musclePickerBtn, { backgroundColor: colors.save }]}
+              onPress={handleCreateTemplateWithMuscles}
+            >
+              <Text style={styles.musclePickerBtnText}>
+                {selectedMuscles.length > 0 ? 'Create Template' : 'Create Template (Skip)'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Routine Picker Modal */}
       <Modal visible={selectModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
@@ -656,7 +749,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flex: 1, backgroundColor: colors.surface, borderRadius: spacing.sm,
     padding: spacing.sm, alignItems: 'center', borderWidth: 1, borderColor: colors.border,
   },
-  summaryValue: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
+  summaryValue: { fontSize: typography.fontSize.xl, fontWeight: '700', color: colors.textPrimary },
   summaryLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
   chartCard: {
     backgroundColor: colors.surface, borderRadius: spacing.sm,
@@ -666,7 +759,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   chartHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   chartTitle: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
   rangeDropdown: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: colors.border },
-  rangeDropdownText: { fontSize: 11, fontWeight: '600', color: colors.textSecondary },
+  rangeDropdownText: { fontSize: typography.fontSize.xs, fontWeight: '600', color: colors.textSecondary },
   rangePickerBox: { position: 'absolute', top: 120, right: 16, backgroundColor: colors.surface, borderRadius: spacing.sm, borderWidth: 1, borderColor: colors.border, minWidth: 160, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, elevation: 8 },
   rangePickerItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingVertical: 12 },
   rangePickerItemActive: { backgroundColor: colors.accent + '18' },
@@ -690,8 +783,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   goalCardTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, marginBottom: 3 },
   goalCardDesc: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 18 },
   goalCardRight: { alignItems: 'center' },
-  goalCardValue: { fontSize: 28, fontWeight: '700', color: colors.accent, lineHeight: 32 },
+  goalCardValue: { fontSize: typography.fontSize.xxl, fontWeight: '700', color: colors.accent, lineHeight: 32 },
   goalCardUnit: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontWeight: '500' },
+  scoreCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border },
+  scoreCardLeft: { flex: 1, marginRight: spacing.md },
+  scoreCardTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, marginBottom: 3 },
+  scoreCardSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
   goalModalBox: { backgroundColor: colors.surface, borderTopLeftRadius: spacing.lg, borderTopRightRadius: spacing.lg, padding: spacing.lg, paddingBottom: spacing.xl },
   goalModalTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 },
   goalModalDesc: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.xl },
@@ -754,7 +851,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   coachHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   coachTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
   coachDesc: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginBottom: spacing.md },
-  coachLabel: { fontSize: 11, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.xs },
+  coachLabel: { fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.xs },
   coachChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.md },
   coachChip: { paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: spacing.xs, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
   coachChipActive: { backgroundColor: colors.save, borderColor: colors.save },
@@ -765,4 +862,27 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   coachGenBtnText: { color: '#fff', fontWeight: '700', fontSize: typography.fontSize.sm },
   coachGenBtnOutline: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderWidth: 1, borderColor: colors.save, borderRadius: spacing.sm, paddingVertical: spacing.sm },
   coachGenBtnOutlineText: { color: colors.save, fontWeight: '700', fontSize: typography.fontSize.sm },
+
+  // Muscle picker modal
+  musclePickerSheet: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg,
+    padding: spacing.lg, paddingBottom: spacing.xl,
+  },
+  musclePickerHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    alignSelf: 'center', marginBottom: spacing.md,
+  },
+  musclePickerTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', marginBottom: spacing.xs },
+  musclePickerSub: { fontSize: typography.fontSize.sm, marginBottom: spacing.md, lineHeight: 20 },
+  muscleChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.lg },
+  muscleChip: {
+    paddingHorizontal: spacing.sm, paddingVertical: 7,
+    borderRadius: radius.full, borderWidth: 1,
+  },
+  muscleChipText: { fontSize: typography.fontSize.sm, fontWeight: '600' },
+  musclePickerBtn: {
+    borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center',
+  },
+  musclePickerBtnText: { color: '#fff', fontWeight: '700', fontSize: typography.fontSize.md },
 });

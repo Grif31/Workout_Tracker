@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, Workout, Exercise, Set, User
+from models import db, Workout, Exercise, Set, User, ExerciseTemplate, PersonalRecord, StrengthScoreSnapshot
 
 stats_bp = Blueprint('stats_bp', __name__)
 
@@ -448,6 +448,219 @@ def recent_exercises():
         .all()
     )
     return jsonify({'recent': [r.name for r in rows]})
+
+
+@stats_bp.get('/api/stats/strength-score')
+@jwt_required()
+def strength_score():
+    from datetime import datetime, timedelta
+    from statistics import mean as _mean
+    from utils.strength_standards import (
+        STANDARDS, BIG_6, EXERCISE_ALIASES, MUSCLE_GROUP_MAP,
+        percentile_to_strength_rank, greek_rank_from_score, compute_percentile,
+        compute_muscle_group_scores, compute_consistency_score,
+        compute_dedication_score, compute_volume_score, compute_greek_score,
+    )
+
+    user_id = get_jwt_identity()
+    user = db.session.get(User, int(user_id))
+
+    missing = []
+    if not user.gender:
+        missing.append('gender')
+    if not user.bodyweight:
+        missing.append('bodyweight')
+    if missing:
+        return jsonify({'missing': missing}), 422
+
+    kg_to_lbs = 2.20462
+    bw_lbs = user.bodyweight * kg_to_lbs if (user.weight_unit or 'lbs') == 'kg' else user.bodyweight
+
+    # Build per-exercise percentiles
+    exercise_percentiles: dict[str, float] = {}
+
+    for exercise_name, aliases in EXERCISE_ALIASES.items():
+        if exercise_name not in STANDARDS.get(user.gender, {}):
+            continue
+
+        # Find matching ExerciseTemplate IDs via ILIKE
+        template_ids = []
+        for alias in aliases:
+            rows = (
+                db.session.query(ExerciseTemplate.id)
+                .filter(db.func.lower(ExerciseTemplate.name).contains(alias.lower()))
+                .all()
+            )
+            template_ids.extend(r[0] for r in rows)
+        template_ids = list(set(template_ids))
+
+        if not template_ids:
+            continue
+
+        # True 1RM (reps=1 sets)
+        true_1rm_row = (
+            db.session.query(db.func.max(Set.weight))
+            .join(Exercise, Set.exercise_id == Exercise.id)
+            .join(Workout, Exercise.workout_id == Workout.id)
+            .filter(
+                Workout.user_id == user_id,
+                Exercise.exercise_template_id.in_(template_ids),
+                Set.reps == 1,
+                Set.weight.isnot(None),
+            )
+            .scalar()
+        )
+        true_1rm = float(true_1rm_row) if true_1rm_row else 0.0
+
+        # Estimated 1RM from PersonalRecord
+        est_1rm_row = (
+            db.session.query(db.func.max(PersonalRecord.value))
+            .filter(
+                PersonalRecord.user_id == user_id,
+                PersonalRecord.exercise_template_id.in_(template_ids),
+                PersonalRecord.pr_type == 'estimated_1rm',
+            )
+            .scalar()
+        )
+        est_1rm = float(est_1rm_row) if est_1rm_row else 0.0
+
+        best_1rm = max(true_1rm, est_1rm)
+
+        # Pull-up / Dip bodyweight fallback
+        if best_1rm == 0.0 and exercise_name in ('Pull-up', 'Dips'):
+            max_reps_row = (
+                db.session.query(db.func.max(Set.reps))
+                .join(Exercise, Set.exercise_id == Exercise.id)
+                .join(Workout, Exercise.workout_id == Workout.id)
+                .filter(
+                    Workout.user_id == user_id,
+                    Exercise.exercise_template_id.in_(template_ids),
+                    Set.weight == 0,
+                    Set.reps.isnot(None),
+                )
+                .scalar()
+            )
+            if max_reps_row and max_reps_row > 0:
+                best_1rm = bw_lbs * (max_reps_row / 30)
+
+        if best_1rm <= 0:
+            continue
+
+        bw_ratio = best_1rm / bw_lbs
+        pct = compute_percentile(exercise_name, user.gender, bw_ratio)
+        if pct is not None:
+            exercise_percentiles[exercise_name] = pct
+
+    if not exercise_percentiles:
+        return jsonify({'missing': 'data'}), 422
+
+    # Overall score
+    big6_scores  = [exercise_percentiles[e] for e in BIG_6 if e in exercise_percentiles]
+    supp_scores  = [v for k, v in exercise_percentiles.items() if k not in BIG_6]
+    big6_avg  = _mean(big6_scores)  if big6_scores  else None
+    supp_avg  = _mean(supp_scores)  if supp_scores  else None
+
+    if big6_avg is not None and supp_avg is not None:
+        overall = 0.7 * big6_avg + 0.3 * supp_avg
+    elif big6_avg is not None:
+        overall = big6_avg
+    else:
+        overall = supp_avg
+
+    # Muscle group scores
+    muscle_groups = compute_muscle_group_scores(exercise_percentiles)
+
+    # Greek rank composite
+    twelve_wks_ago = datetime.now() - timedelta(weeks=12)
+    eight_wks_ago  = datetime.now() - timedelta(weeks=8)
+
+    workouts_12wk = Workout.query.filter(
+        Workout.user_id == user_id,
+        Workout.date >= twelve_wks_ago,
+    ).all()
+    workouts_8wk_count = Workout.query.filter(
+        Workout.user_id == user_id,
+        Workout.date >= eight_wks_ago,
+    ).count()
+    total_workouts = Workout.query.filter_by(user_id=user_id).count()
+
+    consistency = compute_consistency_score(workouts_12wk)
+    dedication  = compute_dedication_score(total_workouts)
+    volume_sig  = compute_volume_score(workouts_8wk_count)
+    greek_score = compute_greek_score(consistency, overall, dedication, volume_sig)
+    greek_rank  = greek_rank_from_score(greek_score)
+
+    # Save snapshot once per 24h
+    last_snap = (
+        StrengthScoreSnapshot.query
+        .filter_by(user_id=user_id)
+        .order_by(StrengthScoreSnapshot.created_at.desc())
+        .first()
+    )
+    if not last_snap or (datetime.now() - last_snap.created_at).total_seconds() > 86400:
+        db.session.add(StrengthScoreSnapshot(user_id=user_id, score=overall))
+        db.session.commit()
+
+    # Build response
+    is_pro = True  # default True until subscription system is built
+
+    def _ex_entry(name):
+        pct = exercise_percentiles.get(name)
+        return {
+            'exercise': name,
+            'percentile': round(pct, 1) if pct is not None else None,
+            'rank': percentile_to_strength_rank(pct) if pct is not None else None,
+            'has_data': pct is not None,
+        }
+
+    big6_list = sorted(
+        [_ex_entry(e) for e in BIG_6],
+        key=lambda x: (x['percentile'] is None, -(x['percentile'] or 0)),
+    )
+    supp_list = sorted(
+        [_ex_entry(e) for e in EXERCISE_ALIASES if e not in BIG_6 and e in exercise_percentiles],
+        key=lambda x: -(x['percentile'] or 0),
+    )
+
+    resp: dict = {
+        'overall': round(overall, 1),
+        'overall_rank': percentile_to_strength_rank(overall),
+        'greek_rank': greek_rank,
+        'exercises_used': len(exercise_percentiles),
+        'muscle_groups_used': len(muscle_groups),
+    }
+
+    if is_pro:
+        resp['greek_score'] = round(greek_score, 1)
+        resp['greek_score_components'] = {
+            'consistency': round(consistency, 1),
+            'strength': round(overall, 1),
+            'dedication': round(dedication, 1),
+            'volume': round(volume_sig, 1),
+        }
+        resp['big6'] = big6_list
+        resp['supplemental'] = supp_list
+        resp['muscle_groups'] = muscle_groups
+
+    return jsonify(resp), 200
+
+
+@stats_bp.get('/api/stats/strength-score/history')
+@jwt_required()
+def strength_score_history():
+    user_id = get_jwt_identity()
+    snapshots = (
+        StrengthScoreSnapshot.query
+        .filter_by(user_id=user_id)
+        .order_by(StrengthScoreSnapshot.created_at.asc())
+        .all()
+    )
+    return jsonify({
+        'history': [
+            {'date': s.created_at.isoformat(), 'score': s.score}
+            for s in snapshots
+        ]
+    }), 200
 
 
 @stats_bp.get('/api/stats/exercise/last-session')

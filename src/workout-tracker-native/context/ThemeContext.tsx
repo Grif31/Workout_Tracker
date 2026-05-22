@@ -17,6 +17,9 @@ export const ACCENT_PRESETS: AccentPreset[] = [
   { name: 'Orange', value: '#FF9F0A', text: '#000000' },
   { name: 'Red',    value: '#FF453A', text: '#FFFFFF' },
   { name: 'Pink',   value: '#FF375F', text: '#FFFFFF' },
+  { name: 'Teal',   value: '#5AC8FA', text: '#000000' },
+  { name: 'Yellow', value: '#FFD60A', text: '#000000' },
+  { name: 'Indigo', value: '#5E5CE6', text: '#FFFFFF' },
 ];
 
 // ── Color type ────────────────────────────────────────────────────────────────

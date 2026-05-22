@@ -45,6 +45,7 @@ class UpdateProfileSchema(_Base):
     bodyweight      = fields.Float()
     height          = fields.Float()
     weight_unit     = fields.Str(validate=validate.OneOf(['kg', 'lbs']))
+    gender          = fields.Str(validate=validate.OneOf(['male', 'female']), load_default=None, allow_none=True)
 
 class DeviceTokenSchema(_Base):
     token    = fields.Str(required=True)

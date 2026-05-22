@@ -16,6 +16,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamsList } from '../../navigation/types';
 import { AUTH } from '../../theme/authColors';
 import { apiFetch } from '../../utils/api';
+import { spacing, radius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 
 type Props = NativeStackScreenProps<AuthStackParamsList, 'ResetPassword'>;
 
@@ -194,35 +196,35 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   container:    { flex: 1, backgroundColor: AUTH.bg },
-  inner:        { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 40 },
-  successInner: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', alignItems: 'center' },
+  inner:        { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 40 },
+  successInner: { flex: 1, paddingHorizontal: spacing.lg, justifyContent: 'center', alignItems: 'center' },
 
-  backBtn: { alignSelf: 'flex-start', padding: 4, marginBottom: 32 },
+  backBtn: { alignSelf: 'flex-start', padding: 4, marginBottom: spacing.xl },
 
   iconCircle: {
     width: 72, height: 72, borderRadius: 36,
     backgroundColor: AUTH.card, borderWidth: 1, borderColor: AUTH.border,
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: 24, alignSelf: 'center',
+    marginBottom: spacing.lg, alignSelf: 'center',
   },
 
-  title:    { fontSize: 28, fontWeight: '700', color: AUTH.text, marginBottom: 8, textAlign: 'center' },
+  title:    { fontSize: typography.fontSize.xxl, fontWeight: '700', color: AUTH.text, marginBottom: 8, textAlign: 'center' },
   subtitle: { fontSize: 15, color: AUTH.subtext, textAlign: 'center', lineHeight: 22, marginBottom: 36 },
-  errorText: { color: AUTH.danger, fontSize: 14, marginBottom: 16, textAlign: 'center' },
+  errorText: { color: AUTH.danger, fontSize: typography.fontSize.sm, marginBottom: 16, textAlign: 'center' },
 
   inputWrapper: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: AUTH.inputBg, borderRadius: 12, borderWidth: 1, borderColor: AUTH.border,
+    backgroundColor: AUTH.inputBg, borderRadius: radius.md, borderWidth: 1, borderColor: AUTH.border,
     marginBottom: 14, paddingHorizontal: 14, height: 54,
   },
   inputIcon: { marginRight: 10 },
   input:     { flex: 1, color: AUTH.text, fontSize: 15 },
   eyeBtn:    { padding: 4 },
 
-  primaryBtn:         { backgroundColor: AUTH.accent, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
+  primaryBtn:         { backgroundColor: AUTH.accent, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   primaryBtnDisabled: { opacity: 0.6 },
-  primaryBtnText:     { fontSize: 16, fontWeight: '700', color: '#000' },
+  primaryBtnText:     { fontSize: typography.fontSize.md, fontWeight: '700', color: '#000' },
 
   resendRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
-  resendText: { fontSize: 14, color: AUTH.subtext },
+  resendText: { fontSize: typography.fontSize.sm, color: AUTH.subtext },
 });

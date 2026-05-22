@@ -106,7 +106,7 @@ export default function PlateCalculatorModal({ visible, targetWeight, weightUnit
   const renderPlate = (weight: number, idx: number) => {
     const cfg = configMap.get(weight);
     const h = cfg?.height ?? 40;
-    const bg = cfg?.color ?? '#888';
+    const bg = cfg?.color ?? colors.textSecondary;
     return (
       <View key={idx} style={[styles.plate, { height: h, backgroundColor: bg }]}>
         <Text style={styles.plateLabel}>{weight}</Text>
@@ -266,7 +266,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '700',
   },
   targetWeight: {
-    fontSize: 28,
+    fontSize: typography.fontSize.xxl,
     fontWeight: '800',
     textAlign: 'center',
     marginVertical: spacing.sm,
@@ -286,7 +286,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     alignItems: 'center',
   },
   barChipName: {
-    fontSize: 11,
+    fontSize: typography.fontSize.xs,
     fontWeight: '700',
   },
   barChipWeight: {
@@ -344,7 +344,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
 
   // Plate chips
   sectionLabel: {
-    fontSize: 11,
+    fontSize: typography.fontSize.xs,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.8,

@@ -52,6 +52,8 @@ def update_user_info():
         user.height = float(data["height"]) if data["height"] not in (None, '') else None
     if "weight_unit" in data:
         user.weight_unit = data["weight_unit"] if data["weight_unit"] in ('lbs', 'kg') else 'lbs'
+    if "gender" in data:
+        user.gender = data["gender"] if data["gender"] in ('male', 'female') else None
 
     db.session.commit()
     return jsonify(user.to_dict()), 200

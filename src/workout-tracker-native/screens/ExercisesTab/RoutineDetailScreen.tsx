@@ -188,7 +188,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   routineName: { fontSize: typography.fontSize.lg, fontWeight: 'bold', color: colors.textPrimary },
   routineDesc: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
-  dayCount: { fontSize: typography.fontSize.sm, color: '#aaa', marginTop: spacing.xs },
+  dayCount: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: spacing.xs },
   deleteText: { color: colors.danger, fontSize: typography.fontSize.sm, fontWeight: '600', marginTop: 4 },
   activateText: { color: colors.save, fontSize: typography.fontSize.sm, fontWeight: '600', marginTop: 4 },
   deactivateText: { color: colors.textSecondary, fontSize: typography.fontSize.sm, fontWeight: '600', marginTop: 4 },

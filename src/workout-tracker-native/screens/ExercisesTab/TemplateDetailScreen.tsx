@@ -7,7 +7,7 @@ import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-nativ
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ExercisesStackParamsList } from 'navigation/types';
+import { TrainingStackParamsList } from 'navigation/types';
 import ExerciseListModal from '../../components/ExerciseList';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
@@ -16,12 +16,12 @@ import { muscleGroups } from '../../constants/muscleGroups';
 
 import { apiFetch } from '../../utils/api';
 
-type Props = NativeStackScreenProps<ExercisesStackParamsList, 'TemplateDetail'>;
+type Props = NativeStackScreenProps<TrainingStackParamsList, 'TemplateDetail'>;
 type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; image_url?: string };
 type Template = { id: number; name: string; exercises: Exercise[] };
 
 export default function TemplateDetailScreen({ route, navigation }: Props) {
-  const { templateId } = route.params;
+  const { templateId, muscleGroups: targetMuscles } = route.params;
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -153,6 +153,16 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         onDragEnd={({ data }) => setExercises(data)}
         ListHeaderComponent={
           <View>
+            {/* Target muscle banner */}
+            {targetMuscles && targetMuscles.length > 0 && (
+              <View style={[styles.muscleBanner, { backgroundColor: colors.accent + '18', borderColor: colors.accent }]}>
+                <Ionicons name="body-outline" size={14} color={colors.accent} />
+                <Text style={[styles.muscleBannerText, { color: colors.accent }]}>
+                  Training: {targetMuscles.join(', ')}
+                </Text>
+              </View>
+            )}
+
             {/* Editable name */}
             <TextInput
               style={styles.nameInput}
@@ -212,6 +222,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         onClose={() => setPickerVisible(false)}
         exercises={allExercises}
         onSelect={addExercise}
+        initialMuscle={targetMuscles?.[0]}
         onAddExercise={async (name, muscle) => {
           const res = await apiFetch('/api/exercises', {
             method: 'POST',
@@ -242,6 +253,17 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   headerTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },
   deleteText: { color: colors.danger, fontWeight: '600', fontSize: typography.fontSize.sm },
   content: { padding: spacing.md, paddingBottom: spacing.xl },
+  muscleBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderRadius: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 7,
+    marginBottom: spacing.sm,
+  },
+  muscleBannerText: { fontSize: typography.fontSize.sm, fontWeight: '600', flex: 1 },
   nameInput: {
     fontSize: 22,
     fontWeight: '700',

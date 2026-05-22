@@ -20,6 +20,8 @@ import SocialAuthButtons from '../../components/SocialAuthButtons';
 import { useSocialAuth } from '../../hooks/useSocialAuth';
 import { AUTH } from '../../theme/authColors';
 import { apiFetch } from '../../utils/api';
+import { spacing, radius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 
 type Props = NativeStackScreenProps<AuthStackParamsList, 'Signup'>;
 
@@ -206,7 +208,7 @@ export default function SignupScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: AUTH.bg },
-  scroll:    { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 40 },
+  scroll:    { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 40 },
 
   backBtn: { marginBottom: 28, alignSelf: 'flex-start', padding: 4 },
 
@@ -215,7 +217,7 @@ const styles = StyleSheet.create({
 
   errorText: {
     color: AUTH.danger,
-    fontSize: 14,
+    fontSize: typography.fontSize.sm,
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -231,7 +233,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: AUTH.inputBg,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: AUTH.border,
     marginBottom: 14,
@@ -249,12 +251,12 @@ const styles = StyleSheet.create({
   primaryBtn: {
     backgroundColor: AUTH.accent,
     borderRadius: 14,
-    paddingVertical: 16,
+    paddingVertical: spacing.md,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   primaryBtnDisabled: { opacity: 0.6 },
-  primaryBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },
+  primaryBtnText: { fontSize: typography.fontSize.md, fontWeight: '700', color: '#000' },
 
   disclaimer: {
     fontSize: 12,
@@ -269,6 +271,6 @@ const styles = StyleSheet.create({
   },
 
   footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
-  footerText: { fontSize: 14, color: AUTH.subtext },
-  footerLink: { fontSize: 14, color: AUTH.accent, fontWeight: '600' },
+  footerText: { fontSize: typography.fontSize.sm, color: AUTH.subtext },
+  footerLink: { fontSize: typography.fontSize.sm, color: AUTH.accent, fontWeight: '600' },
 });

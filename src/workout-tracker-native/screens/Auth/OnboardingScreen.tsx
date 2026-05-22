@@ -15,6 +15,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OnboardingStackParamsList } from '../../navigation/types';
 import { AUTH } from '../../theme/authColors';
 import { apiFetch } from '../../utils/api';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 
 type Props = NativeStackScreenProps<OnboardingStackParamsList, 'Onboarding'>;
 
@@ -242,9 +244,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: AUTH.bg },
 
   chat: { flex: 1 },
-  chatContent: { padding: 16, gap: 12, paddingBottom: 8 },
+  chatContent: { padding: spacing.md, gap: 12, paddingBottom: spacing.sm },
 
-  botRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, maxWidth: '85%' },
+  botRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, maxWidth: '85%' },
   userRow: { alignItems: 'flex-end', alignSelf: 'flex-end', maxWidth: '75%' },
 
   avatar: {
@@ -278,29 +280,29 @@ const styles = StyleSheet.create({
   typingDots: { fontSize: 18, color: AUTH.subtext, letterSpacing: 2 },
 
   chipsArea: {
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 16,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.md,
     borderTopWidth: 1,
     borderTopColor: AUTH.border,
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingTop: 12 },
   chip: {
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
     borderRadius: 20,
     backgroundColor: AUTH.card,
     borderWidth: 1,
     borderColor: AUTH.border,
   },
-  chipText: { fontSize: 14, fontWeight: '500', color: AUTH.text },
+  chipText: { fontSize: typography.fontSize.sm, fontWeight: '500', color: AUTH.text },
 
-  footer: { paddingHorizontal: 16, paddingBottom: 16, paddingTop: 8 },
+  footer: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, paddingTop: spacing.sm },
   continueBtn: {
     backgroundColor: AUTH.accent,
     borderRadius: 14,
     paddingVertical: 15,
     alignItems: 'center',
   },
-  continueBtnText: { fontSize: 16, fontWeight: '700', color: AUTH.bg },
+  continueBtnText: { fontSize: typography.fontSize.md, fontWeight: '700', color: AUTH.bg },
 });

@@ -2,11 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { registerToastCallback } from '../utils/toast';
+import { useTheme } from '../context/ThemeContext';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
 
 const SLIDE_DURATION = 250;
 const DISPLAY_DURATION = 3000;
 
 export function ToastBanner() {
+  const { colors } = useTheme();
   const [message, setMessage] = useState('');
   const [visible, setVisible] = useState(false);
   const translateY = useRef(new Animated.Value(-80)).current;
@@ -45,7 +49,7 @@ export function ToastBanner() {
     <Animated.View
       style={[
         styles.banner,
-        { top: insets.top + 8, transform: [{ translateY }] },
+        { top: insets.top + spacing.sm, backgroundColor: colors.danger, transform: [{ translateY }] },
       ]}
     >
       <Text style={styles.text}>{message}</Text>
@@ -56,13 +60,12 @@ export function ToastBanner() {
 const styles = StyleSheet.create({
   banner: {
     position: 'absolute',
-    left: 16,
-    right: 16,
+    left: spacing.md,
+    right: spacing.md,
     zIndex: 9999,
-    backgroundColor: '#FF453A',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    borderRadius: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
@@ -71,7 +74,7 @@ const styles = StyleSheet.create({
   },
   text: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: typography.fontSize.sm,
     fontWeight: '600',
     textAlign: 'center',
     lineHeight: 19,

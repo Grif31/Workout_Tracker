@@ -676,7 +676,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: 4,
   },
   statBoxValue: {
-    fontSize: 22,
+    fontSize: typography.fontSize.xl,
     fontWeight: '700',
     color: colors.textPrimary,
   },
@@ -705,7 +705,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
 
   photoDate: {
-    fontSize: 11,
+    fontSize: typography.fontSize.xs,
     color: colors.textSecondary,
     textAlign: 'center',
     marginTop: 4,
@@ -728,7 +728,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },

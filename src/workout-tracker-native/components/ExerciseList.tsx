@@ -38,6 +38,7 @@ type Props = {
   onAddExercise: (name: string, muscle: string, equipment: string) => void;
   muscleGroups: string[];
   multiSelect?: boolean;
+  initialMuscle?: string;
 };
 
 export default function ExerciseListModal({
@@ -49,12 +50,18 @@ export default function ExerciseListModal({
   onAddExercise,
   muscleGroups,
   multiSelect = false,
+  initialMuscle,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [search, setSearch] = useState('');
-  const [selectedMuscle, setSelectedMuscle] = useState('All');
+  const [selectedMuscle, setSelectedMuscle] = useState(initialMuscle ?? 'All');
+
+  // Reset to initialMuscle each time the modal opens
+  React.useEffect(() => {
+    if (visible) setSelectedMuscle(initialMuscle ?? 'All');
+  }, [visible]);
   const [formVisible, setFormVisible] = useState(false);
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
 

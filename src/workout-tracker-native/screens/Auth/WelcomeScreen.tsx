@@ -13,6 +13,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamsList } from '../../navigation/types';
 import { useSocialAuth } from '../../hooks/useSocialAuth';
 import { AUTH } from '../../theme/authColors';
+import { spacing, radius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 
 type Props = NativeStackScreenProps<AuthStackParamsList, 'Welcome'>;
 
@@ -87,7 +89,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: AUTH.bg,
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.lg,
   },
 
   hero: {
@@ -114,7 +116,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   tagline: {
-    fontSize: 16,
+    fontSize: typography.fontSize.md,
     color: AUTH.subtext,
     fontStyle: 'italic',
   },
@@ -135,7 +137,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   appleBtnText: {
-    fontSize: 16,
+    fontSize: typography.fontSize.md,
     fontWeight: '600',
     color: '#000',
   },
@@ -148,7 +150,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   signupBtnText: {
-    fontSize: 16,
+    fontSize: typography.fontSize.md,
     fontWeight: '700',
     color: '#000',
   },
@@ -166,7 +168,7 @@ const styles = StyleSheet.create({
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 16,
+    marginVertical: spacing.md,
     gap: 10,
   },
   line: { flex: 1, height: 1, backgroundColor: AUTH.border },
@@ -175,13 +177,13 @@ const styles = StyleSheet.create({
   socialRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 16,
+    gap: spacing.md,
     marginBottom: 20,
   },
   iconBtn: {
     width: 52,
     height: 52,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: AUTH.border,
     backgroundColor: AUTH.card,

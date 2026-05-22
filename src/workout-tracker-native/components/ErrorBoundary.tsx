@@ -1,5 +1,7 @@
 import React from 'react';
 import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { spacing, radius } from '../theme/spacing';
+import { typography } from '../theme/typography';
 
 type Props = { children: React.ReactNode };
 type State = { hasError: boolean; error: Error | null };
@@ -47,30 +49,30 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: spacing.lg,
   },
   title: {
-    fontSize: 22,
+    fontSize: typography.fontSize.xl,
     fontWeight: '700',
     color: '#fff',
     marginBottom: 12,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: typography.fontSize.sm,
     color: '#aaa',
     textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: spacing.xl,
     lineHeight: 20,
   },
   button: {
     backgroundColor: '#FF453A',
     paddingHorizontal: 36,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: radius.md,
   },
   buttonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: typography.fontSize.md,
     fontWeight: '600',
   },
 });
