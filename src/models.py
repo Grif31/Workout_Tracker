@@ -267,6 +267,7 @@ class Set(db.Model):
     distance_unit = db.Column(db.String(5), nullable=True)  # 'km' or 'mi'
     intensity = db.Column(db.Float, nullable=True)          # pace or watts
     rpe = db.Column(db.Integer, nullable=True)               # 1-10 rating of perceived exertion
+    elevation_gain = db.Column(db.Float, nullable=True)     # metres of ascent
 
     def to_dict(self):
         return {
@@ -281,6 +282,7 @@ class Set(db.Model):
             "distance_unit": self.distance_unit,
             "intensity": self.intensity,
             "rpe": self.rpe,
+            "elevation_gain": self.elevation_gain,
         }
 
 # ── DeviceToken ─────────────────────────────────────────────

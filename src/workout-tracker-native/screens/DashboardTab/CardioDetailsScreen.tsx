@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator,
+  ScrollView, Dimensions, Modal, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import polylineLib from '@mapbox/polyline';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useActionSheet } from '@expo/react-native-action-sheet';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { apiFetch } from '../../utils/api';
@@ -25,9 +27,6 @@ type Props = NativeStackScreenProps<DashboardStackParamsList, 'CardioDetails'>;
 
 type Coord = { latitude: number; longitude: number };
 
-const ACTIVITY_ICONS: Record<string, string> = {
-  Run: '🏃', Cycle: '🚴', Walk: '🚶', Hike: '🥾',
-};
 
 function fmtDuration(minutes: number): string {
   const h = Math.floor(minutes / 60);
@@ -52,10 +51,13 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const { showActionSheetWithOptions } = useActionSheet();
 
   const [workout, setWorkout] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('km');
+  const [renameVisible, setRenameVisible] = useState(false);
+  const [renameText, setRenameText] = useState('');
 
   useEffect(() => {
     AsyncStorage.getItem('gps_distance_unit').then(v => {
@@ -77,14 +79,15 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
     return (user as any).weight_unit === 'lbs' ? bw / 2.205 : bw;
   }, [user]);
 
-  const { exercise, coords, mapRegion, durationMin, distanceKm, calories } = useMemo(() => {
-    if (!workout) return { exercise: null, coords: [], mapRegion: null, durationMin: 0, distanceKm: 0, calories: 0 };
+  const { exercise, coords, mapRegion, durationMin, distanceKm, elevationGainM, calories } = useMemo(() => {
+    if (!workout) return { exercise: null, coords: [], mapRegion: null, durationMin: 0, distanceKm: 0, elevationGainM: null, calories: 0 };
 
     const ex = workout.exercises?.[0] ?? null;
     const set = ex?.sets?.[0] ?? null;
 
     const dur = parseFloat(set?.cardio_duration) || 0;
     const dist = parseFloat(set?.distance) || 0;
+    const elev = set?.elevation_gain != null ? parseFloat(set.elevation_gain) : null;
     const kcal = estimateCalories(ex?.name ?? '', dur, weightKg);
 
     let decodedCoords: Coord[] = [];
@@ -110,8 +113,28 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
       } catch {}
     }
 
-    return { exercise: ex, coords: decodedCoords, mapRegion: region, durationMin: dur, distanceKm: dist, calories: kcal };
+    return { exercise: ex, coords: decodedCoords, mapRegion: region, durationMin: dur, distanceKm: dist, elevationGainM: elev, calories: kcal };
   }, [workout, weightKg]);
+
+  const handleRename = async () => {
+    const name = renameText.trim();
+    if (!name) return;
+    try {
+      const res = await apiFetch(`/api/workouts/${workoutId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workoutName: name }),
+      });
+      if (!res.ok) {
+        Alert.alert('Error', 'Failed to rename activity');
+        return;
+      }
+      setWorkout((prev: any) => ({ ...prev, name }));
+      setRenameVisible(false);
+    } catch {
+      Alert.alert('Error', 'Failed to rename activity');
+    }
+  };
 
   const handleDelete = () => {
     Alert.alert('Delete Activity', 'This activity will be permanently deleted.', [
@@ -123,6 +146,16 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
         },
       },
     ]);
+  };
+
+  const showOptions = () => {
+    showActionSheetWithOptions(
+      { options: ['Rename Activity', 'Delete Activity', 'Cancel'], destructiveButtonIndex: 1, cancelButtonIndex: 2 },
+      (index) => {
+        if (index === 0) { setRenameText(workout?.name ?? ''); setRenameVisible(true); }
+        else if (index === 1) handleDelete();
+      },
+    );
   };
 
   if (loading) {
@@ -145,23 +178,24 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
   }
 
   const activityName = exercise?.name ?? workout.name ?? 'Activity';
-  const activityIcon = ACTIVITY_ICONS[activityName] ?? '🏃';
   const dateStr = workout.date
     ? new Date(workout.date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
     : '';
 
+  const MAP_HEIGHT = Dimensions.get('window').height * 0.65;
+
   return (
     <View style={styles.container}>
-      {/* Map area */}
-      <View style={styles.mapContainer}>
+      {/* Map area — explicit height so MapView doesn't overflow */}
+      <View style={[styles.mapContainer, { height: MAP_HEIGHT }]}>
         {MapView && mapRegion ? (
-          <MapView style={styles.map} initialRegion={mapRegion} scrollEnabled={false} zoomEnabled={false}>
+          <MapView style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} initialRegion={mapRegion} scrollEnabled={false} zoomEnabled={false}>
             {coords.length >= 2 && Polyline && (
               <Polyline coordinates={coords} strokeColor={colors.accent} strokeWidth={4} />
             )}
           </MapView>
         ) : (
-          <View style={[styles.map, styles.mapPlaceholder]}>
+          <View style={styles.mapPlaceholder}>
             <Ionicons name="map-outline" size={48} color={colors.textSecondary} />
             <Text style={[styles.mapPlaceholderText, { color: colors.textSecondary }]}>
               {coords.length < 2 ? 'No route recorded' : 'Map unavailable'}
@@ -171,60 +205,97 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
 
         {/* Back button */}
         <TouchableOpacity
-          style={[styles.backBtn, { top: insets.top + spacing.sm }]}
+          style={[styles.overlayBtn, { top: insets.top + spacing.sm, left: spacing.md }]}
           onPress={() => navigation.goBack()}
         >
           <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
 
+        {/* More options */}
+        <TouchableOpacity
+          style={[styles.overlayBtn, { top: insets.top + spacing.sm, right: spacing.md }]}
+          onPress={showOptions}
+        >
+          <Ionicons name="ellipsis-horizontal" size={20} color={colors.textPrimary} />
+        </TouchableOpacity>
+
         {/* Activity badge */}
-        <View style={[styles.activityBadge, { bottom: spacing.md, left: spacing.md }]}>
-          <Text style={styles.activityBadgeText}>{activityIcon} {activityName}</Text>
+        <View style={[styles.activityBadge, { top: insets.top + spacing.sm }]}>
+          <Text style={styles.activityBadgeText}>{activityName}</Text>
         </View>
       </View>
 
       {/* Details panel */}
       <ScrollView style={styles.panel} contentContainerStyle={styles.panelContent}>
-        {/* Date */}
+        <Text style={styles.workoutTitle}>{workout.name || activityName}</Text>
         <Text style={styles.dateText}>{dateStr}</Text>
 
-        {/* Stats row */}
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{fmtDuration(durationMin)}</Text>
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{durationMin > 0 ? fmtDuration(durationMin) : '--'}</Text>
             <Text style={styles.statLabel}>Duration</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{distanceKm.toFixed(2)}</Text>
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{distanceKm > 0 ? distanceKm.toFixed(2) : '--'}</Text>
             <Text style={styles.statLabel}>{distanceUnit}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{fmtPace(durationMin, distanceKm)}</Text>
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{fmtPace(durationMin, distanceKm)}</Text>
             <Text style={styles.statLabel}>/{distanceUnit} pace</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>~{calories}</Text>
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{calories > 0 ? `~${calories}` : '--'}</Text>
             <Text style={styles.statLabel}>kcal</Text>
           </View>
         </View>
 
-        {/* Notes */}
+        {elevationGainM != null && elevationGainM > 0 && (
+          <View style={styles.elevationRow}>
+            <Ionicons name="trending-up" size={16} color={colors.textSecondary} />
+            <Text style={styles.elevationText}>
+              {distanceUnit === 'mi'
+                ? `${Math.round(elevationGainM * 3.28084)} ft elevation gain`
+                : `${Math.round(elevationGainM)} m elevation gain`}
+            </Text>
+          </View>
+        )}
+
         {!!workout.notes && (
           <View style={styles.notesCard}>
             <Text style={styles.notesLabel}>Notes</Text>
             <Text style={styles.notesText}>{workout.notes}</Text>
           </View>
         )}
-
-        {/* Delete */}
-        <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-          <Ionicons name="trash-outline" size={16} color="#e53935" />
-          <Text style={styles.deleteBtnText}>Delete Activity</Text>
-        </TouchableOpacity>
       </ScrollView>
+
+      {/* Rename modal */}
+      <Modal visible={renameVisible} transparent animationType="fade">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <View style={styles.renameCard}>
+            <Text style={styles.renameTitle}>Rename Activity</Text>
+            <TextInput
+              style={styles.renameInput}
+              value={renameText}
+              onChangeText={setRenameText}
+              autoFocus
+              selectTextOnFocus
+              placeholder="Activity name"
+              placeholderTextColor={colors.placeholder}
+            />
+            <View style={styles.renameActions}>
+              <TouchableOpacity style={styles.renameCancelBtn} onPress={() => setRenameVisible(false)}>
+                <Text style={[styles.renameBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.renameSaveBtn, { backgroundColor: colors.accent }]} onPress={handleRename}>
+                <Text style={[styles.renameBtnText, { color: '#fff' }]}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -232,9 +303,9 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
 const createStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
-  mapContainer: { flex: 55, position: 'relative' },
-  map: { flex: 1 },
+  mapContainer: { position: 'relative', overflow: 'hidden' },
   mapPlaceholder: {
+    flex: 1,
     backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
@@ -242,9 +313,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   mapPlaceholderText: { fontSize: typography.fontSize.sm },
 
-  backBtn: {
+  overlayBtn: {
     position: 'absolute',
-    left: spacing.md,
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -254,39 +324,47 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   activityBadge: {
     position: 'absolute',
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.full,
+    alignSelf: 'center',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    backgroundColor: 'transparent',
   },
   activityBadgeText: {
     fontSize: typography.fontSize.sm,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: '#fff',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
 
-  panel: { flex: 45 },
-  panelContent: {
-    padding: spacing.md,
-    gap: spacing.md,
-  },
+  panel: { flex: 1 },
+  panelContent: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xl },
 
-  dateText: {
+  workoutTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },
+  dateText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontWeight: '500' },
+
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  statItem: { flex: 1, alignItems: 'center', paddingHorizontal: spacing.xs },
+  statValue: { fontSize: typography.fontSize.xxl, fontWeight: '700', color: colors.textPrimary },
+  statLabel: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 4 },
+  statDivider: { width: 1, height: 36, backgroundColor: colors.border },
+
+  elevationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  elevationText: {
     fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
     fontWeight: '500',
   },
-
-  statsRow: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-  },
-  statItem: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },
-  statLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
-  statDivider: { width: 1, backgroundColor: colors.border, marginVertical: spacing.xs },
 
   notesCard: {
     backgroundColor: colors.surface,
@@ -297,13 +375,25 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   notesLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 },
   notesText: { fontSize: typography.fontSize.sm, color: colors.textPrimary, lineHeight: 20 },
 
-  deleteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.md,
-    marginTop: spacing.sm,
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: spacing.lg },
+  renameCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    gap: spacing.md,
   },
-  deleteBtnText: { fontSize: typography.fontSize.sm, color: '#e53935', fontWeight: '600' },
+  renameTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
+  renameInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: typography.fontSize.md,
+    color: colors.textPrimary,
+  },
+  renameActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm },
+  renameCancelBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  renameSaveBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.sm },
+  renameBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600' },
 });

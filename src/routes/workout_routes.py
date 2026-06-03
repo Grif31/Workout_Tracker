@@ -382,6 +382,7 @@ def add_workout():
                     distance_unit=s.get('distance_unit'),
                     intensity=s.get('intensity'),
                     rpe=s.get('rpe'),
+                    elevation_gain=s.get('elevation_gain'),
                 )
                 db.session.add(new_set)
                 new_sets.append(new_set)
@@ -526,6 +527,8 @@ def update_workout(workout_id):
                             s.intensity = s_data["intensity"]
                         if "rpe" in s_data:
                             s.rpe = s_data["rpe"]
+                        if "elevation_gain" in s_data:
+                            s.elevation_gain = s_data["elevation_gain"]
                         s.order = s_data.get('order', set_index)
                     else:
                         ex.sets.append(Set(
@@ -538,6 +541,7 @@ def update_workout(workout_id):
                             distance_unit=s_data.get('distance_unit'),
                             intensity=s_data.get('intensity'),
                             rpe=s_data.get('rpe'),
+                            elevation_gain=s_data.get('elevation_gain'),
                         ))
             else:
                 new_ex = Exercise(
@@ -560,6 +564,7 @@ def update_workout(workout_id):
                         distance_unit=s.get('distance_unit'),
                         intensity=s.get('intensity'),
                         rpe=s.get('rpe'),
+                        elevation_gain=s.get('elevation_gain'),
                     ))
                 workout.exercises.append(new_ex)
                         

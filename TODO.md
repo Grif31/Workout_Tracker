@@ -114,11 +114,11 @@ Check off items as you complete them.
   - [x] Show cardio rows in WorkoutDetails and ExerciseDetail history (distance + duration instead of reps/weight)
   - [x] Add cardio stats to Exercise Detail screen (total distance, avg pace over time)
 
-- [ ] **GPS cardio tracking — complete setup**
+- [x] **GPS cardio tracking — complete setup**
   > `GPSCardioScreen.tsx` exists and the "Track Activity" button is wired on DashboardScreen, but the screen requires a custom dev build (`npx expo run:ios` / `npx expo run:android`). It does **not** work in Expo Go because `react-native-maps` and `expo-location` in background mode are unavailable there.
   - [x] Run `npx expo run:ios` / `npx expo run:android` to get GPS + maps working in development
   - [x] Verify live location tracking, pace display, and route polyline rendering on a real device
-  - [ ] Confirm the saved workout appears correctly in WorkoutDetails with distance, duration, and route map
+  - [x] Confirm the saved workout appears correctly in WorkoutDetails with distance, duration, and route map
 
 ---
 
@@ -329,10 +329,10 @@ Check off items as you complete them.
 ## 📱 6. App Store / Play Store Submission
 > Everything needed to actually submit to Apple and Google.
 
-- [ ] **App assets**
-  - [ ] Design and export app icon (1024×1024 for iOS, 512×512 for Android)
-  - [ ] Design splash screen
-  - [ ] Add all required icon sizes via Expo config
+- [x] **App assets**
+  - [x] Design and export app icon (1024×1024 for iOS, 512×512 for Android)
+  - [x] Design splash screen
+  - [x] Add all required icon sizes via Expo config
 
 - [x] **app.json / app.config.js**
   - [x] Set proper `bundleIdentifier` (iOS) and `package` (Android)
@@ -357,11 +357,11 @@ Check off items as you complete them.
   - [ ] Prepare screenshots (iPhone 6.9", iPhone 6.5", Android tablet)
   - [ ] Choose category (Health & Fitness) and age rating
 
-- [ ] **Backend hosting**
-  - [ ] Deploy Flask backend to a cloud host (Railway, Render, Fly.io, etc.)
-  - [ ] Set up PostgreSQL in production (not SQLite)
-  - [ ] Set `DATABASE_URL`, `JWT_SECRET_KEY` as environment secrets
-  - [ ] Point `EXPO_PUBLIC_API_URL` to the live backend URL
+- [x] **Backend hosting**
+  - [x] Deploy Flask backend to a cloud host (Railway, Render, Fly.io, etc.)
+  - [x] Set up PostgreSQL in production (not SQLite)
+  - [x] Set `DATABASE_URL`, `JWT_SECRET_KEY` as environment secrets
+  - [x] Point `EXPO_PUBLIC_API_URL` to the live backend URL
 
 ---
 
@@ -380,20 +380,20 @@ Check off items as you complete them.
   - [x] Creates routine (with days + templates) or standalone template
 
 - [ ] **Improve AI generation**
-  - [ ] Let user preview the generated routine before saving
-  - [ ] Allow regeneration / manual edits before confirm
-  - [ ] Add ANTHROPIC_API_KEY setup instructions to README
+  - [x] Let user preview the generated routine before saving
+  - [x] Allow regeneration / manual edits before confirm
+  - [x] Add ANTHROPIC_API_KEY setup instructions to README
 
 ---
 
 ## 💪 8. Strength Score
 > Percentile-based strength ranking that tells users where they rank among all lifters. Pro feature.
 
-- [ ] **Add gender to User model**
-  - [ ] Add `gender` column (`'male'` | `'female'` | `null`) to `User` in `models.py`
-  - [ ] Generate and apply migration
-  - [ ] Add gender field to `SettingsScreen` (Male / Female / Prefer not to say) — required to see strength score
-  - [ ] `PATCH /api/me` to save gender
+- [x] **Add gender to User model**
+  - [x] Add `gender` column (`'male'` | `'female'` | `null`) to `User` in `models.py`
+  - [x] Generate and apply migration
+  - [x] Add gender field to `SettingsScreen` (Male / Female / Prefer not to say) — required to see strength score
+  - [x] `PATCH /api/me` to save gender
 
 - [ ] **Strength standards data** (`src/utils/strength_standards.py`)
   - [ ] Percentile lookup tables for all major exercises (male + female), based on bodyweight ratio

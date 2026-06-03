@@ -27,7 +27,7 @@ import { estimateCalories } from '../../utils/cardioCalories';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'GPSCardio'>;
 
-type Coord = { latitude: number; longitude: number };
+type Coord = { latitude: number; longitude: number; altitude: number | null };
 
 type TrackingState = 'idle' | 'running' | 'paused';
 
@@ -83,6 +83,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
   const [coords, setCoords] = useState<Coord[]>([]);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [distanceKm, setDistanceKm] = useState(0);
+  const [elevationGainM, setElevationGainM] = useState(0);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [workoutName, setWorkoutName] = useState('');
@@ -94,6 +95,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
   const locationSub = useRef<Location.LocationSubscription | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mapRef = useRef<any>(null);
+  const lastAltRef = useRef<number | null>(null);
 
   const displayDistance = distanceUnit === 'mi' ? distanceKm * 0.621371 : distanceKm;
   const pace = displayDistance > 0 ? elapsedSec / 60 / displayDistance : 0;
@@ -139,10 +141,21 @@ export default function GPSCardioScreen({ navigation }: Props) {
       return;
     }
 
+    lastAltRef.current = null;
     const sub = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 5 },
       loc => {
-        const newCoord: Coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+        const newCoord: Coord = {
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          altitude: loc.coords.altitude ?? null,
+        };
+        const alt = newCoord.altitude;
+        if (alt !== null && lastAltRef.current !== null) {
+          const delta = alt - lastAltRef.current;
+          if (delta > 2) setElevationGainM(g => g + delta);
+        }
+        if (alt !== null) lastAltRef.current = alt;
         setCoords(prev => {
           if (prev.length > 0) {
             setDistanceKm(d => d + haversineKm(prev[prev.length - 1], newCoord));
@@ -170,10 +183,21 @@ export default function GPSCardioScreen({ navigation }: Props) {
   };
 
   const handleResume = async () => {
+    lastAltRef.current = null;
     const sub = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 5 },
       loc => {
-        const newCoord: Coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+        const newCoord: Coord = {
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          altitude: loc.coords.altitude ?? null,
+        };
+        const alt = newCoord.altitude;
+        if (alt !== null && lastAltRef.current !== null) {
+          const delta = alt - lastAltRef.current;
+          if (delta > 2) setElevationGainM(g => g + delta);
+        }
+        if (alt !== null) lastAltRef.current = alt;
         setCoords(prev => {
           if (prev.length > 0) {
             setDistanceKm(d => d + haversineKm(prev[prev.length - 1], newCoord));
@@ -200,6 +224,8 @@ export default function GPSCardioScreen({ navigation }: Props) {
     setCoords([]);
     setElapsedSec(0);
     setDistanceKm(0);
+    setElevationGainM(0);
+    lastAltRef.current = null;
     setTrackingState('idle');
   };
 
@@ -212,8 +238,12 @@ export default function GPSCardioScreen({ navigation }: Props) {
         : null;
       const avgPace = distanceKm > 0 ? durationMin / distanceKm : null;
 
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
       const body = {
         workoutName: workoutName.trim() || activity,
+        date: dateStr,
         duration: Math.round(durationMin),
         exercises: [{
           name: activity,
@@ -224,6 +254,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
             distance: displayDistance,
             distance_unit: distanceUnit,
             intensity: avgPace,
+            elevation_gain: elevationGainM > 0 ? Math.round(elevationGainM) : null,
             reps: null,
             weight: null,
             set_type: 'N',
