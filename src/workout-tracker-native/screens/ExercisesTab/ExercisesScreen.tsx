@@ -39,7 +39,7 @@ export default function ExercisesScreen({ navigation }: Props) {
   const [showNewExerciseModal, setShowNewExerciseModal] = useState(false);
   const [showMuscleDropdown, setShowMuscleDropdown] = useState(false);
   const [showEquipmentDropdown, setShowEquipmentDropdown] = useState(false);
-  const [recentExercises, setRecentExercises] = useState<string[]>([]);
+  const [recentExercises, setRecentExercises] = useState<{ name: string; exercise_template_id: number | null }[]>([]);
 
   const muscleRef = useRef<TouchableOpacity>(null);
   const equipRef  = useRef<TouchableOpacity>(null);
@@ -116,9 +116,12 @@ export default function ExercisesScreen({ navigation }: Props) {
   const recentFiltered = useMemo(() => {
     if (search) return [];
     return recentExercises
-      .map(name => exerciseList.find(ex =>
-        `${ex.name}${ex.equipment ? ` (${ex.equipment})` : ''}` === name || ex.name === name
-      ))
+      .map(recent =>
+        recent.exercise_template_id != null
+          ? exerciseList.find(ex => ex.id === recent.exercise_template_id)
+          : exerciseList.find(ex => ex.name === recent.name && !ex.equipment)
+              ?? exerciseList.find(ex => ex.name === recent.name)
+      )
       .filter((ex): ex is Exercise => ex !== undefined)
       .filter(ex => {
         if (selectedMuscle === 'Cardio') return ex.exercise_type === 'cardio';

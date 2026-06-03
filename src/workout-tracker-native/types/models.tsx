@@ -21,6 +21,8 @@ export type Exercise = {
   exercise_type?: 'strength' | 'cardio'
   route_polyline?: string
   equipment?: string
+  muscle_group?: string
+  notes?: string
   sets: Set[]
 };
 export type Set = {

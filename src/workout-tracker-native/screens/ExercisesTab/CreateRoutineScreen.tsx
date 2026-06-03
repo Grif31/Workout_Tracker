@@ -1,11 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, Modal, FlatList,
+  Alert, ActivityIndicator, Modal, FlatList, ScrollView,
 } from 'react-native';
-import {
-  RenderItemParams, ScaleDecorator, NestableScrollContainer, NestableDraggableFlatList,
-} from 'react-native-draggable-flatlist';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ExercisesStackParamsList } from 'navigation/types';
@@ -117,6 +114,17 @@ export default function CreateRoutineScreen({ navigation }: Props) {
     }));
   };
 
+  const moveExerciseInDay = (dayIdx: number, exIdx: number, direction: -1 | 1) => {
+    setDays(prev => prev.map((d, i) => {
+      if (i !== dayIdx || d.mode !== 'new') return d;
+      const next = [...d.exercises];
+      const target = exIdx + direction;
+      if (target < 0 || target >= next.length) return d;
+      [next[exIdx], next[target]] = [next[target], next[exIdx]];
+      return { ...d, exercises: next };
+    }));
+  };
+
   const saveRoutine = async () => {
     if (!routineName.trim()) { Alert.alert('Error', 'Please enter a routine name'); return; }
     if (days.length === 0) { Alert.alert('Error', 'Please add at least one day'); return; }
@@ -154,7 +162,7 @@ export default function CreateRoutineScreen({ navigation }: Props) {
   };
 
   return (
-    <NestableScrollContainer style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -225,31 +233,25 @@ export default function CreateRoutineScreen({ navigation }: Props) {
             </TouchableOpacity>
           ) : (
             <>
-              <NestableDraggableFlatList
-                data={day.exercises}
-                keyExtractor={(item: Exercise) => item.id.toString()}
-                onDragEnd={({ data }: { data: Exercise[] }) =>
-                  setDays(prev => prev.map((d, i) =>
-                    i !== dayIdx || d.mode !== 'new' ? d : { ...d, exercises: data }
-                  ))
-                }
-                renderItem={({ item: ex, drag, isActive }: RenderItemParams<Exercise>) => (
-                  <ScaleDecorator activeScale={0.98}>
-                    <View style={[styles.exerciseRow, isActive && { opacity: 0.85 }]}>
-                      <TouchableOpacity onLongPress={drag} delayLongPress={150} style={styles.dragHandle}>
-                        <Ionicons name="menu-outline" size={18} color={colors.textSecondary} />
-                      </TouchableOpacity>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.exerciseRowName}>{ex.name}</Text>
-                        <Text style={styles.exerciseRowMuscle}>{ex.muscle_group}</Text>
-                      </View>
-                      <TouchableOpacity onPress={() => removeExerciseFromDay(dayIdx, ex.id)}>
-                        <Ionicons name="remove-circle-outline" size={20} color={colors.danger} />
-                      </TouchableOpacity>
-                    </View>
-                  </ScaleDecorator>
-                )}
-              />
+              {day.exercises.map((ex, exIdx) => (
+                <View key={ex.id} style={styles.exerciseRow}>
+                  <View style={styles.reorderBtns}>
+                    <TouchableOpacity onPress={() => moveExerciseInDay(dayIdx, exIdx, -1)} disabled={exIdx === 0} style={styles.reorderBtn}>
+                      <Ionicons name="chevron-up" size={15} color={exIdx === 0 ? colors.border : colors.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => moveExerciseInDay(dayIdx, exIdx, 1)} disabled={exIdx === day.exercises.length - 1} style={styles.reorderBtn}>
+                      <Ionicons name="chevron-down" size={15} color={exIdx === day.exercises.length - 1 ? colors.border : colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.exerciseRowName}>{ex.name}</Text>
+                    <Text style={styles.exerciseRowMuscle}>{ex.muscle_group}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => removeExerciseFromDay(dayIdx, ex.id)}>
+                    <Ionicons name="remove-circle-outline" size={20} color={colors.danger} />
+                  </TouchableOpacity>
+                </View>
+              ))}
               <TouchableOpacity style={styles.addExBtn} onPress={() => setExPickerDay(dayIdx)}>
                 <Text style={styles.addExBtnText}>+ Add Exercise</Text>
               </TouchableOpacity>
@@ -312,7 +314,7 @@ export default function CreateRoutineScreen({ navigation }: Props) {
           </View>
         </View>
       </Modal>
-    </NestableScrollContainer>
+    </ScrollView>
   );
 }
 
@@ -417,7 +419,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  dragHandle: { paddingRight: spacing.sm },
+  reorderBtns: { flexDirection: 'column', marginRight: spacing.sm },
+  reorderBtn: { padding: 2 },
   exerciseRowName: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
   exerciseRowMuscle: { fontSize: 12, color: colors.textSecondary, marginTop: 1 },
   addExBtn: {

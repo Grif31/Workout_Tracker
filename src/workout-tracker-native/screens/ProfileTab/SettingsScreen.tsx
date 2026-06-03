@@ -35,6 +35,7 @@ import { requestHealthConnectPermission } from '../../utils/healthConnect';
 
 const APP_VERSION = '1.0.0';
 const REST_TIMER_KEY = 'default_rest_timer';
+const GPS_DISTANCE_KEY = 'gps_distance_unit';
 const REMINDERS_KEY = 'workout_reminders_enabled';
 const REST_ALERTS_KEY = 'rest_timer_alerts_enabled';
 const LIVE_NOTIF_KEY = 'live_workout_notif_enabled';
@@ -48,6 +49,7 @@ export default function SettingsScreen({ navigation }: Props) {
   const { colors, mode, accentPreset, toggleMode, setAccentPreset } = useTheme();
 
   const [unitIsKg, setUnitIsKg]             = useState(user?.weight_unit === 'kg');
+  const [distanceIsKm, setDistanceIsKm]     = useState(true);
   const [restTimerSeconds, setRestTimerSeconds] = useState('90');
   const [savingUnit, setSavingUnit]         = useState(false);
   const [exporting, setExporting]           = useState(false);
@@ -67,7 +69,7 @@ export default function SettingsScreen({ navigation }: Props) {
   useEffect(() => {
     AsyncStorage.multiGet([
       REST_TIMER_KEY, REMINDERS_KEY, REST_ALERTS_KEY, LIVE_NOTIF_KEY,
-      REMINDER_HOUR_KEY, REMINDER_MIN_KEY, HEALTH_SYNC_KEY,
+      REMINDER_HOUR_KEY, REMINDER_MIN_KEY, HEALTH_SYNC_KEY, GPS_DISTANCE_KEY,
     ]).then(pairs => {
       const map = Object.fromEntries(pairs.map(([k, v]) => [k, v]));
       if (map[REST_TIMER_KEY]) setRestTimerSeconds(map[REST_TIMER_KEY]!);
@@ -77,6 +79,7 @@ export default function SettingsScreen({ navigation }: Props) {
       if (map[REMINDER_HOUR_KEY]) setReminderHour(map[REMINDER_HOUR_KEY]!);
       if (map[REMINDER_MIN_KEY]) setReminderMin(map[REMINDER_MIN_KEY]!);
       if (map[HEALTH_SYNC_KEY] !== null) setHealthSyncOn(map[HEALTH_SYNC_KEY] === 'true');
+      if (map[GPS_DISTANCE_KEY]) setDistanceIsKm(map[GPS_DISTANCE_KEY] !== 'mi');
     });
   }, []);
 
@@ -299,6 +302,29 @@ export default function SettingsScreen({ navigation }: Props) {
               thumbColor="#fff"
             />
             <Text style={[styles.unitLabel, unitIsKg && styles.unitActive]}>kg</Text>
+          </View>
+        </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.row}>
+          <View style={styles.rowLeft}>
+            <Ionicons name="navigate-outline" size={20} color={colors.textSecondary} />
+            <Text style={styles.rowLabel}>Distance Unit</Text>
+          </View>
+          <View style={styles.unitToggle}>
+            <Text style={[styles.unitLabel, distanceIsKm && styles.unitActive]}>km</Text>
+            <Switch
+              value={!distanceIsKm}
+              onValueChange={async (isMi) => {
+                const unit = isMi ? 'mi' : 'km';
+                setDistanceIsKm(!isMi);
+                await AsyncStorage.setItem(GPS_DISTANCE_KEY, unit);
+              }}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor="#fff"
+            />
+            <Text style={[styles.unitLabel, !distanceIsKm && styles.unitActive]}>mi</Text>
           </View>
         </View>
 

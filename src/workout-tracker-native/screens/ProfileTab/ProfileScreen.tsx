@@ -42,6 +42,9 @@ type Workout = {
   notes?: string;
   duration?: number;
   volume?: number;
+  workout_type?: string;
+  distance?: number;
+  distance_unit?: string;
 };
 
 type ProfileStats = {
@@ -425,21 +428,39 @@ export default function ProfileScreen({ navigation }: Props) {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.workoutCard}
-            onPress={() => navigation.navigate('WorkoutDetails', { workoutId: item.id })}
+            onPress={() =>
+              item.workout_type === 'cardio'
+                ? navigation.navigate('CardioDetails', { workoutId: item.id })
+                : navigation.navigate('WorkoutDetails', { workoutId: item.id })
+            }
           >
             <View style={styles.cardHeader}>
               <Text style={styles.workoutName} numberOfLines={1}>{item.name}</Text>
             </View>
             <Text style={styles.workoutDate}>
               {new Date(item.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
-              {item.duration ? `  ·  ${item.duration} min` : ''}
             </Text>
-            {(item.volume != null && item.volume > 0) && (
+            {item.workout_type === 'cardio' ? (
               <View style={styles.pillRow}>
-                <View style={styles.pill}>
-                  <Text style={styles.pillText}>{toDisplayVolume(item.volume, weightUnit)}</Text>
-                </View>
+                {item.duration != null && (
+                  <View style={styles.pill}>
+                    <Text style={styles.pillText}>{item.duration} min</Text>
+                  </View>
+                )}
+                {item.distance != null && item.distance > 0 && (
+                  <View style={styles.pill}>
+                    <Text style={styles.pillText}>{item.distance.toFixed(2)} {item.distance_unit || 'km'}</Text>
+                  </View>
+                )}
               </View>
+            ) : (
+              (item.volume != null && item.volume > 0) && (
+                <View style={styles.pillRow}>
+                  <View style={styles.pill}>
+                    <Text style={styles.pillText}>{toDisplayVolume(item.volume, weightUnit)}</Text>
+                  </View>
+                </View>
+              )
             )}
           </TouchableOpacity>
         )}
@@ -557,7 +578,12 @@ export default function ProfileScreen({ navigation }: Props) {
                       <TouchableOpacity
                         key={item.id}
                         style={[styles.calWorkoutRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                        onPress={() => { setCalendarVisible(false); navigation.navigate('WorkoutDetails', { workoutId: item.id }); }}
+                        onPress={() => {
+                          setCalendarVisible(false);
+                          item.workout_type === 'cardio'
+                            ? navigation.navigate('CardioDetails', { workoutId: item.id })
+                            : navigation.navigate('WorkoutDetails', { workoutId: item.id });
+                        }}
                         activeOpacity={0.75}
                       >
                         <View style={{ flex: 1 }}>

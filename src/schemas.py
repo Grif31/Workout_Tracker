@@ -64,6 +64,7 @@ class WorkoutSchema(_Base):
     exercises   = fields.List(fields.Dict(), required=True)
     notes       = fields.Str(load_default=None)
     duration    = fields.Int(load_default=None)
+    date        = fields.Str(load_default=None)
 
 # No load_default — missing fields excluded to preserve 'if field in data' PATCH semantics.
 class UpdateWorkoutSchema(_Base):

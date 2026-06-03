@@ -78,9 +78,22 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const [workoutName, setWorkoutName] = useState('');
   const [notes, setNotes] = useState('');
   const [exercises, setExercises] = useState<ExerciseEntry[]>([]);
+  const activeMuscles = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const ex of exercises) {
+      if (!ex.muscle_group) continue;
+      for (const m of ex.muscle_group.split(',').map(s => s.trim()).filter(Boolean)) {
+        if (!seen.has(m)) { seen.add(m); out.push(m); }
+      }
+    }
+    return out;
+  }, [exercises]);
+  const [autoFocusNoteIdx, setAutoFocusNoteIdx] = useState<number | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
 
   const [elapsed, setElapsed] = useState(0);
+  const [timerPaused, setTimerPaused] = useState(false);
   // startRef = wall-clock moment the current segment began; baseRef = seconds accumulated before this segment.
   // elapsed = baseRef + (now - startRef), so the timer survives minimize/resume without resetting.
   const startRef = useRef<Date>(new Date());
@@ -96,8 +109,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const [autoStartRest, setAutoStartRest] = useState(false);
   const [vibrateOnComplete, setVibrateOnComplete] = useState(true);
   const [showRpe, setShowRpe] = useState(false);
-  const [settingsExpanded, setSettingsExpanded] = useState(false);
+  const [showPlateCalc, setShowPlateCalc] = useState(true);
   const [focusedInput, setFocusedInput] = useState<{ exIdx: number; setIdx: number; field: 'reps' | 'weight' } | null>(null);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [rpePickerTarget, setRpePickerTarget]     = useState<{ exIdx: number; setIdx: number } | null>(null);
   const [plateCalcTarget, setPlateCalcTarget]     = useState<{ exIdx: number; setIdx: number } | null>(null);
   // Keep a ref in sync with state so the setInterval closure always reads the current value
@@ -110,7 +124,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const prTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [exerciseList, setExerciseList] = useState<{ id: number; name: string; muscle_group: string; equipment?: string; image_url?: string; exercise_type?: string }[]>([]);
-  const [recentExerciseNames, setRecentExerciseNames] = useState<string[]>([]);
+  const [recentExercises, setRecentExercises] = useState<{ name: string; exercise_template_id: number | null }[]>([]);
   const [templates, setTemplates] = useState<{ id: number; name: string; exercises: { id: number; name: string; equipment?: string; image_url?: string; exercise_type?: string }[] }[]>([]);
   const [exerciseModalVisible, setExerciseModalVisible] = useState(false);
   const [newExerciseFormVisible, setNewExerciseFormVisible] = useState(false);
@@ -132,12 +146,14 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       AsyncStorage.getItem(AUTO_REST_KEY),
       AsyncStorage.getItem(VIBRATE_KEY),
       AsyncStorage.getItem(RPE_KEY),
-    ]).then(([timerVal, autoRestVal, vibrateVal, rpeVal]) => {
+      AsyncStorage.getItem('workout_show_plate_calc'),
+    ]).then(([timerVal, autoRestVal, vibrateVal, rpeVal, plateCalcVal]) => {
       const n = timerVal ? parseInt(timerVal, 10) : NaN;
       if (!isNaN(n)) { setDefaultRest(n); setRestRemaining(n); setRestTotal(n); }
       if (autoRestVal !== null) setAutoStartRest(autoRestVal === 'true');
       if (vibrateVal !== null) setVibrateOnComplete(vibrateVal !== 'false');
       if (rpeVal !== null) setShowRpe(rpeVal === 'true');
+      if (plateCalcVal !== null) setShowPlateCalc(plateCalcVal !== 'false');
     });
   }, []);
 
@@ -157,18 +173,37 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   }, []);
 
   useEffect(() => {
-    if (editMode) return;
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+      setFocusedInput(null);
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
+  useEffect(() => {
+    if (editMode || timerPaused) return;
     startRef.current = new Date();
     const id = setInterval(() => {
       setElapsed(baseRef.current + Math.floor((Date.now() - startRef.current.getTime()) / 1000));
     }, 1000);
     return () => clearInterval(id);
-  }, [editMode]);
+  }, [editMode, timerPaused]);
 
   const resetTimer = () => {
     baseRef.current = 0;
     startRef.current = new Date();
+    setTimerPaused(false);
     setElapsed(0);
+  };
+
+  const toggleTimer = () => {
+    if (timerPaused) {
+      setTimerPaused(false);
+    } else {
+      baseRef.current = elapsed;
+      setTimerPaused(true);
+    }
   };
 
   // Separated from startRest so resumeRest can restart the tick without resetting restRemaining.
@@ -297,7 +332,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const fetchRecentExercises = async () => {
     try {
       const res = await apiFetch('/api/stats/recent-exercises');
-      if (res.ok) setRecentExerciseNames((await res.json()).recent ?? []);
+      if (res.ok) setRecentExercises((await res.json()).recent ?? []);
     } catch {}
   };
 
@@ -458,6 +493,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   const openAddNotes = (exIndex: number) => {
     setOpenMenuIdx(null);
+    setAutoFocusNoteIdx(exIndex);
     setExercises(prev => prev.map((ex, i) =>
       i === exIndex && ex.notes === undefined ? { ...ex, notes: '' } : ex
     ));
@@ -469,7 +505,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     setExerciseModalVisible(true);
   };
 
-  const addExToWorkout = async (exercise: { id: number; name: string; equipment?: string; image_url?: string; exercise_type?: string }) => {
+  const addExToWorkout = async (exercise: { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string }) => {
     const isCardio = exercise.exercise_type === 'cardio';
     const initialSet: WorkoutSet = isCardio
       ? { reps: '', weight: '', set_type: 'N', cardio_duration: '', distance: '', distance_unit: 'km', intensity: '' }
@@ -479,7 +515,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       const targetIdx = replacingExIndex;
       setExercises(prev => prev.map((ex, i) =>
         i === targetIdx
-          ? { uid: ex.uid, name: exercise.name, exercise_template_id: exercise.id, exercise_type: exercise.exercise_type as ExerciseEntry['exercise_type'], equipment: exercise.equipment, image_url: exercise.image_url, sets: [initialSet] }
+          ? { uid: ex.uid, name: exercise.name, exercise_template_id: exercise.id, exercise_type: exercise.exercise_type as ExerciseEntry['exercise_type'], muscle_group: exercise.muscle_group, equipment: exercise.equipment, image_url: exercise.image_url, sets: [initialSet] }
           : ex
       ));
       setReplacingExIndex(null);
@@ -523,7 +559,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     const newUid = makeUid();
     setExercises(prev => [
       ...prev,
-      { uid: newUid, name: exercise.name, exercise_template_id: exercise.id, exercise_type: exercise.exercise_type as ExerciseEntry['exercise_type'], equipment: exercise.equipment, image_url: exercise.image_url, sets: [initialSet] },
+      { uid: newUid, name: exercise.name, exercise_template_id: exercise.id, exercise_type: exercise.exercise_type as ExerciseEntry['exercise_type'], muscle_group: exercise.muscle_group, equipment: exercise.equipment, image_url: exercise.image_url, sets: [initialSet] },
     ]);
     setExerciseModalVisible(false);
 
@@ -630,7 +666,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const buildPayload = (exercisesToSave: ExerciseEntry[]) => ({
     workoutName,
     notes,
-    date: selectedDate.toISOString().split('T')[0],
+    date: `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`,
     duration: editMode ? undefined : Math.floor(elapsed / 60),
     exercises: exercisesToSave.map((ex, exIndex) => ({
       id: ex.id,
@@ -720,6 +756,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   };
 
   const submitWorkout = () => {
+    if (!workoutName.trim()) {
+      Alert.alert('Workout Name Required', 'Please add a name for your workout before saving.');
+      return;
+    }
     const hasUnchecked = exercises.some(
       ex => (ex.exercise_type || 'strength') !== 'cardio' && ex.sets.some(s => !s.done)
     );
@@ -790,7 +830,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         visible={exerciseModalVisible}
         onClose={() => { setExerciseModalVisible(false); setReplacingExIndex(null); }}
         exercises={exerciseList}
-        recentExerciseNames={recentExerciseNames}
+        recentExercises={recentExercises}
         onSelect={addExToWorkout}
         onAddExercise={addNewExercise}
         muscleGroups={muscleGroups}
@@ -820,10 +860,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             selectedDate={selectedDate}
             onDateChange={setSelectedDate}
             elapsed={elapsed}
+            timerPaused={timerPaused}
+            onToggleTimer={toggleTimer}
             onResetTimer={resetTimer}
             editMode={editMode}
-            settingsExpanded={settingsExpanded}
-            onToggleSettings={() => setSettingsExpanded(e => !e)}
             autoStartRest={autoStartRest}
             onAutoStartRestChange={val => {
               setAutoStartRest(val);
@@ -839,10 +879,14 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
               setShowRpe(val);
               AsyncStorage.setItem(RPE_KEY, String(val));
             }}
-            templates={templates}
-            onApplyTemplate={applyTemplate}
+            showPlateCalc={showPlateCalc}
+            onShowPlateCalcChange={val => {
+              setShowPlateCalc(val);
+              AsyncStorage.setItem('workout_show_plate_calc', String(val));
+            }}
             exercises={exercises}
             weightUnit={weightUnit}
+            activeMuscles={activeMuscles}
           />
         )}
         ListFooterComponent={(
@@ -851,6 +895,31 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
               <Ionicons name="add" size={18} color="#fff" />
               <Text style={styles.addExBtnText}>Add Exercise</Text>
             </TouchableOpacity>
+
+            {!editMode && exercises.length === 0 && templates.length > 0 && (
+              <View style={styles.templateDividerSection}>
+                <View style={styles.templateDividerLine} />
+                <Text style={styles.templateDividerText}>Start from a template</Text>
+                <View style={styles.templateDividerLine} />
+              </View>
+            )}
+            {!editMode && exercises.length === 0 && templates.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.templateScrollContent}>
+                {templates.map(t => (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={[styles.templateChip, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    onPress={() => applyTemplate(t)}
+                  >
+                    <Text style={[styles.templateChipName, { color: colors.textPrimary }]} numberOfLines={1}>{t.name}</Text>
+                    <Text style={[styles.templateChipSub, { color: colors.textSecondary }]}>
+                      {t.exercises.length} {t.exercises.length === 1 ? 'exercise' : 'exercises'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
             <TouchableOpacity
               style={styles.discardBtn}
               onPress={() => Alert.alert(
@@ -877,10 +946,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             onUpdateNotes={val => setExercises(prev => prev.map((ex, i) =>
               i === exIndex ? { ...ex, notes: val } : ex
             ))}
+            autoFocusNotes={autoFocusNoteIdx === exIndex}
             onCycleSetType={setIdx => cycleSetType(exIndex, setIdx)}
             onUpdateSetField={(setIdx, field, val) => updateSetField(exIndex, setIdx, field, val)}
             onFocusInput={(setIdx, field) => setFocusedInput({ exIdx: exIndex, setIdx, field })}
-            onBlurInput={() => setFocusedInput(null)}
+            onBlurInput={() => {}}
             onToggleSetDone={setIdx => toggleSetDone(exIndex, setIdx)}
             onOpenRpePicker={setIdx => setRpePickerTarget({ exIdx: exIndex, setIdx })}
             onDeleteSet={setIdx => deleteSet(exIndex, setIdx)}
@@ -999,7 +1069,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                     {focusedInput.field === 'weight' ? `+${weightDelta}` : '+1 rep'}
                   </Text>
                 </TouchableOpacity>
-                {focusedInput.field === 'weight' && (
+                {focusedInput.field === 'weight' && showPlateCalc && (
                   <TouchableOpacity
                     style={styles.keyboardAdjBtn}
                     onPress={() => { setPlateCalcTarget(focusedInput); Keyboard.dismiss(); }}
@@ -1016,7 +1086,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         </InputAccessoryView>
       )}
 
-      {Platform.OS === 'android' && focusedInput && (
+      {Platform.OS === 'android' && keyboardVisible && focusedInput && (
         <View style={[styles.keyboardAccessory, styles.androidKeyboardBar]}>
           <View style={styles.keyboardAdjRow}>
             <TouchableOpacity
@@ -1035,7 +1105,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                 {focusedInput.field === 'weight' ? `+${weightDelta}` : '+1 rep'}
               </Text>
             </TouchableOpacity>
-            {focusedInput.field === 'weight' && (
+            {focusedInput.field === 'weight' && showPlateCalc && (
               <TouchableOpacity
                 style={styles.keyboardAdjBtn}
                 onPress={() => { setPlateCalcTarget(focusedInput); Keyboard.dismiss(); }}
@@ -1339,5 +1409,43 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
     marginTop: 1,
+  },
+
+  templateDividerSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  templateDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  templateDividerText: {
+    marginHorizontal: spacing.sm,
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  templateScrollContent: {
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  templateChip: {
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    minWidth: 120,
+    maxWidth: 180,
+  },
+  templateChipName: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+  },
+  templateChipSub: {
+    fontSize: typography.fontSize.xs,
+    marginTop: 2,
   },
 });

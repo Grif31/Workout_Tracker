@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Modal,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, Modal,
   Alert, ActivityIndicator, ScrollView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 
 // react-native-maps requires a development build — not available in Expo Go.
@@ -10,7 +12,6 @@ let _MapsModule: any = null;
 try { _MapsModule = require('react-native-maps'); } catch {}
 const MapView: React.ComponentType<any> | null = _MapsModule?.default ?? null;
 const Polyline: React.ComponentType<any> | null = _MapsModule?.Polyline ?? null;
-const PROVIDER_DEFAULT = _MapsModule?.PROVIDER_DEFAULT ?? null;
 const MAPS_AVAILABLE = MapView !== null;
 import polylineLib from '@mapbox/polyline';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -60,9 +61,21 @@ function fmtPace(paceMinPerKm: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+class MapErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallback: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
+}
+
 export default function GPSCardioScreen({ navigation }: Props) {
   const { user } = useAuth();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [activity, setActivity] = useState<Activity>('Run');
@@ -72,12 +85,18 @@ export default function GPSCardioScreen({ navigation }: Props) {
   const [distanceKm, setDistanceKm] = useState(0);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [workoutName, setWorkoutName] = useState('');
+  const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('km');
+  const [initialRegion, setInitialRegion] = useState<{
+    latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number;
+  } | undefined>(undefined);
 
   const locationSub = useRef<Location.LocationSubscription | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mapRef = useRef<any>(null);
 
-  const pace = distanceKm > 0 ? elapsedSec / 60 / distanceKm : 0;
+  const displayDistance = distanceUnit === 'mi' ? distanceKm * 0.621371 : distanceKm;
+  const pace = displayDistance > 0 ? elapsedSec / 60 / displayDistance : 0;
 
   const clearTimer = () => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -94,7 +113,24 @@ export default function GPSCardioScreen({ navigation }: Props) {
     }
   };
 
-  useEffect(() => () => { clearTimer(); stopLocationWatch(); }, []);
+  useEffect(() => {
+    AsyncStorage.getItem('gps_distance_unit').then(v => {
+      if (v === 'mi') setDistanceUnit('mi');
+    });
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        setInitialRegion({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        });
+      }
+    })();
+    return () => { clearTimer(); stopLocationWatch(); };
+  }, []);
 
   const handleStart = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -155,6 +191,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
     clearTimer();
     stopLocationWatch();
     setTrackingState('paused');
+    setWorkoutName(activity);
     setConfirmVisible(true);
   };
 
@@ -174,10 +211,9 @@ export default function GPSCardioScreen({ navigation }: Props) {
         ? polylineLib.encode(coords.map(c => [c.latitude, c.longitude]))
         : null;
       const avgPace = distanceKm > 0 ? durationMin / distanceKm : null;
-      const dateStr = new Date().toISOString().slice(0, 10);
 
       const body = {
-        workoutName: `${activity} — ${dateStr}`,
+        workoutName: workoutName.trim() || activity,
         duration: Math.round(durationMin),
         exercises: [{
           name: activity,
@@ -185,8 +221,8 @@ export default function GPSCardioScreen({ navigation }: Props) {
           route_polyline: encodedPolyline,
           sets: [{
             cardio_duration: durationMin,
-            distance: distanceKm,
-            distance_unit: 'km',
+            distance: displayDistance,
+            distance_unit: distanceUnit,
             intensity: avgPace,
             reps: null,
             weight: null,
@@ -202,8 +238,9 @@ export default function GPSCardioScreen({ navigation }: Props) {
       });
 
       if (!res.ok) throw new Error('Save failed');
+      const data = await res.json();
       setConfirmVisible(false);
-      navigation.goBack();
+      navigation.replace('CardioDetails', { workoutId: data.id });
     } catch {
       Alert.alert('Error', 'Failed to save workout. Please try again.');
     } finally {
@@ -218,13 +255,6 @@ export default function GPSCardioScreen({ navigation }: Props) {
   }, [user]);
 
   const estimatedKcal = Math.round(estimateCalories(activity, elapsedSec / 60, weightKg));
-
-  const initialRegion = {
-    latitude: 37.7749,
-    longitude: -122.4194,
-    latitudeDelta: 0.05,
-    longitudeDelta: 0.05,
-  };
 
   if (!MAPS_AVAILABLE) {
     return (
@@ -246,93 +276,122 @@ export default function GPSCardioScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       {/* Map */}
-      <MapView
-        ref={mapRef}
-        provider={PROVIDER_DEFAULT}
-        style={styles.map}
-        initialRegion={initialRegion}
-        showsUserLocation
-        followsUserLocation={trackingState === 'running'}
+      <MapErrorBoundary
+        fallback={
+          <View style={[styles.map, styles.mapFallback]}>
+            <Ionicons name="map-outline" size={40} color={colors.textSecondary} />
+            <Text style={[styles.mapFallbackTitle, { color: colors.textPrimary }]}>Map unavailable</Text>
+            <Text style={[styles.mapFallbackSub, { color: colors.textSecondary }]}>
+              GPS tracking still works — a Google Maps API key is required to show the map on Android.
+            </Text>
+          </View>
+        }
       >
-        {coords.length >= 2 && (
-          <Polyline coordinates={coords} strokeColor={colors.accent} strokeWidth={4} />
-        )}
-      </MapView>
+        <MapView
+          ref={mapRef}
+          style={styles.map}
+          initialRegion={initialRegion}
+          showsUserLocation
+          followsUserLocation={trackingState === 'running'}
+        >
+          {coords.length >= 2 && (
+            <Polyline coordinates={coords} strokeColor={colors.accent} strokeWidth={4} />
+          )}
+        </MapView>
+      </MapErrorBoundary>
 
-      {/* Activity selector (only when idle) */}
-      {trackingState === 'idle' && (
-        <View style={styles.activityRow}>
-          {ACTIVITIES.map(a => (
-            <TouchableOpacity
-              key={a}
-              style={[styles.activityChip, activity === a && { backgroundColor: colors.accent }]}
-              onPress={() => setActivity(a)}
-            >
-              <Text style={[styles.activityChipText, activity === a && { color: '#fff' }]}>{a}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      {/* Live stats overlay */}
-      {trackingState !== 'idle' && (
-        <View style={[styles.statsOverlay, { backgroundColor: colors.surface }]}>
-          <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtElapsed(elapsedSec)}</Text>
-            <Text style={styles.statLabel}>Time</Text>
-          </View>
-          <View style={styles.statSep} />
-          <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: colors.textPrimary }]}>{distanceKm.toFixed(2)}</Text>
-            <Text style={styles.statLabel}>km</Text>
-          </View>
-          <View style={styles.statSep} />
-          <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtPace(pace)}</Text>
-            <Text style={styles.statLabel}>/km</Text>
-          </View>
-        </View>
-      )}
+      {/* Back button */}
+      <TouchableOpacity
+        style={[styles.backBtn, { top: insets.top + spacing.sm }]}
+        onPress={() => navigation.goBack()}
+      >
+        <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+      </TouchableOpacity>
 
       {/* Controls */}
       <View style={[styles.controls, { backgroundColor: colors.surface }]}>
         {trackingState === 'idle' && (
-          <TouchableOpacity style={[styles.mainBtn, { backgroundColor: colors.save }]} onPress={handleStart}>
-            <Ionicons name="play" size={28} color="#fff" />
-            <Text style={styles.mainBtnText}>Start</Text>
-          </TouchableOpacity>
+          <>
+            <View style={styles.activityRow}>
+              {ACTIVITIES.map(a => (
+                <TouchableOpacity
+                  key={a}
+                  style={[styles.activityChip, activity === a && { backgroundColor: colors.accent }]}
+                  onPress={() => setActivity(a)}
+                >
+                  <Text style={[styles.activityChipText, activity === a && { color: '#fff' }]}>{a}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity style={[styles.mainBtn, { backgroundColor: colors.save }]} onPress={handleStart}>
+              <Ionicons name="play" size={28} color="#fff" />
+              <Text style={styles.mainBtnText}>Start</Text>
+            </TouchableOpacity>
+          </>
         )}
 
         {trackingState === 'running' && (
-          <View style={styles.runningBtns}>
-            <TouchableOpacity style={[styles.secondaryBtn, { backgroundColor: colors.border }]} onPress={handlePause}>
-              <Ionicons name="pause" size={22} color={colors.textPrimary} />
-              <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Pause</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.mainBtn, { backgroundColor: '#e53935' }]} onPress={handleStop}>
-              <Ionicons name="stop" size={28} color="#fff" />
-              <Text style={styles.mainBtnText}>Stop</Text>
-            </TouchableOpacity>
-          </View>
+          <>
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtElapsed(elapsedSec)}</Text>
+                <Text style={styles.statLabel}>Time</Text>
+              </View>
+              <View style={styles.statSep} />
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{displayDistance.toFixed(2)}</Text>
+                <Text style={styles.statLabel}>{distanceUnit}</Text>
+              </View>
+              <View style={styles.statSep} />
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtPace(pace)}</Text>
+                <Text style={styles.statLabel}>/{distanceUnit}</Text>
+              </View>
+            </View>
+            <View style={styles.runningBtns}>
+              <TouchableOpacity style={[styles.secondaryBtn, { backgroundColor: colors.border }]} onPress={handlePause}>
+                <Ionicons name="pause" size={22} color={colors.textPrimary} />
+                <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Pause</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.mainBtn, { backgroundColor: '#e53935' }]} onPress={handleStop}>
+                <Ionicons name="stop" size={28} color="#fff" />
+                <Text style={styles.mainBtnText}>Stop</Text>
+              </TouchableOpacity>
+            </View>
+          </>
         )}
 
         {trackingState === 'paused' && (
-          <View style={styles.runningBtns}>
-            <TouchableOpacity style={[styles.secondaryBtn, { backgroundColor: colors.border }]} onPress={handleResume}>
-              <Ionicons name="play" size={22} color={colors.textPrimary} />
-              <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Resume</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.mainBtn, { backgroundColor: '#e53935' }]} onPress={handleStop}>
-              <Ionicons name="stop" size={28} color="#fff" />
-              <Text style={styles.mainBtnText}>Stop</Text>
-            </TouchableOpacity>
-          </View>
+          <>
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtElapsed(elapsedSec)}</Text>
+                <Text style={styles.statLabel}>Time</Text>
+              </View>
+              <View style={styles.statSep} />
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{displayDistance.toFixed(2)}</Text>
+                <Text style={styles.statLabel}>{distanceUnit}</Text>
+              </View>
+              <View style={styles.statSep} />
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtPace(pace)}</Text>
+                <Text style={styles.statLabel}>/{distanceUnit}</Text>
+              </View>
+            </View>
+            <View style={styles.runningBtns}>
+              <TouchableOpacity style={[styles.secondaryBtn, { backgroundColor: colors.border }]} onPress={handleResume}>
+                <Ionicons name="play" size={22} color={colors.textPrimary} />
+                <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Resume</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.mainBtn, { backgroundColor: '#e53935' }]} onPress={handleStop}>
+                <Ionicons name="stop" size={28} color="#fff" />
+                <Text style={styles.mainBtnText}>Stop</Text>
+              </TouchableOpacity>
+            </View>
+          </>
         )}
 
-        <TouchableOpacity style={styles.backLink} onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={18} color={colors.textSecondary} />
-          <Text style={[styles.backLinkText, { color: colors.textSecondary }]}>Back</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Confirmation modal */}
@@ -341,17 +400,25 @@ export default function GPSCardioScreen({ navigation }: Props) {
           <View style={[styles.modalCard, { backgroundColor: colors.surface }]}>
             <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Save Activity?</Text>
 
+            <TextInput
+              style={[styles.modalNameInput, { color: colors.textPrimary, borderColor: colors.border }]}
+              value={workoutName}
+              onChangeText={setWorkoutName}
+              placeholder="Activity name"
+              placeholderTextColor={colors.placeholder}
+            />
+
             <View style={styles.modalStats}>
               <View style={styles.modalStatItem}>
                 <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>{fmtElapsed(elapsedSec)}</Text>
                 <Text style={[styles.modalStatLabel, { color: colors.textSecondary }]}>Duration</Text>
               </View>
               <View style={styles.modalStatItem}>
-                <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>{distanceKm.toFixed(2)} km</Text>
+                <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>{displayDistance.toFixed(2)} {distanceUnit}</Text>
                 <Text style={[styles.modalStatLabel, { color: colors.textSecondary }]}>Distance</Text>
               </View>
               <View style={styles.modalStatItem}>
-                <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>{fmtPace(pace)} /km</Text>
+                <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>{fmtPace(pace)} /{distanceUnit}</Text>
                 <Text style={[styles.modalStatLabel, { color: colors.textSecondary }]}>Avg Pace</Text>
               </View>
               <View style={styles.modalStatItem}>
@@ -364,7 +431,6 @@ export default function GPSCardioScreen({ navigation }: Props) {
               {coords.length >= 2 && (
                 <MapView
                   style={styles.modalMap}
-                  provider={PROVIDER_DEFAULT}
                   scrollEnabled={false}
                   zoomEnabled={false}
                   initialRegion={{
@@ -404,15 +470,15 @@ export default function GPSCardioScreen({ navigation }: Props) {
 const createStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   map: { flex: 1 },
+  mapFallback: { justifyContent: 'center', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl, backgroundColor: colors.background },
+  mapFallbackTitle: { fontSize: typography.fontSize.md, fontWeight: '700' },
+  mapFallbackSub: { fontSize: typography.fontSize.sm, textAlign: 'center', lineHeight: 20 },
 
   activityRow: {
-    position: 'absolute',
-    top: spacing.lg + 10,
-    left: spacing.md,
-    right: spacing.md,
     flexDirection: 'row',
     justifyContent: 'center',
     gap: spacing.sm,
+    flexWrap: 'wrap',
   },
   activityChip: {
     paddingHorizontal: spacing.md,
@@ -428,20 +494,13 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textPrimary,
   },
 
-  statsOverlay: {
-    position: 'absolute',
-    top: spacing.lg + 10,
-    left: spacing.md,
-    right: spacing.md,
+  statsRow: {
     flexDirection: 'row',
-    borderRadius: 14,
-    padding: spacing.md,
     alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
+    width: '100%',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   statItem: { flex: 1, alignItems: 'center' },
   statValue: { fontSize: typography.fontSize.xl, fontWeight: '700' },
@@ -479,12 +538,16 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: 50,
   },
   secondaryBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600' },
-  backLink: {
-    flexDirection: 'row',
+  backBtn: {
+    position: 'absolute',
+    left: spacing.md,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
     alignItems: 'center',
-    paddingVertical: spacing.xs,
+    justifyContent: 'center',
   },
-  backLinkText: { fontSize: typography.fontSize.sm },
 
   modalOverlay: {
     flex: 1,
@@ -498,6 +561,15 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     gap: spacing.md,
   },
   modalTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', textAlign: 'center' },
+  modalNameInput: {
+    fontSize: typography.fontSize.md,
+    fontWeight: '600',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.sm,
+  },
   modalStats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   modalStatItem: {
     flex: 1,

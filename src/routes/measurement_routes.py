@@ -1,5 +1,6 @@
 import os
 import time
+from datetime import datetime
 from flask import Blueprint, jsonify, request, current_app, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.utils import secure_filename
@@ -43,9 +44,13 @@ def create_measurement():
     left_arm  = data.get('left_arm')
     right_leg = data.get('right_leg')
     left_leg  = data.get('left_leg')
+    date_str  = data.get('date')
+
+    entry_date = datetime.strptime(date_str, "%Y-%m-%d") if date_str else datetime.now()
 
     entry = BodyMeasurement(
         user_id=user_id,
+        date=entry_date,
         waist=float(waist) if waist is not None else None,
         chest=float(chest) if chest is not None else None,
         right_arm=float(right_arm) if right_arm is not None else None,

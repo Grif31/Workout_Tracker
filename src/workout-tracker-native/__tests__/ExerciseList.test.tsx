@@ -16,7 +16,7 @@ const defaultProps = {
   visible: true,
   onClose: jest.fn(),
   exercises: mockExercises,
-  recentExerciseNames: [],
+  recentExercises: [],
   onSelect: jest.fn(),
   onAddExercise: jest.fn(),
   muscleGroups: ['Chest', 'Quads', 'Back'],

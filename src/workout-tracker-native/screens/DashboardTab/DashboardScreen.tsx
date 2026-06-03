@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert,
-  ActivityIndicator, ScrollView, PanResponder, Modal,
+  ActivityIndicator, ScrollView, PanResponder, Modal, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -21,19 +21,24 @@ const GREETINGS = [
   'Stronger every day', 'Time to sweat', 'Bring your best',
 ];
 
+function toLocalDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function getDailyGreeting() {
-  const key = new Date().toISOString().slice(0, 10);
+  const key = toLocalDateStr(new Date());
   let hash = 0;
   for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) % 1e9;
   return GREETINGS[Math.abs(hash) % GREETINGS.length];
 }
 
 
-type User = { id: number; username: string; email: string; active_routine_id?: number | null };
+type User = { id: number; username: string; email: string; name?: string | null; active_routine_id?: number | null };
 type Workout = {
   id: number; name: string; notes: string; date: Date;
   duration?: number; volume?: number; total_reps?: number;
   num_exercises?: number; muscles?: string[]; pr_count?: number;
+  workout_type?: string; cardio_duration?: number; distance?: number; distance_unit?: string;
 };
 type Exercise = { id: number; name: string; muscle_group: string };
 type RoutineDay = {
@@ -59,7 +64,7 @@ function WeekCalendar({
   const [weekOffset, setWeekOffset] = useState(0); // 0 = current week, -1 = last week
 
   const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = toLocalDateStr(today);
   const dayOfWeek = today.getDay();
   const monday = new Date(today);
   monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7) + weekOffset * 7);
@@ -102,7 +107,7 @@ function WeekCalendar({
         {DAY_LETTERS.map((letter, i) => {
           const d = new Date(monday);
           d.setDate(monday.getDate() + i);
-          const dateStr = d.toISOString().slice(0, 10);
+          const dateStr = toLocalDateStr(d);
           const isToday = dateStr === todayStr;
           const hasWorkout = workoutSet.has(dateStr);
           const isSelected = dateStr === selectedDate;
@@ -197,10 +202,17 @@ export default function DashboardScreen({ navigation }: Props) {
   const [streakType, setStreakType] = useState<'weekly' | 'monthly' | 'daily'>('weekly');
   const [streakModalVisible, setStreakModalVisible] = useState(false);
 
+  const [refreshing, setRefreshing] = useState(false);
+
   useFocusEffect(useCallback(() => {
     setLoading(true);
     Promise.all([fetchUser(), fetchRecentWorkouts(), fetchAllWorkoutDates(), fetchStreak()]).finally(() => setLoading(false));
   }, []));
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    Promise.all([fetchUser(), fetchRecentWorkouts(), fetchAllWorkoutDates(), fetchStreak()]).finally(() => setRefreshing(false));
+  };
 
   const fetchUser = async () => {
     try {
@@ -278,23 +290,23 @@ export default function DashboardScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} colors={[colors.accent]} />}
+      >
           {(() => {
             const streakDisplay = streakType === 'weekly'
               ? { emoji: '🔥', value: weeklyStreak, unit: 'w' }
               : streakType === 'monthly'
               ? { emoji: '📅', value: monthlyStreak, unit: 'mo' }
               : { emoji: '⚡', value: dailyStreak, unit: 'd' };
-            const anyStreak = weeklyStreak > 0 || monthlyStreak > 0 || dailyStreak > 0;
             return (
               <View style={styles.topbar}>
-                <Text style={styles.title}>{getDailyGreeting()}, {user?.username}</Text>
-                {anyStreak && (
-                  <TouchableOpacity onPress={() => setStreakModalVisible(true)} style={styles.streakBadge}>
-                    <Text style={styles.streakEmoji}>{streakDisplay.emoji}</Text>
-                    <Text style={styles.streakText}>{streakDisplay.value}{streakDisplay.unit}</Text>
-                  </TouchableOpacity>
-                )}
+                <Text style={styles.title}>{getDailyGreeting()}, {user?.name || user?.username}</Text>
+                <TouchableOpacity onPress={() => setStreakModalVisible(true)} style={styles.streakBadge}>
+                  <Text style={styles.streakEmoji}>{streakDisplay.emoji}</Text>
+                  <Text style={styles.streakText}>{streakDisplay.value}{streakDisplay.unit}</Text>
+                </TouchableOpacity>
               </View>
             );
           })()}
@@ -315,50 +327,46 @@ export default function DashboardScreen({ navigation }: Props) {
           </TouchableOpacity>
 
           {/* Active Routine */}
-          <View style={styles.activeBlock}>
-            <Text style={styles.sectionLabel}>Active Routine</Text>
-            {activeRoutine ? (
-              <>
-                <View style={styles.activeRoutineNameRow}>
-                  <Text style={styles.activeRoutineName}>{activeRoutine.name}</Text>
+          {activeRoutine && (
+            <View style={styles.activeBlock}>
+              <Text style={styles.sectionLabel}>Active Routine</Text>
+              <View style={styles.activeRoutineNameRow}>
+                <Text style={styles.activeRoutineName}>{activeRoutine.name}</Text>
+                <TouchableOpacity
+                  style={styles.toggleDaysBtn}
+                  onPress={() => setDaysVisible(v => !v)}
+                >
+                  <Text style={[styles.toggleDaysBtnText, { color: colors.accent }]}>
+                    {daysVisible ? 'Hide' : 'Show'}
+                  </Text>
+                  <Ionicons
+                    name={daysVisible ? 'chevron-up' : 'chevron-down'}
+                    size={14}
+                    color={colors.accent}
+                  />
+                </TouchableOpacity>
+              </View>
+              {daysVisible && activeRoutine.days.map(day => (
+                <View key={day.id} style={styles.dayRow}>
+                  <Text style={styles.dayLabel}>{day.label}</Text>
                   <TouchableOpacity
-                    style={styles.toggleDaysBtn}
-                    onPress={() => setDaysVisible(v => !v)}
+                    style={styles.logDayBtn}
+                    onPress={() => navigation.navigate('WorkoutLog', {
+                      prefill: {
+                        name: day.label, notes: '',
+                        exercises: day.workout_template.exercises.map(ex => ({
+                          name: ex.name, sets: [{ reps: '', weight: '' }],
+                        })),
+                      },
+                      editMode: false,
+                    })}
                   >
-                    <Text style={[styles.toggleDaysBtnText, { color: colors.accent }]}>
-                      {daysVisible ? 'Hide' : 'Show'}
-                    </Text>
-                    <Ionicons
-                      name={daysVisible ? 'chevron-up' : 'chevron-down'}
-                      size={14}
-                      color={colors.accent}
-                    />
+                    <Text style={styles.logDayBtnText}>Log</Text>
                   </TouchableOpacity>
                 </View>
-                {daysVisible && activeRoutine.days.map(day => (
-                  <View key={day.id} style={styles.dayRow}>
-                    <Text style={styles.dayLabel}>{day.label}</Text>
-                    <TouchableOpacity
-                      style={styles.logDayBtn}
-                      onPress={() => navigation.navigate('WorkoutLog', {
-                        prefill: {
-                          name: day.label, notes: '',
-                          exercises: day.workout_template.exercises.map(ex => ({
-                            name: ex.name, sets: [{ reps: '', weight: '' }],
-                          })),
-                        },
-                        editMode: false,
-                      })}
-                    >
-                      <Text style={styles.logDayBtnText}>Log</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </>
-            ) : (
-              <Text style={styles.noRoutineText}>No active routine — set one in the Training tab</Text>
-            )}
-          </View>
+              ))}
+            </View>
+          )}
 
           {/* Week Calendar */}
           <WeekCalendar
@@ -384,7 +392,11 @@ export default function DashboardScreen({ navigation }: Props) {
               <TouchableOpacity
                 key={item.id}
                 style={styles.workoutCard}
-                onPress={() => navigation.navigate('WorkoutDetails', { workoutId: item.id })}
+                onPress={() =>
+                  item.workout_type === 'cardio'
+                    ? navigation.navigate('CardioDetails', { workoutId: item.id })
+                    : navigation.navigate('WorkoutDetails', { workoutId: item.id })
+                }
               >
                 <View style={styles.cardHeader}>
                   <Text style={styles.workoutName}>{item.name || 'Workout'}</Text>
@@ -396,27 +408,43 @@ export default function DashboardScreen({ navigation }: Props) {
                 </View>
                 <Text style={styles.workoutDate}>
                   {new Date(item.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
-                  {item.duration ? `  ·  ${item.duration} min` : ''}
                 </Text>
-                <View style={styles.statPills}>
-                  {item.num_exercises != null && (
-                    <View style={styles.pill}>
-                      <Text style={styles.pillText}>{item.num_exercises} exercise{item.num_exercises !== 1 ? 's' : ''}</Text>
+                {item.workout_type === 'cardio' ? (
+                  <View style={styles.statPills}>
+                    {item.duration != null && (
+                      <View style={styles.pill}>
+                        <Text style={styles.pillText}>{item.duration} min</Text>
+                      </View>
+                    )}
+                    {item.distance != null && item.distance > 0 && (
+                      <View style={styles.pill}>
+                        <Text style={styles.pillText}>{item.distance.toFixed(2)} {item.distance_unit || 'km'}</Text>
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <>
+                    <View style={styles.statPills}>
+                      {item.num_exercises != null && (
+                        <View style={styles.pill}>
+                          <Text style={styles.pillText}>{item.num_exercises} exercise{item.num_exercises !== 1 ? 's' : ''}</Text>
+                        </View>
+                      )}
+                      {item.total_reps != null && item.total_reps > 0 && (
+                        <View style={styles.pill}>
+                          <Text style={styles.pillText}>{item.total_reps} reps</Text>
+                        </View>
+                      )}
+                      {item.volume != null && item.volume > 0 && (
+                        <View style={styles.pill}>
+                          <Text style={styles.pillText}>{toDisplayVolume(item.volume, weightUnit)}</Text>
+                        </View>
+                      )}
                     </View>
-                  )}
-                  {item.total_reps != null && item.total_reps > 0 && (
-                    <View style={styles.pill}>
-                      <Text style={styles.pillText}>{item.total_reps} reps</Text>
-                    </View>
-                  )}
-                  {item.volume != null && item.volume > 0 && (
-                    <View style={styles.pill}>
-                      <Text style={styles.pillText}>{toDisplayVolume(item.volume, weightUnit)}</Text>
-                    </View>
-                  )}
-                </View>
-                {item.muscles && item.muscles.length > 0 && (
-                  <Text style={styles.muscles} numberOfLines={1}>{item.muscles.join('  ·  ')}</Text>
+                    {item.muscles && item.muscles.length > 0 && (
+                      <Text style={styles.muscles} numberOfLines={1}>{item.muscles.join('  ·  ')}</Text>
+                    )}
+                  </>
                 )}
               </TouchableOpacity>
             ));

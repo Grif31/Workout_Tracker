@@ -6,6 +6,7 @@ import WorkoutDetailScreen from '../screens/DashboardTab/WorkoutDetailsScreen';
 import WorkoutSummaryScreen from '../screens/DashboardTab/WorkoutSummaryScreen';
 import LogWorkoutScreen from '../screens/DashboardTab/WorkoutLogScreen';
 import GPSCardioScreen from '../screens/DashboardTab/GPSCardioScreen';
+import CardioDetailsScreen from '../screens/DashboardTab/CardioDetailsScreen';
 import ExerciseDetailScreen from '../screens/ExercisesTab/ExerciseDetailScreen';
 import { useTheme } from '../context/ThemeContext';
 
@@ -18,6 +19,7 @@ export function DashboardStack() {
     <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { paddingTop: insets.top, backgroundColor: colors.background } }}>
       <Stack.Screen name="DashboardHome" component={DashboardScreen} />
       <Stack.Screen name="WorkoutDetails" component={WorkoutDetailScreen} />
+      <Stack.Screen name="CardioDetails" component={CardioDetailsScreen} options={{ contentStyle: { paddingTop: 0 } }} />
       <Stack.Screen name="WorkoutSummary" component={WorkoutSummaryScreen} options={{ contentStyle: { paddingTop: 0 } }} />
       <Stack.Screen name="WorkoutLog" component={LogWorkoutScreen} options={{ animation: 'slide_from_bottom' }} />
       <Stack.Screen name="GPSCardio" component={GPSCardioScreen} options={{ contentStyle: { paddingTop: 0 } }} />

@@ -23,6 +23,7 @@ export type WorkoutSummaryParams = {
 export type DashboardStackParamsList = {
     DashboardHome: undefined;
     WorkoutDetails: { workoutId: number };
+    CardioDetails: { workoutId: number };
     WorkoutSummary: WorkoutSummaryParams;
     WorkoutLog: {prefill?: PrefillWorkoutData, workoutId?:number, editMode?: boolean};
     GPSCardio: undefined;
@@ -62,6 +63,7 @@ export type ProfileStackParamsList = {
     Settings: undefined
     ChangePassword: undefined
     WorkoutDetails: { workoutId: number };
+    CardioDetails: { workoutId: number };
     EditWorkout: {prefill?: PrefillWorkoutData, workoutId?:number, editMode?: boolean}
     Measurements: undefined;
     PersonalRecords: undefined;

@@ -437,17 +437,34 @@ def _add_workout(bucket, workout, kg_to_lbs):
 @jwt_required()
 def recent_exercises():
     user_id = get_jwt_identity()
-    # Distinct exercise names ordered by most recent workout date
-    rows = (
+    # Group template exercises by template_id so Cable vs Barbell variants are distinct
+    template_rows = (
+        db.session.query(Exercise.exercise_template_id, Exercise.name, db.func.max(Workout.date).label('last_date'))
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .filter(Workout.user_id == user_id)
+        .filter(Exercise.exercise_template_id.isnot(None))
+        .group_by(Exercise.exercise_template_id, Exercise.name)
+        .order_by(db.func.max(Workout.date).desc())
+        .limit(10)
+        .all()
+    )
+    # Custom exercises (no template) grouped by name
+    custom_rows = (
         db.session.query(Exercise.name, db.func.max(Workout.date).label('last_date'))
         .join(Workout, Exercise.workout_id == Workout.id)
         .filter(Workout.user_id == user_id)
+        .filter(Exercise.exercise_template_id.is_(None))
         .group_by(Exercise.name)
         .order_by(db.func.max(Workout.date).desc())
         .limit(10)
         .all()
     )
-    return jsonify({'recent': [r.name for r in rows]})
+    merged = (
+        [{'name': r.name, 'exercise_template_id': r.exercise_template_id, 'last_date': r.last_date} for r in template_rows] +
+        [{'name': r.name, 'exercise_template_id': None, 'last_date': r.last_date} for r in custom_rows]
+    )
+    merged.sort(key=lambda r: r['last_date'], reverse=True)
+    return jsonify({'recent': [{'name': r['name'], 'exercise_template_id': r['exercise_template_id']} for r in merged[:10]]})
 
 
 @stats_bp.get('/api/stats/strength-score')
@@ -458,8 +475,9 @@ def strength_score():
     from utils.strength_standards import (
         STANDARDS, BIG_6, EXERCISE_ALIASES, MUSCLE_GROUP_MAP,
         percentile_to_strength_rank, greek_rank_from_score, compute_percentile,
-        compute_muscle_group_scores, compute_consistency_score,
-        compute_dedication_score, compute_volume_score, compute_greek_score,
+        compute_weight_at_percentile, compute_muscle_group_scores,
+        compute_consistency_score, compute_dedication_score,
+        compute_volume_score, compute_greek_score,
     )
 
     user_id = get_jwt_identity()
@@ -478,6 +496,7 @@ def strength_score():
 
     # Build per-exercise percentiles
     exercise_percentiles: dict[str, float] = {}
+    exercise_1rms: dict[str, float] = {}
 
     for exercise_name, aliases in EXERCISE_ALIASES.items():
         if exercise_name not in STANDARDS.get(user.gender, {}):
@@ -550,6 +569,7 @@ def strength_score():
         pct = compute_percentile(exercise_name, user.gender, bw_ratio)
         if pct is not None:
             exercise_percentiles[exercise_name] = pct
+            exercise_1rms[exercise_name] = round(best_1rm, 1)
 
     if not exercise_percentiles:
         return jsonify({'missing': 'data'}), 422
@@ -604,12 +624,27 @@ def strength_score():
     # Build response
     is_pro = True  # default True until subscription system is built
 
+    _TIER_BOUNDARIES = [
+        (10,  'Beginner'),
+        (30,  'Intermediate'),
+        (60,  'Advanced'),
+        (80,  'Elite'),
+        (95,  'Legend'),
+    ]
+
     def _ex_entry(name):
         pct = exercise_percentiles.get(name)
+        thresholds = []
+        for boundary_pct, rank_name in _TIER_BOUNDARIES:
+            w = compute_weight_at_percentile(name, user.gender, bw_lbs, boundary_pct)
+            if w is not None:
+                thresholds.append({'percentile': boundary_pct, 'rank': rank_name, 'weight': w})
         return {
             'exercise': name,
             'percentile': round(pct, 1) if pct is not None else None,
             'rank': percentile_to_strength_rank(pct) if pct is not None else None,
+            'estimated_1rm': exercise_1rms.get(name),
+            'thresholds': thresholds,
             'has_data': pct is not None,
         }
 

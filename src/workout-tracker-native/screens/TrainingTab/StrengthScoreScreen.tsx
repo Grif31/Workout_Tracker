@@ -12,6 +12,7 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { TrainingStackParamsList } from '../../navigation/types';
+import MuscleDiagram from '../../components/MuscleDiagram';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'StrengthScore'>;
 
@@ -32,8 +33,8 @@ interface ScoreData {
   greek_score_components?: { consistency: number; strength: number; dedication: number; volume: number };
   exercises_used: number;
   muscle_groups_used: number;
-  big6?: Array<{ exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; has_data: boolean }>;
-  supplemental?: Array<{ exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; has_data: boolean }>;
+  big6?: Array<{ exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; estimated_1rm?: number | null; thresholds?: { percentile: number; rank: string; weight: number }[]; has_data: boolean }>;
+  supplemental?: Array<{ exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; estimated_1rm?: number | null; thresholds?: { percentile: number; rank: string; weight: number }[]; has_data: boolean }>;
   muscle_groups?: Array<{ name: string; score: number; rank: { label: string; tier: number; display: string } }>;
 }
 
@@ -53,6 +54,14 @@ export default function StrengthScoreScreen({ navigation }: Props) {
   // Muscle group detail modal
   const [selectedGroup, setSelectedGroup] = useState<MuscleGroup | null>(null);
   const [groupModalVisible, setGroupModalVisible] = useState(false);
+
+  // Lift detail modal
+  type LiftEntry = { exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; estimated_1rm?: number | null; thresholds?: { percentile: number; rank: string; weight: number }[]; has_data: boolean };
+  const [selectedLift, setSelectedLift] = useState<LiftEntry | null>(null);
+  const [liftModalVisible, setLiftModalVisible] = useState(false);
+
+  // Info modal
+  const [infoVisible, setInfoVisible] = useState(false);
 
   const fetchScore = async () => {
     try {
@@ -102,7 +111,9 @@ export default function StrengthScoreScreen({ navigation }: Props) {
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Strength Score</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity onPress={() => setInfoVisible(true)}>
+          <Ionicons name="information-circle-outline" size={24} color={colors.textSecondary} />
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -141,6 +152,20 @@ export default function StrengthScoreScreen({ navigation }: Props) {
           {scoreData.muscle_groups && scoreData.muscle_groups.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>Muscle Group Ranks</Text>
+              <MuscleDiagram
+                muscles={scoreData.muscle_groups.map(mg => mg.name)}
+                muscleColors={Object.fromEntries(
+                  scoreData.muscle_groups.map(mg => [mg.name, STRENGTH_RANK_COLORS[mg.rank.label] ?? colors.accent])
+                )}
+              />
+              <View style={styles.legendRow}>
+                {Object.entries(STRENGTH_RANK_COLORS).map(([label, color]) => (
+                  <View key={label} style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: color }]} />
+                    <Text style={[styles.legendLabel, { color: colors.textSecondary }]}>{label}</Text>
+                  </View>
+                ))}
+              </View>
               <View style={styles.card}>
                 {scoreData.muscle_groups.map((mg, i) => {
                   const mgColor = STRENGTH_RANK_COLORS[mg.rank.label] ?? colors.accent;
@@ -181,7 +206,12 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                   return (
                     <React.Fragment key={ex.exercise}>
                       {i > 0 && <View style={styles.divider} />}
-                      <View style={styles.exRow}>
+                      <TouchableOpacity
+                        style={styles.exRow}
+                        onPress={() => { setSelectedLift(ex); setLiftModalVisible(true); }}
+                        activeOpacity={ex.has_data ? 0.7 : 1}
+                        disabled={!ex.has_data}
+                      >
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.exName, !ex.has_data && { color: colors.textSecondary }]}>{ex.exercise}</Text>
                           {ex.has_data ? (
@@ -192,12 +222,15 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                             <Text style={styles.noDataText}>No data logged</Text>
                           )}
                         </View>
-                        {ex.rank && (
-                          <View style={[styles.miniRankBadge, { backgroundColor: exColor + '22', borderColor: exColor }]}>
-                            <Text style={[styles.miniRankText, { color: exColor }]}>{ex.rank.display}</Text>
+                        {ex.rank ? (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                            <View style={[styles.miniRankBadge, { backgroundColor: exColor + '22', borderColor: exColor }]}>
+                              <Text style={[styles.miniRankText, { color: exColor }]}>{ex.rank.display}</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
                           </View>
-                        )}
-                      </View>
+                        ) : null}
+                      </TouchableOpacity>
                     </React.Fragment>
                   );
                 })}
@@ -271,18 +304,146 @@ export default function StrengthScoreScreen({ navigation }: Props) {
         </ScrollView>
       ) : null}
 
+      {/* Lift detail modal */}
+      <Modal visible={liftModalVisible} transparent animationType="slide" onRequestClose={() => setLiftModalVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setLiftModalVisible(false)}>
+          <View style={styles.modalSheet}>
+            {selectedLift?.has_data && (() => {
+              const liftColor = selectedLift.rank ? (STRENGTH_RANK_COLORS[selectedLift.rank.label] ?? colors.accent) : colors.accent;
+              const pct = selectedLift.percentile ?? 0;
+
+              // Rank tier segments for the distribution bar
+              const TIERS = [
+                { label: 'Noobie',       low: 0,  high: 10,  color: '#888888' },
+                { label: 'Beginner',     low: 10, high: 30,  color: '#4A9EFF' },
+                { label: 'Intermediate', low: 30, high: 60,  color: '#4CAF50' },
+                { label: 'Advanced',     low: 60, high: 80,  color: '#FF9800' },
+                { label: 'Elite',        low: 80, high: 95,  color: '#9C27B0' },
+                { label: 'Legend',       low: 95, high: 100, color: '#FFD700' },
+              ];
+              // modalSheet has paddingHorizontal: spacing.lg on each side
+              const BAR_W = Dimensions.get('window').width - spacing.lg * 2;
+
+              return (
+                <>
+                  <View style={styles.modalHandle} />
+                  <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>{selectedLift.exercise}</Text>
+
+                  {/* Hero stat */}
+                  <View style={styles.liftHero}>
+                    <Text style={[styles.liftPercentileText, { color: liftColor }]}>
+                      Top {Math.round(100 - pct)}%
+                    </Text>
+                    <Text style={styles.liftPercentileSub}>Stronger than {Math.round(pct)}% of lifters</Text>
+                    {selectedLift.rank && (
+                      <View style={[styles.miniRankBadge, { backgroundColor: liftColor + '22', borderColor: liftColor, alignSelf: 'center', marginTop: 4 }]}>
+                        <Text style={[styles.miniRankText, { color: liftColor }]}>{selectedLift.rank.display}</Text>
+                      </View>
+                    )}
+                    {selectedLift.estimated_1rm != null && (
+                      <Text style={styles.liftOneRM}>Est. 1RM: {selectedLift.estimated_1rm} lbs</Text>
+                    )}
+                  </View>
+
+                  {/* Rank tier distribution bar */}
+                  <Text style={[styles.sectionTitle, { marginTop: spacing.sm }]}>Where You Rank</Text>
+                  <View style={{ marginTop: spacing.xs }}>
+                    {/* Marker line */}
+                    <View style={{ height: 12, position: 'relative', marginBottom: 2 }}>
+                      <View style={[styles.markerTriangle, { left: (pct / 100) * BAR_W - 6 }]} />
+                    </View>
+                    {/* Segmented bar */}
+                    <View style={{ flexDirection: 'row', height: 18, borderRadius: 9, overflow: 'hidden' }}>
+                      {TIERS.map(tier => (
+                        <View
+                          key={tier.label}
+                          style={{ flex: tier.high - tier.low, backgroundColor: tier.color, opacity: pct >= tier.low ? 1 : 0.25 }}
+                        />
+                      ))}
+                    </View>
+                    {/* Labels + weight thresholds */}
+                    <View style={{ flexDirection: 'row', marginTop: spacing.xs }}>
+                      {TIERS.map(tier => {
+                        const threshold = (selectedLift as LiftEntry).thresholds?.find(t => t.rank === tier.label);
+                        const reached = pct >= tier.low;
+                        return (
+                          <View key={tier.label} style={{ flex: tier.high - tier.low, alignItems: 'center' }}>
+                            <Text style={[styles.tierBarLabel, { color: reached ? tier.color : colors.textSecondary }]} numberOfLines={1}>
+                              {tier.label}
+                            </Text>
+                            {threshold && (
+                              <Text style={[styles.tierBarWeight, { color: reached ? tier.color : colors.textSecondary }]} numberOfLines={1}>
+                                {threshold.weight} lbs
+                              </Text>
+                            )}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  {/* Tier sub-rank dots */}
+                  {selectedLift.rank && (
+                    <View style={[styles.tierRow, { marginTop: spacing.md }]}>
+                      {[1, 2, 3].map(t => (
+                        <View key={t} style={[styles.tierDot, { backgroundColor: t <= selectedLift.rank!.tier ? liftColor : colors.border }]} />
+                      ))}
+                      <Text style={[styles.tierLabel, { color: colors.textSecondary }]}>
+                        Tier {selectedLift.rank.tier}/3 within {selectedLift.rank.label}
+                      </Text>
+                    </View>
+                  )}
+                </>
+              );
+            })()}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Info modal */}
+      <Modal visible={infoVisible} transparent animationType="slide" onRequestClose={() => setInfoVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setInfoVisible(false)}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>How We Calculate Your Score</Text>
+
+            <View style={styles.infoSection}>
+              <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>Strength Percentile</Text>
+              <Text style={[styles.infoBody, { color: colors.textSecondary }]}>
+                Your estimated 1-rep max (1RM) for each exercise is compared against population standards adjusted for your gender and bodyweight. The result is a percentile — how you rank against all lifters.
+              </Text>
+            </View>
+
+            <View style={styles.infoSection}>
+              <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>Overall Score</Text>
+              <Text style={[styles.infoBody, { color: colors.textSecondary }]}>
+                The Big 6 lifts (Squat, Bench, Deadlift, Overhead Press, Row, Pull-up) count for 70% of your overall score. All other exercises contribute the remaining 30%.
+              </Text>
+            </View>
+
+            <View style={styles.infoSection}>
+              <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>Muscle Groups</Text>
+              <Text style={[styles.infoBody, { color: colors.textSecondary }]}>
+                Each muscle group score is the average percentile of the exercises that train it. Log more exercises to make each group more accurate.
+              </Text>
+            </View>
+
+            <View style={styles.infoSection}>
+              <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>Estimated 1RM</Text>
+              <Text style={[styles.infoBody, { color: colors.textSecondary }]}>
+                If you haven't performed a true 1-rep max, we use the Epley formula (weight × (1 + reps ÷ 30)) applied to your best logged set.
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Muscle group detail modal */}
       <Modal visible={groupModalVisible} transparent animationType="slide" onRequestClose={() => setGroupModalVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setGroupModalVisible(false)}>
           <View style={styles.modalSheet}>
             {selectedGroup && (() => {
               const mgColor = STRENGTH_RANK_COLORS[(selectedGroup as any).rank?.label] ?? colors.accent;
-              const contrib = scoreData?.big6?.concat(scoreData?.supplemental ?? [])
-                .filter(ex => ex.has_data)
-                .filter(ex => {
-                  // rough match: group name exists in exercise name or vice versa
-                  return true;
-                }) ?? [];
               return (
                 <>
                   <View style={styles.modalHandle} />
@@ -406,4 +567,30 @@ const createStyles = (colors: Colors) =>
     groupScore: { fontSize: typography.fontSize.sm, textAlign: 'center' },
     chartLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.xs },
     chartLabel: { fontSize: 10, color: colors.textSecondary },
+
+    liftHero: { alignItems: 'center', gap: 4, paddingVertical: spacing.sm },
+    liftPercentileText: { fontSize: 36, fontWeight: '800' },
+    liftPercentileSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+    liftOneRM: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 4 },
+    markerTriangle: {
+      position: 'absolute',
+      width: 0,
+      height: 0,
+      borderLeftWidth: 6,
+      borderRightWidth: 6,
+      borderTopWidth: 10,
+      borderLeftColor: 'transparent',
+      borderRightColor: 'transparent',
+      borderTopColor: colors.textPrimary,
+      top: 2,
+    },
+    tierBarLabel: { fontSize: 8, fontWeight: '600', textAlign: 'center' },
+    tierBarWeight: { fontSize: 7, textAlign: 'center', marginTop: 1 },
+    infoSection: { gap: 4 },
+    infoHeading: { fontSize: typography.fontSize.md, fontWeight: '700' },
+    infoBody: { fontSize: typography.fontSize.sm, lineHeight: 20 },
+    legendRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.xs },
+    legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+    legendDot: { width: 8, height: 8, borderRadius: 4 },
+    legendLabel: { fontSize: 11 },
   });

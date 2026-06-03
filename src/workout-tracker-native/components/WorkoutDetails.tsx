@@ -21,6 +21,7 @@ import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { estimateCalories } from '../utils/cardioCalories';
+import MuscleDiagram from './MuscleDiagram';
 
 
 export type PrefillWorkoutData = {
@@ -217,6 +218,19 @@ export default function WorkoutDetailsScreen({
     );
   };
 
+  const activeMuscles = useMemo(() => {
+    if (!workout) return [];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const ex of workout.exercises) {
+      if (!ex.muscle_group) continue;
+      for (const m of ex.muscle_group.split(',').map(s => s.trim()).filter(Boolean)) {
+        if (!seen.has(m)) { seen.add(m); out.push(m); }
+      }
+    }
+    return out;
+  }, [workout]);
+
   if (loading || !workout) {
     return (
       <View style={styles.centered}>
@@ -246,18 +260,11 @@ export default function WorkoutDetailsScreen({
             </TouchableOpacity>
           </View>
 
-          {/* Metadata: date + duration */}
+          {/* Date */}
           <View style={styles.metaRow}>
             <Text style={styles.metaText}>
               {new Date(workout.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
             </Text>
-            {workout.duration ? (
-              <>
-                <Text style={styles.metaDot}>·</Text>
-                <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
-                <Text style={styles.metaText}>{fmtDuration(workout.duration)}</Text>
-              </>
-            ) : null}
           </View>
 
           {/* Notes */}
@@ -281,7 +288,27 @@ export default function WorkoutDetailsScreen({
               <Text style={styles.summaryValue}>{fmtVolume(totalVolume)}</Text>
               <Text style={styles.summaryLabel}>Volume ({weightUnit})</Text>
             </View>
+            {workout.duration ? (
+              <>
+                <View style={styles.summaryDivider} />
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryValue}>{fmtDuration(workout.duration)}</Text>
+                  <Text style={styles.summaryLabel}>Duration</Text>
+                </View>
+              </>
+            ) : null}
           </View>
+
+          {/* Muscle diagram */}
+          {activeMuscles.length > 0 && (
+            <View style={styles.diagramCard}>
+              <Text style={styles.diagramLabel}>Muscles Targeted</Text>
+              <MuscleDiagram muscles={activeMuscles} />
+              <Text style={styles.diagramMuscleList}>{activeMuscles.join(' · ')}</Text>
+            </View>
+          )}
+
+          <Text style={styles.exercisesLabel}>Exercises</Text>
         </View>
       }
       renderItem={({ item: exercise }) => {
@@ -486,7 +513,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.xs,
   },
   metaText: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
-  metaDot: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
 
   notes: {
     fontSize: typography.fontSize.sm,
@@ -654,6 +680,36 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.md,
     color: colors.accentText,
     fontWeight: '600',
+  },
+
+  diagramCard: {
+    backgroundColor: colors.surface,
+    borderRadius: spacing.sm,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  diagramLabel: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    alignSelf: 'flex-start',
+  },
+  diagramMuscleList: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  exercisesLabel: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: spacing.sm,
   },
 
   routeMap: {

@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView, Switch, StyleSheet, Platform,
+  View, Text, TextInput, TouchableOpacity, Switch, StyleSheet, Platform, Modal, Animated,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { type ExerciseEntry, fmtElapsed } from './types';
+import MuscleDiagram from '../MuscleDiagram';
 
 type Props = {
   workoutName: string;
@@ -17,20 +18,21 @@ type Props = {
   selectedDate: Date;
   onDateChange: (date: Date) => void;
   elapsed: number;
+  timerPaused: boolean;
+  onToggleTimer: () => void;
   onResetTimer: () => void;
   editMode?: boolean;
-  settingsExpanded: boolean;
-  onToggleSettings: () => void;
   autoStartRest: boolean;
   onAutoStartRestChange: (val: boolean) => void;
   vibrateOnComplete: boolean;
   onVibrateChange: (val: boolean) => void;
   showRpe: boolean;
   onShowRpeChange: (val: boolean) => void;
-  templates: { id: number; name: string; exercises: any[] }[];
-  onApplyTemplate: (template: any) => void;
+  showPlateCalc: boolean;
+  onShowPlateCalcChange: (val: boolean) => void;
   exercises: ExerciseEntry[];
   weightUnit: string;
+  activeMuscles: string[];
 };
 
 export default function WorkoutHeader({
@@ -41,24 +43,42 @@ export default function WorkoutHeader({
   selectedDate,
   onDateChange,
   elapsed,
+  timerPaused,
+  onToggleTimer,
   onResetTimer,
   editMode,
-  settingsExpanded,
-  onToggleSettings,
   autoStartRest,
   onAutoStartRestChange,
   vibrateOnComplete,
   onVibrateChange,
   showRpe,
   onShowRpeChange,
-  templates,
-  onApplyTemplate,
+  showPlateCalc,
+  onShowPlateCalcChange,
   exercises,
   weightUnit,
+  activeMuscles,
 }: Props) {
   const { colors, mode } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [diagramModalVisible, setDiagramModalVisible] = useState(false);
+  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (timerPaused) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 0.3, duration: 700, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1,   duration: 700, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.stopAnimation();
+      pulseAnim.setValue(1);
+    }
+  }, [timerPaused]);
 
   const totalVolume = exercises.reduce((sum, ex) =>
     sum + ex.sets.reduce((s, set) => {
@@ -87,15 +107,15 @@ export default function WorkoutHeader({
 
       {/* Date + Settings row */}
       <View style={styles.dateSettingsRow}>
-        <TouchableOpacity style={styles.datePart} onPress={() => setShowDatePicker(true)}>
+        <TouchableOpacity style={styles.datePart} onPress={() => setShowDatePicker(v => !v)}>
           <Ionicons name="calendar-outline" size={16} color={colors.textSecondary} />
           <Text style={styles.dateText}>
             {selectedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
           </Text>
-          <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
+          <Ionicons name={showDatePicker ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={onToggleSettings} style={styles.settingsGearBtn} activeOpacity={0.7}>
-          <Ionicons name="settings-outline" size={18} color={settingsExpanded ? colors.accent : colors.textSecondary} />
+        <TouchableOpacity onPress={() => setSettingsModalVisible(true)} style={styles.settingsGearBtn} activeOpacity={0.7}>
+          <Ionicons name="settings-outline" size={18} color={settingsModalVisible ? colors.accent : colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
@@ -118,71 +138,113 @@ export default function WorkoutHeader({
       )}
 
       {!editMode && (
-        <View style={styles.timerCard}>
-          <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
-          <Text style={styles.timerLabel}>Elapsed</Text>
-          <Text style={styles.timerValue}>{fmtElapsed(elapsed)}</Text>
-          <TouchableOpacity onPress={onResetTimer} style={styles.timerResetBtn}>
-            <Ionicons name="refresh-outline" size={16} color={colors.textSecondary} />
-            <Text style={styles.timerResetText}>Reset</Text>
+        <View style={styles.timerDiagramRow}>
+          <TouchableOpacity style={[styles.timerCard, { flex: 1 }]} onPress={onToggleTimer} activeOpacity={0.7}>
+            <Text style={styles.timerLabel}>Duration</Text>
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={styles.timerMain}>
+                {timerPaused
+                  ? <Animated.View style={[styles.playTriangle, { opacity: pulseAnim }]} />
+                  : <Text style={styles.timerValue}>{fmtElapsed(elapsed)}</Text>
+                }
+              </View>
+              <TouchableOpacity onPress={onResetTimer} style={styles.timerResetBtn} hitSlop={8}>
+                <Ionicons name="refresh-outline" size={14} color={colors.textSecondary} />
+                <Text style={styles.timerResetText}>Reset</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.diagramThumb, { flex: 1 }]}
+            onPress={() => setDiagramModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.diagramThumbLabel}>Muscles</Text>
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-start', marginTop: -8 }}>
+              <MuscleDiagram muscles={activeMuscles} scale={0.18} />
+            </View>
           </TouchableOpacity>
         </View>
       )}
 
-      {settingsExpanded && (
-        <View style={styles.settingsPanel}>
-          <View style={styles.settingsItem}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.settingsLabel}>Auto-start rest timer</Text>
-              <Text style={styles.settingsHint}>Start rest countdown when a set is checked off</Text>
-            </View>
-            <Switch
-              value={autoStartRest}
-              onValueChange={onAutoStartRestChange}
-              trackColor={{ false: colors.border, true: colors.save }}
-              thumbColor="#fff"
-            />
+      <Modal visible={diagramModalVisible} transparent animationType="slide" onRequestClose={() => setDiagramModalVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDiagramModalVisible(false)}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Muscles Targeted</Text>
+            {activeMuscles.length > 0 ? (
+              <>
+                <MuscleDiagram muscles={activeMuscles} />
+                <Text style={styles.modalMuscleList}>{activeMuscles.join(' · ')}</Text>
+              </>
+            ) : (
+              <Text style={styles.modalEmpty}>Add exercises to see targeted muscles</Text>
+            )}
           </View>
-          <View style={styles.settingsItem}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.settingsLabel}>Vibrate when rest ends</Text>
-              <Text style={styles.settingsHint}>Vibrate the phone when the rest countdown completes</Text>
-            </View>
-            <Switch
-              value={vibrateOnComplete}
-              onValueChange={onVibrateChange}
-              trackColor={{ false: colors.border, true: colors.save }}
-              thumbColor="#fff"
-            />
-          </View>
-          <View style={styles.settingsItem}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.settingsLabel}>Track RPE (1–10)</Text>
-              <Text style={styles.settingsHint}>Show an RPE input column on each strength set</Text>
-            </View>
-            <Switch
-              value={showRpe}
-              onValueChange={onShowRpeChange}
-              trackColor={{ false: colors.border, true: colors.save }}
-              thumbColor="#fff"
-            />
-          </View>
-        </View>
-      )}
+        </TouchableOpacity>
+      </Modal>
 
-      {!editMode && exercises.length === 0 && templates.length > 0 && (
-        <View style={styles.templateSection}>
-          <Text style={styles.templateSectionLabel}>Start from a template</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.templateScrollContent}>
-            {templates.map(t => (
-              <TouchableOpacity key={t.id} style={[styles.templateChip, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => onApplyTemplate(t)}>
-                <Text style={[styles.templateChipName, { color: colors.textPrimary }]} numberOfLines={1}>{t.name}</Text>
-                <Text style={[styles.templateChipSub, { color: colors.textSecondary }]}>{t.exercises.length} {t.exercises.length === 1 ? 'exercise' : 'exercises'}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
+      <Modal visible={settingsModalVisible} transparent animationType="slide" onRequestClose={() => setSettingsModalVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setSettingsModalVisible(false)}>
+          <View style={styles.settingsSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Workout Settings</Text>
+            <View style={styles.settingsItem}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingsLabel}>Auto-start rest timer</Text>
+                <Text style={styles.settingsHint}>Start rest countdown when a set is checked off</Text>
+              </View>
+              <Switch
+                value={autoStartRest}
+                onValueChange={onAutoStartRestChange}
+                trackColor={{ false: colors.border, true: colors.save }}
+                thumbColor="#fff"
+              />
+            </View>
+            <View style={styles.settingsDivider} />
+            <View style={styles.settingsItem}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingsLabel}>Vibrate when rest ends</Text>
+                <Text style={styles.settingsHint}>Vibrate the phone when the rest countdown completes</Text>
+              </View>
+              <Switch
+                value={vibrateOnComplete}
+                onValueChange={onVibrateChange}
+                trackColor={{ false: colors.border, true: colors.save }}
+                thumbColor="#fff"
+              />
+            </View>
+            <View style={styles.settingsDivider} />
+            <View style={styles.settingsItem}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingsLabel}>Track RPE</Text>
+                <Text style={styles.settingsHint}>Show an RPE input column on each strength set</Text>
+              </View>
+              <Switch
+                value={showRpe}
+                onValueChange={onShowRpeChange}
+                trackColor={{ false: colors.border, true: colors.save }}
+                thumbColor="#fff"
+              />
+            </View>
+            <View style={styles.settingsDivider} />
+            <View style={styles.settingsItem}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingsLabel}>Show plate calculator</Text>
+                <Text style={styles.settingsHint}>Show a plate calculator button while logging sets</Text>
+              </View>
+              <Switch
+                value={showPlateCalc}
+                onValueChange={onShowPlateCalcChange}
+                trackColor={{ false: colors.border, true: colors.save }}
+                thumbColor="#fff"
+              />
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
 
       {exercises.length > 0 && (
         <View style={styles.summaryBar}>
@@ -230,13 +292,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderBottomColor: colors.border,
   },
   datePart: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
+    flex: 1,
   },
   dateText: {
-    flex: 1,
     fontSize: typography.fontSize.sm,
     color: colors.textPrimary,
     fontWeight: '500',
@@ -247,26 +308,46 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
 
   timerCard: {
+    paddingHorizontal: 0,
+    paddingVertical: spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  timerMain: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginBottom: spacing.md,
+    justifyContent: 'center',
     gap: spacing.xs,
+    marginBottom: spacing.xs,
+    minHeight: 40,
   },
-  timerLabel: { fontSize: typography.fontSize.sm, color: colors.textSecondary, flex: 1 },
-  timerValue: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
-  timerResetBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: spacing.sm },
-  timerResetText: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+  timerValue: { fontSize: 32, fontWeight: '700', color: colors.textPrimary },
+  timerLabel: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary, marginBottom: spacing.xs },
+  timerResetBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'center' },
+  playTriangle: {
+    width: 0,
+    height: 0,
+    borderTopWidth: 12,
+    borderBottomWidth: 12,
+    borderLeftWidth: 20,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+    borderLeftColor: '#fff',
+  },
+  timerResetText: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
 
-  settingsPanel: {
+  settingsSheet: {
     backgroundColor: colors.surface,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xl * 2,
     gap: spacing.md,
+  },
+  settingsDivider: {
+    height: 1,
+    backgroundColor: colors.border,
   },
   settingsItem: {
     flexDirection: 'row',
@@ -336,5 +417,53 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: spacing.sm,
+  },
+
+  timerDiagramRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.sm,
+    height: 80,
+  },
+  diagramThumb: {
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  diagramThumbLabel: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  modalSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xl * 2,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  modalHandle: {
+    width: 40, height: 4, backgroundColor: colors.border,
+    borderRadius: 2, alignSelf: 'center',
+  },
+  modalTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  modalMuscleList: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  modalEmpty: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    paddingVertical: spacing.lg,
   },
 });

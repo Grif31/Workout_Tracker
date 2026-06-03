@@ -25,6 +25,10 @@ type Props = NativeStackScreenProps<ProfileStackParamsList, 'BodyweightLog'>;
 
 type LogEntry = { id: number; weight: number; date: string };
 
+function localDateStr(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function BodyweightScreen({ navigation }: Props) {
   const { user, updateUser } = useAuth();
   const { colors } = useTheme();
@@ -60,7 +64,7 @@ export default function BodyweightScreen({ navigation }: Props) {
       const res = await apiFetch('/api/bodyweight', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ weight }),
+        body: JSON.stringify({ weight, date: localDateStr(new Date()) }),
       });
       if (res.ok) {
         const entry = await res.json();

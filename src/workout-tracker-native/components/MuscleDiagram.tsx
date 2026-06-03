@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import Body, { ExtendedBodyPart, Slug } from 'react-native-body-highlighter';
 import { useTheme } from '../context/ThemeContext';
@@ -6,23 +6,28 @@ import { useTheme } from '../context/ThemeContext';
 type Props = {
   muscles?: string[];
   primaryMuscle?: string | null;
+  // Per-muscle rank colors for strength score screen; falls back to colors.accent if absent
+  muscleColors?: Record<string, string>;
+  scale?: number;
 };
 
 const MUSCLE_MAP: Record<string, { front: Slug[]; back: Slug[] }> = {
-  Chest:      { front: ['chest'],                    back: [] },
-  Back:       { front: [],                           back: ['upper-back', 'lower-back', 'trapezius'] },
-  Shoulders:  { front: ['deltoids'],                 back: ['deltoids'] },
-  Biceps:     { front: ['biceps'],                   back: [] },
-  Triceps:    { front: [],                           back: ['triceps'] },
-  Quads:      { front: ['quadriceps'],               back: [] },
-  Hamstrings: { front: [],                           back: ['hamstring'] },
-  Calves:     { front: ['calves'],                   back: ['calves'] },
-  Core:       { front: ['abs', 'obliques'],          back: [] },
-  Abs:        { front: ['abs', 'obliques'],          back: [] },
-  Glutes:     { front: [],                           back: ['gluteal'] },
+  Chest:        { front: ['chest'],                    back: [] },
+  Back:         { front: [],                           back: ['upper-back', 'trapezius'] },
+  'Lower Back': { front: [],                           back: ['lower-back'] },
+  Shoulders:    { front: ['deltoids'],                 back: ['deltoids'] },
+  Biceps:       { front: ['biceps'],                   back: [] },
+  Triceps:      { front: [],                           back: ['triceps'] },
+  Quads:        { front: ['quadriceps'],               back: [] },
+  Quadriceps:   { front: ['quadriceps'],               back: [] },
+  Hamstrings:   { front: [],                           back: ['hamstring'] },
+  Calves:       { front: ['calves'],                   back: ['calves'] },
+  Core:         { front: ['abs', 'obliques'],          back: [] },
+  Abs:          { front: ['abs', 'obliques'],          back: [] },
+  Glutes:       { front: [],                           back: ['gluteal'] },
 };
 
-export default function MuscleDiagram({ muscles, primaryMuscle }: Props) {
+export default function MuscleDiagram({ muscles, primaryMuscle, muscleColors, scale = 0.65 }: Props) {
   const { colors, mode } = useTheme();
 
   const bodyFill   = mode === 'dark' ? '#3a3a3a' : '#d4d4d4';
@@ -32,25 +37,26 @@ export default function MuscleDiagram({ muscles, primaryMuscle }: Props) {
     ? muscles
     : primaryMuscle ? [primaryMuscle] : [];
 
-  const frontSlugs = new Set<Slug>();
-  const backSlugs  = new Set<Slug>();
+  const frontMap = new Map<Slug, string>();
+  const backMap  = new Map<Slug, string>();
+
   for (const m of activeList) {
-    const match = Object.keys(MUSCLE_MAP).find(k => k.toLowerCase() === m.toLowerCase());
-    if (match) {
-      MUSCLE_MAP[match].front.forEach(s => frontSlugs.add(s));
-      MUSCLE_MAP[match].back.forEach(s => backSlugs.add(s));
-    }
+    const key = Object.keys(MUSCLE_MAP).find(k => k.toLowerCase() === m.toLowerCase());
+    if (!key) continue;
+    const highlight = muscleColors?.[m] ?? muscleColors?.[key] ?? colors.accent;
+    MUSCLE_MAP[key].front.forEach(s => frontMap.set(s, highlight));
+    MUSCLE_MAP[key].back.forEach(s  => backMap.set(s, highlight));
   }
 
-  const frontData: ExtendedBodyPart[] = Array.from(frontSlugs).map(slug => ({ slug, color: colors.accent }));
-  const backData:  ExtendedBodyPart[] = Array.from(backSlugs).map(slug  => ({ slug, color: colors.accent }));
+  const frontData: ExtendedBodyPart[] = Array.from(frontMap.entries()).map(([slug, color]) => ({ slug, color }));
+  const backData:  ExtendedBodyPart[] = Array.from(backMap.entries()).map(([slug, color])  => ({ slug, color }));
 
   return (
     <View style={styles.row}>
       <Body
         data={frontData}
         side="front"
-        scale={0.65}
+        scale={scale}
         defaultFill={bodyFill}
         defaultStroke={bodyStroke}
         border={bodyStroke}
@@ -58,7 +64,7 @@ export default function MuscleDiagram({ muscles, primaryMuscle }: Props) {
       <Body
         data={backData}
         side="back"
-        scale={0.65}
+        scale={scale}
         defaultFill={bodyFill}
         defaultStroke={bodyStroke}
         border={bodyStroke}

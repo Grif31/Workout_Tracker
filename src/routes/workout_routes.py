@@ -339,11 +339,19 @@ def add_workout():
         notes = data.get('notes')
         exercises = data.get('exercises', [])
         duration = data.get('duration')
-        
+        date_str = data.get('date')
+
         if not name:
             return jsonify({'message': 'Name required'}),400
-        
-        new_workout = Workout(user_id=current_user_id, name=name, notes=notes)
+
+        workout_date = datetime.now()
+        if date_str:
+            try:
+                workout_date = datetime.strptime(date_str, "%Y-%m-%d")
+            except ValueError:
+                return jsonify({'message': 'Invalid date format, use YYYY-MM-DD'}), 400
+
+        new_workout = Workout(user_id=current_user_id, name=name, notes=notes, date=workout_date, duration=duration)
         db.session.add(new_workout)
         db.session.flush()
         

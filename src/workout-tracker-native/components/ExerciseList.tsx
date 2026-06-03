@@ -27,13 +27,15 @@ type Exercise = {
   exercise_type?: string;
 };
 
-type SelectedExercise = { id: number; name: string; equipment?: string; image_url?: string; exercise_type?: string };
+type SelectedExercise = { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string };
+
+type RecentExercise = { name: string; exercise_template_id: number | null };
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   exercises: Exercise[];
-  recentExerciseNames?: string[];
+  recentExercises?: RecentExercise[];
   onSelect: (exercise: SelectedExercise) => void;
   onAddExercise: (name: string, muscle: string, equipment: string) => void;
   muscleGroups: string[];
@@ -45,7 +47,7 @@ export default function ExerciseListModal({
   visible,
   onClose,
   exercises,
-  recentExerciseNames = [],
+  recentExercises = [],
   onSelect,
   onAddExercise,
   muscleGroups,
@@ -92,15 +94,20 @@ export default function ExerciseListModal({
 
   const recentFiltered = useMemo(() => {
     if (search) return [];
-    return recentExerciseNames
-      .map(name => exercises.find(ex => displayName(ex) === name || ex.name === name))
+    return recentExercises
+      .map(recent =>
+        recent.exercise_template_id != null
+          ? exercises.find(ex => ex.id === recent.exercise_template_id)
+          : exercises.find(ex => ex.name === recent.name && !ex.equipment)
+              ?? exercises.find(ex => ex.name === recent.name)
+      )
       .filter((ex): ex is Exercise => ex !== undefined)
       .filter(ex => {
         if (selectedMuscle === 'Cardio') return ex.exercise_type === 'cardio';
         return selectedMuscle === 'All' || ex.muscle_group?.split(',').map(m => m.trim()).includes(selectedMuscle);
       })
       .slice(0, 5);
-  }, [recentExerciseNames, exercises, search, selectedMuscle]);
+  }, [recentExercises, exercises, search, selectedMuscle]);
 
   const showCardio = selectedMuscle === 'All' || selectedMuscle === 'Cardio';
 
@@ -113,9 +120,26 @@ export default function ExerciseListModal({
           : strengthFiltered;
       return [{ title: 'Results', data: allResults }];
     }
+
+    // "All" — A-Z flat list
+    if (selectedMuscle === 'All') {
+      const sorted = [...strengthFiltered].sort((a, b) => displayName(a).localeCompare(displayName(b)));
+      return [
+        ...(recentFiltered.length > 0 ? [{ title: 'Recent', data: recentFiltered }] : []),
+        ...(sorted.length > 0 ? [{ title: 'All Exercises', data: sorted }] : []),
+        ...(cardioFiltered.length > 0 ? [{ title: 'Cardio', data: cardioFiltered }] : []),
+      ];
+    }
+
+    // Specific muscle chip — primary matches first, then secondary, each group A-Z
+    const primary = strengthFiltered.filter(ex => ex.muscle_group?.split(',')[0]?.trim() === selectedMuscle)
+      .sort((a, b) => displayName(a).localeCompare(displayName(b)));
+    const secondary = strengthFiltered.filter(ex => ex.muscle_group?.split(',')[0]?.trim() !== selectedMuscle)
+      .sort((a, b) => displayName(a).localeCompare(displayName(b)));
     return [
       ...(recentFiltered.length > 0 ? [{ title: 'Recent', data: recentFiltered }] : []),
-      ...(strengthFiltered.length > 0 ? [{ title: 'All Exercises', data: strengthFiltered }] : []),
+      ...(primary.length > 0 ? [{ title: selectedMuscle, data: primary }] : []),
+      ...(secondary.length > 0 ? [{ title: 'Also Works ' + selectedMuscle, data: secondary }] : []),
       ...(showCardio && cardioFiltered.length > 0 ? [{ title: 'Cardio', data: cardioFiltered }] : []),
     ];
   }, [search, strengthFiltered, cardioFiltered, recentFiltered, selectedMuscle, showCardio]);
@@ -137,7 +161,7 @@ export default function ExerciseListModal({
       });
       return;
     }
-    onSelect({ id: ex.id, name: ex.name, equipment: ex.equipment, image_url: ex.image_url, exercise_type: ex.exercise_type });
+    onSelect({ id: ex.id, name: ex.name, muscle_group: ex.muscle_group, equipment: ex.equipment, image_url: ex.image_url, exercise_type: ex.exercise_type });
     setSearch('');
     setSelectedMuscle('All');
   };
@@ -147,7 +171,7 @@ export default function ExerciseListModal({
       .map(id => exercises.find(ex => ex.id === id))
       .filter((ex): ex is Exercise => ex !== undefined);
     toAdd.forEach(ex =>
-      onSelect({ id: ex.id, name: ex.name, equipment: ex.equipment, image_url: ex.image_url, exercise_type: ex.exercise_type })
+      onSelect({ id: ex.id, name: ex.name, muscle_group: ex.muscle_group, equipment: ex.equipment, image_url: ex.image_url, exercise_type: ex.exercise_type })
     );
     setPendingIds(new Set());
     setSearch('');

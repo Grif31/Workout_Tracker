@@ -225,6 +225,28 @@ def compute_percentile(exercise: str, gender: str, bw_ratio: float) -> float | N
     return 0.0
 
 
+def compute_weight_at_percentile(exercise: str, gender: str, bodyweight_lbs: float, target_pct: float) -> float | None:
+    """Given a target percentile, return the 1RM (in lbs) needed to reach it."""
+    standards = STANDARDS.get(gender, {}).get(exercise)
+    if not standards or bodyweight_lbs <= 0:
+        return None
+    points = sorted(standards.items())
+    pcts   = [p for p, _ in points]
+    ratios = [r for _, r in points]
+    if target_pct <= pcts[0]:
+        ratio = ratios[0]
+    elif target_pct >= pcts[-1]:
+        ratio = ratios[-1]
+    else:
+        ratio = ratios[0]
+        for i in range(len(pcts) - 1):
+            if pcts[i] <= target_pct <= pcts[i + 1]:
+                t = (target_pct - pcts[i]) / (pcts[i + 1] - pcts[i])
+                ratio = ratios[i] + t * (ratios[i + 1] - ratios[i])
+                break
+    return round(bodyweight_lbs * ratio, 1)
+
+
 def compute_muscle_group_scores(
     exercise_percentiles: dict[str, float]
 ) -> list[dict]:

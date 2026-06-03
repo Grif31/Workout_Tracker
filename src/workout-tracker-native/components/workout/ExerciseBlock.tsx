@@ -16,6 +16,7 @@ type Props = {
   weightUnit: string;
   setTypeColors: Record<SetType, string>;
   onUpdateNotes: (val: string) => void;
+  autoFocusNotes?: boolean;
   onCycleSetType: (setIdx: number) => void;
   onUpdateSetField: (setIdx: number, field: 'reps' | 'weight', val: string) => void;
   onFocusInput: (setIdx: number, field: 'reps' | 'weight') => void;
@@ -37,6 +38,7 @@ export default function ExerciseBlock({
   weightUnit,
   setTypeColors,
   onUpdateNotes,
+  autoFocusNotes,
   onCycleSetType,
   onUpdateSetField,
   onFocusInput,
@@ -88,11 +90,12 @@ export default function ExerciseBlock({
         {/* Inline exercise notes */}
         {exercise.notes !== undefined && !collapsed && (
           <TextInput
-            style={[styles.exNotesInput, { borderColor: colors.border, color: colors.textPrimary, backgroundColor: colors.background }]}
-            placeholder="Exercise notes..."
+            style={[styles.exNotesInput, { color: colors.textSecondary }]}
+            placeholder="Add notes..."
             placeholderTextColor={colors.placeholder}
             value={exercise.notes}
             onChangeText={onUpdateNotes}
+            autoFocus={autoFocusNotes}
             multiline
           />
         )}
@@ -204,13 +207,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   exIconBtn: { padding: spacing.xs },
 
   exNotesInput: {
-    borderWidth: 1,
-    borderRadius: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    fontStyle: 'italic',
     fontSize: typography.fontSize.sm,
-    marginBottom: spacing.sm,
-    minHeight: 36,
+    paddingHorizontal: 0,
+    paddingVertical: spacing.xs,
+    marginBottom: spacing.xs,
   },
 
   setHeaderRow: {

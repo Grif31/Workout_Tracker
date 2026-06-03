@@ -54,6 +54,7 @@ class Workout(db.Model):
     )
 
     def to_dict(self, include_exercises=False):
+        is_cardio = any((e.exercise_type or 'strength').lower() == 'cardio' for e in self.exercises)
         data = {
             "id": self.id,
             "user_id": self.user_id,
@@ -62,7 +63,13 @@ class Workout(db.Model):
             "notes": self.notes,
             "duration": self.duration,
             "volume": self.volume,
+            "workout_type": "cardio" if is_cardio else "strength",
         }
+        if is_cardio and self.exercises:
+            first_set = self.exercises[0].sets[0] if self.exercises[0].sets else None
+            data['cardio_duration'] = float(first_set.cardio_duration) if first_set and first_set.cardio_duration else None
+            data['distance'] = float(first_set.distance) if first_set and first_set.distance else None
+            data['distance_unit'] = first_set.distance_unit if first_set and first_set.distance_unit else 'km'
         if include_exercises:
             data["exercises"] = [ex.to_dict(include_sets=True) for ex in self.exercises]
         return data
@@ -107,6 +114,7 @@ class Exercise(db.Model):
             "route_polyline": self.route_polyline,
             "notes": self.notes,
             "equipment": tmpl.equipment if tmpl else None,
+            "muscle_group": tmpl.muscle_group if tmpl else None,
         }
         if include_sets:
             data["sets"] = [s.to_dict() for s in self.sets]

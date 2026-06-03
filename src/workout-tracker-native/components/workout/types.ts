@@ -7,10 +7,6 @@ export const RPE_KEY = 'workout_show_rpe';
 export const NUMERIC_ACCESSORY_ID = 'workoutNumericDismiss';
 
 export const RPE_LABELS = [
-  { value: 1,  desc: 'Very easy — barely any effort' },
-  { value: 2,  desc: 'Easy' },
-  { value: 3,  desc: 'Very light effort' },
-  { value: 4,  desc: 'Light effort' },
   { value: 5,  desc: 'Moderate — many reps left' },
   { value: 6,  desc: 'Could do 4–5 more reps' },
   { value: 7,  desc: 'Could do 3–4 more reps' },
@@ -43,6 +39,7 @@ export type ExerciseEntry = {
   name: string;
   exercise_template_id?: number;
   exercise_type?: 'strength' | 'cardio';
+  muscle_group?: string;
   equipment?: string;
   image_url?: string;
   sets: WorkoutSet[];

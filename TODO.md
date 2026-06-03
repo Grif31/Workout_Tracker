@@ -116,8 +116,8 @@ Check off items as you complete them.
 
 - [ ] **GPS cardio tracking — complete setup**
   > `GPSCardioScreen.tsx` exists and the "Track Activity" button is wired on DashboardScreen, but the screen requires a custom dev build (`npx expo run:ios` / `npx expo run:android`). It does **not** work in Expo Go because `react-native-maps` and `expo-location` in background mode are unavailable there.
-  - [ ] Run `npx expo run:ios` / `npx expo run:android` to get GPS + maps working in development
-  - [ ] Verify live location tracking, pace display, and route polyline rendering on a real device
+  - [x] Run `npx expo run:ios` / `npx expo run:android` to get GPS + maps working in development
+  - [x] Verify live location tracking, pace display, and route polyline rendering on a real device
   - [ ] Confirm the saved workout appears correctly in WorkoutDetails with distance, duration, and route map
 
 ---
