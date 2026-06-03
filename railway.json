@@ -1,11 +1,10 @@
 {
   "$schema": "https://railway.app/railway-schema.json",
   "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "pip install -r src/requirements.txt"
+    "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "cd src && flask db upgrade && gunicorn app:app",
+    "startCommand": "flask db upgrade && gunicorn app:app",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
   }
