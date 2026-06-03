@@ -53,9 +53,6 @@ export default function SettingsScreen({ navigation }: Props) {
   const [restTimerSeconds, setRestTimerSeconds] = useState('90');
   const [savingUnit, setSavingUnit]         = useState(false);
   const [exporting, setExporting]           = useState(false);
-  const [gender, setGender]                 = useState<'male' | 'female' | null>((user as any)?.gender ?? null);
-  const [genderModalVisible, setGenderModalVisible] = useState(false);
-
   // Notification settings
   const [remindersOn, setRemindersOn]   = useState(false);
   const [restAlertsOn, setRestAlertsOn] = useState(true);
@@ -124,20 +121,6 @@ export default function SettingsScreen({ navigation }: Props) {
     Alert.alert('Saved', `Default rest timer set to ${secs}s.`);
   };
 
-  const handleGenderChange = async (val: 'male' | 'female' | null) => {
-    setGender(val);
-    setGenderModalVisible(false);
-    updateUser({ gender: val } as any);
-    try {
-      await apiFetch('/api/me', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gender: val }),
-      });
-    } catch {
-      showToast('Failed to save gender preference.');
-    }
-  };
 
   const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
@@ -243,22 +226,6 @@ export default function SettingsScreen({ navigation }: Props) {
           {exporting
             ? <ActivityIndicator size="small" color={colors.textSecondary} />
             : <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />}
-        </TouchableOpacity>
-
-        <View style={styles.divider} />
-
-        {/* Gender */}
-        <TouchableOpacity style={styles.row} onPress={() => setGenderModalVisible(true)}>
-          <View style={styles.rowLeft}>
-            <Ionicons name="person-outline" size={20} color={colors.textSecondary} />
-            <Text style={styles.rowLabel}>Gender</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={styles.rowValue}>
-              {gender === 'male' ? 'Male' : gender === 'female' ? 'Female' : 'Not set'}
-            </Text>
-            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-          </View>
         </TouchableOpacity>
 
         <View style={styles.divider} />
@@ -556,42 +523,7 @@ export default function SettingsScreen({ navigation }: Props) {
       </View>
     </ScrollView>
 
-    {/* Gender Picker Modal */}
-    <Modal
-      visible={genderModalVisible}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setGenderModalVisible(false)}
-    >
-      <TouchableOpacity
-        style={styles.modalOverlay}
-        activeOpacity={1}
-        onPress={() => setGenderModalVisible(false)}
-      >
-        <View style={styles.modalSheet}>
-          <Text style={styles.modalTitle}>Gender</Text>
-          {([
-            { label: 'Male', value: 'male' as const },
-            { label: 'Female', value: 'female' as const },
-            { label: 'Prefer not to say', value: null },
-          ] as const).map(opt => (
-            <TouchableOpacity
-              key={opt.label}
-              style={styles.modalOption}
-              onPress={() => handleGenderChange(opt.value)}
-            >
-              <Text style={[styles.modalOptionText, gender === opt.value && { color: colors.accent, fontWeight: '700' }]}>
-                {opt.label}
-              </Text>
-              {gender === opt.value && (
-                <Ionicons name="checkmark" size={18} color={colors.accent} />
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-      </TouchableOpacity>
-    </Modal>
-    </>
+</>
   );
 }
 

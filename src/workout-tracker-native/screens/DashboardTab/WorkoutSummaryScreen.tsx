@@ -45,7 +45,14 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const [greekRank, setGreekRank] = useState<string | null>(null);
   const [selectedFrame, setSelectedFrame] = useState('Neophyte');
 
-  const filteredPrs = prs.filter(pr => pr.pr_type !== 'estimated_1rm');
+  const PR_TYPE_ORDER: Record<string, number> = { max_weight: 0, max_reps: 1, best_distance: 2, best_time: 3 };
+  const filteredPrs = prs
+    .filter(pr => pr.pr_type !== 'estimated_1rm')
+    .sort((a, b) => {
+      const typeOrder = (PR_TYPE_ORDER[a.pr_type] ?? 9) - (PR_TYPE_ORDER[b.pr_type] ?? 9);
+      if (typeOrder !== 0) return typeOrder;
+      return (b.value ?? 0) - (a.value ?? 0);
+    });
 
   useEffect(() => {
     AsyncStorage.multiGet(['greek_rank_cached', 'profile_frame_rank']).then(pairs => {

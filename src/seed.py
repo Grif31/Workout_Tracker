@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from app import create_app
 from models import db, ExerciseTemplate, ExerciseMuscleMapping
+from utils.strength_standards import SEEDER_STANDARDS_MAP
 
 WGER_BASE = 'https://wger.de'
 
@@ -460,11 +461,13 @@ def main():
             else:
                 print(f'[{i}/{total}] Adding: {name} ({equipment})')
 
+            sk = SEEDER_STANDARDS_MAP.get((name.lower(), equipment.lower() if equipment else None))
             new_ex = ExerciseTemplate(
                 name=name,
                 equipment=equipment,
                 image_url=image_url,
                 exercise_type='strength',
+                standards_key=sk,
             )
             db.session.add(new_ex)
             db.session.flush()

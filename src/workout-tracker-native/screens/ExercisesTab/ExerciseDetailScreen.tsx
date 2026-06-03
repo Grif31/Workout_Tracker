@@ -133,6 +133,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const [cardioHistory, setCardioHistory] = useState<CardioSession[]>([]);
   const [chart1RM, setChart1RM] = useState<ChartPoint[]>([]);
   const [chartMaxWeight, setChartMaxWeight] = useState<ChartPoint[]>([]);
+  const [chartRange, setChartRange] = useState<'1M' | '3M' | '6M' | 'All'>('3M');
   const [wgerDescription, setWgerDescription] = useState<string | null>(null);
   const [wgerLoading, setWgerLoading] = useState(false);
 
@@ -187,22 +188,6 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         };
       });
 
-      const chronological = [...sessions].reverse().slice(-12);
-      const buildPoints = (items: HistorySession[], getter: (s: HistorySession) => number): ChartPoint[] =>
-        items
-          .filter(s => getter(s) > 0)
-          .map(s => {
-            const d = new Date(s.date);
-            const val = parseFloat(convertWeight(getter(s), weightUnit).toFixed(1));
-            return {
-              value: val,
-              label: `${d.getMonth() + 1}/${d.getDate()}`,
-              dataPointText: `${Math.round(val)}`,
-            };
-          });
-
-      setChart1RM(buildPoints(chronological, s => s.best1rm));
-      setChartMaxWeight(buildPoints(chronological, s => s.bestWeight));
       setHistorySessions(sessions);
       setStats({
         estimatedOneRepMax: data.personal_bests?.estimated_1rm ?? 0,
@@ -218,6 +203,29 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
       setLoading(false);
     }
   }, [exerciseId, exerciseName, weightUnit]);
+
+  useEffect(() => {
+    if (historySessions.length === 0) return;
+    const cutoff = chartRange === 'All' ? null : (() => {
+      const d = new Date();
+      const months = chartRange === '1M' ? 1 : chartRange === '3M' ? 3 : 6;
+      d.setMonth(d.getMonth() - months);
+      return d;
+    })();
+    const filtered = [...historySessions]
+      .reverse()
+      .filter(s => !cutoff || new Date(s.date) >= cutoff);
+    const buildPoints = (items: HistorySession[], getter: (s: HistorySession) => number): ChartPoint[] =>
+      items
+        .filter(s => getter(s) > 0)
+        .map(s => {
+          const d = new Date(s.date);
+          const val = parseFloat(convertWeight(getter(s), weightUnit).toFixed(1));
+          return { value: val, label: `${d.getMonth() + 1}/${d.getDate()}`, dataPointText: `${Math.round(val)}` };
+        });
+    setChart1RM(buildPoints(filtered, s => s.best1rm));
+    setChartMaxWeight(buildPoints(filtered, s => s.bestWeight));
+  }, [historySessions, chartRange, weightUnit]);
 
   const fetchWgerDetails = useCallback(async () => {
     if (!exerciseName) return;
@@ -394,6 +402,19 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
             <Text style={styles.statValue}>{stats.workoutCount}</Text>
           </View>
         </View>
+        {(chart1RM.length >= 2 || chartMaxWeight.length >= 2) && (
+          <View style={styles.rangeToggle}>
+            {(['1M', '3M', '6M', 'All'] as const).map(r => (
+              <TouchableOpacity
+                key={r}
+                style={[styles.rangeBtn, chartRange === r && { backgroundColor: colors.accent }]}
+                onPress={() => setChartRange(r)}
+              >
+                <Text style={[styles.rangeBtnText, chartRange === r && { color: '#fff' }]}>{r}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
         {renderChart(chart1RM, `Estimated 1RM over time (${weightUnit})`)}
         {renderChart(chartMaxWeight, `Max weight over time (${weightUnit})`)}
       </View>
@@ -729,6 +750,25 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textSecondary,
     fontSize: typography.fontSize.sm,
     paddingVertical: 2,
+  },
+  rangeToggle: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  rangeBtn: {
+    flex: 1,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  rangeBtnText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.textSecondary,
   },
   chartCard: {
     backgroundColor: colors.surface,

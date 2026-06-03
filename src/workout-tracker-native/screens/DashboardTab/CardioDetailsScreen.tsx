@@ -23,9 +23,33 @@ try { _MapsModule = require('react-native-maps'); } catch {}
 const MapView: React.ComponentType<any> | null = _MapsModule?.default ?? null;
 const Polyline: React.ComponentType<any> | null = _MapsModule?.Polyline ?? null;
 
+const MAP_HEIGHT = Dimensions.get('window').height * 0.65;
+
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'CardioDetails'>;
 
 type Coord = { latitude: number; longitude: number };
+
+interface CardioSet {
+  cardio_duration: string | number | null;
+  distance: string | number | null;
+  distance_unit: 'km' | 'mi' | null;
+  elevation_gain: string | number | null;
+}
+
+interface CardioExercise {
+  name: string;
+  exercise_type: string;
+  route_polyline: string | null;
+  sets: CardioSet[];
+}
+
+interface CardioWorkout {
+  id: number;
+  name: string;
+  date: string | null;
+  notes: string | null;
+  exercises: CardioExercise[];
+}
 
 
 function fmtDuration(minutes: number): string {
@@ -53,7 +77,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { showActionSheetWithOptions } = useActionSheet();
 
-  const [workout, setWorkout] = useState<any>(null);
+  const [workout, setWorkout] = useState<CardioWorkout | null>(null);
   const [loading, setLoading] = useState(true);
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('km');
   const [renameVisible, setRenameVisible] = useState(false);
@@ -129,7 +153,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
         Alert.alert('Error', 'Failed to rename activity');
         return;
       }
-      setWorkout((prev: any) => ({ ...prev, name }));
+      setWorkout(prev => prev ? { ...prev, name } : prev);
       setRenameVisible(false);
     } catch {
       Alert.alert('Error', 'Failed to rename activity');
@@ -181,8 +205,6 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
   const dateStr = workout.date
     ? new Date(workout.date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
     : '';
-
-  const MAP_HEIGHT = Dimensions.get('window').height * 0.65;
 
   return (
     <View style={styles.container}>

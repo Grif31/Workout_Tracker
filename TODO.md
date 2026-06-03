@@ -395,33 +395,33 @@ Check off items as you complete them.
   - [x] Add gender field to `SettingsScreen` (Male / Female / Prefer not to say) — required to see strength score
   - [x] `PATCH /api/me` to save gender
 
-- [ ] **Strength standards data** (`src/utils/strength_standards.py`)
-  - [ ] Percentile lookup tables for all major exercises (male + female), based on bodyweight ratio
-  - [ ] Big 6: Squat, Bench Press, Deadlift, Overhead Press, Barbell Row, Pull-up
-  - [ ] All other tracked lifts: Front Squat, Sumo Deadlift, Romanian Deadlift, Incline Bench, Close Grip Bench, Power Clean, Hip Thrust, Dumbbell Bench, Dumbbell Row, Dips, etc.
-  - [ ] Epley 1RM estimation formula: `weight × (1 + reps / 30)`
-  - [ ] Percentile interpolation function given a bodyweight ratio + gender + exercise
+- [x] **Strength standards data** (`src/utils/strength_standards.py`)
+  - [x] Percentile lookup tables for all major exercises (male + female), based on bodyweight ratio
+  - [x] Big 6: Squat, Bench Press, Deadlift, Overhead Press, Barbell Row, Pull-up
+  - [x] All other tracked lifts: Front Squat, Sumo Deadlift, Romanian Deadlift, Incline Bench, Close Grip Bench, Power Clean, Hip Thrust, Dumbbell Bench, Dumbbell Row, Dips, etc.
+  - [x] Epley 1RM estimation formula: `weight × (1 + reps / 30)`
+  - [x] Percentile interpolation function given a bodyweight ratio + gender + exercise
 
-- [ ] **`StrengthScoreSnapshot` model** (`models.py`)
-  - [ ] Fields: `id`, `user_id` (FK), `score` (float — overall percentile 0–100), `created_at`
-  - [ ] Write a snapshot whenever the score endpoint is called (max once per 24h per user)
-  - [ ] Migration for new table
+- [x] **`StrengthScoreSnapshot` model** (`models.py`)
+  - [x] Fields: `id`, `user_id` (FK), `score` (float — overall percentile 0–100), `created_at`
+  - [x] Write a snapshot whenever the score endpoint is called (max once per 24h per user)
+  - [x] Migration for new table
 
-- [ ] **Backend endpoint** (`src/routes/stats_routes.py`)
-  - [ ] `GET /api/stats/strength-score` — requires gender + bodyweight set; returns per-exercise percentiles + overall
-  - [ ] Overall = Big 6 average (equal weight, skip exercises with no data); supplemental lifts averaged separately; final = 70% Big 6 + 30% supplemental (if no supplemental, 100% Big 6)
-  - [ ] `GET /api/stats/strength-score/history` — returns `[{ date, score }]` from `StrengthScoreSnapshot`
+- [x] **Backend endpoint** (`src/routes/stats_routes.py`)
+  - [x] `GET /api/stats/strength-score` — requires gender + bodyweight set; returns per-exercise percentiles + overall
+  - [x] Overall = Big 6 average (equal weight, skip exercises with no data); supplemental lifts averaged separately; final = 70% Big 6 + 30% supplemental (if no supplemental, 100% Big 6)
+  - [x] `GET /api/stats/strength-score/history` — returns `[{ date, score }]` from `StrengthScoreSnapshot`
 
-- [ ] **`StrengthScoreScreen`** (`screens/TrainingTab/StrengthScoreScreen.tsx`)
-  - [ ] Overall percentile hero at top: "Top X% of lifters"
-  - [ ] Gender gate: if gender not set, show prompt to add gender in Settings
-  - [ ] Big 6 section: each exercise shows name, estimated 1RM, percentile rank, progress bar — "No data" grayed out if not logged
-  - [ ] Supplemental exercises section below (collapsed "More lifts")
-  - [ ] Score-over-time line chart at bottom
-  - [ ] Add to `TrainingStack` + `navigation/types.ts`
+- [x] **`StrengthScoreScreen`** (`screens/TrainingTab/StrengthScoreScreen.tsx`)
+  - [x] Overall percentile hero at top: "Top X% of lifters"
+  - [x] Gender gate: if gender not set, show prompt to add gender in Settings
+  - [x] Big 6 section: each exercise shows name, estimated 1RM, percentile rank, progress bar — "No data" grayed out if not logged
+  - [x] Supplemental exercises section below (collapsed "More lifts")
+  - [x] Score-over-time line chart at bottom
+  - [x] Add to `TrainingStack` + `navigation/types.ts`
 
-- [ ] **Entry point in Training tab**
-  - [ ] Add a Strength Score card in the Training tab progress section that navigates to `StrengthScoreScreen`
+- [x] **Entry point in Training tab**
+  - [x] Add a Strength Score card in the Training tab progress section that navigates to `StrengthScoreScreen`
 
 ---
 

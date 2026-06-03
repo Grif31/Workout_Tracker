@@ -9,7 +9,10 @@ import {
   ScrollView,
   ActivityIndicator,
   Image,
+  Platform,
+  Modal,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
@@ -31,6 +34,9 @@ export default function EditProfileScreen({ navigation }: Props) {
   const [profilePicUri, setProfilePicUri] = useState('');
   const [heightFt, setHeightFt] = useState('');
   const [heightIn, setHeightIn] = useState('');
+  const [gender, setGender] = useState<'male' | 'female' | null>(null);
+  const [birthDate, setBirthDate] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Prefill from user whenever user data loads (handles async auth state)
@@ -43,6 +49,9 @@ export default function EditProfileScreen({ navigation }: Props) {
       setHeightFt(String(Math.floor(user.height / 12)));
       setHeightIn(String(Math.round(user.height % 12)));
     }
+    setGender((user as any).gender ?? null);
+    const bd = (user as any).birth_date;
+    setBirthDate(bd ? new Date(bd) : null);
   }, [user]);
 
   const pickImage = async () => {
@@ -83,6 +92,10 @@ export default function EditProfileScreen({ navigation }: Props) {
         ? parseInt(heightFt || '0') * 12 + parseFloat(heightIn || '0')
         : null;
 
+    const birthDateIso = birthDate
+      ? `${birthDate.getFullYear()}-${String(birthDate.getMonth() + 1).padStart(2, '0')}-${String(birthDate.getDate()).padStart(2, '0')}`
+      : null;
+
     setSaving(true);
     try {
       let resolvedPicUrl = profilePicUri;
@@ -98,6 +111,8 @@ export default function EditProfileScreen({ navigation }: Props) {
           bio,
           profile_pic_url: resolvedPicUrl,
           height: totalInches,
+          gender,
+          birth_date: birthDateIso,
         }),
       });
 
@@ -154,6 +169,67 @@ export default function EditProfileScreen({ navigation }: Props) {
       />
 
       <Text style={styles.sectionHeader}>Body Stats</Text>
+
+      <Text style={styles.label}>Gender</Text>
+      <View style={styles.chipRow}>
+        {(['male', 'female', null] as const).map((val) => {
+          const label = val === 'male' ? 'Male' : val === 'female' ? 'Female' : 'Prefer not to say';
+          const active = gender === val;
+          return (
+            <TouchableOpacity
+              key={label}
+              style={[styles.chip, active && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+              onPress={() => setGender(val)}
+            >
+              <Text style={[styles.chipText, active && { color: '#fff' }]}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <Text style={styles.label}>Birthday</Text>
+      <TouchableOpacity style={styles.dateRow} onPress={() => setShowDatePicker(true)}>
+        <Text style={[styles.dateText, !birthDate && { color: colors.placeholder }]}>
+          {birthDate
+            ? birthDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
+            : 'Select birthday'}
+        </Text>
+      </TouchableOpacity>
+
+      {/* iOS: modal wrapper so the picker doesn't push layout */}
+      {Platform.OS === 'ios' ? (
+        <Modal visible={showDatePicker} transparent animationType="slide">
+          <View style={styles.pickerModal}>
+            <View style={styles.pickerCard}>
+              <TouchableOpacity style={styles.pickerDone} onPress={() => setShowDatePicker(false)}>
+                <Text style={{ color: colors.accent, fontWeight: '600', fontSize: 16 }}>Done</Text>
+              </TouchableOpacity>
+              <DateTimePicker
+                value={birthDate ?? new Date(1990, 0, 1)}
+                mode="date"
+                display="spinner"
+                maximumDate={new Date(new Date().getFullYear() - 14, 11, 31)}
+                minimumDate={new Date(1920, 0, 1)}
+                onChange={(_, date) => { if (date) setBirthDate(date); }}
+              />
+            </View>
+          </View>
+        </Modal>
+      ) : (
+        showDatePicker && (
+          <DateTimePicker
+            value={birthDate ?? new Date(1990, 0, 1)}
+            mode="date"
+            display="default"
+            maximumDate={new Date(new Date().getFullYear() - 14, 11, 31)}
+            minimumDate={new Date(1920, 0, 1)}
+            onChange={(_, date) => {
+              setShowDatePicker(false);
+              if (date) setBirthDate(date);
+            }}
+          />
+        )
+      )}
 
       <Text style={styles.label}>Height</Text>
       <View style={styles.row}>
@@ -249,6 +325,52 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   bioInput: {
     height: 100,
     textAlignVertical: 'top',
+  },
+  dateRow: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: spacing.sm,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  dateText: {
+    fontSize: typography.fontSize.md,
+    color: colors.textPrimary,
+  },
+  pickerModal: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  pickerCard: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: 32,
+  },
+  pickerDone: {
+    alignItems: 'flex-end',
+    padding: spacing.md,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  chip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  chipText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textPrimary,
+    fontWeight: '500',
   },
   row: {
     flexDirection: 'row',

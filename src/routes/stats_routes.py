@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy.orm import selectinload
 from models import db, Workout, Exercise, Set, User, ExerciseTemplate, PersonalRecord, StrengthScoreSnapshot
 
 stats_bp = Blueprint('stats_bp', __name__)
@@ -17,6 +18,7 @@ def exercise_stats():
     query = (
         db.session.query(Exercise, Workout)
         .join(Workout, Exercise.workout_id == Workout.id)
+        .options(selectinload(Exercise.sets))
         .filter(Workout.user_id == user_id)
         .filter(db.func.lower(Exercise.name) == name.lower())
     )
@@ -60,17 +62,18 @@ def exercise_stats():
 
         for s in sets:
             r, w = s['reps'], s['weight']
-            if r and w:
-                one_rm = w * (1 + r / 30)
-                session_1rms.append(one_rm)
+            if r and w and s['set_type'] != 'W':
                 session_volume += r * w
-                all_1rms.append(one_rm)
                 all_weights.append(w)
                 all_reps.append(r)
                 total_sets += 1
                 total_reps += r
                 if best_set is None or w > best_set['weight']:
                     best_set = {'reps': r, 'weight': w}
+                if r <= 15:
+                    one_rm = w * (1 + r / 30)
+                    session_1rms.append(one_rm)
+                    all_1rms.append(one_rm)
 
         history.append({
             'date': workout.date.strftime('%Y-%m-%d'),
@@ -177,26 +180,36 @@ def profile_stats():
     kg_to_lbs = 2.20462 if (user.weight_unit or 'lbs') == 'kg' else 1.0
     weekly_goal = max(1, request.args.get('weekly_goal', 1, type=int))
 
-    workouts = (
-        db.session.query(Workout)
-        .filter(Workout.user_id == user_id)
-        .order_by(Workout.date.asc())
-        .all()
+    total_workouts = Workout.query.filter_by(user_id=user_id).count()
+
+    vol_row = (
+        db.session.query(db.func.sum(Set.reps * Set.weight))
+        .join(Exercise, Set.exercise_id == Exercise.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .filter(
+            Workout.user_id == user_id,
+            Set.reps.isnot(None),
+            Set.weight.isnot(None),
+            Set.set_type != 'W',
+        )
+        .scalar()
     )
+    total_volume = (vol_row or 0.0) * kg_to_lbs
 
-    total_workouts = len(workouts)
-
-    total_volume = 0.0
-    for w in workouts:
-        for ex in w.exercises:
-            for s in ex.sets:
-                if s.reps and s.weight:
-                    total_volume += s.reps * s.weight * kg_to_lbs
+    # Fetch only dates for streak calculations — no exercises or sets needed
+    workout_dates = [
+        row[0].date() if hasattr(row[0], 'date') else row[0]
+        for row in (
+            db.session.query(Workout.date)
+            .filter(Workout.user_id == user_id)
+            .order_by(Workout.date.asc())
+            .all()
+        )
+    ]
 
     # Group workouts by the Monday of their week
     week_counts: dict = defaultdict(int)
-    for w in workouts:
-        w_date = w.date.date() if hasattr(w.date, 'date') else w.date
+    for w_date in workout_dates:
         monday = w_date - timedelta(days=w_date.weekday())
         week_counts[monday] += 1
 
@@ -225,10 +238,7 @@ def profile_stats():
         check -= timedelta(weeks=1)
 
     # ── Daily streak ──────────────────────────────────────────────────────
-    workout_day_set = set(
-        (w.date.date() if hasattr(w.date, 'date') else w.date)
-        for w in workouts
-    )
+    workout_day_set = set(workout_dates)
     daily_current = 0
     check_day = today
     while check_day in workout_day_set:
@@ -250,8 +260,7 @@ def profile_stats():
     import calendar as cal
     monthly_goal = weekly_goal * 4
     month_counts: dict = defaultdict(int)
-    for w in workouts:
-        w_date = w.date.date() if hasattr(w.date, 'date') else w.date
+    for w_date in workout_dates:
         month_counts[(w_date.year, w_date.month)] += 1
 
     monthly_longest = 0
@@ -317,7 +326,7 @@ def dashboard_stats():
                 week['count'] += 1
                 for ex in workout.exercises:
                     for s in ex.sets:
-                        if s.reps and s.weight:
+                        if s.reps and s.weight and s.set_type != 'W':
                             week['volume'] += s.reps * s.weight * kg_to_lbs
                 break
 
@@ -473,11 +482,11 @@ def strength_score():
     from datetime import datetime, timedelta
     from statistics import mean as _mean
     from utils.strength_standards import (
-        STANDARDS, BIG_6, EXERCISE_ALIASES, MUSCLE_GROUP_MAP,
+        STANDARDS, BIG_6, COMPOUND_SECONDARY, MUSCLE_GROUP_MAP,
         percentile_to_strength_rank, greek_rank_from_score, compute_percentile,
         compute_weight_at_percentile, compute_muscle_group_scores,
         compute_consistency_score, compute_dedication_score,
-        compute_volume_score, compute_greek_score,
+        compute_volume_score, compute_greek_score, age_scaling_factor,
     )
 
     user_id = get_jwt_identity()
@@ -494,28 +503,35 @@ def strength_score():
     kg_to_lbs = 2.20462
     bw_lbs = user.bodyweight * kg_to_lbs if (user.weight_unit or 'lbs') == 'kg' else user.bodyweight
 
-    # Build per-exercise percentiles
+    from datetime import date as _date
+    today = _date.today()
+    if user.birth_date:
+        user_age = today.year - user.birth_date.year - (
+            (today.month, today.day) < (user.birth_date.month, user.birth_date.day)
+        )
+    else:
+        user_age = None
+    age_factor = age_scaling_factor(user_age) if user_age else 1.0
+
+    # Build per-exercise percentiles using standards_key — one bulk query, no fuzzy matching
+    valid_keys = set(STANDARDS.get(user.gender, {}).keys())
+
+    # Fetch all templates that have a standards_key relevant to this gender's standards
+    keyed_templates = (
+        db.session.query(ExerciseTemplate.id, ExerciseTemplate.standards_key)
+        .filter(ExerciseTemplate.standards_key.in_(valid_keys))
+        .all()
+    )
+
+    # Group template IDs by standards_key
+    templates_by_key: dict[str, list[int]] = {}
+    for tmpl_id, sk in keyed_templates:
+        templates_by_key.setdefault(sk, []).append(tmpl_id)
+
     exercise_percentiles: dict[str, float] = {}
     exercise_1rms: dict[str, float] = {}
 
-    for exercise_name, aliases in EXERCISE_ALIASES.items():
-        if exercise_name not in STANDARDS.get(user.gender, {}):
-            continue
-
-        # Find matching ExerciseTemplate IDs via ILIKE
-        template_ids = []
-        for alias in aliases:
-            rows = (
-                db.session.query(ExerciseTemplate.id)
-                .filter(db.func.lower(ExerciseTemplate.name).contains(alias.lower()))
-                .all()
-            )
-            template_ids.extend(r[0] for r in rows)
-        template_ids = list(set(template_ids))
-
-        if not template_ids:
-            continue
-
+    for exercise_name, template_ids in templates_by_key.items():
         # True 1RM (reps=1 sets)
         true_1rm_row = (
             db.session.query(db.func.max(Set.weight))
@@ -545,7 +561,7 @@ def strength_score():
 
         best_1rm = max(true_1rm, est_1rm)
 
-        # Pull-up / Dip bodyweight fallback
+        # Pull-up / Dip bodyweight fallback: use Epley on BW reps to stay on same scale
         if best_1rm == 0.0 and exercise_name in ('Pull-up', 'Dips'):
             max_reps_row = (
                 db.session.query(db.func.max(Set.reps))
@@ -556,16 +572,17 @@ def strength_score():
                     Exercise.exercise_template_id.in_(template_ids),
                     Set.weight == 0,
                     Set.reps.isnot(None),
+                    Set.reps <= 15,
                 )
                 .scalar()
             )
             if max_reps_row and max_reps_row > 0:
-                best_1rm = bw_lbs * (max_reps_row / 30)
+                best_1rm = bw_lbs * (1 + max_reps_row / 30)
 
         if best_1rm <= 0:
             continue
 
-        bw_ratio = best_1rm / bw_lbs
+        bw_ratio = (best_1rm / bw_lbs) * age_factor
         pct = compute_percentile(exercise_name, user.gender, bw_ratio)
         if pct is not None:
             exercise_percentiles[exercise_name] = pct
@@ -574,38 +591,49 @@ def strength_score():
     if not exercise_percentiles:
         return jsonify({'missing': 'data'}), 422
 
-    # Overall score
-    big6_scores  = [exercise_percentiles[e] for e in BIG_6 if e in exercise_percentiles]
-    supp_scores  = [v for k, v in exercise_percentiles.items() if k not in BIG_6]
-    big6_avg  = _mean(big6_scores)  if big6_scores  else None
-    supp_avg  = _mean(supp_scores)  if supp_scores  else None
+    # Overall score — Big 6 (70%), compound secondary (20%), isolation (10%).
+    # Missing categories are dropped and weights renormalized automatically.
+    big6_scores     = [exercise_percentiles[e] for e in BIG_6 if e in exercise_percentiles]
+    compound_scores = [v for k, v in exercise_percentiles.items()
+                       if k not in BIG_6 and k in COMPOUND_SECONDARY]
+    isolation_scores = [v for k, v in exercise_percentiles.items()
+                        if k not in BIG_6 and k not in COMPOUND_SECONDARY]
 
-    if big6_avg is not None and supp_avg is not None:
-        overall = 0.7 * big6_avg + 0.3 * supp_avg
-    elif big6_avg is not None:
-        overall = big6_avg
-    else:
-        overall = supp_avg
+    big6_avg     = _mean(big6_scores)     if big6_scores     else None
+    compound_avg = _mean(compound_scores) if compound_scores else None
+    isolation_avg = _mean(isolation_scores) if isolation_scores else None
+
+    parts = []
+    if big6_avg     is not None: parts.append((0.70, big6_avg))
+    if compound_avg is not None: parts.append((0.20, compound_avg))
+    if isolation_avg is not None: parts.append((0.10, isolation_avg))
+
+    total_weight = sum(w for w, _ in parts)
+    overall = sum(w * v for w, v in parts) / total_weight
 
     # Muscle group scores
     muscle_groups = compute_muscle_group_scores(exercise_percentiles)
 
     # Greek rank composite
-    twelve_wks_ago = datetime.now() - timedelta(weeks=12)
-    eight_wks_ago  = datetime.now() - timedelta(weeks=8)
+    twelve_wks_ago  = datetime.now() - timedelta(weeks=12)
+    thirteen_wks_ago = datetime.now() - timedelta(weeks=13)
+    eight_wks_ago   = datetime.now() - timedelta(weeks=8)
 
     workouts_12wk = Workout.query.filter(
         Workout.user_id == user_id,
         Workout.date >= twelve_wks_ago,
     ).all()
+    workouts_13wk_count = Workout.query.filter(
+        Workout.user_id == user_id,
+        Workout.date >= thirteen_wks_ago,
+    ).count()
     workouts_8wk_count = Workout.query.filter(
         Workout.user_id == user_id,
         Workout.date >= eight_wks_ago,
     ).count()
-    total_workouts = Workout.query.filter_by(user_id=user_id).count()
 
     consistency = compute_consistency_score(workouts_12wk)
-    dedication  = compute_dedication_score(total_workouts)
+    dedication  = compute_dedication_score(workouts_13wk_count)
     volume_sig  = compute_volume_score(workouts_8wk_count)
     greek_score = compute_greek_score(consistency, overall, dedication, volume_sig)
     greek_rank  = greek_rank_from_score(greek_score)
@@ -652,9 +680,14 @@ def strength_score():
         [_ex_entry(e) for e in BIG_6],
         key=lambda x: (x['percentile'] is None, -(x['percentile'] or 0)),
     )
+    def _supp_entry(name):
+        entry = _ex_entry(name)
+        entry['category'] = 'compound' if name in COMPOUND_SECONDARY else 'isolation'
+        return entry
+
     supp_list = sorted(
-        [_ex_entry(e) for e in EXERCISE_ALIASES if e not in BIG_6 and e in exercise_percentiles],
-        key=lambda x: -(x['percentile'] or 0),
+        [_supp_entry(e) for e in EXERCISE_ALIASES if e not in BIG_6 and e in exercise_percentiles],
+        key=lambda x: (x['category'] != 'compound', -(x['percentile'] or 0)),
     )
 
     resp: dict = {
@@ -663,7 +696,21 @@ def strength_score():
         'greek_rank': greek_rank,
         'exercises_used': len(exercise_percentiles),
         'muscle_groups_used': len(muscle_groups),
+        'age_adjusted': age_factor > 1.0,
+        'age': user_age,
+        'last_updated': datetime.now().isoformat(),
     }
+
+    history_snaps = (
+        StrengthScoreSnapshot.query
+        .filter_by(user_id=user_id)
+        .order_by(StrengthScoreSnapshot.created_at.asc())
+        .all()
+    )
+    resp['history'] = [
+        {'date': s.created_at.isoformat(), 'score': s.score}
+        for s in history_snaps
+    ]
 
     if is_pro:
         resp['greek_score'] = round(greek_score, 1)

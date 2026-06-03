@@ -83,7 +83,7 @@
 
 ---
 
-## Week 4 — Launch (June 12+)
+## Week 4 — iOS Launch (June 12+)
 
 - [ ] App approved — set release date or release immediately
 - [ ] Share on social media
@@ -92,9 +92,37 @@
 
 ---
 
+## Week 5+ — Android / Play Store
+
+> The app is built for both platforms. Android submission just needs a Google service account connected to EAS.
+
+### Setup (one-time)
+- [ ] Create app in Google Play Console (play.google.com/console) under the same Google account
+- [ ] Create a Google service account with "Release manager" role in Play Console → Setup → API access
+- [ ] Download the service account JSON key
+- [ ] Run `eas credentials --platform android` or add the key in Expo dashboard
+- [ ] Add `android` block to `eas.json` submit config:
+  ```json
+  "android": {
+    "serviceAccountKeyPath": "./path/to/service-account.json",
+    "track": "internal"
+  }
+  ```
+
+### Build & Submit
+- [ ] Run `eas build --profile production --platform android`
+- [ ] Submit: `eas submit --platform android`
+- [ ] Fill out Play Store listing (description, screenshots at 1080×1920, feature graphic 1024×500)
+- [ ] Set content rating, target audience, and data safety form
+- [ ] Release to internal test track first, then promote to production
+
+---
+
 ## Notes
 
 - **JS/TS changes** (screens, components, logic) → hot reload, no new build needed
 - **Native changes** (new packages, app.json plugins) → requires new EAS build
 - **Apple review** typically 1-3 days; rejections add 1-2 days each
-- **Demo account:** create a test user on your Railway backend before submitting
+- **Google Play review** typically 1-3 days for first submission; updates are faster
+- **Demo account:** create a test user on your Railway backend before submitting to either store
+- **Android submission:** `eas.json` currently only has an `ios` submit block — add the `android` block (above) before running `eas submit --platform android`

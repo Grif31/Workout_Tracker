@@ -20,6 +20,7 @@ class User(db.Model):
     reset_otp_expiry  = db.Column(db.DateTime,   nullable=True)
     is_social_only    = db.Column(db.Boolean,    default=False, nullable=False)
     gender            = db.Column(db.String(10),  nullable=True)   # 'male' | 'female' | None
+    birth_date        = db.Column(db.Date,          nullable=True)
     workouts = db.relationship('Workout', backref='user', lazy=True)
 
     def to_dict(self):
@@ -35,6 +36,7 @@ class User(db.Model):
             'weight_unit': self.weight_unit or 'lbs',
             'active_routine_id': self.active_routine_id,
             'gender': self.gender,
+            'birth_date': self.birth_date.isoformat() if self.birth_date else None,
         }
 
 
@@ -209,6 +211,7 @@ class ExerciseTemplate(db.Model):
     equipment = db.Column(db.String(100), nullable=True)
     image_url = db.Column(db.Text, nullable=True)
     exercise_type = db.Column(db.String(10), nullable=False, server_default='strength')
+    standards_key = db.Column(db.String(100), nullable=True, index=True)
 
     __table_args__ = (
         db.UniqueConstraint('name', 'equipment', name='uq_exercise_name_equipment'),

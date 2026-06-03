@@ -54,6 +54,8 @@ def update_user_info():
         user.weight_unit = data["weight_unit"] if data["weight_unit"] in ('lbs', 'kg') else 'lbs'
     if "gender" in data:
         user.gender = data["gender"] if data["gender"] in ('male', 'female') else None
+    if "birth_date" in data:
+        user.birth_date = data["birth_date"]  # marshmallow already parses to date object
 
     db.session.commit()
     return jsonify(user.to_dict()), 200

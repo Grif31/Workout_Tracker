@@ -1,6 +1,99 @@
 from statistics import mean
 
+# Explicit (name_lower, equipment_lower_or_none) → standards_key mapping.
+# Used by seed.py and the migration to assign standards_key to ExerciseTemplate rows.
+# Equipment None means the exercise is equipment-independent (e.g. bodyweight).
+# Equipment-specific entries take precedence over name-only defaults.
+SEEDER_STANDARDS_MAP: dict[tuple[str, str | None], str] = {
+    ('bench press',          'barbell'):      'Bench Press',
+    ('bench press',          'smith machine'):'Bench Press',
+    ('bench press',          'cable'):        'Bench Press',
+    ('bench press',          'dumbbell'):     'Dumbbell Bench Press',
+    ('incline bench press',  'barbell'):      'Incline Bench Press',
+    ('incline bench press',  'smith machine'):'Incline Bench Press',
+    ('incline bench press',  'cable'):        'Incline Bench Press',
+    ('incline bench press',  'dumbbell'):     'Incline Dumbbell Press',
+    ('push up',              'bodyweight'):   'Push-up',
+    ('chest fly',            'dumbbell'):     'Dumbbell Fly',
+    ('chest fly',            'cable'):        'Cable Fly',
+    ('chest fly',            'machine'):      'Chest Fly Machine',
+    ('cable crossover',      'cable'):        'Cable Fly',
+    ('pull up',              'bodyweight'):   'Pull-up',
+    ('lat pulldown',         'cable'):        'Lat Pulldown',
+    ('lat pulldown',         'machine'):      'Lat Pulldown',
+    ('bent over row',        'barbell'):      'Barbell Row',
+    ('bent over row',        'dumbbell'):     'Dumbbell Row',
+    ('bent over row',        'cable'):        'Cable Row',
+    ('seated cable row',     'cable'):        'Cable Row',
+    ('deadlift',             'barbell'):      'Deadlift',
+    ('deadlift',             'smith machine'):'Deadlift',
+    ('t-bar row',            'barbell'):      'T-Bar Row',
+    ('single arm row',       'dumbbell'):     'Dumbbell Row',
+    ('overhead press',       'barbell'):      'Overhead Press',
+    ('overhead press',       'dumbbell'):     'Dumbbell Shoulder Press',
+    ('overhead press',       'smith machine'):'Overhead Press',
+    ('overhead press',       'machine'):      'Shoulder Press Machine',
+    ('lateral raise',        'dumbbell'):     'Dumbbell Lateral Raise',
+    ('lateral raise',        'cable'):        'Dumbbell Lateral Raise',
+    ('lateral raise',        'machine'):      'Dumbbell Lateral Raise',
+    ('bicep curl',           'barbell'):      'Barbell Curl',
+    ('bicep curl',           'ez bar'):       'Barbell Curl',
+    ('bicep curl',           'dumbbell'):     'Dumbbell Curl',
+    ('bicep curl',           'cable'):        'Cable Curl',
+    ('hammer curl',          'dumbbell'):     'Hammer Curl',
+    ('hammer curl',          'cable'):        'Hammer Curl',
+    ('skull crusher',        'barbell'):      'Skull Crushers',
+    ('skull crusher',        'dumbbell'):     'Skull Crushers',
+    ('skull crusher',        'ez bar'):       'Skull Crushers',
+    ('overhead tricep extension', 'dumbbell'):'Dumbbell Tricep Extension',
+    ('close grip bench press', 'barbell'):    'Close Grip Bench',
+    ('close grip bench press', 'smith machine'): 'Close Grip Bench',
+    ('dips',                 'bodyweight'):   'Dips',
+    ('tricep pushdown',      'cable'):        'Tricep Pushdown',
+    ('tricep pushdown',      'machine'):      'Tricep Pushdown',
+    ('squat',                'barbell'):      'Squat',
+    ('squat',                'smith machine'):'Smith Machine Squat',
+    ('leg press',            'machine'):      'Leg Press',
+    ('leg extension',        'machine'):      'Leg Extension',
+    ('hack squat',           'barbell'):      'Hack Squat',
+    ('hack squat',           'machine'):      'Hack Squat Machine',
+    ('hack squat',           'smith machine'):'Hack Squat',
+    ('bulgarian split squat', 'barbell'):     'Bulgarian Split Squat',
+    ('bulgarian split squat', 'dumbbell'):    'Bulgarian Split Squat',
+    ('bulgarian split squat', 'smith machine'):'Bulgarian Split Squat',
+    ('bulgarian split squat', 'bodyweight'):  'Bulgarian Split Squat',
+    ('romanian deadlift',    'barbell'):      'Romanian Deadlift',
+    ('romanian deadlift',    'dumbbell'):     'Romanian Deadlift',
+    ('leg curl',             'machine'):      'Leg Curl',
+    ('leg curl',             'dumbbell'):     'Leg Curl',
+    ('sumo deadlift',        'barbell'):      'Sumo Deadlift',
+    ('good morning',         'barbell'):      'Good Morning',
+    ('calf raise',           'barbell'):      'Calf Raise',
+    ('calf raise',           'dumbbell'):     'Calf Raise',
+    ('calf raise',           'smith machine'):'Calf Raise',
+    ('calf raise',           'machine'):      'Calf Raise',
+    ('calf raise',           'bodyweight'):   'Calf Raise',
+    ('seated calf raise',    'machine'):      'Seated Calf Raise',
+    ('seated calf raise',    'dumbbell'):     'Seated Calf Raise',
+    ('hip thrust',           'barbell'):      'Hip Thrust',
+    ('hip thrust',           'dumbbell'):     'Hip Thrust',
+    ('hip thrust',           'smith machine'):'Hip Thrust',
+    ('hip thrust',           'machine'):      'Hip Thrust',
+    ('power clean',          'barbell'):      'Power Clean',
+}
+
 BIG_6 = ['Squat', 'Bench Press', 'Deadlift', 'Overhead Press', 'Barbell Row', 'Pull-up']
+
+# Non-Big-6 exercises that are still multi-joint and carry meaningful strength signal.
+# Everything in EXERCISE_ALIASES not in BIG_6 and not here is treated as isolation (10% weight).
+COMPOUND_SECONDARY = {
+    'Front Squat', 'Sumo Deadlift', 'Romanian Deadlift', 'Incline Bench Press',
+    'Close Grip Bench', 'Power Clean', 'Hip Thrust', 'Good Morning', 'Hack Squat',
+    'T-Bar Row', 'Bulgarian Split Squat', 'Dumbbell Bench Press', 'Dumbbell Row',
+    'Dumbbell Shoulder Press', 'Incline Dumbbell Press', 'Dips', 'Push-up',
+    'Leg Press', 'Lat Pulldown', 'Cable Row', 'Chest Press Machine',
+    'Shoulder Press Machine', 'Hack Squat Machine', 'Smith Machine Squat',
+}
 
 EXERCISE_ALIASES: dict[str, list[str]] = {
     'Squat':               ['back squat', 'barbell squat', 'low bar squat', 'high bar squat', 'squat'],
@@ -192,19 +285,36 @@ GREEK_RANK_THRESHOLDS = [
 
 
 def percentile_to_strength_rank(percentile: float) -> dict:
-    for low, high, label, subs in STRENGTH_RANK_TIERS:
+    for _, high, label, subs in STRENGTH_RANK_TIERS:
         if percentile < high:
-            for i, (s_low, s_high) in enumerate(subs, start=1):
+            for i, (_, s_high) in enumerate(subs, start=1):
                 if percentile < s_high:
                     return {'label': label, 'tier': i, 'display': f'{label} {i}'}
     return {'label': 'Legend', 'tier': 3, 'display': 'Legend 3'}
 
 
 def greek_rank_from_score(score: float) -> str:
-    for low, high, name in GREEK_RANK_THRESHOLDS:
+    for _, high, name in GREEK_RANK_THRESHOLDS:
         if score < high:
             return name
     return 'Aretē'
+
+
+def age_scaling_factor(age: int) -> float:
+    """Multiplier applied to bw_ratio before percentile lookup to credit older lifters.
+    Based on Masters powerlifting age coefficients (inverse of expected strength decline).
+    Standards are calibrated for the 18–29 peak; older ratios are scaled up accordingly."""
+    if age < 30:
+        return 1.00
+    if age < 40:
+        return 1.03
+    if age < 50:
+        return 1.08
+    if age < 60:
+        return 1.16
+    if age < 70:
+        return 1.26
+    return 1.38
 
 
 def compute_percentile(exercise: str, gender: str, bw_ratio: float) -> float | None:
@@ -215,7 +325,9 @@ def compute_percentile(exercise: str, gender: str, bw_ratio: float) -> float | N
     pcts   = [p for p, _ in points]
     ratios = [r for _, r in points]
     if bw_ratio <= ratios[0]:
-        return max(0.0, bw_ratio / ratios[0] * pcts[0]) if ratios[0] > 0 else 0.0
+        # Extrapolate linearly but floor at 1.0 — 0% is a display artifact, not a meaningful rank
+        raw = (bw_ratio / ratios[0] * pcts[0]) if ratios[0] > 0 else 0.0
+        return max(1.0, raw)
     if bw_ratio >= ratios[-1]:
         return min(99.9, float(pcts[-1]))
     for i in range(len(ratios) - 1):
@@ -289,14 +401,14 @@ def compute_consistency_score(workouts_12wk: list) -> float:
     return min(100.0, raw)
 
 
-def compute_dedication_score(total_workouts: int) -> float:
-    milestones = [(0, 0), (10, 20), (25, 40), (50, 60), (100, 75),
-                  (200, 88), (365, 95), (500, 98), (1000, 100)]
+def compute_dedication_score(workouts_13wk: int) -> float:
+    """Rolling 3-month (13-week) dedication. Decays to 0 when the user stops training."""
+    milestones = [(0, 0), (4, 15), (8, 30), (13, 45), (20, 60), (26, 75), (39, 88), (52, 100)]
     for i in range(len(milestones) - 1):
         lo_cnt, lo_pts = milestones[i]
         hi_cnt, hi_pts = milestones[i + 1]
-        if total_workouts <= hi_cnt:
-            t = (total_workouts - lo_cnt) / (hi_cnt - lo_cnt)
+        if workouts_13wk <= hi_cnt:
+            t = (workouts_13wk - lo_cnt) / (hi_cnt - lo_cnt)
             return lo_pts + t * (hi_pts - lo_pts)
     return 100.0
 
@@ -315,4 +427,7 @@ def compute_volume_score(workouts_8wk: int) -> float:
 
 def compute_greek_score(consistency: float, strength: float,
                         dedication: float, volume: float) -> float:
-    return consistency * 0.40 + strength * 0.30 + dedication * 0.20 + volume * 0.10
+    # Strength (45%) anchors the floor so inactive users drop ~2 ranks max.
+    # Consistency, dedication (rolling 3-month), and volume all decay when
+    # the user stops training, pulling the composite score down naturally.
+    return strength * 0.45 + consistency * 0.30 + dedication * 0.15 + volume * 0.10

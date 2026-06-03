@@ -37,10 +37,6 @@ export default function SocialAuthButtons({
           <Ionicons name="logo-google" size={20} color={AUTH.text} />
           <Text style={styles.btnText}>Google</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.btn} onPress={onFacebook} activeOpacity={0.75}>
-          <Ionicons name="logo-facebook" size={20} color={AUTH.text} />
-          <Text style={styles.btnText}>Facebook</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );

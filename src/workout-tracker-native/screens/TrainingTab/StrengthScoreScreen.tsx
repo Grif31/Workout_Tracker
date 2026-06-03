@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal,
-  ActivityIndicator, Dimensions,
+  ActivityIndicator, Dimensions, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -15,6 +15,15 @@ import { TrainingStackParamsList } from '../../navigation/types';
 import MuscleDiagram from '../../components/MuscleDiagram';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'StrengthScore'>;
+
+function timeAgo(isoStr: string): string {
+  const mins = Math.floor((Date.now() - new Date(isoStr).getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
 
 const STRENGTH_RANK_COLORS: Record<string, string> = {
   Noobie:       '#888888',
@@ -36,6 +45,10 @@ interface ScoreData {
   big6?: Array<{ exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; estimated_1rm?: number | null; thresholds?: { percentile: number; rank: string; weight: number }[]; has_data: boolean }>;
   supplemental?: Array<{ exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; estimated_1rm?: number | null; thresholds?: { percentile: number; rank: string; weight: number }[]; has_data: boolean }>;
   muscle_groups?: Array<{ name: string; score: number; rank: { label: string; tier: number; display: string } }>;
+  age_adjusted?: boolean;
+  age?: number | null;
+  last_updated?: string;
+  history?: HistoryPoint[];
 }
 
 interface HistoryPoint { date: string; score: number }
@@ -63,6 +76,8 @@ export default function StrengthScoreScreen({ navigation }: Props) {
   // Info modal
   const [infoVisible, setInfoVisible] = useState(false);
 
+  const [refreshing, setRefreshing] = useState(false);
+
   const fetchScore = async () => {
     try {
       const res = await apiFetch('/api/stats/strength-score');
@@ -78,23 +93,21 @@ export default function StrengthScoreScreen({ navigation }: Props) {
       if (!res.ok) return;
       const data: ScoreData = await res.json();
       setScoreData(data);
+      if (data.history) setHistory(data.history);
       setMissingFields([]);
       setNoData(false);
     } catch {}
   };
 
-  const fetchHistory = async () => {
-    try {
-      const res = await apiFetch('/api/stats/strength-score/history');
-      if (!res.ok) return;
-      const { history: h } = await res.json();
-      setHistory(h);
-    } catch {}
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchScore();
+    setRefreshing(false);
   };
 
   useFocusEffect(useCallback(() => {
     setLoading(true);
-    Promise.all([fetchScore(), fetchHistory()]).finally(() => setLoading(false));
+    fetchScore().finally(() => setLoading(false));
   }, []));
 
   const rankColor = scoreData ? (STRENGTH_RANK_COLORS[scoreData.overall_rank.label] ?? colors.accent) : colors.accent;
@@ -127,7 +140,10 @@ export default function StrengthScoreScreen({ navigation }: Props) {
           <Text style={styles.emptySubtitle}>Log workouts to see your strength score</Text>
         </View>
       ) : scoreData ? (
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} />}
+        >
 
           {/* Hero card */}
           <View style={[styles.heroCard, { borderColor: rankColor }]}>
@@ -135,17 +151,20 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               <Text style={[styles.rankLabel, { color: rankColor }]}>{scoreData.overall_rank.display}</Text>
             </View>
             <Text style={styles.percentileText}>
-              Top {Math.round(100 - scoreData.overall)}% of lifters
-            </Text>
-            <Text style={styles.percentileSub}>
-              Stronger than {Math.round(scoreData.overall)}% of all lifters
+              Stronger than {Math.round(scoreData.overall)}% of lifters
             </Text>
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: `${scoreData.overall}%` as any, backgroundColor: rankColor }]} />
             </View>
             <Text style={styles.basedOn}>
               Based on {scoreData.exercises_used} exercise{scoreData.exercises_used !== 1 ? 's' : ''} across {scoreData.muscle_groups_used} muscle group{scoreData.muscle_groups_used !== 1 ? 's' : ''}
+              {scoreData.last_updated ? `  ·  Updated ${timeAgo(scoreData.last_updated)}` : ''}
             </Text>
+            {scoreData.age_adjusted && scoreData.age != null && (
+              <View style={styles.ageBadge}>
+                <Text style={styles.ageBadgeText}>Age-adjusted · {scoreData.age}</Text>
+              </View>
+            )}
           </View>
 
           {/* Muscle Group Scores */}
@@ -216,10 +235,16 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                           <Text style={[styles.exName, !ex.has_data && { color: colors.textSecondary }]}>{ex.exercise}</Text>
                           {ex.has_data ? (
                             <View style={styles.mgBarTrack}>
-                              <View style={[styles.mgBarFill, { width: `${ex.percentile ?? 0}%` as any, backgroundColor: exColor }]} />
+                              <View style={[styles.mgBarFill, {
+                                width: `${Math.max(ex.percentile ?? 0, 8)}%` as any,
+                                backgroundColor: exColor,
+                              }]} />
                             </View>
                           ) : (
                             <Text style={styles.noDataText}>No data logged</Text>
+                          )}
+                          {ex.has_data && (ex.percentile ?? 0) < 10 && (
+                            <Text style={[styles.noDataText, { color: exColor }]}>{'< 10th percentile'}</Text>
                           )}
                         </View>
                         {ex.rank ? (
@@ -252,8 +277,14 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                         <View style={{ flex: 1 }}>
                           <Text style={styles.exName}>{ex.exercise}</Text>
                           <View style={styles.mgBarTrack}>
-                            <View style={[styles.mgBarFill, { width: `${ex.percentile ?? 0}%` as any, backgroundColor: exColor }]} />
+                            <View style={[styles.mgBarFill, {
+                              width: `${Math.max(ex.percentile ?? 0, 8)}%` as any,
+                              backgroundColor: exColor,
+                            }]} />
                           </View>
+                          {(ex.percentile ?? 0) < 10 && (
+                            <Text style={[styles.noDataText, { color: exColor }]}>{'< 10th percentile'}</Text>
+                          )}
                         </View>
                         {ex.rank && (
                           <View style={[styles.miniRankBadge, { backgroundColor: exColor + '22', borderColor: exColor }]}>
@@ -332,9 +363,11 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                   {/* Hero stat */}
                   <View style={styles.liftHero}>
                     <Text style={[styles.liftPercentileText, { color: liftColor }]}>
-                      Top {Math.round(100 - pct)}%
+                      {pct < 10 ? '< 10th percentile' : `Stronger than ${Math.round(pct)}%`}
                     </Text>
-                    <Text style={styles.liftPercentileSub}>Stronger than {Math.round(pct)}% of lifters</Text>
+                    {pct >= 10 && (
+                      <Text style={styles.liftPercentileSub}>of all lifters</Text>
+                    )}
                     {selectedLift.rank && (
                       <View style={[styles.miniRankBadge, { backgroundColor: liftColor + '22', borderColor: liftColor, alignSelf: 'center', marginTop: 4 }]}>
                         <Text style={[styles.miniRankText, { color: liftColor }]}>{selectedLift.rank.display}</Text>
@@ -522,12 +555,19 @@ const createStyles = (colors: Colors) =>
     },
     rankLabel: { fontSize: typography.fontSize.md, fontWeight: '700' },
     percentileText: { fontSize: typography.fontSize.xl, fontWeight: '800', color: colors.textPrimary },
-    percentileSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
     progressTrack: {
       height: 6, backgroundColor: colors.border, borderRadius: 3, overflow: 'hidden',
     },
     progressFill: { height: '100%', borderRadius: 3 },
     basedOn: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+    ageBadge: {
+      alignSelf: 'flex-start',
+      backgroundColor: colors.accent + '18',
+      borderRadius: 6,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 3,
+    },
+    ageBadgeText: { fontSize: typography.fontSize.xs, color: colors.accent, fontWeight: '600' },
     sectionTitle: {
       fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary,
       textTransform: 'uppercase', letterSpacing: 0.8, marginTop: spacing.sm,
