@@ -96,6 +96,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mapRef = useRef<any>(null);
   const lastAltRef = useRef<number | null>(null);
+  const skipNextDistanceRef = useRef(false);
 
   const displayDistance = distanceUnit === 'mi' ? distanceKm * 0.621371 : distanceKm;
   const pace = displayDistance > 0 ? elapsedSec / 60 / displayDistance : 0;
@@ -157,9 +158,10 @@ export default function GPSCardioScreen({ navigation }: Props) {
         }
         if (alt !== null) lastAltRef.current = alt;
         setCoords(prev => {
-          if (prev.length > 0) {
+          if (prev.length > 0 && !skipNextDistanceRef.current) {
             setDistanceKm(d => d + haversineKm(prev[prev.length - 1], newCoord));
           }
+          skipNextDistanceRef.current = false;
           const updated = [...prev, newCoord];
           mapRef.current?.animateToRegion({
             latitude: newCoord.latitude,
@@ -184,6 +186,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
   const handleResume = async () => {
     lastAltRef.current = null;
+    skipNextDistanceRef.current = true;
     const sub = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 5 },
       loc => {
@@ -285,7 +288,8 @@ export default function GPSCardioScreen({ navigation }: Props) {
     return (user as any).weight_unit === 'lbs' ? bw / 2.205 : bw;
   }, [user]);
 
-  const estimatedKcal = Math.round(estimateCalories(activity, elapsedSec / 60, weightKg));
+  const speedKmH = elapsedSec > 0 ? distanceKm / (elapsedSec / 3600) : 0;
+  const estimatedKcal = Math.round(estimateCalories(activity, elapsedSec / 60, weightKg, speedKmH));
 
   if (!MAPS_AVAILABLE) {
     return (

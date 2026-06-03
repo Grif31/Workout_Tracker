@@ -31,7 +31,7 @@
 ## Week 2 — TestFlight & Feedback (May 29 – June 4)
 
 ### Day 1: Preview Build
-- [ ] Confirm `EXPO_PUBLIC_API_URL` points to Railway production URL
+- [x] Confirm `EXPO_PUBLIC_API_URL` points to Railway production URL
 - [ ] Run `eas build --profile preview --platform ios`
 - [ ] Submit to TestFlight: `eas submit --platform ios`
 - [ ] Wait for Apple review (~24 hours)

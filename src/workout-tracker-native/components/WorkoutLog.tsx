@@ -412,11 +412,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     const updated = [...exercises];
     updated[exIndex].sets[setIndex].done = nowDone;
     setExercises(updated);
-    if (nowDone && autoStartRest) startRest();
+    if (nowDone && autoStartRest && set.set_type !== 'W') startRest();
     if (nowDone && ex.currentPR && ex.exercise_type !== 'cardio') {
       const w = parseFloat(set.weight);
       const r = parseFloat(set.reps);
-      const e1rm = w * (1 + r / 30);
+      const e1rm = r <= 15 ? w * (1 + r / 30) : 0;
       const pr = ex.currentPR;
       const perWeightEntry = pr.per_weight_reps?.find(e => Math.abs(e.weight - w) < 0.01);
       const isNewRepsPR =
@@ -425,7 +425,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         r > (perWeightEntry?.max_reps ?? 0);
       const isNewPR =
         (!isNaN(w) && pr.max_weight != null && w > pr.max_weight) ||
-        (!isNaN(e1rm) && pr.estimated_1rm != null && e1rm > pr.estimated_1rm) ||
+        (r <= 15 && e1rm > 0 && pr.estimated_1rm != null && e1rm > pr.estimated_1rm) ||
         isNewRepsPR;
       if (isNewPR) {
         showPRBanner(ex.name);
@@ -769,7 +769,20 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         "Some sets haven't been checked off yet. What would you like to do?",
         [
           { text: 'Go Back', style: 'cancel' },
-          { text: 'Save Anyway', onPress: () => doSubmit(exercises) },
+          {
+            text: 'Save Completed Sets',
+            onPress: () => {
+              const doneOnly = exercises
+                .map(ex => ({
+                  ...ex,
+                  sets: (ex.exercise_type || 'strength') === 'cardio'
+                    ? ex.sets
+                    : ex.sets.filter(s => s.done),
+                }))
+                .filter(ex => ex.sets.length > 0);
+              doSubmit(doneOnly);
+            },
+          },
           {
             text: 'Check Off & Save',
             onPress: () => {

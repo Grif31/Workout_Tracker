@@ -768,7 +768,10 @@ def exercise_last_session():
         return jsonify({'sets': []}), 200
 
     exercise, _ = row
-    sorted_sets = sorted(exercise.sets, key=lambda s: s.order if s.order is not None else 0)
+    sorted_sets = sorted(
+        [s for s in exercise.sets if (getattr(s, 'set_type', 'N') or 'N') != 'W'],
+        key=lambda s: s.order if s.order is not None else 0,
+    )
     sets = [
         {'reps': str(s.reps) if s.reps is not None else '', 'weight': str(s.weight) if s.weight is not None else '', 'set_type': getattr(s, 'set_type', 'N') or 'N'}
         for s in sorted_sets

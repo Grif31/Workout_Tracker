@@ -112,7 +112,8 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
     const dur = parseFloat(set?.cardio_duration) || 0;
     const dist = parseFloat(set?.distance) || 0;
     const elev = set?.elevation_gain != null ? parseFloat(set.elevation_gain) : null;
-    const kcal = estimateCalories(ex?.name ?? '', dur, weightKg);
+    const speedKmH = dur > 0 && dist > 0 ? dist / (dur / 60) : 0;
+    const kcal = estimateCalories(ex?.name ?? '', dur, weightKg, speedKmH);
 
     let decodedCoords: Coord[] = [];
     let region = null;

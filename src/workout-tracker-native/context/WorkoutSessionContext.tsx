@@ -1,4 +1,5 @@
-import React, { createContext, useCallback, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { cancelLiveWorkoutNotification } from '../utils/notifications';
 
 export type SessionSet = {
@@ -35,6 +36,8 @@ export type MinimizedSession = {
   workoutId?: number;
 };
 
+const SESSION_KEY = 'minimized_workout_session';
+
 type WorkoutSessionCtx = {
   session: MinimizedSession | null;
   saveSession: (s: MinimizedSession) => void;
@@ -54,11 +57,27 @@ const WorkoutSessionContext = createContext<WorkoutSessionCtx>({
 export function WorkoutSessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<MinimizedSession | null>(null);
   const [isWorkoutOpen, setWorkoutOpen] = useState(false);
-  const saveSession = useCallback((s: MinimizedSession) => setSession(s), []);
+
+  // Restore any session that survived an app kill
+  useEffect(() => {
+    AsyncStorage.getItem(SESSION_KEY).then(raw => {
+      if (raw) {
+        try { setSession(JSON.parse(raw)); } catch {}
+      }
+    });
+  }, []);
+
+  const saveSession = useCallback((s: MinimizedSession) => {
+    setSession(s);
+    AsyncStorage.setItem(SESSION_KEY, JSON.stringify(s));
+  }, []);
+
   const clearSession = useCallback(() => {
     cancelLiveWorkoutNotification();
     setSession(null);
+    AsyncStorage.removeItem(SESSION_KEY);
   }, []);
+
   return (
     <WorkoutSessionContext.Provider value={{ session, saveSession, clearSession, isWorkoutOpen, setWorkoutOpen }}>
       {children}

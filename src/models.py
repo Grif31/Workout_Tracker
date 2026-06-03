@@ -85,6 +85,8 @@ class Workout(db.Model):
             if (ex.exercise_type or 'strength').lower() == 'cardio':
                 continue
             for s in ex.sets:
+                if (s.set_type or 'N') == 'W':
+                    continue
                 w = s.weight or 0.0
                 if weight_unit == 'kg':
                     w *= kg_to_lbs
