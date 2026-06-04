@@ -14,6 +14,7 @@
     },
     "preview": {
       "distribution": "internal",
+      "autoIncrement": true,
       "node": "20.18.0",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://workouttracker-production-601f.up.railway.app"
