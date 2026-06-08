@@ -17,9 +17,9 @@
 - [x] Test all notifications (rest timer, workout reminders)
 - [x] Test workout log → save → summary → details flow
 - [x] Test AI workout generation
-- [ ] Test profile picture upload
-- [ ] Test data export (CSV)
-- [ ] Fix any bugs found
+- [x] Test profile picture upload
+- [x] Test data export (CSV)
+- [x] Fix any bugs found
 
 ### Day 6-7: Finish Remaining Features
 - [x] TrainingScreen — Strength Score entry card
@@ -32,9 +32,9 @@
 
 ### Day 1: Preview Build
 - [x] Confirm `EXPO_PUBLIC_API_URL` points to Railway production URL
-- [ ] Run `eas build --profile preview --platform ios`
-- [ ] Submit to TestFlight: `eas submit --platform ios`
-- [ ] Wait for Apple review (~24 hours)
+- [x] Run `eas build --profile preview --platform ios`
+- [x] Submit to TestFlight: `eas submit --platform ios`
+- [x] Wait for Apple review (~24 hours)
 
 ### Day 2-3: Send to Testers
 - [ ] Add testers in App Store Connect → TestFlight → External Testing

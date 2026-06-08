@@ -903,7 +903,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           />
         )}
         ListFooterComponent={(
-          <View style={styles.formSection}>
+          <View style={[styles.formSection, exercises.length === 0 && { marginTop: spacing.xl }]}>
             <TouchableOpacity style={styles.addExBtn} onPress={() => setExerciseModalVisible(true)}>
               <Ionicons name="add" size={18} color="#fff" />
               <Text style={styles.addExBtnText}>Add Exercise</Text>

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert,
   ActivityIndicator, ScrollView, PanResponder, Modal, RefreshControl,
@@ -14,6 +14,7 @@ import { toDisplayVolume, WeightUnit } from 'utils/units';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from '../../utils/api';
+import { appCache } from '../../utils/appCache';
 
 const GREETINGS = [
   'Ready to workout', 'Welcome', 'Ready to Train', "Let's Workout",
@@ -203,10 +204,36 @@ export default function DashboardScreen({ navigation }: Props) {
   const [streakModalVisible, setStreakModalVisible] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
+  const hasLoaded = useRef(false);
+
+  // Populate from preload cache instantly on mount
+  useEffect(() => {
+    const rw = appCache.get<Workout[]>('recent_workouts');
+    const wd = appCache.get<{ dates: string[] }>('workout_dates');
+    const ps = appCache.get<any>('profile_stats');
+    const me = appCache.get<any>('me');
+    if (rw) setWorkouts(rw);
+    if (wd) setAllWorkoutDates(wd.dates ?? []);
+    if (ps) {
+      setWeeklyStreak(ps.current_streak ?? 0);
+      setMonthlyStreak(ps.current_monthly_streak ?? 0);
+      setDailyStreak(ps.current_daily_streak ?? 0);
+      setLongestDailyStreak(ps.longest_daily_streak ?? 0);
+    }
+    if (me?.active_routine_id) fetchActiveRoutine(me.active_routine_id);
+    if (rw || me) {
+      setLoading(false);
+      hasLoaded.current = true;
+    }
+  }, []);
 
   useFocusEffect(useCallback(() => {
-    setLoading(true);
-    Promise.all([fetchUser(), fetchRecentWorkouts(), fetchAllWorkoutDates(), fetchStreak()]).finally(() => setLoading(false));
+    const firstLoad = !hasLoaded.current;
+    if (firstLoad) setLoading(true);
+    Promise.all([fetchUser(), fetchRecentWorkouts(), fetchAllWorkoutDates(), fetchStreak()]).finally(() => {
+      setLoading(false);
+      hasLoaded.current = true;
+    });
   }, []));
 
   const handleRefresh = () => {

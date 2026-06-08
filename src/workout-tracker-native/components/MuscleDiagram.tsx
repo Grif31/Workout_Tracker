@@ -18,6 +18,7 @@ const MUSCLE_MAP: Record<string, { front: Slug[]; back: Slug[] }> = {
   Shoulders:    { front: ['deltoids'],                 back: ['deltoids'] },
   Biceps:       { front: ['biceps'],                   back: [] },
   Triceps:      { front: [],                           back: ['triceps'] },
+  Forearms:     { front: ['forearm'],                  back: ['forearm'] },
   Quads:        { front: ['quadriceps'],               back: [] },
   Quadriceps:   { front: ['quadriceps'],               back: [] },
   Hamstrings:   { front: [],                           back: ['hamstring'] },

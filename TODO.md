@@ -453,12 +453,79 @@ Check off items as you complete them.
 
 ---
 
-## 👥 10. Social & Followers
+## 💎 10. Premium Analytics
+> Advanced stats gated behind Aretē Premium. Free users see locked placeholders. All features require the muscle-volume endpoint (`GET /api/stats/muscle-volume`) already built.
+
+### Muscle Volume & Recovery
+
+- [x] **Weekly muscle volume card** (free tier)
+  - [x] Sets per muscle group this week, sorted by most sets
+  - [x] Simple proportional bars, last-trained date per muscle
+  - [x] "Not trained this week" divider with untrained muscles below
+  - [x] ⓘ info tooltip explaining working sets
+
+- [x] **MEV / MAV / MRV zone bars** (premium)
+  - [x] Segmented zone bar per muscle showing where user sits relative to Minimum Effective Volume → Maximum Adaptive Volume → Maximum Recoverable Volume
+  - [x] Color-coded: gray = below MEV, accent = on track, orange = high, red = overreaching
+  - [x] Zone label (Below target / On track / High / Overreaching) per muscle
+  - [x] Free teaser row → Paywall
+
+- [ ] **Muscle training frequency** (premium)
+  > 2×/week per muscle group is optimal for hypertrophy — 1× produces roughly half the gains.
+  - [ ] Add `session_count` per muscle group to `GET /api/stats/muscle-volume` (`db.func.count(db.distinct(Workout.id))`)
+  - [ ] Show sessions column alongside set count in muscle volume card
+  - [ ] Highlight orange if frequency = 1 session this week, green if ≥ 2
+
+- [ ] **4-week muscle volume trend** (premium)
+  > Consistent volume progression over weeks is the primary hypertrophy driver.
+  - [ ] Extend `GET /api/stats/muscle-volume` with `?history=4w` param — return 4-element array of weekly set counts per muscle
+  - [ ] Show trend arrow next to each muscle row: ↑ trending up / → stable / ↓ trending down
+  - [ ] Arrow color: green for up, textSecondary for stable, orange for down
+
+- [ ] **Weekly volume vs last week — fatigue monitor** (premium)
+  > Volume spikes >15–20% week-over-week are a leading cause of overuse injury.
+  - [ ] `GET /api/stats/muscle-volume` already returns `last_week_total` — use it
+  - [ ] Show a banner below the muscle card: green "On track ↑8%", yellow "High jump ↑24% — consider recovery", red "⚠️ Potential detraining — 40% of last week"
+  - [ ] Thresholds: >20% increase = yellow, >35% increase = red, <40% of last week = red
+
+---
+
+### Training Split & Balance
+
+- [ ] **Push / Pull / Legs split balance** (premium)
+  > Pull:Push ratio should be ≥ 1:1, ideally 1.5:1 to prevent shoulder imbalances.
+  - [ ] Pure frontend calculation — group `muscle_sets` from existing endpoint into:
+    - Push: Chest + Shoulders + Triceps
+    - Pull: Back + Biceps + Forearms
+    - Legs: Quads + Hamstrings + Glutes + Calves
+    - Core: Core
+  - [ ] Horizontal stacked bar showing set distribution across groups
+  - [ ] Pull:Push ratio badge — color green if ≥ 1:1, yellow if 0.7–1:1, red if < 0.7:1
+
+---
+
+### Strength Progression
+
+- [ ] **PR velocity — strength gain rate** (premium)
+  > Beginners gain 5–10%/month, intermediate 2–5%, advanced <2%. A plateau (<1% over 8 weeks) signals need for program change or deload.
+  - [ ] Backend: add `GET /api/stats/pr-velocity` — for each exercise with ≥ 2 PR snapshots over 12 weeks, compute slope of estimated_1rm over time (lbs/month) using linear regression on `PersonalRecord` or existing `exercise_stats` history
+  - [ ] Frontend: show "Progress Rate" stat on `ExerciseDetailScreen` stats tab (+X lbs/month)
+  - [ ] Color: green if gaining, yellow if plateau (<1%/month for 8 weeks), gray if insufficient data
+
+- [ ] **Workout density — volume per minute** (premium)
+  > Increasing density (same volume, shorter time) is a form of progressive overload and a proxy for training efficiency.
+  - [ ] Backend: extend `GET /api/stats/progress` buckets to include `density` field (total volume ÷ total duration in minutes; skip workouts with no duration)
+  - [ ] Frontend: add "Density" as a 4th metric option in the chart metric selector (alongside Volume / Sets / Workouts)
+  - [ ] Y-axis label: "lbs/min" or "kg/min" per user preference
+
+---
+
+## 👥 11. Social & Followers
 > Follower system, leaderboards, and activity feed. Build in this order — each subsection depends on the one above.
 >
 > **Design choice: followers (asymmetric), not friends (mutual).** You follow someone with one tap — no request/accept flow. Privacy is handled by `profile_visibility` per user. Feed and leaderboard show people you follow.
 
-### 9a. Follow System — Backend
+### 10a. Follow System — Backend
 > The data layer everything else depends on. A `Follow` row is directional: `follower_id` follows `following_id`. No status field needed — following is immediate.
 
 - [ ] **`Follow` model** (`models.py`)
@@ -477,7 +544,7 @@ Check off items as you complete them.
 
 - [ ] **Register blueprint** in `app.py`
 
-### 9b. Follow System — Frontend
+### 10b. Follow System — Frontend
 > Three screens wired into the Profile tab stack.
 
 - [ ] **`FollowingScreen`** (`screens/ProfileTab/FollowingScreen.tsx`)
@@ -501,7 +568,7 @@ Check off items as you complete them.
 
 - [ ] **Navigation types** — add all three screens to `ProfileStackParamsList` in `navigation/types.ts`
 
-### 9c. Leaderboards — Backend
+### 10c. Leaderboards — Backend
 > Aggregate stats across users the current user follows. Runs weekly queries — keep them efficient.
 
 - [ ] **Leaderboard route** (`routes/social_routes.py`)
@@ -512,7 +579,7 @@ Check off items as you complete them.
   - [ ] Only include followed users whose `profile_visibility` is not `private` (see §9d)
   - [ ] Cap at 50 results to avoid query timeouts
 
-### 9d. Privacy Controls — Backend + Frontend
+### 10d. Privacy Controls — Backend + Frontend
 > Required before any social data is visible. Default to followers-only, never fully public.
 
 - [ ] **`profile_visibility` column** on `User` model: `'followers'` (default) | `'public'` | `'private'`
@@ -525,7 +592,7 @@ Check off items as you complete them.
   - [ ] `PATCH /api/me` with `{ profile_visibility }` on change (already accepted by the me endpoint)
   - [ ] Explain each option inline (e.g. "Private — only you can see your stats")
 
-### 9e. Leaderboard Screen — Frontend
+### 10e. Leaderboard Screen — Frontend
 > The main social surface. Lives in a new Social tab or as a tab within the Profile screen.
 
 - [ ] **`LeaderboardScreen`** (`screens/SocialTab/LeaderboardScreen.tsx`) — top tab inside the Social tab, alongside `FeedScreen`
@@ -537,7 +604,7 @@ Check off items as you complete them.
 
 - [ ] **Push notification** (optional, post-launch): "You've been overtaken on the leaderboard!" via Expo push (reuse existing `push_service.py`)
 
-### 9f. Workout Posts & Activity Feed — Backend
+### 10f. Workout Posts & Activity Feed — Backend
 > Users can choose to share a completed workout with their followers. Sharing is always opt-in — workouts are private by default.
 
 - [ ] **`WorkoutPost` model** (`models.py`)
@@ -558,7 +625,7 @@ Check off items as you complete them.
   - [ ] `POST /api/posts/<id>/react` — toggle like (create if absent, delete if present)
   - [ ] Include `reaction_count` and `user_has_reacted` in feed response
 
-### 9g. Workout Posts & Activity Feed — Frontend
+### 10g. Workout Posts & Activity Feed — Frontend
 
 - [ ] **Share prompt on `WorkoutSummaryScreen`**
   - [ ] Add "Share with Followers" button below "View Full Details"

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Animated } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
@@ -49,11 +49,19 @@ export default function SetRow({
 
   return (
     <Swipeable
-      renderRightActions={() => (
-        <TouchableOpacity style={styles.swipeDelete} onPress={onDelete}>
-          <Text style={styles.swipeDeleteText}>Delete</Text>
-        </TouchableOpacity>
-      )}
+      renderRightActions={(progress) => {
+        const translateX = progress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [80, 0],
+        });
+        return (
+          <Animated.View style={{ transform: [{ translateX }] }}>
+            <TouchableOpacity style={styles.swipeDelete} onPress={onDelete}>
+              <Text style={styles.swipeDeleteText}>Delete</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        );
+      }}
     >
       <View style={[styles.setRow, isDone && styles.setRowDone]}>
         <TouchableOpacity
@@ -112,7 +120,7 @@ export default function SetRow({
           <Ionicons
             name={isDone ? 'checkmark-circle' : 'ellipse-outline'}
             size={30}
-            color={isDone ? colors.save : colors.textSecondary}
+            color={isDone ? '#34C759' : colors.textSecondary}
           />
         </TouchableOpacity>
       </View>

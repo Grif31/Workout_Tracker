@@ -33,10 +33,6 @@ export default function SocialAuthButtons({
             <Text style={styles.btnText}>Apple</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity style={styles.btn} onPress={onGoogle} activeOpacity={0.75}>
-          <Ionicons name="logo-google" size={20} color={AUTH.text} />
-          <Text style={styles.btnText}>Google</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );

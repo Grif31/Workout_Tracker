@@ -28,6 +28,7 @@ import { spacing } from 'theme/spacing';
 import type { PR } from './PersonalRecordsScreen';
 import { toDisplayVolume, type WeightUnit } from 'utils/units';
 import { apiFetch, resolveMediaUrl } from '../../utils/api';
+import { appCache } from '../../utils/appCache';
 import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
 const PR_PINS_KEY = '@pr_pins';
 const DEFAULT_PIN_COUNT = 3;
@@ -58,7 +59,7 @@ type ProfileStats = {
 type ExerciseOption = { exercise_template_id: number; exercise_name: string };
 
 export default function ProfileScreen({ navigation }: Props) {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const unit = user?.weight_unit || 'lbs';
@@ -92,6 +93,45 @@ export default function ProfileScreen({ navigation }: Props) {
 
   const displayName = user?.name?.trim() || user?.username;
   const weightUnit: WeightUnit = user?.weight_unit === 'kg' ? 'kg' : 'lbs';
+
+  const avatarSource = useMemo(() =>
+    user?.profile_pic_url
+      ? { uri: resolveMediaUrl(user.profile_pic_url) }
+      : require('../../assets/profile-placeholder.png'),
+  [user?.profile_pic_url]);
+
+  // Populate from preload cache instantly on mount
+  useEffect(() => {
+    const pw = appCache.get<{ workouts: Workout[]; total: number; has_more: boolean }>('profile_workouts');
+    const ps = appCache.get<ProfileStats>('profile_stats');
+    const cachedPrs = appCache.get<PR[]>('prs');
+    const score = appCache.get<any>('strength_score');
+    if (pw) {
+      setWorkouts(pw.workouts ?? []);
+      setTotalWorkouts(pw.total);
+      setHasMore(pw.has_more);
+    }
+    if (ps) setStats(ps);
+    if (cachedPrs) {
+      setPrs(cachedPrs);
+      AsyncStorage.getItem(PR_PINS_KEY).then(raw => {
+        if (!raw) {
+          const top = cachedPrs
+            .filter(p => p.pr_type === 'max_weight')
+            .sort((a, b) => b.value - a.value)
+            .slice(0, DEFAULT_PIN_COUNT)
+            .map(p => p.exercise_template_id);
+          const filled: (number | null)[] = [null, null, null];
+          top.forEach((id, i) => { filled[i] = id; });
+          savePins(filled);
+        }
+      });
+    }
+    if (score?.greek_rank) {
+      setGreekRank(score.greek_rank);
+      AsyncStorage.setItem('greek_rank_cached', score.greek_rank);
+    }
+  }, []);
 
   // Load saved pins + profile frame + cached Greek rank from AsyncStorage once on mount
   useEffect(() => {
@@ -317,44 +357,51 @@ export default function ProfileScreen({ navigation }: Props) {
     );
   };
 
-  // Rendered above the workout list via ListHeaderComponent
-  const renderHeader = () => (
+  // Memoized as an element (not a function ref) so FlatList never remounts it
+  // and the Image never reloads between tab visits.
+  const listHeader = useMemo(() => (
     <View>
       <View style={styles.titleRow}>
-        <Text style={[styles.title, typography.title]}>Profile</Text>
+        <View style={{ width: 24 }} />
+        <View style={{ alignItems: 'center' }}>
+          {greekRank ? (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('GreekRank')}
+              style={[styles.rankBadgePill, { backgroundColor: (GREEK_RANK_COLORS[greekRank] ?? '#888') + '22', borderColor: GREEK_RANK_COLORS[greekRank] ?? '#888' }]}
+            >
+              <Text style={[styles.rankBadgeText, { color: GREEK_RANK_COLORS[greekRank] ?? '#888' }]}>
+                {greekRank}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={[styles.title, typography.title]}>Profile</Text>
+          )}
+        </View>
         <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
           <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
-      {loading ? (
-        <ActivityIndicator size="large" color={colors.textPrimary} />
-      ) : (
-        <TouchableOpacity
-          style={[styles.card, { backgroundColor: colors.surface, padding: spacing.md }]}
-          onPress={() => navigation.navigate('EditProfile')}
-        >
-          <View style={styles.avatarContainer}>
-            <Image
-              source={
-                user?.profile_pic_url
-                  ? { uri: resolveMediaUrl(user.profile_pic_url) }
-                  : require('../../assets/profile-placeholder.png')
-              }
-              style={styles.image}
-            />
-            <ProfileAvatarFrame rankName={selectedFrame} size={72} avatarSize={64} />
-          </View>
-          <View style={styles.userInfo}>
-            <Text style={[styles.value, { color: colors.textPrimary }]}>
-              {displayName || '—'}
-            </Text>
-            {!!user?.bio && (
-              <Text style={styles.workoutCount} numberOfLines={2}>{user.bio}</Text>
-            )}
-          </View>
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity
+        style={[styles.card, { backgroundColor: colors.surface, padding: spacing.md }]}
+        onPress={() => navigation.navigate('EditProfile')}
+      >
+        <View style={styles.avatarContainer}>
+          <Image
+            source={avatarSource}
+            style={styles.image}
+          />
+          <ProfileAvatarFrame rankName={selectedFrame} size={72} avatarSize={64} />
+        </View>
+        <View style={styles.userInfo}>
+          <Text style={[styles.value, { color: colors.textPrimary }]}>
+            {displayName || '—'}
+          </Text>
+          {!!user?.bio && (
+            <Text style={styles.workoutCount} numberOfLines={2}>{user.bio}</Text>
+          )}
+        </View>
+      </TouchableOpacity>
 
       {/* Stats boxes */}
       <View style={styles.statsRow}>
@@ -408,7 +455,7 @@ export default function ProfileScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
     </View>
-  );
+  ), [styles, avatarSource, selectedFrame, displayName, user, stats, greekRank, prs, pins, weightUnit, unit, colors]);
 
   return (
     <>
@@ -416,7 +463,7 @@ export default function ProfileScreen({ navigation }: Props) {
         style={styles.container}
         data={workouts}
         keyExtractor={(item) => item.id.toString()}
-        ListHeaderComponent={renderHeader}
+        ListHeaderComponent={listHeader}
         ListEmptyComponent={
           <Text style={styles.emptyText}>No workouts logged yet</Text>
         }

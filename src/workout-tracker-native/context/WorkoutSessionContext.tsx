@@ -61,9 +61,14 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
   // Restore any session that survived an app kill
   useEffect(() => {
     AsyncStorage.getItem(SESSION_KEY).then(raw => {
-      if (raw) {
-        try { setSession(JSON.parse(raw)); } catch {}
-      }
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        // JSON serialisation turns Dates into strings — convert them back
+        parsed.selectedDate = new Date(parsed.selectedDate);
+        parsed.startedAt    = new Date(parsed.startedAt);
+        setSession(parsed);
+      } catch {}
     });
   }, []);
 

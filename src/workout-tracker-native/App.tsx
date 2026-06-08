@@ -11,6 +11,7 @@ import { showToast } from './utils/toast';
 import  RootNav  from '../workout-tracker-native/navigation/RootNav'
 import { AuthProvider } from 'context/AuthContext';
 import { ThemeProvider } from 'context/ThemeContext';
+import { PurchaseProvider } from 'context/PurchaseContext';
 import { ActionSheetProvider } from '@expo/react-native-action-sheet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastBanner } from './components/ToastBanner';
@@ -39,14 +40,38 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     setUpLiveWorkoutCategory();
-    const sub = Notifications.addNotificationResponseReceivedListener(response => {
+
+    const navigateToWorkoutLog = () => {
+      (navigationRef as any).navigate('DashboardTab', { screen: 'WorkoutLog', params: {} });
+    };
+
+    const isWorkoutNotification = (response: Notifications.NotificationResponse) => {
       const data = response.notification.request.content.data as any;
-      const isLiveWorkout = data?.type === 'live_workout';
-      const isResumeAction = response.actionIdentifier === 'resume_workout';
-      if ((isLiveWorkout || isResumeAction) && navigationRef.isReady()) {
-        (navigationRef as any).navigate('DashboardTab', { screen: 'WorkoutLog', params: {} });
+      return data?.type === 'live_workout' || response.actionIdentifier === 'resume_workout';
+    };
+
+    // Warm launch: app was in background and user tapped the notification
+    const sub = Notifications.addNotificationResponseReceivedListener(response => {
+      if (isWorkoutNotification(response) && navigationRef.isReady()) {
+        navigateToWorkoutLog();
       }
     });
+
+    // Cold launch: app was killed — getLastNotificationResponseAsync retrieves
+    // the tapped notification after the app has fully mounted and nav is ready.
+    // The 600ms delay gives AsyncStorage time to restore the session first.
+    Notifications.getLastNotificationResponseAsync().then(response => {
+      if (!response || !isWorkoutNotification(response)) return;
+      const attempt = () => {
+        if (navigationRef.isReady()) {
+          navigateToWorkoutLog();
+        } else {
+          setTimeout(attempt, 100);
+        }
+      };
+      setTimeout(attempt, 600);
+    });
+
     return () => sub.remove();
   }, []);
 
@@ -57,10 +82,12 @@ export default function App(): JSX.Element {
           <ActionSheetProvider>
             <GestureHandlerRootView style={{ flex: 1 }}>
               <AuthProvider>
-                <View style={{ flex: 1 }}>
-                  <RootNav />
-                  <ToastBanner />
-                </View>
+                <PurchaseProvider>
+                  <View style={{ flex: 1 }}>
+                    <RootNav />
+                    <ToastBanner />
+                  </View>
+                </PurchaseProvider>
               </AuthProvider>
             </GestureHandlerRootView>
           </ActionSheetProvider>

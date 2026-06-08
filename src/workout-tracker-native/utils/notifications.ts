@@ -52,7 +52,8 @@ export async function scheduleRestTimerAlert(seconds: number): Promise<void> {
       title: 'Rest over — time to lift! 💪',
       body: 'Your rest period has ended.',
       sound: true,
-    },
+      interruptionLevel: 'timeSensitive',
+    } as any,
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
       seconds,

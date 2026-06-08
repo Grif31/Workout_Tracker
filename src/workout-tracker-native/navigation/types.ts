@@ -88,3 +88,8 @@ export type OnboardingStackParamsList = {
     Onboarding:         undefined;
     OnboardingTutorial: undefined;
 }
+
+export type RootStackParamsList = {
+    AppTabs: undefined;
+    Paywall: { source?: string };
+}

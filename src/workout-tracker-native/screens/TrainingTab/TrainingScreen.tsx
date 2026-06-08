@@ -10,10 +10,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import { BarChart } from 'react-native-gifted-charts';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
+import { usePurchase } from '../../context/PurchaseContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { WeightUnit } from '../../utils/units';
 import { apiFetch } from '../../utils/api';
+import { appCache } from '../../utils/appCache';
 import { TrainingStackParamsList } from '../../navigation/types';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { radius } from '../../theme/spacing';
@@ -25,6 +27,35 @@ type ProgressBucket = { label: string; volume: number; sets: number; count: numb
 type ChartRange = '30d' | '6m' | '1y';
 type ChartMetric = 'volume' | 'sets' | 'workouts';
 type Exercise = { id: number; name: string; muscle_group: string; equipment?: string };
+type MuscleVolumeData = {
+  muscle_sets: Record<string, number>;
+  last_trained: Record<string, string>;
+  total_sets: number;
+  last_week_total: number;
+  week_start: string;
+};
+
+const MUSCLE_STANDARDS: Record<string, { mev: number; mav: number; mrv: number }> = {
+  Chest:      { mev: 8,  mav: 16, mrv: 20 },
+  Back:       { mev: 10, mav: 22, mrv: 25 },
+  Shoulders:  { mev: 8,  mav: 22, mrv: 26 },
+  Biceps:     { mev: 8,  mav: 20, mrv: 26 },
+  Triceps:    { mev: 6,  mav: 14, mrv: 20 },
+  Forearms:   { mev: 4,  mav: 14, mrv: 20 },
+  Quads:      { mev: 8,  mav: 18, mrv: 20 },
+  Hamstrings: { mev: 6,  mav: 16, mrv: 20 },
+  Glutes:     { mev: 4,  mav: 12, mrv: 16 },
+  Calves:     { mev: 8,  mav: 20, mrv: 30 },
+  Core:       { mev: 6,  mav: 20, mrv: 25 },
+};
+
+function daysAgoStr(iso: string | undefined): string {
+  if (!iso) return 'Never';
+  const days = Math.floor((Date.now() - new Date(iso + 'T12:00:00').getTime()) / 86_400_000);
+  if (days === 0) return 'Today';
+  if (days === 1) return '1d ago';
+  return `${days}d ago`;
+}
 type WorkoutTemplate = { id: number; name: string; exercises: Exercise[] };
 type RoutineDay = {
   id: number; day_order: number; label: string;
@@ -36,6 +67,7 @@ type ActiveRoutine = { id: number; name: string; days: RoutineDay[] };
 export default function TrainingScreen({ navigation }: Props) {
   const { user, updateUser } = useAuth();
   const { colors } = useTheme();
+  const { isPremium } = usePurchase();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [activeTab, setActiveTab] = useState<'progress' | 'training'>('progress');
   const weightUnit: WeightUnit = (user as any)?.weight_unit === 'kg' ? 'kg' : 'lbs';
@@ -58,6 +90,7 @@ export default function TrainingScreen({ navigation }: Props) {
   const [chartMetric, setChartMetric] = useState<ChartMetric>('volume');
   const [weeklyGoal, setWeeklyGoal] = useState(3);
   const [strengthPercentile, setStrengthPercentile] = useState<number | null>(null);
+  const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeData | null>(null);
   const [rangePickerVisible, setRangePickerVisible] = useState(false);
   const [goalModalVisible, setGoalModalVisible] = useState(false);
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
@@ -116,6 +149,22 @@ export default function TrainingScreen({ navigation }: Props) {
     setChartRange(newRange);
   };
 
+  // Populate from preload cache instantly on mount
+  useEffect(() => {
+    const tmpl = appCache.get<WorkoutTemplate[]>('templates');
+    const rout = appCache.get<Routine[]>('routines');
+    const prog = appCache.get<{ buckets: ProgressBucket[] }>('progress');
+    const score = appCache.get<any>('strength_score');
+    const me = appCache.get<any>('me');
+    if (tmpl) setTemplates(tmpl);
+    if (rout) setRoutines(rout);
+    if (prog) setProgressData(prog.buckets ?? []);
+    if (score?.overall != null) setStrengthPercentile(score.overall);
+    if (me?.active_routine_id) fetchActiveRoutine(me.active_routine_id);
+    const mv = appCache.get<MuscleVolumeData>('muscle_volume');
+    if (mv) setMuscleVolume(mv);
+  }, []);
+
   useEffect(() => { fetchProgressData(chartRange); }, [chartRange]);
 
   const fetchTemplates = async () => {
@@ -151,12 +200,24 @@ export default function TrainingScreen({ navigation }: Props) {
     } catch { }
   };
 
+  const fetchMuscleGroupData = async () => {
+    try {
+      const res = await apiFetch('/api/stats/muscle-volume');
+      if (res.ok) {
+        const data = await res.json();
+        setMuscleVolume(data);
+        appCache.set('muscle_volume', data);
+      }
+    } catch { }
+  };
+
   useFocusEffect(useCallback(() => {
     fetchProgressData(chartRange);
     fetchTemplates();
     fetchRoutines();
     fetchActiveRoutine();
     fetchStrengthScore();
+    fetchMuscleGroupData();
   }, [user?.active_routine_id, chartRange]));
 
   const handleGenerate = async (type: 'routine' | 'template') => {
@@ -402,17 +463,143 @@ export default function TrainingScreen({ navigation }: Props) {
             </TouchableOpacity>
 
             {/* Strength Score card */}
-            <TouchableOpacity style={styles.scoreCard} onPress={() => navigation.navigate('StrengthScore')}>
+            <TouchableOpacity
+              style={styles.scoreCard}
+              onPress={() => isPremium
+                ? navigation.navigate('StrengthScore')
+                : (navigation as any).navigate('Paywall', { source: 'strength_score' })
+              }
+            >
               <View style={styles.scoreCardLeft}>
                 <Text style={styles.scoreCardTitle}>Strength Score</Text>
                 <Text style={styles.scoreCardSub}>
-                  {strengthPercentile != null
-                    ? `Top ${Math.round(100 - strengthPercentile)}% of lifters`
-                    : 'See how you rank'}
+                  {isPremium
+                    ? (strengthPercentile != null ? `Top ${Math.round(100 - strengthPercentile)}% of lifters` : 'See how you rank')
+                    : 'Premium feature'}
                 </Text>
               </View>
-              <Ionicons name="trophy-outline" size={24} color={colors.accent} />
+              <Ionicons
+                name={isPremium ? 'trophy-outline' : 'lock-closed-outline'}
+                size={24}
+                color={colors.accent}
+              />
             </TouchableOpacity>
+
+            {/* ── Muscle Volume Card ── */}
+            {muscleVolume && (() => {
+              const allMuscles = Object.keys(MUSCLE_STANDARDS);
+              const trained   = allMuscles.filter(m => (muscleVolume.muscle_sets[m] ?? 0) > 0)
+                .sort((a, b) => (muscleVolume.muscle_sets[b] ?? 0) - (muscleVolume.muscle_sets[a] ?? 0));
+              const untrained = allMuscles.filter(m => !(muscleVolume.muscle_sets[m] ?? 0));
+              const maxSets   = Math.max(1, ...trained.map(m => muscleVolume.muscle_sets[m] ?? 0));
+
+              const renderRow = (muscle: string) => {
+                const sets = muscleVolume.muscle_sets[muscle] ?? 0;
+                const std  = MUSCLE_STANDARDS[muscle];
+                const lastDate = muscleVolume.last_trained[muscle];
+                const isTrained = sets > 0;
+
+                // Free: simple proportional bar
+                // Premium: zone bar with MEV/MAV markers
+                const freeFillPct = (sets / maxSets) * 100;
+                const zoneColor = sets >= std.mrv ? colors.danger
+                  : sets > std.mav ? '#FF9500'
+                  : sets >= std.mev ? colors.accent
+                  : sets > 0 ? colors.textSecondary
+                  : colors.border;
+                const premiumFillPct = Math.min((sets / std.mrv) * 100, 100);
+                const mevPct = (std.mev / std.mrv) * 100;
+                const mavPct = (std.mav / std.mrv) * 100;
+                const zoneLabel = sets > std.mrv ? 'Overreaching'
+                  : sets > std.mav ? 'High'
+                  : sets >= std.mev ? 'On track'
+                  : sets > 0 ? 'Below target'
+                  : '';
+
+                return (
+                  <View key={muscle} style={styles.mvRow}>
+                    <Text style={[styles.mvMuscle, !isTrained && { color: colors.textSecondary }]} numberOfLines={1}>
+                      {muscle}
+                    </Text>
+                    <View style={styles.mvBarArea}>
+                      {isPremium ? (
+                        <View style={styles.mvPremiumTrack}>
+                          <View style={[styles.mvPremiumFill, { width: `${premiumFillPct}%` as any, backgroundColor: zoneColor }]} />
+                          <View style={[styles.mvTick, { left: `${mevPct}%` as any }]} />
+                          <View style={[styles.mvTick, { left: `${mavPct}%` as any }]} />
+                        </View>
+                      ) : (
+                        <View style={styles.mvFreeTrack}>
+                          <View style={[styles.mvFreeFill, { width: `${freeFillPct}%` as any, backgroundColor: isTrained ? colors.accent : colors.border }]} />
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.mvCount, !isTrained && { color: colors.textSecondary }]}>
+                      {isTrained ? sets : '–'}
+                    </Text>
+                    {isPremium && zoneLabel ? (
+                      <Text style={[styles.mvZoneLabel, { color: zoneColor }]} numberOfLines={1}>{zoneLabel}</Text>
+                    ) : (
+                      <Text style={styles.mvLastTrained} numberOfLines={1}>
+                        {isTrained ? daysAgoStr(lastDate) : lastDate ? daysAgoStr(lastDate) : ''}
+                      </Text>
+                    )}
+                  </View>
+                );
+              };
+
+              return (
+                <View style={styles.mvCard}>
+                  {/* Header */}
+                  <View style={styles.mvHeader}>
+                    <Text style={styles.scoreCardTitle}>This Week</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                      <Text style={styles.mvTotalText}>{muscleVolume.total_sets} working sets</Text>
+                      <TouchableOpacity onPress={() => Alert.alert(
+                        'Working Sets',
+                        'Counts sets taken close to failure (warmups excluded). MEV = minimum sets for growth, MAV = optimal range, MRV = maximum before recovery suffers.'
+                      )}>
+                        <Ionicons name="information-circle-outline" size={15} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Column labels (premium only) */}
+                  {isPremium && (
+                    <View style={styles.mvColLabels}>
+                      <View style={{ width: 88 }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.mvColLabel}>MEV → MAV → MRV</Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {trained.map(renderRow)}
+
+                  {untrained.length > 0 && (
+                    <>
+                      <View style={styles.mvDivider}>
+                        <Text style={styles.mvDividerText}>Not trained this week</Text>
+                      </View>
+                      {untrained.map(renderRow)}
+                    </>
+                  )}
+
+                  {/* Premium teaser for free users */}
+                  {!isPremium && (
+                    <TouchableOpacity
+                      style={styles.mvPremiumTeaser}
+                      onPress={() => (navigation as any).navigate('Paywall', { source: 'muscle_volume' })}
+                    >
+                      <Ionicons name="lock-closed-outline" size={14} color={colors.accent} />
+                      <Text style={[styles.mvTotalText, { color: colors.accent }]}>
+                        Unlock MEV · MAV · MRV zone bars
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })()}
             </>
             );
           })()}
@@ -469,8 +656,14 @@ export default function TrainingScreen({ navigation }: Props) {
           {/* Templates */}
           <View style={styles.sectionHeaderRow}>
             <Text style={[styles.trainingSectionHeader, { marginBottom: 0 }]}>Templates</Text>
-            <TouchableOpacity onPress={createTemplate} style={styles.newTemplateBtn}>
-              <Ionicons name="add" size={16} color={colors.save} />
+            <TouchableOpacity
+              onPress={!isPremium && templates.length >= 3
+                ? () => (navigation as any).navigate('Paywall', { source: 'templates' })
+                : createTemplate
+              }
+              style={styles.newTemplateBtn}
+            >
+              <Ionicons name={!isPremium && templates.length >= 3 ? 'lock-closed-outline' : 'add'} size={16} color={colors.save} />
               <Text style={styles.newTemplateBtnText}>New</Text>
             </TouchableOpacity>
           </View>
@@ -507,8 +700,14 @@ export default function TrainingScreen({ navigation }: Props) {
           {/* Routines */}
           <View style={[styles.sectionHeaderRow, { marginTop: spacing.md }]}>
             <Text style={[styles.trainingSectionHeader, { marginBottom: 0 }]}>Routines</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('CreateRoutine')} style={styles.newTemplateBtn}>
-              <Ionicons name="add" size={16} color={colors.save} />
+            <TouchableOpacity
+              onPress={!isPremium && routines.length >= 3
+                ? () => (navigation as any).navigate('Paywall', { source: 'routines' })
+                : () => navigation.navigate('CreateRoutine')
+              }
+              style={styles.newTemplateBtn}
+            >
+              <Ionicons name={!isPremium && routines.length >= 3 ? 'lock-closed-outline' : 'add'} size={16} color={colors.save} />
               <Text style={styles.newTemplateBtnText}>New</Text>
             </TouchableOpacity>
           </View>
@@ -582,18 +781,24 @@ export default function TrainingScreen({ navigation }: Props) {
             <View style={styles.coachBtnRow}>
               <TouchableOpacity
                 style={[styles.coachGenBtn, coachGenerating && { opacity: 0.6 }]}
-                onPress={() => handleGenerate('routine')}
+                onPress={isPremium
+                  ? () => handleGenerate('routine')
+                  : () => (navigation as any).navigate('Paywall', { source: 'ai_coach' })
+                }
                 disabled={coachGenerating}
               >
-                <Ionicons name="calendar-outline" size={14} color="#fff" />
+                <Ionicons name={isPremium ? 'calendar-outline' : 'lock-closed-outline'} size={14} color="#fff" />
                 <Text style={styles.coachGenBtnText}>{coachGenerating ? 'Generating…' : 'Generate Routine'}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.coachGenBtnOutline, coachGenerating && { opacity: 0.6 }]}
-                onPress={() => handleGenerate('template')}
+                onPress={isPremium
+                  ? () => handleGenerate('template')
+                  : () => (navigation as any).navigate('Paywall', { source: 'ai_coach' })
+                }
                 disabled={coachGenerating}
               >
-                <Ionicons name="list-outline" size={14} color={colors.save} />
+                <Ionicons name={isPremium ? 'list-outline' : 'lock-closed-outline'} size={14} color={colors.save} />
                 <Text style={styles.coachGenBtnOutlineText}>{coachGenerating ? 'Generating…' : 'Generate Template'}</Text>
               </TouchableOpacity>
             </View>
@@ -799,6 +1004,27 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   goalModalDone: { backgroundColor: colors.accent, borderRadius: spacing.sm, padding: spacing.md, alignItems: 'center' },
   goalModalDoneText: { color: '#fff', fontSize: typography.fontSize.md, fontWeight: '700' },
   axisLabel: { fontSize: 9, color: colors.textSecondary },
+
+  // Muscle volume card
+  mvCard: { backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border },
+  mvHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+  mvTotalText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontWeight: '500' },
+  mvColLabels: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  mvColLabel: { fontSize: 9, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  mvRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, gap: spacing.xs },
+  mvMuscle: { width: 80, fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
+  mvBarArea: { flex: 1 },
+  mvFreeTrack: { height: 5, backgroundColor: colors.border, borderRadius: 3, overflow: 'hidden' },
+  mvFreeFill: { height: '100%', borderRadius: 3 },
+  mvPremiumTrack: { height: 7, backgroundColor: colors.border, borderRadius: 3, overflow: 'visible', position: 'relative' },
+  mvPremiumFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 3 },
+  mvTick: { position: 'absolute', top: -2, bottom: -2, width: 1.5, backgroundColor: colors.background },
+  mvCount: { width: 22, fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, textAlign: 'right' },
+  mvZoneLabel: { width: 78, fontSize: 10, fontWeight: '600', textAlign: 'right' },
+  mvLastTrained: { width: 78, fontSize: 10, color: colors.textSecondary, textAlign: 'right' },
+  mvDivider: { paddingVertical: spacing.xs, marginVertical: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  mvDividerText: { fontSize: typography.fontSize.xs, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 },
+  mvPremiumTeaser: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   barTopLabel: { fontSize: 9, color: colors.textSecondary, marginBottom: 2 },
   emptyText: { textAlign: 'center', color: colors.textSecondary, marginVertical: spacing.sm, fontSize: typography.fontSize.sm },
 

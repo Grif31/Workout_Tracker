@@ -11,6 +11,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
+import { appCache } from '../../utils/appCache';
 import { TrainingStackParamsList } from '../../navigation/types';
 import MuscleDiagram from '../../components/MuscleDiagram';
 
@@ -61,6 +62,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
   const [scoreData, setScoreData] = useState<ScoreData | null>(null);
   const [history, setHistory]     = useState<HistoryPoint[]>([]);
   const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [noData, setNoData]       = useState(false);
 
@@ -90,13 +92,19 @@ export default function StrengthScoreScreen({ navigation }: Props) {
         }
         return;
       }
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.warn('[StrengthScore] API error', res.status);
+        setError(true);
+        return;
+      }
       const data: ScoreData = await res.json();
       setScoreData(data);
       if (data.history) setHistory(data.history);
       setMissingFields([]);
       setNoData(false);
-    } catch {}
+      setError(false);
+      appCache.set('strength_score', data);
+    } catch (e) { console.warn('[StrengthScore] fetch failed', e); setError(true); }
   };
 
   const handleRefresh = async () => {
@@ -106,7 +114,14 @@ export default function StrengthScoreScreen({ navigation }: Props) {
   };
 
   useFocusEffect(useCallback(() => {
-    setLoading(true);
+    const cached = appCache.get<ScoreData>('strength_score');
+    if (cached) {
+      setScoreData(cached);
+      if (cached.history) setHistory(cached.history);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     fetchScore().finally(() => setLoading(false));
   }, []));
 
@@ -131,6 +146,12 @@ export default function StrengthScoreScreen({ navigation }: Props) {
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.accent} /></View>
+      ) : error && !scoreData ? (
+        <View style={styles.center}>
+          <Ionicons name="cloud-offline-outline" size={48} color={colors.textSecondary} />
+          <Text style={styles.emptyTitle}>Couldn't load score</Text>
+          <Text style={styles.emptySubtitle}>Check your connection and pull down to refresh</Text>
+        </View>
       ) : missingFields.length > 0 ? (
         <GateCard missingFields={missingFields} navigation={navigation} colors={colors} styles={styles} />
       ) : noData ? (

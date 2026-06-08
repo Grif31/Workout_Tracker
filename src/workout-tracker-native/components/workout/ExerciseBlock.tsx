@@ -226,6 +226,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    textAlign: 'center',
   },
 
   addSetBtn: {

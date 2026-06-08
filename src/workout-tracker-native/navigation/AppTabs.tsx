@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, AppState } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, AppState, Animated } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { postLiveWorkoutNotification, cancelLiveWorkoutNotification } from '../utils/notifications';
 import { onPendingCountChange, initPendingCount } from '../utils/offlineQueue';
@@ -133,19 +133,48 @@ function MiniWorkoutBar() {
 }
 
 function CustomTabBar(props: BottomTabBarProps) {
+  const { colors } = useTheme();
   const { isWorkoutOpen } = useWorkoutSession();
+  const translateY = useRef(new Animated.Value(0)).current;
+  const opacity    = useRef(new Animated.Value(1)).current;
+  const heightRef  = useRef(0);
+  const prevSubScreen = useRef(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   const activeRoute = props.state.routes[props.state.index];
   const focusedRoute = getFocusedRouteNameFromRoute(activeRoute);
   const isOnSubScreen = focusedRoute !== undefined && focusedRoute !== ROOT_SCREENS[activeRoute.name];
 
+  useEffect(() => {
+    if (prevSubScreen.current === isOnSubScreen) return;
+    prevSubScreen.current = isOnSubScreen;
+    if (isOnSubScreen) {
+      Animated.parallel([
+        Animated.timing(translateY, { toValue: heightRef.current, duration: 220, useNativeDriver: true }),
+        Animated.timing(opacity,    { toValue: 0,                 duration: 160, useNativeDriver: true }),
+      ]).start(() => setCollapsed(true));
+    } else {
+      setCollapsed(false);
+      translateY.setValue(heightRef.current);
+      opacity.setValue(0);
+      Animated.parallel([
+        Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 180, mass: 0.8 }),
+        Animated.timing(opacity,    { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [isOnSubScreen]);
+
   if (isWorkoutOpen) return null;
   return (
-    <View>
+    <View style={{ backgroundColor: colors.surface }}>
       <MiniWorkoutBar />
-      <View style={isOnSubScreen ? { display: 'none' } : undefined}>
+      <Animated.View
+        onLayout={e => { heightRef.current = e.nativeEvent.layout.height; }}
+        style={{ opacity, transform: [{ translateY }], display: collapsed ? 'none' : 'flex' }}
+        pointerEvents={isOnSubScreen ? 'none' : 'auto'}
+      >
         <BottomTabBar {...props} />
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -168,6 +197,7 @@ export function AppTabs() {
   return (
     <Tab.Navigator
       tabBar={(props) => <CustomTabBar {...props} />}
+      sceneContainerStyle={{ backgroundColor: colors.background }}
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarShowLabel: false,

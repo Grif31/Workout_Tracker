@@ -51,7 +51,12 @@ export default function EditProfileScreen({ navigation }: Props) {
     }
     setGender((user as any).gender ?? null);
     const bd = (user as any).birth_date;
-    setBirthDate(bd ? new Date(bd) : null);
+    if (bd) {
+      const [y, m, d] = bd.split('-').map(Number);
+      setBirthDate(new Date(y, m - 1, d));
+    } else {
+      setBirthDate(null);
+    }
   }, [user]);
 
   const pickImage = async () => {

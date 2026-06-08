@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm import selectinload
-from models import db, Workout, Exercise, Set, User, ExerciseTemplate, PersonalRecord, StrengthScoreSnapshot
+from models import db, Workout, Exercise, Set, User, ExerciseTemplate, PersonalRecord, StrengthScoreSnapshot, ExerciseMuscleMapping
 
 stats_bp = Blueprint('stats_bp', __name__)
 
@@ -686,7 +686,7 @@ def strength_score():
         return entry
 
     supp_list = sorted(
-        [_supp_entry(e) for e in EXERCISE_ALIASES if e not in BIG_6 and e in exercise_percentiles],
+        [_supp_entry(e) for e in exercise_percentiles if e not in BIG_6],
         key=lambda x: (x['category'] != 'compound', -(x['percentile'] or 0)),
     )
 
@@ -725,6 +725,105 @@ def strength_score():
         resp['muscle_groups'] = muscle_groups
 
     return jsonify(resp), 200
+
+
+@stats_bp.get('/api/stats/muscle-volume')
+@jwt_required()
+def muscle_volume():
+    from datetime import date, timedelta
+    user_id = get_jwt_identity()
+
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())   # Monday
+    last_week_start = week_start - timedelta(weeks=1)
+
+    # Base joins reused across queries
+    def _base(extra_filters):
+        return (
+            db.session.query(
+                ExerciseMuscleMapping.muscle_group,
+            )
+            .join(ExerciseTemplate, ExerciseMuscleMapping.exercise_template_id == ExerciseTemplate.id)
+            .join(Exercise, Exercise.exercise_template_id == ExerciseTemplate.id)
+            .join(Workout, Exercise.workout_id == Workout.id)
+            .join(Set, Set.exercise_id == Exercise.id)
+            .filter(
+                Workout.user_id == user_id,
+                Exercise.exercise_type == 'strength',
+                Set.set_type != 'W',
+                Set.reps.isnot(None),
+                *extra_filters,
+            )
+        )
+
+    # Sets this week per muscle group
+    week_rows = (
+        db.session.query(
+            ExerciseMuscleMapping.muscle_group,
+            db.func.count(Set.id).label('set_count'),
+        )
+        .join(ExerciseTemplate, ExerciseMuscleMapping.exercise_template_id == ExerciseTemplate.id)
+        .join(Exercise, Exercise.exercise_template_id == ExerciseTemplate.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .join(Set, Set.exercise_id == Exercise.id)
+        .filter(
+            Workout.user_id == user_id,
+            Exercise.exercise_type == 'strength',
+            Set.set_type != 'W',
+            Set.reps.isnot(None),
+            Workout.date >= week_start,
+        )
+        .group_by(ExerciseMuscleMapping.muscle_group)
+        .all()
+    )
+
+    # Last trained date per muscle group (all time)
+    last_rows = (
+        db.session.query(
+            ExerciseMuscleMapping.muscle_group,
+            db.func.max(Workout.date).label('last_date'),
+        )
+        .join(ExerciseTemplate, ExerciseMuscleMapping.exercise_template_id == ExerciseTemplate.id)
+        .join(Exercise, Exercise.exercise_template_id == ExerciseTemplate.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .join(Set, Set.exercise_id == Exercise.id)
+        .filter(
+            Workout.user_id == user_id,
+            Exercise.exercise_type == 'strength',
+        )
+        .group_by(ExerciseMuscleMapping.muscle_group)
+        .all()
+    )
+
+    # Last week's total working sets (for fatigue monitor)
+    last_week_total = (
+        db.session.query(db.func.count(Set.id))
+        .join(Exercise, Set.exercise_id == Exercise.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .filter(
+            Workout.user_id == user_id,
+            Exercise.exercise_type == 'strength',
+            Set.set_type != 'W',
+            Set.reps.isnot(None),
+            Workout.date >= last_week_start,
+            Workout.date < week_start,
+        )
+        .scalar() or 0
+    )
+
+    muscle_sets = {row.muscle_group: row.set_count for row in week_rows}
+    last_trained = {
+        row.muscle_group: row.last_date.strftime('%Y-%m-%d') if row.last_date else None
+        for row in last_rows
+    }
+
+    return jsonify({
+        'week_start': week_start.strftime('%Y-%m-%d'),
+        'muscle_sets': muscle_sets,
+        'last_trained': last_trained,
+        'total_sets': sum(muscle_sets.values()),
+        'last_week_total': last_week_total,
+    }), 200
 
 
 @stats_bp.get('/api/stats/strength-score/history')

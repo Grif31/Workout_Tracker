@@ -9,7 +9,8 @@
       "distribution": "internal",
       "node": "20.18.0",
       "env": {
-        "npm_config_legacy_peer_deps": "true"
+        "npm_config_legacy_peer_deps": "true",
+        "APP_VARIANT": "development"
       }
     },
     "preview": {
@@ -22,7 +23,10 @@
     },
     "production": {
       "autoIncrement": true,
-      "node": "20.18.0"
+      "node": "20.18.0",
+      "env": {
+        "EXPO_PUBLIC_REVENUECAT_IOS_KEY": "appl_BocohNqMylioBFqmnkVBwwCpHGg"
+      }
     }
   },
   "submit": {

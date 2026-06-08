@@ -395,7 +395,6 @@ export default function WorkoutDetailsScreen({
           );
         }
 
-        const hasPr = exercise.sets.some(s => s.pr_types && s.pr_types.length > 0);
         return (
           <View style={styles.exerciseCard}>
             <Text style={styles.exerciseName}>{exercise.name}</Text>
@@ -407,33 +406,57 @@ export default function WorkoutDetailsScreen({
             ) : null}
 
             {/* Column headers */}
-            <View style={styles.setHeaderRow}>
-              <View style={styles.colBadge} />
-              <Text style={[styles.setHeaderCell, styles.colReps]}>Reps</Text>
-              <Text style={[styles.setHeaderCell, styles.colWeight]}>{weightUnit}</Text>
-              {hasPr && <View style={styles.colPr} />}
-            </View>
-
-            {exercise.sets.map((s, i) => {
-              const type = (s.set_type ?? 'N') as keyof typeof SET_TYPE_COLORS;
-              const tc = SET_TYPE_COLORS[type] ?? colors.textSecondary;
-              const isPr = s.pr_types && s.pr_types.length > 0;
+            {(() => {
+              const hasPr = exercise.sets.some(s => s.pr_types && s.pr_types.length > 0);
               return (
-                <View key={i} style={styles.setRow}>
-                  <View style={[styles.setNumBadge, styles.colBadge, { borderColor: tc }]}>
-                    <Text style={[styles.setNumText, { color: tc }]}>{i + 1}</Text>
-                    {type !== 'N' && <Text style={[styles.setTypeText, { color: tc }]}>{type}</Text>}
+                <>
+                  <View style={styles.setHeaderRow}>
+                    <View style={styles.colBadge} />
+                    <Text style={[styles.setHeaderCell, styles.colReps]}>Reps</Text>
+                    <Text style={[styles.setHeaderCell, styles.colWeight]}>{weightUnit}</Text>
+                    {hasPr && <View style={styles.colPr} />}
                   </View>
-                  <Text style={[styles.setCellText, styles.colReps]}>{s.reps}</Text>
-                  <Text style={[styles.setCellText, styles.colWeight]}>{s.weight}</Text>
-                  {hasPr && (
-                    isPr
-                      ? <View style={[styles.colPr, styles.prChip]}><Text style={styles.prChipText}>PR</Text></View>
-                      : <View style={styles.colPr} />
-                  )}
-                </View>
+
+                  {exercise.sets.map((s, i) => {
+                    const type = (s.set_type ?? 'N') as keyof typeof SET_TYPE_COLORS;
+                    const tc = SET_TYPE_COLORS[type] ?? colors.textSecondary;
+                    const prTypes = s.pr_types ?? [];
+
+                    const isMaxWeight = prTypes.includes('max_weight');
+                    const isRepPr = !isMaxWeight && prTypes.includes('per_weight_reps') && (() => {
+                      const w = parseFloat(s.weight ?? '0') || 0;
+                      const r = parseFloat(s.reps ?? '0') || 0;
+                      return exercise.sets.some(other =>
+                        other !== s &&
+                        (parseFloat(other.weight ?? '0') || 0) === w &&
+                        (parseFloat(other.reps ?? '0') || 0) < r
+                      );
+                    })();
+                    const isPr = isMaxWeight || isRepPr;
+
+                    return (
+                      <View key={i} style={styles.setRow}>
+                        <View style={[styles.setNumBadge, styles.colBadge, { borderColor: tc }]}>
+                          <Text style={[styles.setNumText, { color: tc }]}>{i + 1}</Text>
+                          {type !== 'N' && <Text style={[styles.setTypeText, { color: tc }]}>{type}</Text>}
+                        </View>
+                        <Text style={[styles.setCellText, styles.colReps, isRepPr && styles.prGoldText]}>
+                          {s.reps}
+                        </Text>
+                        <Text style={[styles.setCellText, styles.colWeight, isMaxWeight && styles.prGoldText]}>
+                          {s.weight}
+                        </Text>
+                        {hasPr && (
+                          isPr
+                            ? <Ionicons name="trophy" size={14} color="#FFD700" style={styles.colPr} />
+                            : <View style={styles.colPr} />
+                        )}
+                      </View>
+                    );
+                  })}
+                </>
               );
-            })}
+            })()}
           </View>
         );
       }}
@@ -579,19 +602,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   colBadge: { width: 36, marginRight: spacing.sm },
   colReps: { flex: 1, textAlign: 'center' },
   colWeight: { flex: 1, textAlign: 'center' },
-  colPr: { width: 32, alignItems: 'center' },
-  prChip: {
-    backgroundColor: '#FFD700',
-    borderRadius: 4,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-  },
-  prChipText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#7A5800',
-    letterSpacing: 0.3,
-  },
+  colPr: { width: 24, alignItems: 'center' },
+  prGoldText: { color: '#FFD700', fontWeight: '700' },
 
   setNumBadge: {
     borderWidth: 1.5,

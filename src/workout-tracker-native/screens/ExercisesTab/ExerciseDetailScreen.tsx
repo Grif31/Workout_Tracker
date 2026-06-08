@@ -453,20 +453,12 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
       </TouchableOpacity>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Hero image — scrolls with content */}
-        <View style={styles.heroContainer}>
-          {imageUrl ? (
+        {/* Hero image — only shown when an image exists */}
+        {imageUrl ? (
+          <View style={styles.heroContainer}>
             <Image source={{ uri: imageUrl }} style={styles.heroImage} resizeMode="cover" />
-          ) : (
-            <View style={styles.heroPlaceholder}>
-              <Ionicons
-                name={isCardio ? 'bicycle-outline' : 'barbell-outline'}
-                size={52}
-                color={colors.textSecondary}
-              />
-            </View>
-          )}
-        </View>
+          </View>
+        ) : null}
         <View style={styles.content}>
         {/* Title + equipment in parentheses */}
         <Text style={styles.title}>
