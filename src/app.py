@@ -36,7 +36,10 @@ def create_app(test_config=None):
     app = Flask(__name__)
 
     _jwt_secret = os.environ.get('JWT_SECRET_KEY', 'dev-secret-key')
-    if not app.config.get('TESTING') and _jwt_secret == 'dev-secret-key':
+    if not (test_config or {}).get('TESTING') and _jwt_secret == 'dev-secret-key':
+        import sys
+        print('FATAL: JWT_SECRET_KEY env var is missing or not set. '
+              'Set it in Railway Variables and redeploy.', file=sys.stderr, flush=True)
         raise RuntimeError('JWT_SECRET_KEY env var must be set in production')
     app.config['JWT_SECRET_KEY'] = _jwt_secret
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=15)
