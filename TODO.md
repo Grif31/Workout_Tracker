@@ -344,7 +344,7 @@ Check off items as you complete them.
   - [x] Install and configure EAS CLI (`npm install -g eas-cli`)
   - [x] Run `eas build:configure`
   - [x] Set up build profiles for preview and production
-  - [ ] Test a production build on a real device
+  - [x] Test a production build on a real device
 
 - [x] **Legal requirements (both stores require these)**
   - [x] Write and host a Privacy Policy (what data is collected and why)
@@ -379,7 +379,7 @@ Check off items as you complete them.
   - [x] Matches exercise names to ExerciseTemplate IDs
   - [x] Creates routine (with days + templates) or standalone template
 
-- [ ] **Improve AI generation**
+- [x] **Improve AI generation**
   - [x] Let user preview the generated routine before saving
   - [x] Allow regeneration / manual edits before confirm
   - [x] Add ANTHROPIC_API_KEY setup instructions to README

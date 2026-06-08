@@ -424,20 +424,6 @@ export default function ProfileScreen({ navigation }: Props) {
         </View>
       </View>
 
-      {greekRank && (
-        <TouchableOpacity
-          style={styles.rankBadgeRow}
-          onPress={() => navigation.navigate('GreekRank')}
-        >
-          <View style={[styles.rankBadgePill, { backgroundColor: (GREEK_RANK_COLORS[greekRank] ?? '#888') + '22', borderColor: GREEK_RANK_COLORS[greekRank] ?? '#888' }]}>
-            <Text style={[styles.rankBadgeText, { color: GREEK_RANK_COLORS[greekRank] ?? '#888' }]}>
-              {greekRank}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={GREEK_RANK_COLORS[greekRank] ?? '#888'} />
-        </TouchableOpacity>
-      )}
-
       <TouchableOpacity
         style={styles.weightRow}
         onPress={() => navigation.navigate('Measurements')}

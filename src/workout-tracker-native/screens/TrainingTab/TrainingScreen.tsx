@@ -49,6 +49,15 @@ const MUSCLE_STANDARDS: Record<string, { mev: number; mav: number; mrv: number }
   Core:       { mev: 6,  mav: 20, mrv: 25 },
 };
 
+const SCORE_RANK_COLORS: Record<string, string> = {
+  Noobie:       '#888888',
+  Beginner:     '#4A9EFF',
+  Intermediate: '#4CAF50',
+  Advanced:     '#FF9800',
+  Elite:        '#9C27B0',
+  Legend:       '#FFD700',
+};
+
 function daysAgoStr(iso: string | undefined): string {
   if (!iso) return 'Never';
   const days = Math.floor((Date.now() - new Date(iso + 'T12:00:00').getTime()) / 86_400_000);
@@ -98,6 +107,7 @@ export default function TrainingScreen({ navigation }: Props) {
   const [chartMetric, setChartMetric] = useState<ChartMetric>('volume');
   const [weeklyGoal, setWeeklyGoal] = useState(3);
   const [strengthPercentile, setStrengthPercentile] = useState<number | null>(null);
+  const [strengthRankLabel, setStrengthRankLabel] = useState<string | null>(null);
   const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeData | null>(null);
   const [rangePickerVisible, setRangePickerVisible] = useState(false);
   const [goalModalVisible, setGoalModalVisible] = useState(false);
@@ -168,6 +178,7 @@ export default function TrainingScreen({ navigation }: Props) {
     if (rout) setRoutines(rout);
     if (prog) setProgressData(prog.buckets ?? []);
     if (score?.overall != null) setStrengthPercentile(score.overall);
+    if (score?.overall_rank?.label) setStrengthRankLabel(score.overall_rank.label);
     if (me?.active_routine_id) fetchActiveRoutine(me.active_routine_id);
     const mv = appCache.get<MuscleVolumeData>('muscle_volume');
     if (mv) setMuscleVolume(mv);
@@ -204,6 +215,7 @@ export default function TrainingScreen({ navigation }: Props) {
       if (res.ok) {
         const data = await res.json();
         setStrengthPercentile(data.overall ?? null);
+        if (data.overall_rank?.label) setStrengthRankLabel(data.overall_rank.label);
       }
     } catch { }
   };
@@ -375,8 +387,42 @@ export default function TrainingScreen({ navigation }: Props) {
 
             const RANGE_SHORT: Record<ChartRange, string> = { '30d': '30D', '6m': '6M', '1y': '1Y' };
 
+            const scoreRingColor = strengthRankLabel
+              ? (SCORE_RANK_COLORS[strengthRankLabel] ?? colors.accent)
+              : colors.border;
+
             return (
               <>
+              {/* ── Score circle + Weekly goal row ── */}
+              <View style={styles.scoreGoalRow}>
+                <TouchableOpacity
+                  style={styles.scoreCircleWrap}
+                  onPress={() => isPremium
+                    ? navigation.navigate('StrengthScore')
+                    : (navigation as any).navigate('Paywall', { source: 'strength_score' })
+                  }
+                >
+                  <View style={[styles.scoreCircle, { borderColor: scoreRingColor }]}>
+                    <Text style={[styles.scoreNum, { color: scoreRingColor }]}>
+                      {strengthPercentile != null ? Math.round(strengthPercentile) : '–'}
+                    </Text>
+                    <Text style={styles.scoreCircleLabel}>SCORE</Text>
+                  </View>
+                  {strengthRankLabel && (
+                    <Text style={[styles.scoreRankLabel, { color: scoreRingColor }]}>{strengthRankLabel}</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.goalSide} onPress={() => setGoalModalVisible(true)}>
+                  <Text style={styles.goalSideTitle}>Weekly Goal</Text>
+                  <View style={styles.goalSideValueRow}>
+                    <Text style={[styles.goalSideValue, { color: colors.accent }]}>{weeklyGoal}</Text>
+                    <Text style={styles.goalSideUnit}>/ week</Text>
+                  </View>
+                  <Text style={styles.goalSideSub}>Tap to edit</Text>
+                </TouchableOpacity>
+              </View>
+
               <View style={styles.chartCard}>
                 {/* Header row: title + range dropdown */}
                 <View style={styles.chartHeader}>
@@ -459,41 +505,6 @@ export default function TrainingScreen({ navigation }: Props) {
                 </View>
 
               </View>
-
-            {/* Weekly goal card */}
-            <TouchableOpacity style={styles.goalCard} onPress={() => setGoalModalVisible(true)}>
-              <View style={styles.goalCardLeft}>
-                <Text style={styles.goalCardTitle}>Weekly Workout Goal</Text>
-                <Text style={styles.goalCardDesc}>Consecutive weeks at or above your goal count as a streak</Text>
-              </View>
-              <View style={styles.goalCardRight}>
-                <Text style={styles.goalCardValue}>{weeklyGoal}</Text>
-                <Text style={styles.goalCardUnit}>/ week</Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Strength Score card */}
-            <TouchableOpacity
-              style={styles.scoreCard}
-              onPress={() => isPremium
-                ? navigation.navigate('StrengthScore')
-                : (navigation as any).navigate('Paywall', { source: 'strength_score' })
-              }
-            >
-              <View style={styles.scoreCardLeft}>
-                <Text style={styles.scoreCardTitle}>Strength Score</Text>
-                <Text style={styles.scoreCardSub}>
-                  {isPremium
-                    ? (strengthPercentile != null ? `Top ${Math.round(100 - strengthPercentile)}% of lifters` : 'See how you rank')
-                    : 'Premium feature'}
-                </Text>
-              </View>
-              <Ionicons
-                name={isPremium ? 'trophy-outline' : 'lock-closed-outline'}
-                size={24}
-                color={colors.accent}
-              />
-            </TouchableOpacity>
 
             {/* ── Muscle Volume Card ── */}
             {muscleVolume && (() => {
@@ -996,17 +1007,31 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     position: 'absolute', bottom: 0, height: 2,
     backgroundColor: colors.accent, borderRadius: 1,
   },
-  goalCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border },
-  goalCardLeft: { flex: 1, marginRight: spacing.md },
-  goalCardTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, marginBottom: 3 },
-  goalCardDesc: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 18 },
-  goalCardRight: { alignItems: 'center' },
-  goalCardValue: { fontSize: typography.fontSize.xxl, fontWeight: '700', color: colors.accent, lineHeight: 32 },
-  goalCardUnit: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontWeight: '500' },
-  scoreCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border },
-  scoreCardLeft: { flex: 1, marginRight: spacing.md },
+  // Score circle + goal row
+  scoreGoalRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md, alignItems: 'stretch' },
+  scoreCircleWrap: { alignItems: 'center', justifyContent: 'center', gap: 6 },
+  scoreCircle: {
+    width: 90, height: 90, borderRadius: 45,
+    borderWidth: 3,
+    backgroundColor: colors.surface,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  scoreNum: { fontSize: 28, fontWeight: '800', lineHeight: 32 },
+  scoreCircleLabel: { fontSize: 9, fontWeight: '700', color: colors.textSecondary, letterSpacing: 1, textTransform: 'uppercase' },
+  scoreRankLabel: { fontSize: typography.fontSize.xs, fontWeight: '700', letterSpacing: 0.3 },
+  goalSide: {
+    flex: 1,
+    backgroundColor: colors.surface, borderRadius: spacing.sm,
+    padding: spacing.md, borderWidth: 1, borderColor: colors.border,
+    justifyContent: 'center',
+  },
+  goalSideTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs },
+  goalSideValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 5, marginBottom: 2 },
+  goalSideValue: { fontSize: 36, fontWeight: '800', lineHeight: 40 },
+  goalSideUnit: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontWeight: '500' },
+  goalSideSub: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
+  // kept for muscle volume card header
   scoreCardTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, marginBottom: 3 },
-  scoreCardSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
   goalModalBox: { backgroundColor: colors.surface, borderTopLeftRadius: spacing.lg, borderTopRightRadius: spacing.lg, padding: spacing.lg, paddingBottom: spacing.xl },
   goalModalTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 },
   goalModalDesc: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.xl },

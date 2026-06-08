@@ -8,6 +8,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Circle as SvgCircle } from 'react-native-svg';
 import { useTheme, type Colors } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
@@ -57,7 +58,13 @@ type MuscleGroup = { name: string; score: number; rank: { label: string; tier: n
 
 export default function StrengthScoreScreen({ navigation }: Props) {
   const { colors } = useTheme();
+  const { user } = useAuth();
   const styles = useMemo(() => createStyles(colors), [colors]);
+
+  // bodyweight in lbs (estimates are always stored in lbs)
+  const bwLbs = user?.bodyweight
+    ? ((user as any).weight_unit === 'kg' ? user.bodyweight * 2.20462 : user.bodyweight)
+    : null;
 
   const [scoreData, setScoreData] = useState<ScoreData | null>(null);
   const [history, setHistory]     = useState<HistoryPoint[]>([]);
@@ -253,7 +260,14 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                         disabled={!ex.has_data}
                       >
                         <View style={{ flex: 1 }}>
-                          <Text style={[styles.exName, !ex.has_data && { color: colors.textSecondary }]}>{ex.exercise}</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: 2 }}>
+                            <Text style={[styles.exName, !ex.has_data && { color: colors.textSecondary }]}>{ex.exercise}</Text>
+                            {ex.has_data && bwLbs && ex.estimated_1rm != null && ex.estimated_1rm > 0 && (
+                              <Text style={[styles.bwMultiplier, { color: exColor }]}>
+                                {(ex.estimated_1rm / bwLbs).toFixed(1)}× BW
+                              </Text>
+                            )}
+                          </View>
                           {ex.has_data ? (
                             <View style={styles.mgBarTrack}>
                               <View style={[styles.mgBarFill, {
@@ -610,8 +624,9 @@ const createStyles = (colors: Colors) =>
       flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
       paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     },
-    exName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary, marginBottom: 4 },
-    noDataText: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+    exName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
+    bwMultiplier: { fontSize: typography.fontSize.xs, fontWeight: '700', letterSpacing: 0.2 },
+    noDataText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
     modalSheet: {
       backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20,

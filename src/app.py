@@ -35,7 +35,10 @@ logging.basicConfig(
 def create_app(test_config=None):
     app = Flask(__name__)
 
-    app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'dev-secret-key')
+    _jwt_secret = os.environ.get('JWT_SECRET_KEY', 'dev-secret-key')
+    if not app.config.get('TESTING') and _jwt_secret == 'dev-secret-key':
+        raise RuntimeError('JWT_SECRET_KEY env var must be set in production')
+    app.config['JWT_SECRET_KEY'] = _jwt_secret
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=15)
     app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
     app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///workout_tracker.db')

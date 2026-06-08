@@ -16,9 +16,10 @@ class User(db.Model):
     height = db.Column(db.Float, nullable=True)
     weight_unit = db.Column(db.String(3), default='lbs', nullable=True)
     active_routine_id = db.Column(db.Integer, db.ForeignKey('routines.id', ondelete='SET NULL'), nullable=True)
-    reset_otp_hash    = db.Column(db.String(64), nullable=True)
-    reset_otp_expiry  = db.Column(db.DateTime,   nullable=True)
-    is_social_only    = db.Column(db.Boolean,    default=False, nullable=False)
+    reset_otp_hash     = db.Column(db.String(64), nullable=True)
+    reset_otp_expiry   = db.Column(db.DateTime,   nullable=True)
+    reset_otp_attempts = db.Column(db.Integer,    default=0, nullable=False, server_default='0')
+    is_social_only     = db.Column(db.Boolean,    default=False, nullable=False)
     gender            = db.Column(db.String(10),  nullable=True)   # 'male' | 'female' | None
     birth_date        = db.Column(db.Date,          nullable=True)
     workouts = db.relationship('Workout', backref='user', lazy=True)

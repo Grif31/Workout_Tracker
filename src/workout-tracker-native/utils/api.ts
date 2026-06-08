@@ -54,6 +54,10 @@ async function doRefresh(): Promise<string | null> {
     const newAccess = data.access_token as string;
     _access = newAccess;
     await AsyncStorage.setItem('token', newAccess);
+    if (data.refresh_token) {
+      _refresh = data.refresh_token as string;
+      await AsyncStorage.setItem('refresh_token', data.refresh_token);
+    }
     return newAccess;
   } catch {
     return null;

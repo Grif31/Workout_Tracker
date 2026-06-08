@@ -5,6 +5,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, WorkoutTemplate, ExerciseTemplate, Routine, RoutineDay
 from schemas import AiGenerateSchema
 from utils.validation import validate_body
+from limiter import limiter
 
 ai_bp = Blueprint('ai_bp', __name__)
 
@@ -49,6 +50,7 @@ def _parse_ai_json(raw: str) -> dict:
 
 @ai_bp.post('/api/ai/generate')
 @jwt_required()
+@limiter.limit('10 per day', key_func=lambda: f"ai_gen:{get_jwt_identity()}")
 @validate_body(_ai_generate_schema)
 def generate_workout():
     """Generate a workout plan and return a preview — does NOT save to DB."""

@@ -79,8 +79,9 @@ def signup():
 @jwt_required(refresh=True)
 def refresh():
     user_id = get_jwt_identity()
-    new_access = create_access_token(identity=user_id)
-    return jsonify({'access_token': new_access}), 200
+    new_access  = create_access_token(identity=user_id)
+    new_refresh = create_refresh_token(identity=user_id)
+    return jsonify({'access_token': new_access, 'refresh_token': new_refresh}), 200
 
 
 @auth_bp.post('/api/forgot-password')
@@ -96,8 +97,9 @@ def forgot_password():
     if not user:
         return SAFE
     raw_otp = str(secrets.randbelow(900000) + 100000)  # always 6 digits: 100000–999999
-    user.reset_otp_hash   = hashlib.sha256(raw_otp.encode()).hexdigest()
-    user.reset_otp_expiry = datetime.now(timezone.utc) + timedelta(minutes=15)
+    user.reset_otp_hash     = hashlib.sha256(raw_otp.encode()).hexdigest()
+    user.reset_otp_expiry   = datetime.now(timezone.utc) + timedelta(minutes=15)
+    user.reset_otp_attempts = 0
     db.session.commit()
     _send_otp_email(user.email, raw_otp)
     return SAFE
@@ -117,17 +119,29 @@ def reset_password():
         return jsonify({'message': 'Password must be at least 6 characters.'}), 400
     user = User.query.filter_by(email=email).first()
     INVALID = jsonify({'message': 'Invalid or expired code.'}), 400
+
+    def _clear_otp():
+        user.reset_otp_hash     = None
+        user.reset_otp_expiry   = None
+        user.reset_otp_attempts = 0
+        db.session.commit()
+
     if not user or not user.reset_otp_hash or not user.reset_otp_expiry:
         return INVALID
     if datetime.now(timezone.utc) > user.reset_otp_expiry.replace(tzinfo=timezone.utc):
+        _clear_otp()
+        return INVALID
+    # Lock out after 5 wrong attempts — attacker must request a fresh OTP
+    if (user.reset_otp_attempts or 0) >= 5:
+        _clear_otp()
         return INVALID
     if not secrets.compare_digest(hashlib.sha256(otp.encode()).hexdigest(), user.reset_otp_hash):
+        user.reset_otp_attempts = (user.reset_otp_attempts or 0) + 1
+        db.session.commit()
         return INVALID
-    user.password         = generate_password_hash(new_password, method='pbkdf2:sha256')
-    user.reset_otp_hash   = None
-    user.reset_otp_expiry = None
-    user.is_social_only   = False
-    db.session.commit()
+    user.password       = generate_password_hash(new_password, method='pbkdf2:sha256')
+    user.is_social_only = False
+    _clear_otp()
     return jsonify({'message': 'Password reset successfully.'}), 200
 
 
@@ -162,6 +176,7 @@ def change_password():
 
 
 @auth_bp.post('/api/auth/social')
+@limiter.limit('20 per hour')
 def social_auth():
     data = request.get_json()
     provider = data.get('provider')  # 'apple' | 'google' | 'facebook'
@@ -227,7 +242,6 @@ def _send_otp_email(recipient: str, otp: str) -> None:
         f"Expires in 15 minutes.\n"
         f"If you didn't request this, ignore this email."
     )
-    current_app.logger.info('OTP for %s: %s', recipient, otp)
     try:
         msg = Message(
             subject='Your Arete Fitness reset code',

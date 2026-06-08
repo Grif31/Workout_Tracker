@@ -1,10 +1,11 @@
 """
-Tests for stats routes added today:
-  GET /api/stats/dashboard  — weekly volume/frequency, last-7-days summary, this_week_dates
-  GET /api/stats/profile    — total_workouts, longest_streak, total_volume
+Tests for stats routes:
+  GET /api/stats/dashboard    — weekly volume/frequency, last-7-days summary, this_week_dates
+  GET /api/stats/profile      — total_workouts, longest_streak, total_volume
+  GET /api/stats/muscle-volume — per-muscle weekly set counts, last-trained dates
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from models import db, Workout
 
 
@@ -264,3 +265,222 @@ class TestProfileStats:
         data = client.get('/api/stats/profile', headers=auth_headers(auth_token2)).get_json()
         assert data['total_workouts'] == 0
         assert data['total_volume'] == 0
+
+
+# ---------------------------------------------------------------------------
+# GET /api/stats/muscle-volume
+# ---------------------------------------------------------------------------
+
+def _this_week_monday():
+    today = date.today()
+    return today - timedelta(days=today.weekday())
+
+
+def _create_template(client, token, name='Bench Press', muscle_group='Chest'):
+    """Create an exercise template with a muscle mapping. Returns template_id."""
+    res = client.post(
+        '/api/exercises',
+        json={'name': name, 'muscle_group': muscle_group},
+        headers=auth_headers(token),
+    )
+    assert res.status_code == 201
+    return res.get_json()['id']
+
+
+def _create_mapped_workout(client, token, template_id, n_sets=3,
+                            set_type='N', exercise_type='strength', name='Exercise'):
+    """Create a workout with n_sets sets for the given template. Returns workout_id."""
+    sets = [{'reps': 8, 'weight': 100, 'set_type': set_type} for _ in range(n_sets)]
+    payload = {
+        'workoutName': 'Test Workout',
+        'exercises': [{
+            'name': name,
+            'exercise_template_id': template_id,
+            'exercise_type': exercise_type,
+            'sets': sets,
+        }],
+    }
+    res = client.post('/api/workouts', json=payload, headers=auth_headers(token))
+    assert res.status_code == 201
+    return res.get_json()['id']
+
+
+def _backdate(app, workout_id, target_date):
+    """Move a workout to a specific date, bypassing the API."""
+    with app.app_context():
+        w = db.session.get(Workout, workout_id)
+        w.date = datetime.combine(target_date, datetime.min.time())
+        db.session.commit()
+
+
+class TestMuscleVolume:
+
+    def _get(self, client, token, local_date=None):
+        d = local_date or date.today()
+        url = f'/api/stats/muscle-volume?local_date={d.isoformat()}'
+        return client.get(url, headers=auth_headers(token))
+
+    # -- Auth --
+
+    def test_requires_auth(self, client):
+        res = client.get('/api/stats/muscle-volume')
+        assert res.status_code == 401
+
+    # -- Response shape --
+
+    def test_response_shape(self, client, auth_token):
+        data = self._get(client, auth_token).get_json()
+        for key in ('week_start', 'muscle_sets', 'last_trained', 'total_sets', 'last_week_total'):
+            assert key in data
+
+    def test_week_start_derived_from_local_date(self, client, auth_token):
+        # Passing a Monday as local_date → week_start must equal that Monday
+        monday = _this_week_monday()
+        data = self._get(client, auth_token, monday).get_json()
+        assert data['week_start'] == monday.isoformat()
+
+    # -- Empty state --
+
+    def test_empty_when_no_workouts(self, client, auth_token):
+        data = self._get(client, auth_token).get_json()
+        assert data['muscle_sets'] == {}
+        assert data['total_sets'] == 0
+        assert data['last_trained'] == {}
+
+    # -- Set counting --
+
+    def test_counts_this_weeks_sets(self, client, auth_token):
+        tid = _create_template(client, auth_token)
+        _create_mapped_workout(client, auth_token, tid, n_sets=4)
+        data = self._get(client, auth_token).get_json()
+        assert data['muscle_sets'].get('Chest', 0) == 4
+
+    def test_excludes_warmup_sets(self, client, auth_token):
+        tid = _create_template(client, auth_token)
+        payload = {
+            'workoutName': 'Test',
+            'exercises': [{
+                'name': 'Bench Press',
+                'exercise_template_id': tid,
+                'exercise_type': 'strength',
+                'sets': [
+                    {'reps': 8, 'weight': 100, 'set_type': 'N'},
+                    {'reps': 8, 'weight': 100, 'set_type': 'N'},
+                    {'reps': 8, 'weight': 100, 'set_type': 'N'},
+                    {'reps': 5, 'weight': 60,  'set_type': 'W'},
+                    {'reps': 5, 'weight': 80,  'set_type': 'W'},
+                ],
+            }],
+        }
+        client.post('/api/workouts', json=payload, headers=auth_headers(auth_token))
+        data = self._get(client, auth_token).get_json()
+        assert data['muscle_sets'].get('Chest', 0) == 3
+
+    def test_multiple_exercises_same_muscle_accumulate(self, client, auth_token):
+        t1 = _create_template(client, auth_token, 'Bench Press', 'Chest')
+        t2 = _create_template(client, auth_token, 'Incline Press', 'Chest')
+        _create_mapped_workout(client, auth_token, t1, n_sets=3)
+        _create_mapped_workout(client, auth_token, t2, n_sets=2, name='Incline Press')
+        data = self._get(client, auth_token).get_json()
+        assert data['muscle_sets'].get('Chest', 0) == 5
+
+    def test_total_sets_equals_sum_of_muscle_sets(self, client, auth_token):
+        t1 = _create_template(client, auth_token, 'Bench Press', 'Chest')
+        t2 = _create_template(client, auth_token, 'Pull-up', 'Back')
+        _create_mapped_workout(client, auth_token, t1, n_sets=3)
+        _create_mapped_workout(client, auth_token, t2, n_sets=5, name='Pull-up')
+        data = self._get(client, auth_token).get_json()
+        assert data['total_sets'] == sum(data['muscle_sets'].values())
+        assert data['total_sets'] == 8
+
+    # -- Exclusions --
+
+    def test_excludes_exercises_without_template_id(self, client, auth_token):
+        payload = {
+            'workoutName': 'Custom',
+            'exercises': [{
+                'name': 'Mystery Move',
+                'exercise_type': 'strength',
+                'sets': [{'reps': 8, 'weight': 100}],
+            }],
+        }
+        client.post('/api/workouts', json=payload, headers=auth_headers(auth_token))
+        data = self._get(client, auth_token).get_json()
+        assert data['muscle_sets'] == {}
+
+    def test_excludes_cardio_exercises(self, client, auth_token):
+        tid = _create_template(client, auth_token, 'Running', 'Core')
+        payload = {
+            'workoutName': 'Cardio Day',
+            'exercises': [{
+                'name': 'Running',
+                'exercise_template_id': tid,
+                'exercise_type': 'cardio',
+                'sets': [{'cardio_duration': 30, 'distance': 5, 'distance_unit': 'km'}],
+            }],
+        }
+        client.post('/api/workouts', json=payload, headers=auth_headers(auth_token))
+        data = self._get(client, auth_token).get_json()
+        assert data['muscle_sets'].get('Core', 0) == 0
+
+    def test_excludes_previous_weeks_from_muscle_sets(self, client, auth_token, app):
+        tid = _create_template(client, auth_token)
+        wid = _create_mapped_workout(client, auth_token, tid)
+        last_monday = _this_week_monday() - timedelta(weeks=1)
+        _backdate(app, wid, last_monday)
+        data = self._get(client, auth_token).get_json()
+        assert data['muscle_sets'].get('Chest', 0) == 0
+
+    # -- last_trained --
+
+    def test_previous_week_appears_in_last_trained(self, client, auth_token, app):
+        tid = _create_template(client, auth_token)
+        wid = _create_mapped_workout(client, auth_token, tid)
+        last_monday = _this_week_monday() - timedelta(weeks=1)
+        _backdate(app, wid, last_monday)
+        data = self._get(client, auth_token).get_json()
+        assert data['last_trained'].get('Chest') == last_monday.isoformat()
+
+    def test_last_trained_shows_most_recent_date(self, client, auth_token, app):
+        tid = _create_template(client, auth_token)
+        monday = _this_week_monday()
+        two_weeks_ago = monday - timedelta(weeks=2)
+
+        wid_old = _create_mapped_workout(client, auth_token, tid, name='Bench Press')
+        _backdate(app, wid_old, two_weeks_ago)
+
+        wid_new = _create_mapped_workout(client, auth_token, tid, name='Bench Press')
+        _backdate(app, wid_new, monday)
+
+        data = self._get(client, auth_token).get_json()
+        assert data['last_trained'].get('Chest') == monday.isoformat()
+
+    # -- Isolation --
+
+    def test_user_isolation(self, client, auth_token, auth_token2):
+        tid = _create_template(client, auth_token)
+        _create_mapped_workout(client, auth_token, tid, n_sets=4)
+        data = self._get(client, auth_token2).get_json()
+        assert data['muscle_sets'].get('Chest', 0) == 0
+
+    # -- local_date / UTC boundary fix --
+
+    def test_local_date_fixes_utc_boundary(self, client, auth_token, app):
+        # Bug: Railway runs UTC. Late Sunday (user's local time) the server's date is
+        # already Monday, so week_start jumps to NEXT Monday and excludes all workouts
+        # from the user's actual current week. Passing local_date fixes this.
+        monday = _this_week_monday()
+        sunday = monday + timedelta(days=6)      # last day of this week (user's perspective)
+        next_monday = monday + timedelta(days=7)  # what the UTC server thinks is "today"
+
+        tid = _create_template(client, auth_token)
+        wid = _create_mapped_workout(client, auth_token, tid, n_sets=3)
+        _backdate(app, wid, monday)
+
+        # With correct local_date (Sunday) → week includes this Monday → counted
+        res = self._get(client, auth_token, sunday)
+        assert res.get_json()['muscle_sets'].get('Chest', 0) == 3
+
+        # With UTC-shifted local_date (next Monday) → week_start = next Monday → NOT counted
+        res = self._get(client, auth_token, next_monday)
+        assert res.get_json()['muscle_sets'].get('Chest', 0) == 0
