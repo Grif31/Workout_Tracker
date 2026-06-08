@@ -757,43 +757,70 @@ def muscle_volume():
         )
 
     # Sets this week per muscle group
-    week_rows = (
+    not_warmup = db.or_(Set.set_type.is_(None), Set.set_type != 'W')
+    not_cardio  = db.func.lower(Exercise.exercise_type) != 'cardio'
+
+    # Step 1: set counts per exercise_template_id this week
+    week_template_rows = (
         db.session.query(
-            ExerciseMuscleMapping.muscle_group,
+            Exercise.exercise_template_id,
             db.func.count(Set.id).label('set_count'),
         )
-        .join(ExerciseTemplate, ExerciseMuscleMapping.exercise_template_id == ExerciseTemplate.id)
-        .join(Exercise, Exercise.exercise_template_id == ExerciseTemplate.id)
-        .join(Workout, Exercise.workout_id == Workout.id)
         .join(Set, Set.exercise_id == Exercise.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
         .filter(
             Workout.user_id == user_id,
-            Exercise.exercise_type == 'strength',
-            Set.set_type != 'W',
+            Exercise.exercise_template_id.isnot(None),
+            not_cardio,
+            not_warmup,
             Set.reps.isnot(None),
             Workout.date >= week_start,
         )
-        .group_by(ExerciseMuscleMapping.muscle_group)
+        .group_by(Exercise.exercise_template_id)
         .all()
     )
 
-    # Last trained date per muscle group (all time)
-    last_rows = (
+    # Step 2: look up muscle groups for those templates, accumulate in Python
+    template_set_map = {row.exercise_template_id: row.set_count for row in week_template_rows}
+    muscle_sets: dict[str, int] = {}
+    if template_set_map:
+        mappings = (
+            db.session.query(ExerciseMuscleMapping.exercise_template_id, ExerciseMuscleMapping.muscle_group)
+            .filter(ExerciseMuscleMapping.exercise_template_id.in_(list(template_set_map.keys())))
+            .all()
+        )
+        for tmpl_id, muscle in mappings:
+            muscle_sets[muscle] = muscle_sets.get(muscle, 0) + template_set_map[tmpl_id]
+
+    # Last trained date per muscle group (all time) — same two-step approach
+    last_template_rows = (
         db.session.query(
-            ExerciseMuscleMapping.muscle_group,
+            Exercise.exercise_template_id,
             db.func.max(Workout.date).label('last_date'),
         )
-        .join(ExerciseTemplate, ExerciseMuscleMapping.exercise_template_id == ExerciseTemplate.id)
-        .join(Exercise, Exercise.exercise_template_id == ExerciseTemplate.id)
         .join(Workout, Exercise.workout_id == Workout.id)
-        .join(Set, Set.exercise_id == Exercise.id)
         .filter(
             Workout.user_id == user_id,
-            Exercise.exercise_type == 'strength',
+            Exercise.exercise_template_id.isnot(None),
+            not_cardio,
         )
-        .group_by(ExerciseMuscleMapping.muscle_group)
+        .group_by(Exercise.exercise_template_id)
         .all()
     )
+    last_date_map = {row.exercise_template_id: row.last_date for row in last_template_rows}
+    last_trained: dict[str, str | None] = {}
+    if last_date_map:
+        last_mappings = (
+            db.session.query(ExerciseMuscleMapping.exercise_template_id, ExerciseMuscleMapping.muscle_group)
+            .filter(ExerciseMuscleMapping.exercise_template_id.in_(list(last_date_map.keys())))
+            .all()
+        )
+        for tmpl_id, muscle in last_mappings:
+            d = last_date_map.get(tmpl_id)
+            date_str = d.strftime('%Y-%m-%d') if d else None
+            # keep the most recent date if multiple templates map to same muscle
+            if muscle not in last_trained or (date_str and (not last_trained[muscle] or date_str > last_trained[muscle])):
+                last_trained[muscle] = date_str
 
     # Last week's total working sets (for fatigue monitor)
     last_week_total = (
@@ -802,8 +829,9 @@ def muscle_volume():
         .join(Workout, Exercise.workout_id == Workout.id)
         .filter(
             Workout.user_id == user_id,
-            Exercise.exercise_type == 'strength',
-            Set.set_type != 'W',
+            Exercise.exercise_template_id.isnot(None),
+            not_cardio,
+            not_warmup,
             Set.reps.isnot(None),
             Workout.date >= last_week_start,
             Workout.date < week_start,
@@ -811,11 +839,6 @@ def muscle_volume():
         .scalar() or 0
     )
 
-    muscle_sets = {row.muscle_group: row.set_count for row in week_rows}
-    last_trained = {
-        row.muscle_group: row.last_date.strftime('%Y-%m-%d') if row.last_date else None
-        for row in last_rows
-    }
 
     return jsonify({
         'week_start': week_start.strftime('%Y-%m-%d'),

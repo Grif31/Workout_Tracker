@@ -218,7 +218,12 @@ export default function ProfileScreen({ navigation }: Props) {
     }
   };
 
-  useFocusEffect(useCallback(() => { fetchAll(); }, []));
+  useFocusEffect(useCallback(() => {
+    fetchAll();
+    AsyncStorage.getItem('profile_frame_rank').then(val => {
+      if (val) setSelectedFrame(val);
+    });
+  }, []));
 
   const handleRefresh = () => { setRefreshing(true); fetchAll(); };
 
