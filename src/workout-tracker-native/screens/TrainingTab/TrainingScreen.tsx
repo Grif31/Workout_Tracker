@@ -56,6 +56,14 @@ function daysAgoStr(iso: string | undefined): string {
   if (days === 1) return '1d ago';
   return `${days}d ago`;
 }
+
+function weekRangeLabel(weekStart: string): string {
+  const start = new Date(weekStart + 'T12:00:00');
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${fmt(start)} – ${fmt(end)}`;
+}
 type WorkoutTemplate = { id: number; name: string; exercises: Exercise[] };
 type RoutineDay = {
   id: number; day_order: number; label: string;
@@ -552,7 +560,10 @@ export default function TrainingScreen({ navigation }: Props) {
                 <View style={styles.mvCard}>
                   {/* Header */}
                   <View style={styles.mvHeader}>
-                    <Text style={styles.scoreCardTitle}>This Week</Text>
+                    <View>
+                      <Text style={styles.scoreCardTitle}>This Week</Text>
+                      <Text style={styles.mvWeekRange}>{weekRangeLabel(muscleVolume.week_start)}</Text>
+                    </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
                       <Text style={styles.mvTotalText}>{muscleVolume.total_sets} working sets</Text>
                       <TouchableOpacity onPress={() => Alert.alert(
@@ -1007,7 +1018,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
 
   // Muscle volume card
   mvCard: { backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border },
-  mvHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+  mvHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: spacing.sm },
+  mvWeekRange: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 1 },
   mvTotalText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontWeight: '500' },
   mvColLabels: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   mvColLabel: { fontSize: 9, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },

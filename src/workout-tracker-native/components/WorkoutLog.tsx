@@ -544,7 +544,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             if (data.sets?.length > 0) {
               return {
                 ...ex,
-                sets: data.sets.map((s: any) => ({ reps: s.reps, weight: s.weight, set_type: s.set_type ?? 'N' })),
+                sets: data.sets.map((s: any) => ({ reps: String(s.reps ?? ''), weight: String(s.weight ?? ''), set_type: s.set_type ?? 'N' })),
                 previousSets: data.sets,
                 currentPR: prData,
               };
@@ -590,7 +590,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             updated[idx] = {
               ...updated[idx],
               sets: data.sets.map((s: any) => ({
-                reps: s.reps, weight: s.weight, set_type: s.set_type ?? 'N',
+                reps: String(s.reps ?? ''), weight: String(s.weight ?? ''), set_type: s.set_type ?? 'N',
               })),
               previousSets: data.sets,
               currentPR: prData,
@@ -649,7 +649,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             if (data.sets?.length > 0) {
               enriched[idx] = {
                 ...enriched[idx],
-                sets: data.sets.map((s: any) => ({ reps: s.reps, weight: s.weight, set_type: s.set_type ?? 'N' })),
+                sets: data.sets.map((s: any) => ({ reps: String(s.reps ?? ''), weight: String(s.weight ?? ''), set_type: s.set_type ?? 'N' })),
                 previousSets: data.sets,
                 currentPR: prData,
               };

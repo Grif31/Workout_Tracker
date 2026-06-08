@@ -773,7 +773,6 @@ def muscle_volume():
             Exercise.exercise_template_id.isnot(None),
             not_cardio,
             not_warmup,
-            Set.reps.isnot(None),
             Workout.date >= week_start,
         )
         .group_by(Exercise.exercise_template_id)
