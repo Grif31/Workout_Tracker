@@ -210,7 +210,9 @@ export default function TrainingScreen({ navigation }: Props) {
 
   const fetchMuscleGroupData = async () => {
     try {
-      const res = await apiFetch('/api/stats/muscle-volume');
+      const now = new Date();
+      const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const res = await apiFetch(`/api/stats/muscle-volume?local_date=${localDate}`);
       if (res.ok) {
         const data = await res.json();
         setMuscleVolume(data);

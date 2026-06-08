@@ -733,7 +733,11 @@ def muscle_volume():
     from datetime import date, timedelta
     user_id = get_jwt_identity()
 
-    today = date.today()
+    local_date_str = request.args.get('local_date')
+    try:
+        today = date.fromisoformat(local_date_str) if local_date_str else date.today()
+    except ValueError:
+        today = date.today()
     week_start = today - timedelta(days=today.weekday())   # Monday
     last_week_start = week_start - timedelta(weeks=1)
 

@@ -9,23 +9,28 @@ import { typography } from '../theme/typography';
 
 type Props = { onComplete: () => void };
 
-const CALLS = [
-  { key: 'me',               url: '/api/me' },
-  { key: 'recent_workouts',  url: '/api/workouts/recent' },
-  { key: 'workout_dates',    url: '/api/workouts/dates' },
-  { key: 'profile_workouts', url: '/api/workouts?page=1&per_page=20' },
-  { key: 'prs',              url: '/api/personal-records' },
-  { key: 'strength_score',   url: '/api/stats/strength-score' },
-  { key: 'templates',        url: '/api/workout-templates' },
-  { key: 'routines',         url: '/api/routines' },
-  { key: 'progress',         url: '/api/stats/progress?range=30d' },
-  { key: 'muscle_volume',    url: '/api/stats/muscle-volume' },
-];
+function buildCalls() {
+  const now = new Date();
+  const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return [
+    { key: 'me',               url: '/api/me' },
+    { key: 'recent_workouts',  url: '/api/workouts/recent' },
+    { key: 'workout_dates',    url: '/api/workouts/dates' },
+    { key: 'profile_workouts', url: '/api/workouts?page=1&per_page=20' },
+    { key: 'prs',              url: '/api/personal-records' },
+    { key: 'strength_score',   url: '/api/stats/strength-score' },
+    { key: 'templates',        url: '/api/workout-templates' },
+    { key: 'routines',         url: '/api/routines' },
+    { key: 'progress',         url: '/api/stats/progress?range=30d' },
+    { key: 'muscle_volume',    url: `/api/stats/muscle-volume?local_date=${localDate}` },
+  ];
+}
 
 export default function PreloadScreen({ onComplete }: Props) {
   const { colors } = useTheme();
   const progress = useRef(new Animated.Value(0)).current;
   const completed = useRef(0);
+  const CALLS = buildCalls();
   const total = CALLS.length + 1; // +1 for profile_stats (needs weekly goal from AsyncStorage)
 
   const tick = () => {
