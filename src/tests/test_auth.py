@@ -1,6 +1,8 @@
 """
-Tests for /api/signup and /api/login
+Tests for /api/signup, /api/login, and /api/auth/social
 """
+import os
+from unittest.mock import patch
 
 
 class TestSignup:
@@ -119,3 +121,27 @@ class TestLogin:
         token = res.get_json()['access_token']
         assert isinstance(token, str)
         assert len(token) > 0
+
+
+class TestAppleSocialAuth:
+
+    def test_apple_fails_closed_without_bundle_id(self, client):
+        """With APPLE_BUNDLE_ID unset, Apple auth must reject the token before
+        any network call — never silently skip audience verification."""
+        def _no_network(*args, **kwargs):
+            raise AssertionError('network call attempted before config check')
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('APPLE_BUNDLE_ID', None)
+            with patch('routes.auth_routes.http_requests.get', _no_network):
+                res = client.post('/api/auth/social', json={
+                    'provider': 'apple', 'token': 'any-identity-token',
+                })
+        assert res.status_code == 401
+        assert 'not configured' in res.get_json()['message'].lower()
+
+    def test_unknown_provider_rejected(self, client):
+        res = client.post('/api/auth/social', json={
+            'provider': 'myspace', 'token': 'x',
+        })
+        assert res.status_code == 401

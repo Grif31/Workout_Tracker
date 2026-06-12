@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from flask_jwt_extended import  jwt_required, get_jwt_identity
 from schemas import WorkoutSchema, UpdateWorkoutSchema
 from utils.validation import validate_body
+from utils.strength_standards import epley_1rm
 
 workout_bp = Blueprint('workout_bp', __name__)
 
@@ -128,7 +129,7 @@ def _compute_and_upsert_prs(user_id, exercise_set_pairs, workout_date):
         epley_valid = [(r, w, sid) for r, w, sid in valid if r <= 15]
 
         workout_max_weight = max(w for _, w, _ in valid)
-        workout_max_1rm    = max(w * (1 + r / 30) for r, w, _ in epley_valid) if epley_valid else None
+        workout_max_1rm    = max(epley_1rm(w, r) for r, w, _ in epley_valid) if epley_valid else None
 
         # ── max_weight and estimated_1rm: single record per exercise ──────────
         pr_candidates = [
@@ -270,10 +271,10 @@ def _recompute_prs_for_templates(user_id, template_ids):
         # estimated_1rm (≤15 reps only)
         epley = [(r, w, sid, d) for r, w, sid, d in valid if r <= 15]
         if epley:
-            best_1rm = max(w * (1 + r / 30) for r, w, _, _ in epley)
+            best_1rm = max(epley_1rm(w, r) for r, w, _, _ in epley)
             e_sid, e_date = next(
                 (sid, d) for r, w, sid, d in epley
-                if abs(w * (1 + r / 30) - best_1rm) < 0.01
+                if abs(epley_1rm(w, r) - best_1rm) < 0.01
             )
             db.session.add(PersonalRecord(
                 user_id=user_id, exercise_template_id=template_id,

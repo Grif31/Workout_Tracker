@@ -1,5 +1,11 @@
 from statistics import mean
 
+
+def epley_1rm(weight: float, reps: int) -> float:
+    """Estimated 1RM. A true single IS the 1RM — Epley only extrapolates for reps ≥ 2
+    (the raw formula w*(1+r/30) would inflate a single by 3.3%)."""
+    return weight if reps <= 1 else weight * (1 + reps / 30)
+
 # Explicit (name_lower, equipment_lower_or_none) → standards_key mapping.
 # Used by seed.py and the migration to assign standards_key to ExerciseTemplate rows.
 # Equipment None means the exercise is equipment-independent (e.g. bodyweight).

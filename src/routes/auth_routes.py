@@ -287,6 +287,12 @@ def _extract_social_identity(provider: str, token: str):
 
 def _verify_apple_token(identity_token: str):
     """Decode Apple identityToken JWT and return (email, name)."""
+    # Fail closed: without the expected audience we cannot tell our app's
+    # tokens from any other app's — never skip the check.
+    bundle_id = os.environ.get('APPLE_BUNDLE_ID', '')
+    if not bundle_id:
+        raise ValueError('Apple Sign-In is not configured (APPLE_BUNDLE_ID missing)')
+
     try:
         import jwt as pyjwt
         from jwt.algorithms import RSAAlgorithm
@@ -301,14 +307,12 @@ def _verify_apple_token(identity_token: str):
             raise ValueError('Apple public key not found')
 
         public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
-        bundle_id = os.environ.get('APPLE_BUNDLE_ID', '')
-        options = {'verify_aud': bool(bundle_id)}
         payload = pyjwt.decode(
             identity_token,
             public_key,
             algorithms=['RS256'],
-            audience=bundle_id or None,
-            options=options,
+            audience=bundle_id,
+            issuer='https://appleid.apple.com',
         )
         return payload.get('email'), None
     except Exception as exc:

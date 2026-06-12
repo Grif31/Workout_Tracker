@@ -96,7 +96,9 @@ module.exports = {
       ],
       'react-native-health-connect',
       'expo-apple-authentication',
-      'react-native-purchases',
+      // react-native-purchases is NOT a config plugin — listing it here makes
+      // Expo import its JS bundle as a plugin and crash. It needs no plugin;
+      // autolinking handles the native module in EAS builds.
     ],
   },
 };

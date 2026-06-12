@@ -30,7 +30,10 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!API_KEY || Platform.OS !== 'ios') {
-      setIsPremium(true); // no key = dev build, unlock everything for testing
+      // Fail closed: only dev builds unlock premium without RevenueCat.
+      // A production build with a missing key (or on Android, where IAP
+      // isn't configured) must NOT hand out premium for free.
+      setIsPremium(__DEV__);
       setLoading(false);
       return;
     }

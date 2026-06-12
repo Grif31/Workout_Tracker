@@ -90,6 +90,36 @@ jest.mock('./context/ThemeContext', () => ({
 }));
 
 jest.mock('./context/WorkoutSessionContext', () => ({
-  useWorkoutSession: () => ({ session: null, saveSession: jest.fn(), clearSession: jest.fn() }),
+  useWorkoutSession: () => ({
+    session: null,
+    saveSession: jest.fn(),
+    clearSession: jest.fn(),
+    isWorkoutOpen: false,
+    setWorkoutOpen: jest.fn(),
+  }),
   WorkoutSessionProvider: ({ children }: any) => children,
+}));
+
+// react-native-purchases ships untransformable minified deps — never load real IAP in tests
+jest.mock('react-native-purchases', () => ({
+  __esModule: true,
+  default: {
+    configure: jest.fn(),
+    logIn: jest.fn(() => Promise.resolve()),
+    getCustomerInfo: jest.fn(() => Promise.resolve({ entitlements: { active: {} } })),
+    getOfferings: jest.fn(() => Promise.resolve({ current: null })),
+    purchasePackage: jest.fn(),
+    restorePurchases: jest.fn(() => Promise.resolve({ entitlements: { active: {} } })),
+  },
+}));
+
+jest.mock('./context/PurchaseContext', () => ({
+  usePurchase: () => ({
+    isPremium: true,
+    offerings: null,
+    purchasePackage: jest.fn(() => Promise.resolve(true)),
+    restorePurchases: jest.fn(() => Promise.resolve(true)),
+    loading: false,
+  }),
+  PurchaseProvider: ({ children }: any) => children,
 }));

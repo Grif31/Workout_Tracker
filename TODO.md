@@ -324,6 +324,13 @@ Check off items as you complete them.
   - [x] Add `?page=` and `?per_page=` params to `GET /api/workouts`
   - [x] Update ProfileScreen and DashboardScreen to paginate workout history
 
+- [ ] **Server-side premium enforcement (post-launch)**
+  > Premium is currently enforced only on the client: `is_pro = True` is hardcoded in `stats_routes.py` `strength_score`, so the API serves premium fields (greek score breakdown, big6, muscle groups) to any authenticated request. Decision (2026-06-12): launch iOS-only with client gating (PurchaseContext fails closed — no key / Android → not premium), do real enforcement after launch.
+  - [ ] Add `is_premium` (Boolean, default False) to `User` + migration
+  - [ ] `POST /api/webhooks/revenuecat` — verify the `Authorization` header against a `REVENUECAT_WEBHOOK_SECRET` env var; set `user.is_premium` from `INITIAL_PURCHASE` / `RENEWAL` / `EXPIRATION` / `CANCELLATION` events (`app_user_id` = our user id, set via `Purchases.logIn`)
+  - [ ] Configure the webhook URL + secret in the RevenueCat dashboard
+  - [ ] Replace `is_pro = True` in `strength_score` with `user.is_premium`
+
 ---
 
 ## 📱 6. App Store / Play Store Submission

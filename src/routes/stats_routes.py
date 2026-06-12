@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm import selectinload
 from models import db, Workout, Exercise, Set, User, ExerciseTemplate, PersonalRecord, StrengthScoreSnapshot, ExerciseMuscleMapping
+from utils.strength_standards import epley_1rm
 
 stats_bp = Blueprint('stats_bp', __name__)
 
@@ -71,7 +72,7 @@ def exercise_stats():
                 if best_set is None or w > best_set['weight']:
                     best_set = {'reps': r, 'weight': w}
                 if r <= 15:
-                    one_rm = w * (1 + r / 30)
+                    one_rm = epley_1rm(w, r)
                     session_1rms.append(one_rm)
                     all_1rms.append(one_rm)
 
@@ -565,7 +566,9 @@ def strength_score():
 
         best_1rm = max(true_1rm, est_1rm)
 
-        # Pull-up / Dip bodyweight fallback: use Epley on BW reps to stay on same scale
+        # Pull-up / Dip bodyweight fallback: standards (and logged weighted sets)
+        # are on the ADDED-weight scale, so estimate added 1RM as Epley total
+        # minus bodyweight: bw*(1 + r/30) - bw = bw*r/30.
         if best_1rm == 0.0 and exercise_name in ('Pull-up', 'Dips'):
             max_reps_row = (
                 db.session.query(db.func.max(Set.reps))
@@ -581,7 +584,7 @@ def strength_score():
                 .scalar()
             )
             if max_reps_row and max_reps_row > 0:
-                best_1rm = bw_lbs * (1 + max_reps_row / 30)
+                best_1rm = bw_lbs * max_reps_row / 30
 
         if best_1rm <= 0:
             continue
@@ -655,7 +658,10 @@ def strength_score():
         db.session.commit()
 
     # Build response
-    is_pro = True  # default True until subscription system is built
+    # TODO(post-launch): server-side premium — RevenueCat webhook sets
+    # user.is_premium and this reads it. Until then the API over-serves
+    # premium fields and gating is client-only (see TODO.md).
+    is_pro = True
 
     _TIER_BOUNDARIES = [
         (10,  'Beginner'),

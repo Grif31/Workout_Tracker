@@ -14,9 +14,10 @@
 
 | Layer | Technology |
 |---|---|
-| Frontend | Expo SDK 54, React Native 0.81, TypeScript, New Architecture enabled |
+| Frontend | Expo SDK 55, React Native 0.83, TypeScript, New Architecture enabled |
 | Navigation | React Navigation v7 (bottom tabs + native stacks) |
-| State | React Context (AuthContext, ThemeContext, WorkoutSessionContext) |
+| State | React Context (AuthContext, ThemeContext, WorkoutSessionContext, PurchaseContext) |
+| Payments | RevenueCat (react-native-purchases) — iOS only, `premium` entitlement |
 | Storage | AsyncStorage for local preferences |
 | Backend | Flask + SQLAlchemy + Flask-JWT-Extended + Flask-Migrate (Alembic) |
 | Database | PostgreSQL (psycopg2-binary) |
@@ -67,8 +68,9 @@ src/
 │   │   │   ├── GPSCardioScreen.tsx       # live GPS activity tracking (EAS build only)
 │   │   │   └── CardioDetailsScreen.tsx   # map + stats view for completed cardio activities
 │   │   ├── ExercisesTab/         # exercise browser + detail
-│   │   ├── TrainingTab/          # training plans (hold)
-│   │   └── ProfileTab/           # profile, settings, bodyweight, measurements
+│   │   ├── TrainingTab/          # strength score, muscle volume, AI plans
+│   │   ├── ProfileTab/           # profile, settings, bodyweight, measurements
+│   │   └── PaywallScreen.tsx     # RevenueCat subscription paywall
 │   ├── navigation/
 │   │   ├── AppTabs.tsx           # bottom tabs + MiniWorkoutBar
 │   │   ├── DashboardStack.tsx
@@ -77,7 +79,8 @@ src/
 │   ├── context/
 │   │   ├── AuthContext.tsx        # login/logout/register, push token reg
 │   │   ├── ThemeContext.tsx       # dark/light/system mode, color tokens
-│   │   └── WorkoutSessionContext.tsx  # minimized workout state
+│   │   ├── WorkoutSessionContext.tsx  # minimized workout state
+│   │   └── PurchaseContext.tsx    # RevenueCat isPremium/offerings/purchase
 │   ├── utils/
 │   │   ├── api.ts                # apiFetch wrapper (attaches JWT, base URL)
 │   │   ├── notifications.ts      # all notification helpers
@@ -106,12 +109,16 @@ src/
 │   ├── measurement_routes.py
 │   ├── workout_template_routes.py
 │   ├── routine_routes.py
-│   └── ai_routes.py
+│   ├── ai_routes.py              # AI workout/routine generation (Anthropic API)
+│   └── legal_routes.py           # privacy policy / terms pages
 ├── models.py                     # all SQLAlchemy models
+├── schemas.py                    # marshmallow request validation schemas
 ├── app.py                        # app factory, blueprint registration, APScheduler
 ├── migrations/versions/          # Alembic migration files
 ├── utils/
-│   └── push_service.py           # Expo push HTTP helper
+│   ├── push_service.py           # Expo push HTTP helper (batches of 100)
+│   ├── strength_standards.py     # percentile standards, ranks, Greek score
+│   └── validation.py             # validate_body decorator
 └── tests/                        # pytest suite
 ```
 
@@ -198,11 +205,13 @@ return jsonify({ 'message': 'error reason' }), 400   # client error
 
 - **Exercise types:** `'strength'` (default) or `'cardio'`
 - **Set types:** `'N'` (normal), `'W'` (warm-up), `'D'` (drop set), `'F'` (failure)
-- **PR types:** `max_weight`, `estimated_1rm`, `per_weight_reps` — never surface `estimated_1rm` as a PR label to users
+- **PR types (strength):** `max_weight`, `estimated_1rm`, `max_reps` (per weight, `weight_context` = the weight) — never surface `estimated_1rm` as a PR label to users
+- **PR types (cardio):** `best_time` (`weight_context` = distance milestone in km) and `best_distance` (`weight_context` = duration milestone in minutes)
 - **Cardio sets** have: `cardio_duration` (minutes), `distance`, `distance_unit` ('km'|'mi'), `intensity`
 - **GPS cardio exercises** also store: `route_polyline` (encoded Google polyline string), decoded with `@mapbox/polyline`
 - **`workout_type`** — computed field in `Workout.to_dict()`, derived from `exercise_type` on exercises; no DB column. Cardio workouts also get `cardio_duration`, `distance`, `distance_unit` in the dict.
-- **Weight units:** per user — `user.weight_unit` is `'kg'` or `'lbs'`; delta: kg=2.5, lbs=5
+- **Weight units:** per user — `user.weight_unit` is `'kg'` or `'lbs'`; delta: kg=2.5, lbs=5. Stored set weights, PR values, and bodyweight logs are always in the user's *current* unit — switching units bulk-converts them (`_convert_stored_weights` in `user_routes.py`). Exception: `Workout.volume` is always lbs.
+- **Custom exercises:** `ExerciseTemplate.user_id` — NULL = global library exercise, set = that user's private custom exercise
 - **RPE:** 1–10 scale, optional per set, only shown when user enables it in workout settings
 - **User gender:** `user.gender` is `'male'` | `'female'` | `None` — used for strength score percentile calculations
 

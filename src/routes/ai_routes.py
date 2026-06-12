@@ -179,4 +179,6 @@ def save_generated_workout():
         db.session.commit()
         return jsonify({'type': 'template', 'id': template.id, 'name': template.name}), 201
 
+    return jsonify({'message': "type must be 'routine' or 'template'"}), 400
+
     return jsonify({'message': 'Invalid type — must be "routine" or "template"'}), 400

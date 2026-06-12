@@ -551,3 +551,59 @@ class TestStrengthScoreUnits:
         assert data['weight_unit'] == 'lbs'
         entry = self._bench_entry(data)
         assert entry['estimated_1rm'] == pytest.approx(220.46, abs=0.1)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/stats/strength-score — pull-up bodyweight fallback uses the
+# ADDED-weight scale (standards are calibrated on weight added to the bar/belt)
+# ---------------------------------------------------------------------------
+
+class TestPullupFallbackScale:
+
+    def _seed_pullup_template(self):
+        from models import ExerciseTemplate
+        tmpl = ExerciseTemplate(name='Pull Up', equipment='Bodyweight', standards_key='Pull-up')
+        db.session.add(tmpl)
+        db.session.commit()
+        return tmpl.id
+
+    def _setup_user(self, client, token, sets, bodyweight=180):
+        h = auth_headers(token)
+        res = client.patch('/api/me', json={
+            'gender': 'male', 'bodyweight': bodyweight, 'weight_unit': 'lbs',
+        }, headers=h)
+        assert res.status_code == 200
+        tmpl_id = getattr(self, '_tmpl_id', None) or self._seed_pullup_template()
+        self._tmpl_id = tmpl_id
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Pull Day',
+            'exercises': [{
+                'name': 'Pull Up', 'exercise_template_id': tmpl_id,
+                'sets': sets,
+            }],
+        }, headers=h)
+        assert res.status_code == 201
+
+    def _pullup_entry(self, client, token):
+        res = client.get('/api/stats/strength-score', headers=auth_headers(token))
+        assert res.status_code == 200
+        return next(e for e in res.get_json()['big6'] if e['exercise'] == 'Pull-up')
+
+    def test_10_bodyweight_pullups_is_midrange_not_elite(self, client, auth_token):
+        # 180 lbs BW × 10 reps → added 1RM = 180*10/30 = 60 lbs → ratio 0.333
+        # Male standards: 50th pct = 0.30, 75th = 0.55 → ≈53rd percentile
+        self._setup_user(client, auth_token, sets=[{'reps': 10, 'weight': 0}])
+        entry = self._pullup_entry(client, auth_token)
+        assert 45 <= entry['percentile'] <= 60
+        assert entry['percentile'] < 95  # the old total-weight math put this at ~99
+
+    def test_bodyweight_reps_rank_below_weighted_set(self, client, auth_token, auth_token2):
+        # +60 lb × 5 → est added 1RM = 60*(1+5/30) = 70 lbs — must outrank 10 BW reps (60 lbs)
+        self._setup_user(client, auth_token, sets=[{'reps': 10, 'weight': 0}])
+        self._tmpl_id = None  # second user reuses the same global template
+        from models import ExerciseTemplate
+        self._tmpl_id = ExerciseTemplate.query.filter_by(standards_key='Pull-up').first().id
+        self._setup_user(client, auth_token2, sets=[{'reps': 5, 'weight': 60}])
+        bw_pct = self._pullup_entry(client, auth_token)['percentile']
+        weighted_pct = self._pullup_entry(client, auth_token2)['percentile']
+        assert weighted_pct > bw_pct
