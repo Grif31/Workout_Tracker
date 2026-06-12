@@ -24,6 +24,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
+import { roundTenth } from '../../utils/units';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'Measurements'>;
 
@@ -320,7 +321,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
         renderItem={({ item }) => (
           <View style={styles.logRow}>
             <View>
-              <Text style={styles.logPrimary}>{item.weight} {weightUnit}</Text>
+              <Text style={styles.logPrimary}>{roundTenth(item.weight)} {weightUnit}</Text>
               <Text style={styles.logDate}>{new Date(item.date).toLocaleDateString()}</Text>
             </View>
             <TouchableOpacity onPress={() => handleBwDelete(item.id)}>
@@ -354,7 +355,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
                 <View key={key} style={styles.statBox}>
                   <Text style={styles.statBoxLabel}>{label}</Text>
                   <Text style={styles.statBoxValue}>
-                    {latestM?.[key] != null ? `${latestM[key]}` : '—'}
+                    {latestM?.[key] != null ? `${roundTenth(latestM[key] as number)}` : '—'}
                   </Text>
                 </View>
               ))}
@@ -374,7 +375,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
           };
           const parts = (['waist', 'chest', 'right_arm', 'left_arm', 'right_leg', 'left_leg'] as const)
             .filter(k => item[k] != null)
-            .map(k => `${LABELS[k]}: ${item[k]}`);
+            .map(k => `${LABELS[k]}: ${roundTenth(item[k] as number)}`);
           return (
             <View style={styles.logRow}>
               <View style={{ flex: 1 }}>

@@ -269,18 +269,18 @@ class TestWeightUnitConversion:
         _setup_lbs_user_with_data(client, auth_token)
         client.patch('/api/me', json={'weight_unit': 'kg'}, headers=auth_headers(auth_token))
         me = client.get('/api/me', headers=auth_headers(auth_token)).get_json()
-        # 200 lbs → 90.72 kg → snapped to 90.5
-        assert me['bodyweight'] == 90.5
+        # 200 lbs → 90.72 kg → not near a half → whole number 91
+        assert me['bodyweight'] == 91.0
         logs = client.get('/api/bodyweight', headers=auth_headers(auth_token)).get_json()
-        assert logs[0]['weight'] == 90.5
+        assert logs[0]['weight'] == 91.0
 
-    def test_round_trip_stays_within_half_unit(self, client, auth_token):
-        # Snapping to 0.5 on each conversion means round-trips can drift by up
-        # to half a unit: 100 → 45.5 kg → 100.5 lbs; 120 → 54.5 kg → 120.0 lbs
+    def test_round_trip_restores_whole_pounds(self, client, auth_token):
+        # The whole-number bias keeps round-trips stable:
+        # 100 → 45.5 kg → 100.31 → 100; 120 → 54.5 kg → 120.15 → 120
         _setup_lbs_user_with_data(client, auth_token)
         client.patch('/api/me', json={'weight_unit': 'kg'}, headers=auth_headers(auth_token))
         client.patch('/api/me', json={'weight_unit': 'lbs'}, headers=auth_headers(auth_token))
-        assert self._set_weights(client, auth_token) == [100.5, 120.0]
+        assert self._set_weights(client, auth_token) == [100.0, 120.0]
 
     def test_same_unit_patch_is_noop(self, client, auth_token):
         _setup_lbs_user_with_data(client, auth_token)

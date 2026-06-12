@@ -26,7 +26,7 @@ import { typography } from 'theme/typography';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 import type { PR } from './PersonalRecordsScreen';
-import { toDisplayVolume, type WeightUnit } from 'utils/units';
+import { toDisplayVolume, roundTenth, type WeightUnit } from 'utils/units';
 import { apiFetch, resolveMediaUrl } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
@@ -431,7 +431,7 @@ export default function ProfileScreen({ navigation }: Props) {
         <View>
           <Text style={styles.weightRowLabel}>Measurements</Text>
           <Text style={styles.weightRowValue}>
-            {user?.bodyweight ? `${user.bodyweight} ${unit}` : 'Tap to track'}
+            {user?.bodyweight ? `${roundTenth(user.bodyweight)} ${unit}` : 'Tap to track'}
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />

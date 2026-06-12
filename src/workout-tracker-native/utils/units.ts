@@ -24,3 +24,8 @@ export function toDisplayVolume(lbs: number, unit: WeightUnit): string {
 export function convertWeight(value: number, _unit: WeightUnit): number {
   return value;
 }
+
+// Bodyweight + body measurements display to the nearest tenth.
+export function roundTenth(value: number): number {
+  return Math.round(value * 10) / 10;
+}

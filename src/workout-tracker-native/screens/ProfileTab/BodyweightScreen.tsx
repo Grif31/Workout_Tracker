@@ -20,6 +20,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
+import { roundTenth } from '../../utils/units';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'BodyweightLog'>;
 
@@ -181,7 +182,7 @@ export default function BodyweightScreen({ navigation }: Props) {
           renderItem={({ item }) => (
             <View style={styles.logRow}>
               <View>
-                <Text style={styles.logWeight}>{item.weight} {weightUnit}</Text>
+                <Text style={styles.logWeight}>{roundTenth(item.weight)} {weightUnit}</Text>
                 <Text style={styles.logDate}>{new Date(item.date).toLocaleDateString()}</Text>
               </View>
               <TouchableOpacity onPress={() => handleDelete(item.id)}>

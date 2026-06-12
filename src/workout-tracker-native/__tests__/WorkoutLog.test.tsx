@@ -64,6 +64,22 @@ describe('WorkoutLog', () => {
     expect(getByText(/cancel|discard/i)).toBeTruthy();
   });
 
+  it('keeps the original workout date when editing', () => {
+    const { getByText } = render(
+      <WorkoutLog
+        prefill={{ name: 'Push Day', notes: '', date: '2026-03-05T00:00:00', exercises: [] }}
+        workoutId={1}
+        editMode
+        onSubmit={jest.fn()}
+        onCancel={jest.fn()}
+      />
+    );
+    const expected = new Date('2026-03-05T00:00:00').toLocaleDateString(undefined, {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+    });
+    expect(getByText(expected)).toBeTruthy();
+  });
+
   it('prefills workout name from prefill prop', () => {
     const { getByDisplayValue } = render(
       <WorkoutLog

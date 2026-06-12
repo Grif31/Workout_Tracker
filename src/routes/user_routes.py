@@ -27,12 +27,19 @@ KG_PER_LB = 0.453592
 LBS_PER_KG = 2.20462
 
 
+# Converted weights land on a half only when the true value is genuinely close
+# to it (±0.15); otherwise they snap to the whole number. The whole-number bias
+# keeps unit round-trips stable (100 → 45.5 kg → 100.31 → 100, not 100.5).
+HALF_SNAP_TOLERANCE = 0.15
+
+
 def convert_weight_value(value: float, new_unit: str) -> float:
-    """Convert a single weight to the new unit, snapped to the nearest 0.5
-    (lb or kg) so converted values read like real plate loads. Round-tripping
-    kg↔lbs can therefore drift by up to half a unit — accepted trade-off."""
-    factor = LBS_PER_KG if new_unit == 'lbs' else KG_PER_LB
-    return round(value * factor * 2) / 2
+    """Convert a single weight to the new unit: nearest whole lb/kg, or the
+    nearest 0.5 when the converted value is within ±0.15 of a half."""
+    scaled = value * (LBS_PER_KG if new_unit == 'lbs' else KG_PER_LB)
+    if abs(scaled - round(scaled)) >= 0.5 - HALF_SNAP_TOLERANCE:
+        return round(scaled * 2) / 2
+    return float(round(scaled))
 
 
 def _convert_stored_weights(user_id: int, new_unit: str) -> None:
@@ -43,8 +50,13 @@ def _convert_stored_weights(user_id: int, new_unit: str) -> None:
     factor = KG_PER_LB if new_unit == 'kg' else LBS_PER_KG
 
     def _converted(col):
-        # SQL twin of convert_weight_value: snap to the nearest 0.5 lb/kg
-        return db.func.round(col * factor * 2) / 2.0
+        # SQL twin of convert_weight_value: whole number unless near a half
+        scaled = col * factor
+        return db.case(
+            (db.func.abs(scaled - db.func.round(scaled)) >= 0.5 - HALF_SNAP_TOLERANCE,
+             db.func.round(scaled * 2) / 2.0),
+            else_=db.func.round(scaled),
+        )
 
     exercise_ids = (
         db.session.query(Exercise.id)

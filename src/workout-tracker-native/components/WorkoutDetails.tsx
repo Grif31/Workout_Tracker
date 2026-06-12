@@ -27,6 +27,9 @@ import MuscleDiagram from './MuscleDiagram';
 export type PrefillWorkoutData = {
   name: string;
   notes: string;
+  // Original workout datetime (ISO) — set in edit mode only so the date
+  // picker keeps the workout's real date instead of resetting to today
+  date?: string;
   exercises: {
     id?: number;
     name: string;
@@ -109,6 +112,7 @@ export default function WorkoutDetailsScreen({
     return {
       name: workout.name,
       notes: workout.notes || '',
+      date: mode === 'edit' ? workout.date : undefined,
       exercises: workout.exercises.map(e => ({
         id: mode === 'edit' ? e.id : undefined,
         name: e.name,

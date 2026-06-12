@@ -340,6 +340,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     if (prefill) {
       setWorkoutName(prefill.name);
       setNotes(prefill.notes);
+      // Keep the workout's original date when editing (defaults to today otherwise)
+      if (prefill.date) {
+        const d = new Date(prefill.date);
+        if (!isNaN(d.getTime())) setSelectedDate(d);
+      }
       setExercises(
         prefill.exercises.map((ex: any) => ({
           uid: makeUid(),
