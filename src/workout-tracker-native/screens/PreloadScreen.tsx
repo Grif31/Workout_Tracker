@@ -1,11 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Image, StyleSheet, Animated } from 'react-native';
+import { View, StyleSheet, Animated } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import { appCache } from '../utils/appCache';
-import { spacing } from '../theme/spacing';
-import { typography } from '../theme/typography';
+import SplashView from '../components/SplashView';
 
 type Props = { onComplete: () => void };
 
@@ -69,22 +68,15 @@ export default function PreloadScreen({ onComplete }: Props) {
   }, []);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.center}>
-        <Image
-          source={require('../assets/Arete_icon.png')}
-          style={styles.icon}
-          resizeMode="contain"
-        />
-        <Text style={[styles.wordmark, { color: colors.textPrimary }]}>Aretē</Text>
-      </View>
-
-      <View style={[styles.barTrack, { backgroundColor: colors.border }]}>
+    <SplashView>
+      {/* Track/fill sit on the fixed splash background, so the track is a
+          fixed translucent white rather than a theme token */}
+      <View style={styles.barTrack}>
         <Animated.View
           style={[
             styles.barFill,
             {
-              backgroundColor: colors.textSecondary,
+              backgroundColor: colors.accent,
               width: progress.interpolate({
                 inputRange: [0, 1],
                 outputRange: ['0%', '100%'],
@@ -93,38 +85,17 @@ export default function PreloadScreen({ onComplete }: Props) {
           ]}
         />
       </View>
-    </View>
+    </SplashView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingBottom: spacing.xl * 2,
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  icon: {
-    width: 72,
-    height: 72,
-    borderRadius: 16,
-  },
-  wordmark: {
-    fontSize: typography.fontSize.xxl,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
   barTrack: {
     width: '50%',
     height: 3,
     borderRadius: 2,
     overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
   barFill: {
     height: '100%',

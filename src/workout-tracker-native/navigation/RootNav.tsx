@@ -3,7 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppTabs } from './AppTabs';
 import { AuthStackScreen } from './AuthStack';
@@ -14,6 +14,7 @@ import OnboardingScreen from '../screens/Auth/OnboardingScreen';
 import OnboardingTutorialScreen from '../screens/Auth/OnboardingTutorialScreen';
 import PaywallScreen from '../screens/PaywallScreen';
 import PreloadScreen from '../screens/PreloadScreen';
+import SplashView from '../components/SplashView';
 import { appCache } from '../utils/appCache';
 
 const OnboardingStack = createNativeStackNavigator<OnboardingStackParamsList>();
@@ -53,10 +54,11 @@ export default function RootNavigator() {
   }, []);
 
   if (loading || !onboardingChecked) {
+    // Same look as the native splash so launch reads as one continuous screen
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
-      </View>
+      <SplashView>
+        <ActivityIndicator color="#fff" />
+      </SplashView>
     );
   }
 
