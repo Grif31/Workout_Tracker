@@ -60,7 +60,9 @@ export default function SetRow({
         });
         return (
           <Animated.View style={{ transform: [{ translateX }] }}>
-            <TouchableOpacity style={styles.swipeDelete} onPress={onDelete}>
+            {/* flex fills the stretched action container so the button matches
+                the 44px set row exactly (marginBottom mirrors the row gap) */}
+            <TouchableOpacity style={[styles.swipeDelete, { flex: 1 }]} onPress={onDelete}>
               <Text style={styles.swipeDeleteText}>Delete</Text>
             </TouchableOpacity>
           </Animated.View>
