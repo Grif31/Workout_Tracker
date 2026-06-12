@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, Alert, TouchableOpacity,
   KeyboardAvoidingView, Platform, Vibration, ScrollView,
-  InputAccessoryView, Keyboard, Modal, Dimensions,
+  Keyboard, Modal, Dimensions,
   Animated, AppState, FlatList,
 } from 'react-native';
 import {
@@ -34,7 +34,6 @@ import {
   AUTO_REST_KEY,
   VIBRATE_KEY,
   RPE_KEY,
-  NUMERIC_ACCESSORY_ID,
   RPE_LABELS,
   SET_TYPES,
   type SetType,
@@ -113,6 +112,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const [showPlateCalc, setShowPlateCalc] = useState(true);
   const [focusedInput, setFocusedInput] = useState<{ exIdx: number; setIdx: number; field: 'reps' | 'weight' } | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [rpePickerTarget, setRpePickerTarget]     = useState<{ exIdx: number; setIdx: number } | null>(null);
   const [plateCalcTarget, setPlateCalcTarget]     = useState<{ exIdx: number; setIdx: number } | null>(null);
   // Keep refs in sync with state so AppState/setInterval closures always read current values.
@@ -198,8 +198,15 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   }, []);
 
   useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
-    const hide = Keyboard.addListener('keyboardDidHide', () => {
+    // iOS gets the will-events so the bar is positioned before the keyboard
+    // finishes animating; Android only emits the did-events.
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvt, e => {
+      setKeyboardHeight(Platform.OS === 'ios' ? e.endCoordinates.height : 0);
+      setKeyboardVisible(true);
+    });
+    const hide = Keyboard.addListener(hideEvt, () => {
       setKeyboardVisible(false);
       // Delay so onFocus on the next input can fire first when switching inputs.
       // If an input gained focus within this window, inputFocusedRef will be true and we skip the clear.
@@ -1116,66 +1123,33 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         )}
       </Modal>
 
-      {/* iOS InputAccessoryView attaches to TextInputs via nativeID; Android uses an absolutely-positioned fallback below. */}
-      {Platform.OS === 'ios' && (
-        <InputAccessoryView nativeID={NUMERIC_ACCESSORY_ID}>
-          <View style={styles.keyboardAccessory}>
-            <View style={styles.keyboardAdjRow}>
-              <TouchableOpacity
-                style={styles.keyboardAdjBtn}
-                onPress={() => focusedInput && adjustNumericField(focusedInput.exIdx, focusedInput.setIdx, focusedInput.field, focusedInput.field === 'weight' ? -weightDelta : -1)}
-              >
-                <Text style={styles.keyboardAdjText}>
-                  {focusedInput?.field === 'weight' ? `-${weightDelta}` : '−1 rep'}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.keyboardAdjBtn}
-                onPress={() => focusedInput && adjustNumericField(focusedInput.exIdx, focusedInput.setIdx, focusedInput.field, focusedInput.field === 'weight' ? weightDelta : 1)}
-              >
-                <Text style={styles.keyboardAdjText}>
-                  {focusedInput?.field === 'weight' ? `+${weightDelta}` : '+1 rep'}
-                </Text>
-              </TouchableOpacity>
-              {focusedInput?.field === 'weight' && showPlateCalc && (
-                <TouchableOpacity
-                  style={styles.keyboardAdjBtn}
-                  onPress={() => { setPlateCalcTarget(focusedInput!); Keyboard.dismiss(); }}
-                >
-                  <Ionicons name="barbell-outline" size={16} color={colors.textPrimary} />
-                </TouchableOpacity>
-              )}
-            </View>
-            <TouchableOpacity onPress={() => { Keyboard.dismiss(); setFocusedInput(null); }} style={styles.keyboardDismissBtn}>
-              <Ionicons name="chevron-down" size={20} color={colors.textPrimary} />
-            </TouchableOpacity>
-          </View>
-        </InputAccessoryView>
-      )}
-
-      {Platform.OS === 'android' && keyboardVisible && (
-        <View style={[styles.keyboardAccessory, styles.androidKeyboardBar]}>
+      {/* Numeric keyboard toolbar — a plain floating view on BOTH platforms.
+          The native InputAccessoryView is broken on the New Architecture
+          (detaches after the first focus / when switching inputs), so we
+          position above the keyboard ourselves via keyboard events. */}
+      {keyboardVisible && focusedInput && (
+        <View style={[styles.keyboardAccessory, styles.floatingKeyboardBar, { bottom: keyboardHeight }]}>
           <View style={styles.keyboardAdjRow}>
             <TouchableOpacity
               style={styles.keyboardAdjBtn}
-              onPress={() => focusedInput && adjustNumericField(focusedInput.exIdx, focusedInput.setIdx, focusedInput.field, focusedInput.field === 'weight' ? -weightDelta : -1)}
+              onPress={() => adjustNumericField(focusedInput.exIdx, focusedInput.setIdx, focusedInput.field, focusedInput.field === 'weight' ? -weightDelta : -1)}
             >
               <Text style={styles.keyboardAdjText}>
-                {focusedInput?.field === 'weight' ? `-${weightDelta}` : '−1 rep'}
+                {focusedInput.field === 'weight' ? `-${weightDelta}` : '−1 rep'}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.keyboardAdjBtn}
-              onPress={() => focusedInput && adjustNumericField(focusedInput.exIdx, focusedInput.setIdx, focusedInput.field, focusedInput.field === 'weight' ? weightDelta : 1)}
+              onPress={() => adjustNumericField(focusedInput.exIdx, focusedInput.setIdx, focusedInput.field, focusedInput.field === 'weight' ? weightDelta : 1)}
             >
               <Text style={styles.keyboardAdjText}>
-                {focusedInput?.field === 'weight' ? `+${weightDelta}` : '+1 rep'}
+                {focusedInput.field === 'weight' ? `+${weightDelta}` : '+1 rep'}
               </Text>
             </TouchableOpacity>
-            {focusedInput?.field === 'weight' && showPlateCalc && (
+            {focusedInput.field === 'weight' && showPlateCalc && (
               <TouchableOpacity
                 style={styles.keyboardAdjBtn}
-                onPress={() => { setPlateCalcTarget(focusedInput!); Keyboard.dismiss(); }}
+                onPress={() => { setPlateCalcTarget(focusedInput); Keyboard.dismiss(); }}
               >
                 <Ionicons name="barbell-outline" size={16} color={colors.textPrimary} />
               </TouchableOpacity>
@@ -1361,9 +1335,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  androidKeyboardBar: {
+  floatingKeyboardBar: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
   },

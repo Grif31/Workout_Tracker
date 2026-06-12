@@ -4,7 +4,6 @@ export const REST_TIMER_KEY = 'default_rest_timer';
 export const AUTO_REST_KEY = 'workout_auto_rest';
 export const VIBRATE_KEY = 'workout_vibrate';
 export const RPE_KEY = 'workout_show_rpe';
-export const NUMERIC_ACCESSORY_ID = 'workoutNumericDismiss';
 
 export const RPE_LABELS = [
   { value: 5,  desc: 'Moderate — many reps left' },

@@ -1,11 +1,11 @@
 import React, { useMemo } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Animated } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { type WorkoutSet, type PreviousSet, type SetType, NUMERIC_ACCESSORY_ID, colStyles } from './types';
+import { type WorkoutSet, type PreviousSet, type SetType, colStyles } from './types';
 
 type Props = {
   set: WorkoutSet;
@@ -85,7 +85,6 @@ export default function SetRow({
           placeholder="—"
           placeholderTextColor={colors.placeholder}
           keyboardType="numeric"
-          inputAccessoryViewID={Platform.OS === 'ios' ? NUMERIC_ACCESSORY_ID : undefined}
           editable={!isDone}
           value={set.reps}
           onChangeText={onChangeReps}
@@ -99,7 +98,6 @@ export default function SetRow({
             placeholder="—"
             placeholderTextColor={colors.placeholder}
             keyboardType="numeric"
-            inputAccessoryViewID={Platform.OS === 'ios' ? NUMERIC_ACCESSORY_ID : undefined}
             editable={!isDone}
             value={set.weight}
             onChangeText={onChangeWeight}
