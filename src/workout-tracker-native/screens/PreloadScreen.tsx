@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import { appCache } from '../utils/appCache';
 import SplashView from '../components/SplashView';
@@ -26,7 +25,6 @@ function buildCalls() {
 }
 
 export default function PreloadScreen({ onComplete }: Props) {
-  const { colors } = useTheme();
   const progress = useRef(new Animated.Value(0)).current;
   const completed = useRef(0);
   const CALLS = buildCalls();
@@ -69,14 +67,12 @@ export default function PreloadScreen({ onComplete }: Props) {
 
   return (
     <SplashView>
-      {/* Track/fill sit on the fixed splash background, so the track is a
-          fixed translucent white rather than a theme token */}
+      {/* Bar sits on the fixed splash background — fixed white, not theme tokens */}
       <View style={styles.barTrack}>
         <Animated.View
           style={[
             styles.barFill,
             {
-              backgroundColor: colors.accent,
               width: progress.interpolate({
                 inputRange: [0, 1],
                 outputRange: ['0%', '100%'],
@@ -100,5 +96,6 @@ const styles = StyleSheet.create({
   barFill: {
     height: '100%',
     borderRadius: 2,
+    backgroundColor: '#fff',
   },
 });
