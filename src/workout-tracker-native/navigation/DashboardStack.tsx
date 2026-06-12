@@ -8,6 +8,7 @@ import LogWorkoutScreen from '../screens/DashboardTab/WorkoutLogScreen';
 import GPSCardioScreen from '../screens/DashboardTab/GPSCardioScreen';
 import CardioDetailsScreen from '../screens/DashboardTab/CardioDetailsScreen';
 import ExerciseDetailScreen from '../screens/ExercisesTab/ExerciseDetailScreen';
+import GreekRankIntroScreen from '../screens/DashboardTab/GreekRankIntroScreen';
 import { useTheme } from '../context/ThemeContext';
 
 const Stack = createNativeStackNavigator<DashboardStackParamsList>();
@@ -24,6 +25,7 @@ export function DashboardStack() {
       <Stack.Screen name="WorkoutLog" component={LogWorkoutScreen} options={{ animation: 'slide_from_bottom' }} />
       <Stack.Screen name="GPSCardio" component={GPSCardioScreen} options={{ contentStyle: { paddingTop: 0 } }} />
       <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen as any} options={{ presentation: 'modal', contentStyle: { paddingTop: 0 } }} />
+      <Stack.Screen name="GreekRankIntro" component={GreekRankIntroScreen} options={{ contentStyle: { paddingTop: 0 }, animation: 'fade' }} />
     </Stack.Navigator>
   );
 }

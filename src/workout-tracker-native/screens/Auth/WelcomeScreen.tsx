@@ -62,23 +62,6 @@ export default function WelcomeScreen({ navigation }: Props) {
           <Text style={styles.loginBtnText}>Log In</Text>
         </TouchableOpacity>
 
-        {/* Social divider */}
-        <View style={styles.dividerRow}>
-          <View style={styles.line} />
-          <Text style={styles.dividerText}>or sign in with</Text>
-          <View style={styles.line} />
-        </View>
-
-        {/* Icon-only social row */}
-        <View style={styles.socialRow}>
-          <TouchableOpacity style={styles.iconBtn} onPress={handleGoogle} activeOpacity={0.75}>
-            <Ionicons name="logo-google" size={22} color={AUTH.text} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn} onPress={handleFacebook} activeOpacity={0.75}>
-            <Ionicons name="logo-facebook" size={22} color={AUTH.text} />
-          </TouchableOpacity>
-        </View>
-
         <Text style={styles.footer}>Sign in securely via your existing account</Text>
       </View>
     </SafeAreaView>

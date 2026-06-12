@@ -144,7 +144,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
       )}
 
       <View style={s.header}>
-        <TouchableOpacity style={s.closeBtn} onPress={() => navigation.navigate('DashboardHome')}>
+        <TouchableOpacity style={s.closeBtn} onPress={() => navigation.navigate(isFirstWorkout ? 'GreekRankIntro' : 'DashboardHome')}>
           <Text style={s.closeText}>✕</Text>
         </TouchableOpacity>
       </View>
@@ -193,7 +193,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           </Animated.View>
         )}
 
-        {greekRank && (() => {
+        {greekRank && !isFirstWorkout && (() => {
           const rankColor = GREEK_RANK_COLORS[greekRank] ?? '#888';
           const rankIdx = GREEK_RANKS.findIndex(r => r.name === greekRank);
           const nextRank = GREEK_RANKS[rankIdx + 1];

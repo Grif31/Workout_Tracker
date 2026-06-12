@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import {
   View,
   Text,
@@ -7,16 +8,11 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
-  TextInput,
   Linking,
   Modal,
   Platform,
-  ActivityIndicator,
-  Share,
 } from 'react-native';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import { showToast } from '../../utils/toast';
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -37,6 +33,7 @@ import { requestHealthConnectPermission } from '../../utils/healthConnect';
 
 const APP_VERSION = '1.0.0';
 const REST_TIMER_KEY = 'default_rest_timer';
+const REST_TIMER_PRESETS = [30, 45, 60, 90, 120, 150, 180, 240, 300];
 const GPS_DISTANCE_KEY = 'gps_distance_unit';
 const REMINDERS_KEY = 'workout_reminders_enabled';
 const REST_ALERTS_KEY = 'rest_timer_alerts_enabled';
@@ -47,7 +44,7 @@ const REMINDER_MIN_KEY = 'workout_reminder_minute';
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'Settings'>;
 
 export default function SettingsScreen({ navigation }: Props) {
-  const { user, logout, updateUser } = useAuth();
+  const { user, updateUser } = useAuth();
   const { colors, mode, accentPreset, toggleMode, setAccentPreset } = useTheme();
   const { isPremium } = usePurchase();
 
@@ -55,13 +52,19 @@ export default function SettingsScreen({ navigation }: Props) {
   const [distanceIsKm, setDistanceIsKm]     = useState(true);
   const [restTimerSeconds, setRestTimerSeconds] = useState('90');
   const [savingUnit, setSavingUnit]         = useState(false);
-  const [exporting, setExporting]           = useState(false);
   // Notification settings
   const [remindersOn, setRemindersOn]   = useState(false);
   const [restAlertsOn, setRestAlertsOn] = useState(true);
   const [liveNotifOn, setLiveNotifOn]   = useState(true);
   const [reminderHour, setReminderHour] = useState('9');
   const [reminderMin, setReminderMin]   = useState('00');
+
+  const [accentModalVisible, setAccentModalVisible] = useState(false);
+  const [restTimerPickerVisible, setRestTimerPickerVisible] = useState(false);
+  const [reminderPickerVisible, setReminderPickerVisible] = useState(false);
+  const [pendingReminderDate, setPendingReminderDate] = useState(() => {
+    const d = new Date(); d.setHours(9, 0, 0, 0); return d;
+  });
 
   // Health sync
   const [healthSyncOn, setHealthSyncOn] = useState(false);
@@ -114,55 +117,33 @@ export default function SettingsScreen({ navigation }: Props) {
     }
   };
 
-  const handleRestTimerSave = async () => {
-    const secs = parseInt(restTimerSeconds, 10);
-    if (isNaN(secs) || secs < 10 || secs > 600) {
-      Alert.alert('Invalid value', 'Enter a value between 10 and 600 seconds.');
-      return;
-    }
-    await AsyncStorage.setItem(REST_TIMER_KEY, String(secs));
-    Alert.alert('Saved', `Default rest timer set to ${secs}s.`);
+  const formatRestTimer = (secs: number) => {
+    if (secs < 60) return `${secs}s`;
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return s === 0 ? `${m}:00` : `${m}:${String(s).padStart(2, '0')}`;
   };
 
-
-  const handleLogout = () => {
-    Alert.alert('Log Out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Log Out', style: 'destructive', onPress: () => logout() },
-    ]);
+  const getReminderDate = () => {
+    const d = new Date();
+    d.setHours(parseInt(reminderHour, 10) || 9, parseInt(reminderMin, 10) || 0, 0, 0);
+    return d;
   };
 
-  const handleExport = async () => {
-    setExporting(true);
-    try {
-      const res = await apiFetch('/api/workouts/export');
-      if (!res.ok) {
-        showToast(`Export failed (server error ${res.status}). Please try again.`);
-        return;
-      }
-      const csvText = await res.text();
-      const dir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
-      if (dir) {
-        const fileUri = dir + 'aretefitnessapp_workouts.csv';
-        await FileSystem.writeAsStringAsync(fileUri, csvText, {
-          encoding: FileSystem.EncodingType.UTF8,
-        });
-        await Sharing.shareAsync(fileUri, {
-          mimeType: 'text/csv',
-          dialogTitle: 'Export Workout Data',
-        });
-      } else {
-        // Fallback: share CSV as text via native share sheet
-        await Share.share({
-          title: 'Workout Export',
-          message: csvText,
-        });
-      }
-    } catch {
-      showToast('Export failed. Please try again.');
-    } finally {
-      setExporting(false);
-    }
+  const formatReminderTime = () => {
+    const h = parseInt(reminderHour, 10) || 9;
+    const m = parseInt(reminderMin, 10) || 0;
+    const period = h >= 12 ? 'PM' : 'AM';
+    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${period}`;
+  };
+
+  const applyReminderDate = async (date: Date) => {
+    const h = date.getHours();
+    const m = date.getMinutes();
+    setReminderHour(String(h));
+    setReminderMin(String(m).padStart(2, '0'));
+    await AsyncStorage.multiSet([[REMINDER_HOUR_KEY, String(h)], [REMINDER_MIN_KEY, String(m)]]);
+    if (remindersOn) await scheduleWorkoutReminder(h, m);
   };
 
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -204,30 +185,16 @@ export default function SettingsScreen({ navigation }: Props) {
         <View style={styles.divider} />
 
         {/* Accent color picker */}
-        <View style={styles.accentRow}>
+        <TouchableOpacity style={styles.row} onPress={() => setAccentModalVisible(true)} activeOpacity={0.7}>
           <View style={styles.rowLeft}>
             <Ionicons name="color-palette-outline" size={20} color={colors.textSecondary} />
             <Text style={styles.rowLabel}>Accent Color</Text>
           </View>
-          <View style={styles.accentPresets}>
-            {ACCENT_PRESETS.map(preset => (
-              <TouchableOpacity
-                key={preset.name}
-                style={[
-                  styles.accentCircle,
-                  { backgroundColor: preset.value },
-                  accentPreset.name === preset.name && styles.accentCircleSelected,
-                ]}
-                onPress={() => setAccentPreset(preset)}
-                activeOpacity={0.8}
-              >
-                {accentPreset.name === preset.name && (
-                  <Ionicons name="checkmark" size={14} color={preset.text} />
-                )}
-              </TouchableOpacity>
-            ))}
+          <View style={styles.accentRowRight}>
+            <View style={[styles.accentCircle, { backgroundColor: accentPreset.value }]} />
+            <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
           </View>
-        </View>
+        </TouchableOpacity>
 
         <View style={styles.divider} />
 
@@ -257,36 +224,12 @@ export default function SettingsScreen({ navigation }: Props) {
       {/* ── Account ── */}
       <Text style={styles.sectionLabel}>Account</Text>
       <View style={styles.group}>
-        <TouchableOpacity style={styles.row} onPress={handleExport} disabled={exporting}>
+        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('AccountSettings')}>
           <View style={styles.rowLeft}>
-            <Ionicons name="download-outline" size={20} color={colors.textSecondary} />
-            <Text style={styles.rowLabel}>Export Data</Text>
-          </View>
-          {exporting
-            ? <ActivityIndicator size="small" color={colors.textSecondary} />
-            : <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />}
-        </TouchableOpacity>
-
-        <View style={styles.divider} />
-
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => navigation.navigate('ChangePassword')}
-        >
-          <View style={styles.rowLeft}>
-            <Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} />
-            <Text style={styles.rowLabel}>Change Password</Text>
+            <Ionicons name="person-circle-outline" size={20} color={colors.textSecondary} />
+            <Text style={styles.rowLabel}>Account</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-        </TouchableOpacity>
-
-        <View style={styles.divider} />
-
-        <TouchableOpacity style={styles.row} onPress={handleLogout}>
-          <View style={styles.rowLeft}>
-            <Ionicons name="log-out-outline" size={20} color={colors.danger} />
-            <Text style={[styles.rowLabel, { color: colors.danger }]}>Log Out</Text>
-          </View>
         </TouchableOpacity>
       </View>
 
@@ -336,27 +279,16 @@ export default function SettingsScreen({ navigation }: Props) {
 
         <View style={styles.divider} />
 
-        <View style={styles.row}>
+        <TouchableOpacity style={styles.row} onPress={() => setRestTimerPickerVisible(true)} activeOpacity={0.7}>
           <View style={styles.rowLeft}>
             <Ionicons name="timer-outline" size={20} color={colors.textSecondary} />
             <Text style={styles.rowLabel}>Default Rest Timer</Text>
           </View>
-          <View style={styles.timerInput}>
-            <TextInput
-              style={styles.timerField}
-              value={restTimerSeconds}
-              onChangeText={setRestTimerSeconds}
-              keyboardType="number-pad"
-              maxLength={3}
-              returnKeyType="done"
-              onSubmitEditing={handleRestTimerSave}
-            />
-            <Text style={styles.timerUnit}>sec</Text>
-            <TouchableOpacity style={styles.saveBtn} onPress={handleRestTimerSave}>
-              <Text style={styles.saveBtnText}>Save</Text>
-            </TouchableOpacity>
+          <View style={styles.accentRowRight}>
+            <Text style={styles.rowValue}>{formatRestTimer(parseInt(restTimerSeconds, 10) || 90)}</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
           </View>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* ── Notifications ── */}
@@ -390,48 +322,23 @@ export default function SettingsScreen({ navigation }: Props) {
           />
         </View>
         {remindersOn && (
-          <View style={[styles.row, { paddingTop: 0, minHeight: 0 }]}>
+          <TouchableOpacity
+            style={[styles.row, { paddingTop: 0 }]}
+            onPress={() => {
+              setPendingReminderDate(getReminderDate());
+              setReminderPickerVisible(true);
+            }}
+            activeOpacity={0.7}
+          >
             <View style={styles.rowLeft}>
               <Ionicons name="time-outline" size={20} color={colors.textSecondary} />
               <Text style={styles.rowLabel}>Reminder Time</Text>
             </View>
-            <View style={styles.timerInput}>
-              <TextInput
-                style={styles.timerField}
-                value={reminderHour}
-                onChangeText={setReminderHour}
-                keyboardType="number-pad"
-                maxLength={2}
-                placeholder="9"
-                placeholderTextColor={colors.placeholder}
-              />
-              <Text style={styles.timerUnit}>h</Text>
-              <TextInput
-                style={styles.timerField}
-                value={reminderMin}
-                onChangeText={setReminderMin}
-                keyboardType="number-pad"
-                maxLength={2}
-                placeholder="00"
-                placeholderTextColor={colors.placeholder}
-              />
-              <Text style={styles.timerUnit}>m</Text>
-              <TouchableOpacity
-                style={styles.saveBtn}
-                onPress={async () => {
-                  const h = Math.min(23, Math.max(0, parseInt(reminderHour, 10) || 9));
-                  const m = Math.min(59, Math.max(0, parseInt(reminderMin, 10) || 0));
-                  setReminderHour(String(h));
-                  setReminderMin(String(m).padStart(2, '0'));
-                  await AsyncStorage.multiSet([[REMINDER_HOUR_KEY, String(h)], [REMINDER_MIN_KEY, String(m)]]);
-                  await scheduleWorkoutReminder(h, m);
-                  Alert.alert('Saved', `Daily reminder set for ${h}:${String(m).padStart(2, '0')}`);
-                }}
-              >
-                <Text style={styles.saveBtnText}>Set</Text>
-              </TouchableOpacity>
+            <View style={styles.accentRowRight}>
+              <Text style={styles.rowValue}>{formatReminderTime()}</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
             </View>
-          </View>
+          </TouchableOpacity>
         )}
 
         <View style={styles.divider} />
@@ -562,6 +469,126 @@ export default function SettingsScreen({ navigation }: Props) {
       </View>
     </ScrollView>
 
+      {/* Accent color picker modal */}
+      <Modal
+        visible={accentModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAccentModalVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAccentModalVisible(false)}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Accent Color</Text>
+            <View style={styles.accentGrid}>
+              {ACCENT_PRESETS.map(preset => (
+                <TouchableOpacity
+                  key={preset.name}
+                  style={styles.accentGridItem}
+                  onPress={() => {
+                    setAccentPreset(preset);
+                    if (user?.id) AsyncStorage.setItem(`@theme_accent_${user.id}`, preset.name);
+                    setAccentModalVisible(false);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <View style={[
+                    styles.accentGridCircle,
+                    { backgroundColor: preset.value },
+                    accentPreset.name === preset.name && styles.accentCircleSelected,
+                  ]}>
+                    {accentPreset.name === preset.name && (
+                      <Ionicons name="checkmark" size={18} color={preset.text} />
+                    )}
+                  </View>
+
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Reminder time picker — iOS bottom sheet */}
+      {Platform.OS === 'ios' && (
+        <Modal
+          visible={reminderPickerVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setReminderPickerVisible(false)}
+        >
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setReminderPickerVisible(false)}>
+            <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
+              <Text style={styles.modalTitle}>Reminder Time</Text>
+              <DateTimePicker
+                value={pendingReminderDate}
+                mode="time"
+                display="spinner"
+                onChange={(_: DateTimePickerEvent, date?: Date) => { if (date) setPendingReminderDate(date); }}
+                textColor={colors.textPrimary}
+                style={{ backgroundColor: colors.surface }}
+              />
+              <TouchableOpacity
+                style={[styles.saveBtn, { marginHorizontal: spacing.md, marginTop: spacing.sm }]}
+                onPress={async () => {
+                  await applyReminderDate(pendingReminderDate);
+                  setReminderPickerVisible(false);
+                }}
+              >
+                <Text style={styles.saveBtnText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Reminder time picker — Android system dialog */}
+      {Platform.OS === 'android' && reminderPickerVisible && (
+        <DateTimePicker
+          value={getReminderDate()}
+          mode="time"
+          display="default"
+          onChange={async (_: DateTimePickerEvent, date?: Date) => {
+            setReminderPickerVisible(false);
+            if (date) await applyReminderDate(date);
+          }}
+        />
+      )}
+
+      {/* Rest timer preset picker */}
+      <Modal
+        visible={restTimerPickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setRestTimerPickerVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setRestTimerPickerVisible(false)}>
+          <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>Default Rest Timer</Text>
+            <View style={styles.restTimerGrid}>
+              {REST_TIMER_PRESETS.map(secs => {
+                const selected = (parseInt(restTimerSeconds, 10) || 90) === secs;
+                return (
+                  <TouchableOpacity
+                    key={secs}
+                    style={[styles.restTimerOption, selected && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+                    onPress={async () => {
+                      setRestTimerSeconds(String(secs));
+                      await AsyncStorage.setItem(REST_TIMER_KEY, String(secs));
+                      setRestTimerPickerVisible(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.restTimerOptionText, selected && { color: '#fff' }]}>
+                      {formatRestTimer(secs)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
 </>
   );
 }
@@ -608,16 +635,6 @@ const createStyles = (colors: Colors) =>
       paddingVertical: spacing.md,
       minHeight: 52,
     },
-    accentRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.md,
-      minHeight: 60,
-      flexWrap: 'wrap',
-      gap: spacing.sm,
-    },
     rowLeft: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -637,22 +654,58 @@ const createStyles = (colors: Colors) =>
       backgroundColor: colors.border,
       marginHorizontal: spacing.md,
     },
-    accentPresets: {
+    accentRowRight: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 10,
-      justifyContent: 'flex-end',
+      alignItems: 'center',
+      gap: spacing.sm,
     },
     accentCircle: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+    },
+    accentCircleSelected: {
+      borderWidth: 2.5,
+      borderColor: colors.textPrimary,
+    },
+    accentGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
+      gap: spacing.md,
+    },
+    accentGridItem: {
+      alignItems: 'center',
+      width: '22%',
+    },
+    accentGridCircle: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    accentCircleSelected: {
-      borderWidth: 2,
-      borderColor: colors.textPrimary,
+    restTimerGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.md,
+      gap: spacing.sm,
+    },
+    restTimerOption: {
+      width: '30%',
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: spacing.sm,
+      paddingVertical: spacing.md,
+      alignItems: 'center',
+    },
+    restTimerOptionText: {
+      fontSize: typography.fontSize.md,
+      fontWeight: '600',
+      color: colors.textPrimary,
     },
     unitToggle: {
       flexDirection: 'row',
@@ -669,26 +722,6 @@ const createStyles = (colors: Colors) =>
     unitActive: {
       color: colors.accent,
       fontWeight: '700',
-    },
-    timerInput: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.xs,
-    },
-    timerField: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 6,
-      paddingHorizontal: spacing.sm,
-      paddingVertical: 4,
-      fontSize: typography.fontSize.md,
-      color: colors.textPrimary,
-      width: 52,
-      textAlign: 'center',
-    },
-    timerUnit: {
-      fontSize: typography.fontSize.sm,
-      color: colors.textSecondary,
     },
     saveBtn: {
       backgroundColor: colors.accent,

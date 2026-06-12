@@ -35,14 +35,21 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     Purchases.configure({ apiKey: API_KEY });
+    // If user is already available at configure time, log in immediately
+    if (user?.id) {
+      Purchases.logIn(String(user.id)).catch(e => console.error('[RC] logIn error:', e));
+      loadCustomerInfo();
+      loadOfferings();
+    }
   }, []);
 
+  // Handle user becoming available after configure (login/signup flow)
   useEffect(() => {
     if (!user?.id || !API_KEY || Platform.OS !== 'ios') {
-      setLoading(false);
+      if (!API_KEY || Platform.OS !== 'ios') setLoading(false);
       return;
     }
-    Purchases.logIn(String(user.id)).catch(() => {});
+    Purchases.logIn(String(user.id)).catch(e => console.error('[RC] logIn error:', e));
     loadCustomerInfo();
     loadOfferings();
   }, [user?.id]);
@@ -58,8 +65,11 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
   const loadOfferings = async () => {
     try {
       const o = await Purchases.getOfferings();
+      console.log('[RC] offerings:', JSON.stringify(o?.current));
       setOfferings(o);
-    } catch {}
+    } catch (e) {
+      console.error('[RC] getOfferings error:', e);
+    }
   };
 
   const purchasePackage = useCallback(async (pkg: PurchasesPackage): Promise<boolean> => {

@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, g
-from models import db, WorkoutTemplate, ExerciseTemplate
+from models import db, WorkoutTemplate, WorkoutTemplateExercise, ExerciseTemplate
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from schemas import WorkoutTemplateSchema
 from utils.validation import validate_body
@@ -21,9 +21,15 @@ def create_workout_template():
         return jsonify({'message': 'Name is required'}), 400
 
     ex_ids = data.get('exercise_template_ids', [])
-    exercises = ExerciseTemplate.query.filter(ExerciseTemplate.id.in_(ex_ids)).all() if ex_ids else []
-    template = WorkoutTemplate(user_id=user_id, name=name, exercises=exercises)
+    template = WorkoutTemplate(user_id=user_id, name=name)
     db.session.add(template)
+    db.session.flush()
+    for i, ex_id in enumerate(ex_ids):
+        db.session.add(WorkoutTemplateExercise(
+            workout_template_id=template.id,
+            exercise_template_id=ex_id,
+            order=i,
+        ))
     db.session.commit()
     return jsonify(template.to_dict(include_exercises=True)), 201
 
@@ -59,7 +65,13 @@ def update_workout_template(template_id):
         template.name = data['name'].strip() or template.name
     if 'exercise_template_ids' in data:
         ex_ids = data['exercise_template_ids']
-        template.exercises = ExerciseTemplate.query.filter(ExerciseTemplate.id.in_(ex_ids)).all() if ex_ids else []
+        WorkoutTemplateExercise.query.filter_by(workout_template_id=template.id).delete()
+        for i, ex_id in enumerate(ex_ids):
+            db.session.add(WorkoutTemplateExercise(
+                workout_template_id=template.id,
+                exercise_template_id=ex_id,
+                order=i,
+            ))
 
     db.session.commit()
     return jsonify(template.to_dict(include_exercises=True))

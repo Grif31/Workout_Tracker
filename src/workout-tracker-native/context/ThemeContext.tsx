@@ -79,12 +79,14 @@ function buildColors(mode: 'light' | 'dark', preset: AccentPreset): Colors {
 // ── Context ───────────────────────────────────────────────────────────────────
 
 type ThemeContextType = {
-  colors:         Colors;
-  mode:           'light' | 'dark';
-  accentPreset:   AccentPreset;
-  accentPresets:  AccentPreset[];
-  toggleMode:     () => void;
-  setAccentPreset:(preset: AccentPreset) => void;
+  colors:            Colors;
+  mode:              'light' | 'dark';
+  accentPreset:      AccentPreset;
+  accentPresets:     AccentPreset[];
+  toggleMode:        () => void;
+  setAccentPreset:   (preset: AccentPreset) => void;
+  resetAccent:       () => void;
+  loadAccentForUser: (userId: number | string) => Promise<void>;
 };
 
 const ThemeContext = createContext<ThemeContextType>(null!);
@@ -144,13 +146,31 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(KEY_ACCENT, preset.name);
   };
 
+  const resetAccent = () => {
+    setAccentState(ACCENT_PRESETS[0]);
+    AsyncStorage.removeItem(KEY_ACCENT);
+  };
+
+  const loadAccentForUser = async (userId: number | string) => {
+    const saved = await AsyncStorage.getItem(`@theme_accent_${userId}`);
+    if (saved) {
+      const found = ACCENT_PRESETS.find(p => p.name === saved);
+      if (found) {
+        setAccentState(found);
+        return;
+      }
+    }
+    // No saved preference for this user — use default
+    setAccentState(ACCENT_PRESETS[0]);
+  };
+
   const colors = useMemo(() => buildColors(mode, accentPreset), [mode, accentPreset]);
 
   // Don't render until we've loaded saved preferences to avoid a flash
   if (!ready) return null;
 
   return (
-    <ThemeContext.Provider value={{ colors, mode, accentPreset, accentPresets: ACCENT_PRESETS, toggleMode, setAccentPreset }}>
+    <ThemeContext.Provider value={{ colors, mode, accentPreset, accentPresets: ACCENT_PRESETS, toggleMode, setAccentPreset, resetAccent, loadAccentForUser }}>
       {children}
     </ThemeContext.Provider>
   );

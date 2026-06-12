@@ -290,6 +290,7 @@ def profile_stats():
         'longest_daily_streak': daily_longest,
         'current_monthly_streak': monthly_current,
         'longest_monthly_streak': monthly_longest,
+        'this_week_count': week_counts.get(current_monday, 0),
     })
 
 
@@ -501,7 +502,10 @@ def strength_score():
         return jsonify({'missing': missing}), 422
 
     kg_to_lbs = 2.20462
-    bw_lbs = user.bodyweight * kg_to_lbs if (user.weight_unit or 'lbs') == 'kg' else user.bodyweight
+    # Logged weights are stored in the user's unit — normalise to lbs so
+    # bodyweight ratios compare against the lbs-calibrated standards.
+    unit_to_lbs = kg_to_lbs if (user.weight_unit or 'lbs') == 'kg' else 1.0
+    bw_lbs = user.bodyweight * unit_to_lbs
 
     from datetime import date as _date
     today = _date.today()
@@ -545,7 +549,7 @@ def strength_score():
             )
             .scalar()
         )
-        true_1rm = float(true_1rm_row) if true_1rm_row else 0.0
+        true_1rm = float(true_1rm_row) * unit_to_lbs if true_1rm_row else 0.0
 
         # Estimated 1RM from PersonalRecord
         est_1rm_row = (
@@ -557,7 +561,7 @@ def strength_score():
             )
             .scalar()
         )
-        est_1rm = float(est_1rm_row) if est_1rm_row else 0.0
+        est_1rm = float(est_1rm_row) * unit_to_lbs if est_1rm_row else 0.0
 
         best_1rm = max(true_1rm, est_1rm)
 
@@ -586,7 +590,8 @@ def strength_score():
         pct = compute_percentile(exercise_name, user.gender, bw_ratio)
         if pct is not None:
             exercise_percentiles[exercise_name] = pct
-            exercise_1rms[exercise_name] = round(best_1rm, 1)
+            # Display value goes back to the user's unit
+            exercise_1rms[exercise_name] = round(best_1rm / unit_to_lbs, 1)
 
     if not exercise_percentiles:
         return jsonify({'missing': 'data'}), 422
@@ -666,7 +671,8 @@ def strength_score():
         for boundary_pct, rank_name in _TIER_BOUNDARIES:
             w = compute_weight_at_percentile(name, user.gender, bw_lbs, boundary_pct)
             if w is not None:
-                thresholds.append({'percentile': boundary_pct, 'rank': rank_name, 'weight': w})
+                thresholds.append({'percentile': boundary_pct, 'rank': rank_name,
+                                   'weight': round(w / unit_to_lbs, 1)})
         return {
             'exercise': name,
             'percentile': round(pct, 1) if pct is not None else None,
@@ -698,6 +704,7 @@ def strength_score():
         'muscle_groups_used': len(muscle_groups),
         'age_adjusted': age_factor > 1.0,
         'age': user_age,
+        'weight_unit': user.weight_unit or 'lbs',
         'last_updated': datetime.now().isoformat(),
     }
 

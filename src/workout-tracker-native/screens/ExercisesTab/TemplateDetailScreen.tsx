@@ -12,11 +12,17 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
-
 import { apiFetch } from '../../utils/api';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'TemplateDetail'>;
-type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; image_url?: string };
+type Exercise = {
+  id: number;
+  name: string;
+  muscle_group: string;
+  equipment?: string;
+  exercise_type?: string;
+  image_url?: string;
+};
 type Template = { id: number; name: string; exercises: Exercise[] };
 
 export default function TemplateDetailScreen({ route, navigation }: Props) {
@@ -111,9 +117,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         text: 'Delete', style: 'destructive',
         onPress: async () => {
           try {
-            const res = await apiFetch(`/api/workout-templates/${templateId}`, {
-              method: 'DELETE',
-            });
+            const res = await apiFetch(`/api/workout-templates/${templateId}`, { method: 'DELETE' });
             if (res.ok) navigation.goBack();
             else Alert.alert('Error', 'Failed to delete template');
           } catch {
@@ -127,9 +131,14 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
   const handleLog = () => {
     navigation.navigate('LogRoutine', {
       prefill: {
-        name: name,
+        name,
         notes: '',
-        exercises: exercises.map(ex => ({ name: ex.name, sets: [{ reps: '', weight: '' }] })),
+        exercises: exercises.map(ex => ({
+          name: ex.name,
+          exercise_template_id: ex.id,
+          exercise_type: ex.exercise_type ?? 'strength',
+          sets: [{ reps: '', weight: '' }],
+        })),
       },
     });
   };
@@ -144,7 +153,6 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />

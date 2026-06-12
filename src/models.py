@@ -144,9 +144,23 @@ class WorkoutTemplate(db.Model):
     def to_dict(self, include_exercises=False):
         data = {"id": self.id, "user_id": self.user_id, "name": self.name}
         if include_exercises:
+            ordered = (
+                db.session.query(ExerciseTemplate)
+                .join(WorkoutTemplateExercise, WorkoutTemplateExercise.exercise_template_id == ExerciseTemplate.id)
+                .filter(WorkoutTemplateExercise.workout_template_id == self.id)
+                .order_by(WorkoutTemplateExercise.order)
+                .all()
+            )
             data["exercises"] = [
-                {"id": e.id, "name": e.name, "muscle_group": e.muscle_group}
-                for e in self.exercises
+                {
+                    "id": e.id,
+                    "name": e.name,
+                    "muscle_group": e.muscle_group,
+                    "equipment": e.equipment,
+                    "exercise_type": e.exercise_type,
+                    "image_url": e.image_url,
+                }
+                for e in ordered
             ]
         return data
 
@@ -215,9 +229,12 @@ class ExerciseTemplate(db.Model):
     image_url = db.Column(db.Text, nullable=True)
     exercise_type = db.Column(db.String(10), nullable=False, server_default='strength')
     standards_key = db.Column(db.String(100), nullable=True, index=True)
+    # NULL = global library exercise visible to all users
+    # Set = custom exercise created by that user, only visible to them
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=True, index=True)
 
     __table_args__ = (
-        db.UniqueConstraint('name', 'equipment', name='uq_exercise_name_equipment'),
+        db.UniqueConstraint('name', 'equipment', 'user_id', name='uq_exercise_name_equipment_user'),
     )
 
     muscle_mappings = db.relationship(
@@ -299,6 +316,8 @@ class DeviceToken(db.Model):
     token = db.Column(db.Text, nullable=False)
     platform = db.Column(db.String(10), nullable=False)  # 'ios' | 'android'
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    # Throttle for the re-engagement cron — at most one nudge per 7 days
+    last_reengagement_at = db.Column(db.DateTime, nullable=True)
 
     __table_args__ = (db.UniqueConstraint('user_id', name='uq_device_token_user'),)
 

@@ -49,6 +49,7 @@ interface ScoreData {
   muscle_groups?: Array<{ name: string; score: number; rank: { label: string; tier: number; display: string } }>;
   age_adjusted?: boolean;
   age?: number | null;
+  weight_unit?: 'lbs' | 'kg';
   last_updated?: string;
   history?: HistoryPoint[];
 }
@@ -409,7 +410,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                       </View>
                     )}
                     {selectedLift.estimated_1rm != null && (
-                      <Text style={styles.liftOneRM}>Est. 1RM: {selectedLift.estimated_1rm} lbs</Text>
+                      <Text style={styles.liftOneRM}>Est. 1RM: {selectedLift.estimated_1rm} {scoreData?.weight_unit ?? 'lbs'}</Text>
                     )}
                   </View>
 
@@ -441,7 +442,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                             </Text>
                             {threshold && (
                               <Text style={[styles.tierBarWeight, { color: reached ? tier.color : colors.textSecondary }]} numberOfLines={1}>
-                                {threshold.weight} lbs
+                                {threshold.weight} {scoreData?.weight_unit ?? 'lbs'}
                               </Text>
                             )}
                           </View>
@@ -554,14 +555,12 @@ function GateCard({ missingFields, navigation, colors, styles }: any) {
           ? 'Add your gender in Settings to see your strength score'
           : 'Add your bodyweight in your profile to see your strength score'}
       </Text>
-      {needsGender && (
-        <TouchableOpacity
-          style={[styles.gateBtn, { backgroundColor: colors.accent }]}
-          onPress={() => navigation.navigate('TrainingHome')}
-        >
-          <Text style={[styles.gateBtnText, { color: '#fff' }]}>Go to Settings</Text>
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity
+        style={[styles.gateBtn, { backgroundColor: colors.accent }]}
+        onPress={() => (navigation as any).navigate('ProfileTab', { screen: 'EditProfile' })}
+      >
+        <Text style={[styles.gateBtnText, { color: '#fff' }]}>Complete Profile</Text>
+      </TouchableOpacity>
     </View>
   );
 }

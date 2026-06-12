@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setTokens, clearTokens, registerUnauthCallback, apiFetch } from '../utils/api';
+import { appCache } from '../utils/appCache';
 import { registerPushToken, deregisterPushToken } from '../utils/notifications';
+import { useTheme } from './ThemeContext';
 
 type AuthContextType = {
     user: any;
@@ -18,13 +20,24 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
     const [user, setUser] = useState<any>(null);
     const [token, setToken] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+    const themeCtx = useTheme();
 
     const logout = async () => {
+        // Save this user's accent preference before resetting
+        if (user?.id) {
+            await AsyncStorage.setItem(`@theme_accent_${user.id}`, themeCtx.accentPreset.name);
+        }
+        themeCtx.resetAccent();
         await deregisterPushToken();
         setUser(null);
         setToken(null);
         clearTokens();
-        await AsyncStorage.multiRemove(['token', 'refresh_token', 'user']);
+        appCache.clear();
+        await AsyncStorage.multiRemove([
+            'token', 'refresh_token', 'user',
+            'greek_rank_cached', 'profile_frame_rank',
+            '@theme_accent',
+        ]);
     };
 
     useEffect(() => {
@@ -38,20 +51,36 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
             const [[, savedAccess], [, savedRefresh]] = await AsyncStorage.multiGet(['token', 'refresh_token']);
             if (savedAccess) {
                 setTokens(savedAccess, savedRefresh ?? '');
+                // Offline or server-error launch: keep the session and show the
+                // cached profile instead of logging the user out.
+                const restoreFromCache = async () => {
+                    const cached = await AsyncStorage.getItem('user');
+                    if (cached) {
+                        try {
+                            setUser(JSON.parse(cached));
+                            setToken(savedAccess);
+                        } catch {}
+                    }
+                };
                 try {
                     // apiFetch will silently refresh the access token if it has expired
                     const res = await apiFetch('/api/me');
                     if (res.ok) {
                         const data = await res.json();
                         setUser(data);
+                        await AsyncStorage.setItem('user', JSON.stringify(data));
                         // Read whatever token is current (may have been refreshed)
                         const currentAccess = await AsyncStorage.getItem('token');
                         setToken(currentAccess);
-                    } else {
+                    } else if (res.status === 401) {
+                        // Refresh already failed inside apiFetch — session is dead
                         await logout();
+                    } else {
+                        await restoreFromCache();
                     }
                 } catch {
-                    await logout();
+                    // Network unreachable — not an auth failure
+                    await restoreFromCache();
                 }
             }
             setLoading(false);
@@ -59,6 +88,11 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
     }, []);
 
     const login = async (userData: any, accessToken: string, refreshToken: string) => {
+        // Clear any previous user's cached data before setting up the new session
+        appCache.clear();
+        await AsyncStorage.multiRemove(['greek_rank_cached', 'profile_frame_rank', '@theme_accent']);
+        // Restore this user's saved accent (or default if they've never set one)
+        await themeCtx.loadAccentForUser(userData.id);
         setUser(userData);
         setToken(accessToken);
         setTokens(accessToken, refreshToken);

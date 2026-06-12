@@ -18,7 +18,7 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: IS_DEV ? 'com.aretefitness.app.dev' : 'com.aretefitness.app',
-      buildNumber: '1',
+      buildNumber: '2',
       entitlements: {
         'com.apple.developer.usernotifications.time-sensitive': true,
       },
@@ -36,7 +36,7 @@ module.exports = {
       },
       edgeToEdgeEnabled: true,
       package: IS_DEV ? 'com.aretefitness.app.dev' : 'com.aretefitness.app',
-      versionCode: 1,
+      versionCode: 2,
       permissions: [
         'android.permission.ACCESS_FINE_LOCATION',
         'android.permission.ACCESS_COARSE_LOCATION',
@@ -96,6 +96,7 @@ module.exports = {
       ],
       'react-native-health-connect',
       'expo-apple-authentication',
+      'react-native-purchases',
     ],
   },
 };

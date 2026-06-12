@@ -1,6 +1,6 @@
 from models import db, ExerciseTemplate, ExerciseMuscleMapping
 from flask import Blueprint, request, jsonify, g
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm import subqueryload
 from schemas import ExerciseSchema
 from utils.validation import validate_body
@@ -24,14 +24,19 @@ def exercise_to_dict(exercise):
 @exercise_bp.get('/api/exercises')
 @jwt_required()
 def get_exercises():
+    user_id = int(get_jwt_identity())
     equipment = request.args.get('equipment')
     muscle = request.args.get('muscle_group')
 
-    # subqueryload avoids N+1 without conflicting with the optional JOIN filter below
-    query = ExerciseTemplate.query.options(subqueryload(ExerciseTemplate.muscle_mappings))
+    # Return global library exercises (user_id IS NULL) + this user's custom exercises
+    query = (
+        ExerciseTemplate.query
+        .options(subqueryload(ExerciseTemplate.muscle_mappings))
+        .filter(db.or_(ExerciseTemplate.user_id.is_(None), ExerciseTemplate.user_id == user_id))
+    )
 
     if equipment:
-        query = query.filter_by(equipment=equipment)
+        query = query.filter(ExerciseTemplate.equipment == equipment)
     if muscle:
         query = query.join(
             ExerciseMuscleMapping,
@@ -45,6 +50,7 @@ def get_exercises():
 @jwt_required()
 @validate_body(_exercise_schema)
 def add_exercise():
+    user_id = int(get_jwt_identity())
     data = g.validated
     name = data.get('name', '').strip()
     muscle = data.get('muscle_group')
@@ -53,10 +59,16 @@ def add_exercise():
 
     if not name:
         return jsonify({'message': 'Name Required'}), 400
-    if ExerciseTemplate.query.filter_by(name=name, equipment=equipment).first():
+    # Duplicate check: same name+equipment in global library or this user's customs
+    duplicate = ExerciseTemplate.query.filter(
+        ExerciseTemplate.name == name,
+        ExerciseTemplate.equipment == equipment,
+        db.or_(ExerciseTemplate.user_id.is_(None), ExerciseTemplate.user_id == user_id),
+    ).first()
+    if duplicate:
         return jsonify({'message': 'Exercise Already Exists'}), 400
 
-    new_exercise = ExerciseTemplate(name=name, equipment=equipment, exercise_type=exercise_type)
+    new_exercise = ExerciseTemplate(name=name, equipment=equipment, exercise_type=exercise_type, user_id=user_id)
     db.session.add(new_exercise)
     db.session.flush()  # populate new_exercise.id before adding mappings
 

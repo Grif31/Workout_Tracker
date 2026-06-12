@@ -148,3 +148,85 @@ class TestGetPrsForExercise:
     def test_requires_auth(self, client):
         res = client.get('/api/personal-records/1')
         assert res.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Cardio PRs must survive workout edits/deletes (recompute used to wipe them)
+# ---------------------------------------------------------------------------
+
+def post_cardio_workout(client, token, template_id, duration_min, distance_km, name='Morning Run'):
+    payload = {
+        'workoutName': name,
+        'exercises': [{
+            'name': 'Running',
+            'exercise_template_id': template_id,
+            'exercise_type': 'cardio',
+            'sets': [{'cardio_duration': duration_min, 'distance': distance_km, 'distance_unit': 'km'}],
+        }],
+    }
+    return client.post('/api/workouts', json=payload, headers=auth_headers(token))
+
+
+def get_best_5k_time(user_id, template_id):
+    from models import PersonalRecord
+    pr = PersonalRecord.query.filter_by(
+        user_id=user_id, exercise_template_id=template_id,
+        pr_type='best_time', weight_context=5.0,
+    ).first()
+    return pr.value if pr else None
+
+
+class TestCardioPrSurvivesRecompute:
+
+    def _setup(self, client, auth_token):
+        template_id = create_template(client, auth_token, name='Running', muscle_group='Core')
+        res = post_cardio_workout(client, auth_token, template_id, duration_min=30, distance_km=5)
+        assert res.status_code == 201
+        return template_id, res.get_json()['id']
+
+    def test_cardio_workout_creates_best_time_pr(self, client, auth_token, registered_user):
+        user_id = registered_user['user']['id']
+        template_id, _ = self._setup(client, auth_token)
+        assert get_best_5k_time(user_id, template_id) == 30.0
+
+    def test_editing_workout_preserves_cardio_pr(self, client, auth_token, registered_user):
+        user_id = registered_user['user']['id']
+        template_id, workout_id = self._setup(client, auth_token)
+        res = client.patch(f'/api/workouts/{workout_id}', json={'workoutName': 'Renamed Run'},
+                           headers=auth_headers(auth_token))
+        assert res.status_code == 200
+        assert get_best_5k_time(user_id, template_id) == 30.0
+
+    def test_editing_sets_recomputes_cardio_pr(self, client, auth_token, registered_user):
+        user_id = registered_user['user']['id']
+        template_id, workout_id = self._setup(client, auth_token)
+        # Fetch the existing exercise/set ids, then slow the run down to 35 min
+        details = client.get(f'/api/workouts/{workout_id}', headers=auth_headers(auth_token)).get_json()
+        ex = details['exercises'][0]
+        res = client.patch(f'/api/workouts/{workout_id}', json={
+            'exercises': [{
+                'id': ex['id'], 'name': ex['name'],
+                'exercise_template_id': template_id, 'exercise_type': 'cardio',
+                'sets': [{'id': ex['sets'][0]['id'], 'cardio_duration': 35, 'distance': 5, 'distance_unit': 'km'}],
+            }],
+        }, headers=auth_headers(auth_token))
+        assert res.status_code == 200
+        assert get_best_5k_time(user_id, template_id) == 35.0
+
+    def test_deleting_best_workout_falls_back_to_remaining(self, client, auth_token, registered_user):
+        user_id = registered_user['user']['id']
+        template_id, _ = self._setup(client, auth_token)  # 30 min 5K
+        res = post_cardio_workout(client, auth_token, template_id, 25, 5, name='Fast Run')
+        fast_id = res.get_json()['id']
+        assert get_best_5k_time(user_id, template_id) == 25.0
+
+        client.delete(f'/api/workouts/{fast_id}', headers=auth_headers(auth_token))
+        assert get_best_5k_time(user_id, template_id) == 30.0
+
+    def test_deleting_only_cardio_workout_removes_prs(self, client, auth_token, registered_user):
+        from models import PersonalRecord
+        user_id = registered_user['user']['id']
+        template_id, workout_id = self._setup(client, auth_token)
+        client.delete(f'/api/workouts/{workout_id}', headers=auth_headers(auth_token))
+        assert PersonalRecord.query.filter_by(
+            user_id=user_id, exercise_template_id=template_id).count() == 0

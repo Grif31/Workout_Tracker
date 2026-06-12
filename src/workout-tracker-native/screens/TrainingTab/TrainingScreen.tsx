@@ -106,6 +106,7 @@ export default function TrainingScreen({ navigation }: Props) {
   const [chartRange, setChartRange] = useState<ChartRange>('30d');
   const [chartMetric, setChartMetric] = useState<ChartMetric>('volume');
   const [weeklyGoal, setWeeklyGoal] = useState(3);
+  const [thisWeekCount, setThisWeekCount] = useState(0);
   const [strengthPercentile, setStrengthPercentile] = useState<number | null>(null);
   const [strengthRankLabel, setStrengthRankLabel] = useState<string | null>(null);
   const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeData | null>(null);
@@ -182,6 +183,9 @@ export default function TrainingScreen({ navigation }: Props) {
     if (me?.active_routine_id) fetchActiveRoutine(me.active_routine_id);
     const mv = appCache.get<MuscleVolumeData>('muscle_volume');
     if (mv) setMuscleVolume(mv);
+    // Seed thisWeekCount from cached 30d progress if available
+    const prog30 = appCache.get<{ buckets: ProgressBucket[] }>('progress');
+    if (prog30?.buckets?.length) setThisWeekCount(prog30.buckets[prog30.buckets.length - 1]?.count ?? 0);
   }, []);
 
   useEffect(() => { fetchProgressData(chartRange); }, [chartRange]);
@@ -220,6 +224,18 @@ export default function TrainingScreen({ navigation }: Props) {
     } catch { }
   };
 
+  const fetchThisWeekCount = async () => {
+    try {
+      // Use the 30d progress endpoint — its last bucket is always the current week
+      const res = await apiFetch('/api/stats/progress?range=30d');
+      if (res.ok) {
+        const data = await res.json();
+        const buckets: ProgressBucket[] = data.buckets ?? [];
+        setThisWeekCount(buckets[buckets.length - 1]?.count ?? 0);
+      }
+    } catch { }
+  };
+
   const fetchMuscleGroupData = async () => {
     try {
       const now = new Date();
@@ -240,6 +256,7 @@ export default function TrainingScreen({ navigation }: Props) {
     fetchActiveRoutine();
     fetchStrengthScore();
     fetchMuscleGroupData();
+    fetchThisWeekCount();
   }, [user?.active_routine_id, chartRange]));
 
   const handleGenerate = async (type: 'routine' | 'template') => {
@@ -415,11 +432,27 @@ export default function TrainingScreen({ navigation }: Props) {
 
                 <TouchableOpacity style={styles.goalSide} onPress={() => setGoalModalVisible(true)}>
                   <Text style={styles.goalSideTitle}>Weekly Goal</Text>
-                  <View style={styles.goalSideValueRow}>
-                    <Text style={[styles.goalSideValue, { color: colors.accent }]}>{weeklyGoal}</Text>
-                    <Text style={styles.goalSideUnit}>/ week</Text>
+                  <View style={styles.goalCirclesRow}>
+                    {Array.from({ length: weeklyGoal }).map((_, i) => {
+                      const done = i < Math.min(thisWeekCount, weeklyGoal);
+                      return (
+                        <View
+                          key={i}
+                          style={[
+                            styles.goalCircle,
+                            done
+                              ? { backgroundColor: colors.accent, borderColor: colors.accent }
+                              : { backgroundColor: 'transparent', borderColor: colors.border },
+                          ]}
+                        >
+                          {done && <Ionicons name="checkmark" size={11} color="#fff" />}
+                        </View>
+                      );
+                    })}
                   </View>
-                  <Text style={styles.goalSideSub}>Tap to edit</Text>
+                  <Text style={styles.goalSideSub}>
+                    {Math.min(thisWeekCount, weeklyGoal)}/{weeklyGoal} this week · Tap to edit
+                  </Text>
                 </TouchableOpacity>
               </View>
 
@@ -1025,10 +1058,21 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     padding: spacing.md, borderWidth: 1, borderColor: colors.border,
     justifyContent: 'center',
   },
-  goalSideTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs },
-  goalSideValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 5, marginBottom: 2 },
-  goalSideValue: { fontSize: 36, fontWeight: '800', lineHeight: 40 },
-  goalSideUnit: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontWeight: '500' },
+  goalSideTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.sm },
+  goalCirclesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: spacing.sm,
+  },
+  goalCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   goalSideSub: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
   // kept for muscle volume card header
   scoreCardTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, marginBottom: 3 },

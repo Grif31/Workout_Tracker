@@ -114,14 +114,16 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [rpePickerTarget, setRpePickerTarget]     = useState<{ exIdx: number; setIdx: number } | null>(null);
   const [plateCalcTarget, setPlateCalcTarget]     = useState<{ exIdx: number; setIdx: number } | null>(null);
-  // Keep a ref in sync with state so the setInterval closure always reads the current value
-  // without needing to be torn down and recreated whenever the toggle changes.
+  // Keep refs in sync with state so AppState/setInterval closures always read current values.
   const vibrateRef = useRef(true);
   vibrateRef.current = vibrateOnComplete;
+  const timerPausedRef = useRef(false);
+  timerPausedRef.current = timerPaused;
 
-  const [prBannerText, setPrBannerText] = useState<string | null>(null);
+  const [prBanner, setPrBanner] = useState<{ name: string; type: string } | null>(null);
   const prAnim = useRef(new Animated.Value(0)).current;
   const prTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputFocusedRef = useRef(false);
 
   const [exerciseList, setExerciseList] = useState<{ id: number; name: string; muscle_group: string; equipment?: string; image_url?: string; exercise_type?: string }[]>([]);
   const [recentExercises, setRecentExercises] = useState<{ name: string; exercise_template_id: number | null }[]>([]);
@@ -157,6 +159,24 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     });
   }, []);
 
+  const TIMER_CHECKPOINT_KEY = '@workout_timer_checkpoint';
+
+  const restoreTimerCheckpoint = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(TIMER_CHECKPOINT_KEY);
+      if (!raw) return;
+      const cp = JSON.parse(raw) as { base: number; savedAt: number; paused: boolean };
+      if (cp.paused) {
+        baseRef.current = cp.base;
+        setTimerPaused(true);
+      } else {
+        baseRef.current = cp.base + Math.floor((Date.now() - cp.savedAt) / 1000);
+        startRef.current = new Date();
+      }
+      await AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
+    } catch {}
+  };
+
   // Restore from minimized session if no prefill
   useEffect(() => {
     if (!prefill && !editMode && session) {
@@ -168,6 +188,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       baseRef.current = session.baseElapsed + Math.floor((Date.now() - session.startedAt.getTime()) / 1000);
       startRef.current = new Date();
       clearSession();
+      AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
+    } else if (!prefill && !editMode && !session) {
+      // App may have been killed while workout was open without minimizing — restore timer from checkpoint.
+      restoreTimerCheckpoint();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -176,7 +200,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
     const hide = Keyboard.addListener('keyboardDidHide', () => {
       setKeyboardVisible(false);
-      setFocusedInput(null);
+      // Delay so onFocus on the next input can fire first when switching inputs.
+      // If an input gained focus within this window, inputFocusedRef will be true and we skip the clear.
+      setTimeout(() => {
+        if (!inputFocusedRef.current) setFocusedInput(null);
+      }, 50);
     });
     return () => { show.remove(); hide.remove(); };
   }, []);
@@ -257,14 +285,22 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     if (editMode) return;
     const sub = AppState.addEventListener('change', async (nextState) => {
       if (nextState === 'background') {
+        // Persist timer so it survives app suspension or kill without minimize.
+        const elapsedSecs = timerPausedRef.current
+          ? baseRef.current
+          : baseRef.current + Math.floor((Date.now() - startRef.current.getTime()) / 1000);
+        await AsyncStorage.setItem(TIMER_CHECKPOINT_KEY, JSON.stringify({
+          base: elapsedSecs,
+          savedAt: Date.now(),
+          paused: timerPausedRef.current,
+        }));
+
         const liveOff = await AsyncStorage.getItem('live_workout_notif_enabled');
         if (liveOff === 'false') return;
         const setsDone = exercises.flatMap(e => e.sets).filter(s => s.done).length;
         const setsTotal = exercises.flatMap(e => e.sets).length;
-        const elapsedSecs = baseRef.current + Math.floor((Date.now() - startRef.current.getTime()) / 1000);
-        // Last exercise with any completed set = the one the user was most recently working on.
         const currentExercise = (
-          [...exercises].reverse().find(e => e.sets.some(s => s.done)) ?? exercises[0]
+          exercises.find(e => e.sets.some(s => !s.done)) ?? exercises[exercises.length - 1]
         )?.name;
         postLiveWorkoutNotification({
           workoutName: workoutName || 'Workout',
@@ -275,20 +311,22 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         });
       } else if (nextState === 'active') {
         cancelLiveWorkoutNotification();
+        // App resumed from background — update timer refs from checkpoint if JS was suspended.
+        await restoreTimerCheckpoint();
       }
     });
     return () => sub.remove();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercises, workoutName, editMode]);
 
-  const showPRBanner = (exerciseName: string) => {
+  const showPRBanner = (exerciseName: string, prType: string) => {
     if (prTimerRef.current) clearTimeout(prTimerRef.current);
-    setPrBannerText(exerciseName);
+    setPrBanner({ name: exerciseName, type: prType });
     prAnim.setValue(0);
     Animated.spring(prAnim, { toValue: 1, useNativeDriver: true, tension: 70, friction: 10 }).start();
     prTimerRef.current = setTimeout(() => {
       Animated.timing(prAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
-        setPrBannerText(null);
+        setPrBanner(null);
       });
     }, 3500);
   };
@@ -428,7 +466,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         (r <= 15 && e1rm > 0 && pr.estimated_1rm != null && e1rm > pr.estimated_1rm) ||
         isNewRepsPR;
       if (isNewPR) {
-        showPRBanner(ex.name);
+        const prType = (!isNaN(w) && pr.max_weight != null && w > pr.max_weight)
+          ? 'Max Weight'
+          : isNewRepsPR
+            ? 'Most Reps at Weight'
+            : 'New Strength Record';
+        showPRBanner(ex.name, prType);
         // Advance currentPR so subsequent sets in the same session don't re-trigger
         setExercises(prev => prev.map((e, i) => {
           if (i !== exIndex) return e;
@@ -713,6 +756,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         await enqueueWorkout(payload);
         cancelLiveWorkoutNotification();
         clearSession();
+        AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
         showToast('Saved offline — will sync when connected');
         onCancel?.();
         return;
@@ -732,6 +776,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       if (!res.ok) { Alert.alert('Error', data.message || 'Please try again'); return; }
       cancelLiveWorkoutNotification();
       clearSession();
+      AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
       const endDate = new Date();
       const startDate = new Date(endDate.getTime() - elapsed * 1000);
       const workoutType = exercisesToSave.some(ex => (ex.exercise_type || 'strength') !== 'cardio') ? 'strength' : 'cardio';
@@ -940,7 +985,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                 'Are you sure you want to discard this workout?',
                 [
                   { text: 'Cancel', style: 'cancel' },
-                  { text: 'Discard', style: 'destructive', onPress: () => { clearSession(); onCancel?.(); } },
+                  { text: 'Discard', style: 'destructive', onPress: () => { clearSession(); AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY); onCancel?.(); } },
                 ]
               )}
             >
@@ -962,8 +1007,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             autoFocusNotes={autoFocusNoteIdx === exIndex}
             onCycleSetType={setIdx => cycleSetType(exIndex, setIdx)}
             onUpdateSetField={(setIdx, field, val) => updateSetField(exIndex, setIdx, field, val)}
-            onFocusInput={(setIdx, field) => setFocusedInput({ exIdx: exIndex, setIdx, field })}
-            onBlurInput={() => {}}
+            onFocusInput={(setIdx, field) => {
+              inputFocusedRef.current = true;
+              setFocusedInput({ exIdx: exIndex, setIdx, field });
+            }}
+            onBlurInput={() => { inputFocusedRef.current = false; }}
             onToggleSetDone={setIdx => toggleSetDone(exIndex, setIdx)}
             onOpenRpePicker={setIdx => setRpePickerTarget({ exIdx: exIndex, setIdx })}
             onDeleteSet={setIdx => deleteSet(exIndex, setIdx)}
@@ -1064,70 +1112,68 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       {Platform.OS === 'ios' && (
         <InputAccessoryView nativeID={NUMERIC_ACCESSORY_ID}>
           <View style={styles.keyboardAccessory}>
-            {focusedInput && (
-              <View style={styles.keyboardAdjRow}>
+            <View style={styles.keyboardAdjRow}>
+              <TouchableOpacity
+                style={styles.keyboardAdjBtn}
+                onPress={() => focusedInput && adjustNumericField(focusedInput.exIdx, focusedInput.setIdx, focusedInput.field, focusedInput.field === 'weight' ? -weightDelta : -1)}
+              >
+                <Text style={styles.keyboardAdjText}>
+                  {focusedInput?.field === 'weight' ? `-${weightDelta}` : '−1 rep'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.keyboardAdjBtn}
+                onPress={() => focusedInput && adjustNumericField(focusedInput.exIdx, focusedInput.setIdx, focusedInput.field, focusedInput.field === 'weight' ? weightDelta : 1)}
+              >
+                <Text style={styles.keyboardAdjText}>
+                  {focusedInput?.field === 'weight' ? `+${weightDelta}` : '+1 rep'}
+                </Text>
+              </TouchableOpacity>
+              {focusedInput?.field === 'weight' && showPlateCalc && (
                 <TouchableOpacity
                   style={styles.keyboardAdjBtn}
-                  onPress={() => adjustNumericField(focusedInput.exIdx, focusedInput.setIdx, focusedInput.field, focusedInput.field === 'weight' ? -weightDelta : -1)}
+                  onPress={() => { setPlateCalcTarget(focusedInput!); Keyboard.dismiss(); }}
                 >
-                  <Text style={styles.keyboardAdjText}>
-                    {focusedInput.field === 'weight' ? `-${weightDelta}` : '−1 rep'}
-                  </Text>
+                  <Ionicons name="barbell-outline" size={16} color={colors.textPrimary} />
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.keyboardAdjBtn}
-                  onPress={() => adjustNumericField(focusedInput.exIdx, focusedInput.setIdx, focusedInput.field, focusedInput.field === 'weight' ? weightDelta : 1)}
-                >
-                  <Text style={styles.keyboardAdjText}>
-                    {focusedInput.field === 'weight' ? `+${weightDelta}` : '+1 rep'}
-                  </Text>
-                </TouchableOpacity>
-                {focusedInput.field === 'weight' && showPlateCalc && (
-                  <TouchableOpacity
-                    style={styles.keyboardAdjBtn}
-                    onPress={() => { setPlateCalcTarget(focusedInput); Keyboard.dismiss(); }}
-                  >
-                    <Ionicons name="barbell-outline" size={16} color={colors.textPrimary} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-            <TouchableOpacity onPress={() => Keyboard.dismiss()} style={styles.keyboardDismissBtn}>
+              )}
+            </View>
+            <TouchableOpacity onPress={() => { Keyboard.dismiss(); setFocusedInput(null); }} style={styles.keyboardDismissBtn}>
               <Ionicons name="chevron-down" size={20} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
         </InputAccessoryView>
       )}
 
-      {Platform.OS === 'android' && keyboardVisible && focusedInput && (
+      {Platform.OS === 'android' && keyboardVisible && (
         <View style={[styles.keyboardAccessory, styles.androidKeyboardBar]}>
           <View style={styles.keyboardAdjRow}>
             <TouchableOpacity
               style={styles.keyboardAdjBtn}
-              onPress={() => adjustNumericField(focusedInput.exIdx, focusedInput.setIdx, focusedInput.field, focusedInput.field === 'weight' ? -weightDelta : -1)}
+              onPress={() => focusedInput && adjustNumericField(focusedInput.exIdx, focusedInput.setIdx, focusedInput.field, focusedInput.field === 'weight' ? -weightDelta : -1)}
             >
               <Text style={styles.keyboardAdjText}>
-                {focusedInput.field === 'weight' ? `-${weightDelta}` : '−1 rep'}
+                {focusedInput?.field === 'weight' ? `-${weightDelta}` : '−1 rep'}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.keyboardAdjBtn}
-              onPress={() => adjustNumericField(focusedInput.exIdx, focusedInput.setIdx, focusedInput.field, focusedInput.field === 'weight' ? weightDelta : 1)}
+              onPress={() => focusedInput && adjustNumericField(focusedInput.exIdx, focusedInput.setIdx, focusedInput.field, focusedInput.field === 'weight' ? weightDelta : 1)}
             >
               <Text style={styles.keyboardAdjText}>
-                {focusedInput.field === 'weight' ? `+${weightDelta}` : '+1 rep'}
+                {focusedInput?.field === 'weight' ? `+${weightDelta}` : '+1 rep'}
               </Text>
             </TouchableOpacity>
-            {focusedInput.field === 'weight' && showPlateCalc && (
+            {focusedInput?.field === 'weight' && showPlateCalc && (
               <TouchableOpacity
                 style={styles.keyboardAdjBtn}
-                onPress={() => { setPlateCalcTarget(focusedInput); Keyboard.dismiss(); }}
+                onPress={() => { setPlateCalcTarget(focusedInput!); Keyboard.dismiss(); }}
               >
                 <Ionicons name="barbell-outline" size={16} color={colors.textPrimary} />
               </TouchableOpacity>
             )}
           </View>
-          <TouchableOpacity onPress={() => Keyboard.dismiss()} style={styles.keyboardDismissBtn}>
+          <TouchableOpacity onPress={() => { Keyboard.dismiss(); setFocusedInput(null); }} style={styles.keyboardDismissBtn}>
             <Ionicons name="chevron-down" size={20} color={colors.textPrimary} />
           </TouchableOpacity>
         </View>
@@ -1212,7 +1258,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       </Modal>
 
       {/* PR banner — slides down from top, auto-dismisses */}
-      {prBannerText && (
+      {prBanner && (
         <Animated.View
           style={[
             styles.prBanner,
@@ -1227,7 +1273,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           <Ionicons name="trophy" size={22} color="#FFD700" />
           <View style={styles.prBannerText}>
             <Text style={styles.prBannerTitle}>Personal Record!</Text>
-            <Text style={styles.prBannerExercise} numberOfLines={1}>{prBannerText}</Text>
+            <Text style={styles.prBannerExercise} numberOfLines={1}>{prBanner.name}</Text>
+            <Text style={styles.prBannerType}>{prBanner.type}</Text>
           </View>
         </Animated.View>
       )}
@@ -1422,6 +1469,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
     marginTop: 1,
+  },
+  prBannerType: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginTop: 2,
   },
 
   templateDividerSection: {

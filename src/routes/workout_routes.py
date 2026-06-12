@@ -238,6 +238,21 @@ def _recompute_prs_for_templates(user_id, template_ids):
             exercise_template_id=template_id,
         ).delete()
 
+        # Cardio PRs (best_time / best_distance) were just deleted too — rebuild
+        # them from the remaining cardio exercises so an edit doesn't wipe them.
+        cardio_rows = (
+            db.session.query(Exercise, Workout.date)
+            .join(Workout, Exercise.workout_id == Workout.id)
+            .filter(
+                Workout.user_id == user_id,
+                Exercise.exercise_template_id == template_id,
+                db.func.lower(Exercise.exercise_type) == 'cardio',
+            )
+            .all()
+        )
+        for exercise, wdate in cardio_rows:
+            _compute_and_upsert_cardio_prs(user_id, [(exercise, exercise.sets)], wdate)
+
         if not rows:
             continue
 

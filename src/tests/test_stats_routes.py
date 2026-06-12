@@ -484,3 +484,70 @@ class TestMuscleVolume:
         # With UTC-shifted local_date (next Monday) → week_start = next Monday → NOT counted
         res = self._get(client, auth_token, next_monday)
         assert res.get_json()['muscle_sets'].get('Chest', 0) == 0
+
+
+# ---------------------------------------------------------------------------
+# GET /api/stats/strength-score — unit handling
+# ---------------------------------------------------------------------------
+
+class TestStrengthScoreUnits:
+
+    def _seed_bench_template(self):
+        from models import ExerciseTemplate
+        tmpl = ExerciseTemplate(name='Bench Press', equipment='Barbell', standards_key='Bench Press')
+        db.session.add(tmpl)
+        db.session.commit()
+        return tmpl.id
+
+    def _setup_user(self, client, token, unit, bodyweight, bench_weight, tmpl_id):
+        h = auth_headers(token)
+        res = client.patch('/api/me', json={
+            'gender': 'male', 'bodyweight': bodyweight, 'weight_unit': unit,
+        }, headers=h)
+        assert res.status_code == 200
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Bench',
+            'exercises': [{
+                'name': 'Bench Press', 'exercise_template_id': tmpl_id,
+                'sets': [{'reps': 1, 'weight': bench_weight}],
+            }],
+        }, headers=h)
+        assert res.status_code == 201
+
+    def _score(self, client, token):
+        res = client.get('/api/stats/strength-score', headers=auth_headers(token))
+        assert res.status_code == 200
+        return res.get_json()
+
+    def _bench_entry(self, data):
+        return next(e for e in data['big6'] if e['exercise'] == 'Bench Press')
+
+    def test_kg_and_lbs_users_get_same_percentile(self, client, auth_token, auth_token2):
+        tmpl_id = self._seed_bench_template()
+        # Same lifter in two unit systems: 80 kg BW benching 100 kg
+        self._setup_user(client, auth_token, 'lbs', 176.37, 220.46, tmpl_id)
+        self._setup_user(client, auth_token2, 'kg', 80, 100, tmpl_id)
+
+        lbs_entry = self._bench_entry(self._score(client, auth_token))
+        kg_entry = self._bench_entry(self._score(client, auth_token2))
+        assert kg_entry['percentile'] == pytest.approx(lbs_entry['percentile'], abs=0.5)
+
+    def test_kg_user_response_in_kg(self, client, auth_token):
+        tmpl_id = self._seed_bench_template()
+        self._setup_user(client, auth_token, 'kg', 80, 100, tmpl_id)
+        data = self._score(client, auth_token)
+        assert data['weight_unit'] == 'kg'
+        entry = self._bench_entry(data)
+        assert entry['estimated_1rm'] == pytest.approx(100, abs=0.1)
+        # Thresholds in kg: Intermediate (30th pct) sits between the 25th (0.55×BW)
+        # and 50th (0.85×BW) breakpoints — must be far below the lbs equivalent
+        inter = next(t for t in entry['thresholds'] if t['rank'] == 'Intermediate')
+        assert 0.55 * 80 <= inter['weight'] <= 0.85 * 80
+
+    def test_lbs_user_response_in_lbs(self, client, auth_token):
+        tmpl_id = self._seed_bench_template()
+        self._setup_user(client, auth_token, 'lbs', 176.37, 220.46, tmpl_id)
+        data = self._score(client, auth_token)
+        assert data['weight_unit'] == 'lbs'
+        entry = self._bench_entry(data)
+        assert entry['estimated_1rm'] == pytest.approx(220.46, abs=0.1)

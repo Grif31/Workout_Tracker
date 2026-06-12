@@ -65,7 +65,7 @@ function MiniWorkoutBar() {
         const total = session.exercises.flatMap(e => e.sets).length;
         const secs = session.baseElapsed + Math.floor((Date.now() - session.startedAt.getTime()) / 1000);
         const currentExercise = (
-          [...session.exercises].reverse().find(e => e.sets.some(s => s.done)) ?? session.exercises[0]
+          session.exercises.find(e => e.sets.some(s => !s.done)) ?? session.exercises[session.exercises.length - 1]
         )?.name;
         postLiveWorkoutNotification({
           workoutName: session.workoutName || 'Workout',

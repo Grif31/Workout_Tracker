@@ -127,24 +127,43 @@ def _send_reengagement_pushes(app):
     with app.app_context():
         from models import DeviceToken, Workout
         from utils.push_service import send_push
-        cutoff = datetime.now() - timedelta(days=10)
-        inactive = (
-            db.session.query(DeviceToken.token)
+        now = datetime.now()
+        inactive_cutoff = now - timedelta(days=10)
+        throttle_cutoff = now - timedelta(days=7)
+
+        # Lapsed = has logged at least one workout, but none in the last 10 days.
+        # Users who never logged a workout are excluded — nagging someone the
+        # morning after they sign up is how you earn 1-star reviews.
+        last_workout = (
+            db.session.query(
+                Workout.user_id.label('user_id'),
+                db.func.max(Workout.date).label('last_date'),
+            )
+            .group_by(Workout.user_id)
+            .subquery()
+        )
+        devices = (
+            db.session.query(DeviceToken)
+            .join(last_workout, last_workout.c.user_id == DeviceToken.user_id)
             .filter(
-                ~db.session.query(Workout).filter(
-                    Workout.user_id == DeviceToken.user_id,
-                    Workout.date >= cutoff,
-                ).exists()
+                last_workout.c.last_date < inactive_cutoff,
+                db.or_(
+                    DeviceToken.last_reengagement_at.is_(None),
+                    DeviceToken.last_reengagement_at < throttle_cutoff,
+                ),
             )
             .all()
         )
-        tokens = [r.token for r in inactive]
-        if tokens:
-            send_push(
-                tokens,
-                title="Miss your gains? 💪",
-                body="You haven't logged a workout in a while. Jump back in!",
-            )
+        if not devices:
+            return
+        send_push(
+            [d.token for d in devices],
+            title="Miss your gains? 💪",
+            body="You haven't logged a workout in a while. Jump back in!",
+        )
+        for d in devices:
+            d.last_reengagement_at = now
+        db.session.commit()
 
 
 app = create_app()
