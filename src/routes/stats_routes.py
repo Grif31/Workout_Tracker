@@ -63,18 +63,22 @@ def exercise_stats():
 
         for s in sets:
             r, w = s['reps'], s['weight']
-            if r and w and s['set_type'] != 'W':
+            # weight 0 = bodyweight set: counts for reps/sets, not weight stats
+            if r and w is not None and s['set_type'] != 'W':
                 session_volume += r * w
-                all_weights.append(w)
                 all_reps.append(r)
                 total_sets += 1
                 total_reps += r
-                if best_set is None or w > best_set['weight']:
-                    best_set = {'reps': r, 'weight': w}
-                if r <= 15:
-                    one_rm = epley_1rm(w, r)
-                    session_1rms.append(one_rm)
-                    all_1rms.append(one_rm)
+                if w > 0:
+                    all_weights.append(w)
+                    if best_set is None or w > best_set['weight']:
+                        best_set = {'reps': r, 'weight': w}
+                    if r <= 15:
+                        one_rm = epley_1rm(w, r)
+                        session_1rms.append(one_rm)
+                        all_1rms.append(one_rm)
+                elif best_set is None or (best_set['weight'] == 0 and r > best_set['reps']):
+                    best_set = {'reps': r, 'weight': 0}
 
         history.append({
             'date': workout.date.strftime('%Y-%m-%d'),

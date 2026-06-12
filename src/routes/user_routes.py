@@ -27,12 +27,24 @@ KG_PER_LB = 0.453592
 LBS_PER_KG = 2.20462
 
 
+def convert_weight_value(value: float, new_unit: str) -> float:
+    """Convert a single weight to the new unit, snapped to the nearest 0.5
+    (lb or kg) so converted values read like real plate loads. Round-tripping
+    kg↔lbs can therefore drift by up to half a unit — accepted trade-off."""
+    factor = LBS_PER_KG if new_unit == 'lbs' else KG_PER_LB
+    return round(value * factor * 2) / 2
+
+
 def _convert_stored_weights(user_id: int, new_unit: str) -> None:
     """Bulk-convert stored weights when the user switches kg↔lbs, preserving the
     invariant that stored values are always in the user's current unit.
     Excludes Workout.volume (canonical lbs) and cardio PR weight_context
     (those hold km/minute milestone targets, not weights)."""
     factor = KG_PER_LB if new_unit == 'kg' else LBS_PER_KG
+
+    def _converted(col):
+        # SQL twin of convert_weight_value: snap to the nearest 0.5 lb/kg
+        return db.func.round(col * factor * 2) / 2.0
 
     exercise_ids = (
         db.session.query(Exercise.id)
@@ -43,21 +55,21 @@ def _convert_stored_weights(user_id: int, new_unit: str) -> None:
     Set.query.filter(
         Set.exercise_id.in_(exercise_ids),
         Set.weight.isnot(None),
-    ).update({Set.weight: Set.weight * factor}, synchronize_session=False)
+    ).update({Set.weight: _converted(Set.weight)}, synchronize_session=False)
 
     PersonalRecord.query.filter(
         PersonalRecord.user_id == user_id,
         PersonalRecord.pr_type.in_(('max_weight', 'estimated_1rm')),
-    ).update({PersonalRecord.value: PersonalRecord.value * factor}, synchronize_session=False)
+    ).update({PersonalRecord.value: _converted(PersonalRecord.value)}, synchronize_session=False)
 
     PersonalRecord.query.filter(
         PersonalRecord.user_id == user_id,
         PersonalRecord.pr_type == 'max_reps',
         PersonalRecord.weight_context > 0,
-    ).update({PersonalRecord.weight_context: PersonalRecord.weight_context * factor}, synchronize_session=False)
+    ).update({PersonalRecord.weight_context: _converted(PersonalRecord.weight_context)}, synchronize_session=False)
 
     BodyweightLog.query.filter_by(user_id=user_id).update(
-        {BodyweightLog.weight: BodyweightLog.weight * factor}, synchronize_session=False)
+        {BodyweightLog.weight: _converted(BodyweightLog.weight)}, synchronize_session=False)
 
 @user_bp.get('/api/me')
 @jwt_required()
@@ -99,7 +111,7 @@ def update_user_info():
             # If this PATCH also carries a bodyweight, it's already in the new
             # unit (set above) — only convert the previously stored value.
             if "bodyweight" not in data and user.bodyweight is not None:
-                user.bodyweight = user.bodyweight * (KG_PER_LB if new_unit == 'kg' else LBS_PER_KG)
+                user.bodyweight = convert_weight_value(user.bodyweight, new_unit)
         user.weight_unit = new_unit
     if "gender" in data:
         user.gender = data["gender"] if data["gender"] in ('male', 'female') else None

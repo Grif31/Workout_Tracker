@@ -225,7 +225,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
           <View style={styles.rowInfo}>
             <Text style={[styles.rowName, { color: colors.textPrimary }]}>{section.title}</Text>
             <Text style={styles.rowDate}>
-              Best: {best.weight} {unit} × {best.reps} reps
+              Best: {best.weight === 0 ? 'Bodyweight' : `${best.weight} ${unit}`} × {best.reps} reps
             </Text>
           </View>
           <Ionicons
@@ -239,7 +239,9 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
           return (
             <View key={`${item.weight}-${index}`} style={[styles.repsRow, { borderTopColor: colors.border }]}>
               <View style={styles.rowInfo}>
-                <Text style={[styles.repsWeight, { color: colors.textSecondary }]}>{item.weight} {unit}</Text>
+                <Text style={[styles.repsWeight, { color: colors.textSecondary }]}>
+                  {item.weight === 0 ? 'Bodyweight' : `${item.weight} ${unit}`}
+                </Text>
                 <Text style={styles.rowDate}>{fmtDate(item.achieved_at)}</Text>
               </View>
               <View style={styles.rowRight}>

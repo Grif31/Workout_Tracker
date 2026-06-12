@@ -42,6 +42,7 @@ import {
   type ExerciseEntry,
   makeUid,
   fmtElapsed,
+  isBodyweight,
 } from './workout/types';
 import WorkoutHeader from './workout/WorkoutHeader';
 import ExerciseBlock from './workout/ExerciseBlock';
@@ -346,11 +347,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           exercise_template_id: ex.exercise_template_id,
           exercise_type: ex.exercise_type,
           name: ex.name,
+          equipment: ex.equipment,
           notes: ex.notes ?? undefined,
           sets: ex.sets.map((s: any) => ({
             id: s.id,
             reps: String(s.reps ?? ''),
-            weight: String(s.weight ?? ''),
+            weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''),
             set_type: s.set_type ?? 'N',
             rpe: s.rpe != null ? String(s.rpe) : '',
             cardio_duration: s.cardio_duration != null ? String(s.cardio_duration) : '',
@@ -445,7 +447,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const toggleSetDone = (exIndex: number, setIndex: number) => {
     const ex = exercises[exIndex];
     const set = ex.sets[setIndex];
-    if (!set.done && (!set.reps.trim() || !set.weight.trim())) return;
+    if (!set.done && (!set.reps.trim() || (!isBodyweight(ex) && !set.weight.trim()))) return;
     const nowDone = !set.done;
     const updated = [...exercises];
     updated[exIndex].sets[setIndex].done = nowDone;
@@ -501,7 +503,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     if (ex.exercise_type === 'cardio') {
       updated[exIndex].sets.push({ reps: '', weight: '', set_type: 'N', cardio_duration: '', distance: '', distance_unit: 'km', intensity: '' });
     } else {
-      updated[exIndex].sets.push({ reps: '', weight: '', set_type: 'N' });
+      updated[exIndex].sets.push({ reps: '', weight: isBodyweight(ex) ? '0' : '', set_type: 'N' });
     }
     setExercises(updated);
   };
@@ -550,9 +552,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   const addExToWorkout = async (exercise: { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string }) => {
     const isCardio = exercise.exercise_type === 'cardio';
+    const bw = isBodyweight(exercise);
     const initialSet: WorkoutSet = isCardio
       ? { reps: '', weight: '', set_type: 'N', cardio_duration: '', distance: '', distance_unit: 'km', intensity: '' }
-      : { reps: '', weight: '', set_type: 'N' };
+      : { reps: '', weight: bw ? '0' : '', set_type: 'N' };
 
     if (replacingExIndex !== null) {
       const targetIdx = replacingExIndex;
@@ -587,7 +590,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             if (data.sets?.length > 0) {
               return {
                 ...ex,
-                sets: data.sets.map((s: any) => ({ reps: String(s.reps ?? ''), weight: String(s.weight ?? ''), set_type: s.set_type ?? 'N' })),
+                sets: data.sets.map((s: any) => ({ reps: String(s.reps ?? ''), weight: bw ? '0' : String(s.weight ?? ''), set_type: s.set_type ?? 'N' })),
                 previousSets: data.sets,
                 currentPR: prData,
               };
@@ -633,7 +636,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             updated[idx] = {
               ...updated[idx],
               sets: data.sets.map((s: any) => ({
-                reps: String(s.reps ?? ''), weight: String(s.weight ?? ''), set_type: s.set_type ?? 'N',
+                reps: String(s.reps ?? ''), weight: bw ? '0' : String(s.weight ?? ''), set_type: s.set_type ?? 'N',
               })),
               previousSets: data.sets,
               currentPR: prData,
@@ -659,7 +662,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       const isCardio = ex.exercise_type === 'cardio';
       const initialSet: WorkoutSet = isCardio
         ? { reps: '', weight: '', set_type: 'N', cardio_duration: '', distance: '', distance_unit: 'km', intensity: '' }
-        : { reps: '', weight: '', set_type: 'N' };
+        : { reps: '', weight: isBodyweight(ex) ? '0' : '', set_type: 'N' };
       return {
         uid: makeUid(),
         name: ex.name,
@@ -692,7 +695,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             if (data.sets?.length > 0) {
               enriched[idx] = {
                 ...enriched[idx],
-                sets: data.sets.map((s: any) => ({ reps: String(s.reps ?? ''), weight: String(s.weight ?? ''), set_type: s.set_type ?? 'N' })),
+                sets: data.sets.map((s: any) => ({ reps: String(s.reps ?? ''), weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''), set_type: s.set_type ?? 'N' })),
                 previousSets: data.sets,
                 currentPR: prData,
               };
@@ -735,7 +738,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         return {
           id: s.id,
           reps: Number(s.reps),
-          weight: Number(s.weight),
+          weight: isBodyweight(ex) ? 0 : Number(s.weight),
           order: setIndex,
           set_type: s.set_type ?? 'N',
           rpe: s.rpe ? Number(s.rpe) : null,

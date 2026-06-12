@@ -247,9 +247,8 @@ class TestWeightUnitConversion:
         _setup_lbs_user_with_data(client, auth_token)
         res = client.patch('/api/me', json={'weight_unit': 'kg'}, headers=auth_headers(auth_token))
         assert res.status_code == 200
-        weights = self._set_weights(client, auth_token)
-        assert weights[0] == pytest.approx(45.36, abs=0.01)
-        assert weights[1] == pytest.approx(54.43, abs=0.01)
+        # Converted values snap to the nearest 0.5 kg: 45.36 → 45.5, 54.43 → 54.5
+        assert self._set_weights(client, auth_token) == [45.5, 54.5]
 
     def test_switch_to_kg_converts_prs(self, client, auth_token, registered_user):
         from models import PersonalRecord
@@ -258,29 +257,30 @@ class TestWeightUnitConversion:
         client.patch('/api/me', json={'weight_unit': 'kg'}, headers=auth_headers(auth_token))
 
         max_weight = PersonalRecord.query.filter_by(user_id=user_id, pr_type='max_weight').first()
-        assert max_weight.value == pytest.approx(120 * 0.453592, abs=0.01)
+        assert max_weight.value == 54.5   # 54.43 kg snapped to nearest 0.5
         est_1rm = PersonalRecord.query.filter_by(user_id=user_id, pr_type='estimated_1rm').first()
-        assert est_1rm.value == pytest.approx(120 * (1 + 5 / 30) * 0.453592, abs=0.1)
+        assert est_1rm.value == 63.5      # 140 lbs e1RM → 63.50 kg
         max_reps = PersonalRecord.query.filter_by(user_id=user_id, pr_type='max_reps')\
             .order_by(PersonalRecord.weight_context).first()
-        assert max_reps.weight_context == pytest.approx(45.36, abs=0.01)
+        assert max_reps.weight_context == 45.5
         assert max_reps.value == 8  # reps are not weights — must not be scaled
 
     def test_switch_to_kg_converts_bodyweight_and_logs(self, client, auth_token):
         _setup_lbs_user_with_data(client, auth_token)
         client.patch('/api/me', json={'weight_unit': 'kg'}, headers=auth_headers(auth_token))
         me = client.get('/api/me', headers=auth_headers(auth_token)).get_json()
-        assert me['bodyweight'] == pytest.approx(90.72, abs=0.01)
+        # 200 lbs → 90.72 kg → snapped to 90.5
+        assert me['bodyweight'] == 90.5
         logs = client.get('/api/bodyweight', headers=auth_headers(auth_token)).get_json()
-        assert logs[0]['weight'] == pytest.approx(90.72, abs=0.01)
+        assert logs[0]['weight'] == 90.5
 
-    def test_round_trip_restores_values(self, client, auth_token):
+    def test_round_trip_stays_within_half_unit(self, client, auth_token):
+        # Snapping to 0.5 on each conversion means round-trips can drift by up
+        # to half a unit: 100 → 45.5 kg → 100.5 lbs; 120 → 54.5 kg → 120.0 lbs
         _setup_lbs_user_with_data(client, auth_token)
         client.patch('/api/me', json={'weight_unit': 'kg'}, headers=auth_headers(auth_token))
         client.patch('/api/me', json={'weight_unit': 'lbs'}, headers=auth_headers(auth_token))
-        weights = self._set_weights(client, auth_token)
-        assert weights[0] == pytest.approx(100, abs=0.01)
-        assert weights[1] == pytest.approx(120, abs=0.01)
+        assert self._set_weights(client, auth_token) == [100.5, 120.0]
 
     def test_same_unit_patch_is_noop(self, client, auth_token):
         _setup_lbs_user_with_data(client, auth_token)
@@ -293,9 +293,36 @@ class TestWeightUnitConversion:
                            headers=auth_headers(auth_token))
         assert res.get_json()['bodyweight'] == 90
 
+    def test_switch_to_lbs_rounds_to_nearest_half_lb(self, client, auth_token):
+        from models import PersonalRecord
+        h = auth_headers(auth_token)
+        client.patch('/api/me', json={'weight_unit': 'kg', 'bodyweight': 80}, headers=h)
+        res = client.post('/api/exercises', json={
+            'name': 'Bench Y', 'equipment': 'Barbell', 'muscle_group': 'Chest',
+        }, headers=h)
+        ex_id = res.get_json()['id']
+        client.post('/api/workouts', json={
+            'workoutName': 'W',
+            'exercises': [{
+                'name': 'Bench Y', 'exercise_template_id': ex_id,
+                # 40 kg → 88.18 lbs → 88.0; 43.3 kg → 95.46 lbs → 95.5
+                'sets': [{'reps': 5, 'weight': 40}, {'reps': 3, 'weight': 43.3}],
+            }],
+        }, headers=h)
+
+        res = client.patch('/api/me', json={'weight_unit': 'lbs'}, headers=h)
+        assert res.status_code == 200
+        # 80 kg → 176.37 lbs → nearest half is 176.5
+        assert res.get_json()['bodyweight'] == 176.5
+        assert self._set_weights(client, auth_token) == [88.0, 95.5]
+
+        max_weight = PersonalRecord.query.filter_by(pr_type='max_weight').first()
+        assert max_weight.value == 95.5
+
     def test_total_volume_stat_unchanged_after_switch(self, client, auth_token):
         _setup_lbs_user_with_data(client, auth_token)
         before = client.get('/api/stats/profile', headers=auth_headers(auth_token)).get_json()['total_volume']
         client.patch('/api/me', json={'weight_unit': 'kg'}, headers=auth_headers(auth_token))
         after = client.get('/api/stats/profile', headers=auth_headers(auth_token)).get_json()['total_volume']
-        assert after == pytest.approx(before, abs=1)
+        # 0.5 kg snapping shifts per-set weights slightly — stays within ~1%
+        assert after == pytest.approx(before, rel=0.01)

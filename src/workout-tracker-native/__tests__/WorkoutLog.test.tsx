@@ -30,7 +30,7 @@ jest.mock('@react-native-community/datetimepicker', () => 'DateTimePicker');
 jest.mock('../components/ExerciseList', () => () => null);
 jest.mock('../components/NewExerciseForm', () => () => null);
 jest.mock('constants/muscleGroups', () => ({ muscleGroups: ['Chest', 'Back', 'Quads'] }), { virtual: true });
-jest.mock('../theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 } }));
+jest.mock('../theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 jest.mock('../theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));
 
 describe('WorkoutLog', () => {
@@ -73,6 +73,42 @@ describe('WorkoutLog', () => {
       />
     );
     expect(getByDisplayValue('Push Day')).toBeTruthy();
+  });
+
+  it('hides the weight input for bodyweight exercises', () => {
+    const { getAllByPlaceholderText } = render(
+      <WorkoutLog
+        prefill={{
+          name: 'Pull Day', notes: '',
+          exercises: [{
+            name: 'Pull Up', exercise_template_id: 1, equipment: 'Bodyweight',
+            sets: [{ reps: '10', weight: '0' }],
+          }],
+        }}
+        onSubmit={jest.fn()}
+        onCancel={jest.fn()}
+      />
+    );
+    // One set row: reps input only — the weight input must not render
+    expect(getAllByPlaceholderText('—')).toHaveLength(1);
+  });
+
+  it('shows the weight input for weighted exercises', () => {
+    const { getAllByPlaceholderText } = render(
+      <WorkoutLog
+        prefill={{
+          name: 'Bench Day', notes: '',
+          exercises: [{
+            name: 'Bench Press', exercise_template_id: 2, equipment: 'Barbell',
+            sets: [{ reps: '5', weight: '135' }],
+          }],
+        }}
+        onSubmit={jest.fn()}
+        onCancel={jest.fn()}
+      />
+    );
+    // One set row: reps + weight inputs
+    expect(getAllByPlaceholderText('—')).toHaveLength(2);
   });
 
   it('calls onCancel when cancel button pressed', () => {

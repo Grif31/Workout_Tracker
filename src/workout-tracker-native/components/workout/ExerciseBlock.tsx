@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { type ExerciseEntry, type SetType, colStyles } from './types';
+import { type ExerciseEntry, type SetType, colStyles, isBodyweight } from './types';
 import SetRow from './SetRow';
 import CardioSetRow from './CardioSetRow';
 
@@ -53,6 +53,7 @@ export default function ExerciseBlock({
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const bodyweight = isBodyweight(exercise);
 
   return (
     <View style={styles.exerciseBlock}>
@@ -127,7 +128,7 @@ export default function ExerciseBlock({
                   <Text style={[styles.setHeaderCell, colStyles.setType]}>#</Text>
                   <Text style={[styles.setHeaderCell, colStyles.prev]}>Prev</Text>
                   <Text style={[styles.setHeaderCell, colStyles.input]}>Reps</Text>
-                  <Text style={[styles.setHeaderCell, colStyles.input]}>{weightUnit}</Text>
+                  {!bodyweight && <Text style={[styles.setHeaderCell, colStyles.input]}>{weightUnit}</Text>}
                   {showRpe && <Text style={[styles.setHeaderCell, colStyles.rpe]}>RPE</Text>}
                   <View style={colStyles.check} />
                 </View>
@@ -143,6 +144,7 @@ export default function ExerciseBlock({
                       setIndex={setIndex}
                       prevSet={prev}
                       showRpe={showRpe}
+                      bodyweight={bodyweight}
                       typeColor={tc}
                       setType={type}
                       onCycleType={() => onCycleSetType(setIndex)}

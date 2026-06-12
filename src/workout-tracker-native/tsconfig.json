@@ -11,10 +11,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "baseUrl": ".",
-    "types": ["node"],
-
-    
-},
+    "types": ["node"]
+  },
   "include": ["env.d.ts", "src", "App.tsx"],
   "extends": "expo/tsconfig.base"
 }

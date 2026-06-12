@@ -375,15 +375,15 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Estimated 1RM</Text>
-            <Text style={styles.statValue}>{toDisplayWeight(stats.estimatedOneRepMax, weightUnit)}</Text>
+            <Text style={styles.statValue}>{stats.estimatedOneRepMax ? toDisplayWeight(stats.estimatedOneRepMax, weightUnit) : '—'}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Max Weight</Text>
-            <Text style={styles.statValue}>{toDisplayWeight(stats.maxWeight, weightUnit)}</Text>
+            <Text style={styles.statValue}>{stats.maxWeight ? toDisplayWeight(stats.maxWeight, weightUnit) : '—'}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Max Volume / Set</Text>
-            <Text style={styles.statValue}>{toDisplayVolume(stats.maxVolume, weightUnit)}</Text>
+            <Text style={styles.statValue}>{stats.maxVolume ? toDisplayVolume(stats.maxVolume, weightUnit) : '—'}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Max Reps</Text>
@@ -438,7 +438,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         ) : null}
         {session.sets.map((set, j) => (
           <Text key={j} style={styles.historyDetail}>
-            Set {j + 1}: {set.reps} reps @ {toDisplayWeight(set.weight, weightUnit)}
+            Set {j + 1}: {set.reps} reps{set.weight ? ` @ ${toDisplayWeight(set.weight, weightUnit)}` : ''}
           </Text>
         ))}
       </View>

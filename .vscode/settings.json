@@ -2,5 +2,6 @@
   // Use the project's TypeScript (5.9) instead of VS Code's bundled one —
   // the bundled TS 6+ flags tsconfig "baseUrl" as deprecated, while local
   // tsc 5.9 rejects the "6.0" ignoreDeprecations value that would silence it.
-  "typescript.tsdk": "src/workout-tracker-native/node_modules/typescript/lib"
+  "typescript.tsdk": "src/workout-tracker-native/node_modules/typescript/lib",
+  "js/ts.tsdk.path": "src/workout-tracker-native/node_modules/typescript/lib"
 }

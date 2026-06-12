@@ -2,12 +2,16 @@ const KG_PER_LB = 0.453592;
 
 export type WeightUnit = 'lbs' | 'kg';
 
-export function toDisplayWeight(lbs: number, unit: WeightUnit): string {
-  if (!lbs && lbs !== 0) return '—';
-  if (unit === 'kg') return `${(lbs * KG_PER_LB).toFixed(1)} kg`;
-  return `${Math.round(lbs)} lbs`;
+// Stored set/PR weights are always in the user's CURRENT unit (switching units
+// converts them in the DB) — so weight display is formatting only, no math.
+export function toDisplayWeight(value: number, unit: WeightUnit): string {
+  if (!value && value !== 0) return '—';
+  const num = Number.isInteger(value) ? value : parseFloat(value.toFixed(1));
+  return `${num} ${unit}`;
 }
 
+// Workout volume is the exception: the backend always reports it in lbs
+// (canonical), so it does get converted for kg users.
 export function toDisplayVolume(lbs: number, unit: WeightUnit): string {
   const val = unit === 'kg' ? lbs * KG_PER_LB : lbs;
   const suffix = unit;
@@ -16,6 +20,7 @@ export function toDisplayVolume(lbs: number, unit: WeightUnit): string {
   return `${Math.round(val)} ${suffix}`;
 }
 
-export function convertWeight(lbs: number, unit: WeightUnit): number {
-  return unit === 'kg' ? lbs * KG_PER_LB : lbs;
+// Chart values: stored weights are already in the display unit.
+export function convertWeight(value: number, _unit: WeightUnit): number {
+  return value;
 }

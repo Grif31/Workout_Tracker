@@ -12,6 +12,7 @@ type Props = {
   setIndex: number;
   prevSet?: PreviousSet;
   showRpe: boolean;
+  bodyweight?: boolean;
   typeColor: string;
   setType: SetType;
   onCycleType: () => void;
@@ -30,6 +31,7 @@ export default function SetRow({
   setIndex,
   prevSet,
   showRpe,
+  bodyweight,
   typeColor,
   setType,
   onCycleType,
@@ -45,7 +47,9 @@ export default function SetRow({
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const isDone = set.done ?? false;
-  const prevText = prevSet ? `${prevSet.reps} x ${prevSet.weight}` : '—';
+  const prevText = prevSet
+    ? bodyweight ? `${prevSet.reps} reps` : `${prevSet.reps} x ${prevSet.weight}`
+    : '—';
 
   return (
     <Swipeable
@@ -87,18 +91,20 @@ export default function SetRow({
           onBlur={onBlur}
         />
 
-        <TextInput
-          style={[styles.setInput, colStyles.input, isDone && styles.setInputDone]}
-          placeholder="—"
-          placeholderTextColor={colors.placeholder}
-          keyboardType="numeric"
-          inputAccessoryViewID={Platform.OS === 'ios' ? NUMERIC_ACCESSORY_ID : undefined}
-          editable={!isDone}
-          value={set.weight}
-          onChangeText={onChangeWeight}
-          onFocus={onFocusWeight}
-          onBlur={onBlur}
-        />
+        {!bodyweight && (
+          <TextInput
+            style={[styles.setInput, colStyles.input, isDone && styles.setInputDone]}
+            placeholder="—"
+            placeholderTextColor={colors.placeholder}
+            keyboardType="numeric"
+            inputAccessoryViewID={Platform.OS === 'ios' ? NUMERIC_ACCESSORY_ID : undefined}
+            editable={!isDone}
+            value={set.weight}
+            onChangeText={onChangeWeight}
+            onFocus={onFocusWeight}
+            onBlur={onBlur}
+          />
+        )}
 
         {showRpe && (
           <TouchableOpacity

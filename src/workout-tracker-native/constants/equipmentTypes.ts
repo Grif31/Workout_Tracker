@@ -6,4 +6,5 @@ export const equipmentTypes = [
   'Cable',
   'Machine',
   'Bodyweight',
+  'Weighted',
 ];

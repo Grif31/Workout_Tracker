@@ -230,3 +230,93 @@ class TestCardioPrSurvivesRecompute:
         client.delete(f'/api/workouts/{workout_id}', headers=auth_headers(auth_token))
         assert PersonalRecord.query.filter_by(
             user_id=user_id, exercise_template_id=template_id).count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Bodyweight (weight-0) sets: earn max_reps PRs only — never max_weight/1RM
+# ---------------------------------------------------------------------------
+
+def post_bodyweight_workout(client, token, template_id, reps_list, name='Pull Day'):
+    payload = {
+        'workoutName': name,
+        'exercises': [{
+            'name': 'Pull Up',
+            'exercise_template_id': template_id,
+            'sets': [{'reps': r, 'weight': 0} for r in reps_list],
+        }],
+    }
+    return client.post('/api/workouts', json=payload, headers=auth_headers(token))
+
+
+class TestBodyweightRepPrs:
+
+    def _template(self, client, token):
+        return create_template(client, token, name='Pull Up', muscle_group='Back')
+
+    def test_creates_max_reps_pr_at_weight_zero(self, client, auth_token, registered_user):
+        from models import PersonalRecord
+        user_id = registered_user['user']['id']
+        tid = self._template(client, auth_token)
+        res = post_bodyweight_workout(client, auth_token, tid, [8, 12, 10])
+        assert res.status_code == 201
+
+        prs = PersonalRecord.query.filter_by(user_id=user_id, exercise_template_id=tid).all()
+        assert {p.pr_type for p in prs} == {'max_reps'}
+        rep_pr = prs[0]
+        assert rep_pr.weight_context == 0.0
+        assert rep_pr.value == 12
+
+    def test_no_zero_weight_max_weight_or_1rm(self, client, auth_token):
+        tid = self._template(client, auth_token)
+        post_bodyweight_workout(client, auth_token, tid, [10])
+        data = client.get(f'/api/personal-records/{tid}', headers=auth_headers(auth_token)).get_json()
+        assert data['max_weight'] is None
+        assert data['estimated_1rm'] is None
+        assert data['per_weight_reps'] == [
+            {'weight': 0.0, 'max_reps': 10.0, 'achieved_at': data['per_weight_reps'][0]['achieved_at']},
+        ]
+
+    def test_beating_reps_fires_new_pr(self, client, auth_token):
+        tid = self._template(client, auth_token)
+        post_bodyweight_workout(client, auth_token, tid, [10])
+        res = post_bodyweight_workout(client, auth_token, tid, [13], name='Pull Day 2')
+        new_prs = res.get_json()['new_prs']
+        assert any(p['pr_type'] == 'max_reps' and p['value'] == 13 for p in new_prs)
+
+    def test_fewer_reps_is_not_a_pr(self, client, auth_token):
+        tid = self._template(client, auth_token)
+        post_bodyweight_workout(client, auth_token, tid, [10])
+        res = post_bodyweight_workout(client, auth_token, tid, [7], name='Pull Day 2')
+        assert res.get_json()['new_prs'] == []
+
+    def test_recompute_preserves_bodyweight_rep_pr(self, client, auth_token, registered_user):
+        from models import PersonalRecord
+        user_id = registered_user['user']['id']
+        tid = self._template(client, auth_token)
+        wid = post_bodyweight_workout(client, auth_token, tid, [11]).get_json()['id']
+
+        # Rename triggers a full PR recompute
+        res = client.patch(f'/api/workouts/{wid}', json={'workoutName': 'Renamed'},
+                           headers=auth_headers(auth_token))
+        assert res.status_code == 200
+
+        prs = PersonalRecord.query.filter_by(user_id=user_id, exercise_template_id=tid).all()
+        assert {p.pr_type for p in prs} == {'max_reps'}
+        assert prs[0].weight_context == 0.0
+        assert prs[0].value == 11
+
+    def test_mixed_weighted_and_bodyweight_sets(self, client, auth_token):
+        """Weighted sets on the same exercise still earn weight PRs alongside the rep PR."""
+        tid = self._template(client, auth_token)
+        payload = {
+            'workoutName': 'Mixed',
+            'exercises': [{
+                'name': 'Pull Up', 'exercise_template_id': tid,
+                'sets': [{'reps': 10, 'weight': 0}, {'reps': 5, 'weight': 45}],
+            }],
+        }
+        client.post('/api/workouts', json=payload, headers=auth_headers(auth_token))
+        data = client.get(f'/api/personal-records/{tid}', headers=auth_headers(auth_token)).get_json()
+        assert data['max_weight'] == 45.0
+        weights = {e['weight'] for e in data['per_weight_reps']}
+        assert weights == {0.0, 45.0}

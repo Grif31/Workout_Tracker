@@ -117,25 +117,30 @@ def _compute_and_upsert_prs(user_id, exercise_set_pairs, workout_date):
 
     max_weight / estimated_1rm: one record per exercise (weight_context = -1).
     max_reps: one record per exercise PER WEIGHT (weight_context = the weight used).
+    Weight-0 sets (bodyweight exercises) only produce max_reps records.
     """
     new_prs = []
     for exercise, sets in exercise_set_pairs:
         if not exercise.exercise_template_id:
             continue
-        valid = [(s.reps, s.weight, s.id) for s in sets if s.reps and s.weight and s.set_type != 'W']
+        valid = [(s.reps, s.weight, s.id) for s in sets
+                 if s.reps and s.weight is not None and s.set_type != 'W']
         if not valid:
             continue
 
-        epley_valid = [(r, w, sid) for r, w, sid in valid if r <= 15]
+        weighted = [(r, w, sid) for r, w, sid in valid if w > 0]
+        epley_valid = [(r, w, sid) for r, w, sid in weighted if r <= 15]
 
-        workout_max_weight = max(w for _, w, _ in valid)
+        workout_max_weight = max((w for _, w, _ in weighted), default=None)
         workout_max_1rm    = max(epley_1rm(w, r) for r, w, _ in epley_valid) if epley_valid else None
 
         # ── max_weight and estimated_1rm: single record per exercise ──────────
-        pr_candidates = [
-            ('max_weight', workout_max_weight,
-             next((sid for _, w, sid in valid if w == workout_max_weight), None)),
-        ]
+        pr_candidates = []
+        if workout_max_weight is not None:
+            pr_candidates.append(
+                ('max_weight', workout_max_weight,
+                 next((sid for _, w, sid in weighted if w == workout_max_weight), None)),
+            )
         if workout_max_1rm is not None:
             pr_candidates.append(('estimated_1rm', workout_max_1rm, None))
 
@@ -259,17 +264,18 @@ def _recompute_prs_for_templates(user_id, template_ids):
 
         valid = [(s.reps, s.weight, s.id, wdate) for s, wdate in rows]
 
-        # max_weight
-        max_w = max(w for _, w, _, _ in valid)
-        mw_sid, mw_date = next((sid, d) for _, w, sid, d in valid if w == max_w)
-        db.session.add(PersonalRecord(
-            user_id=user_id, exercise_template_id=template_id,
-            pr_type='max_weight', value=round(max_w, 1),
-            weight_context=-1.0, achieved_at=mw_date, set_id=mw_sid,
-        ))
+        # max_weight — weighted sets only; bodyweight (weight-0) sets get rep PRs below
+        max_w = max((w for _, w, _, _ in valid if w > 0), default=None)
+        if max_w is not None:
+            mw_sid, mw_date = next((sid, d) for _, w, sid, d in valid if w == max_w)
+            db.session.add(PersonalRecord(
+                user_id=user_id, exercise_template_id=template_id,
+                pr_type='max_weight', value=round(max_w, 1),
+                weight_context=-1.0, achieved_at=mw_date, set_id=mw_sid,
+            ))
 
-        # estimated_1rm (≤15 reps only)
-        epley = [(r, w, sid, d) for r, w, sid, d in valid if r <= 15]
+        # estimated_1rm (≤15 reps, weighted sets only)
+        epley = [(r, w, sid, d) for r, w, sid, d in valid if r <= 15 and w > 0]
         if epley:
             best_1rm = max(epley_1rm(w, r) for r, w, _, _ in epley)
             e_sid, e_date = next(
@@ -341,6 +347,10 @@ def get_workouts():
 @jwt_required()
 def get_recent_workouts():
     current_user_id = get_jwt_identity()
+    user = db.session.get(User, int(current_user_id))
+    # Sets are stored in the user's unit; volume is reported in canonical lbs
+    # everywhere (Workout.volume convention), so normalise before returning.
+    kg_to_lbs = 2.20462 if (user.weight_unit or 'lbs') == 'kg' else 1.0
     workouts = Workout.query.filter_by(user_id=current_user_id).order_by(Workout.date.desc()).limit(5).all()
 
     template_ids = {
@@ -380,7 +390,7 @@ def get_recent_workouts():
 
         data = w.to_dict()
         data['total_reps'] = total_reps
-        data['volume'] = round(total_volume)
+        data['volume'] = round(total_volume * kg_to_lbs)
         data['num_exercises'] = len(w.exercises)
         data['muscles'] = muscles
         data['pr_count'] = pr_count

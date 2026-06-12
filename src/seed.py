@@ -47,6 +47,7 @@ EXERCISES = [
 
     # Back
     ('Pull Up',                 'Back, Biceps',              'Bodyweight'),
+    ('Pull Up',                 'Back, Biceps',              'Weighted'),
     ('Lat Pulldown',            'Back, Biceps',              'Cable'),
     ('Lat Pulldown',            'Back, Biceps',              'Machine'),
     ('Bent Over Row',           'Back, Biceps',              'Barbell'),
@@ -120,6 +121,7 @@ EXERCISES = [
     ('Close Grip Bench Press',  'Triceps, Chest',            'Barbell'),
     ('Close Grip Bench Press',  'Triceps, Chest',            'Smith Machine'),
     ('Dips',                    'Triceps, Chest, Shoulders', 'Bodyweight'),
+    ('Dips',                    'Triceps, Chest, Shoulders', 'Weighted'),
     ('Tricep Kickback',         'Triceps',                   'Dumbbell'),
     ('Tricep Kickback',         'Triceps',                   'Cable'),
 

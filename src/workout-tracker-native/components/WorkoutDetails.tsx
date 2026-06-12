@@ -32,6 +32,7 @@ export type PrefillWorkoutData = {
     name: string;
     exercise_template_id?: number;
     exercise_type?: string;
+    equipment?: string;
     notes?: string;
     sets: {
       id?: number;
@@ -113,6 +114,7 @@ export default function WorkoutDetailsScreen({
         name: e.name,
         exercise_template_id: e.exercise_template_id,
         exercise_type: e.exercise_type,
+        equipment: e.equipment,
         notes: mode === 'edit' ? (e.notes ?? '') : undefined,
         sets: e.sets.map(s => ({
           id: mode === 'edit' ? s.id : undefined,
@@ -444,7 +446,7 @@ export default function WorkoutDetailsScreen({
                           {s.reps}
                         </Text>
                         <Text style={[styles.setCellText, styles.colWeight, isMaxWeight && styles.prGoldText]}>
-                          {s.weight}
+                          {(parseFloat(s.weight ?? '0') || 0) === 0 ? 'BW' : s.weight}
                         </Text>
                         {hasPr && (
                           isPr

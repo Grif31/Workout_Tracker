@@ -54,6 +54,11 @@ export type ExerciseEntry = {
 
 export const makeUid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 
+// Bodyweight exercises are reps-only — weight is always stored as 0.
+// Added-weight work belongs on the separate 'Weighted' equipment variants.
+export const isBodyweight = (ex: { exercise_type?: string; equipment?: string }) =>
+  ex.exercise_type !== 'cardio' && ex.equipment === 'Bodyweight';
+
 export function fmtElapsed(secs: number): string {
   if (secs < 60) return `${secs}s`;
   const m = Math.floor(secs / 60);
