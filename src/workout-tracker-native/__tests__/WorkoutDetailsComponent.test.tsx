@@ -38,17 +38,17 @@ describe('WorkoutDetails component', () => {
   });
 
   it('shows the workout name after fetch', async () => {
-    const { getByText } = render(<WorkoutDetailsComponent workoutId={1} />);
-    await waitFor(() => expect(getByText('Push Day')).toBeTruthy());
+    const { getAllByText } = render(<WorkoutDetailsComponent workoutId={1} />);
+    await waitFor(() => expect(getAllByText('Push Day').length).toBeGreaterThan(0));
   });
 
   it('shows exercise name', async () => {
-    const { getByText } = render(<WorkoutDetailsComponent workoutId={1} />);
-    await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
+    const { getAllByText } = render(<WorkoutDetailsComponent workoutId={1} />);
+    await waitFor(() => expect(getAllByText('Bench Press').length).toBeGreaterThan(0));
   });
 
   it('shows workout duration', async () => {
-    const { getByText } = render(<WorkoutDetailsComponent workoutId={1} />);
-    await waitFor(() => expect(getByText(/1h/)).toBeTruthy());
+    const { getAllByText } = render(<WorkoutDetailsComponent workoutId={1} />);
+    await waitFor(() => expect(getAllByText(/1h/).length).toBeGreaterThan(0));
   });
 });

@@ -100,6 +100,25 @@ jest.mock('./context/WorkoutSessionContext', () => ({
   WorkoutSessionProvider: ({ children }: any) => children,
 }));
 
+jest.mock('react-native-svg', () => {
+  const { View } = require('react-native');
+  return { __esModule: true, default: View, Svg: View, Path: View, Circle: View };
+});
+
+jest.mock('react-native-body-highlighter', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
+jest.mock('react-native-view-shot', () => ({
+  captureRef: jest.fn(() => Promise.resolve('file://mock.png')),
+}));
+
+jest.mock('expo-sharing', () => ({
+  shareAsync: jest.fn(() => Promise.resolve()),
+  isAvailableAsync: jest.fn(() => Promise.resolve(true)),
+}));
+
 // react-native-purchases ships untransformable minified deps — never load real IAP in tests
 jest.mock('react-native-purchases', () => ({
   __esModule: true,

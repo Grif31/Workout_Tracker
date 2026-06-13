@@ -7,8 +7,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import ConfettiCannon from 'react-native-confetti-cannon';
-import { captureRef } from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
+import { captureAndShare } from '../../utils/shareCapture';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, type Colors } from '../../context/ThemeContext';
@@ -39,6 +38,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const shareCardRef = useRef<View>(null);
 
   const [exercises, setExercises] = useState<ExerciseData[]>([]);
+  const [duration, setDuration] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [prExpanded, setPrExpanded] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -65,7 +65,10 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   useEffect(() => {
     apiFetch(`/api/workouts/${workoutId}`)
       .then(r => r.json())
-      .then(data => setExercises(data.exercises ?? []))
+      .then(data => {
+        setExercises(data.exercises ?? []);
+        setDuration(data.duration ?? null);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [workoutId]);
@@ -87,13 +90,25 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   async function handleShare() {
     setSharing(true);
     try {
-      const uri = await captureRef(shareCardRef, { format: 'jpg', quality: 0.95 });
-      await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: 'Share your workout' });
+      await captureAndShare(shareCardRef);
     } catch {
       // user cancelled or capture failed — no-op
     } finally {
       setSharing(false);
     }
+  }
+
+  // Heaviest working set per exercise for the share card (bodyweight = most reps)
+  function bestSetOf(ex: ExerciseData) {
+    let best: { reps: number; weight: number } | null = null;
+    for (const s of ex.sets) {
+      if (!s.reps || s.set_type === 'W') continue;
+      const w = s.weight ?? 0;
+      if (!best || w > best.weight || (w === best.weight && s.reps > best.reps)) {
+        best = { reps: s.reps, weight: w };
+      }
+    }
+    return best;
   }
 
   function formatSet(set: SetData) {
@@ -126,8 +141,9 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           totalVolume={totalVolume}
           totalSets={totalSets}
           totalReps={totalReps}
+          duration={duration}
           weightUnit={weightUnit}
-          exerciseNames={exercises.slice(0, 3).map(e => e.name)}
+          exercises={exercises.slice(0, 3).map(e => ({ name: e.name, bestSet: bestSetOf(e) }))}
           prs={filteredPrs}
           accentColor={colors.accent}
         />

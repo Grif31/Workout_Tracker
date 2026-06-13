@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator,
   ScrollView, Dimensions, Modal, KeyboardAvoidingView, Platform,
@@ -14,6 +14,9 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { apiFetch } from '../../utils/api';
 import { estimateCalories } from '../../utils/cardioCalories';
+import { fmtDuration, fmtPace } from '../../utils/cardioFormat';
+import { captureAndShare } from '../../utils/shareCapture';
+import CardioShareCard from '../../components/share/CardioShareCard';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { DashboardStackParamsList } from '../../navigation/types';
@@ -52,23 +55,6 @@ interface CardioWorkout {
 }
 
 
-function fmtDuration(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = Math.floor(minutes % 60);
-  const s = Math.round((minutes % 1) * 60);
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
-
-function fmtPace(durationMin: number, distanceKm: number): string {
-  if (distanceKm <= 0) return '--:--';
-  const paceMinPerKm = durationMin / distanceKm;
-  const m = Math.floor(paceMinPerKm);
-  const s = Math.round((paceMinPerKm - m) * 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
 export default function CardioDetailsScreen({ navigation, route }: Props) {
   const { workoutId } = route.params;
   const { user } = useAuth();
@@ -79,6 +65,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
 
   const [workout, setWorkout] = useState<CardioWorkout | null>(null);
   const [loading, setLoading] = useState(true);
+  const shareCardRef = useRef<View>(null);
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('km');
   const [renameVisible, setRenameVisible] = useState(false);
   const [renameText, setRenameText] = useState('');
@@ -109,9 +96,9 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
     const ex = workout.exercises?.[0] ?? null;
     const set = ex?.sets?.[0] ?? null;
 
-    const dur = parseFloat(set?.cardio_duration) || 0;
-    const dist = parseFloat(set?.distance) || 0;
-    const elev = set?.elevation_gain != null ? parseFloat(set.elevation_gain) : null;
+    const dur = Number(set?.cardio_duration) || 0;
+    const dist = Number(set?.distance) || 0;
+    const elev = set?.elevation_gain != null ? Number(set.elevation_gain) : null;
     const speedKmH = dur > 0 && dist > 0 ? dist / (dur / 60) : 0;
     const kcal = estimateCalories(ex?.name ?? '', dur, weightKg, speedKmH);
 
@@ -183,6 +170,14 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
     );
   };
 
+  const handleShare = async () => {
+    try {
+      await captureAndShare(shareCardRef);
+    } catch {
+      // user cancelled or capture failed — no-op
+    }
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -209,6 +204,26 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
 
   return (
     <View style={styles.container}>
+      {/* Off-screen share card (captured by handleShare) */}
+      <View
+        ref={shareCardRef}
+        style={{ position: 'absolute', left: -9999, top: -9999 }}
+        collapsable={false}
+      >
+        <CardioShareCard
+          activityName={workout.name || activityName}
+          date={workout.date
+            ? new Date(workout.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+            : ''}
+          distance={distanceKm}
+          distanceUnit={distanceUnit}
+          durationMin={durationMin}
+          elevationM={elevationGainM}
+          coords={coords}
+          accentColor={colors.accent}
+        />
+      </View>
+
       {/* Map area — explicit height so MapView doesn't overflow */}
       <View style={[styles.mapContainer, { height: MAP_HEIGHT }]}>
         {MapView && mapRegion ? (
@@ -240,6 +255,14 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
           onPress={showOptions}
         >
           <Ionicons name="ellipsis-horizontal" size={20} color={colors.textPrimary} />
+        </TouchableOpacity>
+
+        {/* Share */}
+        <TouchableOpacity
+          style={[styles.overlayBtn, { top: insets.top + spacing.sm, right: spacing.md + 48 }]}
+          onPress={handleShare}
+        >
+          <Ionicons name="share-outline" size={20} color={colors.textPrimary} />
         </TouchableOpacity>
 
         {/* Activity badge */}

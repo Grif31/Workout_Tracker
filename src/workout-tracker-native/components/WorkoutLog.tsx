@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, Alert, TouchableOpacity,
-  KeyboardAvoidingView, Platform, Vibration, ScrollView,
+  Platform, Vibration, ScrollView,
   Keyboard, Modal, Dimensions,
   Animated, AppState, FlatList,
 } from 'react-native';
@@ -112,6 +112,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const [showPlateCalc, setShowPlateCalc] = useState(true);
   const [focusedInput, setFocusedInput] = useState<{ exIdx: number; setIdx: number; field: 'reps' | 'weight' } | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  // How far the keyboard overlaps THIS view (screen coords) — the toolbar's `bottom`
+  const [kbOverlap, setKbOverlap] = useState(0);
+  const rootViewRef = useRef<View>(null);
+  const rootBottomRef = useRef(0);
   const [rpePickerTarget, setRpePickerTarget]     = useState<{ exIdx: number; setIdx: number } | null>(null);
   const [plateCalcTarget, setPlateCalcTarget]     = useState<{ exIdx: number; setIdx: number } | null>(null);
   // Keep refs in sync with state so AppState/setInterval closures always read current values.
@@ -201,7 +205,14 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     // finishes animating; Android only emits the did-events.
     const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const show = Keyboard.addListener(showEvt, () => setKeyboardVisible(true));
+    const show = Keyboard.addListener(showEvt, e => {
+      if (Platform.OS === 'ios') {
+        // Pure screen-coordinate math: keyboard top vs this view's bottom.
+        // Independent of navigators, tab bars, or KeyboardAvoidingView quirks.
+        setKbOverlap(Math.max(0, rootBottomRef.current - e.endCoordinates.screenY));
+      }
+      setKeyboardVisible(true);
+    });
     const hide = Keyboard.addListener(hideEvt, () => {
       setKeyboardVisible(false);
       // Delay so onFocus on the next input can fire first when switching inputs.
@@ -871,9 +882,16 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   };
 
   return (
-    <KeyboardAvoidingView
+    <View
+      ref={rootViewRef}
       style={{ flex: 1, backgroundColor: colors.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      onLayout={() => {
+        // Screen-coordinate of this view's bottom edge — used to convert the
+        // keyboard's absolute position into a local `bottom` for the toolbar.
+        rootViewRef.current?.measureInWindow((_x, y, _w, h) => {
+          rootBottomRef.current = y + h;
+        });
+      }}
     >
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
@@ -917,6 +935,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         keyExtractor={(item) => item.uid}
         style={{ flex: 1 }}
         contentContainerStyle={styles.container}
+        // iOS: native keyboard inset handling — scrolls the focused input into
+        // view; the extra contentInset keeps it above the floating toolbar.
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+        contentInset={Platform.OS === 'ios' ? { bottom: 56 } : undefined}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         onScrollBeginDrag={() => setOpenMenuIdx(null)}
@@ -1119,12 +1141,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         )}
       </Modal>
 
-      {/* Numeric keyboard toolbar — an in-layout flex child on BOTH platforms
-          (native InputAccessoryView is broken on the New Architecture). The
-          KeyboardAvoidingView padding ends at this bar, so the list viewport
-          — and iOS's scroll-into-view of the focused input — stops above it. */}
+      {/* Numeric keyboard toolbar — absolutely positioned at the measured
+          keyboard overlap (native InputAccessoryView is broken on the New
+          Architecture, and KeyboardAvoidingView mis-measures in nested
+          navigators). Android's adjustResize shrinks the window, so 0 works. */}
       {keyboardVisible && focusedInput && (
-        <View style={styles.keyboardAccessory}>
+        <View style={[styles.keyboardAccessory, styles.floatingKeyboardBar, { bottom: Platform.OS === 'ios' ? kbOverlap : 0 }]}>
           <View style={styles.keyboardAdjRow}>
             <TouchableOpacity
               style={styles.keyboardAdjBtn}
@@ -1256,7 +1278,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           </View>
         </Animated.View>
       )}
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -1330,6 +1352,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  floatingKeyboardBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
   },
   keyboardAdjRow: {
     flexDirection: 'row',

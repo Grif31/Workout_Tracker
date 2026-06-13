@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator,
   Modal, TextInput, KeyboardAvoidingView, Platform,
@@ -21,7 +21,10 @@ import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { estimateCalories } from '../utils/cardioCalories';
+import { captureAndShare } from '../utils/shareCapture';
 import MuscleDiagram from './MuscleDiagram';
+import WorkoutShareCard, { type ShareExercise } from './WorkoutShareCard';
+import CardioShareCard from './share/CardioShareCard';
 
 
 export type PrefillWorkoutData = {
@@ -88,6 +91,7 @@ export default function WorkoutDetailsScreen({
 
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [loading, setLoading] = useState(true);
+  const shareCardRef = useRef<View>(null);
   const [templateModal, setTemplateModal] = useState<{ visible: boolean; name: string; excluded: number }>({
     visible: false, name: '', excluded: 0,
   });
@@ -181,6 +185,74 @@ export default function WorkoutDetailsScreen({
     }
   };
 
+  const handleShare = async () => {
+    try {
+      await captureAndShare(shareCardRef);
+    } catch {
+      // user cancelled or capture failed — no-op
+    }
+  };
+
+  // Off-screen share card data — derived from the loaded workout
+  const shareData = useMemo(() => {
+    if (!workout) return null;
+    const dateStr = workout.date
+      ? new Date(workout.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      : '';
+
+    const cardioEx = workout.exercises.find(e => e.exercise_type === 'cardio');
+    if (cardioEx) {
+      const set: any = cardioEx.sets?.[0] ?? {};
+      let coords: { latitude: number; longitude: number }[] = [];
+      if (cardioEx.route_polyline) {
+        try {
+          coords = polylineLib
+            .decode(cardioEx.route_polyline)
+            .map(([lat, lng]: [number, number]) => ({ latitude: lat, longitude: lng }));
+        } catch {}
+      }
+      return {
+        kind: 'cardio' as const,
+        date: dateStr,
+        activityName: workout.name,
+        distance: parseFloat(set.distance ?? '0') || 0,
+        distanceUnit: (set.distance_unit === 'mi' ? 'mi' : 'km') as 'km' | 'mi',
+        durationMin: parseFloat(set.cardio_duration ?? '0') || 0,
+        elevationM: set.elevation_gain != null ? parseFloat(set.elevation_gain) || null : null,
+        coords,
+      };
+    }
+
+    let totalReps = 0;
+    let setCount = 0;
+    const prs: { exercise_name: string; pr_type: string }[] = [];
+    const exercises: ShareExercise[] = [];
+    for (const ex of workout.exercises) {
+      let best: { reps: number; weight: number } | null = null;
+      for (const s of ex.sets) {
+        const reps = parseFloat(s.reps ?? '0') || 0;
+        const weight = parseFloat(s.weight ?? '0') || 0;
+        if (reps > 0) { totalReps += reps; setCount += 1; }
+        for (const t of s.pr_types ?? []) {
+          if (t !== 'estimated_1rm') prs.push({ exercise_name: ex.name, pr_type: t });
+        }
+        if (reps > 0 && s.set_type !== 'W' &&
+            (!best || weight > best.weight || (weight === best.weight && reps > best.reps))) {
+          best = { reps, weight };
+        }
+      }
+      exercises.push({ name: ex.name, bestSet: best });
+    }
+    return {
+      kind: 'strength' as const,
+      date: dateStr,
+      totalReps,
+      setCount,
+      prs,
+      exercises: exercises.slice(0, 3),
+    };
+  }, [workout]);
+
   const openMenu = () => {
     if (!workout) return;
     const options: string[] = [];
@@ -192,6 +264,9 @@ export default function WorkoutDetailsScreen({
     }
     options.push('Perform Again');
     handlers.push(() => onPerformAgain?.(buildPrefill('perform')));
+
+    options.push('Share Workout');
+    handlers.push(handleShare);
 
     if (onSaveAsTemplate) {
       options.push('Save as Template');
@@ -470,6 +545,41 @@ export default function WorkoutDetailsScreen({
         <Text style={styles.emptyText}>No exercises recorded</Text>
       }
     />
+
+    {/* Off-screen share card (captured by handleShare) */}
+    {shareData && (
+      <View
+        ref={shareCardRef}
+        style={{ position: 'absolute', left: -9999, top: -9999 }}
+        collapsable={false}
+      >
+        {shareData.kind === 'cardio' ? (
+          <CardioShareCard
+            activityName={shareData.activityName}
+            date={shareData.date}
+            distance={shareData.distance}
+            distanceUnit={shareData.distanceUnit}
+            durationMin={shareData.durationMin}
+            elevationM={shareData.elevationM}
+            coords={shareData.coords}
+            accentColor={colors.accent}
+          />
+        ) : (
+          <WorkoutShareCard
+            workoutName={workout.name}
+            date={shareData.date}
+            totalVolume={totalVolume}
+            totalSets={shareData.setCount}
+            totalReps={shareData.totalReps}
+            duration={workout.duration ?? null}
+            weightUnit={weightUnit}
+            exercises={shareData.exercises}
+            prs={shareData.prs}
+            accentColor={colors.accent}
+          />
+        )}
+      </View>
+    )}
 
     <Modal
       visible={templateModal.visible}
