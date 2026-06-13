@@ -566,15 +566,7 @@ export default function WorkoutDetailsScreen({
                     const prTypes = s.pr_types ?? [];
 
                     const isMaxWeight = prTypes.includes('max_weight');
-                    const isRepPr = !isMaxWeight && prTypes.includes('per_weight_reps') && (() => {
-                      const w = parseFloat(s.weight ?? '0') || 0;
-                      const r = parseFloat(s.reps ?? '0') || 0;
-                      return exercise.sets.some(other =>
-                        other !== s &&
-                        (parseFloat(other.weight ?? '0') || 0) === w &&
-                        (parseFloat(other.reps ?? '0') || 0) < r
-                      );
-                    })();
+                    const isRepPr = prTypes.includes('max_reps');
                     const isPr = isMaxWeight || isRepPr;
 
                     return (
