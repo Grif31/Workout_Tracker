@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, PersonalRecord, ExerciseTemplate
+from models import db, PersonalRecord, ExerciseTemplate, Set
 
 pr_bp = Blueprint('pr_bp', __name__)
 
@@ -48,8 +48,9 @@ def get_personal_records():
     """
     user_id = get_jwt_identity()
     rows = (
-        db.session.query(PersonalRecord, ExerciseTemplate)
+        db.session.query(PersonalRecord, ExerciseTemplate, Set)
         .join(ExerciseTemplate, PersonalRecord.exercise_template_id == ExerciseTemplate.id)
+        .outerjoin(Set, PersonalRecord.set_id == Set.id)
         .filter(PersonalRecord.user_id == user_id)
         .filter(
             ~((PersonalRecord.pr_type == 'max_reps') & (PersonalRecord.weight_context < 0))
@@ -59,18 +60,22 @@ def get_personal_records():
     )
 
     result = []
-    for pr, tmpl in rows:
+    for pr, tmpl, set_row in rows:
         if pr.pr_type in ('best_time', 'best_distance'):
             label = _cardio_pr_label(pr)
         else:
             label = PR_LABELS.get(pr.pr_type, pr.pr_type)
         primary_muscle = (tmpl.muscle_group or '').split(',')[0].strip()
-        result.append({
+        d = {
             **pr.to_dict(),
             'exercise_name': tmpl.name,
+            'equipment': tmpl.equipment,
             'pr_label': label,
             'muscle_group': primary_muscle,
-        })
+        }
+        if pr.pr_type == 'max_weight' and set_row:
+            d['reps'] = set_row.reps
+        result.append(d)
     return jsonify(result)
 
 

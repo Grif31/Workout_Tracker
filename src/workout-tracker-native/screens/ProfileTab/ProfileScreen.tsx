@@ -58,7 +58,7 @@ type ProfileStats = {
 };
 
 // Unique exercises that have at least one PR record
-type ExerciseOption = { exercise_template_id: number; exercise_name: string };
+type ExerciseOption = { exercise_template_id: number; exercise_name: string; equipment?: string | null };
 
 export default function ProfileScreen({ navigation }: Props) {
   const { user } = useAuth();
@@ -298,7 +298,7 @@ export default function ProfileScreen({ navigation }: Props) {
     for (const p of prs) {
       if (!seen.has(p.exercise_template_id)) {
         seen.add(p.exercise_template_id);
-        out.push({ exercise_template_id: p.exercise_template_id, exercise_name: p.exercise_name });
+        out.push({ exercise_template_id: p.exercise_template_id, exercise_name: p.exercise_name, equipment: p.equipment });
       }
     }
     return out.sort((a, b) => a.exercise_name.localeCompare(b.exercise_name));
@@ -788,7 +788,7 @@ export default function ProfileScreen({ navigation }: Props) {
                   onPress={() => handleSelectPin(item.exercise_template_id)}
                 >
                   <Text style={[styles.optionName, { color: colors.textPrimary }]}>
-                    {item.exercise_name}
+                    {item.equipment && item.equipment !== 'Bodyweight' ? `${item.exercise_name} · ${item.equipment}` : item.exercise_name}
                   </Text>
                   {selected && (
                     <Ionicons name="checkmark-circle" size={20} color={colors.accent} />

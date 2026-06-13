@@ -20,12 +20,14 @@ export type PR = {
   id: number;
   exercise_template_id: number;
   exercise_name: string;
-  pr_type: 'max_weight' | 'max_reps' | 'estimated_1rm';
+  equipment?: string | null;
+  pr_type: 'max_weight' | 'max_reps' | 'estimated_1rm' | 'best_time' | 'best_distance';
   pr_label: string;
   value: number;
   weight_context: number | null;
   achieved_at: string;
   muscle_group: string;
+  reps?: number | null;
 };
 
 const TABS = [
@@ -37,6 +39,7 @@ const TABS = [
 type RepsEntry = { weight: number; reps: number; achieved_at: string };
 type RepsSection = {
   title: string;
+  equipment?: string | null;
   exercise_template_id: number;
   muscle_group: string;
   data: RepsEntry[];
@@ -46,6 +49,11 @@ type CardioEntry =
   | { kind: 'time'; label: string; time_min: number; achieved_at: string }
   | { kind: 'distance'; label: string; distance_km: number; achieved_at: string };
 type CardioSection = { title: string; exercise_template_id: number; data: CardioEntry[] };
+
+function exName(name: string, equipment?: string | null) {
+  if (!equipment || equipment === 'Bodyweight') return name;
+  return `${name} · ${equipment}`;
+}
 
 export default function PersonalRecordsScreen({ navigation }: Props) {
   const { user } = useAuth();
@@ -125,6 +133,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
         if (!map.has(p.exercise_template_id)) {
           map.set(p.exercise_template_id, {
             title: p.exercise_name,
+            equipment: p.equipment,
             exercise_template_id: p.exercise_template_id,
             muscle_group: p.muscle_group || 'Other',
             data: [],
@@ -224,7 +233,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
           activeOpacity={0.7}
         >
           <View style={styles.rowInfo}>
-            <Text style={[styles.rowName, { color: colors.textPrimary }]}>{section.title}</Text>
+            <Text style={[styles.rowName, { color: colors.textPrimary }]}>{exName(section.title, section.equipment)}</Text>
             <Text style={styles.rowDate}>
               Best: {best.weight === 0 ? 'Bodyweight' : `${best.weight} ${unit}`} × {best.reps} reps
             </Text>
@@ -246,8 +255,15 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                 <Text style={styles.rowDate}>{fmtDate(item.achieved_at)}</Text>
               </View>
               <View style={styles.rowRight}>
-                {isTop && <LaurelBranch height={18} color="#C9A84C" />}
-                <Text style={[styles.rowValue, isTop && { color: colors.accent }]}>{item.reps} reps</Text>
+                {isTop ? (
+                  <View style={styles.topValueRow}>
+                    <LaurelBranch height={18} color="#C9A84C" />
+                    <Text style={[styles.rowValue, { color: '#C9A84C' }]}>{item.reps} reps</Text>
+                    <LaurelBranch side="right" height={18} color="#C9A84C" />
+                  </View>
+                ) : (
+                  <Text style={styles.rowValue}>{item.reps} reps</Text>
+                )}
               </View>
             </View>
           );
@@ -362,15 +378,24 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             renderItem={({ item, index }) => (
               <View style={[styles.row, { backgroundColor: colors.surface }]}>
                 <View style={styles.rowInfo}>
-                  <Text style={[styles.rowName, { color: colors.textPrimary }]}>{item.exercise_name}</Text>
-                  <Text style={styles.rowDate}>{fmtDate(item.achieved_at)}</Text>
+                  <Text style={[styles.rowName, { color: colors.textPrimary }]}>{exName(item.exercise_name, item.equipment)}</Text>
+                  <Text style={styles.rowDate}>
+                    {item.reps ? `For ${item.reps} reps · ${fmtDate(item.achieved_at)}` : fmtDate(item.achieved_at)}
+                  </Text>
                   {est1rmMap[item.exercise_template_id] != null && (
                     <Text style={styles.est1rm}>Est. 1RM · {est1rmMap[item.exercise_template_id].toFixed(1)} {unit}</Text>
                   )}
                 </View>
                 <View style={styles.rowRight}>
-                  {index === 0 && <LaurelBranch height={18} color="#C9A84C" />}
-                  <Text style={[styles.rowValue, index === 0 && { color: colors.accent }]}>{item.value} {unit}</Text>
+                  {index === 0 ? (
+                    <View style={styles.topValueRow}>
+                      <LaurelBranch height={18} color="#C9A84C" />
+                      <Text style={[styles.rowValue, { color: '#C9A84C' }]}>{item.value} {unit}</Text>
+                      <LaurelBranch side="right" height={18} color="#C9A84C" />
+                    </View>
+                  ) : (
+                    <Text style={styles.rowValue}>{item.value} {unit}</Text>
+                  )}
                 </View>
               </View>
             )}
@@ -386,15 +411,24 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
               <View style={[styles.row, { backgroundColor: colors.surface }]}>
                 <Text style={[styles.rank, index < 3 && { color: colors.accent }]}>#{index + 1}</Text>
                 <View style={styles.rowInfo}>
-                  <Text style={[styles.rowName, { color: colors.textPrimary }]}>{item.exercise_name}</Text>
-                  <Text style={styles.rowDate}>{fmtDate(item.achieved_at)}</Text>
+                  <Text style={[styles.rowName, { color: colors.textPrimary }]}>{exName(item.exercise_name, item.equipment)}</Text>
+                  <Text style={styles.rowDate}>
+                    {item.reps ? `For ${item.reps} reps · ${fmtDate(item.achieved_at)}` : fmtDate(item.achieved_at)}
+                  </Text>
                   {est1rmMap[item.exercise_template_id] != null && (
                     <Text style={styles.est1rm}>Est. 1RM · {est1rmMap[item.exercise_template_id].toFixed(1)} {unit}</Text>
                   )}
                 </View>
                 <View style={styles.rowRight}>
-                  {index === 0 && <LaurelBranch height={18} color="#C9A84C" />}
-                  <Text style={[styles.rowValue, index === 0 && { color: colors.accent }]}>{item.value} {unit}</Text>
+                  {index === 0 ? (
+                    <View style={styles.topValueRow}>
+                      <LaurelBranch height={18} color="#C9A84C" />
+                      <Text style={[styles.rowValue, { color: '#C9A84C' }]}>{item.value} {unit}</Text>
+                      <LaurelBranch side="right" height={18} color="#C9A84C" />
+                    </View>
+                  ) : (
+                    <Text style={styles.rowValue}>{item.value} {unit}</Text>
+                  )}
                 </View>
               </View>
             )}
@@ -446,10 +480,19 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                   <Text style={styles.rowDate}>{fmtDate(item.achieved_at)}</Text>
                 </View>
                 <View style={styles.rowRight}>
-                  {isTop && <LaurelBranch height={18} color="#C9A84C" />}
-                  <Text style={[styles.rowValue, isTop && { color: colors.accent }]}>
-                    {item.kind === 'time' ? fmtTime(item.time_min) : `${item.distance_km.toFixed(2)} km`}
-                  </Text>
+                  {isTop ? (
+                    <View style={styles.topValueRow}>
+                      <LaurelBranch height={18} color="#C9A84C" />
+                      <Text style={[styles.rowValue, { color: '#C9A84C' }]}>
+                        {item.kind === 'time' ? fmtTime(item.time_min) : `${item.distance_km.toFixed(2)} km`}
+                      </Text>
+                      <LaurelBranch side="right" height={18} color="#C9A84C" />
+                    </View>
+                  ) : (
+                    <Text style={styles.rowValue}>
+                      {item.kind === 'time' ? fmtTime(item.time_min) : `${item.distance_km.toFixed(2)} km`}
+                    </Text>
+                  )}
                 </View>
               </View>
             );
@@ -542,6 +585,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   est1rm: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   rowRight: { alignItems: 'flex-end' },
   rowValue: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
+  topValueRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
 
   // Accordion (max reps)
   accordionCard: {
