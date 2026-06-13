@@ -2,6 +2,7 @@ import React from 'react';
 import {
   View,
   Text,
+  Image,
   TouchableOpacity,
   StyleSheet,
   Platform,
@@ -27,10 +28,11 @@ export default function WelcomeScreen({ navigation }: Props) {
 
       {/* ── hero ── */}
       <View style={styles.hero}>
-        <View style={styles.logoCircle}>
-          <Ionicons name="barbell-outline" size={40} color={AUTH.accent} />
-        </View>
-        <Text style={styles.title}>Aretē</Text>
+        <Image
+          source={require('../../assets/Arete_name.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
         <Text style={styles.tagline}>Strive for Excellence</Text>
       </View>
 
@@ -81,22 +83,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 12,
   },
-  logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: AUTH.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: AUTH.border,
-  },
-  title: {
-    fontSize: 42,
-    fontWeight: '700',
-    color: AUTH.text,
-    letterSpacing: -0.5,
+  logo: {
+    width: 220,
+    height: 72,
+    marginBottom: 4,
   },
   tagline: {
     fontSize: typography.fontSize.md,
