@@ -38,9 +38,8 @@ const TAB_CONFIG: Array<{ route: string; icon: keyof typeof Ionicons.glyphMap; l
   { route: 'ProfileTab',   icon: 'person',      label: 'Profile'   },
 ];
 
-const BAR_HEIGHT = 62;
-const ICON_SIZE  = 24;
-const ICON_LIFT  = 7;
+const ICON_SIZE = 24;
+const ICON_LIFT = 5;
 
 function fmtElapsed(secs: number): string {
   if (secs < 60) return `${secs}s`;
@@ -184,10 +183,9 @@ function AnimatedTabBar({ state, navigation, colors, pendingCount }: {
         const config  = TAB_CONFIG[i];
         const color   = isActive ? colors.accent : colors.textSecondary;
 
-        const iconTranslateY  = anim.interpolate({ inputRange: [0, 1], outputRange: [0, -ICON_LIFT] });
-        const iconScale       = anim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
+        const blockTranslateY = anim.interpolate({ inputRange: [0, 1], outputRange: [0, -ICON_LIFT] });
+        const blockScale      = anim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
         const labelOpacity    = anim.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 0, 1] });
-        const labelTranslateY = anim.interpolate({ inputRange: [0, 1], outputRange: [5, 0] });
 
         return (
           <TouchableOpacity
@@ -206,7 +204,10 @@ function AnimatedTabBar({ state, navigation, colors, pendingCount }: {
             }}
             onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })}
           >
-            <Animated.View style={{ transform: [{ translateY: iconTranslateY }, { scale: iconScale }] }}>
+            <Animated.View style={[
+              styles.animTabContent,
+              { transform: [{ translateY: blockTranslateY }, { scale: blockScale }] },
+            ]}>
               {route.name === 'DashboardTab' && pendingCount > 0 ? (
                 <View>
                   <Ionicons name={config.icon} size={ICON_SIZE} color={color} />
@@ -215,16 +216,13 @@ function AnimatedTabBar({ state, navigation, colors, pendingCount }: {
               ) : (
                 <Ionicons name={config.icon} size={ICON_SIZE} color={color} />
               )}
+              <Animated.Text
+                numberOfLines={1}
+                style={[styles.animLabel, { color, opacity: labelOpacity }]}
+              >
+                {config.label}
+              </Animated.Text>
             </Animated.View>
-            <Animated.Text
-              numberOfLines={1}
-              style={[
-                styles.animLabel,
-                { color, opacity: labelOpacity, transform: [{ translateY: labelTranslateY }] },
-              ]}
-            >
-              {config.label}
-            </Animated.Text>
           </TouchableOpacity>
         );
       })}
@@ -338,16 +336,17 @@ const styles = StyleSheet.create({
   },
   animBar: {
     flexDirection: 'row',
-    height: BAR_HEIGHT,
+    paddingTop: 10,
   },
   animTab: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
+  },
+  animTabContent: {
+    alignItems: 'center',
+    gap: 3,
   },
   animLabel: {
-    position: 'absolute',
-    bottom: 7,
     fontSize: 10,
     fontWeight: '600',
     letterSpacing: 0.3,
