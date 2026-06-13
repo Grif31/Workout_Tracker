@@ -25,6 +25,7 @@ import { captureAndShare } from '../utils/shareCapture';
 import MuscleDiagram from './MuscleDiagram';
 import WorkoutShareCard, { type ShareExercise } from './WorkoutShareCard';
 import CardioShareCard from './share/CardioShareCard';
+import { LaurelBranch } from './LaurelWreath';
 
 
 export type PrefillWorkoutData = {
@@ -91,6 +92,7 @@ export default function WorkoutDetailsScreen({
 
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [loading, setLoading] = useState(true);
+  const [prExpanded, setPrExpanded] = useState(false);
   const shareCardRef = useRef<View>(null);
   const [templateModal, setTemplateModal] = useState<{ visible: boolean; name: string; excluded: number }>({
     visible: false, name: '', excluded: 0,
@@ -312,6 +314,29 @@ export default function WorkoutDetailsScreen({
     return out;
   }, [workout]);
 
+  const PR_LABELS: Record<string, string> = {
+    max_weight: 'Max Weight',
+    max_reps: 'Rep Record',
+    best_time: 'Best Time',
+    best_distance: 'Best Distance',
+  };
+
+  const workoutPrs = useMemo(() => {
+    if (!workout) return [];
+    const seen = new Set<string>();
+    const out: { exercise_name: string; pr_type: string }[] = [];
+    for (const ex of workout.exercises) {
+      for (const s of ex.sets) {
+        for (const t of s.pr_types ?? []) {
+          if (t === 'estimated_1rm') continue;
+          const key = `${ex.name}|${t}`;
+          if (!seen.has(key)) { seen.add(key); out.push({ exercise_name: ex.name, pr_type: t }); }
+        }
+      }
+    }
+    return out;
+  }, [workout]);
+
   if (loading || !workout) {
     return (
       <View style={styles.centered}>
@@ -379,6 +404,43 @@ export default function WorkoutDetailsScreen({
               </>
             ) : null}
           </View>
+
+          {/* PR dropdown */}
+          {workoutPrs.length > 0 && (
+            <View style={styles.prSection}>
+              {workoutPrs.length === 1 ? (
+                <View style={styles.prHeader}>
+                  <LaurelBranch height={20} color="#7A5800" />
+                  <Text style={styles.prHeaderText}>
+                    {workoutPrs[0].exercise_name} — {PR_LABELS[workoutPrs[0].pr_type] ?? 'PR'}
+                  </Text>
+                  <LaurelBranch side="right" height={20} color="#7A5800" />
+                </View>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={styles.prHeader}
+                    onPress={() => setPrExpanded(v => !v)}
+                    activeOpacity={0.8}
+                  >
+                    <LaurelBranch height={20} color="#7A5800" />
+                    <Text style={styles.prHeaderText}>{workoutPrs.length} Personal Records</Text>
+                    <Text style={styles.prChevron}>{prExpanded ? '▲' : '▼'}</Text>
+                    <LaurelBranch side="right" height={20} color="#7A5800" />
+                  </TouchableOpacity>
+                  {prExpanded && workoutPrs.map((pr, i) => (
+                    <View key={i} style={styles.prRow}>
+                      <LaurelBranch height={18} color="#7A5800" />
+                      <Text style={styles.prRowText}>
+                        {pr.exercise_name} — {PR_LABELS[pr.pr_type] ?? 'PR'}
+                      </Text>
+                      <LaurelBranch side="right" height={18} color="#7A5800" />
+                    </View>
+                  ))}
+                </>
+              )}
+            </View>
+          )}
 
           {/* Muscle diagram */}
           {activeMuscles.length > 0 && (
@@ -831,6 +893,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
   },
+  prSection: { paddingHorizontal: spacing.md, marginBottom: spacing.md },
+  prHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFD700', borderRadius: 10, padding: 12, marginBottom: 4 },
+  prHeaderText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: '#7A5800', flex: 1 },
+  prChevron: { fontSize: 12, color: '#7A5800' },
+  prRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFF3C4', borderRadius: 10, padding: 12, marginTop: 4 },
+  prRowText: { fontSize: typography.fontSize.sm, fontWeight: '500', color: '#7A5800', flex: 1 },
   exercisesLabel: {
     fontSize: typography.fontSize.sm,
     fontWeight: '700',

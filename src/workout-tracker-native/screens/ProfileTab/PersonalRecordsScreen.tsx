@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { LaurelBranch } from '../../components/LaurelWreath';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
@@ -245,7 +246,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                 <Text style={styles.rowDate}>{fmtDate(item.achieved_at)}</Text>
               </View>
               <View style={styles.rowRight}>
-                {isTop && <Ionicons name="trophy" size={13} color="#FFD700" style={{ marginBottom: 2 }} />}
+                {isTop && <LaurelBranch height={18} color="#C9A84C" />}
                 <Text style={[styles.rowValue, isTop && { color: colors.accent }]}>{item.reps} reps</Text>
               </View>
             </View>
@@ -368,7 +369,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                   )}
                 </View>
                 <View style={styles.rowRight}>
-                  <Ionicons name="trophy" size={13} color={index === 0 ? '#FFD700' : colors.border} style={{ marginBottom: 2 }} />
+                  {index === 0 && <LaurelBranch height={18} color="#C9A84C" />}
                   <Text style={[styles.rowValue, index === 0 && { color: colors.accent }]}>{item.value} {unit}</Text>
                 </View>
               </View>
@@ -392,7 +393,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                   )}
                 </View>
                 <View style={styles.rowRight}>
-                  <Ionicons name="trophy" size={13} color={index === 0 ? '#FFD700' : colors.border} style={{ marginBottom: 2 }} />
+                  {index === 0 && <LaurelBranch height={18} color="#C9A84C" />}
                   <Text style={[styles.rowValue, index === 0 && { color: colors.accent }]}>{item.value} {unit}</Text>
                 </View>
               </View>
@@ -445,7 +446,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                   <Text style={styles.rowDate}>{fmtDate(item.achieved_at)}</Text>
                 </View>
                 <View style={styles.rowRight}>
-                  {isTop && <Ionicons name="trophy" size={13} color="#FFD700" style={{ marginBottom: 2 }} />}
+                  {isTop && <LaurelBranch height={18} color="#C9A84C" />}
                   <Text style={[styles.rowValue, isTop && { color: colors.accent }]}>
                     {item.kind === 'time' ? fmtTime(item.time_min) : `${item.distance_km.toFixed(2)} km`}
                   </Text>

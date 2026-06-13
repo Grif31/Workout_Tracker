@@ -1,5 +1,6 @@
 import React, { forwardRef } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
+import { LaurelBranch } from './LaurelWreath';
 
 export type ShareExercise = {
   name: string;
@@ -98,7 +99,9 @@ const WorkoutShareCard = forwardRef<View, WorkoutShareCardProps>(
           {/* PR banner */}
           {prs.length > 0 && (
             <View style={styles.prBanner}>
-              <Text style={styles.prText}>🥇 {prLabel}</Text>
+              <LaurelBranch height={18} color="#7A5800" />
+              <Text style={styles.prText}>{prLabel}</Text>
+              <LaurelBranch side="right" height={18} color="#7A5800" />
             </View>
           )}
 
@@ -217,11 +220,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   prText: {
     fontSize: 13,
     fontWeight: '700',
     color: '#7A5800',
+    flex: 1,
+    textAlign: 'center',
   },
 
   exercises: {

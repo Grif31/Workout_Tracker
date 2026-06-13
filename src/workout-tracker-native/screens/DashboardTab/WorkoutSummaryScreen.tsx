@@ -17,6 +17,7 @@ import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileA
 import { GREEK_RANKS } from '../ProfileTab/GreekRankScreen';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import WorkoutShareCard from '../../components/WorkoutShareCard';
+import { LaurelBranch } from '../../components/LaurelWreath';
 import { DashboardStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -178,10 +179,11 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           <Animated.View entering={FadeInDown.delay(100).duration(400)} style={s.section}>
             {filteredPrs.length === 1 ? (
               <View style={s.prDropdownHeader}>
-                <Text style={s.prIcon}>🥇</Text>
+                <LaurelBranch height={20} color="#7A5800" />
                 <Text style={s.prText}>
                   {filteredPrs[0].exercise_name} — new {filteredPrs[0].pr_type.replace(/_/g, ' ')} PR!
                 </Text>
+                <LaurelBranch side="right" height={20} color="#7A5800" />
               </View>
             ) : (
               <>
@@ -190,18 +192,20 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
                   onPress={() => setPrExpanded(v => !v)}
                   activeOpacity={0.8}
                 >
-                  <Text style={s.prIcon}>🥇</Text>
+                  <LaurelBranch height={20} color="#7A5800" />
                   <Text style={s.prText}>
                     {filteredPrs.length} Personal Records
                   </Text>
                   <Text style={s.prChevron}>{prExpanded ? '▲' : '▼'}</Text>
+                  <LaurelBranch side="right" height={20} color="#7A5800" />
                 </TouchableOpacity>
                 {prExpanded && filteredPrs.map((pr, i) => (
                   <View key={i} style={s.prBanner}>
-                    <Text style={s.prIcon}>🥇</Text>
+                    <LaurelBranch height={20} color="#7A5800" />
                     <Text style={s.prText}>
                       {pr.exercise_name} — new {pr.pr_type.replace(/_/g, ' ')} PR!
                     </Text>
+                    <LaurelBranch side="right" height={20} color="#7A5800" />
                   </View>
                 ))}
               </>
@@ -317,9 +321,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   headline: { fontSize: typography.fontSize.xl, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
   subline: { fontSize: 15, color: colors.textSecondary, marginTop: 4, textAlign: 'center' },
   section: { paddingHorizontal: 20, marginBottom: 20 },
-  prDropdownHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFD700', borderRadius: 10, padding: 12, marginBottom: 8 },
-  prBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF3C4', borderRadius: 10, padding: 12, marginBottom: 8 },
-  prIcon: { fontSize: 18, marginRight: 8 },
+  prDropdownHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFD700', borderRadius: 10, padding: 12, marginBottom: 8 },
+  prBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFF3C4', borderRadius: 10, padding: 12, marginBottom: 8 },
   prText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: '#7A5800', flex: 1 },
   prChevron: { fontSize: 13, color: '#7A5800', marginLeft: 4 },
   statsRow: { flexDirection: 'row', gap: 10 },
