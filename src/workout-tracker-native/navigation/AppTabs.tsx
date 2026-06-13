@@ -206,7 +206,7 @@ export function AppTabs() {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
           if (route.name === 'DashboardTab') iconName = 'home';
           else if (route.name === 'ExercisesTab') iconName = 'barbell';
-          else if (route.name === 'TrainingTab') iconName = 'trophy';
+          else if (route.name === 'TrainingTab') iconName = 'stats-chart';
           else if (route.name === 'ProfileTab') iconName = 'person';
           const icon = <Ionicons name={iconName} size={size} color={color} />;
           if (route.name === 'DashboardTab' && pendingCount > 0) {
