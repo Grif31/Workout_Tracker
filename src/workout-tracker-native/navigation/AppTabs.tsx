@@ -289,12 +289,9 @@ function CustomTabBar(props: BottomTabBarProps) {
 }
 
 export function AppTabs() {
-  const { colors } = useTheme();
-
   return (
     <Tab.Navigator
       tabBar={(props) => <CustomTabBar {...props} />}
-      sceneContainerStyle={{ backgroundColor: colors.background }}
       screenOptions={{ headerShown: false }}
     >
       <Tab.Screen name="DashboardTab" component={DashboardStack} options={{ title: 'Dashboard' }} />
