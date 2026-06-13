@@ -3,6 +3,7 @@ from datetime import datetime
 from io import StringIO
 from flask import Blueprint, request, jsonify, current_app, g, make_response
 from models import db, Workout, Set, Exercise, PersonalRecord, ExerciseTemplate, User
+from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 from flask_jwt_extended import  jwt_required, get_jwt_identity
 from schemas import WorkoutSchema, UpdateWorkoutSchema
@@ -327,8 +328,28 @@ def get_workouts():
         # Paginated response when ?page= is supplied; plain array otherwise (backwards-compat).
         if page is not None:
             pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+            workout_ids = [w.id for w in pagination.items]
+            pr_counts: dict[int, int] = {}
+            if workout_ids:
+                rows = (
+                    db.session.query(Exercise.workout_id, func.count(PersonalRecord.id))
+                    .join(Set, Set.exercise_id == Exercise.id)
+                    .join(PersonalRecord, PersonalRecord.set_id == Set.id)
+                    .filter(
+                        Exercise.workout_id.in_(workout_ids),
+                        PersonalRecord.pr_type != 'estimated_1rm',
+                    )
+                    .group_by(Exercise.workout_id)
+                    .all()
+                )
+                pr_counts = dict(rows)
+            items = []
+            for w in pagination.items:
+                d = w.to_dict(include_exercises=include_exercises)
+                d['pr_count'] = pr_counts.get(w.id, 0)
+                items.append(d)
             return jsonify({
-                'workouts': [w.to_dict(include_exercises=include_exercises) for w in pagination.items],
+                'workouts': items,
                 'page': page,
                 'per_page': per_page,
                 'total': pagination.total,

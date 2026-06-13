@@ -30,6 +30,7 @@ import { toDisplayVolume, roundTenth, type WeightUnit } from 'utils/units';
 import { apiFetch, resolveMediaUrl } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
+import { LaurelBranch } from '../../components/LaurelWreath';
 const PR_PINS_KEY = '@pr_pins';
 const DEFAULT_PIN_COUNT = 3;
 const PAGE_SIZE = 20;
@@ -46,6 +47,7 @@ type Workout = {
   workout_type?: string;
   distance?: number;
   distance_unit?: string;
+  pr_count?: number;
 };
 
 type ProfileStats = {
@@ -474,6 +476,13 @@ export default function ProfileScreen({ navigation }: Props) {
           >
             <View style={styles.cardHeader}>
               <Text style={styles.workoutName} numberOfLines={1}>{item.name}</Text>
+              {!!item.pr_count && (
+                <View style={styles.prRow}>
+                  <LaurelBranch height={16} color="#C9A84C" />
+                  <Text style={styles.prText}>{item.pr_count} PR{item.pr_count > 1 ? 's' : ''}</Text>
+                  <LaurelBranch side="right" height={16} color="#C9A84C" />
+                </View>
+              )}
             </View>
             <Text style={styles.workoutDate}>
               {new Date(item.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
@@ -869,6 +878,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
   workoutName: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, flex: 1 },
+  prRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: spacing.sm },
+  prText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: '#C9A84C' },
   workoutDate: { fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   pill: {
