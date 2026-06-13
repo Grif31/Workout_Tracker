@@ -87,6 +87,8 @@ export default function WorkoutHeader({
       return s + (isNaN(r) || isNaN(w) ? 0 : r * w);
     }, 0), 0);
 
+  const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+
   return (
     <View style={styles.formSection}>
       <TextInput
@@ -251,6 +253,11 @@ export default function WorkoutHeader({
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>{exercises.length}</Text>
             <Text style={styles.summaryLabel}>{exercises.length === 1 ? 'Exercise' : 'Exercises'}</Text>
+          </View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryValue}>{totalSets}</Text>
+            <Text style={styles.summaryLabel}>{totalSets === 1 ? 'Set' : 'Sets'}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
