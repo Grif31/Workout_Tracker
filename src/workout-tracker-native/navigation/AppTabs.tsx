@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, AppState, Animated } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { postLiveWorkoutNotification, cancelLiveWorkoutNotification } from '../utils/notifications';
 import { onPendingCountChange, initPendingCount } from '../utils/offlineQueue';
-import { createBottomTabNavigator, BottomTabBar, BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { DashboardStack } from './DashboardStack';
 import { ExercisesStack } from './ExercisesStack';
@@ -11,7 +12,7 @@ import { TrainingStack } from './TrainingStack';
 import { ProfileStack } from './ProfileStack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { AppStack } from './types';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, type Colors } from '../context/ThemeContext';
 import { useWorkoutSession } from '../context/WorkoutSessionContext';
 import { navigationRef } from './navigationRef';
 import { spacing, radius } from '../theme/spacing';
@@ -29,6 +30,17 @@ const ROOT_SCREENS: Record<string, string> = {
 const isIOS = Platform.OS === 'ios';
 const iosVersion = isIOS ? parseInt(String(Platform.Version), 10) : 0;
 const isIOS18Plus = isIOS && iosVersion >= 18;
+
+const TAB_CONFIG: Array<{ route: string; icon: keyof typeof Ionicons.glyphMap; label: string }> = [
+  { route: 'DashboardTab', icon: 'home',        label: 'Home'      },
+  { route: 'ExercisesTab', icon: 'barbell',     label: 'Exercises' },
+  { route: 'TrainingTab',  icon: 'stats-chart', label: 'Training'  },
+  { route: 'ProfileTab',   icon: 'person',      label: 'Profile'   },
+];
+
+const BAR_HEIGHT = 62;
+const ICON_SIZE  = 24;
+const ICON_LIFT  = 7;
 
 function fmtElapsed(secs: number): string {
   if (secs < 60) return `${secs}s`;
@@ -132,6 +144,94 @@ function MiniWorkoutBar() {
   );
 }
 
+function AnimatedTabBar({ state, navigation, colors, pendingCount }: {
+  state: BottomTabBarProps['state'];
+  navigation: BottomTabBarProps['navigation'];
+  colors: Colors;
+  pendingCount: number;
+}) {
+  const { bottom } = useSafeAreaInsets();
+
+  const anims = useRef(
+    state.routes.map((_, i) => new Animated.Value(i === state.index ? 1 : 0))
+  ).current;
+
+  useEffect(() => {
+    state.routes.forEach((_, i) => {
+      Animated.spring(anims[i], {
+        toValue: i === state.index ? 1 : 0,
+        useNativeDriver: true,
+        damping: 18,
+        stiffness: 260,
+        mass: 0.65,
+      }).start();
+    });
+  }, [state.index]);
+
+  const borderStyle = isIOS18Plus
+    ? { borderTopWidth: 0 }
+    : { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border };
+
+  return (
+    <View style={[
+      styles.animBar,
+      borderStyle,
+      { backgroundColor: colors.surface, paddingBottom: bottom || 8 },
+    ]}>
+      {state.routes.map((route, i) => {
+        const isActive = state.index === i;
+        const anim    = anims[i];
+        const config  = TAB_CONFIG[i];
+        const color   = isActive ? colors.accent : colors.textSecondary;
+
+        const iconTranslateY  = anim.interpolate({ inputRange: [0, 1], outputRange: [0, -ICON_LIFT] });
+        const iconScale       = anim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
+        const labelOpacity    = anim.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 0, 1] });
+        const labelTranslateY = anim.interpolate({ inputRange: [0, 1], outputRange: [5, 0] });
+
+        return (
+          <TouchableOpacity
+            key={route.key}
+            style={styles.animTab}
+            activeOpacity={1}
+            onPress={() => {
+              const event = navigation.emit({
+                type: 'tabPress',
+                target: route.key,
+                canPreventDefault: true,
+              });
+              if (!isActive && !event.defaultPrevented) {
+                navigation.navigate(route.name);
+              }
+            }}
+            onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })}
+          >
+            <Animated.View style={{ transform: [{ translateY: iconTranslateY }, { scale: iconScale }] }}>
+              {route.name === 'DashboardTab' && pendingCount > 0 ? (
+                <View>
+                  <Ionicons name={config.icon} size={ICON_SIZE} color={color} />
+                  <View style={styles.syncDot} />
+                </View>
+              ) : (
+                <Ionicons name={config.icon} size={ICON_SIZE} color={color} />
+              )}
+            </Animated.View>
+            <Animated.Text
+              numberOfLines={1}
+              style={[
+                styles.animLabel,
+                { color, opacity: labelOpacity, transform: [{ translateY: labelTranslateY }] },
+              ]}
+            >
+              {config.label}
+            </Animated.Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
 function CustomTabBar(props: BottomTabBarProps) {
   const { colors } = useTheme();
   const { isWorkoutOpen } = useWorkoutSession();
@@ -140,6 +240,12 @@ function CustomTabBar(props: BottomTabBarProps) {
   const heightRef  = useRef(0);
   const prevSubScreen = useRef(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    initPendingCount();
+    return onPendingCountChange(setPendingCount);
+  }, []);
 
   const activeRoute = props.state.routes[props.state.index];
   const focusedRoute = getFocusedRouteNameFromRoute(activeRoute);
@@ -173,7 +279,12 @@ function CustomTabBar(props: BottomTabBarProps) {
         style={{ opacity, transform: [{ translateY }], display: collapsed ? 'none' : 'flex' }}
         pointerEvents={isOnSubScreen ? 'none' : 'auto'}
       >
-        <BottomTabBar {...props} />
+        <AnimatedTabBar
+          state={props.state}
+          navigation={props.navigation}
+          colors={colors}
+          pendingCount={pendingCount}
+        />
       </Animated.View>
     </View>
   );
@@ -181,47 +292,12 @@ function CustomTabBar(props: BottomTabBarProps) {
 
 export function AppTabs() {
   const { colors } = useTheme();
-  const [pendingCount, setPendingCount] = useState(0);
-
-  useEffect(() => {
-    initPendingCount();
-    return onPendingCountChange(setPendingCount);
-  }, []);
-
-  // On iOS 18+, remove the top border so the tab bar blends cleanly with
-  // the system's adaptive appearance. On Android / older iOS keep the border.
-  const tabBarStyle = isIOS18Plus
-    ? { backgroundColor: colors.surface, borderTopWidth: 0, elevation: 0 }
-    : { backgroundColor: colors.surface, borderTopColor: colors.border };
 
   return (
     <Tab.Navigator
       tabBar={(props) => <CustomTabBar {...props} />}
       sceneContainerStyle={{ backgroundColor: colors.background }}
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarShowLabel: false,
-        tabBarStyle,
-        tabBarIcon: ({ color, size }) => {
-          let iconName: keyof typeof Ionicons.glyphMap = 'home';
-          if (route.name === 'DashboardTab') iconName = 'home';
-          else if (route.name === 'ExercisesTab') iconName = 'barbell';
-          else if (route.name === 'TrainingTab') iconName = 'stats-chart';
-          else if (route.name === 'ProfileTab') iconName = 'person';
-          const icon = <Ionicons name={iconName} size={size} color={color} />;
-          if (route.name === 'DashboardTab' && pendingCount > 0) {
-            return (
-              <View>
-                {icon}
-                <View style={styles.syncDot} />
-              </View>
-            );
-          }
-          return icon;
-        },
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.textSecondary,
-      })}
+      screenOptions={{ headerShown: false }}
     >
       <Tab.Screen name="DashboardTab" component={DashboardStack} options={{ title: 'Dashboard' }} />
       <Tab.Screen name="ExercisesTab" component={ExercisesStack} options={{ title: 'Exercises' }} />
@@ -259,5 +335,21 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: '#FF9500',
+  },
+  animBar: {
+    flexDirection: 'row',
+    height: BAR_HEIGHT,
+  },
+  animTab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  animLabel: {
+    position: 'absolute',
+    bottom: 7,
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
 });
