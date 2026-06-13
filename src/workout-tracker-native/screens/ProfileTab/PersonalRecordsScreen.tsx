@@ -386,7 +386,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                     )}
                   </Text>
                   <Text style={styles.rowDate}>
-                    {item.reps ? `For ${item.reps} reps · ${fmtDate(item.achieved_at)}` : fmtDate(item.achieved_at)}
+                    {item.reps ? `For ${item.reps} ${item.reps === 1 ? 'rep' : 'reps'} · ${fmtDate(item.achieved_at)}` : fmtDate(item.achieved_at)}
                   </Text>
                   {est1rmMap[item.exercise_template_id] != null && (
                     <Text style={styles.est1rm}>Est. 1RM · {est1rmMap[item.exercise_template_id].toFixed(1)} {unit}</Text>
@@ -424,7 +424,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                     )}
                   </Text>
                   <Text style={styles.rowDate}>
-                    {item.reps ? `For ${item.reps} reps · ${fmtDate(item.achieved_at)}` : fmtDate(item.achieved_at)}
+                    {item.reps ? `For ${item.reps} ${item.reps === 1 ? 'rep' : 'reps'} · ${fmtDate(item.achieved_at)}` : fmtDate(item.achieved_at)}
                   </Text>
                   {est1rmMap[item.exercise_template_id] != null && (
                     <Text style={styles.est1rm}>Est. 1RM · {est1rmMap[item.exercise_template_id].toFixed(1)} {unit}</Text>
