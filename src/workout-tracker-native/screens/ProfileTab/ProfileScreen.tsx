@@ -788,7 +788,10 @@ export default function ProfileScreen({ navigation }: Props) {
                   onPress={() => handleSelectPin(item.exercise_template_id)}
                 >
                   <Text style={[styles.optionName, { color: colors.textPrimary }]}>
-                    {item.equipment && item.equipment !== 'Bodyweight' ? `${item.exercise_name} · ${item.equipment}` : item.exercise_name}
+                    {item.exercise_name}
+                    {item.equipment && item.equipment !== 'Bodyweight' && (
+                      <Text style={styles.optionEquipment}> · {item.equipment}</Text>
+                    )}
                   </Text>
                   {selected && (
                     <Ionicons name="checkmark-circle" size={20} color={colors.accent} />
@@ -1018,6 +1021,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderWidth: 1,
   },
   optionName: { fontSize: 15, fontWeight: '500' },
+  optionEquipment: { fontSize: 12, fontWeight: '400', color: colors.textSecondary },
 
   historyHeader: {
     flexDirection: 'row',

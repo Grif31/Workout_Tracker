@@ -50,10 +50,6 @@ type CardioEntry =
   | { kind: 'distance'; label: string; distance_km: number; achieved_at: string };
 type CardioSection = { title: string; exercise_template_id: number; data: CardioEntry[] };
 
-function exName(name: string, equipment?: string | null) {
-  if (!equipment || equipment === 'Bodyweight') return name;
-  return `${name} · ${equipment}`;
-}
 
 export default function PersonalRecordsScreen({ navigation }: Props) {
   const { user } = useAuth();
@@ -233,7 +229,12 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
           activeOpacity={0.7}
         >
           <View style={styles.rowInfo}>
-            <Text style={[styles.rowName, { color: colors.textPrimary }]}>{exName(section.title, section.equipment)}</Text>
+            <Text style={[styles.rowName, { color: colors.textPrimary }]}>
+              {section.title}
+              {section.equipment && section.equipment !== 'Bodyweight' && (
+                <Text style={styles.rowEquipment}> · {section.equipment}</Text>
+              )}
+            </Text>
             <Text style={styles.rowDate}>
               Best: {best.weight === 0 ? 'Bodyweight' : `${best.weight} ${unit}`} × {best.reps} reps
             </Text>
@@ -378,7 +379,12 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             renderItem={({ item, index }) => (
               <View style={[styles.row, { backgroundColor: colors.surface }]}>
                 <View style={styles.rowInfo}>
-                  <Text style={[styles.rowName, { color: colors.textPrimary }]}>{exName(item.exercise_name, item.equipment)}</Text>
+                  <Text style={[styles.rowName, { color: colors.textPrimary }]}>
+                    {item.exercise_name}
+                    {item.equipment && item.equipment !== 'Bodyweight' && (
+                      <Text style={styles.rowEquipment}> · {item.equipment}</Text>
+                    )}
+                  </Text>
                   <Text style={styles.rowDate}>
                     {item.reps ? `For ${item.reps} reps · ${fmtDate(item.achieved_at)}` : fmtDate(item.achieved_at)}
                   </Text>
@@ -411,7 +417,12 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
               <View style={[styles.row, { backgroundColor: colors.surface }]}>
                 <Text style={[styles.rank, index < 3 && { color: colors.accent }]}>#{index + 1}</Text>
                 <View style={styles.rowInfo}>
-                  <Text style={[styles.rowName, { color: colors.textPrimary }]}>{exName(item.exercise_name, item.equipment)}</Text>
+                  <Text style={[styles.rowName, { color: colors.textPrimary }]}>
+                    {item.exercise_name}
+                    {item.equipment && item.equipment !== 'Bodyweight' && (
+                      <Text style={styles.rowEquipment}> · {item.equipment}</Text>
+                    )}
+                  </Text>
                   <Text style={styles.rowDate}>
                     {item.reps ? `For ${item.reps} reps · ${fmtDate(item.achieved_at)}` : fmtDate(item.achieved_at)}
                   </Text>
@@ -581,6 +592,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   rank: { width: 30, fontSize: 13, fontWeight: '700', color: colors.textSecondary },
   rowInfo: { flex: 1 },
   rowName: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
+  rowEquipment: { fontSize: 12, fontWeight: '400', color: colors.textSecondary },
   rowDate: { fontSize: 12, color: colors.textSecondary },
   est1rm: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   rowRight: { alignItems: 'flex-end' },
