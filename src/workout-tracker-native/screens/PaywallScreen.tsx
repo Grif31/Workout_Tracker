@@ -31,7 +31,8 @@ export default function PaywallScreen({ navigation }: Props) {
   const [restoring, setRestoring] = useState(false);
 
   const packages: PurchasesPackage[] = useMemo(() => {
-    const all = offerings?.current?.availablePackages ?? [];
+    const offering = offerings?.current ?? offerings?.all?.['default'] ?? null;
+    const all = offering?.availablePackages ?? [];
     const annual   = all.find(p => p.packageType === 'ANNUAL');
     const monthly  = all.find(p => p.packageType === 'MONTHLY');
     const lifetime = all.find(p => p.packageType === 'LIFETIME');
