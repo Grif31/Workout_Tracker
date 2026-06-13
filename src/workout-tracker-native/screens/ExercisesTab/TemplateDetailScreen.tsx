@@ -137,6 +137,8 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
           name: ex.name,
           exercise_template_id: ex.id,
           exercise_type: ex.exercise_type ?? 'strength',
+          muscle_group: ex.muscle_group,
+          equipment: ex.equipment,
           sets: [{ reps: '', weight: '' }],
         })),
       },

@@ -366,6 +366,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           exercise_template_id: ex.exercise_template_id,
           exercise_type: ex.exercise_type,
           name: ex.name,
+          muscle_group: ex.muscle_group,
           equipment: ex.equipment,
           notes: ex.notes ?? undefined,
           sets: ex.sets.map((s: any) => ({
