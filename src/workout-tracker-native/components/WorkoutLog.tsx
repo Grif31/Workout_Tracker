@@ -112,7 +112,6 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const [showPlateCalc, setShowPlateCalc] = useState(true);
   const [focusedInput, setFocusedInput] = useState<{ exIdx: number; setIdx: number; field: 'reps' | 'weight' } | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [rpePickerTarget, setRpePickerTarget]     = useState<{ exIdx: number; setIdx: number } | null>(null);
   const [plateCalcTarget, setPlateCalcTarget]     = useState<{ exIdx: number; setIdx: number } | null>(null);
   // Keep refs in sync with state so AppState/setInterval closures always read current values.
@@ -198,14 +197,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   }, []);
 
   useEffect(() => {
-    // iOS gets the will-events so the bar is positioned before the keyboard
+    // iOS gets the will-events so the bar appears before the keyboard
     // finishes animating; Android only emits the did-events.
     const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const show = Keyboard.addListener(showEvt, e => {
-      setKeyboardHeight(Platform.OS === 'ios' ? e.endCoordinates.height : 0);
-      setKeyboardVisible(true);
-    });
+    const show = Keyboard.addListener(showEvt, () => setKeyboardVisible(true));
     const hide = Keyboard.addListener(hideEvt, () => {
       setKeyboardVisible(false);
       // Delay so onFocus on the next input can fire first when switching inputs.
@@ -878,7 +874,6 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
     >
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
@@ -920,6 +915,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       <FlatList
         data={exercises}
         keyExtractor={(item) => item.uid}
+        style={{ flex: 1 }}
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -1123,12 +1119,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         )}
       </Modal>
 
-      {/* Numeric keyboard toolbar — a plain floating view on BOTH platforms.
-          The native InputAccessoryView is broken on the New Architecture
-          (detaches after the first focus / when switching inputs), so we
-          position above the keyboard ourselves via keyboard events. */}
+      {/* Numeric keyboard toolbar — an in-layout flex child on BOTH platforms
+          (native InputAccessoryView is broken on the New Architecture). The
+          KeyboardAvoidingView padding ends at this bar, so the list viewport
+          — and iOS's scroll-into-view of the focused input — stops above it. */}
       {keyboardVisible && focusedInput && (
-        <View style={[styles.keyboardAccessory, styles.floatingKeyboardBar, { bottom: keyboardHeight }]}>
+        <View style={styles.keyboardAccessory}>
           <View style={styles.keyboardAdjRow}>
             <TouchableOpacity
               style={styles.keyboardAdjBtn}
@@ -1334,11 +1330,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  floatingKeyboardBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
   },
   keyboardAdjRow: {
     flexDirection: 'row',
