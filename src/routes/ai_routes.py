@@ -1,4 +1,5 @@
 import os
+import re
 import json
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, current_app, g
@@ -56,13 +57,21 @@ def _match_exercises(exercise_items: list) -> list[dict]:
 
 def _parse_ai_json(raw: str) -> dict:
     text = raw.strip()
+    # Strip markdown code fences
     if '```' in text:
         parts = text.split('```')
         for part in parts:
             stripped = part.strip().lstrip('json').strip()
-            if stripped.startswith('{'):
+            if stripped.startswith('{') or stripped.startswith('['):
                 text = stripped
                 break
+    # Extract outermost JSON object if prose precedes it
+    if not text.startswith('{') and not text.startswith('['):
+        m = re.search(r'[{\[]', text)
+        if m:
+            text = text[m.start():]
+    # Remove trailing commas before } or ] — common LLM output mistake
+    text = re.sub(r',\s*([}\]])', r'\1', text)
     return json.loads(text)
 
 
@@ -335,7 +344,7 @@ def generate_workout():
 
         msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
+            max_tokens=4096,
             messages=[{"role": "user", "content": prompt}],
         )
 
