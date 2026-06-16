@@ -142,7 +142,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   useEffect(() => {
     setWorkoutOpen(true);
-    return () => setWorkoutOpen(false);
+    return () => {
+      setWorkoutOpen(false);
+      AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -164,6 +167,13 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   }, []);
 
   const TIMER_CHECKPOINT_KEY = '@workout_timer_checkpoint';
+  const WORKOUT_BACKUP_KEY   = '@workout_open_backup';
+
+  // Keep refs in sync so the AppState closure always reads current values.
+  const notesRef        = useRef(notes);
+  notesRef.current      = notes;
+  const selectedDateRef        = useRef(selectedDate);
+  selectedDateRef.current      = selectedDate;
 
   const restoreTimerCheckpoint = async () => {
     try {
@@ -193,9 +203,25 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       startRef.current = new Date();
       clearSession();
       AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
+      AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
     } else if (!prefill && !editMode && !session) {
-      // App may have been killed while workout was open without minimizing — restore timer from checkpoint.
-      restoreTimerCheckpoint();
+      // App may have been killed while workout was open without minimizing.
+      // Restore both the exercises backup and the timer checkpoint.
+      (async () => {
+        const raw = await AsyncStorage.getItem(WORKOUT_BACKUP_KEY);
+        if (raw) {
+          try {
+            const backup = JSON.parse(raw);
+            setWorkoutName(backup.workoutName ?? '');
+            setNotes(backup.notes ?? '');
+            setExercises((backup.exercises as ExerciseEntry[]) ?? []);
+            const d = new Date(backup.selectedDate);
+            if (!isNaN(d.getTime())) setSelectedDate(d);
+          } catch {}
+          await AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
+        }
+        restoreTimerCheckpoint();
+      })();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -310,6 +336,15 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           paused: timerPausedRef.current,
         }));
 
+        // Save full workout state in case iOS kills the app while it's backgrounded.
+        // On a normal foreground return this is cleared in the 'active' handler below.
+        await AsyncStorage.setItem(WORKOUT_BACKUP_KEY, JSON.stringify({
+          workoutName,
+          notes: notesRef.current,
+          exercises,
+          selectedDate: selectedDateRef.current.toISOString(),
+        }));
+
         const liveOff = await AsyncStorage.getItem('live_workout_notif_enabled');
         if (liveOff === 'false') return;
         const setsDone = exercises.flatMap(e => e.sets).filter(s => s.done).length;
@@ -328,6 +363,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         cancelLiveWorkoutNotification();
         // App resumed from background — update timer refs from checkpoint if JS was suspended.
         await restoreTimerCheckpoint();
+        // Exercises are still in memory; discard the insurance backup.
+        await AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
       }
     });
     return () => sub.remove();
@@ -780,6 +817,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         cancelLiveWorkoutNotification();
         clearSession();
         AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
+        AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
         showToast('Saved offline — will sync when connected');
         onCancel?.();
         return;
@@ -800,6 +838,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       cancelLiveWorkoutNotification();
       clearSession();
       AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
+      AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
       const endDate = new Date();
       const startDate = new Date(endDate.getTime() - elapsed * 1000);
       const workoutType = exercisesToSave.some(ex => (ex.exercise_type || 'strength') !== 'cardio') ? 'strength' : 'cardio';
@@ -1019,7 +1058,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                 'Are you sure you want to discard this workout?',
                 [
                   { text: 'Cancel', style: 'cancel' },
-                  { text: 'Discard', style: 'destructive', onPress: () => { clearSession(); AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY); onCancel?.(); } },
+                  { text: 'Discard', style: 'destructive', onPress: () => { clearSession(); AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY); AsyncStorage.removeItem(WORKOUT_BACKUP_KEY); onCancel?.(); } },
                 ]
               )}
             >
