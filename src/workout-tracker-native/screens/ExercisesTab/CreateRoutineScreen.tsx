@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, Modal, FlatList, ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ExercisesStackParamsList } from 'navigation/types';
+import { TrainingStackParamsList } from 'navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
@@ -14,17 +14,19 @@ import ExerciseListModal from '../../components/ExerciseList';
 
 import { apiFetch } from '../../utils/api';
 
-type Props = NativeStackScreenProps<ExercisesStackParamsList, 'CreateRoutine'>;
+type Props = NativeStackScreenProps<TrainingStackParamsList, 'CreateRoutine'>;
 
 type Exercise = { id: number; name: string; muscle_group: string };
 type Template = { id: number; name: string; exercises: Exercise[] };
 
-// A day is either linked to an existing template or built inline
 type DayEntry =
   | { mode: 'existing'; label: string; templateId: number; templateName: string }
   | { mode: 'new'; label: string; exercises: Exercise[] };
 
-export default function CreateRoutineScreen({ navigation }: Props) {
+export default function CreateRoutineScreen({ route, navigation }: Props) {
+  const routineId = route.params?.routineId;
+  const isEditing = !!routineId;
+
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [routineName, setRoutineName] = useState('');
@@ -33,29 +35,53 @@ export default function CreateRoutineScreen({ navigation }: Props) {
   const [exerciseList, setExerciseList] = useState<Exercise[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [saving, setSaving] = useState(false);
+  const [loadingRoutine, setLoadingRoutine] = useState(isEditing);
 
-  // Which day index the exercise picker / template picker is open for
   const [exPickerDay, setExPickerDay] = useState<number | null>(null);
   const [tmplPickerDay, setTmplPickerDay] = useState<number | null>(null);
 
-  useEffect(() => {
-    fetchExercises();
-    fetchTemplates();
-  }, []);
-
-  const fetchExercises = async () => {
+  const fetchExercises = useCallback(async () => {
     try {
       const res = await apiFetch('/api/exercises');
       if (res.ok) setExerciseList(await res.json());
     } catch {}
-  };
+  }, []);
 
-  const fetchTemplates = async () => {
+  const fetchTemplates = useCallback(async () => {
     try {
       const res = await apiFetch('/api/workout-templates');
       if (res.ok) setTemplates(await res.json());
     } catch {}
-  };
+  }, []);
+
+  // Pre-populate form when editing
+  const fetchRoutine = useCallback(async () => {
+    if (!routineId) return;
+    try {
+      const res = await apiFetch(`/api/routines/${routineId}`);
+      if (!res.ok) { Alert.alert('Error', 'Failed to load routine'); navigation.goBack(); return; }
+      const data = await res.json();
+      setRoutineName(data.name ?? '');
+      setDescription(data.description ?? '');
+      setDays((data.days ?? []).map((d: any) => ({
+        mode: 'existing' as const,
+        label: d.label,
+        templateId: d.workout_template.id,
+        templateName: d.workout_template.name,
+      })));
+    } catch {
+      Alert.alert('Error', 'Something went wrong');
+      navigation.goBack();
+    } finally {
+      setLoadingRoutine(false);
+    }
+  }, [routineId]);
+
+  useEffect(() => {
+    fetchExercises();
+    fetchTemplates();
+    if (isEditing) fetchRoutine();
+  }, []);
 
   const addNewExerciseToLib = async (name: string, muscle: string) => {
     try {
@@ -133,22 +159,27 @@ export default function CreateRoutineScreen({ navigation }: Props) {
 
     setSaving(true);
     try {
-      const res = await apiFetch('/api/routines', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: routineName.trim(),
-          description: description.trim() || null,
-          days: days.map(d => ({
-            label: d.label,
-            ...(d.mode === 'existing'
-              ? { workout_template_id: d.templateId }
-              : { exercise_template_ids: d.exercises.map(e => e.id) }),
-          })),
-        }),
-      });
+      const body = {
+        name: routineName.trim(),
+        description: description.trim() || null,
+        days: days.map(d => ({
+          label: d.label,
+          ...(d.mode === 'existing'
+            ? { workout_template_id: d.templateId }
+            : { exercise_template_ids: d.exercises.map(e => e.id) }),
+        })),
+      };
+
+      const res = await apiFetch(
+        isEditing ? `/api/routines/${routineId}` : '/api/routines',
+        {
+          method: isEditing ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+      );
+
       if (res.ok) {
-        Alert.alert('Success', 'Routine created!');
         navigation.goBack();
       } else {
         const data = await res.json();
@@ -161,6 +192,14 @@ export default function CreateRoutineScreen({ navigation }: Props) {
     }
   };
 
+  if (loadingRoutine) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={colors.save} />
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Header */}
@@ -168,7 +207,7 @@ export default function CreateRoutineScreen({ navigation }: Props) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Create Routine</Text>
+        <Text style={styles.headerTitle}>{isEditing ? 'Edit Routine' : 'Create Routine'}</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -195,7 +234,6 @@ export default function CreateRoutineScreen({ navigation }: Props) {
 
       {days.map((day, dayIdx) => (
         <View key={dayIdx} style={styles.dayCard}>
-          {/* Day label + remove */}
           <View style={styles.dayHeader}>
             <TextInput
               style={styles.dayLabelInput}
@@ -208,7 +246,6 @@ export default function CreateRoutineScreen({ navigation }: Props) {
             </TouchableOpacity>
           </View>
 
-          {/* Mode toggle */}
           <View style={styles.modeRow}>
             <TouchableOpacity
               style={[styles.modeBtn, day.mode === 'new' && styles.modeBtnActive]}
@@ -269,10 +306,12 @@ export default function CreateRoutineScreen({ navigation }: Props) {
         onPress={saveRoutine}
         disabled={saving}
       >
-        {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Save Routine</Text>}
+        {saving
+          ? <ActivityIndicator color="#fff" />
+          : <Text style={styles.saveBtnText}>{isEditing ? 'Save Changes' : 'Save Routine'}</Text>
+        }
       </TouchableOpacity>
 
-      {/* Exercise picker modal (for inline new days) */}
       {exPickerDay !== null && (
         <ExerciseListModal
           visible
@@ -284,7 +323,6 @@ export default function CreateRoutineScreen({ navigation }: Props) {
         />
       )}
 
-      {/* Template picker modal */}
       <Modal visible={tmplPickerDay !== null} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
@@ -321,6 +359,7 @@ export default function CreateRoutineScreen({ navigation }: Props) {
 const createStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingBottom: spacing.xl * 2 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

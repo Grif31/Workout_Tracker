@@ -87,6 +87,37 @@ def update_routine(routine_id):
     if 'description' in data:
         routine.description = data['description']
 
+    if 'days' in data:
+        days_data = data['days']
+        if not days_data:
+            return jsonify({'message': 'At least one day is required'}), 400
+
+        # Remove all existing days (cascade orphan delete handles RoutineDay rows)
+        for day in list(routine.days):
+            db.session.delete(day)
+        db.session.flush()
+
+        for order, day in enumerate(days_data):
+            label = day.get('label') or f'Day {order + 1}'
+            existing_id = day.get('workout_template_id')
+            if existing_id:
+                template = WorkoutTemplate.query.filter_by(id=existing_id, user_id=user_id).first()
+                if not template:
+                    return jsonify({'message': f'Template {existing_id} not found'}), 404
+            else:
+                ex_ids = day.get('exercise_template_ids', [])
+                exercises = ExerciseTemplate.query.filter(ExerciseTemplate.id.in_(ex_ids)).all() if ex_ids else []
+                template = WorkoutTemplate(user_id=user_id, name=f"{routine.name} - {label}", exercises=exercises)
+                db.session.add(template)
+                db.session.flush()
+
+            db.session.add(RoutineDay(
+                routine_id=routine.id,
+                workout_template_id=template.id,
+                day_order=order,
+                label=label,
+            ))
+
     db.session.commit()
     return jsonify(routine.to_dict(include_days=True))
 

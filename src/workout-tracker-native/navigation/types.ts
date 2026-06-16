@@ -8,6 +8,7 @@ export type ExerciseDetailParams = {
   secondaryMuscleGroup?: string;
   description?: string;
   imageUrl?: string;
+  isCustom?: boolean;
 };
 
 export type WorkoutSummaryParams = {
@@ -34,12 +35,19 @@ export type ExercisesStackParamsList = {
     ExercisesHome: undefined;
     ExerciseDetail: ExerciseDetailParams;
 };
-export type PreviewExercise = { id: number; name: string; muscle_group: string };
+export type PreviewExercise = {
+  id: number;
+  name: string;
+  muscle_group: string;
+  prescribed_sets?: number;
+  prescribed_reps?: string;
+  prescribed_rpe?: number;
+};
 export type PreviewDay = { label: string; exercises: PreviewExercise[] };
 
 export type TrainingStackParamsList = {
     TrainingHome: undefined;
-    CreateRoutine: undefined;
+    CreateRoutine: { routineId?: number; routineName?: string } | undefined;
     RoutineDetail: { routineId: number; routineName: string };
     TemplateDetail: { templateId: number; muscleGroups?: string[] };
     LogRoutine: { prefill?: PrefillWorkoutData; workoutId?: number; editMode?: boolean };
@@ -56,6 +64,9 @@ export type TrainingStackParamsList = {
         coachDays: number;
         coachGoal: string;
         coachExp: string;
+        coachEquipment: string;
+        coachSessionLength: string;
+        coachAvoid: string;
     };
 };
 export type ProfileStackParamsList = {

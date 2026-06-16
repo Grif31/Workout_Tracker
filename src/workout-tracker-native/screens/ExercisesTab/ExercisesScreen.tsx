@@ -26,7 +26,7 @@ import { apiFetch } from '../../utils/api';
 
 type Props = NativeStackScreenProps<ExercisesStackParamsList, 'ExercisesHome'>;
 
-type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; image_url?: string; exercise_type?: string };
+type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; image_url?: string; exercise_type?: string; is_custom?: boolean };
 
 export default function ExercisesScreen({ navigation }: Props) {
   const { colors } = useTheme();
@@ -144,6 +144,7 @@ export default function ExercisesScreen({ navigation }: Props) {
           equipment: item.equipment,
           muscleGroup: isCardio ? 'Cardio' : item.muscle_group,
           imageUrl: item.image_url,
+          isCustom: !!item.is_custom,
         })}
       >
         {item.image_url ? (

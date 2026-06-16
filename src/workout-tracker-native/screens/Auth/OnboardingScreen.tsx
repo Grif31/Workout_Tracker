@@ -18,7 +18,7 @@ import { apiFetch } from '../../utils/api';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 
-type Props = NativeStackScreenProps<OnboardingStackParamsList, 'Onboarding'>;
+type Props = NativeStackScreenProps<OnboardingStackParamsList, 'Onboarding'> & { onComplete: () => void };
 
 type Msg =
   | { id: string; type: 'bot'; text: string }
@@ -30,39 +30,69 @@ const STEPS = [
     key: 'goal',
     botText: "Hey! I'm your Aretē coach 👋\n\nWhat's your main goal?",
     options: [
-      { label: 'Hypertrophy', value: 'hypertrophy' },
-      { label: 'Strength', value: 'strength' },
-      { label: 'Endurance', value: 'endurance' },
+      { label: 'Build Muscle', value: 'hypertrophy' },
+      { label: 'Get Stronger', value: 'strength' },
+      { label: 'Improve Endurance', value: 'endurance' },
       { label: 'General Fitness', value: 'general' },
     ],
   },
   {
     key: 'exp',
-    botText: "Nice! What's your training experience?",
+    botText: "How long have you been training consistently?",
     options: [
-      { label: 'Beginner', value: 'beginner' },
-      { label: 'Intermediate', value: 'intermediate' },
-      { label: 'Advanced', value: 'advanced' },
+      { label: 'Under 1 year', value: 'beginner' },
+      { label: '1–3 years', value: 'intermediate' },
+      { label: '3+ years', value: 'advanced' },
     ],
   },
   {
     key: 'days',
     botText: 'How many days per week can you train?',
-    options: [2, 3, 4, 5, 6].map(d => ({ label: String(d), value: String(d) })),
+    options: [2, 3, 4, 5, 6].map(d => ({ label: `${d} days`, value: String(d) })),
+  },
+  {
+    key: 'equipment',
+    botText: 'What equipment do you have access to?',
+    options: [
+      { label: 'Full gym', value: 'full_gym' },
+      { label: 'Home gym (barbell + bench)', value: 'home_barbell' },
+      { label: 'Dumbbells only', value: 'dumbbells' },
+      { label: 'Bodyweight only', value: 'bodyweight' },
+    ],
+  },
+  {
+    key: 'session_length',
+    botText: 'How long can you train per session?',
+    options: [
+      { label: '30–45 min', value: '30' },
+      { label: '45–60 min', value: '45' },
+      { label: '60–75 min', value: '60' },
+      { label: '90+ min', value: '90' },
+    ],
+  },
+  {
+    key: 'avoid',
+    botText: 'Any injuries or areas I should work around?',
+    options: [
+      { label: 'Lower back', value: 'lower_back' },
+      { label: 'Knees', value: 'knees' },
+      { label: 'Shoulders', value: 'shoulders' },
+      { label: 'All clear', value: 'none' },
+    ],
   },
   {
     key: 'routine',
-    botText: "Last one — want me to generate a starter routine based on your goals?",
+    botText: "Got it — I have everything I need.\n\nWant me to build your personalised program right now?",
     options: [
-      { label: 'Yes, generate one', value: 'yes' },
-      { label: 'Skip for now', value: 'no' },
+      { label: 'Yes, build my program', value: 'yes' },
+      { label: 'Maybe later', value: 'no' },
     ],
   },
 ];
 
-const DONE_TEXT = "You're all set! Let's get you started 🚀";
+const DONE_TEXT = "Perfect. Tap Continue to enter the app — I'll have your program ready in the Training tab.";
 
-export default function OnboardingScreen({ navigation }: Props) {
+export default function OnboardingScreen({ onComplete }: Props) {
   const msgIdRef = useRef(0);
   const nextId = () => String(++msgIdRef.current);
 
@@ -73,7 +103,11 @@ export default function OnboardingScreen({ navigation }: Props) {
   const [chipsActive, setChipsActive] = useState(true);
   const [isDone, setIsDone] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [answers, setAnswers] = useState({ goal: '', exp: '', days: 0, routine: false });
+  const [answers, setAnswers] = useState({
+    goal: '', exp: '', days: 0,
+    equipment: 'full_gym', sessionLength: '60', avoid: 'none',
+    routine: false,
+  });
 
   const scrollRef = useRef<ScrollView>(null);
 
@@ -90,7 +124,10 @@ export default function OnboardingScreen({ navigation }: Props) {
     if (currentStep === 0) newAnswers.goal = option.value;
     else if (currentStep === 1) newAnswers.exp = option.value;
     else if (currentStep === 2) newAnswers.days = parseInt(option.value, 10);
-    else if (currentStep === 3) newAnswers.routine = option.value === 'yes';
+    else if (currentStep === 3) newAnswers.equipment = option.value;
+    else if (currentStep === 4) newAnswers.sessionLength = option.value;
+    else if (currentStep === 5) newAnswers.avoid = option.value;
+    else if (currentStep === 6) newAnswers.routine = option.value === 'yes';
     setAnswers(newAnswers);
 
     // Add user bubble + typing indicator
@@ -130,6 +167,9 @@ export default function OnboardingScreen({ navigation }: Props) {
             days_per_week: answers.days,
             goal: answers.goal,
             experience: answers.exp,
+            equipment: answers.equipment,
+            session_length_min: parseInt(answers.sessionLength, 10),
+            avoid: answers.avoid,
             generate_type: 'routine',
           }),
         });
@@ -141,14 +181,18 @@ export default function OnboardingScreen({ navigation }: Props) {
     }
 
     await AsyncStorage.multiSet([
-      ['coach_settings', JSON.stringify({ days: answers.days, goal: answers.goal, exp: answers.exp })],
+      ['coach_settings', JSON.stringify({
+        days: answers.days, goal: answers.goal, exp: answers.exp,
+        equipment: answers.equipment, sessionLength: answers.sessionLength, avoid: answers.avoid,
+      })],
       ['user_goal', answers.goal],
       ['user_experience', answers.exp],
       ['user_days_per_week', String(answers.days)],
       ['workout_weekly_goal', String(answers.days)],
+      ['onboarding_complete', 'true'],
     ]);
 
-    navigation.navigate('OnboardingTutorial');
+    onComplete();
   };
 
   const currentOptions = !isDone && chipsActive ? STEPS[currentStep].options : [];

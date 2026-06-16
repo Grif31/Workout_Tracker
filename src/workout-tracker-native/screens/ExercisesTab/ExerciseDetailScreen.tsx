@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Animated,
+  Alert,
   Image,
   Dimensions,
 } from 'react-native';
@@ -114,6 +115,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     muscleGroup,
     description,
     imageUrl,
+    isCustom,
   } = route.params;
 
   const [activeTab, setActiveTab] = useState<'about' | 'stats' | 'history'>('about');
@@ -136,6 +138,37 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const [chartRange, setChartRange] = useState<'1M' | '3M' | '6M' | 'All'>('3M');
   const [wgerDescription, setWgerDescription] = useState<string | null>(null);
   const [wgerLoading, setWgerLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Exercise',
+      `Delete "${exerciseName}"? This won't remove it from past workouts.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              const res = await apiFetch(`/api/exercises/${exerciseId}`, { method: 'DELETE' });
+              if (res.ok) {
+                navigation.goBack();
+              } else {
+                const data = await res.json();
+                Alert.alert('Error', data.message || 'Could not delete exercise');
+              }
+            } catch {
+              Alert.alert('Error', 'Something went wrong');
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const tabAnimRef = useRef(new Animated.Value(0)).current;
   const sliderX = tabAnimRef.interpolate({
@@ -515,6 +548,20 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
               <Text style={styles.sectionTitle}>How to perform</Text>
               <Text style={styles.body}>{exerciseDescription}</Text>
             </View>
+
+            {isCustom && (
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={handleDelete}
+                disabled={deleting}
+                activeOpacity={0.7}
+              >
+                {deleting
+                  ? <ActivityIndicator size="small" color={colors.danger} />
+                  : <Text style={[styles.deleteBtnText, { color: colors.danger }]}>Delete Exercise</Text>
+                }
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -778,4 +825,13 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.sm,
   },
   axisLabel: { fontSize: 9, color: colors.textSecondary },
+  deleteBtn: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    marginTop: spacing.sm,
+  },
+  deleteBtnText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+  },
 });

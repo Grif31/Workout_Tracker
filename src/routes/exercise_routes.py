@@ -18,6 +18,7 @@ def exercise_to_dict(exercise):
         'equipment': exercise.equipment,
         'image_url': exercise.image_url,
         'exercise_type': (exercise.exercise_type or 'strength').lower(),
+        'is_custom': exercise.user_id is not None,
     }
 
 
@@ -83,3 +84,17 @@ def add_exercise():
 
     db.session.commit()
     return jsonify({'message': 'New Exercise added', 'id': new_exercise.id}), 201
+
+
+@exercise_bp.delete('/api/exercises/<int:exercise_id>')
+@jwt_required()
+def delete_exercise(exercise_id):
+    user_id = int(get_jwt_identity())
+    exercise = ExerciseTemplate.query.filter_by(id=exercise_id).first()
+    if not exercise:
+        return jsonify({'message': 'Exercise not found'}), 404
+    if exercise.user_id != user_id:
+        return jsonify({'message': 'You can only delete your own exercises'}), 403
+    db.session.delete(exercise)
+    db.session.commit()
+    return jsonify({'message': 'Exercise deleted'}), 200

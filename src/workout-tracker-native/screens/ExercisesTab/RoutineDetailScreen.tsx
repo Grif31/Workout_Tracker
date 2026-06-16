@@ -11,21 +11,28 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
-import { ExercisesStackParamsList } from 'navigation/types';
+import { TrainingStackParamsList } from 'navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
 
 import { apiFetch } from '../../utils/api';
 
-type Props = NativeStackScreenProps<ExercisesStackParamsList, 'RoutineDetail'>;
+type Props = NativeStackScreenProps<TrainingStackParamsList, 'RoutineDetail'>;
 
 type Exercise = { id: number; name: string; muscle_group: string };
+
+const parseRepsMin = (reps: string): string => {
+  const m = (reps ?? '').match(/^(\d+)/);
+  return m ? m[1] : '';
+};
+
+type ProgrammingEntry = { exercise_template_id: number; sets: number; reps: string; rpe?: number | null };
 type RoutineDay = {
   id: number;
   day_order: number;
   label: string;
-  workout_template: { id: number; name: string; exercises: Exercise[] };
+  workout_template: { id: number; name: string; exercises: Exercise[]; programming_json?: string | null };
 };
 type Routine = {
   id: number;
@@ -129,6 +136,9 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
               {isActive ? 'Deactivate' : 'Set as Active'}
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('CreateRoutine', { routineId, routineName })}>
+            <Text style={styles.editText}>Edit</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={handleDelete}>
             <Text style={styles.deleteText}>Delete</Text>
           </TouchableOpacity>
@@ -145,16 +155,34 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
               <Text style={styles.dayLabel}>{item.label}</Text>
               <TouchableOpacity
                 style={styles.logBtn}
-                onPress={() => navigation.navigate('LogRoutine', {
-                  prefill: {
-                    name: item.label,
-                    notes: '',
-                    exercises: item.workout_template.exercises.map(ex => ({
-                      name: ex.name,
-                      sets: [{ reps: '', weight: '' }],
-                    })),
-                  },
-                })}
+                onPress={() => {
+                  let progMap = new Map<number, ProgrammingEntry>();
+                  if (item.workout_template.programming_json) {
+                    try {
+                      const parsed: ProgrammingEntry[] = JSON.parse(item.workout_template.programming_json);
+                      for (const p of parsed) progMap.set(p.exercise_template_id, p);
+                    } catch { }
+                  }
+                  navigation.navigate('LogRoutine', {
+                    prefill: {
+                      name: item.label,
+                      notes: '',
+                      exercises: item.workout_template.exercises.map(ex => {
+                        const prog = progMap.get(ex.id);
+                        return {
+                          name: ex.name,
+                          sets: prog
+                            ? Array(prog.sets).fill(null).map(() => ({
+                                reps: parseRepsMin(prog.reps),
+                                weight: '',
+                                rpe: prog.rpe != null ? String(prog.rpe) : undefined,
+                              }))
+                            : [{ reps: '', weight: '' }],
+                        };
+                      }),
+                    },
+                  });
+                }}
               >
                 <Text style={styles.logBtnText}>Log</Text>
               </TouchableOpacity>
@@ -190,6 +218,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   routineDesc: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
   dayCount: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: spacing.xs },
   deleteText: { color: colors.danger, fontSize: typography.fontSize.sm, fontWeight: '600', marginTop: 4 },
+  editText: { color: colors.accent, fontSize: typography.fontSize.sm, fontWeight: '600', marginTop: 4 },
   activateText: { color: colors.save, fontSize: typography.fontSize.sm, fontWeight: '600', marginTop: 4 },
   deactivateText: { color: colors.textSecondary, fontSize: typography.fontSize.sm, fontWeight: '600', marginTop: 4 },
   list: { paddingHorizontal: spacing.md, paddingBottom: spacing.lg },

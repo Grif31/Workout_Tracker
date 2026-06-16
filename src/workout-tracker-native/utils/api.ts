@@ -8,7 +8,7 @@ const BASE = process.env.EXPO_PUBLIC_API_URL ?? '';
 // Safe to call on null/undefined — returns undefined so <Image source> is skipped.
 export function resolveMediaUrl(path: string | null | undefined): string | undefined {
   if (!path) return undefined;
-  if (path.startsWith('http') || path.startsWith('file://') || path.startsWith('content://')) return path;
+  if (path.startsWith('http') || path.startsWith('data:') || path.startsWith('file://') || path.startsWith('content://')) return path;
   return `${BASE}${path}`;
 }
 const NETWORK_ERROR_MSG = 'Network error. Check your connection and try again.';

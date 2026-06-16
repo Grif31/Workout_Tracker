@@ -123,6 +123,9 @@ export default function TrainingScreen({ navigation }: Props) {
   const [coachDays, setCoachDays] = useState(3);
   const [coachGoal, setCoachGoal] = useState<'hypertrophy' | 'strength' | 'endurance' | 'general'>('general');
   const [coachExp, setCoachExp] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
+  const [coachEquipment, setCoachEquipment] = useState('full_gym');
+  const [coachSessionLength, setCoachSessionLength] = useState('60');
+  const [coachAvoid, setCoachAvoid] = useState('none');
   const [coachGenerating, setCoachGenerating] = useState(false);
   const [musclePickerVisible, setMusclePickerVisible] = useState(false);
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
@@ -135,6 +138,9 @@ export default function TrainingScreen({ navigation }: Props) {
         if (s.days) setCoachDays(s.days);
         if (s.goal) setCoachGoal(s.goal);
         if (s.exp) setCoachExp(s.exp);
+        if (s.equipment) setCoachEquipment(s.equipment);
+        if (s.sessionLength) setCoachSessionLength(s.sessionLength);
+        if (s.avoid) setCoachAvoid(s.avoid);
       } catch { }
     });
     AsyncStorage.getItem('workout_weekly_goal').then(raw => {
@@ -149,7 +155,10 @@ export default function TrainingScreen({ navigation }: Props) {
   };
 
   const saveCoachSettings = (days: number, goal: typeof coachGoal, exp: typeof coachExp) => {
-    AsyncStorage.setItem('coach_settings', JSON.stringify({ days, goal, exp }));
+    AsyncStorage.setItem('coach_settings', JSON.stringify({
+      days, goal, exp,
+      equipment: coachEquipment, sessionLength: coachSessionLength, avoid: coachAvoid,
+    }));
   };
 
   const fetchProgressData = async (range: ChartRange) => {
@@ -265,7 +274,11 @@ export default function TrainingScreen({ navigation }: Props) {
       const res = await apiFetch('/api/ai/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ days_per_week: coachDays, goal: coachGoal, experience: coachExp, generate_type: type }),
+        body: JSON.stringify({
+          days_per_week: coachDays, goal: coachGoal, experience: coachExp,
+          equipment: coachEquipment, session_length_min: parseInt(coachSessionLength, 10), avoid: coachAvoid,
+          generate_type: type,
+        }),
       });
       const data = await res.json();
       if (!res.ok) { Alert.alert('Error', data.message || 'Generation failed'); return; }
@@ -278,6 +291,9 @@ export default function TrainingScreen({ navigation }: Props) {
         coachDays,
         coachGoal,
         coachExp,
+        coachEquipment,
+        coachSessionLength,
+        coachAvoid,
       });
     } catch {
       Alert.alert('Error', 'Could not reach AI service');
@@ -714,13 +730,13 @@ export default function TrainingScreen({ navigation }: Props) {
           <View style={styles.sectionHeaderRow}>
             <Text style={[styles.trainingSectionHeader, { marginBottom: 0 }]}>Templates</Text>
             <TouchableOpacity
-              onPress={!isPremium && templates.length >= 3
+              onPress={!isPremium && templates.length >= 5
                 ? () => (navigation as any).navigate('Paywall', { source: 'templates' })
                 : createTemplate
               }
               style={styles.newTemplateBtn}
             >
-              <Ionicons name={!isPremium && templates.length >= 3 ? 'lock-closed-outline' : 'add'} size={16} color={colors.save} />
+              <Ionicons name={!isPremium && templates.length >= 5 ? 'lock-closed-outline' : 'add'} size={16} color={colors.save} />
               <Text style={styles.newTemplateBtnText}>New</Text>
             </TouchableOpacity>
           </View>
@@ -758,13 +774,13 @@ export default function TrainingScreen({ navigation }: Props) {
           <View style={[styles.sectionHeaderRow, { marginTop: spacing.md }]}>
             <Text style={[styles.trainingSectionHeader, { marginBottom: 0 }]}>Routines</Text>
             <TouchableOpacity
-              onPress={!isPremium && routines.length >= 3
+              onPress={!isPremium && routines.length >= 2
                 ? () => (navigation as any).navigate('Paywall', { source: 'routines' })
                 : () => navigation.navigate('CreateRoutine')
               }
               style={styles.newTemplateBtn}
             >
-              <Ionicons name={!isPremium && routines.length >= 3 ? 'lock-closed-outline' : 'add'} size={16} color={colors.save} />
+              <Ionicons name={!isPremium && routines.length >= 2 ? 'lock-closed-outline' : 'add'} size={16} color={colors.save} />
               <Text style={styles.newTemplateBtnText}>New</Text>
             </TouchableOpacity>
           </View>

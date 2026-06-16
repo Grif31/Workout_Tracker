@@ -84,11 +84,11 @@ export default function RootNavigator() {
           <PreloadScreen onComplete={() => setPreloaded(true)} />
         ) : needsOnboarding ? (
           <OnboardingStack.Navigator screenOptions={{ headerShown: false }}>
-            <OnboardingStack.Screen name="Onboarding" component={OnboardingScreen} />
+            <OnboardingStack.Screen name="OnboardingTutorial" component={OnboardingTutorialScreen} />
             <OnboardingStack.Screen
-              name="OnboardingTutorial"
+              name="Onboarding"
               children={(props) => (
-                <OnboardingTutorialScreen {...props} onComplete={handleOnboardingComplete} />
+                <OnboardingScreen {...props} onComplete={handleOnboardingComplete} />
               )}
             />
           </OnboardingStack.Navigator>

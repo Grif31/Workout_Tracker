@@ -17,7 +17,7 @@ type Props = NativeStackScreenProps<TrainingStackParamsList, 'AIWorkoutPreview'>
 type AllExercise = { id: number; name: string; muscle_group: string; equipment?: string; image_url?: string; exercise_type?: string };
 
 export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
-  const { generateType, description: initDesc, coachDays, coachGoal, coachExp } = route.params;
+  const { generateType, description: initDesc, coachDays, coachGoal, coachExp, coachEquipment, coachSessionLength, coachAvoid } = route.params;
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -45,6 +45,9 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
           days_per_week: coachDays,
           goal: coachGoal,
           experience: coachExp,
+          equipment: coachEquipment,
+          session_length_min: parseInt(coachSessionLength, 10),
+          avoid: coachAvoid,
           generate_type: generateType,
         }),
       });
@@ -68,13 +71,32 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
     if (!name.trim()) { Alert.alert('Error', 'Workout name is required'); return; }
     setSaving(true);
     try {
+      const toProgramming = (exList: PreviewExercise[]) =>
+        exList
+          .filter(e => e.prescribed_sets)
+          .map(e => ({
+            exercise_template_id: e.id,
+            sets: e.prescribed_sets,
+            reps: e.prescribed_reps ?? '',
+            rpe: e.prescribed_rpe ?? null,
+          }));
+
       const body = generateType === 'template'
-        ? { type: 'template', name: name.trim(), exercise_ids: exercises.map(e => e.id) }
+        ? {
+            type: 'template',
+            name: name.trim(),
+            exercise_ids: exercises.map(e => e.id),
+            programming: toProgramming(exercises),
+          }
         : {
             type: 'routine',
             name: name.trim(),
             description: description.trim() || null,
-            days: days.map(d => ({ label: d.label, exercise_ids: d.exercises.map(e => e.id) })),
+            days: days.map(d => ({
+              label: d.label,
+              exercise_ids: d.exercises.map(e => e.id),
+              programming: toProgramming(d.exercises),
+            })),
           };
 
       const res = await apiFetch('/api/ai/save', {
@@ -178,7 +200,9 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
               <View key={ex.id} style={styles.exRow}>
                 <View style={styles.exInfo}>
                   <Text style={styles.exName}>{ex.name}</Text>
-                  <Text style={styles.exMuscle}>{ex.muscle_group}</Text>
+                  <Text style={styles.exMuscle}>
+                    {ex.muscle_group}{ex.prescribed_sets ? `  ·  ${ex.prescribed_sets} × ${ex.prescribed_reps}${ex.prescribed_rpe ? `  @  RPE ${ex.prescribed_rpe}` : ''}` : ''}
+                  </Text>
                 </View>
                 <TouchableOpacity onPress={() => removeExercise(ex.id)} hitSlop={8}>
                   <Ionicons name="remove-circle-outline" size={22} color={colors.danger} />
@@ -206,7 +230,9 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
               <View key={ex.id} style={styles.exRow}>
                 <View style={styles.exInfo}>
                   <Text style={styles.exName}>{ex.name}</Text>
-                  <Text style={styles.exMuscle}>{ex.muscle_group}</Text>
+                  <Text style={styles.exMuscle}>
+                    {ex.muscle_group}{ex.prescribed_sets ? `  ·  ${ex.prescribed_sets} × ${ex.prescribed_reps}${ex.prescribed_rpe ? `  @  RPE ${ex.prescribed_rpe}` : ''}` : ''}
+                  </Text>
                 </View>
                 <TouchableOpacity onPress={() => removeFromDay(dayIdx, ex.id)} hitSlop={8}>
                   <Ionicons name="remove-circle-outline" size={22} color={colors.danger} />

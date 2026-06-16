@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
 import { ProfileStackParamsList } from 'navigation/types';
@@ -69,26 +70,15 @@ export default function EditProfileScreen({ navigation }: Props) {
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.7,
+      quality: 1,
     });
-    if (!result.canceled) {
-      setProfilePicUri(result.assets[0].uri);
-    }
-  };
-
-  const uploadAvatarIfLocal = async (uri: string): Promise<string> => {
-    if (!uri.startsWith('file://') && !uri.startsWith('content://')) return uri;
-    const ext = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
-    const formData = new FormData();
-    formData.append('avatar', { uri, type: `image/${ext}`, name: `avatar.${ext}` } as any);
-    const res = await apiFetch('/api/me/avatar', {
-      method: 'POST',
-      body: formData,
-    });
-    if (!res.ok) throw new Error('Avatar upload failed');
-    const data = await res.json();
-    // Extract just the path so we never store a host-specific URL in the DB.
-    try { return new URL(data.avatar_url as string).pathname; } catch { return data.avatar_url as string; }
+    if (result.canceled) return;
+    const manipulated = await ImageManipulator.manipulateAsync(
+      result.assets[0].uri,
+      [{ resize: { width: 300, height: 300 } }],
+      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+    );
+    setProfilePicUri(`data:image/jpeg;base64,${manipulated.base64}`);
   };
 
   const handleSave = async () => {
@@ -103,10 +93,7 @@ export default function EditProfileScreen({ navigation }: Props) {
 
     setSaving(true);
     try {
-      let resolvedPicUrl = profilePicUri;
-      if (profilePicUri) {
-        resolvedPicUrl = await uploadAvatarIfLocal(profilePicUri);
-      }
+      const resolvedPicUrl = profilePicUri;
 
       const res = await apiFetch('/api/me', {
         method: 'PATCH',

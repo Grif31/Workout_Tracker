@@ -2,6 +2,7 @@ import logging
 import os
 from datetime import timedelta, datetime
 from dotenv import load_dotenv
+import click
 from flask import Flask, jsonify, send_from_directory
 from flask_migrate import Migrate
 from models import db
@@ -125,6 +126,45 @@ def create_app(test_config=None):
         scheduler = BackgroundScheduler()
         scheduler.add_job(_send_reengagement_pushes, 'cron', hour=9, minute=0, args=[app])
         scheduler.start()
+
+    @app.cli.command('claim-custom-exercises')
+    @click.option('--user-id', required=True, type=int, help='User ID to assign orphaned custom exercises to')
+    @click.option('--apply', 'do_apply', is_flag=True, default=False, help='Write changes to DB (omit for dry run)')
+    def claim_custom_exercises(user_id, do_apply):
+        """Reassign pre-migration custom exercises (user_id=NULL, not in seed list) to a user."""
+        from seed import EXERCISES, CARDIO_EXERCISES
+        from models import ExerciseTemplate
+
+        # Build set of (name_lower, equipment_lower) pairs from the standard seed list
+        seeded = {
+            (name.lower().strip(), (equip or '').lower().strip())
+            for name, _muscle, equip in EXERCISES
+        } | {
+            (name.lower().strip(), (equip or '').lower().strip())
+            for name, equip in CARDIO_EXERCISES
+        }
+
+        orphans = ExerciseTemplate.query.filter(ExerciseTemplate.user_id.is_(None)).all()
+        to_claim = [
+            ex for ex in orphans
+            if (ex.name.lower().strip(), (ex.equipment or '').lower().strip()) not in seeded
+        ]
+
+        if not to_claim:
+            click.echo('No orphaned custom exercises found.')
+            return
+
+        click.echo(f'{"[DRY RUN] " if not do_apply else ""}Found {len(to_claim)} custom exercise(s) to claim for user {user_id}:')
+        for ex in to_claim:
+            click.echo(f'  • {ex.name} ({ex.equipment or "no equipment"})  [id={ex.id}]')
+
+        if do_apply:
+            for ex in to_claim:
+                ex.user_id = user_id
+            db.session.commit()
+            click.echo(f'Done. {len(to_claim)} exercise(s) assigned to user {user_id}.')
+        else:
+            click.echo('\nRe-run with --apply to write these changes.')
 
     return app
 

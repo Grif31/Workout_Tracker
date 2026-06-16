@@ -134,6 +134,7 @@ class WorkoutTemplate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     name = db.Column(db.String(250), nullable=False)
+    programming_json = db.Column(db.Text, nullable=True)
 
     exercises = db.relationship(
         "ExerciseTemplate",
@@ -142,7 +143,7 @@ class WorkoutTemplate(db.Model):
     )
 
     def to_dict(self, include_exercises=False):
-        data = {"id": self.id, "user_id": self.user_id, "name": self.name}
+        data = {"id": self.id, "user_id": self.user_id, "name": self.name, "programming_json": self.programming_json}
         if include_exercises:
             ordered = (
                 db.session.query(ExerciseTemplate)

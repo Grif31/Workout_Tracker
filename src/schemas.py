@@ -108,7 +108,10 @@ for _f in _MEASUREMENT_FIELDS:
 
 # ── AI ────────────────────────────────────────────────────────
 class AiGenerateSchema(_Base):
-    days_per_week = fields.Int(required=True, validate=validate.Range(min=1, max=7))
-    goal          = fields.Str(required=True)
-    experience    = fields.Str(required=True)
-    generate_type = fields.Str(required=True, validate=validate.OneOf(['routine', 'workout', 'template']))
+    days_per_week      = fields.Int(required=True, validate=validate.Range(min=1, max=7))
+    goal               = fields.Str(required=True)
+    experience         = fields.Str(required=True)
+    generate_type      = fields.Str(required=True, validate=validate.OneOf(['routine', 'workout', 'template']))
+    equipment          = fields.Str(load_default='full_gym')
+    session_length_min = fields.Int(load_default=60)
+    avoid              = fields.Str(load_default='none')
