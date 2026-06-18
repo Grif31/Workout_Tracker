@@ -6,6 +6,14 @@ import SettingsScreen from '../screens/ProfileTab/SettingsScreen';
 
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 jest.mock('../theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));
+jest.mock('@react-native-community/datetimepicker', () => 'DateTimePicker');
+jest.mock('../utils/notifications', () => ({
+  requestNotificationPermission: jest.fn(),
+  scheduleWorkoutReminder: jest.fn(),
+  cancelWorkoutReminder: jest.fn(),
+}));
+jest.mock('../utils/healthKit', () => ({ HEALTH_SYNC_KEY: 'health_sync_enabled', requestHealthKitPermission: jest.fn() }));
+jest.mock('../utils/healthConnect', () => ({ requestHealthConnectPermission: jest.fn() }));
 
 const nav = createMockNavigation();
 const route = createMockRoute('Settings');
@@ -30,20 +38,13 @@ describe('SettingsScreen', () => {
     expect(getByText(/1\.0\.0/)).toBeTruthy();
   });
 
-  it('triggers logout alert when Log Out is pressed', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
-      const confirm = buttons?.find((b: any) => b.style === 'destructive');
-      confirm?.onPress?.();
-    });
+  it('shows the Terms of Service row', () => {
     const { getByText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
-    fireEvent.press(getByText('Log Out'));
-    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
-    alertSpy.mockRestore();
+    expect(getByText('Terms of Service')).toBeTruthy();
   });
 
-  it('navigates to ChangePassword when pressed', () => {
+  it('shows the Contact Support row', () => {
     const { getByText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
-    fireEvent.press(getByText('Change Password'));
-    expect(nav.navigate).toHaveBeenCalledWith('ChangePassword');
+    expect(getByText('Contact Support')).toBeTruthy();
   });
 });

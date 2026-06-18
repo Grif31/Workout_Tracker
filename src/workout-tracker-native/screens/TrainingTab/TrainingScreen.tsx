@@ -26,7 +26,7 @@ type Props = NativeStackScreenProps<TrainingStackParamsList, 'TrainingHome'>;
 type ProgressBucket = { label: string; volume: number; sets: number; count: number };
 type ChartRange = '30d' | '6m' | '1y';
 type ChartMetric = 'volume' | 'sets' | 'workouts';
-type Exercise = { id: number; name: string; muscle_group: string; equipment?: string };
+type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; exercise_type?: string };
 type MuscleVolumeData = {
   muscle_sets: Record<string, number>;
   last_trained: Record<string, string>;
@@ -709,7 +709,12 @@ export default function TrainingScreen({ navigation }: Props) {
                         prefill: {
                           name: day.label, notes: '',
                           exercises: day.workout_template.exercises.map(ex => ({
-                            name: ex.name, sets: [{ reps: '', weight: '' }],
+                            name: ex.name,
+                            exercise_template_id: ex.id,
+                            exercise_type: ex.exercise_type ?? 'strength',
+                            muscle_group: ex.muscle_group,
+                            equipment: ex.equipment,
+                            sets: [{ reps: '', weight: '' }],
                           })),
                         },
                       })}
@@ -759,7 +764,14 @@ export default function TrainingScreen({ navigation }: Props) {
                     onPress={() => navigation.navigate('LogRoutine', {
                       prefill: {
                         name: t.name, notes: '',
-                        exercises: t.exercises.map(ex => ({ name: ex.name, sets: [{ reps: '', weight: '' }] })),
+                        exercises: t.exercises.map(ex => ({
+                          name: ex.name,
+                          exercise_template_id: ex.id,
+                          exercise_type: ex.exercise_type ?? 'strength',
+                          muscle_group: ex.muscle_group,
+                          equipment: ex.equipment,
+                          sets: [{ reps: '', weight: '' }],
+                        })),
                       },
                     })}
                   >

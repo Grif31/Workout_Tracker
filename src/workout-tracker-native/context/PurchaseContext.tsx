@@ -5,6 +5,8 @@ import { useAuth } from './AuthContext';
 
 const API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ?? '';
 const PREMIUM_ENTITLEMENT = 'premium';
+// Set EXPO_PUBLIC_BETA_PREMIUM=true in eas.json to grant all testers premium. Remove before public launch.
+const BETA_PREMIUM = process.env.EXPO_PUBLIC_BETA_PREMIUM === 'true';
 
 type PurchaseContextType = {
   isPremium: boolean;
@@ -33,7 +35,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
       // Fail closed: only dev builds unlock premium without RevenueCat.
       // A production build with a missing key (or on Android, where IAP
       // isn't configured) must NOT hand out premium for free.
-      setIsPremium(__DEV__);
+      setIsPremium(__DEV__ || BETA_PREMIUM);
       setLoading(false);
       return;
     }
@@ -60,7 +62,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
   const loadCustomerInfo = async () => {
     try {
       const info: CustomerInfo = await Purchases.getCustomerInfo();
-      setIsPremium(!!info.entitlements.active[PREMIUM_ENTITLEMENT]);
+      setIsPremium(BETA_PREMIUM || !!info.entitlements.active[PREMIUM_ENTITLEMENT]);
     } catch {}
     setLoading(false);
   };

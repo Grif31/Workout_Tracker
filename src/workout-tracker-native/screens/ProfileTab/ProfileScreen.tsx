@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
+  TextInput,
   FlatList,
   StyleSheet,
   ActivityIndicator,
+  Animated,
   TouchableOpacity,
   Image,
   Modal,
@@ -31,6 +33,20 @@ import { apiFetch, resolveMediaUrl } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
 import { LaurelBranch } from '../../components/LaurelWreath';
+
+function SectionRule({ label, style }: { label: string; style?: object }) {
+  const { colors } = useTheme();
+  return (
+    <View style={[{ flexDirection: 'row', alignItems: 'center' }, style]}>
+      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
+      <Text style={{ fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginHorizontal: spacing.sm }}>
+        {label}
+      </Text>
+      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
+    </View>
+  );
+}
+
 const PR_PINS_KEY = '@pr_pins';
 const DEFAULT_PIN_COUNT = 3;
 const PAGE_SIZE = 20;
@@ -58,7 +74,9 @@ type ProfileStats = {
 };
 
 // Unique exercises that have at least one PR record
-type ExerciseOption = { exercise_template_id: number; exercise_name: string; equipment?: string | null };
+type ExerciseOption = { exercise_template_id: number; exercise_name: string; equipment?: string | null; muscle_group?: string };
+// A pinned PR slot — stores the exercise, which metric type, and (for contextual PRs) the context value
+type Pin = { exerciseId: number; prType: PR['pr_type']; context: number | null } | null;
 
 export default function ProfileScreen({ navigation }: Props) {
   const { user } = useAuth();
@@ -86,12 +104,18 @@ export default function ProfileScreen({ navigation }: Props) {
   const [totalWorkouts, setTotalWorkouts] = useState<number | null>(null);
   const loadingMoreRef              = useRef(false);
   const [stats, setStats]           = useState<ProfileStats | null>(null);
+  const statAnim                    = useRef(new Animated.Value(0)).current;
+  const [displayStats, setDisplayStats] = useState<ProfileStats | null>(null);
+  const prCardAnims                 = useRef([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]).current;
   const [refreshing, setRefreshing] = useState(false);
   const [prs, setPrs]               = useState<PR[]>([]);
-  // Indices into pinned exercise_template_ids; null = empty slot
-  const [pins, setPins]           = useState<(number | null)[]>([null, null, null]);
+  const [pins, setPins]               = useState<Pin[]>([null, null, null]);
   // Which slot is being swapped (0/1/2), or -1 = modal closed
-  const [swapSlot, setSwapSlot]   = useState<number>(-1);
+  const [swapSlot, setSwapSlot]       = useState<number>(-1);
+  // Step 2 of modal: exercise chosen, waiting for PR type pick
+  const [pendingExercise, setPendingExercise] = useState<{ id: number; name: string } | null>(null);
+  const [prSearch, setPrSearch]       = useState('');
+  const [prMuscle, setPrMuscle]       = useState<string | null>(null);
 
   const displayName = user?.name?.trim() || user?.username;
   const weightUnit: WeightUnit = user?.weight_unit === 'kg' ? 'kg' : 'lbs';
@@ -123,8 +147,8 @@ export default function ProfileScreen({ navigation }: Props) {
             .sort((a, b) => b.value - a.value)
             .slice(0, DEFAULT_PIN_COUNT)
             .map(p => p.exercise_template_id);
-          const filled: (number | null)[] = [null, null, null];
-          top.forEach((id, i) => { filled[i] = id; });
+          const filled: Pin[] = [null, null, null];
+          top.forEach((id, i) => { filled[i] = { exerciseId: id, prType: 'max_weight', context: null }; });
           savePins(filled);
         }
       });
@@ -139,13 +163,46 @@ export default function ProfileScreen({ navigation }: Props) {
   useEffect(() => {
     AsyncStorage.multiGet([PR_PINS_KEY, 'profile_frame_rank', 'greek_rank_cached']).then(pairs => {
       const [pinsRaw, frameRaw, rankRaw] = pairs.map(p => p[1]);
-      if (pinsRaw) { try { setPins(JSON.parse(pinsRaw)); } catch {} }
+      if (pinsRaw) {
+        try {
+          const parsed = JSON.parse(pinsRaw);
+          const migrated: Pin[] = parsed.map((p: any) =>
+            p == null ? null :
+            typeof p === 'number' ? { exerciseId: p, prType: 'max_weight' as const, context: null } :
+            p
+          );
+          setPins(migrated);
+        } catch {}
+      }
       if (frameRaw) setSelectedFrame(frameRaw);
       if (rankRaw) setGreekRank(rankRaw);
     });
   }, []);
 
-  const savePins = (next: (number | null)[]) => {
+  useEffect(() => {
+    if (!stats) return;
+    const id = statAnim.addListener(({ value }) => {
+      setDisplayStats({
+        total_workouts: Math.round(stats.total_workouts * value),
+        longest_streak: Math.round(stats.longest_streak * value),
+        current_streak: Math.round((stats.current_streak ?? 0) * value),
+        total_volume:   Math.round(stats.total_volume * value),
+      });
+    });
+    statAnim.setValue(0);
+    Animated.timing(statAnim, { toValue: 1, duration: 700, useNativeDriver: false }).start();
+    return () => statAnim.removeListener(id);
+  }, [stats]);
+
+  useEffect(() => {
+    if (prs.length === 0) return;
+    prCardAnims.forEach(a => a.setValue(0));
+    Animated.stagger(60, prCardAnims.map(a =>
+      Animated.timing(a, { toValue: 1, duration: 280, useNativeDriver: true })
+    )).start();
+  }, [prs]);
+
+  const savePins = (next: Pin[]) => {
     setPins(next);
     AsyncStorage.setItem(PR_PINS_KEY, JSON.stringify(next));
   };
@@ -187,8 +244,8 @@ export default function ProfileScreen({ navigation }: Props) {
               .sort((a, b) => b.value - a.value)
               .slice(0, DEFAULT_PIN_COUNT)
               .map(p => p.exercise_template_id);
-            const filled: (number | null)[] = [null, null, null];
-            top.forEach((id, i) => { filled[i] = id; });
+            const filled: Pin[] = [null, null, null];
+            top.forEach((id, i) => { filled[i] = { exerciseId: id, prType: 'max_weight', context: null }; });
             savePins(filled);
           }
         });
@@ -225,6 +282,10 @@ export default function ProfileScreen({ navigation }: Props) {
     AsyncStorage.getItem('profile_frame_rank').then(val => {
       if (val) setSelectedFrame(val);
     });
+    prCardAnims.forEach(a => a.setValue(0));
+    Animated.stagger(60, prCardAnims.map(a =>
+      Animated.timing(a, { toValue: 1, duration: 280, useNativeDriver: true })
+    )).start();
   }, []));
 
   const handleRefresh = () => { setRefreshing(true); fetchAll(); };
@@ -279,16 +340,16 @@ export default function ProfileScreen({ navigation }: Props) {
     return String(v);
   };
 
-  // Best PR to display on the pinned card: max_weight first, then best rep PR (heaviest weight)
-  const getPinnedPR = (exerciseTemplateId: number): PR | undefined => {
-    const byWeight = prs.find(
-      p => p.exercise_template_id === exerciseTemplateId && p.pr_type === 'max_weight'
-    );
-    if (byWeight) return byWeight;
-    const repsPRs = prs.filter(
-      p => p.exercise_template_id === exerciseTemplateId && p.pr_type === 'max_reps' && p.weight_context != null
-    );
-    return repsPRs.sort((a, b) => (b.weight_context ?? 0) - (a.weight_context ?? 0))[0];
+  const fmtTime = (min: number) =>
+    `${Math.floor(min)}:${String(Math.round((min % 1) * 60)).padStart(2, '0')}`;
+
+  const getPinnedPR = (pin: Pin): PR | undefined => {
+    if (!pin) return undefined;
+    const { exerciseId, prType, context } = pin;
+    const matches = prs.filter(p => p.exercise_template_id === exerciseId && p.pr_type === prType);
+    if (context != null) return matches.find(p => p.weight_context === context) ?? matches[0];
+    if (prType === 'max_reps') return matches.sort((a, b) => b.value - a.value)[0];
+    return matches[0];
   };
 
   // Unique exercises available to pin
@@ -298,17 +359,33 @@ export default function ProfileScreen({ navigation }: Props) {
     for (const p of prs) {
       if (!seen.has(p.exercise_template_id)) {
         seen.add(p.exercise_template_id);
-        out.push({ exercise_template_id: p.exercise_template_id, exercise_name: p.exercise_name, equipment: p.equipment });
+        out.push({ exercise_template_id: p.exercise_template_id, exercise_name: p.exercise_name, equipment: p.equipment, muscle_group: p.muscle_group });
       }
     }
     return out.sort((a, b) => a.exercise_name.localeCompare(b.exercise_name));
   }, [prs]);
 
-  const handleSelectPin = (exerciseTemplateId: number) => {
+  const prMuscleOptions: string[] = useMemo(() => {
+    const muscles = new Set(exerciseOptions.map(e => e.muscle_group ?? 'Other'));
+    return Array.from(muscles).sort();
+  }, [exerciseOptions]);
+
+  const filteredExerciseOptions = useMemo(() => {
+    const q = prSearch.trim().toLowerCase();
+    return exerciseOptions.filter(e =>
+      (!q || e.exercise_name.toLowerCase().includes(q)) &&
+      (!prMuscle || e.muscle_group === prMuscle)
+    );
+  }, [exerciseOptions, prSearch, prMuscle]);
+
+  const handleSelectPin = (exerciseId: number, prType: PR['pr_type'], context: number | null) => {
     const next = [...pins];
-    next[swapSlot] = exerciseTemplateId;
+    next[swapSlot] = { exerciseId, prType, context };
     savePins(next);
     setSwapSlot(-1);
+    setPendingExercise(null);
+    setPrSearch('');
+    setPrMuscle(null);
   };
 
   const renderPRBar = () => {
@@ -316,47 +393,63 @@ export default function ProfileScreen({ navigation }: Props) {
     return (
       <View style={styles.prSection}>
         <View style={styles.prSectionHeader}>
-          <Text style={styles.sectionTitle}>Personal Records</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('PersonalRecords')}>
+          <View style={{ flex: 1 }}>
+            <SectionRule label="Personal Records" />
+          </View>
+          <TouchableOpacity onPress={() => navigation.navigate('PersonalRecords')} style={{ marginLeft: spacing.sm }}>
             <Text style={[styles.seeAll, { color: colors.accent }]}>See All</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.prCards}>
-          {pins.map((pinnedId, slot) => {
-            const pr = pinnedId != null ? getPinnedPR(pinnedId) : undefined;
+          {pins.map((pin, slot) => {
+            const pr = getPinnedPR(pin);
+            const cardAnim = prCardAnims[slot];
             return (
-              <View key={slot} style={[styles.prCard, { backgroundColor: colors.surface }]}>
-                <Ionicons name="trophy-outline" size={18} color={colors.accent} style={styles.trophyIcon} />
-                {pr ? (
-                  <>
-                    <Text style={[styles.prCardName, { color: colors.textPrimary }]} numberOfLines={2}>
-                      {pr.exercise_name}
-                    </Text>
-                    <Text style={[styles.prCardValue, { color: colors.accent }]}>
-                      {pr.pr_type === 'max_weight'
-                        ? `${pr.value} ${unit}`
-                        : `${pr.value} reps`}
-                    </Text>
-                    <Text style={styles.prCardType}>
-                      {pr.pr_type === 'max_weight'
-                        ? 'Max Weight'
-                        : pr.weight_context != null
-                          ? `@ ${pr.weight_context} ${unit}`
-                          : 'Max Reps'}
-                    </Text>
-                  </>
-                ) : (
-                  <Text style={styles.prCardEmpty}>Tap ↺ to{'\n'}pick exercise</Text>
-                )}
-                <TouchableOpacity
-                  style={[styles.swapBtn, { backgroundColor: colors.background }]}
-                  onPress={() => setSwapSlot(slot)}
-                  hitSlop={6}
-                >
-                  <Ionicons name="swap-horizontal" size={13} color={colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
+              <Animated.View
+                key={slot}
+                style={{
+                  flex: 1,
+                  opacity: cardAnim,
+                  transform: [{ translateY: cardAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
+                }}
+              >
+                <View style={[styles.prCard, { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: '#FFD70060' }]}>
+                  <Ionicons name="trophy" size={22} color="#FFD700" style={styles.trophyIcon} />
+                  {pr ? (
+                    <>
+                      <Text style={[styles.prCardName, { color: colors.textPrimary }]} numberOfLines={2}>
+                        {pr.exercise_name}
+                      </Text>
+                      <Text style={[styles.prCardValue, { color: '#C9A84C' }]}>
+                        {pr.pr_type === 'max_weight' || pr.pr_type === 'estimated_1rm'
+                          ? `${pr.value} ${unit}`
+                          : pr.pr_type === 'max_reps'
+                            ? `${pr.value} reps`
+                            : pr.pr_type === 'best_time'
+                              ? fmtTime(pr.value)
+                              : `${pr.value.toFixed(1)} km`}
+                      </Text>
+                      <Text style={styles.prCardType}>
+                        {pr.pr_type === 'max_weight' ? 'Max Weight'
+                          : pr.pr_type === 'estimated_1rm' ? 'Est. 1RM'
+                          : pr.pr_type === 'max_reps'
+                            ? (pr.weight_context != null ? `@ ${pr.weight_context} ${unit}` : 'Max Reps')
+                            : pr.pr_label}
+                      </Text>
+                    </>
+                  ) : (
+                    <Text style={styles.prCardEmpty}>Tap ↺ to{'\n'}pick exercise</Text>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.swapBtn, { backgroundColor: colors.background }]}
+                    onPress={() => setSwapSlot(slot)}
+                    hitSlop={6}
+                  >
+                    <Ionicons name="swap-horizontal" size={13} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
             );
           })}
         </View>
@@ -411,18 +504,18 @@ export default function ProfileScreen({ navigation }: Props) {
       </TouchableOpacity>
 
       {/* Stats boxes */}
-      <View style={styles.statsRow}>
+      <View style={[styles.statsRow, { borderTopColor: GREEK_RANK_COLORS[greekRank ?? 'Neophyte'] ?? '#888888' }]}>
         <View style={styles.statBox}>
-          <Text style={styles.statValue}>{stats?.total_workouts ?? '—'}</Text>
           <Text style={styles.statLabel}>Workouts</Text>
+          <Text style={styles.statValue}>{displayStats?.total_workouts ?? '—'}</Text>
         </View>
-        <View style={[styles.statBox, styles.statBoxMiddle]}>
-          <Text style={styles.statValue}>{stats ? `${stats.longest_streak}w` : '—'}</Text>
+        <View style={[styles.statBox, styles.statBoxDivider]}>
           <Text style={styles.statLabel}>Longest Streak</Text>
+          <Text style={styles.statValue}>{displayStats ? `${displayStats.longest_streak}w` : '—'}</Text>
         </View>
         <View style={styles.statBox}>
-          <Text style={styles.statValue}>{stats ? fmtVolume(stats.total_volume) : '—'}</Text>
           <Text style={styles.statLabel}>Total Volume</Text>
+          <Text style={styles.statValue}>{displayStats ? `${fmtVolume(displayStats.total_volume)} ${unit}` : '—'}</Text>
         </View>
       </View>
 
@@ -442,13 +535,15 @@ export default function ProfileScreen({ navigation }: Props) {
       {renderPRBar()}
 
       <View style={styles.historyHeader}>
-        <Text style={styles.sectionTitle}>Workout History</Text>
+        <View style={{ flex: 1 }}>
+          <SectionRule label="Workout History" />
+        </View>
         <TouchableOpacity onPress={openCalendar} hitSlop={8} style={styles.calendarIconBtn}>
           <Ionicons name="calendar-outline" size={22} color={colors.accent} />
         </TouchableOpacity>
       </View>
     </View>
-  ), [styles, avatarSource, selectedFrame, displayName, user, stats, greekRank, prs, pins, weightUnit, unit, colors]);
+  ), [styles, avatarSource, selectedFrame, displayName, user, stats, displayStats, greekRank, prs, pins, weightUnit, unit, colors]);
 
   return (
     <>
@@ -761,45 +856,147 @@ export default function ProfileScreen({ navigation }: Props) {
         visible={swapSlot >= 0}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setSwapSlot(-1)}
+        onRequestClose={() => { setSwapSlot(-1); setPendingExercise(null); setPrSearch(''); setPrMuscle(null); }}
       >
         <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Choose Exercise</Text>
-            <TouchableOpacity onPress={() => setSwapSlot(-1)} hitSlop={8}>
-              <Ionicons name="close" size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={exerciseOptions}
-            keyExtractor={item => item.exercise_template_id.toString()}
-            contentContainerStyle={{ padding: spacing.md, gap: spacing.sm }}
-            renderItem={({ item }) => {
-              const selected = swapSlot >= 0 && pins[swapSlot] === item.exercise_template_id;
-              return (
-                <Pressable
-                  style={[
-                    styles.optionRow,
-                    {
-                      backgroundColor: selected ? colors.accent + '22' : colors.surface,
-                      borderColor: selected ? colors.accent : 'transparent',
-                    },
-                  ]}
-                  onPress={() => handleSelectPin(item.exercise_template_id)}
+          {pendingExercise ? (
+            /* ── Step 2: pick PR type ── */
+            <>
+              <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                <TouchableOpacity onPress={() => setPendingExercise(null)} hitSlop={8}>
+                  <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+                </TouchableOpacity>
+                <Text style={[styles.modalTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                  {pendingExercise.name}
+                </Text>
+                <TouchableOpacity onPress={() => { setSwapSlot(-1); setPendingExercise(null); setPrSearch(''); setPrMuscle(null); }} hitSlop={8}>
+                  <Ionicons name="close" size={24} color={colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={(() => {
+                  const exercisePRs = prs.filter(p => p.exercise_template_id === pendingExercise.id);
+                  const opts: { label: string; value: string; prType: PR['pr_type']; context: number | null }[] = [];
+                  const seen = new Set<string>();
+                  for (const p of exercisePRs) {
+                    const key = `${p.pr_type}:${p.weight_context ?? ''}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    let label = p.pr_label;
+                    let valueStr = '';
+                    if (p.pr_type === 'max_weight') { label = 'Max Weight'; valueStr = `${p.value} ${unit}`; }
+                    else if (p.pr_type === 'estimated_1rm') { label = 'Est. 1RM'; valueStr = `${p.value} ${unit}`; }
+                    else if (p.pr_type === 'max_reps') { label = 'Max Reps'; valueStr = `${p.value} reps${p.weight_context != null ? ` @ ${p.weight_context} ${unit}` : ''}`; }
+                    else if (p.pr_type === 'best_time') { valueStr = fmtTime(p.value); }
+                    else if (p.pr_type === 'best_distance') { valueStr = `${p.value.toFixed(1)} km`; }
+                    opts.push({ label, value: valueStr, prType: p.pr_type, context: p.weight_context ?? null });
+                  }
+                  return opts;
+                })()}
+                keyExtractor={item => `${item.prType}:${item.context}`}
+                contentContainerStyle={{ padding: spacing.md, gap: spacing.sm }}
+                ListEmptyComponent={
+                  <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: spacing.lg }}>No PR data for this exercise</Text>
+                }
+                renderItem={({ item }) => {
+                  const currentPin = swapSlot >= 0 ? pins[swapSlot] : null;
+                  const selected = currentPin?.exerciseId === pendingExercise.id &&
+                    currentPin.prType === item.prType && currentPin.context === item.context;
+                  return (
+                    <Pressable
+                      style={[styles.optionRow, {
+                        backgroundColor: selected ? colors.accent + '22' : colors.surface,
+                        borderColor: selected ? colors.accent : 'transparent',
+                      }]}
+                      onPress={() => handleSelectPin(pendingExercise.id, item.prType, item.context)}
+                    >
+                      <View>
+                        <Text style={[styles.optionName, { color: colors.textPrimary }]}>{item.label}</Text>
+                        <Text style={[styles.optionEquipment, { color: colors.textSecondary }]}>{item.value}</Text>
+                      </View>
+                      {selected && <Ionicons name="checkmark-circle" size={20} color={colors.accent} />}
+                    </Pressable>
+                  );
+                }}
+              />
+            </>
+          ) : (
+            /* ── Step 1: pick exercise ── */
+            <>
+              <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Choose Exercise</Text>
+                <TouchableOpacity onPress={() => { setSwapSlot(-1); setPrSearch(''); setPrMuscle(null); }} hitSlop={8}>
+                  <Ionicons name="close" size={24} color={colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={[styles.prSearchRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Ionicons name="search-outline" size={16} color={colors.textSecondary} />
+                <TextInput
+                  style={[styles.prSearchInput, { color: colors.textPrimary }]}
+                  value={prSearch}
+                  onChangeText={setPrSearch}
+                  placeholder="Search exercises…"
+                  placeholderTextColor={colors.placeholder}
+                  autoCorrect={false}
+                  clearButtonMode="while-editing"
+                />
+              </View>
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.prChipRow}>
+                <TouchableOpacity
+                  style={[styles.prChip, !prMuscle && { backgroundColor: colors.accent }]}
+                  onPress={() => setPrMuscle(null)}
                 >
-                  <Text style={[styles.optionName, { color: colors.textPrimary }]}>
-                    {item.exercise_name}
-                    {item.equipment && item.equipment !== 'Bodyweight' && (
-                      <Text style={styles.optionEquipment}> · {item.equipment}</Text>
-                    )}
-                  </Text>
-                  {selected && (
-                    <Ionicons name="checkmark-circle" size={20} color={colors.accent} />
-                  )}
-                </Pressable>
-              );
-            }}
-          />
+                  <Text style={[styles.prChipText, { color: !prMuscle ? '#fff' : colors.textSecondary }]}>All</Text>
+                </TouchableOpacity>
+                {prMuscleOptions.map(m => (
+                  <TouchableOpacity
+                    key={m}
+                    style={[styles.prChip, prMuscle === m && { backgroundColor: colors.accent }]}
+                    onPress={() => setPrMuscle(prMuscle === m ? null : m)}
+                  >
+                    <Text style={[styles.prChipText, { color: prMuscle === m ? '#fff' : colors.textSecondary }]}>{m}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <FlatList
+                data={filteredExerciseOptions}
+                keyExtractor={item => item.exercise_template_id.toString()}
+                style={{ flex: 1 }}
+                contentContainerStyle={{ padding: spacing.md, gap: spacing.sm }}
+                ListEmptyComponent={
+                  <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: spacing.lg }}>No exercises found</Text>
+                }
+                renderItem={({ item }) => {
+                  const selected = swapSlot >= 0 && pins[swapSlot]?.exerciseId === item.exercise_template_id;
+                  return (
+                    <Pressable
+                      style={[styles.optionRow, {
+                        backgroundColor: selected ? colors.accent + '22' : colors.surface,
+                        borderColor: selected ? colors.accent : 'transparent',
+                      }]}
+                      onPress={() => setPendingExercise({ id: item.exercise_template_id, name: item.exercise_name })}
+                    >
+                      <View>
+                        <Text style={[styles.optionName, { color: colors.textPrimary }]}>
+                          {item.exercise_name}
+                          {item.equipment && item.equipment !== 'Bodyweight' && (
+                            <Text style={styles.optionEquipment}> · {item.equipment}</Text>
+                          )}
+                        </Text>
+                        {item.muscle_group && (
+                          <Text style={[styles.optionEquipment, { color: colors.textSecondary }]}>{item.muscle_group}</Text>
+                        )}
+                      </View>
+                      {selected && <Ionicons name="checkmark-circle" size={20} color={colors.accent} />}
+                    </Pressable>
+                  );
+                }}
+              />
+            </>
+          )}
         </View>
       </Modal>
     </>
@@ -920,20 +1117,28 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexDirection: 'row',
     marginHorizontal: spacing.md,
     marginBottom: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: spacing.sm,
+    overflow: 'hidden',
+    borderTopWidth: 2,
+    borderTopColor: colors.border,
   },
   statBox: {
     flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.xs,
     alignItems: 'center',
   },
-  statBoxMiddle: { marginHorizontal: spacing.sm },
+  statBoxDivider: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: colors.border,
+    borderRightColor: colors.border,
+  },
   statValue: {
-    fontSize: typography.fontSize.lg,
+    fontSize: typography.fontSize.md,
     fontWeight: '700',
     color: colors.textPrimary,
-    marginBottom: 2,
   },
   statLabel: {
     fontSize: typography.fontSize.xs,
@@ -949,7 +1154,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   prSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.xs,
@@ -1023,11 +1227,41 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   optionName: { fontSize: 15, fontWeight: '500' },
   optionEquipment: { fontSize: 12, fontWeight: '400', color: colors.textSecondary },
 
+  prSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  prSearchInput: { flex: 1, fontSize: typography.fontSize.sm, paddingVertical: 4 },
+  prChipRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  prChip: {
+    height: 30,
+    minWidth: 64,
+    borderRadius: 20,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  prChipText: { fontSize: typography.fontSize.xs, fontWeight: '600' },
+
   historyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingRight: spacing.md,
+    paddingHorizontal: spacing.md,
   },
   calendarIconBtn: { padding: spacing.xs },
 

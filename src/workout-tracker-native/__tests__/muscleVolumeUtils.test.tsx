@@ -26,7 +26,13 @@ function weekRangeLabel(weekStart: string): string {
 // ── daysAgoStr ────────────────────────────────────────────────────────────────
 
 describe('daysAgoStr', () => {
-  beforeEach(() => jest.useFakeTimers());
+  beforeEach(() => {
+    jest.useFakeTimers();
+    // Anchor to 3 PM so Date.now() is always past noon (daysAgoStr normalizes dates to T12:00:00)
+    const d = new Date();
+    d.setHours(15, 0, 0, 0);
+    jest.setSystemTime(d);
+  });
   afterEach(() => jest.useRealTimers());
 
   it('returns "Never" for undefined', () => {

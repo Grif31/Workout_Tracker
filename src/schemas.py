@@ -115,3 +115,4 @@ class AiGenerateSchema(_Base):
     equipment          = fields.Str(load_default='full_gym')
     session_length_min = fields.Int(load_default=60)
     avoid              = fields.Str(load_default='none')
+    muscles            = fields.List(fields.Str(), load_default=[])

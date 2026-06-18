@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert,
-  ActivityIndicator, ScrollView, PanResponder, Modal, RefreshControl,
+  ActivityIndicator, Animated, ScrollView, PanResponder, Modal, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -16,6 +16,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import { LaurelBranch } from '../../components/LaurelWreath';
+
+function SectionRule({ label, style }: { label: string; style?: object }) {
+  const { colors } = useTheme();
+  return (
+    <View style={[{ flexDirection: 'row', alignItems: 'center' }, style]}>
+      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
+      <Text style={{ fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginHorizontal: spacing.sm }}>
+        {label}
+      </Text>
+      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
+    </View>
+  );
+}
 
 const GREETINGS = [
   'Ready to workout', 'Welcome', 'Ready to Train', "Let's Workout",
@@ -42,7 +55,7 @@ type Workout = {
   num_exercises?: number; muscles?: string[]; pr_count?: number;
   workout_type?: string; cardio_duration?: number; distance?: number; distance_unit?: string;
 };
-type Exercise = { id: number; name: string; muscle_group: string };
+type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; exercise_type?: string };
 type RoutineDay = {
   id: number; day_order: number; label: string;
   workout_template: { id: number; name: string; exercises: Exercise[] };
@@ -87,6 +100,18 @@ function WeekCalendar({
     })
   ).current;
 
+  const slideAnim     = useRef(new Animated.Value(0)).current;
+  const prevOffsetRef = useRef(weekOffset);
+  const isFirstRef    = useRef(true);
+
+  useEffect(() => {
+    if (isFirstRef.current) { isFirstRef.current = false; return; }
+    const dir = weekOffset < prevOffsetRef.current ? -1 : 1;
+    prevOffsetRef.current = weekOffset;
+    slideAnim.setValue(dir * 50);
+    Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 200, mass: 0.8 }).start();
+  }, [weekOffset]);
+
   const weekLabel = weekOffset === 0
     ? 'This Week'
     : weekOffset === -1
@@ -105,7 +130,7 @@ function WeekCalendar({
         </TouchableOpacity>
       </View>
 
-      <View style={calStyles.row} {...panResponder.panHandlers}>
+      <Animated.View style={[calStyles.row, { transform: [{ translateX: slideAnim }] }]} {...panResponder.panHandlers}>
         {DAY_LETTERS.map((letter, i) => {
           const d = new Date(monday);
           d.setDate(monday.getDate() + i);
@@ -135,7 +160,7 @@ function WeekCalendar({
             </TouchableOpacity>
           );
         })}
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -206,6 +231,21 @@ export default function DashboardScreen({ navigation }: Props) {
 
   const [refreshing, setRefreshing] = useState(false);
   const hasLoaded = useRef(false);
+
+  const workoutCardAnims  = useRef<Animated.Value[]>([]);
+  const streakAnim        = useRef(new Animated.Value(0)).current;
+  const [displayStreakValue, setDisplayStreakValue] = useState(0);
+
+  const runWorkoutStagger = (count: number) => {
+    while (workoutCardAnims.current.length < count) {
+      workoutCardAnims.current.push(new Animated.Value(0));
+    }
+    const anims = workoutCardAnims.current.slice(0, count);
+    anims.forEach(a => a.setValue(0));
+    Animated.stagger(40, anims.map(a =>
+      Animated.timing(a, { toValue: 1, duration: 260, useNativeDriver: true })
+    )).start();
+  };
 
   // Populate from preload cache instantly on mount
   useEffect(() => {
@@ -314,6 +354,22 @@ export default function DashboardScreen({ navigation }: Props) {
     } catch { /* silently fail */ }
   };
 
+  useEffect(() => {
+    if (workouts.length === 0) return;
+    runWorkoutStagger(workouts.length);
+  }, [workouts]);
+
+  useEffect(() => {
+    const target = streakType === 'weekly' ? weeklyStreak
+      : streakType === 'monthly' ? monthlyStreak
+      : dailyStreak;
+    if (target === 0) { setDisplayStreakValue(0); return; }
+    const id = streakAnim.addListener(({ value }) => setDisplayStreakValue(Math.round(target * value)));
+    streakAnim.setValue(0);
+    Animated.timing(streakAnim, { toValue: 1, duration: 400, useNativeDriver: false }).start();
+    return () => streakAnim.removeListener(id);
+  }, [streakType, weeklyStreak, monthlyStreak, dailyStreak]);
+
   if (loading) return <ActivityIndicator size="large" style={{ flex: 1, marginTop: 50 }} />;
 
   return (
@@ -324,16 +380,16 @@ export default function DashboardScreen({ navigation }: Props) {
       >
           {(() => {
             const streakDisplay = streakType === 'weekly'
-              ? { emoji: '🔥', value: weeklyStreak, unit: 'w' }
+              ? { value: weeklyStreak, unit: 'w', label: 'Week Streak' }
               : streakType === 'monthly'
-              ? { emoji: '📅', value: monthlyStreak, unit: 'mo' }
-              : { emoji: '⚡', value: dailyStreak, unit: 'd' };
+              ? { value: monthlyStreak, unit: 'mo', label: 'Month Streak' }
+              : { value: dailyStreak, unit: 'd', label: 'Day Streak' };
             return (
               <View style={styles.topbar}>
                 <Text style={styles.title}>{getDailyGreeting()}, {user?.name || user?.username}</Text>
                 <TouchableOpacity onPress={() => setStreakModalVisible(true)} style={styles.streakBadge}>
-                  <Text style={styles.streakEmoji}>{streakDisplay.emoji}</Text>
-                  <Text style={styles.streakText}>{streakDisplay.value}{streakDisplay.unit}</Text>
+                  <Text style={styles.streakCount}>{displayStreakValue}{streakDisplay.unit}</Text>
+                  <Text style={styles.streakLabel}>{streakDisplay.label}</Text>
                 </TouchableOpacity>
               </View>
             );
@@ -343,7 +399,8 @@ export default function DashboardScreen({ navigation }: Props) {
             style={styles.logButton}
             onPress={() => navigation.navigate('WorkoutLog', { prefill: undefined, editMode: false })}
           >
-            <Text style={styles.logButtonText}>+ Log Workout</Text>
+            <Ionicons name="add-circle" size={20} color="#fff" />
+            <Text style={styles.logButtonText}>Log Workout</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -383,7 +440,12 @@ export default function DashboardScreen({ navigation }: Props) {
                       prefill: {
                         name: day.label, notes: '',
                         exercises: day.workout_template.exercises.map(ex => ({
-                          name: ex.name, sets: [{ reps: '', weight: '' }],
+                          name: ex.name,
+                          exercise_template_id: ex.id,
+                          exercise_type: ex.exercise_type ?? 'strength',
+                          muscle_group: ex.muscle_group,
+                          equipment: ex.equipment,
+                          sets: [{ reps: '', weight: '' }],
                         })),
                       },
                       editMode: false,
@@ -404,11 +466,12 @@ export default function DashboardScreen({ navigation }: Props) {
           />
 
           {/* Workouts — filtered by selected date or recent */}
-          <Text style={styles.sectionLabel}>
-            {selectedCalDate
+          <SectionRule
+            label={selectedCalDate
               ? new Date(selectedCalDate + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
               : 'Recent Workouts'}
-          </Text>
+            style={{ marginBottom: spacing.sm }}
+          />
           {(() => {
             const list = selectedCalDate ? dateWorkouts : workouts;
             if (list.length === 0) return (
@@ -416,9 +479,14 @@ export default function DashboardScreen({ navigation }: Props) {
                 {selectedCalDate ? 'No workouts on this day' : 'No recent workouts'}
               </Text>
             );
-            return list.map(item => (
-              <TouchableOpacity
+            return list.map((item, index) => {
+              const cardAnim = workoutCardAnims.current[index] ?? new Animated.Value(1);
+              return (
+              <Animated.View
                 key={item.id}
+                style={{ opacity: cardAnim, transform: [{ translateY: cardAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}
+              >
+              <TouchableOpacity
                 style={styles.workoutCard}
                 onPress={() =>
                   item.workout_type === 'cardio'
@@ -427,6 +495,12 @@ export default function DashboardScreen({ navigation }: Props) {
                 }
               >
                 <View style={styles.cardHeader}>
+                  <Ionicons
+                    name={item.workout_type === 'cardio' ? 'location-outline' : 'barbell-outline'}
+                    size={14}
+                    color={colors.textSecondary}
+                    style={{ marginRight: 4, marginTop: 1 }}
+                  />
                   <Text style={styles.workoutName}>{item.name || 'Workout'}</Text>
                   {!!item.pr_count && (
                     <View style={styles.prRow}>
@@ -477,7 +551,9 @@ export default function DashboardScreen({ navigation }: Props) {
                   </>
                 )}
               </TouchableOpacity>
-            ));
+              </Animated.View>
+              );
+            });
           })()}
         </ScrollView>
       {/* Streak selector modal */}
@@ -524,12 +600,18 @@ const createStyles = (colors: Colors) => StyleSheet.create({
 
   logButton: {
     backgroundColor: colors.save,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
+    borderRadius: spacing.md,
+    paddingVertical: spacing.md + 2,
+    paddingHorizontal: spacing.lg,
     alignItems: 'center',
     marginBottom: spacing.sm,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: '#ffffff28',
   },
-  logButtonText: { color: '#fff', fontSize: typography.fontSize.md, fontWeight: '600' },
+  logButtonText: { color: '#fff', fontSize: typography.fontSize.md, fontWeight: '700' },
   trackButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -549,8 +631,14 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: spacing.sm,
     padding: spacing.md,
     marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderTopWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderLeftWidth: 3,
+    borderTopColor: colors.border,
+    borderRightColor: colors.border,
+    borderBottomColor: colors.border,
+    borderLeftColor: colors.accent,
   },
   sectionLabel: {
     fontSize: typography.fontSize.sm,
@@ -616,12 +704,22 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   emptyText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontStyle: 'italic' },
 
   streakBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
+    backgroundColor: colors.surface,
+    borderRadius: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderTopWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderLeftWidth: 3,
+    borderTopColor: colors.border,
+    borderRightColor: colors.border,
+    borderBottomColor: colors.border,
+    borderLeftColor: colors.accent,
+    alignItems: 'flex-end',
   },
-  streakEmoji: { fontSize: typography.fontSize.sm },
-  streakText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
+  streakCount: { fontSize: typography.fontSize.md, fontWeight: '800', color: colors.textPrimary },
+  streakLabel: { fontSize: 10, fontWeight: '600', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
 
   streakOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
   streakModalBox: {

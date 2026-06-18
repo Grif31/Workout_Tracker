@@ -9,18 +9,18 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { TrainingStackParamsList } from 'navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
-
 import { apiFetch } from '../../utils/api';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'RoutineDetail'>;
 
-type Exercise = { id: number; name: string; muscle_group: string };
+type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; exercise_type?: string };
 
 const parseRepsMin = (reps: string): string => {
   const m = (reps ?? '').match(/^(\d+)/);
@@ -41,6 +41,8 @@ type Routine = {
   days: RoutineDay[];
 };
 
+const DESC_COLLAPSE_LENGTH = 120;
+
 export default function RoutineDetailScreen({ route, navigation }: Props) {
   const { routineId, routineName } = route.params;
   const { user, updateUser } = useAuth();
@@ -48,6 +50,7 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [routine, setRoutine] = useState<Routine | null>(null);
   const [loading, setLoading] = useState(true);
+  const [descExpanded, setDescExpanded] = useState(false);
 
   const isActive = user?.active_routine_id === routineId;
 
@@ -77,14 +80,9 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
         style: 'destructive',
         onPress: async () => {
           try {
-            const res = await apiFetch(`/api/routines/${routineId}`, {
-              method: 'DELETE',
-            });
-            if (res.ok) {
-              navigation.goBack();
-            } else {
-              Alert.alert('Error', 'Failed to delete routine');
-            }
+            const res = await apiFetch(`/api/routines/${routineId}`, { method: 'DELETE' });
+            if (res.ok) navigation.goBack();
+            else Alert.alert('Error', 'Failed to delete routine');
           } catch {
             Alert.alert('Error', 'Something went wrong');
           }
@@ -108,6 +106,19 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
     }
   };
 
+  const showMenu = () => {
+    Alert.alert(
+      routine?.name ?? routineName,
+      undefined,
+      [
+        { text: isActive ? 'Deactivate' : 'Set as Active', onPress: handleToggleActive },
+        { text: 'Edit', onPress: () => navigation.navigate('CreateRoutine', { routineId, routineName }) },
+        { text: 'Delete', style: 'destructive', onPress: handleDelete },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -118,37 +129,56 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
 
   if (!routine) return null;
 
+  const desc = routine.description ?? '';
+  const descLong = desc.length > DESC_COLLAPSE_LENGTH;
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.routineName}>{routine.name}</Text>
-          {routine.description ? (
-            <Text style={styles.routineDesc}>{routine.description}</Text>
-          ) : null}
-          <Text style={styles.dayCount}>
-            {routine.days.length} {routine.days.length === 1 ? 'day' : 'days'}
-          </Text>
-        </View>
-        <View style={{ flexDirection: 'row', gap: spacing.md }}>
-          <TouchableOpacity onPress={handleToggleActive}>
-            <Text style={isActive ? styles.deactivateText : styles.activateText}>
-              {isActive ? 'Deactivate' : 'Set as Active'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('CreateRoutine', { routineId, routineName })}>
-            <Text style={styles.editText}>Edit</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleDelete}>
-            <Text style={styles.deleteText}>Delete</Text>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.topBar}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={8}>
+          <Ionicons name="chevron-back" size={26} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={showMenu} style={styles.menuBtn} hitSlop={8} testID="menu-btn">
+          <Ionicons name="ellipsis-vertical" size={22} color={colors.textPrimary} />
+        </TouchableOpacity>
       </View>
 
       <FlatList
         data={routine.days}
         keyExtractor={item => item.id.toString()}
         contentContainerStyle={styles.list}
+        ListHeaderComponent={
+          <View style={styles.routineInfo}>
+            <View style={styles.nameRow}>
+              <Text style={styles.routineName}>{routine.name}</Text>
+              {isActive && (
+                <View style={styles.activeBadge}>
+                  <Text style={styles.activeBadgeText}>Active</Text>
+                </View>
+              )}
+            </View>
+            {desc ? (
+              <>
+                <Text style={styles.routineDesc} numberOfLines={descExpanded ? undefined : 3}>
+                  {desc}
+                </Text>
+                {descLong && (
+                  <TouchableOpacity onPress={() => setDescExpanded(v => !v)} style={styles.seeMoreBtn}>
+                    <Text style={styles.seeMoreText}>{descExpanded ? 'See less' : 'See more'}</Text>
+                    <Ionicons
+                      name={descExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={13}
+                      color={colors.accent}
+                    />
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : null}
+            <Text style={styles.dayCount}>
+              {routine.days.length} {routine.days.length === 1 ? 'day' : 'days'}
+            </Text>
+          </View>
+        }
         renderItem={({ item }) => (
           <View style={styles.dayCard}>
             <View style={styles.dayHeader}>
@@ -171,6 +201,10 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
                         const prog = progMap.get(ex.id);
                         return {
                           name: ex.name,
+                          exercise_template_id: ex.id,
+                          exercise_type: ex.exercise_type ?? 'strength',
+                          muscle_group: ex.muscle_group,
+                          equipment: ex.equipment,
                           sets: prog
                             ? Array(prog.sets).fill(null).map(() => ({
                                 reps: parseRepsMin(prog.reps),
@@ -208,19 +242,51 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
 const createStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
-  header: {
+
+  topBar: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    padding: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  backBtn: { padding: spacing.xs },
+  menuBtn: { padding: spacing.xs },
+
+  routineInfo: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
     paddingBottom: spacing.sm,
   },
-  routineName: { fontSize: typography.fontSize.lg, fontWeight: 'bold', color: colors.textPrimary },
-  routineDesc: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
-  dayCount: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: spacing.xs },
-  deleteText: { color: colors.danger, fontSize: typography.fontSize.sm, fontWeight: '600', marginTop: 4 },
-  editText: { color: colors.accent, fontSize: typography.fontSize.sm, fontWeight: '600', marginTop: 4 },
-  activateText: { color: colors.save, fontSize: typography.fontSize.sm, fontWeight: '600', marginTop: 4 },
-  deactivateText: { color: colors.textSecondary, fontSize: typography.fontSize.sm, fontWeight: '600', marginTop: 4 },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  routineName: { fontSize: typography.fontSize.xl, fontWeight: 'bold', color: colors.textPrimary },
+  activeBadge: {
+    backgroundColor: colors.save + '22',
+    borderRadius: 20,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: colors.save,
+  },
+  activeBadgeText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.save },
+  routineDesc: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 20 },
+  seeMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 4,
+  },
+  seeMoreText: { fontSize: typography.fontSize.xs, fontWeight: '600', color: colors.accent },
+  dayCount: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: spacing.sm },
+
   list: { paddingHorizontal: spacing.md, paddingBottom: spacing.lg },
   dayCard: {
     backgroundColor: colors.surface,

@@ -21,10 +21,8 @@ const exercises = [
 describe('ExercisesScreen', () => {
   beforeEach(() => {
     mockFetchSequence([
-      { data: exercises },           // fetchExercises
-      { data: [] },                  // fetchTemplates
-      { data: [] },                  // fetchRoutines
-      { data: { recent: [] } },     // fetchRecentExercises
+      { data: exercises },          // fetchExercises
+      { data: { recent: [] } },    // fetchRecentExercises
     ]);
   });
 
@@ -32,24 +30,13 @@ describe('ExercisesScreen', () => {
     render(<ExercisesScreen navigation={nav as any} route={route as any} />);
   });
 
-  it('shows the Exercises tab label', () => {
+  it('shows the Exercises screen title', () => {
     const { getByText } = render(<ExercisesScreen navigation={nav as any} route={route as any} />);
     expect(getByText('Exercises')).toBeTruthy();
-  });
-
-  it('shows the Training tab label', () => {
-    const { getByText } = render(<ExercisesScreen navigation={nav as any} route={route as any} />);
-    expect(getByText('Training')).toBeTruthy();
   });
 
   it('shows exercise list after fetch', async () => {
     const { getByText } = render(<ExercisesScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
-  });
-
-  it('switches to Training tab when pressed', async () => {
-    const { getByText, getAllByText } = render(<ExercisesScreen navigation={nav as any} route={route as any} />);
-    fireEvent.press(getByText('Training'));
-    await waitFor(() => expect(getAllByText(/routine/i).length).toBeGreaterThan(0));
   });
 });

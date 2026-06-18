@@ -16,6 +16,9 @@ import { ActionSheetProvider } from '@expo/react-native-action-sheet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastBanner } from './components/ToastBanner';
 import { navigationRef } from './navigation/navigationRef';
+import Purchases, { LOG_LEVEL } from 'react-native-purchases';
+
+Purchases.setLogLevel(LOG_LEVEL.DEBUG);
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({

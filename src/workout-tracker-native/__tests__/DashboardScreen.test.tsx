@@ -47,9 +47,8 @@ describe('DashboardScreen', () => {
     await waitFor(() => expect(getByText('Push Day')).toBeTruthy());
   });
 
-  it('shows last 7 days workout count in Progress tab', async () => {
-    const { getAllByText, getByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => fireEvent.press(getByText('Progress')));
-    await waitFor(() => expect(getAllByText('3').length).toBeGreaterThan(0));
+  it('shows the Track Activity button', async () => {
+    const { getByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Track Activity')).toBeTruthy());
   });
 });

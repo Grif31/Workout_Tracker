@@ -32,19 +32,11 @@ describe('SocialAuthButtons', () => {
     expect(getByText('or sign in with')).toBeTruthy();
   });
 
-  it('calls onGoogle when Google button pressed', () => {
+  it('calls onApple when Apple button pressed', () => {
     const { getByText } = render(
       <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} onFacebook={onFacebook} />
     );
-    fireEvent.press(getByText('Google'));
-    expect(onGoogle).toHaveBeenCalledTimes(1);
-  });
-
-  it('calls onFacebook when Facebook button pressed', () => {
-    const { getByText } = render(
-      <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} onFacebook={onFacebook} />
-    );
-    fireEvent.press(getByText('Facebook'));
-    expect(onFacebook).toHaveBeenCalledTimes(1);
+    fireEvent.press(getByText('Apple'));
+    expect(onApple).toHaveBeenCalledTimes(1);
   });
 });

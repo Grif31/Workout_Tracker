@@ -50,8 +50,8 @@ describe('RoutineDetailScreen', () => {
     await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
   });
 
-  it('shows Set as Active / Deactivate button', async () => {
-    const { getByText } = render(<RoutineDetailScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => expect(getByText(/set as active|deactivate/i)).toBeTruthy());
+  it('shows the 3-dot menu button', async () => {
+    const { getByTestId } = render(<RoutineDetailScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByTestId('menu-btn')).toBeTruthy());
   });
 });

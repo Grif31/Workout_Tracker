@@ -124,8 +124,17 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         onPress: async () => {
           try {
             const res = await apiFetch(`/api/workout-templates/${templateId}`, { method: 'DELETE' });
-            if (res.ok) navigation.goBack();
-            else Alert.alert('Error', 'Failed to delete template');
+            if (res.ok) {
+              navigation.goBack();
+            } else if (res.status === 409) {
+              const data = await res.json();
+              Alert.alert(
+                'Cannot Delete Template',
+                data.message ?? 'This template is used in a routine. Remove it from the routine or delete the routine first.',
+              );
+            } else {
+              Alert.alert('Error', 'Failed to delete template');
+            }
           } catch {
             Alert.alert('Error', 'Something went wrong');
           }

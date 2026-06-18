@@ -41,6 +41,8 @@ const TAB_CONFIG: Array<{ route: string; icon: keyof typeof Ionicons.glyphMap; l
 const ICON_SIZE = 24;
 const ICON_LIFT = 5;
 
+const screenFadeAnim = new Animated.Value(1);
+
 function fmtElapsed(secs: number): string {
   if (secs < 60) return `${secs}s`;
   const m = Math.floor(secs / 60);
@@ -199,7 +201,10 @@ function AnimatedTabBar({ state, navigation, colors, pendingCount }: {
                 canPreventDefault: true,
               });
               if (!isActive && !event.defaultPrevented) {
-                navigation.navigate(route.name);
+                Animated.timing(screenFadeAnim, { toValue: 0, duration: 80, useNativeDriver: true }).start(() => {
+                  navigation.navigate(route.name);
+                  Animated.timing(screenFadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+                });
               }
             }}
             onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })}
@@ -290,15 +295,17 @@ function CustomTabBar(props: BottomTabBarProps) {
 
 export function AppTabs() {
   return (
-    <Tab.Navigator
-      tabBar={(props) => <CustomTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
-    >
-      <Tab.Screen name="DashboardTab" component={DashboardStack} options={{ title: 'Dashboard' }} />
-      <Tab.Screen name="ExercisesTab" component={ExercisesStack} options={{ title: 'Exercises' }} />
-      <Tab.Screen name="TrainingTab" component={TrainingStack} options={{ title: 'Training' }} />
-      <Tab.Screen name="ProfileTab" component={ProfileStack} options={{ title: 'Profile' }} />
-    </Tab.Navigator>
+    <Animated.View style={{ flex: 1, opacity: screenFadeAnim }}>
+      <Tab.Navigator
+        tabBar={(props) => <CustomTabBar {...props} />}
+        screenOptions={{ headerShown: false }}
+      >
+        <Tab.Screen name="DashboardTab" component={DashboardStack} options={{ title: 'Dashboard' }} />
+        <Tab.Screen name="ExercisesTab" component={ExercisesStack} options={{ title: 'Exercises' }} />
+        <Tab.Screen name="TrainingTab" component={TrainingStack} options={{ title: 'Training' }} />
+        <Tab.Screen name="ProfileTab" component={ProfileStack} options={{ title: 'Profile' }} />
+      </Tab.Navigator>
+    </Animated.View>
   );
 }
 

@@ -8,6 +8,7 @@ from sqlalchemy.orm import aliased
 from models import (
     db, WorkoutTemplate, ExerciseTemplate, Routine, RoutineDay,
     User, Exercise, Set, Workout, PersonalRecord, ExerciseMuscleMapping,
+    BodyweightLog, StrengthScoreSnapshot,
 )
 from schemas import AiGenerateSchema
 from utils.validation import validate_body
@@ -16,6 +17,26 @@ from limiter import limiter
 ai_bp = Blueprint('ai_bp', __name__)
 
 _ai_generate_schema = AiGenerateSchema()
+
+MUSCLE_MRV = {
+    'Chest': 20, 'Back': 25, 'Shoulders': 26, 'Biceps': 26, 'Triceps': 20,
+    'Forearms': 20, 'Quads': 20, 'Hamstrings': 16, 'Glutes': 16, 'Calves': 30, 'Core': 25,
+}
+MUSCLE_MEV = {
+    'Chest': 8, 'Back': 10, 'Shoulders': 8, 'Biceps': 8, 'Triceps': 6,
+    'Forearms': 4, 'Quads': 8, 'Hamstrings': 6, 'Glutes': 4, 'Calves': 8, 'Core': 6,
+}
+GREEK_THRESHOLDS = [
+    (90, 'Aretē'), (75, 'Titan'), (60, 'Olympian'),
+    (45, 'Demigod'), (30, 'Hero'), (15, 'Athlete'), (0, 'Neophyte'),
+]
+
+
+def _greek_rank_from_score(score: float) -> str:
+    for threshold, name in GREEK_THRESHOLDS:
+        if score >= threshold:
+            return name
+    return 'Neophyte'
 
 
 def _match_exercises(exercise_items: list) -> list[dict]:
@@ -78,7 +99,7 @@ def _parse_ai_json(raw: str) -> dict:
 def _build_user_context(user_id: int) -> dict:
     user = db.session.get(User, int(user_id))
 
-    # Top strength PRs — max_weight only; never expose estimated_1rm
+    # Top strength PRs — max_weight
     emm_alias = aliased(ExerciseMuscleMapping)
     pr_rows = (
         db.session.query(
@@ -101,7 +122,7 @@ def _build_user_context(user_id: int) -> dict:
         .all()
     )
 
-    # Working sets per muscle group over last 14 days (mirrors muscle_volume endpoint logic)
+    # Working sets per muscle group over last 14 days
     cutoff = datetime.now() - timedelta(days=14)
     not_warmup = db.or_(Set.set_type.is_(None), Set.set_type != 'W')
     not_cardio  = db.func.lower(Exercise.exercise_type) != 'cardio'
@@ -145,6 +166,23 @@ def _build_user_context(user_id: int) -> dict:
         .scalar()
     )
 
+    # Greek rank
+    snapshot = (
+        StrengthScoreSnapshot.query
+        .filter_by(user_id=user_id)
+        .order_by(StrengthScoreSnapshot.created_at.desc())
+        .first()
+    )
+    greek_score = snapshot.score if snapshot else None
+    greek_rank = _greek_rank_from_score(greek_score) if greek_score is not None else None
+
+    # Active routine name
+    active_routine_name = None
+    if user and user.active_routine_id:
+        r = Routine.query.filter_by(id=user.active_routine_id).first()
+        if r:
+            active_routine_name = r.name
+
     return {
         'weight_unit':        (user.weight_unit or 'lbs') if user else 'lbs',
         'bodyweight':         user.bodyweight if user else None,
@@ -152,6 +190,8 @@ def _build_user_context(user_id: int) -> dict:
         'top_prs':            pr_rows,
         'muscle_sets_14d':    muscle_sets,
         'last_workout_date':  last_workout_date,
+        'greek_rank':         greek_rank,
+        'active_routine_name': active_routine_name,
     }
 
 
@@ -162,6 +202,7 @@ def _build_prompt(data: dict, generate_type: str, user_context: dict | None = No
     equipment          = data.get('equipment', 'full_gym')
     session_length_min = data.get('session_length_min', 60)
     avoid              = data.get('avoid', 'none')
+    muscles            = data.get('muscles', [])
 
     GOAL_LABELS = {
         'hypertrophy': 'Muscle Building (Hypertrophy)',
@@ -230,7 +271,17 @@ def _build_prompt(data: dict, generate_type: str, user_context: dict | None = No
     }
     avoid_directive = AVOID_MAP.get(avoid, AVOID_MAP['none'])
 
-    # ── Real user data section ────────────────────────────────
+    # Muscle targeting directive (when muscles are specified)
+    muscle_directive = ''
+    if muscles:
+        muscle_list = ', '.join(muscles)
+        muscle_directive = (
+            f"MUSCLE FOCUS: This session must primarily target: {muscle_list}. "
+            f"Select exercises that directly work these specific muscle groups. "
+            f"Avoid adding exercises for unrelated muscles.\n\n"
+        )
+
+    # Real user data section
     training_status_section = ''
     if user_context:
         unit = user_context.get('weight_unit', 'lbs')
@@ -245,6 +296,12 @@ def _build_prompt(data: dict, generate_type: str, user_context: dict | None = No
             lines.append(bw_line)
         elif gender:
             lines.append(f'• Gender: {gender}')
+
+        if user_context.get('greek_rank'):
+            lines.append(f'• Current Greek rank: {user_context["greek_rank"]}')
+
+        if user_context.get('active_routine_name'):
+            lines.append(f'• Active routine: {user_context["active_routine_name"]}')
 
         top_prs = user_context.get('top_prs', [])
         if top_prs:
@@ -301,6 +358,7 @@ def _build_prompt(data: dict, generate_type: str, user_context: dict | None = No
 
     return (
         f"You are an elite personal trainer. Build a precise, client-appropriate program.\n\n"
+        f"{muscle_directive}"
         f"CLIENT PROFILE:\n"
         f"• Goal: {GOAL_LABELS.get(goal, goal)}\n"
         f"• Experience: {EXP_LABELS.get(experience, experience)}\n"
@@ -319,6 +377,170 @@ def _build_prompt(data: dict, generate_type: str, user_context: dict | None = No
         f"Respond with ONLY valid JSON — no markdown, no explanation:\n"
         f"{json_format}"
     )
+
+
+def _build_insights_context(user_id: int) -> dict:
+    user = db.session.get(User, user_id)
+    now = datetime.now()
+    week_start = now - timedelta(days=7)
+    last_week_start = now - timedelta(days=14)
+    not_warmup = db.or_(Set.set_type.is_(None), Set.set_type != 'W')
+    not_cardio = db.func.lower(Exercise.exercise_type) != 'cardio'
+
+    def _muscle_sets_range(start, end):
+        rows = (
+            db.session.query(ExerciseMuscleMapping.muscle_group, db.func.count(Set.id).label('cnt'))
+            .join(Exercise, ExerciseMuscleMapping.exercise_template_id == Exercise.exercise_template_id)
+            .join(Set, Set.exercise_id == Exercise.id)
+            .join(Workout, Exercise.workout_id == Workout.id)
+            .filter(
+                Workout.user_id == user_id,
+                Workout.date >= start,
+                Workout.date < end,
+                not_warmup, not_cardio,
+                Set.reps.isnot(None),
+            )
+            .group_by(ExerciseMuscleMapping.muscle_group)
+            .all()
+        )
+        return {r.muscle_group: r.cnt for r in rows}
+
+    muscle_sets_week = _muscle_sets_range(week_start, now + timedelta(days=1))
+    muscle_sets_last = _muscle_sets_range(last_week_start, week_start)
+
+    # Workouts per week — last 4 weeks
+    four_weeks_ago = now - timedelta(days=28)
+    workout_count = (
+        db.session.query(db.func.count(Workout.id))
+        .filter(Workout.user_id == user_id, Workout.date >= four_weeks_ago)
+        .scalar() or 0
+    )
+    avg_workouts_per_week = workout_count / 4.0
+
+    # Top 5 estimated_1rm PRs
+    top_prs = (
+        db.session.query(ExerciseTemplate.name, PersonalRecord.value, PersonalRecord.achieved_at)
+        .join(ExerciseTemplate, PersonalRecord.exercise_template_id == ExerciseTemplate.id)
+        .filter(PersonalRecord.user_id == user_id, PersonalRecord.pr_type == 'estimated_1rm')
+        .order_by(PersonalRecord.value.desc())
+        .limit(5)
+        .all()
+    )
+
+    # Active routine name
+    active_routine = None
+    if user and user.active_routine_id:
+        r = Routine.query.filter_by(id=user.active_routine_id).first()
+        if r:
+            active_routine = r.name
+
+    # Bodyweight trend
+    bw_logs = (
+        BodyweightLog.query
+        .filter_by(user_id=user_id)
+        .order_by(BodyweightLog.date.desc())
+        .limit(3)
+        .all()
+    )
+
+    # Greek rank from latest snapshot
+    snapshot = (
+        StrengthScoreSnapshot.query
+        .filter_by(user_id=user_id)
+        .order_by(StrengthScoreSnapshot.created_at.desc())
+        .first()
+    )
+    greek_score = snapshot.score if snapshot else None
+    greek_rank = _greek_rank_from_score(greek_score) if greek_score is not None else 'Neophyte'
+
+    last_workout = (
+        db.session.query(db.func.max(Workout.date))
+        .filter(Workout.user_id == user_id)
+        .scalar()
+    )
+
+    return {
+        'name': (user.name or user.username) if user else 'Athlete',
+        'weight_unit': (user.weight_unit or 'lbs') if user else 'lbs',
+        'greek_rank': greek_rank,
+        'greek_score': greek_score,
+        'muscle_sets_week': muscle_sets_week,
+        'muscle_sets_last_week': muscle_sets_last,
+        'avg_workouts_per_week': round(avg_workouts_per_week, 1),
+        'top_prs': top_prs,
+        'active_routine': active_routine,
+        'bw_logs': bw_logs,
+        'last_workout': last_workout,
+    }
+
+
+def _build_insights_prompt(ctx: dict) -> str:
+    unit = ctx.get('weight_unit', 'lbs')
+    name = ctx.get('name', 'Athlete')
+    lines = [
+        f"You are an elite personal exercise scientist coaching {name}.",
+        "Analyze the training data below and return 3–5 specific, actionable insights.",
+        "",
+    ]
+
+    if ctx.get('greek_rank'):
+        score_str = f" (score {ctx['greek_score']:.0f}/100)" if ctx.get('greek_score') is not None else ""
+        lines.append(f"Greek rank: {ctx['greek_rank']}{score_str}")
+
+    avg = ctx.get('avg_workouts_per_week', 0)
+    lines.append(f"Average workouts/week (last 4 weeks): {avg}")
+
+    last_w = ctx.get('last_workout')
+    if last_w:
+        days_ago = (datetime.now() - last_w).days
+        lines.append(f"Days since last workout: {days_ago}")
+
+    if ctx.get('active_routine'):
+        lines.append(f"Active routine: {ctx['active_routine']}")
+
+    muscle_week = ctx.get('muscle_sets_week', {})
+    muscle_last = ctx.get('muscle_sets_last_week', {})
+    all_muscles = sorted(set(list(muscle_week.keys()) + list(muscle_last.keys())))
+    if all_muscles:
+        lines.append("\nWorking sets per muscle (this week vs last week):")
+        for m in all_muscles:
+            this_w = muscle_week.get(m, 0)
+            last_w_sets = muscle_last.get(m, 0)
+            mrv = MUSCLE_MRV.get(m, 20)
+            mev = MUSCLE_MEV.get(m, 8)
+            flags = []
+            if this_w >= mrv:
+                flags.append('OVER MRV — deload candidate')
+            elif this_w < mev and (this_w > 0 or last_w_sets > 0):
+                flags.append('below MEV')
+            elif this_w == 0 and last_w_sets == 0:
+                flags.append('not trained recently')
+            flag_str = f" [{', '.join(flags)}]" if flags else ''
+            lines.append(f"  {m}: {this_w} sets this week, {last_w_sets} last week{flag_str}")
+
+    top_prs = ctx.get('top_prs', [])
+    if top_prs:
+        lines.append(f"\nTop estimated 1-rep maxes ({unit}):")
+        for row in top_prs:
+            age = f" ({(datetime.now() - row.achieved_at).days}d ago)" if row.achieved_at else ""
+            lines.append(f"  {row.name}: {row.value:.0f}{age}")
+
+    bw_logs = ctx.get('bw_logs', [])
+    if len(bw_logs) >= 2:
+        oldest = bw_logs[-1].weight
+        newest = bw_logs[0].weight
+        delta = newest - oldest
+        sign = '+' if delta >= 0 else ''
+        lines.append(f"\nBodyweight trend (last {len(bw_logs)} logs): {oldest:.1f} → {newest:.1f} {unit} ({sign}{delta:.1f})")
+
+    lines += [
+        "",
+        "Insight types: deload, rest, frequency, routine, achievement, suggestion",
+        "Be specific — cite actual numbers from the data above. Each insight must be actionable.",
+        "",
+        'Respond ONLY with valid JSON (no markdown):\n{"insights":[{"type":"<type>","title":"<6 words max>","body":"<1-2 sentences with specific data>","priority":"high|medium|low"}]}',
+    ]
+    return '\n'.join(lines)
 
 
 @ai_bp.post('/api/ai/generate')
@@ -378,6 +600,39 @@ def generate_workout():
         return jsonify({'message': 'Generation failed'}), 500
 
 
+@ai_bp.post('/api/ai/insights')
+@jwt_required()
+@limiter.limit('5 per day', key_func=lambda: f"ai_insights:{get_jwt_identity()}")
+def get_ai_insights():
+    """Generate AI coaching insights from the user's full training history."""
+    user_id = int(get_jwt_identity())
+    api_key = os.environ.get('ANTHROPIC_API_KEY')
+    if not api_key:
+        return jsonify({'message': 'AI service not configured'}), 503
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        ctx = _build_insights_context(user_id)
+        prompt = _build_insights_prompt(ctx)
+        msg = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=2048,
+            messages=[{'role': 'user', 'content': prompt}],
+        )
+        result = _parse_ai_json(msg.content[0].text)
+        insights = result.get('insights', [])
+        return jsonify({'insights': insights, 'generated_at': datetime.now().isoformat()}), 200
+
+    except ImportError:
+        return jsonify({'message': 'anthropic package not installed'}), 503
+    except json.JSONDecodeError as e:
+        return jsonify({'message': f'AI returned malformed JSON: {e}'}), 500
+    except Exception:
+        current_app.logger.exception('AI insights generation failed')
+        return jsonify({'message': 'Failed to generate insights'}), 500
+
+
 @ai_bp.post('/api/ai/save')
 @jwt_required()
 def save_generated_workout():
@@ -404,7 +659,7 @@ def save_generated_workout():
             day_prog = day.get('programming')
             template = WorkoutTemplate(
                 user_id=user_id,
-                name=f"{routine.name} – {day['label']}",
+                name=day['label'],
                 exercises=exercises,
                 programming_json=json.dumps(day_prog) if day_prog else None,
             )
@@ -438,5 +693,3 @@ def save_generated_workout():
         return jsonify({'type': 'template', 'id': template.id, 'name': template.name}), 201
 
     return jsonify({'message': "type must be 'routine' or 'template'"}), 400
-
-    return jsonify({'message': 'Invalid type — must be "routine" or "template"'}), 400

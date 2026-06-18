@@ -85,6 +85,17 @@ def delete_workout_template(template_id):
     if not template:
         return jsonify({'message': 'Not found'}), 404
 
+    from models import RoutineDay, Routine
+    routine_day = RoutineDay.query.filter_by(workout_template_id=template_id).first()
+    if routine_day:
+        routine = Routine.query.get(routine_day.routine_id)
+        routine_name = routine.name if routine else 'a routine'
+        return jsonify({
+            'message': f'This template is part of "{routine_name}". To delete it, remove it from the routine or delete the routine entirely.',
+            'routine_id': routine_day.routine_id,
+            'routine_name': routine_name,
+        }), 409
+
     db.session.delete(template)
     db.session.commit()
     return jsonify({'message': 'Workout template deleted'}), 200

@@ -12,8 +12,10 @@ const route = createMockRoute('ProfileHome');
 describe('ProfileScreen', () => {
   beforeEach(() => {
     mockFetchSequence([
-      { data: [{ id: 1, name: 'Push Day', date: '2026-05-01T10:00:00' }] },
-      { data: { total_workouts: 10, longest_streak: 3, total_volume: 5000 } },
+      { data: { workouts: [{ id: 1, name: 'Push Day', date: '2026-05-01T10:00:00', duration: 60, volume: 2000, num_exercises: 3, muscles: [] }], total: 1, has_more: false } }, // workouts (paginated)
+      { data: { total_workouts: 10, longest_streak: 3, total_volume: 5000 } }, // stats
+      { data: [] },                   // personal-records
+      { data: {} },                   // strength-score
     ]);
   });
 

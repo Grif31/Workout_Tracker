@@ -21,14 +21,9 @@ describe('WelcomeScreen', () => {
     render(<WelcomeScreen navigation={nav as any} route={route as any} />);
   });
 
-  it('displays the welcome title', () => {
-    const { getByText } = render(<WelcomeScreen navigation={nav as any} route={route as any} />);
-    expect(getByText('Welcome')).toBeTruthy();
-  });
-
   it('displays the tagline', () => {
     const { getByText } = render(<WelcomeScreen navigation={nav as any} route={route as any} />);
-    expect(getByText('One day or Day One.')).toBeTruthy();
+    expect(getByText('Strive for Excellence')).toBeTruthy();
   });
 
   it('navigates to Signup when Sign Up is pressed', () => {

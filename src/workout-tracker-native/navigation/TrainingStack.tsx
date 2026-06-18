@@ -1,7 +1,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TrainingStackParamsList } from './types';
-import TrainingScreen from '../screens/TrainingTab/TrainingScreen';
+import CoachScreen from '../screens/TrainingTab/CoachScreen';
 import CreateRoutineScreen from '../screens/ExercisesTab/CreateRoutineScreen';
 import RoutineDetailScreen from '../screens/ExercisesTab/RoutineDetailScreen';
 import TemplateDetailScreen from '../screens/ExercisesTab/TemplateDetailScreen';
@@ -20,7 +20,7 @@ export function TrainingStack() {
   const { colors } = useTheme();
   return (
     <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { paddingTop: insets.top, backgroundColor: colors.background } }}>
-      <Stack.Screen name="TrainingHome" component={TrainingScreen} />
+      <Stack.Screen name="TrainingHome" component={CoachScreen} />
       <Stack.Screen name="CreateRoutine" component={CreateRoutineScreen} />
       <Stack.Screen name="RoutineDetail" component={RoutineDetailScreen} />
       <Stack.Screen name="TemplateDetail" component={TemplateDetailScreen} />

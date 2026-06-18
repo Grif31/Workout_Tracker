@@ -396,29 +396,64 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         const d = new Date(prefill.date);
         if (!isNaN(d.getTime())) setSelectedDate(d);
       }
-      setExercises(
-        prefill.exercises.map((ex: any) => ({
-          uid: makeUid(),
-          id: ex.id,
-          exercise_template_id: ex.exercise_template_id,
-          exercise_type: ex.exercise_type,
-          name: ex.name,
-          muscle_group: ex.muscle_group,
-          equipment: ex.equipment,
-          notes: ex.notes ?? undefined,
-          sets: ex.sets.map((s: any) => ({
-            id: s.id,
-            reps: String(s.reps ?? ''),
-            weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''),
-            set_type: s.set_type ?? 'N',
-            rpe: s.rpe != null ? String(s.rpe) : '',
-            cardio_duration: s.cardio_duration != null ? String(s.cardio_duration) : '',
-            distance: s.distance != null ? String(s.distance) : '',
-            distance_unit: s.distance_unit ?? 'km',
-            intensity: s.intensity != null ? String(s.intensity) : '',
-          })),
-        }))
-      );
+      const initialExercises = prefill.exercises.map((ex: any) => ({
+        uid: makeUid(),
+        id: ex.id,
+        exercise_template_id: ex.exercise_template_id,
+        exercise_type: ex.exercise_type,
+        name: ex.name,
+        muscle_group: ex.muscle_group,
+        equipment: ex.equipment,
+        notes: ex.notes ?? undefined,
+        sets: ex.sets.map((s: any) => ({
+          id: s.id,
+          reps: String(s.reps ?? ''),
+          weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''),
+          set_type: s.set_type ?? 'N',
+          rpe: s.rpe != null ? String(s.rpe) : '',
+          cardio_duration: s.cardio_duration != null ? String(s.cardio_duration) : '',
+          distance: s.distance != null ? String(s.distance) : '',
+          distance_unit: s.distance_unit ?? 'km',
+          intensity: s.intensity != null ? String(s.intensity) : '',
+        })),
+      }));
+      setExercises(initialExercises);
+
+      if (!editMode) {
+        (async () => {
+          const enriched = [...initialExercises];
+          await Promise.all(
+            initialExercises.map(async (ex, idx) => {
+              try {
+                const params = new URLSearchParams({ name: ex.name });
+                if (ex.exercise_template_id) params.set('exercise_template_id', String(ex.exercise_template_id));
+                const fetches: Promise<Response>[] = [apiFetch(`/api/stats/exercise/last-session?${params}`)];
+                if (ex.exercise_template_id) fetches.push(apiFetch(`/api/personal-records/${ex.exercise_template_id}`));
+                const [lastRes, prRes] = await Promise.all(fetches);
+                let prData: ExerciseEntry['currentPR'] | undefined;
+                if (prRes?.ok) {
+                  const pr = await prRes.json();
+                  prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps };
+                }
+                if (lastRes.ok) {
+                  const data = await lastRes.json();
+                  if (data.sets?.length > 0) {
+                    enriched[idx] = {
+                      ...enriched[idx],
+                      sets: data.sets.map((s: any) => ({ reps: String(s.reps ?? ''), weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''), set_type: s.set_type ?? 'N' })),
+                      previousSets: data.sets,
+                      currentPR: prData,
+                    };
+                  } else if (prData) {
+                    enriched[idx] = { ...enriched[idx], currentPR: prData };
+                  }
+                }
+              } catch {}
+            })
+          );
+          setExercises([...enriched]);
+        })();
+      }
     } else if (!session) {
       setWorkoutName('');
       setNotes('');

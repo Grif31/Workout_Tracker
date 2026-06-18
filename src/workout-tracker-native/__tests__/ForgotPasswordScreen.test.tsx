@@ -22,18 +22,18 @@ describe('ForgotPasswordScreen', () => {
 
   it('shows error when email is empty and submitted', () => {
     const { getByText } = render(<ForgotPasswordScreen navigation={nav as any} route={route as any} />);
-    fireEvent.press(getByText('Send Reset Link'));
+    fireEvent.press(getByText('Send Code'));
     expect(getByText('Please enter your email address.')).toBeTruthy();
   });
 
-  it('shows success message after successful API call', async () => {
+  it('navigates to ResetPassword after successful API call', async () => {
     mockFetch({ message: 'Email sent' }, true);
     const { getByText, getByPlaceholderText } = render(
       <ForgotPasswordScreen navigation={nav as any} route={route as any} />
     );
     fireEvent.changeText(getByPlaceholderText('e.g. john@example.com'), 'test@example.com');
-    fireEvent.press(getByText('Send Reset Link'));
-    await waitFor(() => expect(getByText(/check your inbox/i)).toBeTruthy());
+    fireEvent.press(getByText('Send Code'));
+    await waitFor(() => expect(nav.navigate).toHaveBeenCalledWith('ResetPassword', { email: 'test@example.com' }));
   });
 
   it('shows error on failed API call', async () => {
@@ -42,7 +42,7 @@ describe('ForgotPasswordScreen', () => {
       <ForgotPasswordScreen navigation={nav as any} route={route as any} />
     );
     fireEvent.changeText(getByPlaceholderText('e.g. john@example.com'), 'bad@example.com');
-    fireEvent.press(getByText('Send Reset Link'));
+    fireEvent.press(getByText('Send Code'));
     await waitFor(() => expect(getByText('Email not found.')).toBeTruthy());
   });
 });

@@ -119,6 +119,52 @@ jest.mock('expo-sharing', () => ({
   isAvailableAsync: jest.fn(() => Promise.resolve(true)),
 }));
 
+// react-native-reanimated and worklets require native init — stub without importing real module
+jest.mock('react-native-worklets', () => ({
+  createSerializable: jest.fn((v: any) => v),
+  makeShareable: jest.fn((v: any) => v),
+  makeShareableCloneRecursive: jest.fn((v: any) => v),
+  isShareableRef: jest.fn(() => false),
+  runOnUI: jest.fn((fn: any) => fn),
+  runOnJS: jest.fn((fn: any) => fn),
+}));
+jest.mock('react-native-reanimated', () => {
+  const RN = require('react-native');
+  const shared = (v: any) => ({ value: v });
+  return {
+    __esModule: true,
+    default: { createAnimatedComponent: (c: any) => c },
+    createAnimatedComponent: (c: any) => c,
+    useSharedValue: shared,
+    useDerivedValue: (fn: any) => shared(fn()),
+    useAnimatedStyle: (fn: any) => fn(),
+    useAnimatedProps: (fn: any) => fn(),
+    useAnimatedRef: () => ({ current: null }),
+    useAnimatedScrollHandler: jest.fn(),
+    useAnimatedGestureHandler: jest.fn(),
+    withTiming: (v: any) => v,
+    withSpring: (v: any) => v,
+    withDelay: (_: any, v: any) => v,
+    withRepeat: (v: any) => v,
+    withSequence: (...args: any[]) => args[args.length - 1],
+    cancelAnimation: jest.fn(),
+    runOnJS: (fn: any) => fn,
+    runOnUI: (fn: any) => fn,
+    interpolate: jest.fn((v: any) => v),
+    interpolateColor: jest.fn((v: any) => v),
+    Extrapolation: { CLAMP: 'clamp', EXTEND: 'extend', IDENTITY: 'identity' },
+    Easing: { linear: (t: any) => t, ease: (t: any) => t, bezier: () => (t: any) => t },
+    getUseOfValueInStyleWarning: jest.fn(),
+    addWhitelistedNativeProps: jest.fn(),
+    addWhitelistedUIProps: jest.fn(),
+    View: RN.View,
+    Text: RN.Text,
+    Image: RN.Image,
+    ScrollView: RN.ScrollView,
+    FlatList: RN.FlatList,
+  };
+});
+
 // react-native-purchases ships untransformable minified deps — never load real IAP in tests
 jest.mock('react-native-purchases', () => ({
   __esModule: true,
