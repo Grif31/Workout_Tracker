@@ -29,10 +29,10 @@ const MUSCLE_MAP: Record<string, { front: Slug[]; back: Slug[] }> = {
 };
 
 export default function MuscleDiagram({ muscles, primaryMuscle, muscleColors, scale = 0.65 }: Props) {
-  const { colors, mode } = useTheme();
+  const { colors } = useTheme();
 
-  const bodyFill   = mode === 'dark' ? '#3a3a3a' : '#d4d4d4';
-  const bodyStroke = mode === 'dark' ? '#555'    : '#aaaaaa';
+  const bodyFill   = colors.surface;
+  const bodyStroke = colors.border;
 
   const activeList = muscles && muscles.length > 0
     ? muscles

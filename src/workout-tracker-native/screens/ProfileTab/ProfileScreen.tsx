@@ -404,7 +404,7 @@ export default function ProfileScreen({ navigation }: Props) {
                       <Text style={[styles.prCardName, { color: colors.textPrimary }]} numberOfLines={2}>
                         {pr.exercise_name}
                       </Text>
-                      <Text style={[styles.prCardValue, { color: '#C9A84C' }]}>
+                      <Text style={[styles.prCardValue, { color: '#7A5800' }]}>
                         {pr.pr_type === 'max_weight' || pr.pr_type === 'estimated_1rm'
                           ? `${pr.value} ${unit}`
                           : pr.pr_type === 'max_reps'
@@ -450,9 +450,9 @@ export default function ProfileScreen({ navigation }: Props) {
           {greekRank ? (
             <TouchableOpacity
               onPress={() => navigation.navigate('GreekRank')}
-              style={[styles.rankBadgePill, { backgroundColor: (GREEK_RANK_COLORS[greekRank] ?? '#888') + '22', borderColor: GREEK_RANK_COLORS[greekRank] ?? '#888' }]}
+              style={[styles.rankBadgePill, { backgroundColor: (GREEK_RANK_COLORS[greekRank] ?? '#888888') + '22', borderColor: GREEK_RANK_COLORS[greekRank] ?? '#888888' }]}
             >
-              <Text style={[styles.rankBadgeText, { color: GREEK_RANK_COLORS[greekRank] ?? '#888' }]}>
+              <Text style={[styles.rankBadgeText, { color: GREEK_RANK_COLORS[greekRank] ?? '#888888' }]}>
                 {greekRank}
               </Text>
             </TouchableOpacity>
@@ -556,9 +556,9 @@ export default function ProfileScreen({ navigation }: Props) {
               <Text style={styles.workoutName} numberOfLines={1}>{item.name}</Text>
               {!!item.pr_count && (
                 <View style={styles.prRow}>
-                  <LaurelBranch height={16} color="#C9A84C" />
+                  <LaurelBranch height={16} color="#FFD700" />
                   <Text style={styles.prText}>{item.pr_count} PR{item.pr_count > 1 ? 's' : ''}</Text>
-                  <LaurelBranch side="right" height={16} color="#C9A84C" />
+                  <LaurelBranch side="right" height={16} color="#FFD700" />
                 </View>
               )}
             </View>
@@ -671,7 +671,7 @@ export default function ProfileScreen({ navigation }: Props) {
                                 isToday && !hasWorkout && { borderWidth: 1.5, borderColor: colors.accent },
                               ]}>
                                 <Text style={[
-                                  styles.calDayText, { color: hasWorkout ? '#fff' : colors.textPrimary },
+                                  styles.calDayText, { color: hasWorkout ? colors.accentText : colors.textPrimary },
                                   isToday && !hasWorkout && { color: colors.accent, fontWeight: '700' },
                                 ]}>
                                   {day}
@@ -931,7 +931,7 @@ export default function ProfileScreen({ navigation }: Props) {
                   style={[styles.prChip, !prMuscle && { backgroundColor: colors.accent }]}
                   onPress={() => setPrMuscle(null)}
                 >
-                  <Text style={[styles.prChipText, { color: !prMuscle ? '#fff' : colors.textSecondary }]}>All</Text>
+                  <Text style={[styles.prChipText, { color: !prMuscle ? colors.accentText : colors.textSecondary }]}>All</Text>
                 </TouchableOpacity>
                 {prMuscleOptions.map(m => (
                   <TouchableOpacity
@@ -939,7 +939,7 @@ export default function ProfileScreen({ navigation }: Props) {
                     style={[styles.prChip, prMuscle === m && { backgroundColor: colors.accent }]}
                     onPress={() => setPrMuscle(prMuscle === m ? null : m)}
                   >
-                    <Text style={[styles.prChipText, { color: prMuscle === m ? '#fff' : colors.textSecondary }]}>{m}</Text>
+                    <Text style={[styles.prChipText, { color: prMuscle === m ? colors.accentText : colors.textSecondary }]}>{m}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -1062,7 +1062,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
   workoutName: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, flex: 1 },
   prRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: spacing.sm },
-  prText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: '#C9A84C' },
+  prText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: '#7A5800' },
   workoutDate: { fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   pill: {

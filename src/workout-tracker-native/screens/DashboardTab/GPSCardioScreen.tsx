@@ -354,12 +354,12 @@ export default function GPSCardioScreen({ navigation }: Props) {
                   style={[styles.activityChip, activity === a && { backgroundColor: colors.accent }]}
                   onPress={() => setActivity(a)}
                 >
-                  <Text style={[styles.activityChipText, activity === a && { color: '#fff' }]}>{a}</Text>
+                  <Text style={[styles.activityChipText, activity === a && { color: colors.accentText }]}>{a}</Text>
                 </TouchableOpacity>
               ))}
             </View>
             <TouchableOpacity style={[styles.mainBtn, { backgroundColor: colors.save }]} onPress={handleStart}>
-              <Ionicons name="play" size={28} color="#fff" />
+              <Ionicons name="play" size={28} color={colors.accentText} />
               <Text style={styles.mainBtnText}>Start</Text>
             </TouchableOpacity>
           </>
@@ -388,8 +388,8 @@ export default function GPSCardioScreen({ navigation }: Props) {
                 <Ionicons name="pause" size={22} color={colors.textPrimary} />
                 <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Pause</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.mainBtn, { backgroundColor: '#e53935' }]} onPress={handleStop}>
-                <Ionicons name="stop" size={28} color="#fff" />
+              <TouchableOpacity style={[styles.mainBtn, { backgroundColor: colors.danger }]} onPress={handleStop}>
+                <Ionicons name="stop" size={28} color={colors.accentText} />
                 <Text style={styles.mainBtnText}>Stop</Text>
               </TouchableOpacity>
             </View>
@@ -419,8 +419,8 @@ export default function GPSCardioScreen({ navigation }: Props) {
                 <Ionicons name="play" size={22} color={colors.textPrimary} />
                 <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Resume</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.mainBtn, { backgroundColor: '#e53935' }]} onPress={handleStop}>
-                <Ionicons name="stop" size={28} color="#fff" />
+              <TouchableOpacity style={[styles.mainBtn, { backgroundColor: colors.danger }]} onPress={handleStop}>
+                <Ionicons name="stop" size={28} color={colors.accentText} />
                 <Text style={styles.mainBtnText}>Stop</Text>
               </TouchableOpacity>
             </View>
@@ -490,8 +490,8 @@ export default function GPSCardioScreen({ navigation }: Props) {
                 disabled={saving}
               >
                 {saving
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={[styles.modalBtnText, { color: '#fff' }]}>Save</Text>
+                  ? <ActivityIndicator color={colors.accentText} size="small" />
+                  : <Text style={[styles.modalBtnText, { color: colors.accentText }]}>Save</Text>
                 }
               </TouchableOpacity>
             </View>
@@ -561,7 +561,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: 50,
     minWidth: 160,
   },
-  mainBtnText: { color: '#fff', fontSize: typography.fontSize.md, fontWeight: '700' },
+  mainBtnText: { color: colors.accentText, fontSize: typography.fontSize.md, fontWeight: '700' },
   runningBtns: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
   secondaryBtn: {
     flexDirection: 'row',
@@ -586,7 +586,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
   },
   modalCard: {

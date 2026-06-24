@@ -316,7 +316,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     overflow: 'hidden',
   },
   plateLabel: {
-    color: '#fff',
+    color: colors.accentText,
     fontSize: 8,
     fontWeight: '800',
     transform: [{ rotate: '90deg' }],

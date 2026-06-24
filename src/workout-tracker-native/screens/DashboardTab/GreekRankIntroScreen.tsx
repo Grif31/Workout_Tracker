@@ -11,6 +11,7 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { DashboardStackParamsList } from '../../navigation/types';
 import { GREEK_RANKS } from '../ProfileTab/GreekRankScreen';
+import { GREEK_RANK_COLORS } from '../../constants/greekRanks';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'GreekRankIntro'>;
 
@@ -118,7 +119,7 @@ export default function GreekRankIntroScreen({ navigation }: Props) {
           <Text style={s.sectionTitle}>Rank Rewards</Text>
           <Text style={s.bodyText}>
             Each rank unlocks a unique profile frame you can equip on your avatar. Reach{' '}
-            <Text style={{ color: '#9C27B0', fontWeight: '700' }}>Olympian</Text>
+            <Text style={{ color: GREEK_RANK_COLORS['Olympian'], fontWeight: '700' }}>Olympian</Text>
             {' '}and above to unlock animated frames that pulse with your rank colour.
           </Text>
         </Animated.View>

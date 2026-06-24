@@ -461,7 +461,7 @@ export default function TrainingScreen({ navigation }: Props) {
                               : { backgroundColor: 'transparent', borderColor: colors.border },
                           ]}
                         >
-                          {done && <Ionicons name="checkmark" size={11} color="#fff" />}
+                          {done && <Ionicons name="checkmark" size={11} color={colors.accentText} />}
                         </View>
                       );
                     })}
@@ -573,7 +573,7 @@ export default function TrainingScreen({ navigation }: Props) {
                 // Premium: zone bar with MEV/MAV markers
                 const freeFillPct = (sets / maxSets) * 100;
                 const zoneColor = sets >= std.mrv ? colors.danger
-                  : sets > std.mav ? '#FF9500'
+                  : sets > std.mav ? colors.warmup
                   : sets >= std.mev ? colors.accent
                   : sets > 0 ? colors.textSecondary
                   : colors.border;
@@ -872,7 +872,7 @@ export default function TrainingScreen({ navigation }: Props) {
                 }
                 disabled={coachGenerating}
               >
-                <Ionicons name={isPremium ? 'calendar-outline' : 'lock-closed-outline'} size={14} color="#fff" />
+                <Ionicons name={isPremium ? 'calendar-outline' : 'lock-closed-outline'} size={14} color={colors.accentText} />
                 <Text style={styles.coachGenBtnText}>{coachGenerating ? 'Generating…' : 'Generate Routine'}</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1026,7 +1026,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   tabBtn: { flex: 1, paddingVertical: spacing.sm, alignItems: 'center', backgroundColor: colors.surface },
   tabBtnActive: { backgroundColor: colors.accent },
   tabBtnText: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textSecondary },
-  tabBtnTextActive: { color: '#fff' },
+  tabBtnTextActive: { color: colors.accentText },
 
   // Progress tab
   content: { padding: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xl },
@@ -1112,7 +1112,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   goalModalBtnText: { fontSize: 24, color: colors.accent, fontWeight: '600', lineHeight: 28 },
   goalModalValue: { fontSize: 48, fontWeight: '700', color: colors.textPrimary, minWidth: 60, textAlign: 'center' },
   goalModalDone: { backgroundColor: colors.accent, borderRadius: spacing.sm, padding: spacing.md, alignItems: 'center' },
-  goalModalDoneText: { color: '#fff', fontSize: typography.fontSize.md, fontWeight: '700' },
+  goalModalDoneText: { color: colors.accentText, fontSize: typography.fontSize.md, fontWeight: '700' },
   axisLabel: { fontSize: 9, color: colors.textSecondary },
 
   // Muscle volume card
@@ -1155,7 +1155,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   dayLabel: { fontSize: typography.fontSize.md, color: colors.textPrimary },
   logDayBtn: { backgroundColor: colors.save, borderRadius: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  logDayBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.sm },
+  logDayBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
   noRoutineText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontStyle: 'italic' },
 
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
@@ -1169,7 +1169,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   cardSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
   cardDesc: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
   logInlineBtn: { backgroundColor: colors.save, borderRadius: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  logInlineBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.sm },
+  logInlineBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
 
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
@@ -1193,10 +1193,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   coachChip: { paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: spacing.xs, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
   coachChipActive: { backgroundColor: colors.save, borderColor: colors.save },
   coachChipText: { fontSize: typography.fontSize.sm, fontWeight: '500', color: colors.textSecondary },
-  coachChipTextActive: { color: '#fff', fontWeight: '700' },
+  coachChipTextActive: { color: colors.accentText, fontWeight: '700' },
   coachBtnRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   coachGenBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, backgroundColor: colors.save, borderRadius: spacing.sm, paddingVertical: spacing.sm },
-  coachGenBtnText: { color: '#fff', fontWeight: '700', fontSize: typography.fontSize.sm },
+  coachGenBtnText: { color: colors.accentText, fontWeight: '700', fontSize: typography.fontSize.sm },
   coachGenBtnOutline: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderWidth: 1, borderColor: colors.save, borderRadius: spacing.sm, paddingVertical: spacing.sm },
   coachGenBtnOutlineText: { color: colors.save, fontWeight: '700', fontSize: typography.fontSize.sm },
 
@@ -1221,5 +1221,5 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   musclePickerBtn: {
     borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center',
   },
-  musclePickerBtnText: { color: '#fff', fontWeight: '700', fontSize: typography.fontSize.md },
+  musclePickerBtnText: { color: colors.accentText, fontWeight: '700', fontSize: typography.fontSize.md },
 });

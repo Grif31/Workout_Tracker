@@ -98,7 +98,7 @@ export default function CardioSetRow({ set, setIndex, onChangeField, onDelete }:
                   style={[styles.cardioUnitBtn, (set.distance_unit || 'km') === u && { backgroundColor: colors.accent }]}
                   onPress={() => onChangeField('distance_unit', u)}
                 >
-                  <Text style={{ fontSize: typography.fontSize.xs, fontWeight: '700', color: (set.distance_unit || 'km') === u ? '#fff' : colors.textSecondary }}>
+                  <Text style={{ fontSize: typography.fontSize.xs, fontWeight: '700', color: (set.distance_unit || 'km') === u ? colors.accentText : colors.textSecondary }}>
                     {u}
                   </Text>
                 </TouchableOpacity>
@@ -144,7 +144,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: spacing.sm,
     marginBottom: spacing.sm,
   },
-  swipeDeleteText: { color: '#fff', fontWeight: '700' },
+  swipeDeleteText: { color: colors.accentText, fontWeight: '700' },
 
   cardioSetBlock: {
     flexDirection: 'row',

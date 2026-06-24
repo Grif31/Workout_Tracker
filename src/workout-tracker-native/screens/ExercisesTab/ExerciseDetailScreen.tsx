@@ -336,7 +336,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           hideDataPoints={false}
           dataPointsColor={colors.save}
           startFillColor={colors.save}
-          endFillColor="#fff"
+          endFillColor={colors.background}
           startOpacity={0.15}
           endOpacity={0}
           areaChart
@@ -469,7 +469,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
                 style={[styles.rangeBtn, chartRange === r && { backgroundColor: colors.accent }]}
                 onPress={() => setChartRange(r)}
               >
-                <Text style={[styles.rangeBtnText, chartRange === r && { color: '#fff' }]}>{r}</Text>
+                <Text style={[styles.rangeBtnText, chartRange === r && { color: colors.accentText }]}>{r}</Text>
               </TouchableOpacity>
             ))}
           </View>

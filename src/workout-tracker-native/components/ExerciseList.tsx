@@ -338,7 +338,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     alignItems: 'center',
   },
   createBtnText: {
-    color: '#fff',
+    color: colors.accentText,
     fontWeight: '600',
     fontSize: typography.fontSize.sm,
   },
@@ -390,7 +390,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '500',
   },
   chipTextActive: {
-    color: '#fff',
+    color: colors.accentText,
     fontWeight: '700',
   },
   sectionHeader: {
@@ -454,7 +454,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     alignItems: 'center',
   },
   addPendingText: {
-    color: '#fff',
+    color: colors.accentText,
     fontWeight: '700',
     fontSize: typography.fontSize.md,
   },

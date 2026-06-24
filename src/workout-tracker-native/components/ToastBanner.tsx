@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
   },
   text: {
-    color: '#fff',
+    color: colors.accentText,
     fontSize: typography.fontSize.sm,
     fontWeight: '600',
     textAlign: 'center',

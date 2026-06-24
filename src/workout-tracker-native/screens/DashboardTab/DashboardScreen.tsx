@@ -204,9 +204,9 @@ const createCalStyles = (colors: Colors) => StyleSheet.create({
   numWorkout: { color: colors.accent },
   dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.accent, marginTop: 1 },
   cellSelected: { backgroundColor: colors.save, borderWidth: 1, borderColor: colors.save },
-  letterSelected: { color: '#fff' },
-  numSelected: { color: '#fff' },
-  dotSelected: { backgroundColor: '#fff' },
+  letterSelected: { color: colors.accentText },
+  numSelected: { color: colors.accentText },
+  dotSelected: { backgroundColor: colors.accentText },
 });
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
@@ -402,7 +402,7 @@ export default function DashboardScreen({ navigation }: Props) {
             style={styles.logButton}
             onPress={() => navigation.navigate('WorkoutLog', { prefill: undefined, editMode: false })}
           >
-            <Ionicons name="add-circle" size={20} color="#fff" />
+            <Ionicons name="add-circle" size={20} color={colors.accentText} />
             <Text style={styles.logButtonText}>Log Workout</Text>
           </TouchableOpacity>
 
@@ -507,9 +507,9 @@ export default function DashboardScreen({ navigation }: Props) {
                   <Text style={styles.workoutName}>{item.name || 'Workout'}</Text>
                   {!!item.pr_count && (
                     <View style={styles.prRow}>
-                      <LaurelBranch height={16} color="#C9A84C" />
+                      <LaurelBranch height={16} color="#FFD700" />
                       <Text style={styles.prText}>{item.pr_count} PR{item.pr_count > 1 ? 's' : ''}</Text>
-                      <LaurelBranch side="right" height={16} color="#C9A84C" />
+                      <LaurelBranch side="right" height={16} color="#FFD700" />
                     </View>
                   )}
                 </View>
@@ -612,9 +612,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.xs,
     borderTopWidth: 1,
-    borderTopColor: '#ffffff28',
+    borderTopColor: colors.accentText + '28',
   },
-  logButtonText: { color: '#fff', fontSize: typography.fontSize.md, fontWeight: '700' },
+  logButtonText: { color: colors.accentText, fontSize: typography.fontSize.md, fontWeight: '700' },
   trackButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -679,7 +679,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     backgroundColor: colors.save, borderRadius: spacing.xs,
     paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
   },
-  logDayBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.sm },
+  logDayBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
   noRoutineText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontStyle: 'italic' },
 
   // Workout cards
@@ -694,7 +694,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
   workoutName: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, flex: 1 },
   prRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: spacing.sm },
-  prText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: '#C9A84C' },
+  prText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: '#7A5800' },
   workoutDate: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginBottom: spacing.sm },
   statPills: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xs },
   pill: {
@@ -750,5 +750,5 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginTop: spacing.md, backgroundColor: colors.save,
     borderRadius: spacing.sm, padding: spacing.sm, alignItems: 'center',
   },
-  streakModalDoneText: { color: '#fff', fontWeight: '700', fontSize: typography.fontSize.sm },
+  streakModalDoneText: { color: colors.accentText, fontWeight: '700', fontSize: typography.fontSize.sm },
 });

@@ -1058,7 +1058,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         ListFooterComponent={(
           <View style={[styles.formSection, exercises.length === 0 && { marginTop: spacing.xl }]}>
             <TouchableOpacity style={styles.addExBtn} onPress={() => setExerciseModalVisible(true)}>
-              <Ionicons name="add" size={18} color="#fff" />
+              <Ionicons name="add" size={18} color={colors.accentText} />
               <Text style={styles.addExBtnText}>Add Exercise</Text>
             </TouchableOpacity>
 
@@ -1319,7 +1319,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                   }}
                   activeOpacity={0.75}
                 >
-                  <Text style={[styles.rpeItemNum, { color: selected ? '#fff' : colors.textPrimary }]}>
+                  <Text style={[styles.rpeItemNum, { color: selected ? colors.accentText : colors.textPrimary }]}>
                     {value}
                   </Text>
                   <Text style={[styles.rpeItemDesc, { color: selected ? 'rgba(255,255,255,0.85)' : colors.textSecondary }]}>
@@ -1386,7 +1386,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingVertical: spacing.sm,
     marginBottom: spacing.md,
   },
-  addExBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.md },
+  addExBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.md },
 
   discardBtn: {
     alignItems: 'center',

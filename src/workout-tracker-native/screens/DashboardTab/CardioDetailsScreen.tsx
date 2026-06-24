@@ -336,7 +336,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
                 <Text style={[styles.renameBtnText, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.renameSaveBtn, { backgroundColor: colors.accent }]} onPress={handleRename}>
-                <Text style={[styles.renameBtnText, { color: '#fff' }]}>Save</Text>
+                <Text style={[styles.renameBtnText, { color: colors.accentText }]}>Save</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -379,7 +379,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   activityBadgeText: {
     fontSize: typography.fontSize.sm,
     fontWeight: '700',
-    color: '#fff',
+    color: colors.accentText,
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
