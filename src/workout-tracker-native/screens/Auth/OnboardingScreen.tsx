@@ -163,6 +163,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
       try {
         await apiFetch('/api/ai/generate', {
           method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             days_per_week: answers.days,
             goal: answers.goal,

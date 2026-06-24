@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Alert,
   Modal,
   Image,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -23,6 +24,19 @@ import { muscleGroups } from '../../constants/muscleGroups';
 import { equipmentTypes } from '../../constants/equipmentTypes';
 import NewExerciseForm from '../../components/NewExerciseForm';
 import { apiFetch } from '../../utils/api';
+
+function SectionRule({ label }: { label: string }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm, marginTop: spacing.xs }}>
+      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
+      <Text style={{ fontSize: 10, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginHorizontal: spacing.sm }}>
+        {label}
+      </Text>
+      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
+    </View>
+  );
+}
 
 type Props = NativeStackScreenProps<ExercisesStackParamsList, 'ExercisesHome'>;
 
@@ -40,6 +54,7 @@ export default function ExercisesScreen({ navigation }: Props) {
   const [showMuscleDropdown, setShowMuscleDropdown] = useState(false);
   const [showEquipmentDropdown, setShowEquipmentDropdown] = useState(false);
   const [recentExercises, setRecentExercises] = useState<{ name: string; exercise_template_id: number | null }[]>([]);
+  const cardAnims = useRef<Animated.Value[]>([]);
 
   const muscleRef = useRef<TouchableOpacity>(null);
   const equipRef  = useRef<TouchableOpacity>(null);
@@ -84,6 +99,16 @@ export default function ExercisesScreen({ navigation }: Props) {
     fetchExercises();
     fetchRecentExercises();
   }, []));
+
+  useEffect(() => {
+    const total = Math.min(exerciseList.length, 20);
+    if (total === 0) return;
+    while (cardAnims.current.length < total) cardAnims.current.push(new Animated.Value(0));
+    cardAnims.current.slice(0, total).forEach(a => a.setValue(0));
+    Animated.stagger(35, cardAnims.current.slice(0, total).map(a =>
+      Animated.timing(a, { toValue: 1, duration: 250, useNativeDriver: true })
+    )).start();
+  }, [exerciseList]);
 
   const addNewExercise = async (name: string, muscle: string, equipment: string) => {
     try {
@@ -133,33 +158,44 @@ export default function ExercisesScreen({ navigation }: Props) {
       .slice(0, 5);
   }, [recentExercises, exerciseList, search, selectedMuscle, selectedEquipment]);
 
-  const renderExerciseCard = ({ item }: { item: Exercise }) => {
+  const renderExerciseCard = ({ item, animIndex }: { item: Exercise; animIndex?: number }) => {
     const isCardio = item.exercise_type === 'cardio';
+    const anim = animIndex !== undefined ? (cardAnims.current[animIndex] ?? new Animated.Value(1)) : new Animated.Value(1);
+    const primaryMuscle = isCardio ? 'Cardio' : (item.muscle_group?.split(',')[0]?.trim() ?? '');
     return (
-      <TouchableOpacity
-        style={styles.exerciseCard}
-        onPress={() => navigation.navigate('ExerciseDetail', {
-          exerciseId: item.id,
-          exerciseName: item.name,
-          equipment: item.equipment,
-          muscleGroup: isCardio ? 'Cardio' : item.muscle_group,
-          imageUrl: item.image_url,
-          isCustom: !!item.is_custom,
-        })}
-      >
-        {item.image_url ? (
-          <Image source={{ uri: item.image_url }} style={styles.exerciseImage} resizeMode="cover" />
-        ) : (
-          <View style={[styles.exerciseImage, styles.exerciseImagePlaceholder]}>
-            <Ionicons name={isCardio ? 'bicycle-outline' : 'barbell-outline'} size={26} color={colors.textSecondary} />
+      <Animated.View style={{ opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] }}>
+        <TouchableOpacity
+          style={styles.exerciseCard}
+          onPress={() => navigation.navigate('ExerciseDetail', {
+            exerciseId: item.id,
+            exerciseName: item.name,
+            equipment: item.equipment,
+            muscleGroup: isCardio ? 'Cardio' : item.muscle_group,
+            imageUrl: item.image_url,
+            isCustom: !!item.is_custom,
+          })}
+        >
+          {item.image_url ? (
+            <Image source={{ uri: item.image_url }} style={styles.exerciseImage} resizeMode="cover" />
+          ) : (
+            <View style={[styles.exerciseImage, styles.exerciseImagePlaceholder]}>
+              <Ionicons name={isCardio ? 'bicycle-outline' : 'barbell-outline'} size={26} color={colors.accent} />
+            </View>
+          )}
+          <View style={styles.exerciseCardRight}>
+            <View style={styles.exerciseNameRow}>
+              <Text style={styles.exerciseName}>{item.name}</Text>
+              {item.is_custom && <Ionicons name="person" size={13} color={colors.accent} />}
+            </View>
+            {!!item.equipment && <Text style={styles.exerciseEquipment}>{item.equipment}</Text>}
+            {!!primaryMuscle && (
+              <View style={styles.musclePill}>
+                <Text style={styles.musclePillText}>{primaryMuscle}</Text>
+              </View>
+            )}
           </View>
-        )}
-        <View style={styles.exerciseCardRight}>
-          <Text style={styles.exerciseName}>{item.name}</Text>
-          {!!item.equipment && <Text style={styles.exerciseEquipment}>{item.equipment}</Text>}
-          <Text style={styles.exerciseMuscle}>{isCardio ? 'Cardio' : item.muscle_group}</Text>
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </Animated.View>
     );
   };
 
@@ -271,7 +307,7 @@ export default function ExercisesScreen({ navigation }: Props) {
         <FlatList
           data={filteredExercises}
           keyExtractor={item => item.id.toString()}
-          renderItem={renderExerciseCard}
+          renderItem={({ item, index }) => renderExerciseCard({ item, animIndex: index })}
           ListEmptyComponent={<Text style={styles.emptyText}>No exercises found</Text>}
         />
       ) : (
@@ -281,9 +317,12 @@ export default function ExercisesScreen({ navigation }: Props) {
             { title: 'All Exercises', data: filteredExercises },
           ]}
           keyExtractor={item => item.id.toString()}
-          renderItem={({ item }) => renderExerciseCard({ item })}
+          renderItem={({ item, index, section }) => {
+            const flatIndex = section.title === 'Recent Exercises' ? index : recentFiltered.length + index;
+            return renderExerciseCard({ item, animIndex: flatIndex });
+          }}
           renderSectionHeader={({ section }) => (
-            <Text style={styles.sectionHeader}>{section.title}</Text>
+            <SectionRule label={section.title} />
           )}
           ListEmptyComponent={<Text style={styles.emptyText}>No exercises found</Text>}
         />
@@ -346,21 +385,25 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   dropdownItemActive: { backgroundColor: colors.accent },
   dropdownItemText: { fontSize: typography.fontSize.md, color: colors.textPrimary },
   dropdownItemTextActive: { color: '#fff', fontWeight: '600' },
-  sectionHeader: {
-    fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary,
-    textTransform: 'uppercase', letterSpacing: 0.8,
-    paddingVertical: spacing.xs, backgroundColor: colors.background,
-  },
   exerciseCard: {
     backgroundColor: colors.surface, borderRadius: spacing.sm,
     padding: spacing.md, marginBottom: spacing.sm,
     flexDirection: 'row', alignItems: 'center',
   },
   exerciseName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
-  exerciseMuscle: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 1 },
   exerciseEquipment: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 1 },
   exerciseImage: { width: 64, height: 64, borderRadius: radius.sm, marginRight: spacing.sm },
-  exerciseImagePlaceholder: { backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  exerciseImagePlaceholder: { backgroundColor: colors.accent + '18', alignItems: 'center', justifyContent: 'center' },
   exerciseCardRight: { flex: 1, justifyContent: 'center' },
+  exerciseNameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 1 },
+  musclePill: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.accent + '18',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 4,
+  },
+  musclePillText: { fontSize: 11, fontWeight: '600', color: colors.accent },
   emptyText: { textAlign: 'center', color: colors.textSecondary, marginVertical: spacing.sm, fontSize: typography.fontSize.sm },
 });

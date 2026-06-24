@@ -84,7 +84,7 @@ class RoutineSchema(_Base):
 # ── Workout Template ──────────────────────────────────────────
 class WorkoutTemplateSchema(_Base):
     name                  = fields.Str(required=True, validate=validate.Length(min=1))
-    exercise_template_ids = fields.List(fields.Int(), load_default=None)
+    exercise_template_ids = fields.List(fields.Int(), load_default=[])
 
 # ── Bodyweight ────────────────────────────────────────────────
 class BodyweightSchema(_Base):

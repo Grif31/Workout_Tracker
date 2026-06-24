@@ -388,8 +388,11 @@ export default function DashboardScreen({ navigation }: Props) {
               <View style={styles.topbar}>
                 <Text style={styles.title}>{getDailyGreeting()}, {user?.name || user?.username}</Text>
                 <TouchableOpacity onPress={() => setStreakModalVisible(true)} style={styles.streakBadge}>
-                  <Text style={styles.streakCount}>{displayStreakValue}{streakDisplay.unit}</Text>
-                  <Text style={styles.streakLabel}>{streakDisplay.label}</Text>
+                  <Text style={styles.streakEmoji}>🔥</Text>
+                  <View style={styles.streakText}>
+                    <Text style={styles.streakCount}>{displayStreakValue}{streakDisplay.unit}</Text>
+                    <Text style={styles.streakLabel}>{streakDisplay.label}</Text>
+                  </View>
                 </TouchableOpacity>
               </View>
             );
@@ -716,8 +719,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRightColor: colors.border,
     borderBottomColor: colors.border,
     borderLeftColor: colors.accent,
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
+  streakEmoji: { fontSize: 18, lineHeight: 22 },
+  streakText: { alignItems: 'flex-end' },
   streakCount: { fontSize: typography.fontSize.md, fontWeight: '800', color: colors.textPrimary },
   streakLabel: { fontSize: 10, fontWeight: '600', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
 

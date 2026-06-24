@@ -785,7 +785,9 @@ export default function CoachScreen({ navigation }: Props) {
                     <Text style={styles.cardName}>{t.name}</Text>
                     <Text style={styles.cardSub}>{t.exercises.length} exercise{t.exercises.length !== 1 ? 's' : ''}</Text>
                     {(() => {
-                      const muscles = [...new Set(t.exercises.map(ex => ex.muscle_group).filter(Boolean))].slice(0, 3);
+                      const muscles = [...new Set(
+                        t.exercises.flatMap(ex => ex.muscle_group ? ex.muscle_group.split(',').map(m => m.trim()) : []).filter(Boolean)
+                      )].slice(0, 3);
                       return muscles.length > 0 ? (
                         <View style={styles.muscleChipRow}>
                           {muscles.map(m => (

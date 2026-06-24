@@ -104,8 +104,6 @@ export default function ProfileScreen({ navigation }: Props) {
   const [totalWorkouts, setTotalWorkouts] = useState<number | null>(null);
   const loadingMoreRef              = useRef(false);
   const [stats, setStats]           = useState<ProfileStats | null>(null);
-  const statAnim                    = useRef(new Animated.Value(0)).current;
-  const [displayStats, setDisplayStats] = useState<ProfileStats | null>(null);
   const prCardAnims                 = useRef([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]).current;
   const [refreshing, setRefreshing] = useState(false);
   const [prs, setPrs]               = useState<PR[]>([]);
@@ -178,21 +176,6 @@ export default function ProfileScreen({ navigation }: Props) {
       if (rankRaw) setGreekRank(rankRaw);
     });
   }, []);
-
-  useEffect(() => {
-    if (!stats) return;
-    const id = statAnim.addListener(({ value }) => {
-      setDisplayStats({
-        total_workouts: Math.round(stats.total_workouts * value),
-        longest_streak: Math.round(stats.longest_streak * value),
-        current_streak: Math.round((stats.current_streak ?? 0) * value),
-        total_volume:   Math.round(stats.total_volume * value),
-      });
-    });
-    statAnim.setValue(0);
-    Animated.timing(statAnim, { toValue: 1, duration: 700, useNativeDriver: false }).start();
-    return () => statAnim.removeListener(id);
-  }, [stats]);
 
   useEffect(() => {
     if (prs.length === 0) return;
@@ -507,15 +490,15 @@ export default function ProfileScreen({ navigation }: Props) {
       <View style={[styles.statsRow, { borderTopColor: GREEK_RANK_COLORS[greekRank ?? 'Neophyte'] ?? '#888888' }]}>
         <View style={styles.statBox}>
           <Text style={styles.statLabel}>Workouts</Text>
-          <Text style={styles.statValue}>{displayStats?.total_workouts ?? '—'}</Text>
+          <Text style={styles.statValue}>{stats?.total_workouts ?? '—'}</Text>
         </View>
         <View style={[styles.statBox, styles.statBoxDivider]}>
           <Text style={styles.statLabel}>Longest Streak</Text>
-          <Text style={styles.statValue}>{displayStats ? `${displayStats.longest_streak}w` : '—'}</Text>
+          <Text style={styles.statValue}>{stats ? `${stats.longest_streak}w` : '—'}</Text>
         </View>
         <View style={styles.statBox}>
           <Text style={styles.statLabel}>Total Volume</Text>
-          <Text style={styles.statValue}>{displayStats ? `${fmtVolume(displayStats.total_volume)} ${unit}` : '—'}</Text>
+          <Text style={styles.statValue}>{stats ? `${fmtVolume(stats.total_volume)} ${unit}` : '—'}</Text>
         </View>
       </View>
 
@@ -543,7 +526,7 @@ export default function ProfileScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
     </View>
-  ), [styles, avatarSource, selectedFrame, displayName, user, stats, displayStats, greekRank, prs, pins, weightUnit, unit, colors]);
+  ), [styles, avatarSource, selectedFrame, displayName, user, stats, greekRank, prs, pins, weightUnit, unit, colors]);
 
   return (
     <>

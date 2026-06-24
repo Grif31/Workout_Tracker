@@ -171,6 +171,9 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   };
 
   const tabAnimRef = useRef(new Animated.Value(0)).current;
+  const contentFadeAnim = useRef(new Animated.Value(1)).current;
+  const statAnims = useRef(Array.from({ length: 7 }, () => new Animated.Value(0))).current;
+  const histAnims = useRef<Animated.Value[]>([]);
   const sliderX = tabAnimRef.interpolate({
     inputRange: [0, 1, 2],
     outputRange: [0, TAB_SLIDE_WIDTH, TAB_SLIDE_WIDTH * 2],
@@ -179,7 +182,10 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const handleTabChange = (tab: 'about' | 'stats' | 'history') => {
     const idx = tab === 'about' ? 0 : tab === 'stats' ? 1 : 2;
     Animated.timing(tabAnimRef, { toValue: idx, duration: 200, useNativeDriver: true }).start();
-    setActiveTab(tab);
+    Animated.timing(contentFadeAnim, { toValue: 0, duration: 100, useNativeDriver: true }).start(() => {
+      setActiveTab(tab);
+      Animated.timing(contentFadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+    });
   };
 
   const stripHtml = (html: string) => html.replace(/<[^>]*>/g, '').trim();
@@ -259,6 +265,25 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     setChart1RM(buildPoints(filtered, s => s.best1rm));
     setChartMaxWeight(buildPoints(filtered, s => s.bestWeight));
   }, [historySessions, chartRange, weightUnit]);
+
+  useEffect(() => {
+    if (activeTab !== 'stats' || stats.totalSets === 0) return;
+    statAnims.forEach(a => a.setValue(0));
+    Animated.stagger(50, statAnims.map(a =>
+      Animated.timing(a, { toValue: 1, duration: 260, useNativeDriver: true })
+    )).start();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'history') return;
+    const count = exerciseType === 'cardio' ? cardioHistory.length : historySessions.length;
+    if (count === 0) return;
+    while (histAnims.current.length < count) histAnims.current.push(new Animated.Value(0));
+    histAnims.current.slice(0, count).forEach(a => a.setValue(0));
+    Animated.stagger(60, histAnims.current.slice(0, count).map(a =>
+      Animated.timing(a, { toValue: 1, duration: 260, useNativeDriver: true })
+    )).start();
+  }, [activeTab, historySessions.length, cardioHistory.length]);
 
   const fetchWgerDetails = useCallback(async () => {
     if (!exerciseName) return;
@@ -376,25 +401,33 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     if (cardioHistory.length === 0) {
       return <Text style={styles.emptyText}>No recorded sessions for this exercise yet.</Text>;
     }
-    return cardioHistory.map((session, i) => (
-      <View key={i} style={styles.historySession}>
-        <View style={styles.historyMeta}>
-          <Text style={styles.historyLabel}>{session.workout_name}</Text>
-          <Text style={styles.historyDate}>{new Date(session.date).toLocaleDateString()}</Text>
-        </View>
-        {session.bouts.map((bout, j) => {
-          const parts: string[] = [];
-          if (bout.cardio_duration) parts.push(`${Math.round(bout.cardio_duration)} min`);
-          if (bout.distance) parts.push(`${bout.distance.toFixed(2)} ${bout.distance_unit}`);
-          if (bout.intensity) parts.push(`@ ${fmtPace(bout.intensity)}`);
-          return (
-            <Text key={j} style={styles.historyDetail}>
-              Bout {j + 1}: {parts.join(' · ')}
-            </Text>
-          );
-        })}
-      </View>
-    ));
+    return cardioHistory.map((session, i) => {
+      const anim = histAnims.current[i] ?? new Animated.Value(1);
+      return (
+        <Animated.View key={i} style={{ opacity: anim, transform: [{ translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
+          <View style={styles.historySession}>
+            <View style={styles.historyMeta}>
+              <Text style={styles.historyLabel}>{session.workout_name}</Text>
+              <Text style={styles.historyDate}>{new Date(session.date).toLocaleDateString()}</Text>
+            </View>
+            {session.bouts.map((bout, j) => {
+              const parts: string[] = [];
+              if (bout.cardio_duration) parts.push(`${Math.round(bout.cardio_duration)} min`);
+              if (bout.distance) parts.push(`${bout.distance.toFixed(2)} ${bout.distance_unit}`);
+              if (bout.intensity) parts.push(`@ ${fmtPace(bout.intensity)}`);
+              return (
+                <View key={j} style={styles.historySetRow}>
+                  <View style={styles.historySetBadge}>
+                    <Text style={styles.historySetBadgeText}>{j + 1}</Text>
+                  </View>
+                  <Text style={styles.historySetReps}>{parts.join(' · ')}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </Animated.View>
+      );
+    });
   };
 
   const renderStats = () => {
@@ -403,37 +436,30 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     if (stats.totalSets === 0) {
       return <Text style={styles.emptyText}>Log this exercise to see your stats.</Text>;
     }
+    const strengthStatData = [
+      { label: 'Estimated 1RM', value: stats.estimatedOneRepMax ? toDisplayWeight(stats.estimatedOneRepMax, weightUnit) : '—' },
+      { label: 'Max Weight',    value: stats.maxWeight ? toDisplayWeight(stats.maxWeight, weightUnit) : '—' },
+      { label: 'Max Vol / Set', value: stats.maxVolume ? toDisplayVolume(stats.maxVolume, weightUnit) : '—' },
+      { label: 'Max Reps',      value: String(stats.maxReps || '—') },
+      { label: 'Total Sets',    value: String(stats.totalSets) },
+      { label: 'Total Reps',    value: String(stats.totalReps) },
+      { label: 'Workouts',      value: String(stats.workoutCount) },
+    ];
     return (
       <View>
         <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Estimated 1RM</Text>
-            <Text style={styles.statValue}>{stats.estimatedOneRepMax ? toDisplayWeight(stats.estimatedOneRepMax, weightUnit) : '—'}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Max Weight</Text>
-            <Text style={styles.statValue}>{stats.maxWeight ? toDisplayWeight(stats.maxWeight, weightUnit) : '—'}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Max Volume / Set</Text>
-            <Text style={styles.statValue}>{stats.maxVolume ? toDisplayVolume(stats.maxVolume, weightUnit) : '—'}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Max Reps</Text>
-            <Text style={styles.statValue}>{stats.maxReps || '—'}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Total Sets</Text>
-            <Text style={styles.statValue}>{stats.totalSets}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Total Reps</Text>
-            <Text style={styles.statValue}>{stats.totalReps}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Workouts</Text>
-            <Text style={styles.statValue}>{stats.workoutCount}</Text>
-          </View>
+          {strengthStatData.map((s, i) => (
+            <Animated.View
+              key={i}
+              style={[styles.statCard, {
+                opacity: statAnims[i],
+                transform: [{ scale: statAnims[i].interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) }],
+              }]}
+            >
+              <Text style={styles.statLabel}>{s.label}</Text>
+              <Text style={styles.statValue}>{s.value}</Text>
+            </Animated.View>
+          ))}
         </View>
         {(chart1RM.length >= 2 || chartMaxWeight.length >= 2) && (
           <View style={styles.rangeToggle}>
@@ -460,22 +486,31 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     if (historySessions.length === 0) {
       return <Text style={styles.emptyText}>No recorded sets for this exercise yet.</Text>;
     }
-    return historySessions.map((session, i) => (
-      <View key={i} style={styles.historySession}>
-        <View style={styles.historyMeta}>
-          <Text style={styles.historyLabel}>{session.workoutName}</Text>
-          <Text style={styles.historyDate}>{new Date(session.date).toLocaleDateString()}</Text>
-        </View>
-        {session.notes ? (
-          <Text style={styles.historyNotes}>{session.notes}</Text>
-        ) : null}
-        {session.sets.map((set, j) => (
-          <Text key={j} style={styles.historyDetail}>
-            Set {j + 1}: {set.reps} reps{set.weight ? ` @ ${toDisplayWeight(set.weight, weightUnit)}` : ''}
-          </Text>
-        ))}
-      </View>
-    ));
+    return historySessions.map((session, i) => {
+      const anim = histAnims.current[i] ?? new Animated.Value(1);
+      return (
+        <Animated.View key={i} style={{ opacity: anim, transform: [{ translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
+          <View style={styles.historySession}>
+            <View style={styles.historyMeta}>
+              <Text style={styles.historyLabel}>{session.workoutName}</Text>
+              <Text style={styles.historyDate}>{new Date(session.date).toLocaleDateString()}</Text>
+            </View>
+            {session.notes ? (
+              <Text style={styles.historyNotes}>{session.notes}</Text>
+            ) : null}
+            {session.sets.map((set, j) => (
+              <View key={j} style={styles.historySetRow}>
+                <View style={styles.historySetBadge}>
+                  <Text style={styles.historySetBadgeText}>{j + 1}</Text>
+                </View>
+                <Text style={styles.historySetReps}>{set.reps} reps</Text>
+                {set.weight ? <Text style={styles.historySetWeight}>{toDisplayWeight(set.weight, weightUnit)}</Text> : null}
+              </View>
+            ))}
+          </View>
+        </Animated.View>
+      );
+    });
   };
 
   return (
@@ -518,64 +553,66 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           <Animated.View style={[styles.tabSlider, { backgroundColor: colors.accent, transform: [{ translateX: sliderX }] }]} />
         </View>
 
-        {activeTab === 'about' && (
-          <View style={styles.section}>
-            {/* Primary / secondary muscles */}
-            {!isCardio && (primaryMuscle || secondaryMuscles.length > 0) && (
-              <View style={styles.muscleRow}>
-                {primaryMuscle ? (
-                  <View style={styles.musclePill}>
-                    <Text style={styles.musclePillLabel}>Primary</Text>
-                    <Text style={styles.musclePillValue}>{primaryMuscle}</Text>
-                  </View>
-                ) : null}
-                {secondaryMuscles.length > 0 && (
-                  <View style={styles.musclePill}>
-                    <Text style={styles.musclePillLabel}>Also Works</Text>
-                    <Text style={styles.musclePillValue}>{secondaryMuscles.join(', ')}</Text>
-                  </View>
-                )}
-              </View>
-            )}
+        <Animated.View style={{ opacity: contentFadeAnim }}>
+          {activeTab === 'about' && (
+            <View style={styles.section}>
+              {/* Primary / secondary muscles */}
+              {!isCardio && (primaryMuscle || secondaryMuscles.length > 0) && (
+                <View style={styles.muscleRow}>
+                  {primaryMuscle ? (
+                    <View style={styles.musclePill}>
+                      <Text style={styles.musclePillLabel}>Primary</Text>
+                      <Text style={styles.musclePillValue}>{primaryMuscle}</Text>
+                    </View>
+                  ) : null}
+                  {secondaryMuscles.length > 0 && (
+                    <View style={styles.musclePill}>
+                      <Text style={styles.musclePillLabel}>Also Works</Text>
+                      <Text style={styles.musclePillValue}>{secondaryMuscles.join(', ')}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
 
-            {!isCardio && (
-              <View style={styles.diagramCard}>
-                <MuscleDiagram muscles={muscles} />
-              </View>
-            )}
+              {!isCardio && (
+                <View style={styles.diagramCard}>
+                  <MuscleDiagram muscles={muscles} />
+                </View>
+              )}
 
-            <View style={styles.card}>
-              <Text style={styles.sectionTitle}>How to perform</Text>
-              <Text style={styles.body}>{exerciseDescription}</Text>
+              <View style={styles.card}>
+                <Text style={styles.sectionTitle}>How to perform</Text>
+                <Text style={styles.body}>{exerciseDescription}</Text>
+              </View>
+
+              {isCustom && (
+                <TouchableOpacity
+                  style={styles.deleteBtn}
+                  onPress={handleDelete}
+                  disabled={deleting}
+                  activeOpacity={0.7}
+                >
+                  {deleting
+                    ? <ActivityIndicator size="small" color={colors.danger} />
+                    : <Text style={[styles.deleteBtnText, { color: colors.danger }]}>Delete Exercise</Text>
+                  }
+                </TouchableOpacity>
+              )}
             </View>
+          )}
 
-            {isCustom && (
-              <TouchableOpacity
-                style={styles.deleteBtn}
-                onPress={handleDelete}
-                disabled={deleting}
-                activeOpacity={0.7}
-              >
-                {deleting
-                  ? <ActivityIndicator size="small" color={colors.danger} />
-                  : <Text style={[styles.deleteBtnText, { color: colors.danger }]}>Delete Exercise</Text>
-                }
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+          {activeTab === 'stats' && (
+            <View style={styles.section}>
+              {renderStats()}
+            </View>
+          )}
 
-        {activeTab === 'stats' && (
-          <View style={styles.section}>
-            {renderStats()}
-          </View>
-        )}
-
-        {activeTab === 'history' && (
-          <View style={styles.section}>
-            {renderHistory()}
-          </View>
-        )}
+          {activeTab === 'history' && (
+            <View style={styles.section}>
+              {renderHistory()}
+            </View>
+          )}
+        </Animated.View>
         </View>
       </ScrollView>
     </View>
@@ -732,8 +769,14 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexBasis: '31%',
     flexGrow: 1,
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderTopWidth: 2,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderLeftWidth: 1,
+    borderTopColor: colors.accent,
+    borderRightColor: colors.border,
+    borderBottomColor: colors.border,
+    borderLeftColor: colors.border,
     borderRadius: 10,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.sm,
@@ -790,6 +833,25 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.sm,
     paddingVertical: 2,
   },
+  historySetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    gap: spacing.sm,
+  },
+  historySetBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historySetBadgeText: { fontSize: 11, fontWeight: '700', color: colors.textSecondary },
+  historySetReps: { flex: 1, fontSize: typography.fontSize.sm, color: colors.textPrimary, fontWeight: '500' },
+  historySetWeight: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
   rangeToggle: {
     flexDirection: 'row',
     gap: spacing.xs,
