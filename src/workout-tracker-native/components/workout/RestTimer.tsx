@@ -78,7 +78,7 @@ export default function RestTimer({
             style={[styles.restPauseBtn, { backgroundColor: colors.accent }]}
             onPress={restPaused ? onResume : onPause}
           >
-            <Ionicons name={restPaused ? 'play' : 'pause'} size={26} color="#fff" />
+            <Ionicons name={restPaused ? 'play' : 'pause'} size={26} color={colors.accentText} />
           </TouchableOpacity>
 
           <TouchableOpacity

@@ -214,7 +214,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
         )}
 
         {greekRank && !isFirstWorkout && (() => {
-          const rankColor = GREEK_RANK_COLORS[greekRank] ?? '#888';
+          const rankColor = GREEK_RANK_COLORS[greekRank] ?? '#888888';
           const rankIdx = GREEK_RANKS.findIndex(r => r.name === greekRank);
           const nextRank = GREEK_RANKS[rankIdx + 1];
           return (

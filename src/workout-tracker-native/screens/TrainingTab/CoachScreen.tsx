@@ -20,6 +20,7 @@ import { TrainingStackParamsList } from '../../navigation/types';
 import { muscleGroups } from '../../constants/muscleGroups';
 import CoachCharacter from './CoachCharacter';
 import CoachProfileModal, { CoachProfile } from './CoachProfileModal';
+import { GREEK_RANK_COLORS } from '../../constants/greekRanks';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'TrainingHome'>;
 
@@ -70,15 +71,6 @@ const SCORE_RANK_COLORS: Record<string, string> = {
   Legend:       '#FFD700',
 };
 
-const GREEK_RANK_COLORS: Record<string, string> = {
-  Neophyte: '#888888',
-  Athlete:  '#4A9EFF',
-  Hero:     '#4CAF50',
-  Demigod:  '#FF9800',
-  Olympian: '#9C27B0',
-  Titan:    '#E53935',
-  'Aretē':  '#FFD700',
-};
 
 const INSIGHT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   deload:      'battery-half-outline',
@@ -530,7 +522,7 @@ export default function CoachScreen({ navigation }: Props) {
 
   const renderInsightCard = (ins: Insight, idx: number) => {
     const icon = INSIGHT_ICONS[ins.type] ?? 'bulb-outline';
-    const priorityColor = ins.priority === 'high' ? colors.danger : ins.priority === 'medium' ? '#FF9500' : colors.accent;
+    const priorityColor = ins.priority === 'high' ? colors.danger : ins.priority === 'medium' ? colors.warmup : colors.accent;
     const anim = insightAnimsRef.current[idx] ?? new Animated.Value(1);
     return (
       <Animated.View
@@ -581,7 +573,7 @@ export default function CoachScreen({ navigation }: Props) {
       const isTrained = sets > 0;
       const freeFillPct = (sets / maxSets) * 100;
       const zoneColor = sets >= std.mrv ? colors.danger
-        : sets > std.mav ? '#FF9500'
+        : sets > std.mav ? colors.warmup
         : sets >= std.mev ? colors.accent
         : sets > 0 ? colors.textSecondary
         : colors.border;
@@ -890,7 +882,7 @@ export default function CoachScreen({ navigation }: Props) {
               >
                 <Ionicons
                   name={isPremium ? (aiGenerating ? 'hourglass-outline' : 'list-outline') : 'lock-closed-outline'}
-                  size={16} color="#fff"
+                  size={16} color={colors.accentText}
                 />
                 <Text style={styles.generateBtnText}>
                   {aiGenerating ? 'Generating…' : 'Template'}
@@ -1049,7 +1041,7 @@ export default function CoachScreen({ navigation }: Props) {
                                 : { backgroundColor: 'transparent', borderColor: colors.border },
                             ]}
                           >
-                            {done && <Ionicons name="checkmark" size={11} color="#fff" />}
+                            {done && <Ionicons name="checkmark" size={11} color={colors.accentText} />}
                           </View>
                         );
                       })}
@@ -1369,7 +1361,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   goalModalBtnText: { fontSize: 24, color: colors.accent, fontWeight: '600', lineHeight: 28 },
   goalModalValue: { fontSize: 48, fontWeight: '700', color: colors.textPrimary, minWidth: 60, textAlign: 'center' },
   goalModalDone: { backgroundColor: colors.accent, borderRadius: spacing.sm, padding: spacing.md, alignItems: 'center' },
-  goalModalDoneText: { color: '#fff', fontSize: typography.fontSize.md, fontWeight: '700' },
+  goalModalDoneText: { color: colors.accentText, fontSize: typography.fontSize.md, fontWeight: '700' },
   axisLabel: { fontSize: 9, color: colors.textSecondary },
 
   // Muscle volume card
@@ -1408,7 +1400,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   dayLabel: { fontSize: typography.fontSize.md, color: colors.textPrimary },
   dayExCount: { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
   logDayBtn: { backgroundColor: colors.save, borderRadius: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  logDayBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.sm },
+  logDayBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
   noRoutineText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontStyle: 'italic' },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   newTemplateBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
@@ -1431,7 +1423,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   routineCardName: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary, lineHeight: 18 },
   routineCardSub: { fontSize: 12, color: colors.textSecondary, marginTop: spacing.xs },
   logInlineBtn: { backgroundColor: colors.save, borderRadius: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  logInlineBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.sm },
+  logInlineBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
   muscleChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 5 },
   templateMuscleChip: { backgroundColor: colors.accent + '20', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   templateMuscleChipText: { fontSize: 11, color: colors.accent, fontWeight: '600' },
@@ -1459,7 +1451,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   generateTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.8 },
   generateBtnRow: { flexDirection: 'row', gap: spacing.sm },
   generateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.save, borderRadius: spacing.sm, paddingVertical: 12 },
-  generateBtnText: { color: '#fff', fontWeight: '700', fontSize: typography.fontSize.sm },
+  generateBtnText: { color: colors.accentText, fontWeight: '700', fontSize: typography.fontSize.sm },
   generateBtnOutline: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.save, borderRadius: spacing.sm, paddingVertical: 12 },
   generateBtnOutlineText: { color: colors.save, fontWeight: '700', fontSize: typography.fontSize.sm },
   insightsSection: { gap: spacing.sm },
@@ -1489,7 +1481,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   upgradeBannerTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: 2 },
   upgradeBannerSub: { fontSize: typography.fontSize.xs, color: colors.textSecondary, lineHeight: 16 },
   upgradeBannerCTA: { backgroundColor: colors.accent, borderRadius: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  upgradeBannerCTAText: { color: '#fff', fontSize: typography.fontSize.sm, fontWeight: '700' },
+  upgradeBannerCTAText: { color: colors.accentText, fontSize: typography.fontSize.sm, fontWeight: '700' },
 
   // ── Shared modals ───────────────────────────────────────────────────────────
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
@@ -1508,5 +1500,5 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   muscleChip: { paddingHorizontal: spacing.sm, paddingVertical: 7, borderRadius: radius.full, borderWidth: 1 },
   muscleChipText: { fontSize: typography.fontSize.sm, fontWeight: '600' },
   musclePickerBtn: { borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
-  musclePickerBtnText: { color: '#fff', fontWeight: '700', fontSize: typography.fontSize.md },
+  musclePickerBtnText: { color: colors.accentText, fontWeight: '700', fontSize: typography.fontSize.md },
 });

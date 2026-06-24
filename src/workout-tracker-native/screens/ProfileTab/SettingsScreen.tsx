@@ -578,7 +578,7 @@ export default function SettingsScreen({ navigation }: Props) {
                     }}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.restTimerOptionText, selected && { color: '#fff' }]}>
+                    <Text style={[styles.restTimerOptionText, selected && { color: colors.accentText }]}>
                       {formatRestTimer(secs)}
                     </Text>
                   </TouchableOpacity>

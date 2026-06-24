@@ -219,7 +219,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
             />
             <View style={styles.actionRow}>
               <TouchableOpacity style={styles.logBtn} onPress={handleLog}>
-                <Ionicons name="play" size={14} color="#fff" />
+                <Ionicons name="play" size={14} color={colors.accentText} />
                 <Text style={styles.logBtnText}>Log Workout</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -333,7 +333,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  logBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.sm },
+  logBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
   saveBtn: {
     flex: 1,
     backgroundColor: colors.save,
@@ -341,7 +341,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingVertical: spacing.sm,
     alignItems: 'center',
   },
-  saveBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.sm },
+  saveBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
   sectionLabel: {
     fontSize: typography.fontSize.sm,
     fontWeight: '700',

@@ -307,7 +307,7 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
         disabled={saving}
       >
         {saving
-          ? <ActivityIndicator color="#fff" />
+          ? <ActivityIndicator color={colors.accentText} />
           : <Text style={styles.saveBtnText}>{isEditing ? 'Save Changes' : 'Save Routine'}</Text>
         }
       </TouchableOpacity>
@@ -439,7 +439,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   modeBtnActive: { backgroundColor: colors.accent },
   modeBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
-  modeBtnTextActive: { color: '#fff' },
+  modeBtnTextActive: { color: colors.accentText },
   templatePicker: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -490,8 +490,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.sm,
   },
   saveBtnDisabled: { opacity: 0.6 },
-  saveBtnText: { color: '#fff', fontSize: typography.fontSize.md, fontWeight: '600' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  saveBtnText: { color: colors.accentText, fontSize: typography.fontSize.md, fontWeight: '600' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalBox: {
     backgroundColor: colors.background,
     borderTopLeftRadius: spacing.md,

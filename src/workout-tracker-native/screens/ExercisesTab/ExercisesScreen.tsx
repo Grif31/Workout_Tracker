@@ -345,7 +345,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   dropdownItem: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   dropdownItemActive: { backgroundColor: colors.accent },
   dropdownItemText: { fontSize: typography.fontSize.md, color: colors.textPrimary },
-  dropdownItemTextActive: { color: '#fff', fontWeight: '600' },
+  dropdownItemTextActive: { color: colors.accentText, fontWeight: '600' },
   sectionHeader: {
     fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary,
     textTransform: 'uppercase', letterSpacing: 0.8,

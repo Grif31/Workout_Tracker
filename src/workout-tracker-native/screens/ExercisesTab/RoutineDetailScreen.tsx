@@ -307,7 +307,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
-  logBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.sm },
+  logBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
   exerciseRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

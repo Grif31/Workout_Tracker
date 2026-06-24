@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated } from 'react-native';
 import Svg, { Circle, Path, G, Rect, Text as SvgText } from 'react-native-svg';
+import { GREEK_RANK_COLORS } from '../../constants/greekRanks';
 
 type RankCfg = {
   color: string;
@@ -16,13 +17,13 @@ type RankCfg = {
 };
 
 const CONFIGS: Record<string, RankCfg> = {
-  Neophyte: { color: '#888888', headR: 9,  sw: 10, ww: 7,  hw: 9,  aw: 3,  lw: 4,  glow: false, crown: false, laurel: false },
-  Athlete:  { color: '#4A9EFF', headR: 10, sw: 13, ww: 9,  hw: 11, aw: 5,  lw: 5,  glow: false, crown: false, laurel: false },
-  Hero:     { color: '#4CAF50', headR: 10, sw: 16, ww: 11, hw: 13, aw: 7,  lw: 7,  glow: false, crown: false, laurel: false },
-  Demigod:  { color: '#FF9800', headR: 11, sw: 19, ww: 12, hw: 15, aw: 9,  lw: 9,  glow: false, crown: false, laurel: false },
-  Olympian: { color: '#9C27B0', headR: 11, sw: 21, ww: 13, hw: 16, aw: 10, lw: 10, glow: false, crown: false, laurel: true  },
-  Titan:    { color: '#E53935', headR: 12, sw: 23, ww: 14, hw: 17, aw: 11, lw: 11, glow: false, crown: false, laurel: true  },
-  'Aretē':  { color: '#FFD700', headR: 12, sw: 25, ww: 15, hw: 18, aw: 12, lw: 12, glow: true,  crown: true,  laurel: false },
+  Neophyte: { color: GREEK_RANK_COLORS.Neophyte, headR: 9,  sw: 10, ww: 7,  hw: 9,  aw: 3,  lw: 4,  glow: false, crown: false, laurel: false },
+  Athlete:  { color: GREEK_RANK_COLORS.Athlete,  headR: 10, sw: 13, ww: 9,  hw: 11, aw: 5,  lw: 5,  glow: false, crown: false, laurel: false },
+  Hero:     { color: GREEK_RANK_COLORS.Hero,     headR: 10, sw: 16, ww: 11, hw: 13, aw: 7,  lw: 7,  glow: false, crown: false, laurel: false },
+  Demigod:  { color: GREEK_RANK_COLORS.Demigod,  headR: 11, sw: 19, ww: 12, hw: 15, aw: 9,  lw: 9,  glow: false, crown: false, laurel: false },
+  Olympian: { color: GREEK_RANK_COLORS.Olympian, headR: 11, sw: 21, ww: 13, hw: 16, aw: 10, lw: 10, glow: false, crown: false, laurel: true  },
+  Titan:    { color: GREEK_RANK_COLORS.Titan,    headR: 12, sw: 23, ww: 14, hw: 17, aw: 11, lw: 11, glow: false, crown: false, laurel: true  },
+  'Aretē':  { color: GREEK_RANK_COLORS['Aretē'], headR: 12, sw: 25, ww: 15, hw: 18, aw: 12, lw: 12, glow: true,  crown: true,  laurel: false },
 };
 
 const RANK_SPEECH: Record<string, string> = {

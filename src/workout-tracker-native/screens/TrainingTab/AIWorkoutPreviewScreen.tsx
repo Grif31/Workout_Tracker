@@ -268,8 +268,8 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
           disabled={saving || regenerating}
         >
           {saving
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <Ionicons name="checkmark" size={18} color="#fff" />}
+            ? <ActivityIndicator size="small" color={colors.accentText} />
+            : <Ionicons name="checkmark" size={18} color={colors.accentText} />}
           <Text style={styles.saveBtnText}>
             {generateType === 'routine' ? 'Save Routine' : 'Save Template'}
           </Text>
@@ -404,5 +404,5 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: radius.md,
     paddingVertical: spacing.sm,
   },
-  saveBtnText: { color: '#fff', fontWeight: '700', fontSize: typography.fontSize.sm },
+  saveBtnText: { color: colors.accentText, fontWeight: '700', fontSize: typography.fontSize.sm },
 });

@@ -15,6 +15,7 @@ import { apiFetch } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import { TrainingStackParamsList } from '../../navigation/types';
 import MuscleDiagram from '../../components/MuscleDiagram';
+import { GREEK_RANK_COLORS } from '../../constants/greekRanks';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'StrengthScore'>;
 
@@ -27,14 +28,6 @@ function timeAgo(isoStr: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-const STRENGTH_RANK_COLORS: Record<string, string> = {
-  Noobie:       '#888888',
-  Beginner:     '#4A9EFF',
-  Intermediate: '#4CAF50',
-  Advanced:     '#FF9800',
-  Elite:        '#9C27B0',
-  Legend:       '#FFD700',
-};
 
 interface ScoreData {
   overall: number;
@@ -133,7 +126,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
     fetchScore().finally(() => setLoading(false));
   }, []));
 
-  const rankColor = scoreData ? (STRENGTH_RANK_COLORS[scoreData.overall_rank.label] ?? colors.accent) : colors.accent;
+  const rankColor = scoreData ? (GREEK_RANK_COLORS[scoreData.overall_rank.label] ?? colors.accent) : colors.accent;
 
   const chartData = history.map(h => ({ value: h.score }));
   const CHART_W = Dimensions.get('window').width - spacing.md * 2 - spacing.sm * 2;
@@ -203,11 +196,11 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               <MuscleDiagram
                 muscles={scoreData.muscle_groups.map(mg => mg.name)}
                 muscleColors={Object.fromEntries(
-                  scoreData.muscle_groups.map(mg => [mg.name, STRENGTH_RANK_COLORS[mg.rank.label] ?? colors.accent])
+                  scoreData.muscle_groups.map(mg => [mg.name, GREEK_RANK_COLORS[mg.rank.label] ?? colors.accent])
                 )}
               />
               <View style={styles.legendRow}>
-                {Object.entries(STRENGTH_RANK_COLORS).map(([label, color]) => (
+                {Object.entries(GREEK_RANK_COLORS).map(([label, color]) => (
                   <View key={label} style={styles.legendItem}>
                     <View style={[styles.legendDot, { backgroundColor: color }]} />
                     <Text style={[styles.legendLabel, { color: colors.textSecondary }]}>{label}</Text>
@@ -216,7 +209,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               </View>
               <View style={styles.card}>
                 {scoreData.muscle_groups.map((mg, i) => {
-                  const mgColor = STRENGTH_RANK_COLORS[mg.rank.label] ?? colors.accent;
+                  const mgColor = GREEK_RANK_COLORS[mg.rank.label] ?? colors.accent;
                   return (
                     <React.Fragment key={mg.name}>
                       {i > 0 && <View style={styles.divider} />}
@@ -250,7 +243,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               <Text style={styles.sectionTitle}>Big 6 Lifts</Text>
               <View style={styles.card}>
                 {scoreData.big6.map((ex, i) => {
-                  const exColor = ex.rank ? (STRENGTH_RANK_COLORS[ex.rank.label] ?? colors.accent) : colors.border;
+                  const exColor = ex.rank ? (GREEK_RANK_COLORS[ex.rank.label] ?? colors.accent) : colors.border;
                   return (
                     <React.Fragment key={ex.exercise}>
                       {i > 0 && <View style={styles.divider} />}
@@ -305,7 +298,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               <Text style={styles.sectionTitle}>More Lifts</Text>
               <View style={styles.card}>
                 {scoreData.supplemental.map((ex, i) => {
-                  const exColor = ex.rank ? (STRENGTH_RANK_COLORS[ex.rank.label] ?? colors.accent) : colors.border;
+                  const exColor = ex.rank ? (GREEK_RANK_COLORS[ex.rank.label] ?? colors.accent) : colors.border;
                   return (
                     <React.Fragment key={ex.exercise}>
                       {i > 0 && <View style={styles.divider} />}
@@ -376,7 +369,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setLiftModalVisible(false)}>
           <View style={styles.modalSheet}>
             {selectedLift?.has_data && (() => {
-              const liftColor = selectedLift.rank ? (STRENGTH_RANK_COLORS[selectedLift.rank.label] ?? colors.accent) : colors.accent;
+              const liftColor = selectedLift.rank ? (GREEK_RANK_COLORS[selectedLift.rank.label] ?? colors.accent) : colors.accent;
               const pct = selectedLift.percentile ?? 0;
 
               // Rank tier segments for the distribution bar
@@ -512,7 +505,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setGroupModalVisible(false)}>
           <View style={styles.modalSheet}>
             {selectedGroup && (() => {
-              const mgColor = STRENGTH_RANK_COLORS[(selectedGroup as any).rank?.label] ?? colors.accent;
+              const mgColor = GREEK_RANK_COLORS[(selectedGroup as any).rank?.label] ?? colors.accent;
               return (
                 <>
                   <View style={styles.modalHandle} />
@@ -559,7 +552,7 @@ function GateCard({ missingFields, navigation, colors, styles }: any) {
         style={[styles.gateBtn, { backgroundColor: colors.accent }]}
         onPress={() => (navigation as any).navigate('ProfileTab', { screen: 'EditProfile' })}
       >
-        <Text style={[styles.gateBtnText, { color: '#fff' }]}>Complete Profile</Text>
+        <Text style={[styles.gateBtnText, { color: colors.accentText }]}>Complete Profile</Text>
       </TouchableOpacity>
     </View>
   );

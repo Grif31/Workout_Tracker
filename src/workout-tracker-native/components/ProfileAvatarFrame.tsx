@@ -1,16 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { GREEK_RANK_COLORS } from '../constants/greekRanks';
 
-export const GREEK_RANK_COLORS: Record<string, string> = {
-  Neophyte: '#888888',
-  Athlete:  '#4A9EFF',
-  Hero:     '#4CAF50',
-  Demigod:  '#FF9800',
-  Olympian: '#9C27B0',
-  Titan:    '#E53935',
-  'Aretē':  '#FFD700',
-};
+export { GREEK_RANK_COLORS };
 
 const RANK_FRAMES: Record<string, {
   strokeWidth: number;

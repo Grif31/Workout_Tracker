@@ -216,7 +216,7 @@ function AnimatedTabBar({ state, navigation, colors, pendingCount }: {
               {route.name === 'DashboardTab' && pendingCount > 0 ? (
                 <View>
                   <Ionicons name={config.icon} size={ICON_SIZE} color={color} />
-                  <View style={styles.syncDot} />
+                  <View style={[styles.syncDot, { backgroundColor: colors.warmup }]} />
                 </View>
               ) : (
                 <Ionicons name={config.icon} size={ICON_SIZE} color={color} />
@@ -336,7 +336,6 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#FF9500',
   },
   animBar: {
     flexDirection: 'row',

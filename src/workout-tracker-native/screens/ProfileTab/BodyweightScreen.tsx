@@ -125,7 +125,7 @@ export default function BodyweightScreen({ navigation }: Props) {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Bodyweight</Text>
         <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
-          <Ionicons name="add" size={22} color="#fff" />
+          <Ionicons name="add" size={22} color={colors.accentText} />
         </TouchableOpacity>
       </View>
 
@@ -158,7 +158,7 @@ export default function BodyweightScreen({ navigation }: Props) {
                     hideDataPoints={false}
                     dataPointsColor={colors.save}
                     startFillColor={colors.save}
-                    endFillColor="#fff"
+                    endFillColor={colors.background}
                     startOpacity={0.2}
                     endOpacity={0}
                     areaChart
@@ -306,7 +306,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -342,5 +342,5 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   cancelBtn: { backgroundColor: colors.surface },
   cancelBtnText: { color: colors.textPrimary, fontWeight: '600' },
   saveBtn: { backgroundColor: colors.save },
-  saveBtnText: { color: '#fff', fontWeight: '600' },
+  saveBtnText: { color: colors.accentText, fontWeight: '600' },
 });

@@ -23,7 +23,7 @@ type Props = {
   color?: string;
 };
 
-export function LaurelBranch({ side = 'left', height = 24, color = '#C9A84C' }: Props) {
+export function LaurelBranch({ side = 'left', height = 24, color = '#FFD700' }: Props) {
   const width = Math.round(height * VB_W / VB_H);
   const mirror = side === 'right' ? `translate(${VB_W}, 0) scale(-1, 1)` : undefined;
   return (

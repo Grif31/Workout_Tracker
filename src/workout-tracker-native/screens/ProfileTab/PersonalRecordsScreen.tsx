@@ -258,9 +258,9 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
               <View style={styles.rowRight}>
                 {isTop ? (
                   <View style={styles.topValueRow}>
-                    <LaurelBranch height={18} color="#C9A84C" />
-                    <Text style={[styles.rowValue, { color: '#C9A84C' }]}>{item.reps} reps</Text>
-                    <LaurelBranch side="right" height={18} color="#C9A84C" />
+                    <LaurelBranch height={18} color="#FFD700" />
+                    <Text style={[styles.rowValue, { color: '#7A5800' }]}>{item.reps} reps</Text>
+                    <LaurelBranch side="right" height={18} color="#FFD700" />
                   </View>
                 ) : (
                   <Text style={styles.rowValue}>{item.reps} reps</Text>
@@ -395,9 +395,9 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                 <View style={styles.rowRight}>
                   {index === 0 ? (
                     <View style={styles.topValueRow}>
-                      <LaurelBranch height={18} color="#C9A84C" />
-                      <Text style={[styles.rowValue, { color: '#C9A84C' }]}>{item.value} {unit}</Text>
-                      <LaurelBranch side="right" height={18} color="#C9A84C" />
+                      <LaurelBranch height={18} color="#FFD700" />
+                      <Text style={[styles.rowValue, { color: '#7A5800' }]}>{item.value} {unit}</Text>
+                      <LaurelBranch side="right" height={18} color="#FFD700" />
                     </View>
                   ) : (
                     <Text style={styles.rowValue}>{item.value} {unit}</Text>
@@ -433,9 +433,9 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                 <View style={styles.rowRight}>
                   {index === 0 ? (
                     <View style={styles.topValueRow}>
-                      <LaurelBranch height={18} color="#C9A84C" />
-                      <Text style={[styles.rowValue, { color: '#C9A84C' }]}>{item.value} {unit}</Text>
-                      <LaurelBranch side="right" height={18} color="#C9A84C" />
+                      <LaurelBranch height={18} color="#FFD700" />
+                      <Text style={[styles.rowValue, { color: '#7A5800' }]}>{item.value} {unit}</Text>
+                      <LaurelBranch side="right" height={18} color="#FFD700" />
                     </View>
                   ) : (
                     <Text style={styles.rowValue}>{item.value} {unit}</Text>
@@ -493,11 +493,11 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                 <View style={styles.rowRight}>
                   {isTop ? (
                     <View style={styles.topValueRow}>
-                      <LaurelBranch height={18} color="#C9A84C" />
-                      <Text style={[styles.rowValue, { color: '#C9A84C' }]}>
+                      <LaurelBranch height={18} color="#FFD700" />
+                      <Text style={[styles.rowValue, { color: '#7A5800' }]}>
                         {item.kind === 'time' ? fmtTime(item.time_min) : `${item.distance_km.toFixed(2)} km`}
                       </Text>
-                      <LaurelBranch side="right" height={18} color="#C9A84C" />
+                      <LaurelBranch side="right" height={18} color="#FFD700" />
                     </View>
                   ) : (
                     <Text style={styles.rowValue}>

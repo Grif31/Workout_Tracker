@@ -173,7 +173,7 @@ export default function EditProfileScreen({ navigation }: Props) {
               style={[styles.chip, active && { backgroundColor: colors.accent, borderColor: colors.accent }]}
               onPress={() => setGender(val)}
             >
-              <Text style={[styles.chipText, active && { color: '#fff' }]}>{label}</Text>
+              <Text style={[styles.chipText, active && { color: colors.accentText }]}>{label}</Text>
             </TouchableOpacity>
           );
         })}
@@ -253,7 +253,7 @@ export default function EditProfileScreen({ navigation }: Props) {
         disabled={saving}
       >
         {saving
-          ? <ActivityIndicator color="#fff" />
+          ? <ActivityIndicator color={colors.accentText} />
           : <Text style={styles.saveButtonText}>Save Changes</Text>
         }
       </TouchableOpacity>
@@ -285,7 +285,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: '#eee',
+    backgroundColor: colors.border,
   },
   avatarHint: {
     color: colors.save,
@@ -333,7 +333,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   pickerModal: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
   pickerCard: {
     backgroundColor: colors.surface,
@@ -396,7 +396,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.sm,
   },
   unitBtnTextActive: {
-    color: '#fff',
+    color: colors.accentText,
   },
   saveButton: {
     backgroundColor: colors.save,
@@ -409,7 +409,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     opacity: 0.6,
   },
   saveButtonText: {
-    color: '#fff',
+    color: colors.accentText,
     fontSize: typography.fontSize.md,
     fontWeight: '600',
   },

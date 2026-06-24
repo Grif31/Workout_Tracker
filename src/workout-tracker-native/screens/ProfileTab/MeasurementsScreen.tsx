@@ -298,7 +298,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
                   hideDataPoints={false}
                   dataPointsColor={colors.accent}
                   startFillColor={colors.accent}
-                  endFillColor="#fff"
+                  endFillColor={colors.background}
                   startOpacity={0.2}
                   endOpacity={0}
                   areaChart
@@ -431,8 +431,8 @@ export default function MeasurementsScreen({ navigation }: Props) {
           disabled={uploading}
         >
           {uploading
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <Ionicons name="add" size={28} color="#fff" />
+            ? <ActivityIndicator size="small" color={colors.accentText} />
+            : <Ionicons name="add" size={28} color={colors.accentText} />
           }
         </TouchableOpacity>
       </View>
@@ -456,7 +456,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
         <Text style={styles.headerTitle}>Measurements</Text>
         {activeTab !== 'photos' ? (
           <TouchableOpacity style={[styles.addBtn, { backgroundColor: colors.accent }]} onPress={handleAdd}>
-            <Ionicons name="add" size={22} color="#fff" />
+            <Ionicons name="add" size={22} color={colors.accentText} />
           </TouchableOpacity>
         ) : (
           <View style={{ width: 36 }} />
@@ -562,7 +562,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
       <Modal visible={!!selectedPhoto} transparent animationType="fade">
         <View style={styles.photoModalOverlay}>
           <TouchableOpacity style={styles.photoModalClose} onPress={() => setSelectedPhoto(null)}>
-            <Ionicons name="close" size={28} color="#fff" />
+            <Ionicons name="close" size={28} color={colors.accentText} />
           </TouchableOpacity>
           {selectedPhoto && (
             <>
@@ -578,7 +578,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
                 style={[styles.photoDeleteBtn, { backgroundColor: colors.danger }]}
                 onPress={() => handleDeletePhoto(selectedPhoto)}
               >
-                <Ionicons name="trash-outline" size={18} color="#fff" />
+                <Ionicons name="trash-outline" size={18} color={colors.accentText} />
                 <Text style={styles.photoDeleteText}>Delete</Text>
               </TouchableOpacity>
             </>
@@ -768,7 +768,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   cancelBtn: { backgroundColor: colors.background },
   cancelBtnText: { color: colors.textPrimary, fontWeight: '600' },
-  saveBtnText: { color: '#fff', fontWeight: '600' },
+  saveBtnText: { color: colors.accentText, fontWeight: '600' },
 
   photoModalOverlay: {
     flex: 1,
@@ -788,7 +788,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     height: SCREEN_WIDTH * 1.2,
   },
   photoNotes: {
-    color: '#fff',
+    color: colors.accentText,
     fontSize: typography.fontSize.sm,
     marginTop: spacing.sm,
     textAlign: 'center',
@@ -804,7 +804,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: spacing.sm,
   },
   photoDeleteText: {
-    color: '#fff',
+    color: colors.accentText,
     fontWeight: '600',
     fontSize: typography.fontSize.md,
   },

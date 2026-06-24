@@ -339,7 +339,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderLeftWidth: 20,
     borderTopColor: 'transparent',
     borderBottomColor: 'transparent',
-    borderLeftColor: '#fff',
+    borderLeftColor: colors.accentText,
   },
   timerResetText: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
 

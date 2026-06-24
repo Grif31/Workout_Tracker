@@ -16,7 +16,7 @@ import { type RootStackParamsList } from '../navigation/types';
 type Props = NativeStackScreenProps<RootStackParamsList, 'Paywall'>;
 
 // Paywall brand palette — fixed premium look, independent of app theme
-const GOLD        = '#C9A84C';
+const GOLD        = '#FFD700';
 const GOLD_LIGHT  = '#E8D5A3';
 const GOLD_DIM    = '#7A6235';
 const PW_BG       = '#0A0806';

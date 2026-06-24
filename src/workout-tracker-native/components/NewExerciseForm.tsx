@@ -117,7 +117,7 @@ export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups
 const createStyles = (colors: Colors) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },

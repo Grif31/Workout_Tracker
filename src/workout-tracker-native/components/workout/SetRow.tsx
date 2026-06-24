@@ -126,7 +126,7 @@ export default function SetRow({
           <Ionicons
             name={isDone ? 'checkmark-circle' : 'ellipse-outline'}
             size={30}
-            color={isDone ? '#34C759' : colors.textSecondary}
+            color={isDone ? colors.save : colors.textSecondary}
           />
         </TouchableOpacity>
       </View>

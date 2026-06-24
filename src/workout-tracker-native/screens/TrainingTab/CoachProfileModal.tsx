@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView,
   TextInput, KeyboardAvoidingView, Platform,
@@ -68,7 +68,7 @@ const chipStyles = StyleSheet.create({
 
 export default function CoachProfileModal({ visible, onClose, onSave }: Props) {
   const { colors } = useTheme();
-  const styles = createStyles(colors);
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [profile, setProfile] = useState<CoachProfile>(DEFAULT_PROFILE);
 
   useEffect(() => {
@@ -274,5 +274,5 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     backgroundColor: colors.accent, borderRadius: radius.md,
     padding: spacing.md, alignItems: 'center', marginTop: spacing.lg,
   },
-  saveBlockText: { color: '#fff', fontSize: typography.fontSize.md, fontWeight: '700' },
+  saveBlockText: { color: colors.accentText, fontSize: typography.fontSize.md, fontWeight: '700' },
 });
