@@ -2,15 +2,20 @@
 Seed script for ExerciseTemplate data.
 
 Usage:
-    python seed.py              # Seeds exercises and fetches images from Wger API
+    python seed.py              # Seeds exercises and fetches images from ExerciseDB
     python seed.py --no-images  # Seeds exercises without fetching images
     python seed.py --backfill       # Update existing exercises that have no image_url
-    python seed.py --refetch-images # Re-fetch wger images for ALL exercises (overwrites existing)
+    python seed.py --refetch-images # Re-fetch ExerciseDB images for ALL exercises (overwrites existing)
     python seed.py --update-muscles # Update muscle_group on existing exercises to match list
+
+Requires RAPIDAPI_KEY in environment (from RapidAPI ExerciseDB subscription).
+A local cache (exercisedb_cache.json) is written after the first fetch to avoid
+burning API calls on repeat runs. Delete it to force a fresh fetch.
 """
 
 import sys
 import os
+import json
 import argparse
 import time
 
@@ -20,7 +25,24 @@ from app import create_app
 from models import db, ExerciseTemplate, ExerciseMuscleMapping
 from utils.strength_standards import SEEDER_STANDARDS_MAP
 
-WGER_BASE = 'https://wger.de'
+EXERCISEDB_BASE      = 'https://exercisedb.p.rapidapi.com'
+EXERCISEDB_CACHE     = os.path.join(os.path.dirname(__file__), 'exercisedb_cache.json')
+CACHE_MAX_AGE_DAYS   = 30
+
+# Map our equipment labels → ExerciseDB equipment strings
+_EQUIP_MAP = {
+    'barbell':       'barbell',
+    'dumbbell':      'dumbbell',
+    'cable':         'cable',
+    'machine':       'leverage machine',
+    'bodyweight':    'body weight',
+    'smith machine': 'smith machine',
+    'ez bar':        'ez barbell',
+    'kettlebell':    'kettlebell',
+    'weighted':      'weighted',
+}
+
+_exercisedb_cache: list | None = None
 
 # ---------------------------------------------------------------------------
 # Exercise data: (name, muscle_group, equipment)
@@ -214,130 +236,111 @@ CARDIO_EXERCISES = [
 ]
 
 
-_wger_cache: tuple | None = None  # (name_to_base, base_to_image)
-
-# Map our equipment labels to words wger uses in exercise names
-_EQUIP_WORDS = {
-    'barbell':      ['barbell'],
-    'dumbbell':     ['dumbbell'],
-    'cable':        ['cable'],
-    'machine':      ['machine'],
-    'bodyweight':   ['bodyweight'],
-    'smith machine':['smith'],
-    'ez bar':       ['ez', 'curl'],
-    'kettlebell':   ['kettlebell'],
-}
-
-
 def _normalize(text: str) -> list:
     """Lowercase word list, no punctuation."""
     import re
     return re.sub(r'[^a-z0-9 ]', ' ', text.lower()).split()
 
 
-def _load_wger() -> tuple:
+def _load_exercisedb() -> list:
     """
-    Download all wger English exercise names and images in bulk (≈24 requests).
-    Returns (name_to_base, base_to_image).
-      name_to_base  : {lowercase_name: base_id}
-      base_to_image : {base_id: absolute_image_url}
+    Load all ExerciseDB exercises. Writes a local JSON cache after the first
+    API fetch; subsequent calls within CACHE_MAX_AGE_DAYS use the cache.
+    Returns list of dicts with keys: name, equipment, bodyPart, target, gifUrl.
     """
-    global _wger_cache
-    if _wger_cache is not None:
-        return _wger_cache
+    global _exercisedb_cache
+    if _exercisedb_cache is not None:
+        return _exercisedb_cache
 
-    import urllib.request, json
+    if os.path.exists(EXERCISEDB_CACHE):
+        age_days = (time.time() - os.path.getmtime(EXERCISEDB_CACHE)) / 86400
+        if age_days < CACHE_MAX_AGE_DAYS:
+            with open(EXERCISEDB_CACHE) as f:
+                _exercisedb_cache = json.load(f)
+            print(f'Using cached ExerciseDB data ({len(_exercisedb_cache)} exercises).\n', flush=True)
+            return _exercisedb_cache
 
-    name_to_base: dict[str, int] = {}
-    base_to_image: dict[int, str] = {}
+    import requests as http_requests
+    api_key = os.environ.get('RAPIDAPI_KEY', '')
+    if not api_key:
+        raise RuntimeError(
+            'RAPIDAPI_KEY not set. Add it to .env or export it before running seed.py.'
+        )
 
-    print('Fetching wger exercise names...', flush=True)
-    offset, limit = 0, 100
+    headers = {
+        'X-RapidAPI-Key':  api_key,
+        'X-RapidAPI-Host': 'exercisedb.p.rapidapi.com',
+    }
+    exercises: list = []
+    limit, offset = 1300, 0
+    print('Fetching all ExerciseDB exercises (this may take a moment)…', flush=True)
     while True:
-        url = (f'{WGER_BASE}/api/v2/exercise-translation/'
-               f'?format=json&language=2&limit={limit}&offset={offset}')
-        with urllib.request.urlopen(url, timeout=15) as r:
-            data = json.loads(r.read().decode())
-        for item in data['results']:
-            name_to_base[item['name'].lower().strip()] = item['exercise']
-        if not data.get('next'):
+        url = f'{EXERCISEDB_BASE}/exercises?limit={limit}&offset={offset}'
+        resp = http_requests.get(url, headers=headers, timeout=30)
+        resp.raise_for_status()
+        batch = resp.json()
+        if not batch:
+            break
+        for item in batch:
+            exercises.append({
+                'name':      item['name'],
+                'equipment': item['equipment'],
+                'bodyPart':  item['bodyPart'],
+                'target':    item['target'],
+                'gifUrl':    f'https://v2.exercisedb.io/image/{item["id"]}',
+            })
+        if len(batch) < limit:
             break
         offset += limit
-        time.sleep(0.15)
-    print(f'  {len(name_to_base)} exercise names loaded.', flush=True)
+        time.sleep(0.5)
 
-    print('Fetching wger exercise images...', flush=True)
-    offset = 0
-    while True:
-        url = (f'{WGER_BASE}/api/v2/exerciseimage/'
-               f'?format=json&limit={limit}&offset={offset}')
-        with urllib.request.urlopen(url, timeout=15) as r:
-            data = json.loads(r.read().decode())
-        for item in data['results']:
-            bid = item['exercise']
-            img = item.get('image', '')
-            if not img:
-                continue
-            url_abs = img if img.startswith('http') else f'{WGER_BASE}{img}'
-            # Prefer is_main; keep first otherwise
-            if bid not in base_to_image or item.get('is_main'):
-                base_to_image[bid] = url_abs
-        if not data.get('next'):
-            break
-        offset += limit
-        time.sleep(0.15)
-    print(f'  {len(base_to_image)} exercise images loaded.\n', flush=True)
-
-    _wger_cache = (name_to_base, base_to_image)
-    return _wger_cache
+    print(f'  {len(exercises)} exercises fetched.', flush=True)
+    with open(EXERCISEDB_CACHE, 'w') as f:
+        json.dump(exercises, f)
+    print(f'  Saved to {EXERCISEDB_CACHE}\n', flush=True)
+    _exercisedb_cache = exercises
+    return exercises
 
 
-def _find_wger_image(name: str, equipment: str = '') -> str | None:
-    """Find the best wger diagram for the given exercise name + equipment.
+def _find_exercisedb_image(name: str, equipment: str = '') -> str | None:
+    """Return the best-matching ExerciseDB GIF URL for name + equipment."""
+    all_ex = _load_exercisedb()
+    base_words = set(_normalize(name))
+    if not base_words:
+        return None
+    target_equip = _EQUIP_MAP.get(equipment.lower(), '')
+    threshold = len(base_words) * 0.7
 
-    Ranks candidates by (base_word_hits, equip_word_hits) so exercise identity
-    is the primary key and equipment specificity is the tie-breaker. An entry
-    like 'Barbell Bench Press' will beat 'Bench Press' when equipment='Barbell'.
-    """
-    name_to_base, base_to_image = _load_wger()
+    def best_in(candidates: list) -> str | None:
+        top_score, top_gif = 0, None
+        for ex in candidates:
+            hits = len(base_words & set(_normalize(ex['name'])))
+            if hits > top_score:
+                top_score, top_gif = hits, ex['gifUrl']
+        return top_gif if top_score >= threshold else None
 
-    equip_lower = equipment.lower()
-    equip_words = _EQUIP_WORDS.get(equip_lower, [equip_lower] if equip_lower else [])
-    base_words = _normalize(name)
-
-    best_base = 0
-    best_equip = -1
-    best_bid = None
-
-    for wger_name, bid in name_to_base.items():
-        if bid not in base_to_image:
-            continue
-        cand = wger_name.lower()
-        base_hits = sum(1 for w in base_words if w in cand)
-        equip_hits = sum(1 for w in equip_words if w in cand)
-        if (base_hits, equip_hits) > (best_base, best_equip):
-            best_base = base_hits
-            best_equip = equip_hits
-            best_bid = bid
-
-    # Require at least 70% of base exercise words to match
-    if best_bid and best_base >= len(base_words) * 0.7:
-        return base_to_image[best_bid]
-    return None
+    # Pass 1: matching equipment only
+    if target_equip:
+        result = best_in([ex for ex in all_ex if ex['equipment'] == target_equip])
+        if result:
+            return result
+    # Pass 2: any equipment (fallback)
+    return best_in(all_ex)
 
 
 def fetch_image_url(name: str, equipment: str = '') -> str | None:
-    """Return a wger diagram URL for the given exercise, or None."""
+    """Return an ExerciseDB GIF URL for the given exercise, or None."""
     try:
-        return _find_wger_image(name, equipment)
-    except Exception:
+        return _find_exercisedb_image(name, equipment)
+    except Exception as exc:
+        print(f'  [warn] {exc}')
         return None
 
 
 def backfill_images():
     """Update all ExerciseTemplate rows that have no image_url using wger diagrams."""
     # Pre-load all wger data once
-    _load_wger()
+    _load_exercisedb()
 
     exercises = ExerciseTemplate.query.filter(
         (ExerciseTemplate.image_url == None) | (ExerciseTemplate.image_url == '')
@@ -361,7 +364,7 @@ def backfill_images():
 
 def refetch_images():
     """Re-fetch wger diagram URLs for ALL exercises, overwriting any existing image_url."""
-    _load_wger()
+    _load_exercisedb()
 
     exercises = ExerciseTemplate.query.filter(
         ExerciseTemplate.exercise_type != 'cardio'

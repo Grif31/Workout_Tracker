@@ -1,8 +1,23 @@
+import json
 import os
 import secrets
+import urllib.parse
 from functools import wraps
+import requests as http_requests
 from flask import Blueprint, Response, jsonify, request
 from models import db, ExerciseTemplate
+
+_OUR_TO_EXERCISEDB_EQUIP = {
+    'Barbell':       'barbell',
+    'Dumbbell':      'dumbbell',
+    'Cable':         'cable',
+    'Machine':       'leverage machine',
+    'Bodyweight':    'body weight',
+    'Smith Machine': 'smith machine',
+    'EZ Bar':        'ez barbell',
+    'Kettlebell':    'kettlebell',
+    'Weighted':      'weighted',
+}
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -128,6 +143,7 @@ ADMIN_PAGE = """<!DOCTYPE html>
       gap: 7px;
       padding: 8px 12px 12px;
       align-items: center;
+      flex-wrap: wrap;
     }
     .btn-save {
       background: #30D158; color: #000;
@@ -143,9 +159,40 @@ ADMIN_PAGE = """<!DOCTYPE html>
       cursor: pointer;
     }
     .btn-clear:hover { border-color: #FF453A; color: #FF453A; }
-    .status { font-size: 11px; margin-left: auto; }
+    .btn-suggest {
+      background: transparent; color: #0A84FF;
+      border: 1px solid #0A84FF; border-radius: 7px;
+      padding: 7px 12px; font-size: 12px; font-weight: 600;
+      cursor: pointer; margin-left: auto;
+    }
+    .btn-suggest:hover { background: rgba(10,132,255,0.1); }
+    .btn-suggest:disabled { opacity: 0.5; cursor: default; }
+    .status { font-size: 11px; }
     .status.ok  { color: #30D158; }
     .status.err { color: #FF453A; }
+    .suggest-row {
+      display: flex;
+      gap: 8px;
+      padding: 0 12px 10px;
+      overflow-x: auto;
+      flex-wrap: nowrap;
+    }
+    .sug-thumb {
+      flex-shrink: 0;
+      width: 90px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #2C2C2E;
+    }
+    .sug-thumb:hover { border-color: #30D158; }
+    .sug-thumb img { width: 90px; height: 70px; object-fit: cover; display: block; }
+    .sug-label {
+      font-size: 9px; color: #8E8E93; padding: 3px 4px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .no-suggest { font-size: 11px; color: #636366; padding: 4px 0; }
     .empty { text-align: center; padding: 80px 24px; color: #636366; grid-column: 1/-1; }
   </style>
 </head>
@@ -222,10 +269,12 @@ ADMIN_PAGE = """<!DOCTYPE html>
                  placeholder="Paste image URL to preview…"
                  value="${url}"
                  oninput="previewUrl(${ex.id}, this.value)">
+          <div class="suggest-row" id="suggest-${ex.id}"></div>
           <div class="btn-row">
             <button class="btn-save" onclick="save(${ex.id})">Save</button>
             <button class="btn-clear" onclick="doClear(${ex.id})">Clear</button>
             <span class="status" id="status-${ex.id}"></span>
+            <button class="btn-suggest" id="suggest-btn-${ex.id}" onclick="suggest(${ex.id})">Suggest</button>
           </div>
         </div>`;
     }
@@ -280,6 +329,44 @@ ADMIN_PAGE = """<!DOCTYPE html>
       }
     }
 
+    async function suggest(id) {
+      const btn = document.getElementById('suggest-btn-' + id);
+      const row = document.getElementById('suggest-' + id);
+      btn.textContent = 'Loading…';
+      btn.disabled = true;
+      row.innerHTML = '';
+      try {
+        const res = await fetch('/admin/exercises/' + id + '/suggest');
+        const data = await res.json();
+        if (!res.ok || !data.length) {
+          row.innerHTML = '<span class="no-suggest">No suggestions found.</span>';
+          return;
+        }
+        row.innerHTML = data.map(s => {
+          const safeGif = esc(s.gifUrl);
+          const safeEquip = esc(s.equipment);
+          const safeLabel = esc(s.name);
+          return `<div class="sug-thumb" title="${safeLabel}" onclick="selectSuggest(${id}, '${safeGif}')">
+            <img src="${safeGif}" loading="lazy">
+            <div class="sug-label">${safeEquip}</div>
+          </div>`;
+        }).join('');
+      } catch {
+        row.innerHTML = '<span class="no-suggest">Error loading suggestions.</span>';
+      } finally {
+        btn.textContent = 'Suggest';
+        btn.disabled = false;
+      }
+    }
+
+    function selectSuggest(id, url) {
+      const input = document.getElementById('input-' + id);
+      if (input) input.value = url;
+      previewUrl(id, url);
+      const row = document.getElementById('suggest-' + id);
+      if (row) row.innerHTML = '';
+    }
+
     init();
   </script>
 </body>
@@ -317,3 +404,40 @@ def update_exercise_image(exercise_id):
     ex.image_url = data.get('image_url') or None
     db.session.commit()
     return jsonify({'message': 'ok'})
+
+
+@admin_bp.get('/exercises/<int:exercise_id>/suggest')
+@_require_admin
+def suggest_exercise_image(exercise_id):
+    """Search ExerciseDB for GIFs matching this exercise's name + equipment."""
+    ex = db.session.get(ExerciseTemplate, exercise_id)
+    if not ex:
+        return jsonify({'message': 'Not found'}), 404
+
+    api_key = os.environ.get('RAPIDAPI_KEY', '')
+    if not api_key:
+        return jsonify({'message': 'RAPIDAPI_KEY not configured on server'}), 503
+
+    name_encoded = urllib.parse.quote(ex.name.lower())
+    url = f'https://exercisedb.p.rapidapi.com/exercises/name/{name_encoded}?limit=20'
+    headers = {
+        'X-RapidAPI-Key':  api_key,
+        'X-RapidAPI-Host': 'exercisedb.p.rapidapi.com',
+    }
+    try:
+        resp = http_requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as exc:
+        return jsonify({'message': str(exc)}), 502
+
+    target_equip = _OUR_TO_EXERCISEDB_EQUIP.get(ex.equipment or '', '').lower()
+
+    # Sort: equipment-matching results first
+    data.sort(key=lambda item: 0 if item['equipment'] == target_equip else 1)
+
+    results = [
+        {'name': item['name'], 'equipment': item['equipment'], 'gifUrl': f'https://v2.exercisedb.io/image/{item["id"]}'}
+        for item in data[:8]
+    ]
+    return jsonify(results)
