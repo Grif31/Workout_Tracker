@@ -24,13 +24,12 @@ HOMEPAGE = """<!DOCTYPE html>
       text-align: center;
       padding: 80px 24px 64px;
     }
-    .logo {
-      font-size: clamp(3rem, 10vw, 5rem);
-      font-weight: 800;
-      letter-spacing: -2px;
-      color: #F2F2F7;
+    .logo img {
+      height: clamp(56px, 12vw, 90px);
+      width: auto;
+      display: block;
+      margin: 0 auto;
     }
-    .logo-accent { color: #30D158; }
     .tagline {
       margin-top: 14px;
       font-size: 1.1rem;
@@ -177,7 +176,7 @@ HOMEPAGE = """<!DOCTYPE html>
 
   <!-- Header -->
   <header>
-    <div class="logo">Aret<span class="logo-accent">ē</span></div>
+    <div class="logo"><img src="/static/arete_name.png" alt="Aretē Fitness"></div>
     <p class="tagline">Pursue excellence. Track every rep.</p>
     <div class="cta-row">
       <a href="https://apps.apple.com/app/id6744030558" class="btn btn-green">Download on the App Store</a>

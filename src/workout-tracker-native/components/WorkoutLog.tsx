@@ -481,10 +481,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       if (res.ok) {
         const data = await res.json();
         setExerciseList(data);
-        setExerciseCache(data);
+        setExerciseCache(data, uid);
       }
     } catch {
-      const cached = await getExerciseCache();
+      const cached = await getExerciseCache(uid);
       if (cached) setExerciseList(cached as typeof exerciseList);
     }
   };

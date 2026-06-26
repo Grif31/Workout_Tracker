@@ -8,7 +8,7 @@
 - [x] Resolve EAS build errors
 - [x] Install dev build `.ipa` on iPhone
 - [x] Connect to local Metro server (`npx expo start`)
-- [ ] Confirm hot reload works
+- [x] Confirm hot reload works
 
 ### Day 3-5: Full Device Testing
 - [x] Test every screen end to end on your phone

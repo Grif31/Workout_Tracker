@@ -22,6 +22,7 @@ from routes.personal_record_routes import pr_bp
 from routes.ai_routes import ai_bp
 from routes.measurement_routes import measurement_bp
 from routes.legal_routes import legal_bp
+from routes.admin_routes import admin_bp
 from limiter import limiter
 from mail_ext import mail
 
@@ -121,6 +122,7 @@ def create_app(test_config=None):
     app.register_blueprint(ai_bp)
     app.register_blueprint(measurement_bp)
     app.register_blueprint(legal_bp)
+    app.register_blueprint(admin_bp)
 
     if not app.config.get('TESTING'):
         scheduler = BackgroundScheduler()
@@ -128,33 +130,35 @@ def create_app(test_config=None):
         scheduler.start()
 
     @app.cli.command('claim-custom-exercises')
-    @click.option('--user-id', required=True, type=int, help='User ID to assign orphaned custom exercises to')
+    @click.option('--user-id', required=True, type=int, help='User ID to assign exercises to')
+    @click.option('--from-user-id', default=None, type=int, help='Reassign from this user ID instead of searching NULL')
     @click.option('--apply', 'do_apply', is_flag=True, default=False, help='Write changes to DB (omit for dry run)')
-    def claim_custom_exercises(user_id, do_apply):
-        """Reassign pre-migration custom exercises (user_id=NULL, not in seed list) to a user."""
+    def claim_custom_exercises(user_id, from_user_id, do_apply):
+        """Reassign custom exercises to a user (from NULL orphans or from another user ID)."""
         from seed import EXERCISES, CARDIO_EXERCISES
         from models import ExerciseTemplate
 
-        # Build set of (name_lower, equipment_lower) pairs from the standard seed list
-        seeded = {
-            (name.lower().strip(), (equip or '').lower().strip())
-            for name, _muscle, equip in EXERCISES
-        } | {
-            (name.lower().strip(), (equip or '').lower().strip())
-            for name, equip in CARDIO_EXERCISES
-        }
-
-        orphans = ExerciseTemplate.query.filter(ExerciseTemplate.user_id.is_(None)).all()
-        to_claim = [
-            ex for ex in orphans
-            if (ex.name.lower().strip(), (ex.equipment or '').lower().strip()) not in seeded
-        ]
+        if from_user_id is not None:
+            to_claim = ExerciseTemplate.query.filter_by(user_id=from_user_id).all()
+        else:
+            seeded = {
+                (name.lower().strip(), (equip or '').lower().strip())
+                for name, _muscle, equip in EXERCISES
+            } | {
+                (name.lower().strip(), (equip or '').lower().strip())
+                for name, equip in CARDIO_EXERCISES
+            }
+            orphans = ExerciseTemplate.query.filter(ExerciseTemplate.user_id.is_(None)).all()
+            to_claim = [
+                ex for ex in orphans
+                if (ex.name.lower().strip(), (ex.equipment or '').lower().strip()) not in seeded
+            ]
 
         if not to_claim:
-            click.echo('No orphaned custom exercises found.')
+            click.echo('No custom exercises found.')
             return
 
-        click.echo(f'{"[DRY RUN] " if not do_apply else ""}Found {len(to_claim)} custom exercise(s) to claim for user {user_id}:')
+        click.echo(f'{"[DRY RUN] " if not do_apply else ""}Found {len(to_claim)} custom exercise(s) to assign to user {user_id}:')
         for ex in to_claim:
             click.echo(f'  • {ex.name} ({ex.equipment or "no equipment"})  [id={ex.id}]')
 

@@ -5,9 +5,13 @@ const TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 type CacheShape = { exercises: object[]; savedAt: number };
 
-export async function getExerciseCache(): Promise<object[] | null> {
+function cacheKey(userId?: number | string | null): string {
+  return userId ? `${CACHE_KEY}_${userId}` : CACHE_KEY;
+}
+
+export async function getExerciseCache(userId?: number | string | null): Promise<object[] | null> {
   try {
-    const raw = await AsyncStorage.getItem(CACHE_KEY);
+    const raw = await AsyncStorage.getItem(cacheKey(userId));
     if (!raw) return null;
     const { exercises, savedAt }: CacheShape = JSON.parse(raw);
     return Date.now() - savedAt < TTL_MS ? exercises : null;
@@ -16,9 +20,9 @@ export async function getExerciseCache(): Promise<object[] | null> {
   }
 }
 
-export async function setExerciseCache(exercises: object[]): Promise<void> {
+export async function setExerciseCache(exercises: object[], userId?: number | string | null): Promise<void> {
   await AsyncStorage.setItem(
-    CACHE_KEY,
+    cacheKey(userId),
     JSON.stringify({ exercises, savedAt: Date.now() }),
   );
 }
