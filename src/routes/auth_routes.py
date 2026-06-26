@@ -106,6 +106,36 @@ def forgot_password():
     return SAFE
 
 
+@auth_bp.post('/api/verify-otp')
+@limiter.limit('10 per hour')
+def verify_otp():
+    """Check an OTP is valid without consuming it or changing the password."""
+    data  = request.get_json(silent=True) or {}
+    email = data.get('email', '').strip().lower()
+    otp   = str(data.get('otp', '')).strip()
+    if not email or not otp:
+        return jsonify({'message': 'Email and code are required.'}), 400
+    user    = User.query.filter_by(email=email).first()
+    INVALID = jsonify({'message': 'Invalid or expired code.'}), 400
+    if not user or not user.reset_otp_hash or not user.reset_otp_expiry:
+        return INVALID
+    if datetime.now(timezone.utc) > user.reset_otp_expiry.replace(tzinfo=timezone.utc):
+        user.reset_otp_hash = user.reset_otp_expiry = None
+        user.reset_otp_attempts = 0
+        db.session.commit()
+        return INVALID
+    if (user.reset_otp_attempts or 0) >= 5:
+        user.reset_otp_hash = user.reset_otp_expiry = None
+        user.reset_otp_attempts = 0
+        db.session.commit()
+        return INVALID
+    if not secrets.compare_digest(hashlib.sha256(otp.encode()).hexdigest(), user.reset_otp_hash):
+        user.reset_otp_attempts = (user.reset_otp_attempts or 0) + 1
+        db.session.commit()
+        return INVALID
+    return jsonify({'message': 'Code verified.'}), 200
+
+
 @auth_bp.post('/api/reset-password')
 @limiter.limit('10 per hour')
 @validate_body(_reset_password_schema)

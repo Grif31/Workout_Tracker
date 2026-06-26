@@ -65,6 +65,7 @@ type Workout = {
   distance?: number;
   distance_unit?: string;
   pr_count?: number;
+  num_exercises?: number;
 };
 
 type ProfileStats = {
@@ -106,6 +107,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [totalWorkouts, setTotalWorkouts] = useState<number | null>(null);
   const loadingMoreRef              = useRef(false);
+  const hasMountedRef               = useRef(false);
   const [stats, setStats]           = useState<ProfileStats | null>(null);
   const prCardAnims                 = useRef([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]).current;
   const [refreshing, setRefreshing] = useState(false);
@@ -183,8 +185,8 @@ export default function ProfileScreen({ navigation }: Props) {
   useEffect(() => {
     if (prs.length === 0) return;
     prCardAnims.forEach(a => a.setValue(0));
-    Animated.stagger(60, prCardAnims.map(a =>
-      Animated.timing(a, { toValue: 1, duration: 280, useNativeDriver: true })
+    Animated.stagger(25, prCardAnims.map(a =>
+      Animated.timing(a, { toValue: 1, duration: 120, useNativeDriver: true })
     )).start();
   }, [prs]);
 
@@ -264,14 +266,14 @@ export default function ProfileScreen({ navigation }: Props) {
   };
 
   useFocusEffect(useCallback(() => {
+    if (hasMountedRef.current) {
+      prCardAnims.forEach(a => a.setValue(0));
+    }
+    hasMountedRef.current = true;
     fetchAll();
     AsyncStorage.getItem(`profile_frame_rank_${user?.id}`).then(val => {
       if (val) setSelectedFrame(val);
     });
-    prCardAnims.forEach(a => a.setValue(0));
-    Animated.stagger(60, prCardAnims.map(a =>
-      Animated.timing(a, { toValue: 1, duration: 280, useNativeDriver: true })
-    )).start();
   }, []));
 
   const handleRefresh = () => { setRefreshing(true); fetchAll(); };
@@ -582,13 +584,18 @@ export default function ProfileScreen({ navigation }: Props) {
                 )}
               </View>
             ) : (
-              (item.volume != null && item.volume > 0) && (
-                <View style={styles.pillRow}>
+              <View style={styles.pillRow}>
+                {!!item.num_exercises && (
+                  <View style={styles.pill}>
+                    <Text style={styles.pillText}>{item.num_exercises} exercise{item.num_exercises !== 1 ? 's' : ''}</Text>
+                  </View>
+                )}
+                {item.volume != null && item.volume > 0 && (
                   <View style={styles.pill}>
                     <Text style={styles.pillText}>{toDisplayVolume(item.volume, weightUnit)}</Text>
                   </View>
-                </View>
-              )
+                )}
+              </View>
             )}
           </TouchableOpacity>
         )}

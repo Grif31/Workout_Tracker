@@ -19,7 +19,6 @@ import { appCache } from '../../utils/appCache';
 import { TrainingStackParamsList } from '../../navigation/types';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { SCORE_RANK_COLORS } from '../../constants/strengthRanks';
-import ProfileAvatarFrame from '../../components/ProfileAvatarFrame';
 import CoachProfileModal, { CoachProfile, COACH_PROFILE_KEY } from './CoachProfileModal';
 import { GREEK_RANK_COLORS } from '../../constants/greekRanks';
 
@@ -118,7 +117,6 @@ export default function CoachScreen({ navigation }: Props) {
   const tabIndexAnim = useRef(new Animated.Value(0)).current;
   const contentOpacity = useRef(new Animated.Value(1)).current;
   const insightAnimsRef = useRef<Animated.Value[]>([]);
-  const charEntranceAnim = useRef(new Animated.Value(1)).current;
 
   // Mutable refs so the stable PanResponder can read current values without stale closure
   const activeTabRef = useRef<typeof TAB_NAMES[number]>('training');
@@ -159,14 +157,7 @@ export default function CoachScreen({ navigation }: Props) {
     }).start();
     Animated.timing(contentOpacity, { toValue: 0, duration: 80, useNativeDriver: true }).start(() => {
       setActiveTab(tab);
-      if (tab === 'coach') charEntranceAnim.setValue(0.85);
-      const fadeIn = Animated.timing(contentOpacity, { toValue: 1, duration: 180, useNativeDriver: true });
-      const charSpring = Animated.spring(charEntranceAnim, { toValue: 1, useNativeDriver: true, damping: 14, stiffness: 180 });
-      if (tab === 'coach') {
-        Animated.parallel([fadeIn, charSpring]).start();
-      } else {
-        fadeIn.start();
-      }
+      Animated.timing(contentOpacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
     });
   };
 
@@ -206,7 +197,6 @@ export default function CoachScreen({ navigation }: Props) {
 
   // ── Coach tab state ─────────────────────────────────────────────────────────
   const [greekRank, setGreekRank] = useState<string>('Neophyte');
-  const [selectedFrame, setSelectedFrame] = useState<string>('Neophyte');
   const [coachProfile, setCoachProfile] = useState<CoachProfile>(DEFAULT_PROFILE);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [insights, setInsights] = useState<Insight[]>([]);
@@ -220,12 +210,11 @@ export default function CoachScreen({ navigation }: Props) {
 
   // ── Initialization ──────────────────────────────────────────────────────────
   useEffect(() => {
-    AsyncStorage.multiGet([`${COACH_PROFILE_KEY}_${user?.id}`, `workout_weekly_goal_${user?.id}`, `profile_frame_rank_${user?.id}`]).then(([profileRaw, goalRaw, frameRaw]) => {
+    AsyncStorage.multiGet([`${COACH_PROFILE_KEY}_${user?.id}`, `workout_weekly_goal_${user?.id}`]).then(([profileRaw, goalRaw]) => {
       if (profileRaw[1]) {
         try { setCoachProfile({ ...DEFAULT_PROFILE, ...JSON.parse(profileRaw[1]) }); } catch { }
       }
       if (goalRaw[1]) setWeeklyGoal(parseInt(goalRaw[1], 10) || 3);
-      if (frameRaw[1]) setSelectedFrame(frameRaw[1]);
     });
     // Load cached insights
     AsyncStorage.getItem(COACH_INSIGHTS_KEY).then(raw => {
@@ -350,9 +339,7 @@ export default function CoachScreen({ navigation }: Props) {
     fetchStrengthScore();
     fetchMuscleGroupData();
     fetchThisWeekCount();
-    AsyncStorage.getItem(`profile_frame_rank_${user?.id}`).then(val => {
-      if (val) setSelectedFrame(val);
-    });
+
   }, [user?.active_routine_id, chartRange]));
 
   // ── Coach tab handlers ──────────────────────────────────────────────────────
@@ -849,9 +836,6 @@ export default function CoachScreen({ navigation }: Props) {
         <ScrollView contentContainerStyle={styles.coachContent}>
           {/* Character + rank header */}
           <View style={[styles.coachHero, { backgroundColor: rankColor + '18', borderColor: rankColor + '40' }]}>
-            <Animated.View style={{ transform: [{ scale: charEntranceAnim }] }}>
-              <ProfileAvatarFrame rankName={selectedFrame} size={120} avatarSize={100} />
-            </Animated.View>
             <View style={styles.coachHeroInfo}>
               <Text style={[styles.coachRankBadge, { color: rankColor }]}>{greekRank}</Text>
               <Text style={styles.coachGreeting}>
@@ -1296,7 +1280,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   tabRow: {
     flexDirection: 'row',
     marginHorizontal: spacing.md,
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },

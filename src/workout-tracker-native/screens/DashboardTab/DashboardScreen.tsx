@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import { LaurelBranch } from '../../components/LaurelWreath';
+import { PR_GOLD_TEXT } from '../../constants/prColors';
 
 function SectionRule({ label, style }: { label: string; style?: object }) {
   const { colors } = useTheme();
@@ -675,7 +676,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
   workoutName: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, flex: 1 },
   prRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: spacing.sm },
-  prText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: '#7A5800' },
+  prText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: PR_GOLD_TEXT },
   workoutDate: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginBottom: spacing.sm },
   statPills: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xs },
   pill: {

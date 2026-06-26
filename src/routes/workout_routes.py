@@ -330,6 +330,7 @@ def get_workouts():
             pagination = query.paginate(page=page, per_page=per_page, error_out=False)
             workout_ids = [w.id for w in pagination.items]
             pr_counts: dict[int, int] = {}
+            ex_counts: dict[int, int] = {}
             if workout_ids:
                 rows = (
                     db.session.query(Exercise.workout_id, func.count(PersonalRecord.id))
@@ -343,10 +344,18 @@ def get_workouts():
                     .all()
                 )
                 pr_counts = dict(rows)
+                ex_rows = (
+                    db.session.query(Exercise.workout_id, func.count(Exercise.id))
+                    .filter(Exercise.workout_id.in_(workout_ids))
+                    .group_by(Exercise.workout_id)
+                    .all()
+                )
+                ex_counts = dict(ex_rows)
             items = []
             for w in pagination.items:
                 d = w.to_dict(include_exercises=include_exercises)
                 d['pr_count'] = pr_counts.get(w.id, 0)
+                d['num_exercises'] = ex_counts.get(w.id, 0)
                 items.append(d)
             return jsonify({
                 'workouts': items,

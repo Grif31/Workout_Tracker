@@ -24,6 +24,7 @@ type Props = NativeStackScreenProps<AuthStackParamsList, 'ResetPassword'>;
 export default function ResetPasswordScreen({ navigation, route }: Props) {
   const { email } = route.params;
 
+  const [step,        setStep]        = useState<1 | 2>(1);
   const [otp,         setOtp]         = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPw,   setConfirmPw]   = useState('');
@@ -33,12 +34,38 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
   const [error,       setError]       = useState('');
   const [success,     setSuccess]     = useState(false);
 
-  const handleSubmit = async () => {
+  const handleVerify = async () => {
     setError('');
     if (otp.trim().length !== 6) {
       setError('Enter the 6-digit code from your email.');
       return;
     }
+    setLoading(true);
+    try {
+      const res = await apiFetch('/api/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp: otp.trim() }),
+      });
+      if (res.ok) {
+        setStep(2);
+      } else {
+        try {
+          const data = await res.json();
+          setError(data.message || 'Invalid or expired code.');
+        } catch {
+          setError('Invalid or expired code.');
+        }
+      }
+    } catch {
+      setError('Could not connect. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReset = async () => {
+    setError('');
     if (newPassword.length < 6) {
       setError('Password must be at least 6 characters.');
       return;
@@ -54,11 +81,15 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, otp: otp.trim(), new_password: newPassword }),
       });
-      const data = await res.json();
       if (res.ok) {
         setSuccess(true);
       } else {
-        setError(data.message || 'Something went wrong.');
+        try {
+          const data = await res.json();
+          setError(data.message || 'Something went wrong.');
+        } catch {
+          setError('Something went wrong.');
+        }
       }
     } catch {
       setError('Could not connect. Please check your connection.');
@@ -100,94 +131,114 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => step === 2 ? (setStep(1), setError('')) : navigation.goBack()}
+          >
             <Ionicons name="chevron-back" size={24} color={AUTH.text} />
           </TouchableOpacity>
 
           <View style={styles.iconCircle}>
-            <Ionicons name="shield-checkmark-outline" size={32} color={AUTH.accent} />
-          </View>
-
-          <Text style={styles.title}>Enter Your Code</Text>
-          <Text style={styles.subtitle}>
-            We sent a 6-digit code to{' '}
-            <Text style={{ color: AUTH.text, fontWeight: '600' }}>{email}</Text>.
-            {'\n'}Enter it below along with your new password.
-          </Text>
-
-          {!!error && <Text style={styles.errorText}>{error}</Text>}
-
-          {/* Read-only email display */}
-          <View style={[styles.inputWrapper, { marginBottom: 8 }]}>
-            <Ionicons name="mail-outline" size={18} color={AUTH.subtext} style={styles.inputIcon} />
-            <Text style={[styles.input, { color: AUTH.subtext, flex: 1 }]} numberOfLines={1}>{email}</Text>
-          </View>
-
-          {/* OTP */}
-          <View style={styles.inputWrapper}>
-            <Ionicons name="keypad-outline" size={18} color={AUTH.subtext} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="6-digit code"
-              placeholderTextColor={AUTH.placeholder}
-              keyboardType="number-pad"
-              keyboardAppearance="dark"
-              maxLength={6}
-              value={otp}
-              onChangeText={setOtp}
+            <Ionicons
+              name={step === 1 ? 'keypad-outline' : 'lock-closed-outline'}
+              size={32}
+              color={AUTH.accent}
             />
           </View>
 
-          {/* New password */}
-          <View style={styles.inputWrapper}>
-            <Ionicons name="lock-closed-outline" size={18} color={AUTH.subtext} style={styles.inputIcon} />
-            <TextInput
-              style={[styles.input, { flex: 1 }]}
-              placeholder="New password (min 6 chars)"
-              placeholderTextColor={AUTH.placeholder}
-              secureTextEntry={!showPw}
-              keyboardAppearance="dark"
-              value={newPassword}
-              onChangeText={setNewPassword}
-            />
-            <TouchableOpacity onPress={() => setShowPw(p => !p)} style={styles.eyeBtn}>
-              <Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={20} color={AUTH.subtext} />
-            </TouchableOpacity>
-          </View>
+          {step === 1 ? (
+            <>
+              <Text style={styles.title}>Enter Your Code</Text>
+              <Text style={styles.subtitle}>
+                We sent a 6-digit code to{' '}
+                <Text style={{ color: AUTH.text, fontWeight: '600' }}>{email}</Text>.
+              </Text>
 
-          {/* Confirm password */}
-          <View style={styles.inputWrapper}>
-            <Ionicons name="lock-closed-outline" size={18} color={AUTH.subtext} style={styles.inputIcon} />
-            <TextInput
-              style={[styles.input, { flex: 1 }]}
-              placeholder="Confirm new password"
-              placeholderTextColor={AUTH.placeholder}
-              secureTextEntry={!showConfirm}
-              keyboardAppearance="dark"
-              value={confirmPw}
-              onChangeText={setConfirmPw}
-            />
-            <TouchableOpacity onPress={() => setShowConfirm(p => !p)} style={styles.eyeBtn}>
-              <Ionicons name={showConfirm ? 'eye-off-outline' : 'eye-outline'} size={20} color={AUTH.subtext} />
-            </TouchableOpacity>
-          </View>
+              {!!error && <Text style={styles.errorText}>{error}</Text>}
 
-          <TouchableOpacity
-            style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
-            onPress={handleSubmit}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.primaryBtnText}>
-              {loading ? 'Resetting…' : 'Reset Password'}
-            </Text>
-          </TouchableOpacity>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="keypad-outline" size={18} color={AUTH.subtext} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="6-digit code"
+                  placeholderTextColor={AUTH.placeholder}
+                  keyboardType="number-pad"
+                  keyboardAppearance="dark"
+                  maxLength={6}
+                  value={otp}
+                  onChangeText={setOtp}
+                  autoFocus
+                />
+              </View>
 
-          {/* Resend — go back to enter email again */}
-          <TouchableOpacity style={styles.resendRow} onPress={() => navigation.goBack()}>
-            <Text style={styles.resendText}>Didn't receive a code? </Text>
-            <Text style={[styles.resendText, { color: AUTH.accent }]}>Resend</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
+                onPress={handleVerify}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.primaryBtnText}>
+                  {loading ? 'Verifying…' : 'Verify Code'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.resendRow} onPress={() => navigation.goBack()}>
+                <Text style={styles.resendText}>Didn't receive a code? </Text>
+                <Text style={[styles.resendText, { color: AUTH.accent }]}>Resend</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.title}>New Password</Text>
+              <Text style={styles.subtitle}>Choose a new password for your account.</Text>
+
+              {!!error && <Text style={styles.errorText}>{error}</Text>}
+
+              <View style={styles.inputWrapper}>
+                <Ionicons name="lock-closed-outline" size={18} color={AUTH.subtext} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  placeholder="New password (min 6 chars)"
+                  placeholderTextColor={AUTH.placeholder}
+                  secureTextEntry={!showPw}
+                  keyboardAppearance="dark"
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  autoFocus
+                />
+                <TouchableOpacity onPress={() => setShowPw(p => !p)} style={styles.eyeBtn}>
+                  <Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={20} color={AUTH.subtext} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.inputWrapper}>
+                <Ionicons name="lock-closed-outline" size={18} color={AUTH.subtext} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  placeholder="Confirm new password"
+                  placeholderTextColor={AUTH.placeholder}
+                  secureTextEntry={!showConfirm}
+                  keyboardAppearance="dark"
+                  value={confirmPw}
+                  onChangeText={setConfirmPw}
+                />
+                <TouchableOpacity onPress={() => setShowConfirm(p => !p)} style={styles.eyeBtn}>
+                  <Ionicons name={showConfirm ? 'eye-off-outline' : 'eye-outline'} size={20} color={AUTH.subtext} />
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
+                onPress={handleReset}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.primaryBtnText}>
+                  {loading ? 'Resetting…' : 'Reset Password'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -208,8 +259,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg, alignSelf: 'center',
   },
 
-  title:    { fontSize: typography.fontSize.xxl, fontWeight: '700', color: AUTH.text, marginBottom: 8, textAlign: 'center' },
-  subtitle: { fontSize: 15, color: AUTH.subtext, textAlign: 'center', lineHeight: 22, marginBottom: 36 },
+  title:     { fontSize: typography.fontSize.xxl, fontWeight: '700', color: AUTH.text, marginBottom: 8, textAlign: 'center' },
+  subtitle:  { fontSize: 15, color: AUTH.subtext, textAlign: 'center', lineHeight: 22, marginBottom: 36 },
   errorText: { color: AUTH.danger, fontSize: typography.fontSize.sm, marginBottom: 16, textAlign: 'center' },
 
   inputWrapper: {
@@ -225,6 +276,6 @@ const styles = StyleSheet.create({
   primaryBtnDisabled: { opacity: 0.6 },
   primaryBtnText:     { fontSize: typography.fontSize.md, fontWeight: '700', color: '#000' },
 
-  resendRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
+  resendRow:  { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
   resendText: { fontSize: typography.fontSize.sm, color: AUTH.subtext },
 });
