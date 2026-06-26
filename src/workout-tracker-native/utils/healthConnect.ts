@@ -30,9 +30,11 @@ export async function syncWorkoutToHealthConnect(params: {
   type: 'strength' | 'cardio';
   startDate: Date;
   endDate: Date;
+  userId?: number | string;
 }): Promise<void> {
   if (!HealthConnect) return;
-  if ((await AsyncStorage.getItem(HEALTH_SYNC_KEY)) !== 'true') return;
+  const key = params.userId ? `${HEALTH_SYNC_KEY}_${params.userId}` : HEALTH_SYNC_KEY;
+  if ((await AsyncStorage.getItem(key)) !== 'true') return;
   try {
     await HealthConnect.initialize();
     await HealthConnect.insertRecords([{

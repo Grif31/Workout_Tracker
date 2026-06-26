@@ -18,6 +18,7 @@ import { apiFetch } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import { TrainingStackParamsList } from '../../navigation/types';
 import { muscleGroups } from '../../constants/muscleGroups';
+import { SCORE_RANK_COLORS } from '../../constants/strengthRanks';
 import { radius } from '../../theme/spacing';
 
 
@@ -49,14 +50,6 @@ const MUSCLE_STANDARDS: Record<string, { mev: number; mav: number; mrv: number }
   Core:       { mev: 6,  mav: 20, mrv: 25 },
 };
 
-const SCORE_RANK_COLORS: Record<string, string> = {
-  Noobie:       '#888888',
-  Beginner:     '#4A9EFF',
-  Intermediate: '#4CAF50',
-  Advanced:     '#FF9800',
-  Elite:        '#9C27B0',
-  Legend:       '#FFD700',
-};
 
 function daysAgoStr(iso: string | undefined): string {
   if (!iso) return 'Never';
@@ -131,7 +124,7 @@ export default function TrainingScreen({ navigation }: Props) {
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
 
   useEffect(() => {
-    AsyncStorage.getItem('coach_settings').then(raw => {
+    AsyncStorage.getItem(`coach_settings_${user?.id}`).then(raw => {
       if (!raw) return;
       try {
         const s = JSON.parse(raw);
@@ -143,7 +136,7 @@ export default function TrainingScreen({ navigation }: Props) {
         if (s.avoid) setCoachAvoid(s.avoid);
       } catch { }
     });
-    AsyncStorage.getItem('workout_weekly_goal').then(raw => {
+    AsyncStorage.getItem(`workout_weekly_goal_${user?.id}`).then(raw => {
       if (raw) setWeeklyGoal(parseInt(raw, 10) || 3);
     });
   }, []);
@@ -151,11 +144,11 @@ export default function TrainingScreen({ navigation }: Props) {
   const updateWeeklyGoal = (delta: number) => {
     const next = Math.max(1, Math.min(7, weeklyGoal + delta));
     setWeeklyGoal(next);
-    AsyncStorage.setItem('workout_weekly_goal', String(next));
+    AsyncStorage.setItem(`workout_weekly_goal_${user?.id}`, String(next));
   };
 
   const saveCoachSettings = (days: number, goal: typeof coachGoal, exp: typeof coachExp) => {
-    AsyncStorage.setItem('coach_settings', JSON.stringify({
+    AsyncStorage.setItem(`coach_settings_${user?.id}`, JSON.stringify({
       days, goal, exp,
       equipment: coachEquipment, sessionLength: coachSessionLength, avoid: coachAvoid,
     }));

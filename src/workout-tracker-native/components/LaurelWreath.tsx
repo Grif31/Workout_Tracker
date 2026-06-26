@@ -1,5 +1,6 @@
 import React from 'react';
 import Svg, { G, Path } from 'react-native-svg';
+import { PR_GOLD } from '../constants/prColors';
 
 // Pointed oval leaf: tip up, 4px wide × 10px tall, centered at origin
 const LEAF = 'M 0 -5 Q 2 -2 2 0 Q 2 2 0 5 Q -2 2 -2 0 Q -2 -2 0 -5 Z';
@@ -23,7 +24,7 @@ type Props = {
   color?: string;
 };
 
-export function LaurelBranch({ side = 'left', height = 24, color = '#FFD700' }: Props) {
+export function LaurelBranch({ side = 'left', height = 24, color = PR_GOLD }: Props) {
   const width = Math.round(height * VB_W / VB_H);
   const mirror = side === 'right' ? `translate(${VB_W}, 0) scale(-1, 1)` : undefined;
   return (

@@ -14,10 +14,11 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
 import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
-import { GREEK_RANKS } from '../ProfileTab/GreekRankScreen';
+import { GREEK_RANKS } from '../../constants/greekRanks';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import WorkoutShareCard from '../../components/WorkoutShareCard';
 import { LaurelBranch } from '../../components/LaurelWreath';
+import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
 import { DashboardStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -56,7 +57,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
     });
 
   useEffect(() => {
-    AsyncStorage.multiGet(['greek_rank_cached', 'profile_frame_rank']).then(pairs => {
+    AsyncStorage.multiGet(['greek_rank_cached', `profile_frame_rank_${user?.id}`]).then(pairs => {
       const [rankRaw, frameRaw] = pairs.map(p => p[1]);
       if (rankRaw) setGreekRank(rankRaw);
       if (frameRaw) setSelectedFrame(frameRaw);
@@ -179,11 +180,11 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           <Animated.View entering={FadeInDown.delay(100).duration(400)} style={s.section}>
             {filteredPrs.length === 1 ? (
               <View style={s.prDropdownHeader}>
-                <LaurelBranch height={20} color="#7A5800" />
+                <LaurelBranch height={20} color={PR_GOLD_TEXT} />
                 <Text style={s.prText}>
                   {filteredPrs[0].exercise_name} — new {filteredPrs[0].pr_type.replace(/_/g, ' ')} PR!
                 </Text>
-                <LaurelBranch side="right" height={20} color="#7A5800" />
+                <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
               </View>
             ) : (
               <>
@@ -192,20 +193,20 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
                   onPress={() => setPrExpanded(v => !v)}
                   activeOpacity={0.8}
                 >
-                  <LaurelBranch height={20} color="#7A5800" />
+                  <LaurelBranch height={20} color={PR_GOLD_TEXT} />
                   <Text style={s.prText}>
                     {filteredPrs.length} Personal Records
                   </Text>
                   <Text style={s.prChevron}>{prExpanded ? '▲' : '▼'}</Text>
-                  <LaurelBranch side="right" height={20} color="#7A5800" />
+                  <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
                 </TouchableOpacity>
                 {prExpanded && filteredPrs.map((pr, i) => (
                   <View key={i} style={s.prBanner}>
-                    <LaurelBranch height={20} color="#7A5800" />
+                    <LaurelBranch height={20} color={PR_GOLD_TEXT} />
                     <Text style={s.prText}>
                       {pr.exercise_name} — new {pr.pr_type.replace(/_/g, ' ')} PR!
                     </Text>
-                    <LaurelBranch side="right" height={20} color="#7A5800" />
+                    <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
                   </View>
                 ))}
               </>
@@ -321,10 +322,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   headline: { fontSize: typography.fontSize.xl, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
   subline: { fontSize: 15, color: colors.textSecondary, marginTop: 4, textAlign: 'center' },
   section: { paddingHorizontal: 20, marginBottom: 20 },
-  prDropdownHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFD700', borderRadius: 10, padding: 12, marginBottom: 8 },
-  prBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFF3C4', borderRadius: 10, padding: 12, marginBottom: 8 },
-  prText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: '#7A5800', flex: 1 },
-  prChevron: { fontSize: 13, color: '#7A5800', marginLeft: 4 },
+  prDropdownHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: PR_GOLD, borderRadius: 10, padding: 12, marginBottom: 8 },
+  prBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: PR_GOLD_BG, borderRadius: 10, padding: 12, marginBottom: 8 },
+  prText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: PR_GOLD_TEXT, flex: 1 },
+  prChevron: { fontSize: 13, color: PR_GOLD_TEXT, marginLeft: 4 },
   statsRow: { flexDirection: 'row', gap: 10 },
   statBox: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: 14, alignItems: 'center' },
   statValue: { fontSize: typography.fontSize.xl, fontWeight: '700', color: colors.textPrimary },

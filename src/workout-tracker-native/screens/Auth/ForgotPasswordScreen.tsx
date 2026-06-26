@@ -41,8 +41,12 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
       if (res.ok) {
         navigation.navigate('ResetPassword', { email: email.trim() });
       } else {
-        const data = await res.json();
-        setError(data.message || 'Something went wrong.');
+        try {
+          const data = await res.json();
+          setError(data.message || 'Something went wrong.');
+        } catch {
+          setError(`Request failed (${res.status}). Please try again.`);
+        }
       }
     } catch {
       setError('Could not connect. Please check your connection.');

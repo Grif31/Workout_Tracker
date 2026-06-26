@@ -33,6 +33,7 @@ import { apiFetch, resolveMediaUrl } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
 import { LaurelBranch } from '../../components/LaurelWreath';
+import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
 
 function SectionRule({ label, style }: { label: string; style?: object }) {
   const { colors } = useTheme();
@@ -47,7 +48,7 @@ function SectionRule({ label, style }: { label: string; style?: object }) {
   );
 }
 
-const PR_PINS_KEY = '@pr_pins';
+const PR_PINS_BASE = '@pr_pins';
 const DEFAULT_PIN_COUNT = 3;
 const PAGE_SIZE = 20;
 
@@ -83,6 +84,8 @@ export default function ProfileScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const unit = user?.weight_unit || 'lbs';
+  const prPinsKey = `${PR_PINS_BASE}_${user?.id}`;
+  const weeklyGoalKey = `workout_weekly_goal_${user?.id}`;
 
   const [selectedFrame, setSelectedFrame] = useState('Neophyte');
   const [greekRank, setGreekRank]         = useState<string | null>(null);
@@ -138,7 +141,7 @@ export default function ProfileScreen({ navigation }: Props) {
     if (ps) setStats(ps);
     if (cachedPrs) {
       setPrs(cachedPrs);
-      AsyncStorage.getItem(PR_PINS_KEY).then(raw => {
+      AsyncStorage.getItem(prPinsKey).then(raw => {
         if (!raw) {
           const top = cachedPrs
             .filter(p => p.pr_type === 'max_weight')
@@ -159,7 +162,7 @@ export default function ProfileScreen({ navigation }: Props) {
 
   // Load saved pins + profile frame + cached Greek rank from AsyncStorage once on mount
   useEffect(() => {
-    AsyncStorage.multiGet([PR_PINS_KEY, 'profile_frame_rank', 'greek_rank_cached']).then(pairs => {
+    AsyncStorage.multiGet([prPinsKey, `profile_frame_rank_${user?.id}`, 'greek_rank_cached']).then(pairs => {
       const [pinsRaw, frameRaw, rankRaw] = pairs.map(p => p[1]);
       if (pinsRaw) {
         try {
@@ -187,12 +190,12 @@ export default function ProfileScreen({ navigation }: Props) {
 
   const savePins = (next: Pin[]) => {
     setPins(next);
-    AsyncStorage.setItem(PR_PINS_KEY, JSON.stringify(next));
+    AsyncStorage.setItem(prPinsKey, JSON.stringify(next));
   };
 
   const fetchAll = async () => {
     try {
-      const goalRaw = await AsyncStorage.getItem('workout_weekly_goal');
+      const goalRaw = await AsyncStorage.getItem(weeklyGoalKey);
       const weeklyGoal = goalRaw ? (parseInt(goalRaw, 10) || 3) : 3;
 
       const [workoutsRes, statsRes, prsRes, scoreRes] = await Promise.all([
@@ -220,7 +223,7 @@ export default function ProfileScreen({ navigation }: Props) {
         const data: PR[] = await prsRes.json();
         setPrs(data);
         // Auto-populate empty pins with top max_weight exercises on first load
-        AsyncStorage.getItem(PR_PINS_KEY).then(raw => {
+        AsyncStorage.getItem(prPinsKey).then(raw => {
           if (!raw) {
             const top = data
               .filter(p => p.pr_type === 'max_weight')
@@ -262,7 +265,7 @@ export default function ProfileScreen({ navigation }: Props) {
 
   useFocusEffect(useCallback(() => {
     fetchAll();
-    AsyncStorage.getItem('profile_frame_rank').then(val => {
+    AsyncStorage.getItem(`profile_frame_rank_${user?.id}`).then(val => {
       if (val) setSelectedFrame(val);
     });
     prCardAnims.forEach(a => a.setValue(0));
@@ -397,14 +400,14 @@ export default function ProfileScreen({ navigation }: Props) {
                   transform: [{ translateY: cardAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
                 }}
               >
-                <View style={[styles.prCard, { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: '#FFD70060' }]}>
-                  <Ionicons name="trophy" size={22} color="#FFD700" style={styles.trophyIcon} />
+                <View style={[styles.prCard, { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: PR_GOLD + '60' }]}>
+                  <Ionicons name="trophy" size={22} color={PR_GOLD} style={styles.trophyIcon} />
                   {pr ? (
                     <>
                       <Text style={[styles.prCardName, { color: colors.textPrimary }]} numberOfLines={2}>
                         {pr.exercise_name}
                       </Text>
-                      <Text style={[styles.prCardValue, { color: '#7A5800' }]}>
+                      <Text style={[styles.prCardValue, { color: PR_GOLD_TEXT }]}>
                         {pr.pr_type === 'max_weight' || pr.pr_type === 'estimated_1rm'
                           ? `${pr.value} ${unit}`
                           : pr.pr_type === 'max_reps'
@@ -556,9 +559,9 @@ export default function ProfileScreen({ navigation }: Props) {
               <Text style={styles.workoutName} numberOfLines={1}>{item.name}</Text>
               {!!item.pr_count && (
                 <View style={styles.prRow}>
-                  <LaurelBranch height={16} color="#FFD700" />
+                  <LaurelBranch height={16} color={PR_GOLD} />
                   <Text style={styles.prText}>{item.pr_count} PR{item.pr_count > 1 ? 's' : ''}</Text>
-                  <LaurelBranch side="right" height={16} color="#FFD700" />
+                  <LaurelBranch side="right" height={16} color={PR_GOLD} />
                 </View>
               )}
             </View>
@@ -1062,7 +1065,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
   workoutName: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, flex: 1 },
   prRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: spacing.sm },
-  prText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: '#7A5800' },
+  prText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: PR_GOLD_TEXT },
   workoutDate: { fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   pill: {

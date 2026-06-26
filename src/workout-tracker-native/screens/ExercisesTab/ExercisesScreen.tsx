@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,6 @@ import {
   Alert,
   Modal,
   Image,
-  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -54,8 +53,6 @@ export default function ExercisesScreen({ navigation }: Props) {
   const [showMuscleDropdown, setShowMuscleDropdown] = useState(false);
   const [showEquipmentDropdown, setShowEquipmentDropdown] = useState(false);
   const [recentExercises, setRecentExercises] = useState<{ name: string; exercise_template_id: number | null }[]>([]);
-  const cardAnims = useRef<Animated.Value[]>([]);
-
   const muscleRef = useRef<TouchableOpacity>(null);
   const equipRef  = useRef<TouchableOpacity>(null);
   const [muscleAnchor, setMuscleAnchor] = useState({ x: 0, y: 0, width: 0 });
@@ -99,16 +96,6 @@ export default function ExercisesScreen({ navigation }: Props) {
     fetchExercises();
     fetchRecentExercises();
   }, []));
-
-  useEffect(() => {
-    const total = Math.min(exerciseList.length, 20);
-    if (total === 0) return;
-    while (cardAnims.current.length < total) cardAnims.current.push(new Animated.Value(0));
-    cardAnims.current.slice(0, total).forEach(a => a.setValue(0));
-    Animated.stagger(35, cardAnims.current.slice(0, total).map(a =>
-      Animated.timing(a, { toValue: 1, duration: 250, useNativeDriver: true })
-    )).start();
-  }, [exerciseList]);
 
   const addNewExercise = async (name: string, muscle: string, equipment: string) => {
     try {
@@ -158,44 +145,41 @@ export default function ExercisesScreen({ navigation }: Props) {
       .slice(0, 5);
   }, [recentExercises, exerciseList, search, selectedMuscle, selectedEquipment]);
 
-  const renderExerciseCard = ({ item, animIndex }: { item: Exercise; animIndex?: number }) => {
+  const renderExerciseCard = ({ item }: { item: Exercise }) => {
     const isCardio = item.exercise_type === 'cardio';
-    const anim = animIndex !== undefined ? (cardAnims.current[animIndex] ?? new Animated.Value(1)) : new Animated.Value(1);
     const primaryMuscle = isCardio ? 'Cardio' : (item.muscle_group?.split(',')[0]?.trim() ?? '');
     return (
-      <Animated.View style={{ opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] }}>
-        <TouchableOpacity
-          style={styles.exerciseCard}
-          onPress={() => navigation.navigate('ExerciseDetail', {
-            exerciseId: item.id,
-            exerciseName: item.name,
-            equipment: item.equipment,
-            muscleGroup: isCardio ? 'Cardio' : item.muscle_group,
-            imageUrl: item.image_url,
-            isCustom: !!item.is_custom,
-          })}
-        >
-          {item.image_url ? (
-            <Image source={{ uri: item.image_url }} style={styles.exerciseImage} resizeMode="cover" />
-          ) : (
-            <View style={[styles.exerciseImage, styles.exerciseImagePlaceholder]}>
-              <Ionicons name={isCardio ? 'bicycle-outline' : 'barbell-outline'} size={26} color={colors.accent} />
+      <TouchableOpacity
+        style={styles.exerciseCard}
+        onPress={() => navigation.navigate('ExerciseDetail', {
+          exerciseId: item.id,
+          exerciseName: item.name,
+          equipment: item.equipment,
+          muscleGroup: isCardio ? 'Cardio' : item.muscle_group,
+          imageUrl: item.image_url,
+          isCustom: !!item.is_custom,
+        })}
+      >
+        {item.image_url ? (
+          <Image source={{ uri: item.image_url }} style={styles.exerciseImage} resizeMode="cover" />
+        ) : (
+          <View style={[styles.exerciseImage, styles.exerciseImagePlaceholder]}>
+            <Ionicons name={isCardio ? 'bicycle-outline' : 'barbell-outline'} size={26} color={colors.accent} />
+          </View>
+        )}
+        <View style={styles.exerciseCardRight}>
+          <View style={styles.exerciseNameRow}>
+            <Text style={styles.exerciseName}>{item.name}</Text>
+            {item.is_custom && <Ionicons name="person" size={13} color={colors.accent} />}
+          </View>
+          {!!item.equipment && <Text style={styles.exerciseEquipment}>{item.equipment}</Text>}
+          {!!primaryMuscle && (
+            <View style={styles.musclePill}>
+              <Text style={styles.musclePillText}>{primaryMuscle}</Text>
             </View>
           )}
-          <View style={styles.exerciseCardRight}>
-            <View style={styles.exerciseNameRow}>
-              <Text style={styles.exerciseName}>{item.name}</Text>
-              {item.is_custom && <Ionicons name="person" size={13} color={colors.accent} />}
-            </View>
-            {!!item.equipment && <Text style={styles.exerciseEquipment}>{item.equipment}</Text>}
-            {!!primaryMuscle && (
-              <View style={styles.musclePill}>
-                <Text style={styles.musclePillText}>{primaryMuscle}</Text>
-              </View>
-            )}
-          </View>
-        </TouchableOpacity>
-      </Animated.View>
+        </View>
+      </TouchableOpacity>
     );
   };
 
@@ -307,7 +291,7 @@ export default function ExercisesScreen({ navigation }: Props) {
         <FlatList
           data={filteredExercises}
           keyExtractor={item => item.id.toString()}
-          renderItem={({ item, index }) => renderExerciseCard({ item, animIndex: index })}
+          renderItem={({ item }) => renderExerciseCard({ item })}
           ListEmptyComponent={<Text style={styles.emptyText}>No exercises found</Text>}
         />
       ) : (
@@ -317,10 +301,7 @@ export default function ExercisesScreen({ navigation }: Props) {
             { title: 'All Exercises', data: filteredExercises },
           ]}
           keyExtractor={item => item.id.toString()}
-          renderItem={({ item, index, section }) => {
-            const flatIndex = section.title === 'Recent Exercises' ? index : recentFiltered.length + index;
-            return renderExerciseCard({ item, animIndex: flatIndex });
-          }}
+          renderItem={({ item }) => renderExerciseCard({ item })}
           renderSectionHeader={({ section }) => (
             <SectionRule label={section.title} />
           )}

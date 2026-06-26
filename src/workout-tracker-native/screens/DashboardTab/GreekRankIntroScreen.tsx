@@ -10,8 +10,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { DashboardStackParamsList } from '../../navigation/types';
-import { GREEK_RANKS } from '../ProfileTab/GreekRankScreen';
-import { GREEK_RANK_COLORS } from '../../constants/greekRanks';
+import { GREEK_RANKS, GREEK_RANK_COLORS } from '../../constants/greekRanks';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'GreekRankIntro'>;
 

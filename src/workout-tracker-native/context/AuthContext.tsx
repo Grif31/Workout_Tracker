@@ -35,8 +35,8 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
         appCache.clear();
         await AsyncStorage.multiRemove([
             'token', 'refresh_token', 'user',
-            'greek_rank_cached', 'profile_frame_rank',
-            '@theme_accent',
+            'greek_rank_cached', '@theme_accent',
+            'coach_insights_cache', 'minimized_workout_session',
         ]);
     };
 
@@ -90,7 +90,10 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
     const login = async (userData: any, accessToken: string, refreshToken: string) => {
         // Clear any previous user's cached data before setting up the new session
         appCache.clear();
-        await AsyncStorage.multiRemove(['greek_rank_cached', 'profile_frame_rank', '@theme_accent']);
+        await AsyncStorage.multiRemove([
+            'greek_rank_cached', '@theme_accent',
+            'coach_insights_cache', 'minimized_workout_session',
+        ]);
         // Restore this user's saved accent (or default if they've never set one)
         await themeCtx.loadAccentForUser(userData.id);
         setUser(userData);

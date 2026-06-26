@@ -9,15 +9,15 @@ import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { ProfileStackParamsList } from '../../navigation/types';
-import { GREEK_RANK_COLORS } from '../../constants/greekRanks';
+import { GREEK_RANK_COLORS, GREEK_RANKS } from '../../constants/greekRanks';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'GreekRank'>;
 
-const PROFILE_FRAME_KEY = 'profile_frame_rank';
 const GREEK_RANK_CACHED_KEY = 'greek_rank_cached';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -25,15 +25,6 @@ const CIRCLE_SIZE = 88;
 const CIRCLE_GAP = 16;
 const ITEM_WIDTH = CIRCLE_SIZE + CIRCLE_GAP;
 
-export const GREEK_RANKS = [
-  { name: 'Neophyte', color: GREEK_RANK_COLORS.Neophyte, low: 0,  high: 12, icon: 'N' },
-  { name: 'Athlete',  color: GREEK_RANK_COLORS.Athlete,  low: 12, high: 28, icon: 'A' },
-  { name: 'Hero',     color: GREEK_RANK_COLORS.Hero,     low: 28, high: 48, icon: 'H' },
-  { name: 'Demigod',  color: GREEK_RANK_COLORS.Demigod,  low: 48, high: 65, icon: 'D' },
-  { name: 'Olympian', color: GREEK_RANK_COLORS.Olympian, low: 65, high: 80, icon: 'O' },
-  { name: 'Titan',    color: GREEK_RANK_COLORS.Titan,    low: 80, high: 92, icon: 'T' },
-  { name: 'Aretē',    color: GREEK_RANK_COLORS["Aretē"], low: 92, high: 100, icon: 'Ā' },
-];
 
 interface RankData {
   greek_rank: string;
@@ -130,7 +121,9 @@ function RankCircle({
 
 export default function GreekRankScreen({ navigation }: Props) {
   const { colors } = useTheme();
+  const { user } = useAuth();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const frameKey = `profile_frame_rank_${user?.id}`;
 
   const [rankData, setRankData] = useState<RankData | null>(null);
   const [loading, setLoading]   = useState(true);
@@ -140,7 +133,7 @@ export default function GreekRankScreen({ navigation }: Props) {
   const listRef = useRef<FlatList>(null);
 
   const fetchData = async () => {
-    const [frameVal] = await AsyncStorage.multiGet([PROFILE_FRAME_KEY]);
+    const [frameVal] = await AsyncStorage.multiGet([frameKey]);
     if (frameVal[1]) setSelectedFrame(frameVal[1]);
 
     try {
@@ -181,7 +174,7 @@ export default function GreekRankScreen({ navigation }: Props) {
   const handleEquip = async (rankName: string) => {
     if (!isUnlocked(rankName)) return;
     setSelectedFrame(rankName);
-    await AsyncStorage.setItem(PROFILE_FRAME_KEY, rankName);
+    await AsyncStorage.setItem(frameKey, rankName);
   };
 
   const components = rankData?.greek_score_components;

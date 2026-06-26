@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../../context/AuthContext';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OnboardingStackParamsList } from '../../navigation/types';
 import { AUTH } from '../../theme/authColors';
@@ -93,6 +94,7 @@ const STEPS = [
 const DONE_TEXT = "Perfect. Tap Continue to enter the app — I'll have your program ready in the Training tab.";
 
 export default function OnboardingScreen({ onComplete }: Props) {
+  const { user } = useAuth();
   const msgIdRef = useRef(0);
   const nextId = () => String(++msgIdRef.current);
 
@@ -182,14 +184,14 @@ export default function OnboardingScreen({ onComplete }: Props) {
     }
 
     await AsyncStorage.multiSet([
-      ['coach_settings', JSON.stringify({
+      [`coach_settings_${user?.id}`, JSON.stringify({
         days: answers.days, goal: answers.goal, exp: answers.exp,
         equipment: answers.equipment, sessionLength: answers.sessionLength, avoid: answers.avoid,
       })],
       ['user_goal', answers.goal],
       ['user_experience', answers.exp],
       ['user_days_per_week', String(answers.days)],
-      ['workout_weekly_goal', String(answers.days)],
+      [`workout_weekly_goal_${user?.id}`, String(answers.days)],
       ['onboarding_complete', 'true'],
     ]);
 

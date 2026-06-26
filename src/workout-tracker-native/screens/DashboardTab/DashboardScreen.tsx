@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { DashboardStackParamsList } from '../../navigation/types';
 import { useFocusEffect } from '@react-navigation/native';
+import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -211,6 +212,7 @@ const createCalStyles = (colors: Colors) => StyleSheet.create({
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function DashboardScreen({ navigation }: Props) {
+  const { user: authUser } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
@@ -232,20 +234,8 @@ export default function DashboardScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const hasLoaded = useRef(false);
 
-  const workoutCardAnims  = useRef<Animated.Value[]>([]);
   const streakAnim        = useRef(new Animated.Value(0)).current;
   const [displayStreakValue, setDisplayStreakValue] = useState(0);
-
-  const runWorkoutStagger = (count: number) => {
-    while (workoutCardAnims.current.length < count) {
-      workoutCardAnims.current.push(new Animated.Value(0));
-    }
-    const anims = workoutCardAnims.current.slice(0, count);
-    anims.forEach(a => a.setValue(0));
-    Animated.stagger(40, anims.map(a =>
-      Animated.timing(a, { toValue: 1, duration: 260, useNativeDriver: true })
-    )).start();
-  };
 
   // Populate from preload cache instantly on mount
   useEffect(() => {
@@ -340,7 +330,7 @@ export default function DashboardScreen({ navigation }: Props) {
 
   const fetchStreak = async () => {
     try {
-      const goalRaw = await AsyncStorage.getItem('workout_weekly_goal');
+      const goalRaw = await AsyncStorage.getItem(`workout_weekly_goal_${authUser?.id}`);
       const weeklyGoal = goalRaw ? (parseInt(goalRaw, 10) || 3) : 3;
       const res = await apiFetch(`/api/stats/profile?weekly_goal=${weeklyGoal}`);
       if (res.ok) {
@@ -354,10 +344,6 @@ export default function DashboardScreen({ navigation }: Props) {
     } catch { /* silently fail */ }
   };
 
-  useEffect(() => {
-    if (workouts.length === 0) return;
-    runWorkoutStagger(workouts.length);
-  }, [workouts]);
 
   useEffect(() => {
     const target = streakType === 'weekly' ? weeklyStreak
@@ -482,14 +468,10 @@ export default function DashboardScreen({ navigation }: Props) {
                 {selectedCalDate ? 'No workouts on this day' : 'No recent workouts'}
               </Text>
             );
-            return list.map((item, index) => {
-              const cardAnim = workoutCardAnims.current[index] ?? new Animated.Value(1);
+            return list.map((item) => {
               return (
-              <Animated.View
-                key={item.id}
-                style={{ opacity: cardAnim, transform: [{ translateY: cardAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}
-              >
               <TouchableOpacity
+                key={item.id}
                 style={styles.workoutCard}
                 onPress={() =>
                   item.workout_type === 'cardio'
@@ -554,7 +536,6 @@ export default function DashboardScreen({ navigation }: Props) {
                   </>
                 )}
               </TouchableOpacity>
-              </Animated.View>
               );
             });
           })()}

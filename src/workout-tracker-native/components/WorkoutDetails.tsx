@@ -21,6 +21,7 @@ import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { estimateCalories } from '../utils/cardioCalories';
+import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../constants/prColors';
 import { captureAndShare } from '../utils/shareCapture';
 import MuscleDiagram from './MuscleDiagram';
 import WorkoutShareCard, { type ShareExercise } from './WorkoutShareCard';
@@ -410,11 +411,11 @@ export default function WorkoutDetailsScreen({
             <View style={styles.prSection}>
               {workoutPrs.length === 1 ? (
                 <View style={styles.prHeader}>
-                  <LaurelBranch height={20} color="#7A5800" />
+                  <LaurelBranch height={20} color={PR_GOLD_TEXT} />
                   <Text style={styles.prHeaderText}>
                     {workoutPrs[0].exercise_name} — {PR_LABELS[workoutPrs[0].pr_type] ?? 'PR'}
                   </Text>
-                  <LaurelBranch side="right" height={20} color="#7A5800" />
+                  <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
                 </View>
               ) : (
                 <>
@@ -423,18 +424,18 @@ export default function WorkoutDetailsScreen({
                     onPress={() => setPrExpanded(v => !v)}
                     activeOpacity={0.8}
                   >
-                    <LaurelBranch height={20} color="#7A5800" />
+                    <LaurelBranch height={20} color={PR_GOLD_TEXT} />
                     <Text style={styles.prHeaderText}>{workoutPrs.length} Personal Records</Text>
                     <Text style={styles.prChevron}>{prExpanded ? '▲' : '▼'}</Text>
-                    <LaurelBranch side="right" height={20} color="#7A5800" />
+                    <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
                   </TouchableOpacity>
                   {prExpanded && workoutPrs.map((pr, i) => (
                     <View key={i} style={styles.prRow}>
-                      <LaurelBranch height={18} color="#7A5800" />
+                      <LaurelBranch height={18} color={PR_GOLD_TEXT} />
                       <Text style={styles.prRowText}>
                         {pr.exercise_name} — {PR_LABELS[pr.pr_type] ?? 'PR'}
                       </Text>
-                      <LaurelBranch side="right" height={18} color="#7A5800" />
+                      <LaurelBranch side="right" height={18} color={PR_GOLD_TEXT} />
                     </View>
                   ))}
                 </>
@@ -583,7 +584,7 @@ export default function WorkoutDetailsScreen({
                         </Text>
                         {hasPr && (
                           isPr
-                            ? <Ionicons name="trophy" size={14} color="#FFD700" style={styles.colPr} />
+                            ? <Ionicons name="trophy" size={14} color={PR_GOLD} style={styles.colPr} />
                             : <View style={styles.colPr} />
                         )}
                       </View>
@@ -773,7 +774,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   colReps: { flex: 1, textAlign: 'center' },
   colWeight: { flex: 1, textAlign: 'center' },
   colPr: { width: 24, alignItems: 'center' },
-  prGoldText: { color: '#FFD700', fontWeight: '700' },
+  prGoldText: { color: PR_GOLD, fontWeight: '700' },
 
   setNumBadge: {
     borderWidth: 1.5,
@@ -886,11 +887,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     textAlign: 'center',
   },
   prSection: { paddingHorizontal: spacing.md, marginBottom: spacing.md },
-  prHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFD700', borderRadius: 10, padding: 12, marginBottom: 4 },
-  prHeaderText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: '#7A5800', flex: 1 },
-  prChevron: { fontSize: 12, color: '#7A5800' },
-  prRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFF3C4', borderRadius: 10, padding: 12, marginTop: 4 },
-  prRowText: { fontSize: typography.fontSize.sm, fontWeight: '500', color: '#7A5800', flex: 1 },
+  prHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: PR_GOLD, borderRadius: 10, padding: 12, marginBottom: 4 },
+  prHeaderText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: PR_GOLD_TEXT, flex: 1 },
+  prChevron: { fontSize: 12, color: PR_GOLD_TEXT },
+  prRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: PR_GOLD_BG, borderRadius: 10, padding: 12, marginTop: 4 },
+  prRowText: { fontSize: typography.fontSize.sm, fontWeight: '500', color: PR_GOLD_TEXT, flex: 1 },
   exercisesLabel: {
     fontSize: typography.fontSize.sm,
     fontWeight: '700',

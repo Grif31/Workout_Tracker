@@ -71,7 +71,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
   const [renameText, setRenameText] = useState('');
 
   useEffect(() => {
-    AsyncStorage.getItem('gps_distance_unit').then(v => {
+    AsyncStorage.getItem(`gps_distance_unit_${user?.id}`).then(v => {
       if (v === 'mi') setDistanceUnit('mi');
     });
   }, []);

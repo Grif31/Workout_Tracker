@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import secrets
+import threading
 import requests as http_requests
 from datetime import datetime, timedelta, timezone
 from flask import Blueprint, request, jsonify, current_app, g
@@ -214,7 +215,12 @@ def social_auth():
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _send_otp_email(recipient: str, otp: str) -> None:
-    html = f"""<!DOCTYPE html>
+    # Fire-and-forget in a daemon thread so the route returns before SMTP resolves.
+    # Avoids blocking the Gunicorn worker on an unreachable or slow mail server.
+    app = current_app._get_current_object()
+
+    def _send() -> None:
+        html = f"""<!DOCTYPE html>
 <html><body style="margin:0;padding:0;background:#0D0D0D;font-family:-apple-system,sans-serif;">
   <table width="100%" style="background:#0D0D0D;padding:40px 0;"><tr><td align="center">
   <table width="480" style="background:#1C1C1E;border-radius:16px;border:1px solid #2C2C2E;">
@@ -237,21 +243,24 @@ def _send_otp_email(recipient: str, otp: str) -> None:
     </td></tr>
   </table></td></tr></table>
 </body></html>"""
-    plain = (
-        f"Your Arete Fitness reset code: {otp}\n\n"
-        f"Expires in 15 minutes.\n"
-        f"If you didn't request this, ignore this email."
-    )
-    try:
-        msg = Message(
-            subject='Your Arete Fitness reset code',
-            recipients=[recipient],
-            body=plain,
-            html=html,
+        plain = (
+            f"Your Arete Fitness reset code: {otp}\n\n"
+            f"Expires in 15 minutes.\n"
+            f"If you didn't request this, ignore this email."
         )
-        mail.send(msg)
-    except Exception:
-        current_app.logger.exception('OTP email send failed for %s', recipient)
+        try:
+            with app.app_context():
+                msg = Message(
+                    subject='Your Arete Fitness reset code',
+                    recipients=[recipient],
+                    body=plain,
+                    html=html,
+                )
+                mail.send(msg)
+        except Exception:
+            app.logger.exception('OTP email send failed for %s', recipient)
+
+    threading.Thread(target=_send, daemon=True).start()
 
 
 

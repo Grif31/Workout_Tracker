@@ -117,7 +117,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
   };
 
   useEffect(() => {
-    AsyncStorage.getItem('gps_distance_unit').then(v => {
+    AsyncStorage.getItem(`gps_distance_unit_${user?.id}`).then(v => {
       if (v === 'mi') setDistanceUnit('mi');
     });
     (async () => {

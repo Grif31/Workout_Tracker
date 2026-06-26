@@ -68,7 +68,10 @@ src/
 │   │   │   ├── GPSCardioScreen.tsx       # live GPS activity tracking (EAS build only)
 │   │   │   └── CardioDetailsScreen.tsx   # map + stats view for completed cardio activities
 │   │   ├── ExercisesTab/         # exercise browser + detail
-│   │   ├── TrainingTab/          # strength score, muscle volume, AI plans
+│   │   ├── TrainingTab/          # AI coach tab (tab label: "Coach", route stays TrainingTab)
+│   │   │   ├── CoachScreen.tsx           # tab home: coach character + insights + training overview
+│   │   │   ├── CoachCharacter.tsx        # SVG character that evolves with Greek rank
+│   │   │   └── CoachProfileModal.tsx     # coach personalization (goal/equipment/schedule/injuries)
 │   │   ├── ProfileTab/           # profile, settings, bodyweight, measurements
 │   │   └── PaywallScreen.tsx     # RevenueCat subscription paywall
 │   ├── navigation/
@@ -96,7 +99,11 @@ src/
 │   │   ├── spacing.ts            # xs/sm/md/lg/xl
 │   │   └── typography.ts         # fontSize.sm/md/lg
 │   └── constants/
-│       └── muscleGroups.ts
+│       ├── muscleGroups.tsx      # muscle group name list
+│       ├── equipmentTypes.ts     # equipment type list
+│       ├── greekRanks.ts         # GREEK_RANK_COLORS map, GREEK_RANKS array (name/color/range/icon)
+│       ├── strengthRanks.ts      # STRENGTH_TIERS array, SCORE_RANK_COLORS map (percentile tiers)
+│       └── prColors.ts           # PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG — import instead of hardcoding
 │
 ├── routes/                       # Flask blueprints
 │   ├── auth_routes.py            # register, login, refresh, Apple/Google
@@ -134,11 +141,17 @@ import { typography } from '../theme/typography'; // fontSize xs=11 sm=14 md=16 
 ```
 
 **Approved hardcoded colors** (everything else must use `colors.*`):
-- `#FFD700` — PR gold indicators
-- `#7A5800` — PR gold text contrast  
-- `#FFF3C4` — PR banner background
 - `#fff` / `#ffffff` — text on solid accent/colored backgrounds only
 - `'rgba(0,0,0,0.6)'` — modal backdrop overlay
+
+**Never hardcode PR gold.** Use the constants from `constants/prColors.ts`:
+```typescript
+import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../constants/prColors';
+// PR_GOLD      = '#FFE066'  — PR indicators (trophies, laurel borders, PR banners)
+// PR_GOLD_TEXT = '#7A5800'  — dark text on gold/cream backgrounds
+// PR_GOLD_BG   = '#FFF3C4'  — cream background for PR banners
+```
+Note: `#FFD700` (bright gold) still appears in `greekRanks.ts` and `CoachCharacter.tsx` as the **Aretē rank color** — that is intentional and separate from PR gold.
 
 ### Styles
 - Always `StyleSheet.create` — no static multi-property inline styles
@@ -152,10 +165,11 @@ const res = await apiFetch('/api/workouts', { method: 'POST', ... });
 ```
 `apiFetch` automatically attaches the JWT and base URL — never call `fetch` directly.
 
-### AsyncStorage keys — define as constants at top of owning file
+### AsyncStorage keys — define as named constants, share when used across files
 ```typescript
 const MY_KEY = 'my_feature_key';
 ```
+Shared keys that cross file boundaries live in `constants/` or are exported from the file that owns them (e.g. `COACH_PROFILE_KEY` exported from `CoachProfileModal.tsx`, `REST_TIMER_KEY` exported from `components/workout/types.ts`). Never use the same key string as a bare literal in two different files.
 
 ### Navigation — new screens
 1. Create file in `screens/<Tab>/`
@@ -164,18 +178,40 @@ const MY_KEY = 'my_feature_key';
 4. Navigate via `navigation.navigate('ScreenName', { params })`
 
 ### AsyncStorage keys
+
+**Device-level (shared across all accounts on the device):**
 | Key | Default | Controls |
 |---|---|---|
 | `rest_timer_alerts_enabled` | true | Rest timer local notification |
 | `live_workout_notif_enabled` | true | Live workout system notification |
-| `workout_reminders_enabled` | false | Daily reminder notification |
-| `workout_reminder_hour` | '9' | Reminder hour |
-| `workout_reminder_minute` | '00' | Reminder minute |
-| `health_sync_enabled` | false | Apple Health / Health Connect sync toggle |
-| `plate_calc_bar` | 'standard' | Last-used bar type in plate calculator |
-| `plate_calc_plates` | all defaults | Enabled plate sizes in plate calculator (JSON number[]) |
-| `default_rest_timer` | '90' | Default rest timer duration in seconds |
-| `gps_distance_unit` | 'km' | Distance unit for GPS cardio activities ('km' or 'mi') |
+| `minimized_workout_session` | — | Serialized minimized workout state (WorkoutSessionContext) |
+| `greek_rank_cached` | — | Cached current Greek rank name (avoids fetch on cold open) |
+| `coach_insights_cache` | — | Cached AI coach insights JSON |
+
+**Per-user (key includes user ID suffix `_${userId}`):**
+| Key pattern | Default | Controls |
+|---|---|---|
+| `workout_reminders_enabled_${uid}` | false | Daily reminder notification |
+| `workout_reminder_hour_${uid}` | '9' | Reminder hour |
+| `workout_reminder_minute_${uid}` | '00' | Reminder minute |
+| `health_sync_enabled_${uid}` | false | Apple Health / Health Connect sync toggle |
+| `plate_calc_bar_${uid}` | 'standard' | Last-used bar type in plate calculator |
+| `plate_calc_plates_${uid}` | all defaults | Enabled plate sizes in plate calculator (JSON number[]) |
+| `default_rest_timer_${uid}` | '90' | Default rest timer duration in seconds |
+| `gps_distance_unit_${uid}` | 'km' | Distance unit for GPS cardio activities ('km' or 'mi') |
+| `workout_weekly_goal_${uid}` | '3' | Weekly workout target (integer string) |
+| `workout_auto_rest_${uid}` | true | Auto-start rest timer after a set |
+| `workout_vibrate_${uid}` | true | Vibrate when rest timer completes |
+| `workout_show_rpe_${uid}` | false | Show RPE input per set |
+| `workout_show_plate_calc_${uid}` | true | Show plate calculator in workout |
+| `profile_frame_rank_${uid}` | 'Neophyte' | Selected avatar frame rank name |
+| `@pr_pins_${uid}` | — | JSON array of 3 pinned PR slots on Profile (Pin\|null)[] |
+| `coach_profile_${uid}` | — | Coach personalization JSON (goal/equipment/schedule/injuries) |
+| `coach_settings_${uid}` | — | Legacy onboarding settings (migrated to coach_profile on first open) |
+| `coach_insights_cache` | — | Cached AI coaching insights JSON + fetchedAt timestamp |
+| `coach_settings` | — | Legacy key — migrated to `coach_profile` on first CoachProfileModal open |
+
+**On logout and login**, these account-specific keys are cleared via `AsyncStorage.multiRemove` in `AuthContext.tsx`: `coach_insights_cache`, `coach_profile`, `coach_settings`, `workout_weekly_goal`, `minimized_workout_session`, `@pr_pins`.
 
 ---
 
@@ -230,7 +266,7 @@ return jsonify({ 'message': 'error reason' }), 400   # client error
 
 ## Things to Avoid
 
-- Never hardcode colors outside the approved list above
+- Never hardcode colors outside the approved list above — and never hardcode PR gold hex values; use `PR_GOLD` / `PR_GOLD_TEXT` / `PR_GOLD_BG` from `constants/prColors.ts`
 - Never call `fetch` directly — use `apiFetch`
 - Never commit `.env` files
 - Don't add features, refactor, or abstract beyond what the task requires

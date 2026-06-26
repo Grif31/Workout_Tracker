@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
 import { appCache } from '../utils/appCache';
 import SplashView from '../components/SplashView';
@@ -25,6 +26,7 @@ function buildCalls() {
 }
 
 export default function PreloadScreen({ onComplete }: Props) {
+  const { user } = useAuth();
   const progress = useRef(new Animated.Value(0)).current;
   const completed = useRef(0);
   const CALLS = buildCalls();
@@ -53,7 +55,7 @@ export default function PreloadScreen({ onComplete }: Props) {
   useEffect(() => {
     const run = async () => {
       // Fetch weekly goal from AsyncStorage first so profile_stats is accurate
-      const goalRaw = await AsyncStorage.getItem('workout_weekly_goal');
+      const goalRaw = await AsyncStorage.getItem(`workout_weekly_goal_${user?.id}`);
       const weeklyGoal = goalRaw ? (parseInt(goalRaw, 10) || 3) : 3;
 
       // All calls in parallel

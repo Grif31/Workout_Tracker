@@ -1,6 +1,7 @@
 import React, { forwardRef } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { LaurelBranch } from './LaurelWreath';
+import { PR_GOLD, PR_GOLD_TEXT } from '../constants/prColors';
 
 export type ShareExercise = {
   name: string;
@@ -99,9 +100,9 @@ const WorkoutShareCard = forwardRef<View, WorkoutShareCardProps>(
           {/* PR banner */}
           {prs.length > 0 && (
             <View style={styles.prBanner}>
-              <LaurelBranch height={18} color="#7A5800" />
+              <LaurelBranch height={18} color={PR_GOLD_TEXT} />
               <Text style={styles.prText}>{prLabel}</Text>
-              <LaurelBranch side="right" height={18} color="#7A5800" />
+              <LaurelBranch side="right" height={18} color={PR_GOLD_TEXT} />
             </View>
           )}
 
@@ -215,7 +216,7 @@ const styles = StyleSheet.create({
   },
 
   prBanner: {
-    backgroundColor: '#FFD700',
+    backgroundColor: PR_GOLD,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -227,7 +228,7 @@ const styles = StyleSheet.create({
   prText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#7A5800',
+    color: PR_GOLD_TEXT,
     flex: 1,
     textAlign: 'center',
   },

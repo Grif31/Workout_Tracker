@@ -18,8 +18,9 @@ import { apiFetch } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import { TrainingStackParamsList } from '../../navigation/types';
 import { muscleGroups } from '../../constants/muscleGroups';
-import CoachCharacter from './CoachCharacter';
-import CoachProfileModal, { CoachProfile } from './CoachProfileModal';
+import { SCORE_RANK_COLORS } from '../../constants/strengthRanks';
+import ProfileAvatarFrame from '../../components/ProfileAvatarFrame';
+import CoachProfileModal, { CoachProfile, COACH_PROFILE_KEY } from './CoachProfileModal';
 import { GREEK_RANK_COLORS } from '../../constants/greekRanks';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'TrainingHome'>;
@@ -46,7 +47,6 @@ type Insight = { type: string; title: string; body: string; priority: 'high' | '
 type InsightsCache = { insights: Insight[]; fetchedAt: string };
 
 const COACH_INSIGHTS_KEY = 'coach_insights_cache';
-const COACH_PROFILE_KEY = 'coach_profile';
 
 const MUSCLE_STANDARDS: Record<string, { mev: number; mav: number; mrv: number }> = {
   Chest:      { mev: 8,  mav: 16, mrv: 20 },
@@ -60,15 +60,6 @@ const MUSCLE_STANDARDS: Record<string, { mev: number; mav: number; mrv: number }
   Glutes:     { mev: 4,  mav: 12, mrv: 16 },
   Calves:     { mev: 8,  mav: 20, mrv: 30 },
   Core:       { mev: 6,  mav: 20, mrv: 25 },
-};
-
-const SCORE_RANK_COLORS: Record<string, string> = {
-  Noobie:       '#888888',
-  Beginner:     '#4A9EFF',
-  Intermediate: '#4CAF50',
-  Advanced:     '#FF9800',
-  Elite:        '#9C27B0',
-  Legend:       '#FFD700',
 };
 
 
@@ -215,6 +206,7 @@ export default function CoachScreen({ navigation }: Props) {
 
   // ── Coach tab state ─────────────────────────────────────────────────────────
   const [greekRank, setGreekRank] = useState<string>('Neophyte');
+  const [selectedFrame, setSelectedFrame] = useState<string>('Neophyte');
   const [coachProfile, setCoachProfile] = useState<CoachProfile>(DEFAULT_PROFILE);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [insights, setInsights] = useState<Insight[]>([]);
@@ -228,11 +220,12 @@ export default function CoachScreen({ navigation }: Props) {
 
   // ── Initialization ──────────────────────────────────────────────────────────
   useEffect(() => {
-    AsyncStorage.multiGet([COACH_PROFILE_KEY, 'workout_weekly_goal']).then(([profileRaw, goalRaw]) => {
+    AsyncStorage.multiGet([`${COACH_PROFILE_KEY}_${user?.id}`, `workout_weekly_goal_${user?.id}`, `profile_frame_rank_${user?.id}`]).then(([profileRaw, goalRaw, frameRaw]) => {
       if (profileRaw[1]) {
         try { setCoachProfile({ ...DEFAULT_PROFILE, ...JSON.parse(profileRaw[1]) }); } catch { }
       }
       if (goalRaw[1]) setWeeklyGoal(parseInt(goalRaw[1], 10) || 3);
+      if (frameRaw[1]) setSelectedFrame(frameRaw[1]);
     });
     // Load cached insights
     AsyncStorage.getItem(COACH_INSIGHTS_KEY).then(raw => {
@@ -248,7 +241,7 @@ export default function CoachScreen({ navigation }: Props) {
   const updateWeeklyGoal = (delta: number) => {
     const next = Math.max(1, Math.min(7, weeklyGoal + delta));
     setWeeklyGoal(next);
-    AsyncStorage.setItem('workout_weekly_goal', String(next));
+    AsyncStorage.setItem(`workout_weekly_goal_${user?.id}`, String(next));
   };
 
   // ── Data fetching ───────────────────────────────────────────────────────────
@@ -263,6 +256,7 @@ export default function CoachScreen({ navigation }: Props) {
     if (prog) setProgressData(prog.buckets ?? []);
     if (score?.overall != null) setStrengthPercentile(score.overall);
     if (score?.overall_rank?.label) setStrengthRankLabel(score.overall_rank.label);
+    if (score?.greek_rank) setGreekRank(score.greek_rank);
     if (me?.active_routine_id) fetchActiveRoutine();
     const mv = appCache.get<MuscleVolumeData>('muscle_volume');
     if (mv) setMuscleVolume(mv);
@@ -320,7 +314,7 @@ export default function CoachScreen({ navigation }: Props) {
         const data = await res.json();
         setStrengthPercentile(data.overall ?? null);
         if (data.overall_rank?.label) setStrengthRankLabel(data.overall_rank.label);
-        if (data.overall_rank?.greek_rank) setGreekRank(data.overall_rank.greek_rank);
+        if (data.greek_rank) setGreekRank(data.greek_rank);
       }
     } catch { }
   };
@@ -356,6 +350,9 @@ export default function CoachScreen({ navigation }: Props) {
     fetchStrengthScore();
     fetchMuscleGroupData();
     fetchThisWeekCount();
+    AsyncStorage.getItem(`profile_frame_rank_${user?.id}`).then(val => {
+      if (val) setSelectedFrame(val);
+    });
   }, [user?.active_routine_id, chartRange]));
 
   // ── Coach tab handlers ──────────────────────────────────────────────────────
@@ -853,7 +850,7 @@ export default function CoachScreen({ navigation }: Props) {
           {/* Character + rank header */}
           <View style={[styles.coachHero, { backgroundColor: rankColor + '18', borderColor: rankColor + '40' }]}>
             <Animated.View style={{ transform: [{ scale: charEntranceAnim }] }}>
-              <CoachCharacter rank={greekRank} size={100} />
+              <ProfileAvatarFrame rankName={selectedFrame} size={120} avatarSize={100} />
             </Animated.View>
             <View style={styles.coachHeroInfo}>
               <Text style={[styles.coachRankBadge, { color: rankColor }]}>{greekRank}</Text>

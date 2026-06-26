@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -32,8 +33,11 @@ type Props = {
 };
 
 export default function PlateCalculatorModal({ visible, targetWeight, weightUnit, onClose }: Props) {
+  const { user } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const barKey    = `${BAR_KEY}_${user?.id}`;
+  const platesKey = `${PLATES_KEY}_${user?.id}`;
 
   const isKg = weightUnit === 'kg';
   const plateConfigs = isKg ? PLATE_CONFIG_KG : PLATE_CONFIG_LBS;
@@ -46,7 +50,7 @@ export default function PlateCalculatorModal({ visible, targetWeight, weightUnit
 
   useEffect(() => {
     if (!visible) return;
-    AsyncStorage.multiGet([BAR_KEY, PLATES_KEY]).then(pairs => {
+    AsyncStorage.multiGet([barKey, platesKey]).then(pairs => {
       const barVal    = pairs[0][1];
       const platesVal = pairs[1][1];
       if (barVal) setBarType(barVal as BarType);
@@ -59,7 +63,7 @@ export default function PlateCalculatorModal({ visible, targetWeight, weightUnit
 
   const changeBarType = useCallback((t: BarType) => {
     setBarType(t);
-    AsyncStorage.setItem(BAR_KEY, t);
+    AsyncStorage.setItem(barKey, t);
   }, []);
 
   const togglePlate = useCallback((weight: number) => {
@@ -67,7 +71,7 @@ export default function PlateCalculatorModal({ visible, targetWeight, weightUnit
       const next = prev.includes(weight)
         ? prev.filter(w => w !== weight)
         : [...prev, weight];
-      AsyncStorage.setItem(PLATES_KEY, JSON.stringify(next));
+      AsyncStorage.setItem(platesKey, JSON.stringify(next));
       return next;
     });
   }, []);

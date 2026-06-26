@@ -29,10 +29,10 @@ import {
   cancelWorkoutReminder,
 } from '../../utils/notifications';
 import { HEALTH_SYNC_KEY, requestHealthKitPermission } from '../../utils/healthKit';
+import { REST_TIMER_KEY } from '../../components/workout/types';
 import { requestHealthConnectPermission } from '../../utils/healthConnect';
 
 const APP_VERSION = '1.0.0';
-const REST_TIMER_KEY = 'default_rest_timer';
 const REST_TIMER_PRESETS = [30, 45, 60, 90, 120, 150, 180, 240, 300];
 const GPS_DISTANCE_KEY = 'gps_distance_unit';
 const REMINDERS_KEY = 'workout_reminders_enabled';
@@ -47,6 +47,13 @@ export default function SettingsScreen({ navigation }: Props) {
   const { user, updateUser } = useAuth();
   const { colors, mode, accentPreset, toggleMode, setAccentPreset } = useTheme();
   const { isPremium } = usePurchase();
+  const uid = user?.id;
+  const perUserRestTimerKey    = `${REST_TIMER_KEY}_${uid}`;
+  const perUserHealthSyncKey   = `${HEALTH_SYNC_KEY}_${uid}`;
+  const perUserGpsKey          = `gps_distance_unit_${uid}`;
+  const perUserRemindersKey    = `workout_reminders_enabled_${uid}`;
+  const perUserReminderHourKey = `workout_reminder_hour_${uid}`;
+  const perUserReminderMinKey  = `workout_reminder_minute_${uid}`;
 
   const [unitIsKg, setUnitIsKg]             = useState(user?.weight_unit === 'kg');
   const [distanceIsKm, setDistanceIsKm]     = useState(true);
@@ -71,18 +78,18 @@ export default function SettingsScreen({ navigation }: Props) {
 
   useEffect(() => {
     AsyncStorage.multiGet([
-      REST_TIMER_KEY, REMINDERS_KEY, REST_ALERTS_KEY, LIVE_NOTIF_KEY,
-      REMINDER_HOUR_KEY, REMINDER_MIN_KEY, HEALTH_SYNC_KEY, GPS_DISTANCE_KEY,
+      perUserRestTimerKey, perUserRemindersKey, REST_ALERTS_KEY, LIVE_NOTIF_KEY,
+      perUserReminderHourKey, perUserReminderMinKey, perUserHealthSyncKey, perUserGpsKey,
     ]).then(pairs => {
       const map = Object.fromEntries(pairs.map(([k, v]) => [k, v]));
-      if (map[REST_TIMER_KEY]) setRestTimerSeconds(map[REST_TIMER_KEY]!);
-      if (map[REMINDERS_KEY] !== null) setRemindersOn(map[REMINDERS_KEY] === 'true');
+      if (map[perUserRestTimerKey]) setRestTimerSeconds(map[perUserRestTimerKey]!);
+      if (map[perUserRemindersKey] !== null) setRemindersOn(map[perUserRemindersKey] === 'true');
       if (map[REST_ALERTS_KEY] !== null) setRestAlertsOn(map[REST_ALERTS_KEY] !== 'false');
       if (map[LIVE_NOTIF_KEY] !== null) setLiveNotifOn(map[LIVE_NOTIF_KEY] !== 'false');
-      if (map[REMINDER_HOUR_KEY]) setReminderHour(map[REMINDER_HOUR_KEY]!);
-      if (map[REMINDER_MIN_KEY]) setReminderMin(map[REMINDER_MIN_KEY]!);
-      if (map[HEALTH_SYNC_KEY] !== null) setHealthSyncOn(map[HEALTH_SYNC_KEY] === 'true');
-      if (map[GPS_DISTANCE_KEY]) setDistanceIsKm(map[GPS_DISTANCE_KEY] !== 'mi');
+      if (map[perUserReminderHourKey]) setReminderHour(map[perUserReminderHourKey]!);
+      if (map[perUserReminderMinKey]) setReminderMin(map[perUserReminderMinKey]!);
+      if (map[perUserHealthSyncKey] !== null) setHealthSyncOn(map[perUserHealthSyncKey] === 'true');
+      if (map[perUserGpsKey]) setDistanceIsKm(map[perUserGpsKey] !== 'mi');
     });
   }, []);
 
@@ -142,7 +149,7 @@ export default function SettingsScreen({ navigation }: Props) {
     const m = date.getMinutes();
     setReminderHour(String(h));
     setReminderMin(String(m).padStart(2, '0'));
-    await AsyncStorage.multiSet([[REMINDER_HOUR_KEY, String(h)], [REMINDER_MIN_KEY, String(m)]]);
+    await AsyncStorage.multiSet([[perUserReminderHourKey, String(h)], [perUserReminderMinKey, String(m)]]);
     if (remindersOn) await scheduleWorkoutReminder(h, m);
   };
 
@@ -268,7 +275,7 @@ export default function SettingsScreen({ navigation }: Props) {
               onValueChange={async (isMi) => {
                 const unit = isMi ? 'mi' : 'km';
                 setDistanceIsKm(!isMi);
-                await AsyncStorage.setItem(GPS_DISTANCE_KEY, unit);
+                await AsyncStorage.setItem(perUserGpsKey, unit);
               }}
               trackColor={{ false: colors.border, true: colors.accent }}
               thumbColor="#fff"
@@ -307,13 +314,13 @@ export default function SettingsScreen({ navigation }: Props) {
               if (v) {
                 if (!(await ensurePermission())) return;
                 setRemindersOn(true);
-                await AsyncStorage.setItem(REMINDERS_KEY, 'true');
+                await AsyncStorage.setItem(perUserRemindersKey, 'true');
                 const h = parseInt(reminderHour, 10) || 9;
                 const m = parseInt(reminderMin, 10) || 0;
                 scheduleWorkoutReminder(h, m);
               } else {
                 setRemindersOn(false);
-                await AsyncStorage.setItem(REMINDERS_KEY, 'false');
+                await AsyncStorage.setItem(perUserRemindersKey, 'false');
                 cancelWorkoutReminder();
               }
             }}
@@ -409,7 +416,7 @@ export default function SettingsScreen({ navigation }: Props) {
                 }
               }
               setHealthSyncOn(v);
-              await AsyncStorage.setItem(HEALTH_SYNC_KEY, String(v));
+              await AsyncStorage.setItem(perUserHealthSyncKey, String(v));
             }}
             trackColor={{ false: colors.border, true: colors.accent }}
             thumbColor="#fff"
@@ -573,7 +580,7 @@ export default function SettingsScreen({ navigation }: Props) {
                     style={[styles.restTimerOption, selected && { backgroundColor: colors.accent, borderColor: colors.accent }]}
                     onPress={async () => {
                       setRestTimerSeconds(String(secs));
-                      await AsyncStorage.setItem(REST_TIMER_KEY, String(secs));
+                      await AsyncStorage.setItem(perUserRestTimerKey, String(secs));
                       setRestTimerPickerVisible(false);
                     }}
                     activeOpacity={0.7}

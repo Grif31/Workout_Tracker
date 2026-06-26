@@ -62,12 +62,12 @@
 
 ### Day 2-3: Screenshots
 - [ ] Take screenshots on iPhone (6.9" required, 6.5" recommended)
-- [ ] Capture: Dashboard / home
-- [ ] Capture: Live workout logging
+- [x] Capture: Dashboard / home
+- [x] Capture: Live workout logging
 - [ ] Capture: Exercise library
 - [ ] Capture: Progress charts
-- [ ] Capture: Strength Score screen
-- [ ] Capture: Profile screen
+- [x] Capture: Strength Score screen
+- [x] Capture: Profile screen
 - [ ] Optional: add text overlays in Figma
 - [ ] Upload screenshots to App Store Connect
 

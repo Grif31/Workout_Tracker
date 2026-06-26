@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -20,7 +21,7 @@ export type CoachProfile = {
   notes: string;
 };
 
-const COACH_PROFILE_KEY = 'coach_profile';
+export const COACH_PROFILE_KEY = 'coach_profile';
 const LEGACY_KEY = 'coach_settings';
 
 const DEFAULT_PROFILE: CoachProfile = {
@@ -67,13 +68,15 @@ const chipStyles = StyleSheet.create({
 });
 
 export default function CoachProfileModal({ visible, onClose, onSave }: Props) {
+  const { user } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [profile, setProfile] = useState<CoachProfile>(DEFAULT_PROFILE);
+  const coachProfileKey = `${COACH_PROFILE_KEY}_${user?.id}`;
 
   useEffect(() => {
     if (!visible) return;
-    AsyncStorage.multiGet([COACH_PROFILE_KEY, LEGACY_KEY]).then(([newRaw, legacyRaw]) => {
+    AsyncStorage.multiGet([coachProfileKey, LEGACY_KEY]).then(([newRaw, legacyRaw]) => {
       if (newRaw[1]) {
         try { setProfile({ ...DEFAULT_PROFILE, ...JSON.parse(newRaw[1]) }); return; } catch { }
       }
@@ -106,7 +109,7 @@ export default function CoachProfileModal({ visible, onClose, onSave }: Props) {
     }));
 
   const handleSave = async () => {
-    await AsyncStorage.setItem(COACH_PROFILE_KEY, JSON.stringify(profile));
+    await AsyncStorage.setItem(coachProfileKey, JSON.stringify(profile));
     onSave(profile);
     onClose();
   };

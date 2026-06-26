@@ -16,6 +16,7 @@ import { appCache } from '../../utils/appCache';
 import { TrainingStackParamsList } from '../../navigation/types';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import { GREEK_RANK_COLORS } from '../../constants/greekRanks';
+import { STRENGTH_TIERS } from '../../constants/strengthRanks';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'StrengthScore'>;
 
@@ -373,14 +374,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               const pct = selectedLift.percentile ?? 0;
 
               // Rank tier segments for the distribution bar
-              const TIERS = [
-                { label: 'Noobie',       low: 0,  high: 10,  color: '#888888' },
-                { label: 'Beginner',     low: 10, high: 30,  color: '#4A9EFF' },
-                { label: 'Intermediate', low: 30, high: 60,  color: '#4CAF50' },
-                { label: 'Advanced',     low: 60, high: 80,  color: '#FF9800' },
-                { label: 'Elite',        low: 80, high: 95,  color: '#9C27B0' },
-                { label: 'Legend',       low: 95, high: 100, color: '#FFD700' },
-              ];
+              const TIERS = STRENGTH_TIERS;
               // modalSheet has paddingHorizontal: spacing.lg on each side
               const BAR_W = Dimensions.get('window').width - spacing.lg * 2;
 

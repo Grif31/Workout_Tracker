@@ -28,6 +28,7 @@ import NewExerciseForm from '../components/NewExerciseForm';
 import { PrefillWorkoutData } from './WorkoutDetails';
 import { muscleGroups } from 'constants/muscleGroups';
 import { useWorkoutSession } from '../context/WorkoutSessionContext';
+import { PR_GOLD } from '../constants/prColors';
 
 import {
   REST_TIMER_KEY,
@@ -63,6 +64,12 @@ type Props = {
 
 export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onCancel, onViewExerciseHistory }: Props) {
   const { user } = useAuth();
+  const uid = user?.id;
+  const restTimerKey       = `${REST_TIMER_KEY}_${uid}`;
+  const autoRestKey        = `${AUTO_REST_KEY}_${uid}`;
+  const vibrateKey         = `${VIBRATE_KEY}_${uid}`;
+  const rpeKey             = `${RPE_KEY}_${uid}`;
+  const plateCalcKey       = `workout_show_plate_calc_${uid}`;
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const SET_TYPE_COLORS = useMemo<Record<SetType, string>>(() => ({
@@ -151,11 +158,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   useEffect(() => {
     Promise.all([
-      AsyncStorage.getItem(REST_TIMER_KEY),
-      AsyncStorage.getItem(AUTO_REST_KEY),
-      AsyncStorage.getItem(VIBRATE_KEY),
-      AsyncStorage.getItem(RPE_KEY),
-      AsyncStorage.getItem('workout_show_plate_calc'),
+      AsyncStorage.getItem(restTimerKey),
+      AsyncStorage.getItem(autoRestKey),
+      AsyncStorage.getItem(vibrateKey),
+      AsyncStorage.getItem(rpeKey),
+      AsyncStorage.getItem(plateCalcKey),
     ]).then(([timerVal, autoRestVal, vibrateVal, rpeVal, plateCalcVal]) => {
       const n = timerVal ? parseInt(timerVal, 10) : NaN;
       if (!isNaN(n)) { setDefaultRest(n); setRestRemaining(n); setRestTotal(n); }
@@ -878,9 +885,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       const startDate = new Date(endDate.getTime() - elapsed * 1000);
       const workoutType = exercisesToSave.some(ex => (ex.exercise_type || 'strength') !== 'cardio') ? 'strength' : 'cardio';
       if (Platform.OS === 'ios') {
-        syncWorkoutToHealthKit({ type: workoutType, startDate, endDate });
+        syncWorkoutToHealthKit({ type: workoutType, startDate, endDate, userId: uid });
       } else if (Platform.OS === 'android') {
-        syncWorkoutToHealthConnect({ type: workoutType, startDate, endDate });
+        syncWorkoutToHealthConnect({ type: workoutType, startDate, endDate, userId: uid });
       }
       if (onSubmit) onSubmit(
         isEditing ? workoutId : data.id,
@@ -1033,22 +1040,22 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             autoStartRest={autoStartRest}
             onAutoStartRestChange={val => {
               setAutoStartRest(val);
-              AsyncStorage.setItem(AUTO_REST_KEY, String(val));
+              AsyncStorage.setItem(autoRestKey, String(val));
             }}
             vibrateOnComplete={vibrateOnComplete}
             onVibrateChange={val => {
               setVibrateOnComplete(val);
-              AsyncStorage.setItem(VIBRATE_KEY, String(val));
+              AsyncStorage.setItem(vibrateKey, String(val));
             }}
             showRpe={showRpe}
             onShowRpeChange={val => {
               setShowRpe(val);
-              AsyncStorage.setItem(RPE_KEY, String(val));
+              AsyncStorage.setItem(rpeKey, String(val));
             }}
             showPlateCalc={showPlateCalc}
             onShowPlateCalcChange={val => {
               setShowPlateCalc(val);
-              AsyncStorage.setItem('workout_show_plate_calc', String(val));
+              AsyncStorage.setItem(plateCalcKey, String(val));
             }}
             exercises={exercises}
             weightUnit={weightUnit}
@@ -1345,7 +1352,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           ]}
           pointerEvents="none"
         >
-          <Ionicons name="trophy" size={22} color="#FFD700" />
+          <Ionicons name="trophy" size={22} color={PR_GOLD} />
           <View style={styles.prBannerText}>
             <Text style={styles.prBannerTitle}>Personal Record!</Text>
             <Text style={styles.prBannerExercise} numberOfLines={1}>{prBanner.name}</Text>
@@ -1520,11 +1527,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     gap: spacing.sm,
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#FFD700',
+    borderColor: PR_GOLD,
     borderRadius: 14,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
-    shadowColor: '#FFD700',
+    shadowColor: PR_GOLD,
     shadowOpacity: 0.25,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 2 },
@@ -1535,7 +1542,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   prBannerTitle: {
     fontSize: typography.fontSize.sm,
     fontWeight: '700',
-    color: '#FFD700',
+    color: PR_GOLD,
     letterSpacing: 0.4,
   },
   prBannerExercise: {
