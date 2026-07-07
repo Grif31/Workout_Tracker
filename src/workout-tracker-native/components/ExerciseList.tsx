@@ -25,6 +25,7 @@ type Exercise = {
   equipment?: string;
   image_url?: string;
   exercise_type?: string;
+  is_custom?: boolean;
 };
 
 type SelectedExercise = { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string };
@@ -198,7 +199,14 @@ export default function ExerciseListModal({
           </View>
         )}
         <View style={styles.cardInfo}>
-          <Text style={styles.cardName}>{displayName(item)}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={styles.cardName}>{displayName(item)}</Text>
+            {item.is_custom && (
+              <View style={styles.customBadge}>
+                <Text style={styles.customBadgeText}>Custom</Text>
+              </View>
+            )}
+          </View>
           <Text style={styles.cardMuscle}>{isCardio ? 'Cardio' : item.muscle_group}</Text>
         </View>
         <Ionicons
@@ -436,6 +444,19 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  customBadge: {
+    backgroundColor: colors.accent + '22',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  customBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.accent,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   emptyText: {
     textAlign: 'center',

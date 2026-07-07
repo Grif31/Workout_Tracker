@@ -15,8 +15,7 @@ import { apiFetch } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import { TrainingStackParamsList } from '../../navigation/types';
 import MuscleDiagram from '../../components/MuscleDiagram';
-import { GREEK_RANK_COLORS } from '../../constants/greekRanks';
-import { STRENGTH_TIERS } from '../../constants/strengthRanks';
+import { STRENGTH_TIERS, SCORE_RANK_COLORS } from '../../constants/strengthRanks';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'StrengthScore'>;
 
@@ -127,7 +126,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
     fetchScore().finally(() => setLoading(false));
   }, []));
 
-  const rankColor = scoreData ? (GREEK_RANK_COLORS[scoreData.overall_rank.label] ?? colors.accent) : colors.accent;
+  const rankColor = scoreData ? (SCORE_RANK_COLORS[scoreData.overall_rank.label] ?? colors.accent) : colors.accent;
 
   const chartData = history.map(h => ({ value: h.score }));
   const CHART_W = Dimensions.get('window').width - spacing.md * 2 - spacing.sm * 2;
@@ -197,11 +196,11 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               <MuscleDiagram
                 muscles={scoreData.muscle_groups.map(mg => mg.name)}
                 muscleColors={Object.fromEntries(
-                  scoreData.muscle_groups.map(mg => [mg.name, GREEK_RANK_COLORS[mg.rank.label] ?? colors.accent])
+                  scoreData.muscle_groups.map(mg => [mg.name, SCORE_RANK_COLORS[mg.rank.label] ?? colors.accent])
                 )}
               />
               <View style={styles.legendRow}>
-                {Object.entries(GREEK_RANK_COLORS).map(([label, color]) => (
+                {Object.entries(SCORE_RANK_COLORS).map(([label, color]) => (
                   <View key={label} style={styles.legendItem}>
                     <View style={[styles.legendDot, { backgroundColor: color }]} />
                     <Text style={[styles.legendLabel, { color: colors.textSecondary }]}>{label}</Text>
@@ -210,7 +209,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               </View>
               <View style={styles.card}>
                 {scoreData.muscle_groups.map((mg, i) => {
-                  const mgColor = GREEK_RANK_COLORS[mg.rank.label] ?? colors.accent;
+                  const mgColor = SCORE_RANK_COLORS[mg.rank.label] ?? colors.accent;
                   return (
                     <React.Fragment key={mg.name}>
                       {i > 0 && <View style={styles.divider} />}
@@ -244,7 +243,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               <Text style={styles.sectionTitle}>Big 6 Lifts</Text>
               <View style={styles.card}>
                 {scoreData.big6.map((ex, i) => {
-                  const exColor = ex.rank ? (GREEK_RANK_COLORS[ex.rank.label] ?? colors.accent) : colors.border;
+                  const exColor = ex.rank ? (SCORE_RANK_COLORS[ex.rank.label] ?? colors.accent) : colors.border;
                   return (
                     <React.Fragment key={ex.exercise}>
                       {i > 0 && <View style={styles.divider} />}
@@ -299,7 +298,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               <Text style={styles.sectionTitle}>More Lifts</Text>
               <View style={styles.card}>
                 {scoreData.supplemental.map((ex, i) => {
-                  const exColor = ex.rank ? (GREEK_RANK_COLORS[ex.rank.label] ?? colors.accent) : colors.border;
+                  const exColor = ex.rank ? (SCORE_RANK_COLORS[ex.rank.label] ?? colors.accent) : colors.border;
                   return (
                     <React.Fragment key={ex.exercise}>
                       {i > 0 && <View style={styles.divider} />}
@@ -370,7 +369,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setLiftModalVisible(false)}>
           <View style={styles.modalSheet}>
             {selectedLift?.has_data && (() => {
-              const liftColor = selectedLift.rank ? (GREEK_RANK_COLORS[selectedLift.rank.label] ?? colors.accent) : colors.accent;
+              const liftColor = selectedLift.rank ? (SCORE_RANK_COLORS[selectedLift.rank.label] ?? colors.accent) : colors.accent;
               const pct = selectedLift.percentile ?? 0;
 
               // Rank tier segments for the distribution bar
@@ -466,28 +465,28 @@ export default function StrengthScoreScreen({ navigation }: Props) {
             <View style={styles.infoSection}>
               <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>Strength Percentile</Text>
               <Text style={[styles.infoBody, { color: colors.textSecondary }]}>
-                Your estimated 1-rep max (1RM) for each exercise is compared against population standards adjusted for your gender and bodyweight. The result is a percentile — how you rank against all lifters.
+                Your estimated 1RM for each exercise is compared against population standards adjusted for your gender and bodyweight. The result is a percentile — how you stack up against all lifters. Ranks go from Noobie → Beginner → Intermediate → Advanced → Elite → Legend.
               </Text>
             </View>
 
             <View style={styles.infoSection}>
               <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>Overall Score</Text>
               <Text style={[styles.infoBody, { color: colors.textSecondary }]}>
-                The Big 6 lifts (Squat, Bench, Deadlift, Overhead Press, Row, Pull-up) count for 70% of your overall score. All other exercises contribute the remaining 30%.
+                The Big 6 lifts (Squat, Bench Press, Deadlift, Overhead Press, Barbell Row, Pull-up) count for 70% of your score. Other compound lifts (Romanian Deadlift, Incline Bench, Dips, etc.) count for 20%. Isolation exercises make up the remaining 10%. Your strength score also counts for 45% of your Greek rank.
               </Text>
             </View>
 
             <View style={styles.infoSection}>
               <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>Muscle Groups</Text>
               <Text style={[styles.infoBody, { color: colors.textSecondary }]}>
-                Each muscle group score is the average percentile of the exercises that train it. Log more exercises to make each group more accurate.
+                Each muscle group score is the average percentile of the exercises that train it. Log more exercises across a muscle group to make its score more accurate.
               </Text>
             </View>
 
             <View style={styles.infoSection}>
               <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>Estimated 1RM</Text>
               <Text style={[styles.infoBody, { color: colors.textSecondary }]}>
-                If you haven't performed a true 1-rep max, we use the Epley formula (weight × (1 + reps ÷ 30)) applied to your best logged set.
+                If you haven't logged a true 1-rep max, we use the Epley formula — weight × (1 + reps ÷ 30) — applied to your best logged set for each exercise.
               </Text>
             </View>
           </View>
@@ -499,7 +498,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setGroupModalVisible(false)}>
           <View style={styles.modalSheet}>
             {selectedGroup && (() => {
-              const mgColor = GREEK_RANK_COLORS[(selectedGroup as any).rank?.label] ?? colors.accent;
+              const mgColor = SCORE_RANK_COLORS[(selectedGroup as any).rank?.label] ?? colors.accent;
               return (
                 <>
                   <View style={styles.modalHandle} />

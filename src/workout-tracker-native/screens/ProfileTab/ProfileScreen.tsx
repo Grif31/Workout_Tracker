@@ -6,7 +6,6 @@ import {
   FlatList,
   StyleSheet,
   ActivityIndicator,
-  Animated,
   TouchableOpacity,
   Image,
   Modal,
@@ -107,9 +106,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [totalWorkouts, setTotalWorkouts] = useState<number | null>(null);
   const loadingMoreRef              = useRef(false);
-  const hasMountedRef               = useRef(false);
   const [stats, setStats]           = useState<ProfileStats | null>(null);
-  const prCardAnims                 = useRef([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]).current;
   const [refreshing, setRefreshing] = useState(false);
   const [prs, setPrs]               = useState<PR[]>([]);
   const [pins, setPins]               = useState<Pin[]>([null, null, null]);
@@ -182,13 +179,6 @@ export default function ProfileScreen({ navigation }: Props) {
     });
   }, []);
 
-  useEffect(() => {
-    if (prs.length === 0) return;
-    prCardAnims.forEach(a => a.setValue(0));
-    Animated.stagger(25, prCardAnims.map(a =>
-      Animated.timing(a, { toValue: 1, duration: 120, useNativeDriver: true })
-    )).start();
-  }, [prs]);
 
   const savePins = (next: Pin[]) => {
     setPins(next);
@@ -266,10 +256,7 @@ export default function ProfileScreen({ navigation }: Props) {
   };
 
   useFocusEffect(useCallback(() => {
-    if (hasMountedRef.current) {
-      prCardAnims.forEach(a => a.setValue(0));
-    }
-    hasMountedRef.current = true;
+
     fetchAll();
     AsyncStorage.getItem(`profile_frame_rank_${user?.id}`).then(val => {
       if (val) setSelectedFrame(val);
@@ -392,16 +379,8 @@ export default function ProfileScreen({ navigation }: Props) {
         <View style={styles.prCards}>
           {pins.map((pin, slot) => {
             const pr = getPinnedPR(pin);
-            const cardAnim = prCardAnims[slot];
             return (
-              <Animated.View
-                key={slot}
-                style={{
-                  flex: 1,
-                  opacity: cardAnim,
-                  transform: [{ translateY: cardAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
-                }}
-              >
+              <View key={slot} style={{ flex: 1 }}>
                 <View style={[styles.prCard, { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: PR_GOLD + '60' }]}>
                   <Ionicons name="trophy" size={22} color={PR_GOLD} style={styles.trophyIcon} />
                   {pr ? (
@@ -437,7 +416,7 @@ export default function ProfileScreen({ navigation }: Props) {
                     <Ionicons name="swap-horizontal" size={13} color={colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
-              </Animated.View>
+              </View>
             );
           })}
         </View>

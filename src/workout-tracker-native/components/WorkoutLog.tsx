@@ -136,7 +136,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const prTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputFocusedRef = useRef(false);
 
-  const [exerciseList, setExerciseList] = useState<{ id: number; name: string; muscle_group: string; equipment?: string; image_url?: string; exercise_type?: string }[]>([]);
+  const [exerciseList, setExerciseList] = useState<{ id: number; name: string; muscle_group: string; equipment?: string; image_url?: string; exercise_type?: string; is_custom?: boolean }[]>([]);
   const [recentExercises, setRecentExercises] = useState<{ name: string; exercise_template_id: number | null }[]>([]);
   const [templates, setTemplates] = useState<{ id: number; name: string; exercises: { id: number; name: string; equipment?: string; image_url?: string; exercise_type?: string }[] }[]>([]);
   const [exerciseModalVisible, setExerciseModalVisible] = useState(false);
@@ -403,7 +403,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         const d = new Date(prefill.date);
         if (!isNaN(d.getTime())) setSelectedDate(d);
       }
-      const initialExercises = prefill.exercises.map((ex: any) => ({
+      const initialExercises: ExerciseEntry[] = prefill.exercises.map((ex: any) => ({
         uid: makeUid(),
         id: ex.id,
         exercise_template_id: ex.exercise_template_id,

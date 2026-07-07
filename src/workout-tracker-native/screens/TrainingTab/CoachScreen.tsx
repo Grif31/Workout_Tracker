@@ -678,7 +678,7 @@ export default function CoachScreen({ navigation }: Props) {
       <Animated.View style={{ flex: 1, opacity: contentOpacity }} {...swipeResponder.panHandlers}>
       {/* ── TRAINING TAB ── */}
       {activeTab === 'training' && (
-        <ScrollView style={styles.trainingScroll} contentContainerStyle={{ paddingBottom: spacing.xl }}>
+        <ScrollView style={styles.trainingScroll} contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.xl }}>
           {/* Active Routine */}
           <TouchableOpacity
             style={styles.activeBlock}
@@ -1374,7 +1374,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   // ── Training tab ────────────────────────────────────────────────────────────
   trainingScroll: { flex: 1, paddingHorizontal: spacing.md },
   sectionLabel: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.sm },
-  activeBlock: { backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border },
+  activeBlock: { backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 3, borderLeftColor: colors.accent },
   activeRoutineNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   activeRoutineName: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, flex: 1 },
   toggleDaysBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: spacing.sm },

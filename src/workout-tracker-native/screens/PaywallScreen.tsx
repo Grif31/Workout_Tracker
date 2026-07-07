@@ -134,7 +134,7 @@ export default function PaywallScreen({ navigation }: Props) {
                     {label}
                   </Text>
                   {pkg ? (
-                    <Text style={styles.tierPrice}>{pkg.product.localizedPriceString}</Text>
+                    <Text style={styles.tierPrice}>{pkg.product.priceString}</Text>
                   ) : (
                     <ActivityIndicator size="small" color={GOLD_DIM} style={{ marginTop: 2 }} />
                   )}

@@ -53,8 +53,8 @@ export default function ExercisesScreen({ navigation }: Props) {
   const [showMuscleDropdown, setShowMuscleDropdown] = useState(false);
   const [showEquipmentDropdown, setShowEquipmentDropdown] = useState(false);
   const [recentExercises, setRecentExercises] = useState<{ name: string; exercise_template_id: number | null }[]>([]);
-  const muscleRef = useRef<TouchableOpacity>(null);
-  const equipRef  = useRef<TouchableOpacity>(null);
+  const muscleRef = useRef<View>(null);
+  const equipRef  = useRef<View>(null);
   const [muscleAnchor, setMuscleAnchor] = useState({ x: 0, y: 0, width: 0 });
   const [equipAnchor,  setEquipAnchor]  = useState({ x: 0, y: 0, width: 0 });
 
@@ -170,7 +170,11 @@ export default function ExercisesScreen({ navigation }: Props) {
         <View style={styles.exerciseCardRight}>
           <View style={styles.exerciseNameRow}>
             <Text style={styles.exerciseName}>{item.name}</Text>
-            {item.is_custom && <Ionicons name="person" size={13} color={colors.accent} />}
+            {item.is_custom && (
+              <View style={styles.customBadge}>
+                <Text style={styles.customBadgeText}>Custom</Text>
+              </View>
+            )}
           </View>
           {!!item.equipment && <Text style={styles.exerciseEquipment}>{item.equipment}</Text>}
           {!!primaryMuscle && (
@@ -371,7 +375,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     padding: spacing.md, marginBottom: spacing.sm,
     flexDirection: 'row', alignItems: 'center',
   },
-  exerciseName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
+  exerciseName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary, flexShrink: 1 },
+  customBadge: { backgroundColor: colors.accent + '22', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
+  customBadgeText: { fontSize: 10, fontWeight: '700', color: colors.accent, textTransform: 'uppercase', letterSpacing: 0.4 },
   exerciseEquipment: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 1 },
   exerciseImage: { width: 64, height: 64, borderRadius: radius.sm, marginRight: spacing.sm },
   exerciseImagePlaceholder: { backgroundColor: colors.accent + '18', alignItems: 'center', justifyContent: 'center' },

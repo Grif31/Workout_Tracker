@@ -12,7 +12,7 @@ let _MapsModule: any = null;
 try { _MapsModule = require('react-native-maps'); } catch {}
 const MapView: React.ComponentType<any> | null = _MapsModule?.default ?? null;
 const Polyline: React.ComponentType<any> | null = _MapsModule?.Polyline ?? null;
-const MAPS_AVAILABLE = MapView !== null;
+const MAPS_AVAILABLE = MapView !== null && Polyline !== null;
 import polylineLib from '@mapbox/polyline';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';

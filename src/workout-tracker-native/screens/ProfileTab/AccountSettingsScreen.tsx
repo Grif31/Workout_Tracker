@@ -26,7 +26,7 @@ export default function AccountSettingsScreen({ navigation }: Props) {
       const res = await apiFetch('/api/workouts/export');
       if (!res.ok) { Alert.alert('Error', 'Export failed. Please try again.'); return; }
       const csvText = await res.text();
-      const { default: FileSystem } = await import('expo-file-system');
+      const FileSystem = await import('expo-file-system/legacy');
       const { shareAsync } = await import('expo-sharing');
       const dir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
       if (dir) {
