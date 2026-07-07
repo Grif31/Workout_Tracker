@@ -35,7 +35,7 @@
 npx expo start              # start dev server (scan QR with Expo Go)
 npx expo start --ios        # iOS simulator
 npx expo start --android    # Android emulator
-npx jest                    # run all frontend tests
+npx jest --maxWorkers=2     # run all frontend tests (default parallelism causes false timeout failures on this machine)
 npx jest __tests__/Foo.test.tsx --verbose   # run single test file
 npx expo install <pkg>      # install Expo-compatible package version
 ```
@@ -46,7 +46,7 @@ npx expo install <pkg>      # install Expo-compatible package version
 ./venv/Scripts/flask.exe db migrate -m "msg" # generate migration
 ./venv/Scripts/flask.exe db upgrade           # apply migrations
 ./venv/Scripts/pip.exe install <pkg>          # install Python package
-python -m pytest tests/ -q --tb=short        # run all backend tests
+python -m pytest tests/ -q --tb=short        # run all backend tests (~14 min on this machine — run in background, it is not hung)
 python -m pytest tests/test_foo.py -v        # run single test file
 ```
 
@@ -69,8 +69,9 @@ src/
 │   │   │   └── CardioDetailsScreen.tsx   # map + stats view for completed cardio activities
 │   │   ├── ExercisesTab/         # exercise browser + detail
 │   │   ├── TrainingTab/          # AI coach tab (tab label: "Coach", route stays TrainingTab)
-│   │   │   ├── CoachScreen.tsx           # tab home: coach character + insights + training overview
-│   │   │   ├── CoachCharacter.tsx        # SVG character that evolves with Greek rank
+│   │   │   ├── CoachScreen.tsx           # tab home: insights + training overview (character removed)
+│   │   │   ├── CoachCharacter.tsx        # UNUSED — SVG character, no longer rendered anywhere
+│   │   │   ├── StrengthScoreScreen.tsx   # percentile ranks — uses SCORE_RANK_COLORS, NOT Greek colors
 │   │   │   └── CoachProfileModal.tsx     # coach personalization (goal/equipment/schedule/injuries)
 │   │   ├── ProfileTab/           # profile, settings, bodyweight, measurements
 │   │   └── PaywallScreen.tsx     # RevenueCat subscription paywall
@@ -117,7 +118,9 @@ src/
 │   ├── workout_template_routes.py
 │   ├── routine_routes.py
 │   ├── ai_routes.py              # AI workout/routine generation (Anthropic API)
-│   └── legal_routes.py           # privacy policy / terms pages
+│   ├── legal_routes.py           # public homepage, privacy policy, terms pages
+│   ├── admin_routes.py           # /admin/exercises image review page (HTTP Basic Auth via ADMIN_PASSWORD; ExerciseDB suggest needs RAPIDAPI_KEY)
+│   └── health_routes.py          # GET /health — public liveness probe (200 + DB ping, 503 if DB down)
 ├── models.py                     # all SQLAlchemy models
 ├── schemas.py                    # marshmallow request validation schemas
 ├── app.py                        # app factory, blueprint registration, APScheduler
@@ -177,6 +180,12 @@ Shared keys that cross file boundaries live in `constants/` or are exported from
 3. Add type to `navigation/types.ts`
 4. Navigate via `navigation.navigate('ScreenName', { params })`
 
+### Navigation — cross-tab navigation MUST pass `initial: false`
+```typescript
+navigation.navigate('TrainingTab', { screen: 'StrengthScore', initial: false })
+```
+Without it, the sub-screen becomes the tab stack's only route — its back button bubbles to the tab navigator (jumps to Dashboard) and the hidden tab bar strands the user.
+
 ### AsyncStorage keys
 
 **Device-level (shared across all accounts on the device):**
@@ -207,6 +216,7 @@ Shared keys that cross file boundaries live in `constants/` or are exported from
 | `profile_frame_rank_${uid}` | 'Neophyte' | Selected avatar frame rank name |
 | `@pr_pins_${uid}` | — | JSON array of 3 pinned PR slots on Profile (Pin\|null)[] |
 | `coach_profile_${uid}` | — | Coach personalization JSON (goal/equipment/schedule/injuries) |
+| `exercise_list_cache_${uid}` | — | Exercise list cache, 24h TTL (`utils/exerciseCache.ts`; falls back to un-suffixed key when no userId passed) |
 | `coach_settings_${uid}` | — | Legacy onboarding settings (migrated to coach_profile on first open) |
 | `coach_insights_cache` | — | Cached AI coaching insights JSON + fetchedAt timestamp |
 | `coach_settings` | — | Legacy key — migrated to `coach_profile` on first CoachProfileModal open |
@@ -218,7 +228,7 @@ Shared keys that cross file boundaries live in `constants/` or are exported from
 ## Backend Conventions
 
 ### Every new route must:
-- Be `@jwt_required()` protected (except auth endpoints)
+- Be `@jwt_required()` protected — exceptions: auth endpoints, `legal_routes.py` (public pages), `/health` (public probe), and `/admin/*` (HTTP Basic Auth via `ADMIN_PASSWORD` env var instead)
 - Live in the appropriate blueprint in `routes/`
 - Be registered in `app.py`
 
@@ -280,6 +290,11 @@ return jsonify({ 'message': 'error reason' }), 400   # client error
 ## Production Deployment
 
 - **Backend:** Railway — auto-deploys from `main` branch push to GitHub
-- **Live URL:** `https://workouttracker-production-601f.up.railway.app`
+- **Live URL:** `https://workouttracker-production-601f.up.railway.app` (also `aretefitnessapp.com`)
 - **DB migrations on deploy:** `flask db upgrade` runs automatically via `railway.json` `startCommand`
 - **Frontend:** EAS Build — `eas build --profile production --platform ios` for App Store
+- **Liveness probe:** `GET /health` — public, returns 200 + DB ping status
+- **Railway CLI:** installed and linked to project "Arete Fitness APp" (services: `Postgres`, `Workout_Tracker`); run from `src/`
+- **`railway run` gotcha:** it executes locally with prod env vars, but the injected `DATABASE_URL` host (`postgres.railway.internal`) is unreachable from this machine — to hit the prod DB, fetch `DATABASE_PUBLIC_URL` from `railway variables --service Postgres` and set it as `DATABASE_URL` before running the command
+- **Backend env vars (Railway):** `DATABASE_URL`, `JWT_SECRET_KEY`, `APPLE_BUNDLE_ID`, `ADMIN_PASSWORD` (admin pages), `RAPIDAPI_KEY` (ExerciseDB image suggest), mail/SMTP creds
+- **Ops work** (logs, prod DB queries, rollbacks, EAS builds): use the `ops-maintainer` agent — runbooks live in `.claude/agents/ops-maintainer.agent.md`

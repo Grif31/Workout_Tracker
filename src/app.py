@@ -23,6 +23,7 @@ from routes.ai_routes import ai_bp
 from routes.measurement_routes import measurement_bp
 from routes.legal_routes import legal_bp
 from routes.admin_routes import admin_bp
+from routes.health_routes import health_bp
 from limiter import limiter
 from mail_ext import mail
 
@@ -123,6 +124,7 @@ def create_app(test_config=None):
     app.register_blueprint(measurement_bp)
     app.register_blueprint(legal_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(health_bp)
 
     if not app.config.get('TESTING'):
         scheduler = BackgroundScheduler()
