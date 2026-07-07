@@ -12,6 +12,7 @@ import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { showToast } from '../utils/toast';
 import { type RootStackParamsList } from '../navigation/types';
+import { APP_ICONS_ENABLED } from '../constants/featureFlags';
 
 type Props = NativeStackScreenProps<RootStackParamsList, 'Paywall'>;
 
@@ -27,7 +28,7 @@ const FEATURES: { icon: string; label: string }[] = [
   { icon: 'trophy-outline', label: 'Strength Score & lifter ranking' },
   { icon: 'sparkles',       label: 'AI Coach — generate routines & templates' },
   { icon: 'list-outline',   label: 'Unlimited templates & routines' },
-  { icon: 'apps-outline',   label: 'Custom app icons' },
+  ...(APP_ICONS_ENABLED ? [{ icon: 'apps-outline', label: 'Custom app icons' }] : []),
 ];
 
 const TIER_LABELS = ['Annual', 'Monthly', 'Lifetime'];

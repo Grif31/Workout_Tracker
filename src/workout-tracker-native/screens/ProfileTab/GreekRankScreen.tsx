@@ -294,7 +294,7 @@ export default function GreekRankScreen({ navigation }: Props) {
           {/* View Full Breakdown */}
           <TouchableOpacity
             style={[styles.fullBreakdownBtn, { borderColor: colors.accent }]}
-            onPress={() => (navigation as any).navigate('TrainingTab', { screen: 'StrengthScore' })}
+            onPress={() => (navigation as any).navigate('TrainingTab', { screen: 'StrengthScore', initial: false })}
           >
             <Text style={[styles.fullBreakdownText, { color: colors.accent }]}>View Full Strength Breakdown</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.accent} />

@@ -45,7 +45,7 @@ export default function App(): JSX.Element {
     setUpLiveWorkoutCategory();
 
     const navigateToWorkoutLog = () => {
-      (navigationRef as any).navigate('DashboardTab', { screen: 'WorkoutLog', params: {} });
+      (navigationRef as any).navigate('DashboardTab', { screen: 'WorkoutLog', params: {}, initial: false });
     };
 
     const isWorkoutNotification = (response: Notifications.NotificationResponse) => {

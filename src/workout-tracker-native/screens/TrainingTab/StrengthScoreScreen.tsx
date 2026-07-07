@@ -543,7 +543,7 @@ function GateCard({ missingFields, navigation, colors, styles }: any) {
       </Text>
       <TouchableOpacity
         style={[styles.gateBtn, { backgroundColor: colors.accent }]}
-        onPress={() => (navigation as any).navigate('ProfileTab', { screen: 'EditProfile' })}
+        onPress={() => (navigation as any).navigate('ProfileTab', { screen: 'EditProfile', initial: false })}
       >
         <Text style={[styles.gateBtnText, { color: colors.accentText }]}>Complete Profile</Text>
       </TouchableOpacity>

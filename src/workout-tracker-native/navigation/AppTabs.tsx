@@ -43,6 +43,19 @@ const ICON_LIFT = 5;
 
 const screenFadeAnim = new Animated.Value(1);
 
+// Fade wrapper applied per-scene so tab switches animate only the screen
+// content — the tab bar and MiniWorkoutBar render inside Tab.Navigator and
+// must stay solid.
+const withScreenFade = (Stack: React.ComponentType<any>) => () => (
+  <Animated.View style={{ flex: 1, opacity: screenFadeAnim }}>
+    <Stack />
+  </Animated.View>
+);
+const FadedDashboardStack = withScreenFade(DashboardStack);
+const FadedExercisesStack = withScreenFade(ExercisesStack);
+const FadedTrainingStack  = withScreenFade(TrainingStack);
+const FadedProfileStack   = withScreenFade(ProfileStack);
+
 function fmtElapsed(secs: number): string {
   if (secs < 60) return `${secs}s`;
   const m = Math.floor(secs / 60);
@@ -101,7 +114,7 @@ function MiniWorkoutBar() {
 
   const handleResume = () => {
     if (navigationRef.isReady()) {
-      navigationRef.navigate('DashboardTab', { screen: 'WorkoutLog', params: {} });
+      navigationRef.navigate('DashboardTab', { screen: 'WorkoutLog', params: {}, initial: false });
     }
   };
 
@@ -295,17 +308,15 @@ function CustomTabBar(props: BottomTabBarProps) {
 
 export function AppTabs() {
   return (
-    <Animated.View style={{ flex: 1, opacity: screenFadeAnim }}>
-      <Tab.Navigator
-        tabBar={(props) => <CustomTabBar {...props} />}
-        screenOptions={{ headerShown: false }}
-      >
-        <Tab.Screen name="DashboardTab" component={DashboardStack} options={{ title: 'Dashboard' }} />
-        <Tab.Screen name="ExercisesTab" component={ExercisesStack} options={{ title: 'Exercises' }} />
-        <Tab.Screen name="TrainingTab" component={TrainingStack} options={{ title: 'Training' }} />
-        <Tab.Screen name="ProfileTab" component={ProfileStack} options={{ title: 'Profile' }} />
-      </Tab.Navigator>
-    </Animated.View>
+    <Tab.Navigator
+      tabBar={(props) => <CustomTabBar {...props} />}
+      screenOptions={{ headerShown: false }}
+    >
+      <Tab.Screen name="DashboardTab" component={FadedDashboardStack} options={{ title: 'Dashboard' }} />
+      <Tab.Screen name="ExercisesTab" component={FadedExercisesStack} options={{ title: 'Exercises' }} />
+      <Tab.Screen name="TrainingTab" component={FadedTrainingStack} options={{ title: 'Training' }} />
+      <Tab.Screen name="ProfileTab" component={FadedProfileStack} options={{ title: 'Profile' }} />
+    </Tab.Navigator>
   );
 }
 

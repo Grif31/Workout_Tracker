@@ -18,6 +18,7 @@ import { OnboardingStackParamsList } from '../../navigation/types';
 import { AUTH } from '../../theme/authColors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
+import { APP_ICONS_ENABLED } from '../../constants/featureFlags';
 
 type Props = NativeStackScreenProps<OnboardingStackParamsList, 'OnboardingTutorial'>;
 
@@ -52,7 +53,7 @@ const PREMIUM_FEATURES = [
   'AI Coach — personalised programs in seconds',
   'Strength Score & Greek Rank',
   'Unlimited templates & routines',
-  'Custom app icons',
+  ...(APP_ICONS_ENABLED ? ['Custom app icons'] : []),
 ];
 
 const SLIDES: Slide[] = [

@@ -23,6 +23,7 @@ import { ProfileStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
+import { APP_ICONS_ENABLED } from '../../constants/featureFlags';
 import {
   requestNotificationPermission,
   scheduleWorkoutReminder,
@@ -203,29 +204,33 @@ export default function SettingsScreen({ navigation }: Props) {
           </View>
         </TouchableOpacity>
 
-        <View style={styles.divider} />
+        {APP_ICONS_ENABLED && (
+          <>
+            <View style={styles.divider} />
 
-        {/* App Icon */}
-        <TouchableOpacity
-          style={styles.row}
-          onPress={isPremium
-            ? undefined
-            : () => (navigation as any).navigate('Paywall', { source: 'app_icon' })
-          }
-          activeOpacity={isPremium ? 1 : 0.7}
-        >
-          <View style={styles.rowLeft}>
-            <Ionicons name="apps-outline" size={20} color={colors.textSecondary} />
-            <Text style={styles.rowLabel}>App Icon</Text>
-          </View>
-          {isPremium
-            ? <Text style={[styles.rowLabel, { color: colors.textSecondary, fontSize: 13 }]}>Coming soon</Text>
-            : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Ionicons name="lock-closed-outline" size={14} color={colors.accent} />
-                <Text style={{ fontSize: 12, color: colors.accent, fontWeight: '600' }}>Premium</Text>
+            {/* App Icon */}
+            <TouchableOpacity
+              style={styles.row}
+              onPress={isPremium
+                ? undefined
+                : () => (navigation as any).navigate('Paywall', { source: 'app_icon' })
+              }
+              activeOpacity={isPremium ? 1 : 0.7}
+            >
+              <View style={styles.rowLeft}>
+                <Ionicons name="apps-outline" size={20} color={colors.textSecondary} />
+                <Text style={styles.rowLabel}>App Icon</Text>
               </View>
-          }
-        </TouchableOpacity>
+              {isPremium
+                ? <Text style={[styles.rowLabel, { color: colors.textSecondary, fontSize: 13 }]}>Coming soon</Text>
+                : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name="lock-closed-outline" size={14} color={colors.accent} />
+                    <Text style={{ fontSize: 12, color: colors.accent, fontWeight: '600' }}>Premium</Text>
+                  </View>
+              }
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       {/* ── Account ── */}
