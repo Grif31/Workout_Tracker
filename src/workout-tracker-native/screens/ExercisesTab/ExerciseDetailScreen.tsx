@@ -12,7 +12,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LineChart } from 'react-native-gifted-charts';
+import { LineChart, BarChart } from 'react-native-gifted-charts';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
 import { ExerciseDetailParams } from '../../navigation/types';
@@ -51,7 +51,7 @@ type HistorySession = {
   notes?: string;
 };
 
-type ChartPoint = { value: number; label: string; dataPointText: string };
+type ChartPoint = { value: number; label: string; dataPointText: string; date: string };
 
 type CardioStats = {
   total_distance: number;
@@ -135,6 +135,8 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const [cardioHistory, setCardioHistory] = useState<CardioSession[]>([]);
   const [chart1RM, setChart1RM] = useState<ChartPoint[]>([]);
   const [chartMaxWeight, setChartMaxWeight] = useState<ChartPoint[]>([]);
+  const [chartVolume, setChartVolume] = useState<ChartPoint[]>([]);
+  const [hasChartData, setHasChartData] = useState({ oneRm: false, maxW: false, vol: false });
   const [chartRange, setChartRange] = useState<'1M' | '3M' | '6M' | 'All'>('3M');
   const [wgerDescription, setWgerDescription] = useState<string | null>(null);
   const [wgerLoading, setWgerLoading] = useState(false);
@@ -251,19 +253,40 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
       d.setMonth(d.getMonth() - months);
       return d;
     })();
-    const filtered = [...historySessions]
-      .reverse()
-      .filter(s => !cutoff || new Date(s.date) >= cutoff);
-    const buildPoints = (items: HistorySession[], getter: (s: HistorySession) => number): ChartPoint[] =>
-      items
+    const chrono = [...historySessions].reverse();
+    const inRange = chrono.filter(s => !cutoff || new Date(s.date) >= cutoff);
+    const sessionVolume = (s: HistorySession) =>
+      s.sets.reduce((sum, st) => sum + (st.reps || 0) * (st.weight || 0), 0);
+
+    const buildPoints = (items: HistorySession[], getter: (s: HistorySession) => number): ChartPoint[] => {
+      const pts = items
         .filter(s => getter(s) > 0)
         .map(s => {
           const d = new Date(s.date);
           const val = parseFloat(convertWeight(getter(s), weightUnit).toFixed(1));
-          return { value: val, label: `${d.getMonth() + 1}/${d.getDate()}`, dataPointText: `${Math.round(val)}` };
+          return { value: val, date: `${d.getMonth() + 1}/${d.getDate()}` };
         });
-    setChart1RM(buildPoints(filtered, s => s.best1rm));
-    setChartMaxWeight(buildPoints(filtered, s => s.bestWeight));
+      // Thin x labels to ~4; direct-label only the max and latest points
+      const step = Math.max(1, Math.ceil(pts.length / 4));
+      let maxIdx = 0;
+      pts.forEach((p, i) => { if (p.value > pts[maxIdx].value) maxIdx = i; });
+      return pts.map((p, i) => ({
+        ...p,
+        label: i % step === 0 ? p.date : '',
+        dataPointText: i === maxIdx || i === pts.length - 1 ? `${Math.round(p.value)}` : '',
+      }));
+    };
+
+    // Range-independent counts decide whether a chart exists at all vs is just
+    // empty for the selected range
+    setHasChartData({
+      oneRm: chrono.filter(s => s.best1rm > 0).length >= 2,
+      maxW: chrono.filter(s => s.bestWeight > 0).length >= 2,
+      vol: chrono.filter(s => sessionVolume(s) > 0).length >= 2,
+    });
+    setChart1RM(buildPoints(inRange, s => s.best1rm));
+    setChartMaxWeight(buildPoints(inRange, s => s.bestWeight));
+    setChartVolume(buildPoints(inRange, sessionVolume));
   }, [historySessions, chartRange, weightUnit]);
 
   useEffect(() => {
@@ -320,32 +343,78 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
       ? 'Loading exercise details...'
       : wgerDescription || description || (muscleGroup ? exerciseDescriptions[muscleGroup] : null) || defaultDescription;
 
-  const renderChart = (points: ChartPoint[], title: string) => {
-    if (points.length < 2) return null;
-    const maxVal = Math.max(...points.map(p => p.value));
+  const fmtK = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : `${Math.round(v)}`);
+
+  const renderDelta = (points: ChartPoint[], suffix: string) => {
+    const delta = points[points.length - 1].value - points[0].value;
+    if (Math.round(Math.abs(delta)) === 0) return null;
+    const up = delta > 0;
+    const deltaColor = up ? colors.save : colors.danger;
+    return (
+      <View style={styles.deltaRow}>
+        <Ionicons name={up ? 'trending-up' : 'trending-down'} size={12} color={deltaColor} />
+        <Text style={[styles.deltaText, { color: deltaColor }]}>
+          {up ? '+' : '−'}{fmtK(Math.abs(delta))} {suffix}
+        </Text>
+      </View>
+    );
+  };
+
+  const renderTooltipBubble = (item: ChartPoint, suffix: string) => (
+    <View style={styles.tooltipBubble}>
+      <Text style={styles.tooltipDate}>{item.date}</Text>
+      <Text style={styles.tooltipValue}>{fmtK(item.value)} {suffix}</Text>
+    </View>
+  );
+
+  const renderChart = (points: ChartPoint[], title: string, color: string, hasAny: boolean) => {
+    if (!hasAny) return null;
+    if (points.length < 2) {
+      return (
+        <View style={styles.chartCard}>
+          <Text style={styles.chartTitle}>{title}</Text>
+          <Text style={styles.chartEmptyNote}>Not enough data in this range</Text>
+        </View>
+      );
+    }
+    const vals = points.map(p => p.value);
+    const minVal = Math.min(...vals);
+    const maxVal = Math.max(...vals);
+    // Window the y-axis around the data — a zero floor flattens progress lines
+    const pad = Math.max((maxVal - minVal) * 0.2, maxVal * 0.04, 2);
+    const yMin = Math.max(0, Math.floor(minVal - pad));
+    const yMax = Math.ceil(maxVal + pad);
+    const spacing = Math.max(12, Math.floor((CHART_WIDTH - 40) / (points.length - 1)));
     return (
       <View style={styles.chartCard}>
-        <Text style={styles.chartTitle}>{title}</Text>
+        <View style={styles.chartHeaderRow}>
+          <Text style={styles.chartTitle}>{title}</Text>
+          {renderDelta(points, weightUnit)}
+        </View>
         <LineChart
           data={points}
           width={CHART_WIDTH}
-          height={140}
-          spacing={Math.max(30, Math.floor(CHART_WIDTH / points.length))}
-          color={colors.save}
+          height={150}
+          spacing={spacing}
+          color={color}
           thickness={2}
-          hideDataPoints={false}
-          dataPointsColor={colors.save}
-          startFillColor={colors.save}
+          dataPointsColor={color}
+          dataPointsRadius={3.5}
+          startFillColor={color}
           endFillColor={colors.background}
-          startOpacity={0.15}
+          startOpacity={0.16}
           endOpacity={0}
           areaChart
           curved
-          hideRules
-          hideYAxisText
+          rulesType="dashed"
+          rulesColor={colors.border}
+          rulesThickness={1}
+          yAxisTextStyle={styles.axisLabel}
+          yAxisLabelWidth={36}
           xAxisLabelTextStyle={styles.axisLabel}
-          noOfSections={4}
-          maxValue={maxVal * 1.2}
+          noOfSections={3}
+          maxValue={yMax - yMin}
+          yAxisOffset={yMin}
           initialSpacing={10}
           endSpacing={10}
           textShiftY={-8}
@@ -355,6 +424,68 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           xAxisColor={colors.border}
           yAxisThickness={0}
           isAnimated
+          pointerConfig={{
+            activatePointersOnLongPress: true,
+            pointerStripColor: colors.border,
+            pointerStripWidth: 1,
+            pointerStripUptoDataPoint: true,
+            pointerColor: color,
+            radius: 5,
+            pointerLabelWidth: 96,
+            pointerLabelHeight: 44,
+            autoAdjustPointerLabelPosition: true,
+            pointerLabelComponent: (items: ChartPoint[]) => renderTooltipBubble(items[0], weightUnit),
+          }}
+        />
+      </View>
+    );
+  };
+
+  const renderVolumeChart = (points: ChartPoint[], hasAny: boolean) => {
+    if (!hasAny) return null;
+    if (points.length < 2) {
+      return (
+        <View style={styles.chartCard}>
+          <Text style={styles.chartTitle}>Session volume ({weightUnit})</Text>
+          <Text style={styles.chartEmptyNote}>Not enough data in this range</Text>
+        </View>
+      );
+    }
+    const maxVal = Math.max(...points.map(p => p.value));
+    const slot = Math.floor((CHART_WIDTH - 46) / points.length);
+    const barSpacing = Math.max(2, Math.floor(slot * 0.3));
+    const barWidth = Math.min(26, Math.max(6, slot - barSpacing));
+    return (
+      <View style={styles.chartCard}>
+        <View style={styles.chartHeaderRow}>
+          <Text style={styles.chartTitle}>Session volume ({weightUnit})</Text>
+          {renderDelta(points, weightUnit)}
+        </View>
+        <BarChart
+          data={points}
+          width={CHART_WIDTH}
+          height={150}
+          barWidth={barWidth}
+          spacing={barSpacing}
+          frontColor={colors.accent}
+          barBorderTopLeftRadius={3}
+          barBorderTopRightRadius={3}
+          rulesType="dashed"
+          rulesColor={colors.border}
+          rulesThickness={1}
+          yAxisTextStyle={styles.axisLabel}
+          yAxisLabelWidth={36}
+          formatYLabel={(label: string) => fmtK(Number(label))}
+          xAxisLabelTextStyle={styles.axisLabel}
+          noOfSections={3}
+          maxValue={Math.ceil(maxVal * 1.15)}
+          initialSpacing={10}
+          endSpacing={10}
+          xAxisThickness={1}
+          xAxisColor={colors.border}
+          yAxisThickness={0}
+          isAnimated
+          renderTooltip={(item: ChartPoint) => renderTooltipBubble(item, weightUnit)}
         />
       </View>
     );
@@ -461,21 +592,25 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
             </Animated.View>
           ))}
         </View>
-        {(chart1RM.length >= 2 || chartMaxWeight.length >= 2) && (
-          <View style={styles.rangeToggle}>
-            {(['1M', '3M', '6M', 'All'] as const).map(r => (
-              <TouchableOpacity
-                key={r}
-                style={[styles.rangeBtn, chartRange === r && { backgroundColor: colors.accent }]}
-                onPress={() => setChartRange(r)}
-              >
-                <Text style={[styles.rangeBtnText, chartRange === r && { color: colors.accentText }]}>{r}</Text>
-              </TouchableOpacity>
-            ))}
+        {(hasChartData.oneRm || hasChartData.maxW || hasChartData.vol) && (
+          <View style={styles.progressHeaderRow}>
+            <Text style={styles.progressLabel}>Progress</Text>
+            <View style={styles.rangeToggle}>
+              {(['1M', '3M', '6M', 'All'] as const).map(r => (
+                <TouchableOpacity
+                  key={r}
+                  style={[styles.rangeBtn, chartRange === r && { backgroundColor: colors.accent + '22' }]}
+                  onPress={() => setChartRange(r)}
+                >
+                  <Text style={[styles.rangeBtnText, chartRange === r && { color: colors.accent, fontWeight: '700' }]}>{r}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         )}
-        {renderChart(chart1RM, `Estimated 1RM over time (${weightUnit})`)}
-        {renderChart(chartMaxWeight, `Max weight over time (${weightUnit})`)}
+        {renderChart(chart1RM, `Estimated 1RM over time (${weightUnit})`, colors.accent, hasChartData.oneRm)}
+        {renderChart(chartMaxWeight, `Max weight over time (${weightUnit})`, colors.save, hasChartData.maxW)}
+        {renderVolumeChart(chartVolume, hasChartData.vol)}
       </View>
     );
   };
@@ -852,22 +987,36 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   historySetBadgeText: { fontSize: 11, fontWeight: '700', color: colors.textSecondary },
   historySetReps: { flex: 1, fontSize: typography.fontSize.sm, color: colors.textPrimary, fontWeight: '500' },
   historySetWeight: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
-  rangeToggle: {
+  progressHeaderRow: {
     flexDirection: 'row',
-    gap: spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.xs,
     marginBottom: spacing.sm,
   },
-  rangeBtn: {
-    flex: 1,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.sm,
+  progressLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  rangeToggle: {
+    flexDirection: 'row',
     backgroundColor: colors.surface,
-    alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
+    borderRadius: radius.sm + 2,
+    padding: 2,
+  },
+  rangeBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: radius.sm,
+    alignItems: 'center',
   },
   rangeBtnText: {
-    fontSize: typography.fontSize.sm,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -880,11 +1029,50 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderColor: colors.border,
     overflow: 'hidden',
   },
+  chartHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
   chartTitle: {
     fontSize: typography.fontSize.sm,
     fontWeight: '600',
     color: colors.textSecondary,
-    marginBottom: spacing.sm,
+    flexShrink: 1,
+  },
+  chartEmptyNote: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    paddingVertical: spacing.md,
+    textAlign: 'center',
+  },
+  deltaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  deltaText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  tooltipBubble: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    alignItems: 'center',
+  },
+  tooltipDate: {
+    fontSize: 10,
+    color: colors.textSecondary,
+  },
+  tooltipValue: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+    color: colors.textPrimary,
   },
   axisLabel: { fontSize: 9, color: colors.textSecondary },
   deleteBtn: {

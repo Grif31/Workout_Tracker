@@ -70,6 +70,24 @@ function MiniWorkoutBar() {
   const { session, clearSession } = useWorkoutSession();
   const [elapsed, setElapsed] = useState(0);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const entranceAnim = useRef(new Animated.Value(0)).current;
+  const hadSessionRef = useRef(false);
+
+  // Slide-up entrance when a session first appears (fresh minimize or a
+  // crash-restored workout on cold start)
+  useEffect(() => {
+    if (session && !hadSessionRef.current) {
+      entranceAnim.setValue(0);
+      Animated.spring(entranceAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        damping: 18,
+        stiffness: 220,
+        mass: 0.7,
+      }).start();
+    }
+    hadSessionRef.current = !!session;
+  }, [session]);
 
   useEffect(() => {
     if (!session) { if (tickRef.current) clearInterval(tickRef.current); return; }
@@ -111,6 +129,11 @@ function MiniWorkoutBar() {
 
   const setsDone = session.exercises.flatMap(e => e.sets).filter(s => s.done).length;
   const setsTotal = session.exercises.flatMap(e => e.sets).length;
+  const progressPct = setsTotal > 0 ? Math.min(100, (setsDone / setsTotal) * 100) : 0;
+  const currentExercise = (
+    session.exercises.find(e => e.sets.some(s => !s.done)) ?? session.exercises[session.exercises.length - 1]
+  )?.name;
+  const subParts = [fmtElapsed(elapsed), currentExercise, `${setsDone}/${setsTotal} sets`].filter(Boolean);
 
   const handleResume = () => {
     if (navigationRef.isReady()) {
@@ -119,42 +142,49 @@ function MiniWorkoutBar() {
   };
 
   return (
-    <View style={[styles.miniBar, {
-      backgroundColor: colors.surface,
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-    }]}>
-      <View style={styles.miniLeft}>
-        <Text style={[styles.miniName, { color: colors.textPrimary }]} numberOfLines={1}>
-          {session.workoutName || 'Workout'}
-        </Text>
-        <Text style={[styles.miniSub, { color: colors.textSecondary }]}>
-          {fmtElapsed(elapsed)} · {setsDone}/{setsTotal} sets
-        </Text>
-      </View>
+    <Animated.View style={{
+      opacity: entranceAnim,
+      transform: [{ translateY: entranceAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }],
+    }}>
       <TouchableOpacity
-        style={[styles.miniBtn, { backgroundColor: colors.accent }]}
+        activeOpacity={0.85}
         onPress={handleResume}
+        style={[styles.miniBar, {
+          backgroundColor: colors.surface,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+        }]}
       >
-        <Ionicons name="play" size={14} color={colors.accentText} />
-        <Text style={[styles.miniBtnText, { color: colors.accentText }]}>Resume</Text>
+        <View style={[styles.miniProgress, { backgroundColor: colors.accent, width: `${progressPct}%` }]} />
+        <View style={styles.miniLeft}>
+          <Text style={[styles.miniName, { color: colors.textPrimary }]} numberOfLines={1}>
+            {session.workoutName || 'Workout'}
+          </Text>
+          <Text style={[styles.miniSub, { color: colors.textSecondary }]} numberOfLines={1}>
+            {subParts.join(' · ')}
+          </Text>
+        </View>
+        <View style={[styles.miniBtn, { backgroundColor: colors.accent }]}>
+          <Ionicons name="play" size={14} color={colors.accentText} />
+          <Text style={[styles.miniBtnText, { color: colors.accentText }]}>Resume</Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.miniBtn, { borderWidth: 1, borderColor: colors.border }]}
+          onPress={() => {
+            Alert.alert(
+              'Discard Workout',
+              'Are you sure you want to discard this workout? All progress will be lost.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Discard', style: 'destructive', onPress: clearSession },
+              ]
+            );
+          }}
+        >
+          <Ionicons name="trash-outline" size={14} color={colors.danger} />
+        </TouchableOpacity>
       </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.miniBtn, { borderWidth: 1, borderColor: colors.border }]}
-        onPress={() => {
-          Alert.alert(
-            'Discard Workout',
-            'Are you sure you want to discard this workout? All progress will be lost.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Discard', style: 'destructive', onPress: clearSession },
-            ]
-          );
-        }}
-      >
-        <Ionicons name="trash-outline" size={14} color={colors.danger} />
-      </TouchableOpacity>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -327,6 +357,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 10,
     gap: spacing.sm,
+  },
+  miniProgress: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    height: 2.5,
+    borderTopRightRadius: 2,
+    borderBottomRightRadius: 2,
   },
   miniLeft: { flex: 1, justifyContent: 'center' },
   miniName: { fontSize: typography.fontSize.sm, fontWeight: '700' },

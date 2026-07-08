@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, Alert, TouchableOpacity,
   Platform, Vibration, ScrollView,
   Keyboard, Modal, Dimensions,
-  Animated, AppState, FlatList,
+  Animated, AppState, FlatList, ActivityIndicator,
 } from 'react-native';
 import {
   scheduleRestTimerAlert,
@@ -35,6 +35,8 @@ import {
   AUTO_REST_KEY,
   VIBRATE_KEY,
   RPE_KEY,
+  WORKOUT_BACKUP_KEY,
+  TIMER_CHECKPOINT_KEY,
   RPE_LABELS,
   SET_TYPES,
   type SetType,
@@ -143,6 +145,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const [newExerciseFormVisible, setNewExerciseFormVisible] = useState(false);
   const [replacingExIndex, setReplacingExIndex] = useState<number | null>(null);
 
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+
   // Which exercise's 3-dot menu is open
   const [openMenuIdx, setOpenMenuIdx] = useState<number | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
@@ -172,9 +177,6 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       if (plateCalcVal !== null) setShowPlateCalc(plateCalcVal !== 'false');
     });
   }, []);
-
-  const TIMER_CHECKPOINT_KEY = '@workout_timer_checkpoint';
-  const WORKOUT_BACKUP_KEY   = '@workout_open_backup';
 
   // Keep refs in sync so the AppState closure always reads current values.
   const notesRef        = useRef(notes);
@@ -313,11 +315,30 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const pauseRest = () => {
     if (restRef.current) clearInterval(restRef.current);
     setRestPaused(true);
+    // The OS alert would still fire at the original wall-clock time — cancel
+    // while paused; resumeRest re-schedules from the frozen remaining.
+    cancelRestTimerAlert();
   };
 
-  const resumeRest = () => {
+  const resumeRest = async () => {
     setRestPaused(false);
     _runRestInterval();
+    const alertsOff = await AsyncStorage.getItem('rest_timer_alerts_enabled');
+    if (alertsOff !== 'false') scheduleRestTimerAlert(restRemaining);
+  };
+
+  const adjustRest = async (delta: number) => {
+    const next = delta < 0 ? Math.max(5, restRemaining + delta) : restRemaining + delta;
+    setRestRemaining(next);
+    // Keep the ring's denominator in sync when time is added past the original
+    // total, so progress never exceeds the full circle
+    if (next > restTotal) setRestTotal(next);
+    // Re-schedule the OS alert to the adjusted finish time (paused timers have
+    // no alert scheduled; resumeRest handles them)
+    if (!restPaused) {
+      const alertsOff = await AsyncStorage.getItem('rest_timer_alerts_enabled');
+      if (alertsOff !== 'false') scheduleRestTimerAlert(next);
+    }
   };
 
   const stopRest = () => {
@@ -847,6 +868,19 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   });
 
   const doSubmit = async (exercisesToSave: ExerciseEntry[]) => {
+    // Re-entry guard — repeated Save presses must not save twice
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      await _doSubmitInner(exercisesToSave);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  const _doSubmitInner = async (exercisesToSave: ExerciseEntry[]) => {
     const payload = buildPayload(exercisesToSave);
     const isEditing = Boolean(editMode && workoutId);
 
@@ -905,6 +939,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   };
 
   const submitWorkout = () => {
+    if (savingRef.current) return;
     if (!workoutName.trim()) {
       Alert.alert('Workout Name Required', 'Please add a name for your workout before saving.');
       return;
@@ -989,8 +1024,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           ) : <View style={styles.headerBtn} />}
         </View>
         <Text style={styles.headerTitle}>{editMode ? 'Edit Workout' : 'Log Workout'}</Text>
-        <TouchableOpacity onPress={submitWorkout} style={styles.headerBtn}>
-          <Text style={styles.saveText}>{editMode ? 'Update' : 'Save'}</Text>
+        <TouchableOpacity onPress={submitWorkout} style={styles.headerBtn} disabled={saving}>
+          {saving
+            ? <ActivityIndicator size="small" color={colors.save} />
+            : <Text style={styles.saveText}>{editMode ? 'Update' : 'Save'}</Text>
+          }
         </TouchableOpacity>
       </View>
 
@@ -1156,7 +1194,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           onStop={stopRest}
           onPause={pauseRest}
           onResume={resumeRest}
-          onAdjust={delta => setRestRemaining(r => delta < 0 ? Math.max(5, r + delta) : r + delta)}
+          onAdjust={adjustRest}
         />
       )}
 

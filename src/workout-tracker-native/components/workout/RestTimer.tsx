@@ -1,11 +1,14 @@
-import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { fmtCountdown } from './types';
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const RING_CIRCUMFERENCE = 2 * Math.PI * 85;
 
 type Props = {
   restRemaining: number;
@@ -28,7 +31,20 @@ export default function RestTimer({
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const progress = restTotal > 0 ? restRemaining / restTotal : 0;
+  const progress = restTotal > 0 ? Math.min(1, restRemaining / restTotal) : 0;
+
+  // Glide the ring between values instead of stepping once a second. Normal
+  // ticks arrive every 1000ms, so a 1000ms linear glide makes the drain
+  // continuous; ±30s adjustments ride the same tween.
+  const progressAnim = useRef(new Animated.Value(progress)).current;
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: progress,
+      duration: restPaused ? 250 : 1000,
+      easing: Easing.linear,
+      useNativeDriver: false, // SVG stroke props can't use the native driver
+    }).start();
+  }, [progress, restPaused]);
 
   return (
     <View style={styles.restOverlay}>
@@ -48,13 +64,16 @@ export default function RestTimer({
               strokeWidth={10}
               fill="none"
             />
-            <Circle
+            <AnimatedCircle
               cx={100} cy={100} r={85}
               stroke={restPaused ? colors.textSecondary : colors.accent}
               strokeWidth={10}
               fill="none"
-              strokeDasharray={`${2 * Math.PI * 85}`}
-              strokeDashoffset={`${2 * Math.PI * 85 * (1 - progress)}`}
+              strokeDasharray={`${RING_CIRCUMFERENCE}`}
+              strokeDashoffset={progressAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [RING_CIRCUMFERENCE, 0],
+              })}
               strokeLinecap="round"
               transform="rotate(-90 100 100)"
             />

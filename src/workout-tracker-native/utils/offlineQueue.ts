@@ -42,33 +42,46 @@ export async function initPendingCount(): Promise<void> {
 
 export async function enqueueWorkout(payload: object): Promise<void> {
   const q = await readQueue();
+  // A double-tapped Save enqueues byte-identical payloads — one copy is enough
+  const json = JSON.stringify(payload);
+  if (q.some(item => JSON.stringify(item.payload) === json)) return;
   q.push({ id: Date.now().toString(36), payload, enqueuedAt: new Date().toISOString() });
   await writeQueue(q);
 }
 
+// NetInfo fires several events in quick succession on reconnect; overlapping
+// flushes would each POST the full queue and duplicate every workout.
+let _flushing = false;
+
 // Attempts to POST each queued workout. Returns the number successfully synced.
 // Failed items stay in the queue for the next flush attempt.
 export async function flushQueue(): Promise<number> {
-  const q = await readQueue();
-  if (!q.length) return 0;
-  const failed: QueueItem[] = [];
-  let synced = 0;
-  for (const item of q) {
-    try {
-      const res = await apiFetch('/api/workouts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(item.payload),
-      });
-      if (res.ok) {
-        synced++;
-      } else {
+  if (_flushing) return 0;
+  _flushing = true;
+  try {
+    const q = await readQueue();
+    if (!q.length) return 0;
+    const failed: QueueItem[] = [];
+    let synced = 0;
+    for (const item of q) {
+      try {
+        const res = await apiFetch('/api/workouts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item.payload),
+        });
+        if (res.ok) {
+          synced++;
+        } else {
+          failed.push(item);
+        }
+      } catch {
         failed.push(item);
       }
-    } catch {
-      failed.push(item);
     }
+    await writeQueue(failed);
+    return synced;
+  } finally {
+    _flushing = false;
   }
-  await writeQueue(failed);
-  return synced;
 }
