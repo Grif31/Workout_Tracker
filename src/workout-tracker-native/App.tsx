@@ -17,6 +17,15 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastBanner } from './components/ToastBanner';
 import { navigationRef } from './navigation/navigationRef';
 import Purchases, { LOG_LEVEL } from 'react-native-purchases';
+import * as Sentry from '@sentry/react-native';
+
+// No-op until EXPO_PUBLIC_SENTRY_DSN is set (create the project at sentry.io);
+// disabled in dev so local red-boxes don't pollute production issues.
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  enabled: !!process.env.EXPO_PUBLIC_SENTRY_DSN && !__DEV__,
+  sendDefaultPii: false,
+});
 
 Purchases.setLogLevel(LOG_LEVEL.DEBUG);
 
@@ -29,13 +38,14 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export default function App(): JSX.Element {
+function App(): JSX.Element {
   useEffect(() => {
     initPendingCount();
     const netUnsub = NetInfo.addEventListener(async (state) => {
       if (state.isConnected && state.isInternetReachable !== false) {
-        const synced = await flushQueue();
+        const { synced, dropped } = await flushQueue();
         if (synced > 0) showToast(`${synced} workout${synced > 1 ? 's' : ''} synced`);
+        if (dropped > 0) showToast(`${dropped} workout${dropped > 1 ? 's' : ''} couldn't sync and ${dropped > 1 ? 'were' : 'was'} removed`);
       }
     });
     return () => netUnsub();
@@ -100,3 +110,5 @@ export default function App(): JSX.Element {
   );
 }
 
+
+export default Sentry.wrap(App);

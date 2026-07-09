@@ -217,6 +217,8 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 | `@pr_pins_${uid}` | — | JSON array of 3 pinned PR slots on Profile (Pin\|null)[] |
 | `coach_profile_${uid}` | — | Coach personalization JSON (goal/equipment/schedule/injuries) |
 | `exercise_list_cache_${uid}` | — | Exercise list cache, 24h TTL (`utils/exerciseCache.ts`; falls back to un-suffixed key when no userId passed) |
+| `offline_workout_queue_${uid}` | — | Offline workout queue (`utils/offlineQueue.ts`) — deliberately NOT cleared on logout; each user's queue waits for them and is only flushed while they are logged in |
+| `gps_run_checkpoint_${uid}` | — | In-progress GPS run checkpoint (route/distance/elapsed) written every ~10 points; restore offered on next screen open after a crash |
 | `coach_settings_${uid}` | — | Legacy onboarding settings (migrated to coach_profile on first open) |
 | `coach_insights_cache` | — | Cached AI coaching insights JSON + fetchedAt timestamp |
 | `coach_settings` | — | Legacy key — migrated to `coach_profile` on first CoachProfileModal open |

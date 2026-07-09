@@ -16,8 +16,19 @@ const MAPS_AVAILABLE = MapView !== null && Polyline !== null;
 import polylineLib from '@mapbox/polyline';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import NetInfo from '@react-native-community/netinfo';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
+import { enqueueWorkout } from '../../utils/offlineQueue';
+import {
+  onGpsLocation,
+  startBackgroundTracking,
+  stopBackgroundTracking,
+  cleanupOrphanedTracking,
+  type TrackingMode,
+} from '../../utils/gpsTracking';
+import { showToast } from '../../utils/toast';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { DashboardStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
@@ -27,12 +38,17 @@ import { estimateCalories } from '../../utils/cardioCalories';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'GPSCardio'>;
 
-type Coord = { latitude: number; longitude: number; altitude: number | null };
+// timestamp (epoch ms) is unused today but enables per-km splits and
+// pace-over-time later — it can't be backfilled after the run.
+type Coord = { latitude: number; longitude: number; altitude: number | null; timestamp: number };
 
 type TrackingState = 'idle' | 'running' | 'paused';
 
 const ACTIVITIES = ['Run', 'Cycle', 'Walk', 'Hike'] as const;
 type Activity = typeof ACTIVITIES[number];
+
+// GPS fixes worse than this add phantom distance and jagged routes — drop them
+const MAX_ACCURACY_M = 30;
 
 function haversineKm(a: Coord, b: Coord): number {
   const R = 6371;
@@ -97,16 +113,34 @@ export default function GPSCardioScreen({ navigation }: Props) {
   const mapRef = useRef<any>(null);
   const lastAltRef = useRef<number | null>(null);
   const skipNextDistanceRef = useRef(false);
+  const trackingModeRef = useRef<TrackingMode | null>(null);
+  const gpsUnsubRef = useRef<(() => void) | null>(null);
+  // Wall-clock timer: intervals get throttled/suspended and tick-counting
+  // undercounts — elapsed is always recomputed from real timestamps.
+  const baseElapsedRef = useRef(0);
+  const segmentStartRef = useRef<Date | null>(null);
 
   const displayDistance = distanceUnit === 'mi' ? distanceKm * 0.621371 : distanceKm;
   const pace = displayDistance > 0 ? elapsedSec / 60 / displayDistance : 0;
+
+  const computeElapsed = () =>
+    baseElapsedRef.current +
+    (segmentStartRef.current ? Math.floor((Date.now() - segmentStartRef.current.getTime()) / 1000) : 0);
 
   const clearTimer = () => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   };
 
   const startTimer = () => {
-    timerRef.current = setInterval(() => setElapsedSec(s => s + 1), 1000);
+    timerRef.current = setInterval(() => setElapsedSec(computeElapsed()), 1000);
+  };
+
+  // Folds the running segment into the base so the clock freezes correctly
+  const haltTimer = () => {
+    clearTimer();
+    baseElapsedRef.current = computeElapsed();
+    segmentStartRef.current = null;
+    setElapsedSec(baseElapsedRef.current);
   };
 
   const stopLocationWatch = async () => {
@@ -116,7 +150,74 @@ export default function GPSCardioScreen({ navigation }: Props) {
     }
   };
 
+  const checkpointKey = `gps_run_checkpoint_${user?.id}`;
+
+  // Crash insurance: while running, the route is periodically checkpointed so
+  // a killed app can offer to restore the run instead of losing it.
+  const writeCheckpoint = () => {
+    AsyncStorage.setItem(checkpointKey, JSON.stringify({
+      activity,
+      coords,
+      distanceKm,
+      elevationGainM,
+      elapsedSec: computeElapsed(),
+      savedAt: Date.now(),
+    })).catch(() => {});
+  };
+
+  const clearCheckpoint = () => { AsyncStorage.removeItem(checkpointKey).catch(() => {}); };
+
   useEffect(() => {
+    if (trackingState !== 'running' || coords.length === 0 || coords.length % 10 !== 0) return;
+    writeCheckpoint();
+  }, [coords]);
+
+  const offerCheckpointRestore = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(checkpointKey);
+      if (!raw) return;
+      const cp = JSON.parse(raw);
+      if (!Array.isArray(cp.coords) || cp.coords.length < 2) {
+        clearCheckpoint();
+        return;
+      }
+      const when = new Date(cp.savedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      Alert.alert(
+        'Restore activity?',
+        `A ${cp.activity ?? 'workout'} was interrupted around ${when}. Restore it?`,
+        [
+          { text: 'Discard', style: 'destructive', onPress: clearCheckpoint },
+          {
+            text: 'Restore',
+            onPress: () => {
+              if (ACTIVITIES.includes(cp.activity)) setActivity(cp.activity);
+              setCoords(cp.coords);
+              setDistanceKm(cp.distanceKm ?? 0);
+              setElevationGainM(cp.elevationGainM ?? 0);
+              baseElapsedRef.current = cp.elapsedSec ?? 0;
+              segmentStartRef.current = null;
+              setElapsedSec(cp.elapsedSec ?? 0);
+              lastAltRef.current = null;
+              // Movement between the crash and the restore must not count
+              skipNextDistanceRef.current = true;
+              setTrackingState('paused');
+              const last = cp.coords[cp.coords.length - 1];
+              setInitialRegion({
+                latitude: last.latitude, longitude: last.longitude,
+                latitudeDelta: 0.01, longitudeDelta: 0.01,
+              });
+            },
+          },
+        ],
+      );
+    } catch {}
+  };
+
+  useEffect(() => {
+    // The app may have been killed mid-run — stop any OS task left running,
+    // then offer to restore the checkpointed run
+    cleanupOrphanedTracking();
+    offerCheckpointRestore();
     AsyncStorage.getItem(`gps_distance_unit_${user?.id}`).then(v => {
       if (v === 'mi') setDistanceUnit('mi');
     });
@@ -124,7 +225,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        setInitialRegion({
+        setInitialRegion(prev => prev ?? {
           latitude: loc.coords.latitude,
           longitude: loc.coords.longitude,
           latitudeDelta: 0.01,
@@ -132,8 +233,72 @@ export default function GPSCardioScreen({ navigation }: Props) {
         });
       }
     })();
-    return () => { clearTimer(); stopLocationWatch(); };
+    return () => {
+      clearTimer();
+      gpsUnsubRef.current?.();
+      stopBackgroundTracking();
+      stopLocationWatch();
+      deactivateKeepAwake();
+    };
   }, []);
+
+  // Shared by start and resume subscriptions. Respects skipNextDistanceRef so
+  // the gap travelled while paused is never counted as distance.
+  const onLocationUpdate = (loc: Location.LocationObject) => {
+    const accuracy = loc.coords.accuracy;
+    if (accuracy != null && accuracy > MAX_ACCURACY_M) return;
+    const newCoord: Coord = {
+      latitude: loc.coords.latitude,
+      longitude: loc.coords.longitude,
+      altitude: loc.coords.altitude ?? null,
+      timestamp: loc.timestamp,
+    };
+    const alt = newCoord.altitude;
+    if (alt !== null && lastAltRef.current !== null) {
+      const delta = alt - lastAltRef.current;
+      if (delta > 2) setElevationGainM(g => g + delta);
+    }
+    if (alt !== null) lastAltRef.current = alt;
+    setCoords(prev => {
+      if (prev.length > 0 && !skipNextDistanceRef.current) {
+        setDistanceKm(d => d + haversineKm(prev[prev.length - 1], newCoord));
+      }
+      skipNextDistanceRef.current = false;
+      const updated = [...prev, newCoord];
+      mapRef.current?.animateToRegion({
+        latitude: newCoord.latitude,
+        longitude: newCoord.longitude,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+      }, 500);
+      return updated;
+    });
+  };
+
+  const WATCH_OPTS = { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 5 };
+
+  // Prefers the background task (survives screen lock); falls back to a
+  // foreground watch + keep-awake when background permission is declined.
+  const beginLocationUpdates = async () => {
+    const mode = await startBackgroundTracking();
+    trackingModeRef.current = mode;
+    if (mode === 'background') {
+      gpsUnsubRef.current = onGpsLocation(onLocationUpdate);
+    } else {
+      locationSub.current = await Location.watchPositionAsync(WATCH_OPTS, onLocationUpdate);
+      activateKeepAwakeAsync();
+      showToast('Screen will stay on — allow "Always" location to track with it off');
+    }
+  };
+
+  const endLocationUpdates = async () => {
+    gpsUnsubRef.current?.();
+    gpsUnsubRef.current = null;
+    await stopBackgroundTracking();
+    await stopLocationWatch();
+    deactivateKeepAwake();
+    trackingModeRef.current = null;
+  };
 
   const handleStart = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -143,83 +308,36 @@ export default function GPSCardioScreen({ navigation }: Props) {
     }
 
     lastAltRef.current = null;
-    const sub = await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 5 },
-      loc => {
-        const newCoord: Coord = {
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-          altitude: loc.coords.altitude ?? null,
-        };
-        const alt = newCoord.altitude;
-        if (alt !== null && lastAltRef.current !== null) {
-          const delta = alt - lastAltRef.current;
-          if (delta > 2) setElevationGainM(g => g + delta);
-        }
-        if (alt !== null) lastAltRef.current = alt;
-        setCoords(prev => {
-          if (prev.length > 0 && !skipNextDistanceRef.current) {
-            setDistanceKm(d => d + haversineKm(prev[prev.length - 1], newCoord));
-          }
-          skipNextDistanceRef.current = false;
-          const updated = [...prev, newCoord];
-          mapRef.current?.animateToRegion({
-            latitude: newCoord.latitude,
-            longitude: newCoord.longitude,
-            latitudeDelta: 0.005,
-            longitudeDelta: 0.005,
-          }, 500);
-          return updated;
-        });
-      },
-    );
-    locationSub.current = sub;
+    await beginLocationUpdates();
+    baseElapsedRef.current = 0;
+    segmentStartRef.current = new Date();
     startTimer();
     setTrackingState('running');
   };
 
   const handlePause = () => {
-    clearTimer();
-    stopLocationWatch();
+    haltTimer();
+    endLocationUpdates();
     setTrackingState('paused');
+    writeCheckpoint();
   };
 
   const handleResume = async () => {
     lastAltRef.current = null;
     skipNextDistanceRef.current = true;
-    const sub = await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 5 },
-      loc => {
-        const newCoord: Coord = {
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-          altitude: loc.coords.altitude ?? null,
-        };
-        const alt = newCoord.altitude;
-        if (alt !== null && lastAltRef.current !== null) {
-          const delta = alt - lastAltRef.current;
-          if (delta > 2) setElevationGainM(g => g + delta);
-        }
-        if (alt !== null) lastAltRef.current = alt;
-        setCoords(prev => {
-          if (prev.length > 0) {
-            setDistanceKm(d => d + haversineKm(prev[prev.length - 1], newCoord));
-          }
-          return [...prev, newCoord];
-        });
-      },
-    );
-    locationSub.current = sub;
+    await beginLocationUpdates();
+    segmentStartRef.current = new Date();
     startTimer();
     setTrackingState('running');
   };
 
   const handleStop = () => {
-    clearTimer();
-    stopLocationWatch();
+    haltTimer();
+    endLocationUpdates();
     setTrackingState('paused');
     setWorkoutName(activity);
     setConfirmVisible(true);
+    writeCheckpoint();
   };
 
   const handleDiscard = () => {
@@ -229,41 +347,62 @@ export default function GPSCardioScreen({ navigation }: Props) {
     setDistanceKm(0);
     setElevationGainM(0);
     lastAltRef.current = null;
+    baseElapsedRef.current = 0;
+    segmentStartRef.current = null;
     setTrackingState('idle');
+    clearCheckpoint();
   };
 
   const handleSave = async () => {
     setSaving(true);
-    try {
-      const durationMin = elapsedSec / 60;
-      const encodedPolyline = coords.length >= 2
-        ? polylineLib.encode(coords.map(c => [c.latitude, c.longitude]))
-        : null;
-      const avgPace = distanceKm > 0 ? durationMin / distanceKm : null;
+    const durationMin = elapsedSec / 60;
+    const encodedPolyline = coords.length >= 2
+      ? polylineLib.encode(coords.map(c => [c.latitude, c.longitude]))
+      : null;
+    const avgPace = distanceKm > 0 ? durationMin / distanceKm : null;
 
-      const now = new Date();
-      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-      const body = {
-        workoutName: workoutName.trim() || activity,
-        date: dateStr,
-        duration: Math.round(durationMin),
-        exercises: [{
-          name: activity,
-          exercise_type: 'cardio',
-          route_polyline: encodedPolyline,
-          sets: [{
-            cardio_duration: durationMin,
-            distance: displayDistance,
-            distance_unit: distanceUnit,
-            intensity: avgPace,
-            elevation_gain: elevationGainM > 0 ? Math.round(elevationGainM) : null,
-            reps: null,
-            weight: null,
-            set_type: 'N',
-          }],
+    const body = {
+      workoutName: workoutName.trim() || activity,
+      date: dateStr,
+      duration: Math.round(durationMin),
+      exercises: [{
+        name: activity,
+        exercise_type: 'cardio',
+        route_polyline: encodedPolyline,
+        sets: [{
+          cardio_duration: durationMin,
+          distance: displayDistance,
+          distance_unit: distanceUnit,
+          intensity: avgPace,
+          elevation_gain: elevationGainM > 0 ? Math.round(elevationGainM) : null,
+          reps: null,
+          weight: null,
+          set_type: 'N',
         }],
-      };
+      }],
+    };
+
+    // A tracked run must never depend on one POST succeeding — queue it for
+    // sync when there's no connection. CardioDetails needs a server id, so
+    // offline saves return to the Dashboard instead.
+    const saveOffline = async () => {
+      await enqueueWorkout(body);
+      clearCheckpoint();
+      setConfirmVisible(false);
+      showToast('Saved offline — will sync when connected');
+      navigation.goBack();
+    };
+
+    try {
+      const net = await NetInfo.fetch();
+      const online = net.isConnected && net.isInternetReachable !== false;
+      if (!online) {
+        await saveOffline();
+        return;
+      }
 
       const res = await apiFetch('/api/workouts', {
         method: 'POST',
@@ -273,10 +412,20 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
       if (!res.ok) throw new Error('Save failed');
       const data = await res.json();
+      clearCheckpoint();
       setConfirmVisible(false);
       navigation.replace('CardioDetails', { workoutId: data.id });
     } catch {
-      Alert.alert('Error', 'Failed to save workout. Please try again.');
+      // NetInfo said online but the request still died (flaky signal) —
+      // offer the queue instead of a dead-end retry loop
+      Alert.alert(
+        'Save Failed',
+        "Couldn't reach the server. Save this activity offline and sync later?",
+        [
+          { text: 'Try Again', style: 'cancel' },
+          { text: 'Save Offline', onPress: () => { saveOffline(); } },
+        ],
+      );
     } finally {
       setSaving(false);
     }

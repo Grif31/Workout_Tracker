@@ -165,6 +165,13 @@ jest.mock('react-native-reanimated', () => {
   };
 });
 
+jest.mock('@sentry/react-native', () => ({
+  init: jest.fn(),
+  wrap: (c: any) => c,
+  captureException: jest.fn(),
+  setUser: jest.fn(),
+}));
+
 // react-native-purchases ships untransformable minified deps — never load real IAP in tests
 jest.mock('react-native-purchases', () => ({
   __esModule: true,

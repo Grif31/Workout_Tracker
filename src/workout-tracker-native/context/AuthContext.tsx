@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Sentry from '@sentry/react-native';
 import { setTokens, clearTokens, registerUnauthCallback, apiFetch } from '../utils/api';
 import { appCache } from '../utils/appCache';
 import { registerPushToken, deregisterPushToken } from '../utils/notifications';
@@ -29,6 +30,7 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
         }
         themeCtx.resetAccent();
         await deregisterPushToken();
+        Sentry.setUser(null);
         setUser(null);
         setToken(null);
         clearTokens();
@@ -57,7 +59,9 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
                     const cached = await AsyncStorage.getItem('user');
                     if (cached) {
                         try {
-                            setUser(JSON.parse(cached));
+                            const parsed = JSON.parse(cached);
+                            Sentry.setUser({ id: String(parsed.id) });
+                            setUser(parsed);
                             setToken(savedAccess);
                         } catch {}
                     }
@@ -67,6 +71,7 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
                     const res = await apiFetch('/api/me');
                     if (res.ok) {
                         const data = await res.json();
+                        Sentry.setUser({ id: String(data.id) });
                         setUser(data);
                         await AsyncStorage.setItem('user', JSON.stringify(data));
                         // Read whatever token is current (may have been refreshed)
@@ -96,12 +101,17 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
         ]);
         // Restore this user's saved accent (or default if they've never set one)
         await themeCtx.loadAccentForUser(userData.id);
-        setUser(userData);
-        setToken(accessToken);
+        // Persist to storage BEFORE flipping React state: setUser mounts the
+        // logged-in UI, and mount-time effects (offline queue flush) resolve
+        // the current user from AsyncStorage — it must already be this user.
         setTokens(accessToken, refreshToken);
         await AsyncStorage.setItem('token', accessToken);
         await AsyncStorage.setItem('refresh_token', refreshToken);
         await AsyncStorage.setItem('user', JSON.stringify(userData));
+        // id only — no email/name, keep PII out of crash reports
+        Sentry.setUser({ id: String(userData.id) });
+        setUser(userData);
+        setToken(accessToken);
         registerPushToken();
     };
 
