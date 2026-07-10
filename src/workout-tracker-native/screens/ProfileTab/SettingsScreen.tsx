@@ -22,7 +22,9 @@ import { usePurchase } from '../../context/PurchaseContext';
 import { ProfileStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
+import * as Sentry from '@sentry/react-native';
 import { apiFetch } from '../../utils/api';
+import { showToast } from '../../utils/toast';
 import { APP_ICONS_ENABLED } from '../../constants/featureFlags';
 import {
   requestNotificationPermission,
@@ -478,6 +480,26 @@ export default function SettingsScreen({ navigation }: Props) {
           </View>
           <Ionicons name="open-outline" size={18} color={colors.textSecondary} />
         </TouchableOpacity>
+
+        {/* TEMP — verify Sentry pipeline on the next EAS build, then delete.
+            Only renders when a DSN is configured. */}
+        {!!process.env.EXPO_PUBLIC_SENTRY_DSN && (
+          <>
+            <View style={styles.divider} />
+            <TouchableOpacity
+              style={styles.row}
+              onPress={() => {
+                Sentry.captureException(new Error('Sentry test — pipeline check'));
+                showToast('Test error sent to Sentry');
+              }}
+            >
+              <View style={styles.rowLeft}>
+                <Ionicons name="bug-outline" size={20} color={colors.textSecondary} />
+                <Text style={styles.rowLabel}>Send Test Crash Report</Text>
+              </View>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </ScrollView>
 

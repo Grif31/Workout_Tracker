@@ -911,8 +911,24 @@ export default function CoachScreen({ navigation }: Props) {
                     <View style={styles.insightsEmpty}>
                       <Ionicons name="sparkles-outline" size={32} color={colors.textSecondary} />
                       <Text style={styles.insightsEmptyText}>
-                        Tap the refresh button to get personalized coaching insights.
+                        Personalized coaching based on your recent training.
                       </Text>
+                      <TouchableOpacity
+                        style={[styles.generateInsightsBtn, { backgroundColor: colors.accent }, insightsLoading && { opacity: 0.6 }]}
+                        onPress={fetchInsights}
+                        disabled={insightsLoading}
+                      >
+                        {insightsLoading ? (
+                          <ActivityIndicator size="small" color={colors.accentText} />
+                        ) : (
+                          <>
+                            <Ionicons name="sparkles" size={16} color={colors.accentText} />
+                            <Text style={[styles.generateInsightsBtnText, { color: colors.accentText }]}>
+                              Generate Insights
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
                     </View>
                   )
               ) : (
@@ -1455,6 +1471,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   insightPlaceholderLine: { height: 10, backgroundColor: colors.border, borderRadius: 5 },
   insightsEmpty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
   insightsEmptyText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center', maxWidth: 240 },
+  generateInsightsBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing.xs, borderRadius: 20, minWidth: 180,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, marginTop: spacing.xs,
+  },
+  generateInsightsBtnText: { fontSize: typography.fontSize.md, fontWeight: '700' },
   upgradeBanner: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     backgroundColor: colors.accent + '15', borderRadius: spacing.sm,

@@ -15,6 +15,7 @@ import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { ProfileStackParamsList } from '../../navigation/types';
 import { GREEK_RANK_COLORS, GREEK_RANKS } from '../../constants/greekRanks';
+import ProfileAvatarFrame from '../../components/ProfileAvatarFrame';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'GreekRank'>;
 
@@ -68,42 +69,54 @@ function RankCircle({
   const strokeOffset = circumference * (1 - progress);
 
   return (
-    <TouchableOpacity onPress={onSelect} style={[circleStyles.touchable, { opacity: isLocked ? 0.35 : 1 }]}>
+    <TouchableOpacity onPress={onSelect} style={[circleStyles.touchable, { opacity: isLocked ? 0.6 : 1 }]}>
       <View style={circleStyles.svgWrapper}>
-        <Svg width={CIRCLE_SIZE} height={CIRCLE_SIZE} style={{ position: 'absolute' }}>
-          <Circle
-            cx={CIRCLE_SIZE / 2} cy={CIRCLE_SIZE / 2} r={r}
-            stroke={isLocked ? colors.border : rank.color + '33'}
-            strokeWidth={6} fill="none"
-          />
-          {(isCurrent || isCompleted) && (
-            <Circle
-              cx={CIRCLE_SIZE / 2} cy={CIRCLE_SIZE / 2} r={r}
-              stroke={rank.color}
-              strokeWidth={6} fill="none"
-              strokeDasharray={circumference}
-              strokeDashoffset={strokeOffset}
-              strokeLinecap="round"
-              rotation="-90"
-              origin={`${CIRCLE_SIZE / 2}, ${CIRCLE_SIZE / 2}`}
-            />
-          )}
-        </Svg>
+        {isLocked ? (
+          <>
+            {/* Preview the real frame this rank unlocks, lock in front */}
+            <ProfileAvatarFrame rankName={rank.name} size={CIRCLE_SIZE} avatarSize={CIRCLE_INNER} />
+            <View style={[circleStyles.innerCircle, { backgroundColor: colors.surface }]}>
+              <Ionicons name="lock-closed" size={20} color={colors.textSecondary} />
+            </View>
+          </>
+        ) : (
+          <>
+            <Svg width={CIRCLE_SIZE} height={CIRCLE_SIZE} style={{ position: 'absolute' }}>
+              <Circle
+                cx={CIRCLE_SIZE / 2} cy={CIRCLE_SIZE / 2} r={r}
+                stroke={rank.color + '33'}
+                strokeWidth={6} fill="none"
+              />
+              {(isCurrent || isCompleted) && (
+                <Circle
+                  cx={CIRCLE_SIZE / 2} cy={CIRCLE_SIZE / 2} r={r}
+                  stroke={rank.color}
+                  strokeWidth={6} fill="none"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={strokeOffset}
+                  strokeLinecap="round"
+                  rotation="-90"
+                  origin={`${CIRCLE_SIZE / 2}, ${CIRCLE_SIZE / 2}`}
+                />
+              )}
+            </Svg>
 
-        <View style={[circleStyles.innerCircle, { backgroundColor: isLocked ? colors.surface : rank.color + '22' }]}>
-          {isCompleted ? (
-            <Ionicons name="checkmark" size={22} color={rank.color} />
-          ) : (
-            <Text style={[circleStyles.iconText, { color: isLocked ? colors.textSecondary : rank.color }]}>
-              {rank.icon}
-            </Text>
-          )}
-        </View>
+            <View style={[circleStyles.innerCircle, { backgroundColor: rank.color + '22' }]}>
+              {isCompleted ? (
+                <Ionicons name="checkmark" size={22} color={rank.color} />
+              ) : (
+                <Text style={[circleStyles.iconText, { color: rank.color }]}>
+                  {rank.icon}
+                </Text>
+              )}
+            </View>
 
-        {isEquipped && (
-          <View style={[circleStyles.equippedDot, { backgroundColor: rank.color }]}>
-            <Ionicons name="star" size={10} color="#fff" />
-          </View>
+            {isEquipped && (
+              <View style={[circleStyles.equippedDot, { backgroundColor: rank.color }]}>
+                <Ionicons name="star" size={10} color="#fff" />
+              </View>
+            )}
+          </>
         )}
       </View>
 
@@ -228,8 +241,8 @@ export default function GreekRankScreen({ navigation }: Props) {
             onScrollToIndexFailed={() => {}}
           />
 
-          {/* Equip button for selected rank */}
-          {isUnlocked(currentRank.name) && (
+          {/* Equip button for selected rank — locked ranks show the unlock hint */}
+          {isUnlocked(currentRank.name) ? (
             <TouchableOpacity
               style={[styles.equipBtn, {
                 backgroundColor: selectedFrame === currentRank.name ? currentRank.color + '22' : currentRank.color,
@@ -247,6 +260,11 @@ export default function GreekRankScreen({ navigation }: Props) {
                 <Ionicons name="star" size={14} color={currentRank.color} style={{ marginLeft: 6 }} />
               )}
             </TouchableOpacity>
+          ) : (
+            <View style={styles.lockedHint}>
+              <Ionicons name="lock-closed" size={14} color={colors.textSecondary} />
+              <Text style={styles.lockedHintText}>Rank up to unlock frame</Text>
+            </View>
           )}
 
           {/* Progress detail */}
@@ -341,6 +359,11 @@ const createStyles = (colors: Colors) =>
       borderRadius: 20, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
     },
     equipBtnText: { fontSize: typography.fontSize.md, fontWeight: '700' },
+    lockedHint: {
+      alignSelf: 'center', flexDirection: 'row', alignItems: 'center',
+      gap: spacing.xs, paddingVertical: spacing.sm,
+    },
+    lockedHintText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
     fullBreakdownBtn: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
       gap: spacing.xs, marginHorizontal: spacing.md, borderWidth: 1,

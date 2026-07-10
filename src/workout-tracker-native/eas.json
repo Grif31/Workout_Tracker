@@ -21,7 +21,8 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://workouttracker-production-601f.up.railway.app",
         "EXPO_PUBLIC_REVENUECAT_IOS_KEY": "appl_BocohNqMylioBFqmnkVBwwCpHGg",
-        "EXPO_PUBLIC_BETA_PREMIUM": "true"
+        "EXPO_PUBLIC_BETA_PREMIUM": "true",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://4490d4433886984d9b2155cfc751b9f1@o4511703263870976.ingest.us.sentry.io/4511703270555648"
       }
     },
     "production": {
@@ -30,7 +31,8 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://workouttracker-production-601f.up.railway.app",
         "EXPO_PUBLIC_REVENUECAT_IOS_KEY": "appl_BocohNqMylioBFqmnkVBwwCpHGg",
-        "EXPO_PUBLIC_BETA_PREMIUM": "true"
+        "EXPO_PUBLIC_BETA_PREMIUM": "true",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://4490d4433886984d9b2155cfc751b9f1@o4511703263870976.ingest.us.sentry.io/4511703270555648"
       }
     }
   },
