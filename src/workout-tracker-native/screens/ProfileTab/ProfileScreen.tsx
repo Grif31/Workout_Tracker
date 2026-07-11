@@ -1128,7 +1128,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
+    paddingBottom: spacing.sm,
   },
   seeAll: { fontSize: typography.fontSize.sm, fontWeight: '600' },
   prCards: {

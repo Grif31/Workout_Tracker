@@ -6,14 +6,12 @@ import threading
 import requests as http_requests
 from datetime import datetime, timedelta, timezone
 from flask import Blueprint, request, jsonify, current_app, g
-from flask_mail import Message
 from models import db, User
 from werkzeug.security import check_password_hash, generate_password_hash
 from flask_jwt_extended import (
     create_access_token, create_refresh_token, jwt_required, get_jwt_identity,
 )
 from limiter import limiter
-from mail_ext import mail
 from schemas import SignupSchema, ResetPasswordSchema, ChangePasswordSchema
 from utils.validation import validate_body
 
@@ -245,9 +243,15 @@ def social_auth():
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _send_otp_email(recipient: str, otp: str) -> None:
-    # Fire-and-forget in a daemon thread so the route returns before SMTP resolves.
-    # Avoids blocking the Gunicorn worker on an unreachable or slow mail server.
+    # Sent via Resend's HTTPS API — Railway blocks outbound SMTP ports, so
+    # Flask-Mail/smtplib times out in production.
+    # Fire-and-forget in a daemon thread so the route returns immediately.
     app = current_app._get_current_object()
+    api_key = os.environ.get('RESEND_API_KEY', '')
+    sender  = os.environ.get('RESEND_FROM', 'Arete Fitness <support@aretefitnessapp.com>')
+    if not api_key:
+        app.logger.error('RESEND_API_KEY not set — OTP email not sent to %s', recipient)
+        return
 
     def _send() -> None:
         html = f"""<!DOCTYPE html>
@@ -279,14 +283,23 @@ def _send_otp_email(recipient: str, otp: str) -> None:
             f"If you didn't request this, ignore this email."
         )
         try:
-            with app.app_context():
-                msg = Message(
-                    subject='Your Arete Fitness reset code',
-                    recipients=[recipient],
-                    body=plain,
-                    html=html,
+            resp = http_requests.post(
+                'https://api.resend.com/emails',
+                headers={'Authorization': f'Bearer {api_key}'},
+                json={
+                    'from': sender,
+                    'to': [recipient],
+                    'subject': 'Your Arete Fitness reset code',
+                    'html': html,
+                    'text': plain,
+                },
+                timeout=15,
+            )
+            if resp.status_code >= 400:
+                app.logger.error(
+                    'OTP email send failed for %s: HTTP %s %s',
+                    recipient, resp.status_code, resp.text,
                 )
-                mail.send(msg)
         except Exception:
             app.logger.exception('OTP email send failed for %s', recipient)
 

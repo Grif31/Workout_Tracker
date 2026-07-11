@@ -889,8 +889,6 @@ export default function CoachScreen({ navigation }: Props) {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.aiCoachDivider} />
-
             <View style={styles.insightsSectionHeader}>
               <SectionRule label="Insights" style={{ flex: 1, marginBottom: 0 }} />
               {isPremium && (
@@ -1441,12 +1439,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   profileBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   profileBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.accent },
   generateSection: { marginBottom: spacing.md },
-  aiCoachCard: {
-    backgroundColor: colors.surface, borderRadius: spacing.md,
-    padding: spacing.md, marginBottom: spacing.md,
-    borderWidth: 1, borderColor: colors.border, gap: spacing.sm,
-  },
-  aiCoachDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: spacing.xs },
+  aiCoachCard: { marginBottom: spacing.md, gap: spacing.sm },
   generateTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.8 },
   generateBtnRow: { flexDirection: 'row', gap: spacing.sm },
   generateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.save, borderRadius: spacing.sm, paddingVertical: 12 },
@@ -1454,7 +1447,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   generateBtnOutline: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.save, borderRadius: spacing.sm, paddingVertical: 12 },
   generateBtnOutlineText: { color: colors.save, fontWeight: '700', fontSize: typography.fontSize.sm },
   insightsSection: { gap: spacing.sm },
-  insightsSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  insightsSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm },
   insightsTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.8 }, // kept for fallback
   refreshBtn: { padding: spacing.xs },
   insightCard: {

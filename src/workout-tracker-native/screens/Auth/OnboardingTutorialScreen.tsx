@@ -9,6 +9,7 @@ import {
   StatusBar,
   Image,
   ImageSourcePropType,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -36,7 +37,6 @@ type ScreenshotSlide = {
   //   slide-progress.png → ExerciseDetailScreen on the Stats tab with a chart visible
   //   slide-ai.png       → AIWorkoutPreview screen showing a generated routine
   source: ImageSourcePropType;
-  badge: 'FREE' | 'PREMIUM';
   title: string;
   body: string;
 };
@@ -51,43 +51,52 @@ type Slide = ScreenshotSlide | PremiumSlide;
 
 const PREMIUM_FEATURES = [
   'AI Coach — personalised programs in seconds',
-  'Strength Score & Greek Rank',
+  'Strength Score',
   'Unlimited templates & routines',
   ...(APP_ICONS_ENABLED ? ['Custom app icons'] : []),
 ];
 
+// Testers get premium for free while this is set (see PurchaseContext), so the
+// premium pitch slide is hidden. It returns automatically at public launch when
+// EXPO_PUBLIC_BETA_PREMIUM is removed from eas.json.
+const BETA_PREMIUM = process.env.EXPO_PUBLIC_BETA_PREMIUM === 'true';
+
 const SLIDES: Slide[] = [
   {
     type: 'screenshot',
-    source: require('../../assets/screenshots/slide-workout.png'),
-    badge: 'FREE',
+    source: require('../../assets/screenshots/slide-dashboard.jpg'),
+    title: 'Strength & Cardio, One Place',
+    body: 'Every session lands on your dashboard — lifting workouts, runs, and GPS-tracked cardio side by side.',
+  },
+  {
+    type: 'screenshot',
+    source: require('../../assets/screenshots/slide-workout.jpg'),
     title: 'Track Every Rep',
     body: 'Log sets, weight, and reps. Rest timers, RPE tracking, and automatic PR detection built in.',
   },
   {
     type: 'screenshot',
     source: require('../../assets/screenshots/slide-progress.png'),
-    badge: 'FREE',
     title: 'Watch Yourself Improve',
     body: 'Progress charts and personal records show exactly when you\'re getting stronger.',
   },
   {
     type: 'screenshot',
-    source: require('../../assets/screenshots/slide-ai.png'),
-    badge: 'PREMIUM',
+    source: require('../../assets/screenshots/slide-ai.jpg'),
     title: 'Your AI Coach',
-    body: 'Answer a few questions and get a full personalised program in seconds. First one\'s on us.',
+    body: 'Build personalised programs in seconds, and get insights from your training — when to push, when to deload, and what needs work.',
   },
-  {
+  ...(BETA_PREMIUM ? [] : [{
     type: 'premium',
     title: 'Reach Your Peak',
     body: 'Everything you need to train smarter and hit your goals — no fluff.',
-  },
+  } as PremiumSlide]),
 ];
 
 export default function OnboardingTutorialScreen({ navigation }: Props) {
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<FlatList>(null);
+  const scrollX = useRef(new Animated.Value(0)).current;
 
   const advance = () => {
     if (activeIndex < SLIDES.length - 1) {
@@ -107,12 +116,17 @@ export default function OnboardingTutorialScreen({ navigation }: Props) {
 
       <View style={styles.header}>
         <View style={styles.headerSpacer} />
+        <Image
+          source={require('../../assets/Arete_name.png')}
+          style={styles.headerLogo}
+          resizeMode="contain"
+        />
         {!isLast ? (
           <TouchableOpacity onPress={() => navigation.navigate('Onboarding')} style={styles.skipBtn}>
             <Text style={styles.skipText}>Skip</Text>
           </TouchableOpacity>
         ) : (
-          <View style={styles.headerSpacer} />
+          <View style={styles.skipBtn} />
         )}
       </View>
 
@@ -123,12 +137,17 @@ export default function OnboardingTutorialScreen({ navigation }: Props) {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        scrollEnabled={false}
+        onMomentumScrollEnd={e => setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / W))}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+          { useNativeDriver: false },
+        )}
+        scrollEventThrottle={16}
         getItemLayout={(_, index) => ({ length: W, offset: W * index, index })}
         renderItem={({ item }) => (
           <View style={styles.slide}>
             {item.type === 'screenshot' ? (
-              <ScreenshotFrame source={item.source} badge={item.badge} />
+              <ScreenshotFrame source={item.source} />
             ) : (
               <PremiumCard />
             )}
@@ -143,9 +162,29 @@ export default function OnboardingTutorialScreen({ navigation }: Props) {
 
       <View style={styles.footer}>
         <View style={styles.dotsRow}>
-          {SLIDES.map((_, i) => (
-            <View key={i} style={[styles.dot, i === activeIndex && styles.dotActive]} />
-          ))}
+          {SLIDES.map((_, i) => {
+            const inputRange = [(i - 1) * W, i * W, (i + 1) * W];
+            return (
+              <Animated.View
+                key={i}
+                style={[
+                  styles.dot,
+                  {
+                    width: scrollX.interpolate({
+                      inputRange,
+                      outputRange: [8, 24, 8],
+                      extrapolate: 'clamp',
+                    }),
+                    backgroundColor: scrollX.interpolate({
+                      inputRange,
+                      outputRange: [AUTH.border, AUTH.accent, AUTH.border],
+                      extrapolate: 'clamp',
+                    }),
+                  },
+                ]}
+              />
+            );
+          })}
         </View>
 
         <TouchableOpacity style={styles.nextBtn} onPress={advance} activeOpacity={0.85}>
@@ -156,8 +195,7 @@ export default function OnboardingTutorialScreen({ navigation }: Props) {
   );
 }
 
-function ScreenshotFrame({ source, badge }: { source: ImageSourcePropType; badge: 'FREE' | 'PREMIUM' }) {
-  const isPremium = badge === 'PREMIUM';
+function ScreenshotFrame({ source }: { source: ImageSourcePropType }) {
   return (
     <View style={styles.frameWrap}>
       <View style={styles.phoneShadow}>
@@ -169,14 +207,6 @@ function ScreenshotFrame({ source, badge }: { source: ImageSourcePropType; badge
             style={styles.phoneGradient}
           />
         </View>
-      </View>
-
-      {/* FREE / PREMIUM badge */}
-      <View style={[styles.badge, isPremium && styles.badgePremium]}>
-        {isPremium && <Ionicons name="sparkles" size={11} color={AUTH.bg} style={{ marginRight: 3 }} />}
-        <Text style={[styles.badgeText, isPremium && styles.badgeTextPremium]}>
-          {isPremium ? 'PREMIUM' : 'FREE'}
-        </Text>
       </View>
     </View>
   );
@@ -212,13 +242,15 @@ const styles = StyleSheet.create({
 
   header: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     minHeight: 44,
   },
   headerSpacer: { width: 56 },
-  skipBtn: { paddingHorizontal: 8, paddingVertical: 6 },
+  headerLogo: { width: 120, height: 32 },
+  skipBtn: { width: 56, paddingVertical: 6, alignItems: 'flex-end' },
   skipText: { fontSize: 15, color: AUTH.subtext, fontWeight: '500' },
 
   slide: {
@@ -263,30 +295,6 @@ const styles = StyleSheet.create({
     height: FRAME_H * 0.28,
   },
 
-  // Badge anchored to top-right of frame
-  badge: {
-    position: 'absolute',
-    top: -10,
-    right: -10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: AUTH.border,
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  badgePremium: {
-    backgroundColor: AUTH.accent,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: AUTH.subtext,
-    letterSpacing: 0.8,
-  },
-  badgeTextPremium: {
-    color: AUTH.bg,
-  },
 
   // ── Premium card ─────────────────────────────────────────────
   premiumCard: {
@@ -295,7 +303,8 @@ const styles = StyleSheet.create({
     borderRadius: 36,
     borderWidth: 2,
     borderColor: AUTH.accent + '55',
-    padding: spacing.lg,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
     justifyContent: 'center',
     gap: spacing.md,
   },
@@ -363,11 +372,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: AUTH.border,
-  },
-  dotActive: {
-    backgroundColor: AUTH.accent,
-    width: 24,
-    borderRadius: 4,
   },
   nextBtn: {
     backgroundColor: AUTH.accent,

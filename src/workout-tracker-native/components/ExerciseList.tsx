@@ -439,6 +439,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.md,
     fontWeight: '600',
     color: colors.textPrimary,
+    flexShrink: 1,
   },
   cardMuscle: {
     fontSize: typography.fontSize.sm,

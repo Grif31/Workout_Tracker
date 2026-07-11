@@ -33,6 +33,8 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState('');
   const [success,     setSuccess]     = useState(false);
+  const [resending,   setResending]   = useState(false);
+  const [resent,      setResent]      = useState(false);
 
   const handleVerify = async () => {
     setError('');
@@ -61,6 +63,24 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
       setError('Could not connect. Please check your connection.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setError('');
+    setResent(false);
+    setResending(true);
+    try {
+      await apiFetch('/api/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      setResent(true);
+    } catch {
+      setError('Could not connect. Please check your connection.');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -182,9 +202,11 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.resendRow} onPress={() => navigation.goBack()}>
+              <TouchableOpacity style={styles.resendRow} onPress={handleResend} disabled={resending}>
                 <Text style={styles.resendText}>Didn't receive a code? </Text>
-                <Text style={[styles.resendText, { color: AUTH.accent }]}>Resend</Text>
+                <Text style={[styles.resendText, { color: AUTH.accent }]}>
+                  {resending ? 'Sending…' : resent ? 'Sent — check your email' : 'Resend'}
+                </Text>
               </TouchableOpacity>
             </>
           ) : (

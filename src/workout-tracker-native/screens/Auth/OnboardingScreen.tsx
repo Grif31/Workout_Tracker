@@ -7,6 +7,7 @@ import {
   ScrollView,
   StatusBar,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -91,7 +92,8 @@ const STEPS = [
   },
 ];
 
-const DONE_TEXT = "Perfect. Tap Continue to enter the app — I'll have your program ready in the Training tab.";
+const DONE_TEXT_BUILD = "Perfect. Tap Continue to enter the app — I'll have your program ready in the Coach tab.";
+const DONE_TEXT_LATER = "No problem! When you're ready, you can generate a personalised program anytime from the Coach tab.\n\nTap Continue to enter the app.";
 
 export default function OnboardingScreen({ onComplete }: Props) {
   const { user } = useAuth();
@@ -144,7 +146,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
       if (isLast) {
         setMessages(prev => [
           ...prev.filter(m => m.type !== 'typing'),
-          { id: nextId(), type: 'bot', text: DONE_TEXT },
+          { id: nextId(), type: 'bot', text: newAnswers.routine ? DONE_TEXT_BUILD : DONE_TEXT_LATER },
         ]);
         setIsDone(true);
       } else {
@@ -198,11 +200,39 @@ export default function OnboardingScreen({ onComplete }: Props) {
     onComplete();
   };
 
+  const handleSkip = () => {
+    Alert.alert(
+      'Skip coach setup?',
+      "Your answers let the AI coach tailor generated programs and insights to your goal, equipment, and schedule. If you skip, you'll get generic defaults instead.\n\nYou can always do this later from the Coach tab → Edit Profile.",
+      [
+        { text: 'Keep Going', style: 'cancel' },
+        {
+          text: 'Skip',
+          style: 'destructive',
+          onPress: async () => {
+            await AsyncStorage.setItem('onboarding_complete', 'true');
+            onComplete();
+          },
+        },
+      ],
+    );
+  };
+
   const currentOptions = !isDone && chipsActive ? STEPS[currentStep].options : [];
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={AUTH.bg} />
+
+      <View style={styles.header}>
+        {!isDone ? (
+          <TouchableOpacity onPress={handleSkip} style={styles.skipBtn}>
+            <Text style={styles.skipText}>Skip</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.skipBtn} />
+        )}
+      </View>
 
       {/* Chat area */}
       <ScrollView
@@ -289,6 +319,16 @@ export default function OnboardingScreen({ onComplete }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: AUTH.bg },
+
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    minHeight: 44,
+  },
+  skipBtn: { paddingHorizontal: 8, paddingVertical: 6 },
+  skipText: { fontSize: 15, color: AUTH.subtext, fontWeight: '500' },
 
   chat: { flex: 1 },
   chatContent: { padding: spacing.md, gap: 12, paddingBottom: spacing.sm },
