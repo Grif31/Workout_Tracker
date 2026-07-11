@@ -338,7 +338,7 @@ PRIVACY = """<!DOCTYPE html>
 </head>
 <body>
   <h1>Privacy Policy</h1>
-  <p class="meta">Aretē Fitness &nbsp;·&nbsp; Last updated: June 2026</p>
+  <p class="meta">Aretē Fitness &nbsp;·&nbsp; Last updated: July 2026</p>
 
   <p>This Privacy Policy explains how Aretē Fitness ("we", "us", or "our") collects, uses, and protects
   your information when you use the Aretē app and website at aretefitnessapp.com. By using Aretē,
@@ -347,7 +347,8 @@ PRIVACY = """<!DOCTYPE html>
   <h2>1. Information We Collect</h2>
   <p><strong>Account information:</strong> When you register, we collect your name, email address,
   and a securely hashed password. If you sign in with Apple or Google, we receive a unique identifier
-  and, optionally, your name and email from those providers.</p>
+  and, optionally, your name and email from those providers. You may optionally provide your gender,
+  which is used solely to calculate strength percentile scores against the appropriate standards.</p>
 
   <p><strong>Fitness data:</strong> We store the workout data you log — exercises, sets, reps, weight,
   RPE, cardio duration, distance, and workout dates. We also store bodyweight entries, body
@@ -368,8 +369,13 @@ PRIVACY = """<!DOCTYPE html>
   reminders, re-engagement messages), we store a push notification token associated with your
   account.</p>
 
-  <p><strong>Usage data:</strong> We do not collect analytics, crash reports, or behavioural
-  tracking data beyond what is necessary to operate the service.</p>
+  <p><strong>Crash reports:</strong> If the app crashes or encounters an error, a technical crash
+  report is sent to Sentry, our error-monitoring provider. Crash reports contain device model,
+  operating system version, app version, and technical details of the error. They are configured
+  to exclude personal identifying information and your fitness data.</p>
+
+  <p><strong>Usage data:</strong> We do not collect behavioural analytics or advertising
+  tracking data.</p>
 
   <h2>2. How We Use Your Information</h2>
   <ul>
@@ -377,6 +383,8 @@ PRIVACY = """<!DOCTYPE html>
     <li>To calculate your Strength Score, personal records, and progress statistics</li>
     <li>To generate AI-powered workout routines and templates (your preferences are sent to our AI service)</li>
     <li>To send push notifications you have opted into</li>
+    <li>To send essential account emails, such as password reset codes</li>
+    <li>To diagnose and fix crashes and errors in the app</li>
     <li>To process in-app purchases and manage your subscription status</li>
     <li>To respond to support requests sent to support@aretefitnessapp.com</li>
   </ul>
@@ -391,6 +399,12 @@ PRIVACY = """<!DOCTYPE html>
     <li><strong>RevenueCat</strong> — manages in-app subscriptions and purchase verification.
         RevenueCat may receive your App Store account identifier and purchase history.
         See <a href="https://www.revenuecat.com/privacy">revenuecat.com/privacy</a>.</li>
+    <li><strong>Sentry</strong> — collects crash reports so we can find and fix bugs. Reports
+        include device and error details but are configured to exclude personal identifying
+        information. See <a href="https://sentry.io/privacy/">sentry.io/privacy</a>.</li>
+    <li><strong>Resend</strong> — delivers essential account emails such as password reset codes.
+        Resend processes your email address to deliver these messages.
+        See <a href="https://resend.com/legal/privacy-policy">resend.com/legal/privacy-policy</a>.</li>
     <li><strong>Expo / Expo Push Service</strong> — delivers push notifications to your device.</li>
     <li><strong>Apple Sign In / Google Sign In</strong> — optional sign-in methods. The respective
         privacy policies of Apple and Google apply.</li>
@@ -445,7 +459,7 @@ TERMS = """<!DOCTYPE html>
 </head>
 <body>
   <h1>Terms of Service</h1>
-  <p class="meta">Aretē Fitness &nbsp;·&nbsp; Last updated: June 2026</p>
+  <p class="meta">Aretē Fitness &nbsp;·&nbsp; Last updated: July 2026</p>
 
   <p>These Terms of Service ("Terms") govern your use of the Aretē Fitness mobile application
   and website at aretefitnessapp.com (collectively, the "Service"), operated by Aretē Fitness ("we",
@@ -498,7 +512,8 @@ TERMS = """<!DOCTYPE html>
   Anthropic's Claude model and may not always reflect current exercise science best practices;
   use it as a starting point, not a prescription. Consult a qualified healthcare provider
   before starting any new exercise programme, especially if you have a medical condition or injury.
-  You use the Service at your own risk.</p>
+  If you use GPS cardio tracking, remain aware of your surroundings — do not interact with the app
+  while moving in traffic or hazardous environments. You use the Service at your own risk.</p>
 
   <h2>6. Intellectual Property</h2>
   <p>All content, design, software, and trademarks within the Service are owned by or licensed
@@ -513,25 +528,34 @@ TERMS = """<!DOCTYPE html>
 
   <h2>8. Termination</h2>
   <p>We reserve the right to suspend or terminate your account if you violate these Terms. You
-  may delete your account at any time by contacting support@aretefitnessapp.com. Upon termination,
-  your data will be deleted within 30 days.</p>
+  may delete your account at any time in the app (Settings → Account → Delete Account) or by
+  contacting support@aretefitnessapp.com. Upon termination, your data will be deleted within
+  30 days.</p>
 
-  <h2>9. Disclaimers and Limitation of Liability</h2>
+  <h2>9. Beta and Pre-Release Versions</h2>
+  <p>From time to time we may offer pre-release versions of Aretē (for example, through Apple's
+  TestFlight programme). Beta versions are provided for testing purposes, may contain bugs, and
+  may include features that change or are removed before public release — including features
+  offered free during testing that later require a paid subscription. We may need to reset or
+  migrate data collected during a beta period, although we make reasonable efforts to preserve it.
+  Your use of a beta version is also subject to the platform's own beta terms (e.g. TestFlight).</p>
+
+  <h2>10. Disclaimers and Limitation of Liability</h2>
   <p>The Service is provided "as is" without warranties of any kind. To the fullest extent
   permitted by law, Aretē Fitness is not liable for any indirect, incidental, special, or
   consequential damages arising from your use of the Service, including but not limited to
   loss of data, personal injury, or property damage resulting from fitness activities.</p>
 
-  <h2>10. Changes to These Terms</h2>
+  <h2>11. Changes to These Terms</h2>
   <p>We may update these Terms from time to time. We will notify you of material changes by
   posting the updated Terms on this page. Continued use of the Service after changes are posted
   constitutes your acceptance of the new Terms.</p>
 
-  <h2>11. Governing Law</h2>
+  <h2>12. Governing Law</h2>
   <p>These Terms are governed by the laws of the United States. Any disputes shall be resolved
   in the jurisdiction where Aretē Fitness operates.</p>
 
-  <h2>12. Contact Us</h2>
+  <h2>13. Contact Us</h2>
   <p>Questions about these Terms? Contact us at:<br>
   <a href="mailto:support@aretefitnessapp.com">support@aretefitnessapp.com</a></p>
 </body>
