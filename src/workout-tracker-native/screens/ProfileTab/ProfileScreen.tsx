@@ -915,7 +915,7 @@ export default function ProfileScreen({ navigation }: Props) {
                 />
               </View>
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.prChipRow}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.prChipRow}>
                 <TouchableOpacity
                   style={[styles.prChip, !prMuscle && { backgroundColor: colors.accent }]}
                   onPress={() => setPrMuscle(null)}
