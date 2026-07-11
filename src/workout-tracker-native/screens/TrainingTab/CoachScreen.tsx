@@ -194,6 +194,7 @@ export default function CoachScreen({ navigation }: Props) {
   // Muscle picker for creating blank templates (existing feature)
   const [musclePickerVisible, setMusclePickerVisible] = useState(false);
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
+  const [showAllTemplates, setShowAllTemplates] = useState(false);
 
   // ── Coach tab state ─────────────────────────────────────────────────────────
   const [greekRank, setGreekRank] = useState<string>('Neophyte');
@@ -750,7 +751,7 @@ export default function CoachScreen({ navigation }: Props) {
           {templates.length === 0 ? (
             <Text style={styles.emptyText}>No templates yet</Text>
           ) : (
-            templates.map(t => (
+            (showAllTemplates ? templates : templates.slice(0, 5)).map(t => (
               <TouchableOpacity
                 key={t.id}
                 style={styles.card}
@@ -796,6 +797,21 @@ export default function CoachScreen({ navigation }: Props) {
                 </View>
               </TouchableOpacity>
             ))
+          )}
+          {templates.length > 5 && (
+            <TouchableOpacity
+              style={styles.showAllBtn}
+              onPress={() => setShowAllTemplates(v => !v)}
+            >
+              <Text style={[styles.showAllBtnText, { color: colors.accent }]}>
+                {showAllTemplates ? 'Show Less' : `Show All (${templates.length})`}
+              </Text>
+              <Ionicons
+                name={showAllTemplates ? 'chevron-up' : 'chevron-down'}
+                size={14}
+                color={colors.accent}
+              />
+            </TouchableOpacity>
           )}
 
           {/* Routines */}
@@ -1421,6 +1437,14 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   routineCardSub: { fontSize: 12, color: colors.textSecondary, marginTop: spacing.xs },
   logInlineBtn: { backgroundColor: colors.save, borderRadius: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   logInlineBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
+  showAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: spacing.sm,
+  },
+  showAllBtnText: { fontWeight: '600', fontSize: typography.fontSize.sm },
   muscleChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 5 },
   templateMuscleChip: { backgroundColor: colors.accent + '20', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   templateMuscleChipText: { fontSize: 11, color: colors.accent, fontWeight: '600' },

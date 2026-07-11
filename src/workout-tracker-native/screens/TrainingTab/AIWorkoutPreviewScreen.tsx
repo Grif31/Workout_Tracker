@@ -10,11 +10,23 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import ExerciseListModal from '../../components/ExerciseList';
+import ExerciseEditRow, { EXERCISE_ROW_HEIGHT } from '../../components/ExerciseEditRow';
+import DraggableList from '../../components/DraggableList';
+import ExerciseProgrammingModal, { ProgrammingValue } from '../../components/ExerciseProgrammingModal';
+import UndoBar from '../../components/UndoBar';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { TrainingStackParamsList, PreviewExercise, PreviewDay } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'AIWorkoutPreview'>;
 type AllExercise = { id: number; name: string; muscle_group: string; equipment?: string; image_url?: string; exercise_type?: string };
+
+// 'template' targets the flat exercise list; a number targets that routine day index
+type Scope = 'template' | number;
+type PickerState = { mode: 'add' | 'switch'; scope: Scope; exId?: number } | null;
+type EditState = { scope: Scope; exId: number } | null;
+type RemovedState = { scope: Scope; index: number; exercise: PreviewExercise } | null;
+
+const BOTTOM_BAR_HEIGHT = 76;
 
 export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
   const { generateType, description: initDesc, coachDays, coachGoal, coachExp, coachEquipment, coachSessionLength, coachAvoid } = route.params;
@@ -27,16 +39,28 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
   const [days, setDays] = useState<PreviewDay[]>(route.params.days ?? []);
 
   const [allExercises, setAllExercises] = useState<AllExercise[]>([]);
-  const [pickerTarget, setPickerTarget] = useState<'template' | number | null>(null);
+  const [picker, setPicker] = useState<PickerState>(null);
+  const [editTarget, setEditTarget] = useState<EditState>(null);
+  const [removed, setRemoved] = useState<RemovedState>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [listDragging, setListDragging] = useState(false);
 
   useEffect(() => {
     apiFetch('/api/exercises').then(r => r.ok ? r.json() : []).then(setAllExercises).catch(() => {});
   }, []);
 
+  const getList = (scope: Scope): PreviewExercise[] =>
+    scope === 'template' ? exercises : days[scope]?.exercises ?? [];
+
+  const setList = (scope: Scope, updater: (list: PreviewExercise[]) => PreviewExercise[]) => {
+    if (scope === 'template') setExercises(prev => updater(prev));
+    else setDays(prev => prev.map((d, i) => i === scope ? { ...d, exercises: updater(d.exercises) } : d));
+  };
+
   const handleRegenerate = async () => {
     setRegenerating(true);
+    setRemoved(null);
     try {
       const res = await apiFetch('/api/ai/generate', {
         method: 'POST',
@@ -119,14 +143,25 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
     }
   };
 
-  const removeExercise = (id: number) => {
-    setExercises(prev => prev.filter(e => e.id !== id));
+  const removeExercise = (scope: Scope, exId: number) => {
+    const list = getList(scope);
+    const index = list.findIndex(e => e.id === exId);
+    if (index < 0) return;
+    const exercise = list[index];
+    setList(scope, prev => prev.filter(e => e.id !== exId));
+    setRemoved({ scope, index, exercise });
   };
 
-  const removeFromDay = (dayIdx: number, exId: number) => {
-    setDays(prev => prev.map((d, i) =>
-      i === dayIdx ? { ...d, exercises: d.exercises.filter(e => e.id !== exId) } : d
-    ));
+  const undoRemove = () => {
+    if (!removed) return;
+    const { scope, index, exercise } = removed;
+    setList(scope, prev => {
+      if (prev.some(e => e.id === exercise.id)) return prev;
+      const next = [...prev];
+      next.splice(Math.min(index, next.length), 0, exercise);
+      return next;
+    });
+    setRemoved(null);
   };
 
   const updateDayLabel = (dayIdx: number, label: string) => {
@@ -134,28 +169,83 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
   };
 
   const handlePickExercise = useCallback((ex: { id: number; name: string }) => {
+    if (!picker) return;
     const full = allExercises.find(e => e.id === ex.id);
     if (!full) return;
-    const preview: PreviewExercise = { id: full.id, name: full.name, muscle_group: full.muscle_group };
+    const list = getList(picker.scope);
+    const inThisList = picker.scope === 'template' ? 'this workout' : 'this day';
 
-    if (pickerTarget === 'template') {
-      if (exercises.some(e => e.id === full.id)) {
-        Alert.alert('Already added', `${full.name} is already in this workout`);
+    if (picker.mode === 'switch') {
+      if (list.some(e => e.id === full.id && e.id !== picker.exId)) {
+        Alert.alert('Already added', `${full.name} is already in ${inThisList}`);
         return;
       }
-      setExercises(prev => [...prev, preview]);
-    } else if (typeof pickerTarget === 'number') {
-      const dayIdx = pickerTarget;
-      if (days[dayIdx]?.exercises.some(e => e.id === full.id)) {
-        Alert.alert('Already added', `${full.name} is already in this day`);
+      // Replace in place, keeping position and prescribed programming
+      setList(picker.scope, prev => prev.map(e => e.id === picker.exId
+        ? {
+            id: full.id,
+            name: full.name,
+            muscle_group: full.muscle_group,
+            prescribed_sets: e.prescribed_sets,
+            prescribed_reps: e.prescribed_reps,
+            prescribed_rpe: e.prescribed_rpe,
+          }
+        : e));
+    } else {
+      if (list.some(e => e.id === full.id)) {
+        Alert.alert('Already added', `${full.name} is already in ${inThisList}`);
         return;
       }
-      setDays(prev => prev.map((d, i) =>
-        i === dayIdx ? { ...d, exercises: [...d.exercises, preview] } : d
-      ));
+      setList(picker.scope, prev => [...prev, { id: full.id, name: full.name, muscle_group: full.muscle_group }]);
     }
-    setPickerTarget(null);
-  }, [pickerTarget, exercises, days, allExercises]);
+    setPicker(null);
+  }, [picker, exercises, days, allExercises]);
+
+  const handleProgrammingSave = (value: ProgrammingValue | null) => {
+    if (!editTarget) return;
+    setList(editTarget.scope, prev => prev.map(e => e.id === editTarget.exId
+      ? value
+        ? { ...e, prescribed_sets: value.sets, prescribed_reps: value.reps, prescribed_rpe: value.rpe ?? undefined }
+        : { ...e, prescribed_sets: undefined, prescribed_reps: undefined, prescribed_rpe: undefined }
+      : e));
+    setEditTarget(null);
+  };
+
+  const editExercise = editTarget
+    ? getList(editTarget.scope).find(e => e.id === editTarget.exId)
+    : null;
+
+  const reorderIn = (scope: Scope) => (from: number, to: number) => {
+    setList(scope, prev => {
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  };
+
+  const renderExerciseList = (scope: Scope, data: PreviewExercise[]) => (
+    <DraggableList
+      data={data}
+      keyExtractor={e => String(e.id)}
+      rowHeight={EXERCISE_ROW_HEIGHT}
+      gap={spacing.sm}
+      onReorder={reorderIn(scope)}
+      onDragActiveChange={setListDragging}
+      renderItem={item => (
+        <ExerciseEditRow
+          name={item.name}
+          muscleGroup={item.muscle_group}
+          programming={{ sets: item.prescribed_sets, reps: item.prescribed_reps, rpe: item.prescribed_rpe }}
+          rowColor={colors.background}
+          swipeEnabled={!listDragging}
+          onDelete={() => removeExercise(scope, item.id)}
+          onSwitch={() => setPicker({ mode: 'switch', scope, exId: item.id })}
+          onEdit={() => setEditTarget({ scope, exId: item.id })}
+        />
+      )}
+    />
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -170,7 +260,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={styles.scroll} scrollEnabled={!listDragging}>
         {/* Name */}
         <TextInput
           style={styles.nameInput}
@@ -196,20 +286,8 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
         {generateType === 'template' && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Exercises ({exercises.length})</Text>
-            {exercises.map(ex => (
-              <View key={ex.id} style={styles.exRow}>
-                <View style={styles.exInfo}>
-                  <Text style={styles.exName}>{ex.name}</Text>
-                  <Text style={styles.exMuscle}>
-                    {ex.muscle_group}{ex.prescribed_sets ? `  ·  ${ex.prescribed_sets} × ${ex.prescribed_reps}${ex.prescribed_rpe ? `  @  RPE ${ex.prescribed_rpe}` : ''}` : ''}
-                  </Text>
-                </View>
-                <TouchableOpacity onPress={() => removeExercise(ex.id)} hitSlop={8}>
-                  <Ionicons name="remove-circle-outline" size={22} color={colors.danger} />
-                </TouchableOpacity>
-              </View>
-            ))}
-            <TouchableOpacity style={styles.addExBtn} onPress={() => setPickerTarget('template')}>
+            {renderExerciseList('template', exercises)}
+            <TouchableOpacity style={styles.addExBtn} onPress={() => setPicker({ mode: 'add', scope: 'template' })}>
               <Ionicons name="add" size={16} color={colors.save} />
               <Text style={styles.addExBtnText}>Add Exercise</Text>
             </TouchableOpacity>
@@ -226,25 +304,17 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
               placeholder={`Day ${dayIdx + 1}`}
               placeholderTextColor={colors.placeholder}
             />
-            {day.exercises.map(ex => (
-              <View key={ex.id} style={styles.exRow}>
-                <View style={styles.exInfo}>
-                  <Text style={styles.exName}>{ex.name}</Text>
-                  <Text style={styles.exMuscle}>
-                    {ex.muscle_group}{ex.prescribed_sets ? `  ·  ${ex.prescribed_sets} × ${ex.prescribed_reps}${ex.prescribed_rpe ? `  @  RPE ${ex.prescribed_rpe}` : ''}` : ''}
-                  </Text>
-                </View>
-                <TouchableOpacity onPress={() => removeFromDay(dayIdx, ex.id)} hitSlop={8}>
-                  <Ionicons name="remove-circle-outline" size={22} color={colors.danger} />
-                </TouchableOpacity>
-              </View>
-            ))}
-            <TouchableOpacity style={styles.addExBtn} onPress={() => setPickerTarget(dayIdx)}>
+            {renderExerciseList(dayIdx, day.exercises)}
+            <TouchableOpacity style={styles.addExBtn} onPress={() => setPicker({ mode: 'add', scope: dayIdx })}>
               <Ionicons name="add" size={16} color={colors.save} />
               <Text style={styles.addExBtnText}>Add Exercise</Text>
             </TouchableOpacity>
           </View>
         ))}
+
+        <Text style={styles.editHint}>
+          Swipe an exercise left for actions · hold & drag to reorder
+        </Text>
 
         <View style={{ height: spacing.xl * 3 }} />
       </ScrollView>
@@ -276,9 +346,17 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
         </TouchableOpacity>
       </View>
 
+      <UndoBar
+        visible={removed !== null}
+        message={removed ? `Removed ${removed.exercise.name}` : ''}
+        onUndo={undoRemove}
+        onDismiss={() => setRemoved(null)}
+        bottomOffset={BOTTOM_BAR_HEIGHT}
+      />
+
       <ExerciseListModal
-        visible={pickerTarget !== null}
-        onClose={() => setPickerTarget(null)}
+        visible={picker !== null}
+        onClose={() => setPicker(null)}
         exercises={allExercises}
         onSelect={handlePickExercise}
         onAddExercise={async (exName, muscle, equipment) => {
@@ -293,6 +371,16 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
           }
         }}
         muscleGroups={muscleGroups}
+      />
+
+      <ExerciseProgrammingModal
+        visible={editTarget !== null}
+        exerciseName={editExercise?.name ?? ''}
+        initial={editExercise
+          ? { sets: editExercise.prescribed_sets, reps: editExercise.prescribed_reps, rpe: editExercise.prescribed_rpe }
+          : null}
+        onClose={() => setEditTarget(null)}
+        onSave={handleProgrammingSave}
       />
     </View>
   );
@@ -352,18 +440,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.xs,
   },
 
-  exRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  exInfo: { flex: 1 },
-  exName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
-  exMuscle: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
-
   addExBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -376,6 +452,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginTop: spacing.xs,
   },
   addExBtnText: { color: colors.save, fontWeight: '600', fontSize: typography.fontSize.sm },
+
+  editHint: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
 
   bottomBar: {
     flexDirection: 'row',

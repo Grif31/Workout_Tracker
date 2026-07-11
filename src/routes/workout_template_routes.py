@@ -1,3 +1,5 @@
+import json
+
 from flask import Blueprint, request, jsonify, g
 from models import db, WorkoutTemplate, WorkoutTemplateExercise, ExerciseTemplate
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -72,6 +74,9 @@ def update_workout_template(template_id):
                 exercise_template_id=ex_id,
                 order=i,
             ))
+    if 'programming' in data:
+        prog = data['programming']
+        template.programming_json = json.dumps(prog) if prog else None
 
     db.session.commit()
     return jsonify(template.to_dict(include_exercises=True))

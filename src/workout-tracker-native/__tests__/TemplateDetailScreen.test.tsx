@@ -8,6 +8,20 @@ jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl:
 jest.mock('theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));
 jest.mock('constants/muscleGroups', () => ({ muscleGroups: ['All', 'Chest', 'Back'] }));
 jest.mock('components/ExerciseList', () => () => null);
+jest.mock('components/DraggableList', () => {
+  const { View } = require('react-native');
+  return ({ data = [], renderItem }: any) => (
+    <View>
+      {data.map((item: any, i: number) => (
+        <View key={i}>{renderItem(item, i)}</View>
+      ))}
+    </View>
+  );
+});
+jest.mock('react-native-gesture-handler/Swipeable', () => {
+  const { View } = require('react-native');
+  return ({ children }: any) => <View>{children}</View>;
+});
 
 const nav = createMockNavigation();
 const route = createMockRoute('TemplateDetail', { templateId: 1 });

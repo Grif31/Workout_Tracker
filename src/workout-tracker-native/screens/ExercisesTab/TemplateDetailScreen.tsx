@@ -1,13 +1,17 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, FlatList,
+  Alert, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { TrainingStackParamsList } from 'navigation/types';
 import ExerciseListModal from '../../components/ExerciseList';
+import ExerciseEditRow, { EXERCISE_ROW_HEIGHT } from '../../components/ExerciseEditRow';
+import DraggableList from '../../components/DraggableList';
+import ExerciseProgrammingModal, { ProgrammingValue } from '../../components/ExerciseProgrammingModal';
+import UndoBar from '../../components/UndoBar';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
@@ -25,6 +29,7 @@ type Exercise = {
 };
 type ProgrammingEntry = { exercise_template_id: number; sets: number; reps: string; rpe?: number | null };
 type Template = { id: number; name: string; exercises: Exercise[]; programming_json?: string | null };
+type RemovedState = { index: number; exercise: Exercise } | null;
 
 const parseRepsMin = (reps: string): string => {
   const m = (reps ?? '').match(/^(\d+)/);
@@ -36,13 +41,17 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const [template, setTemplate] = useState<Template | null>(null);
   const [name, setName] = useState('');
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [progMap, setProgMap] = useState<Record<number, ProgrammingEntry>>({});
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [switchExId, setSwitchExId] = useState<number | null>(null);
+  const [editExId, setEditExId] = useState<number | null>(null);
+  const [removed, setRemoved] = useState<RemovedState>(null);
+  const [listDragging, setListDragging] = useState(false);
 
   const fetchTemplate = async () => {
     try {
@@ -52,9 +61,16 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
       ]);
       if (tmplRes.ok) {
         const data: Template = await tmplRes.json();
-        setTemplate(data);
         setName(data.name);
         setExercises(data.exercises);
+        const map: Record<number, ProgrammingEntry> = {};
+        if (data.programming_json) {
+          try {
+            const parsed: ProgrammingEntry[] = JSON.parse(data.programming_json);
+            for (const p of parsed) map[p.exercise_template_id] = p;
+          } catch { }
+        }
+        setProgMap(map);
       }
       if (exRes.ok) setAllExercises(await exRes.json());
     } catch {
@@ -66,29 +82,68 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
 
   useFocusEffect(useCallback(() => { fetchTemplate(); }, [templateId]));
 
-  const addExercise = (ex: { id: number; name: string }) => {
+  const handlePickExercise = (ex: { id: number; name: string }) => {
     const full = allExercises.find(e => e.id === ex.id);
     if (!full) return;
-    if (exercises.some(e => e.id === full.id)) {
-      Alert.alert('Already added', `${full.name} is already in this template`);
-      return;
+
+    if (switchExId != null) {
+      if (exercises.some(e => e.id === full.id && e.id !== switchExId)) {
+        Alert.alert('Already added', `${full.name} is already in this template`);
+        return;
+      }
+      // Replace in place; carry programming over to the new exercise
+      setExercises(prev => prev.map(e => e.id === switchExId ? full : e));
+      setProgMap(prev => {
+        const old = prev[switchExId];
+        if (!old) return prev;
+        const next = { ...prev };
+        delete next[switchExId];
+        next[full.id] = { ...old, exercise_template_id: full.id };
+        return next;
+      });
+      setSwitchExId(null);
+    } else {
+      if (exercises.some(e => e.id === full.id)) {
+        Alert.alert('Already added', `${full.name} is already in this template`);
+        return;
+      }
+      setExercises(prev => [...prev, full]);
     }
-    setExercises(prev => [...prev, full]);
     setPickerVisible(false);
   };
 
   const removeExercise = (id: number) => {
+    const index = exercises.findIndex(e => e.id === id);
+    if (index < 0) return;
+    const exercise = exercises[index];
     setExercises(prev => prev.filter(e => e.id !== id));
+    setRemoved({ index, exercise });
   };
 
-  const moveExercise = (index: number, direction: -1 | 1) => {
+  const undoRemove = () => {
+    if (!removed) return;
+    const { index, exercise } = removed;
     setExercises(prev => {
+      if (prev.some(e => e.id === exercise.id)) return prev;
       const next = [...prev];
-      const target = index + direction;
-      if (target < 0 || target >= next.length) return prev;
-      [next[index], next[target]] = [next[target], next[index]];
+      next.splice(Math.min(index, next.length), 0, exercise);
       return next;
     });
+    setRemoved(null);
+  };
+
+  const handleProgrammingSave = (value: ProgrammingValue | null) => {
+    if (editExId == null) return;
+    setProgMap(prev => {
+      const next = { ...prev };
+      if (value) {
+        next[editExId] = { exercise_template_id: editExId, sets: value.sets, reps: value.reps, rpe: value.rpe };
+      } else {
+        delete next[editExId];
+      }
+      return next;
+    });
+    setEditExId(null);
   };
 
   const handleSave = async () => {
@@ -101,6 +156,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         body: JSON.stringify({
           name: name.trim(),
           exercise_template_ids: exercises.map(e => e.id),
+          programming: exercises.filter(e => progMap[e.id]).map(e => progMap[e.id]),
         }),
       });
       if (res.ok) {
@@ -144,19 +200,12 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
   };
 
   const handleLog = () => {
-    let progMap = new Map<number, ProgrammingEntry>();
-    if (template?.programming_json) {
-      try {
-        const parsed: ProgrammingEntry[] = JSON.parse(template.programming_json);
-        for (const p of parsed) progMap.set(p.exercise_template_id, p);
-      } catch { }
-    }
     navigation.navigate('LogRoutine', {
       prefill: {
         name,
         notes: '',
         exercises: exercises.map(ex => {
-          const prog = progMap.get(ex.id);
+          const prog = progMap[ex.id];
           return {
             name: ex.name,
             exercise_template_id: ex.id,
@@ -175,6 +224,8 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
       },
     });
   };
+
+  const editExercise = editExId != null ? exercises.find(e => e.id === editExId) : null;
 
   if (loading) {
     return (
@@ -196,78 +247,91 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={exercises}
-        keyExtractor={item => item.id.toString()}
-        contentContainerStyle={styles.content}
-        ListHeaderComponent={
-          <View>
-            {targetMuscles && targetMuscles.length > 0 && (
-              <View style={[styles.muscleBanner, { backgroundColor: colors.accent + '18', borderColor: colors.accent }]}>
-                <Ionicons name="body-outline" size={14} color={colors.accent} />
-                <Text style={[styles.muscleBannerText, { color: colors.accent }]}>
-                  Training: {targetMuscles.join(', ')}
-                </Text>
-              </View>
-            )}
-            <TextInput
-              style={styles.nameInput}
-              value={name}
-              onChangeText={setName}
-              placeholder="Template name"
-              placeholderTextColor={colors.placeholder}
-            />
-            <View style={styles.actionRow}>
-              <TouchableOpacity style={styles.logBtn} onPress={handleLog}>
-                <Ionicons name="play" size={14} color={colors.accentText} />
-                <Text style={styles.logBtnText}>Log Workout</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.saveBtn, saving && { opacity: 0.6 }]}
-                onPress={handleSave}
-                disabled={saving}
-              >
-                <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Changes'}</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.sectionLabel}>Exercises ({exercises.length})</Text>
-          </View>
-        }
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>No exercises yet — tap Add to get started</Text>
-        }
-        renderItem={({ item, index }) => (
-          <View style={styles.exerciseRow}>
-            <View style={styles.reorderBtns}>
-              <TouchableOpacity onPress={() => moveExercise(index, -1)} disabled={index === 0} style={styles.reorderBtn}>
-                <Ionicons name="chevron-up" size={16} color={index === 0 ? colors.border : colors.textSecondary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => moveExercise(index, 1)} disabled={index === exercises.length - 1} style={styles.reorderBtn}>
-                <Ionicons name="chevron-down" size={16} color={index === exercises.length - 1 ? colors.border : colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.exerciseInfo}>
-              <Text style={styles.exerciseName}>{item.name}</Text>
-              <Text style={styles.exerciseMuscle}>{item.muscle_group}</Text>
-            </View>
-            <TouchableOpacity onPress={() => removeExercise(item.id)}>
-              <Ionicons name="remove-circle-outline" size={22} color={colors.danger} />
-            </TouchableOpacity>
+      <ScrollView contentContainerStyle={styles.content} scrollEnabled={!listDragging}>
+        {targetMuscles && targetMuscles.length > 0 && (
+          <View style={[styles.muscleBanner, { backgroundColor: colors.accent + '18', borderColor: colors.accent }]}>
+            <Ionicons name="body-outline" size={14} color={colors.accent} />
+            <Text style={[styles.muscleBannerText, { color: colors.accent }]}>
+              Training: {targetMuscles.join(', ')}
+            </Text>
           </View>
         )}
-        ListFooterComponent={
-          <TouchableOpacity style={styles.addBtn} onPress={() => setPickerVisible(true)}>
-            <Ionicons name="add" size={18} color={colors.save} />
-            <Text style={styles.addBtnText}>Add Exercise</Text>
+        <TextInput
+          style={styles.nameInput}
+          value={name}
+          onChangeText={setName}
+          placeholder="Template name"
+          placeholderTextColor={colors.placeholder}
+        />
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={styles.logBtn} onPress={handleLog}>
+            <Ionicons name="play" size={14} color={colors.accentText} />
+            <Text style={styles.logBtnText}>Log Workout</Text>
           </TouchableOpacity>
-        }
+          <TouchableOpacity
+            style={[styles.saveBtn, saving && { opacity: 0.6 }]}
+            onPress={handleSave}
+            disabled={saving}
+          >
+            <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Changes'}</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.sectionLabel}>Exercises ({exercises.length})</Text>
+
+        {exercises.length === 0 ? (
+          <Text style={styles.emptyText}>No exercises yet — tap Add to get started</Text>
+        ) : (
+          <DraggableList
+            data={exercises}
+            keyExtractor={item => item.id.toString()}
+            rowHeight={EXERCISE_ROW_HEIGHT}
+            gap={spacing.sm}
+            onDragActiveChange={setListDragging}
+            onReorder={(from, to) => {
+              setExercises(prev => {
+                const next = [...prev];
+                const [moved] = next.splice(from, 1);
+                next.splice(to, 0, moved);
+                return next;
+              });
+            }}
+            renderItem={item => (
+              <ExerciseEditRow
+                name={item.name}
+                muscleGroup={item.muscle_group}
+                programming={progMap[item.id] ?? null}
+                swipeEnabled={!listDragging}
+                onDelete={() => removeExercise(item.id)}
+                onSwitch={() => { setSwitchExId(item.id); setPickerVisible(true); }}
+                onEdit={() => setEditExId(item.id)}
+              />
+            )}
+          />
+        )}
+
+        <TouchableOpacity style={styles.addBtn} onPress={() => { setSwitchExId(null); setPickerVisible(true); }}>
+          <Ionicons name="add" size={18} color={colors.save} />
+          <Text style={styles.addBtnText}>Add Exercise</Text>
+        </TouchableOpacity>
+        {exercises.length > 0 && (
+          <Text style={styles.editHint}>
+            Swipe an exercise left for actions · hold & drag to reorder
+          </Text>
+        )}
+      </ScrollView>
+
+      <UndoBar
+        visible={removed !== null}
+        message={removed ? `Removed ${removed.exercise.name}` : ''}
+        onUndo={undoRemove}
+        onDismiss={() => setRemoved(null)}
       />
 
       <ExerciseListModal
         visible={pickerVisible}
-        onClose={() => setPickerVisible(false)}
+        onClose={() => { setPickerVisible(false); setSwitchExId(null); }}
         exercises={allExercises}
-        onSelect={addExercise}
+        onSelect={handlePickExercise}
         initialMuscle={targetMuscles?.[0]}
         onAddExercise={async (name, muscle) => {
           const res = await apiFetch('/api/exercises', {
@@ -278,6 +342,14 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
           if (res.ok) setAllExercises(await (await apiFetch('/api/exercises')).json());
         }}
         muscleGroups={muscleGroups}
+      />
+
+      <ExerciseProgrammingModal
+        visible={editExId !== null}
+        exerciseName={editExercise?.name ?? ''}
+        initial={editExId != null ? progMap[editExId] ?? null : null}
+        onClose={() => setEditExId(null)}
+        onSave={handleProgrammingSave}
       />
     </View>
   );
@@ -350,19 +422,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     letterSpacing: 0.8,
     marginBottom: spacing.sm,
   },
-  exerciseRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  reorderBtns: { flexDirection: 'column', marginRight: spacing.sm },
-  reorderBtn: { padding: 2 },
-  exerciseInfo: { flex: 1 },
-  exerciseName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
-  exerciseMuscle: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
   emptyText: { textAlign: 'center', color: colors.textSecondary, marginVertical: spacing.lg },
   addBtn: {
     flexDirection: 'row',
@@ -373,7 +432,13 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderColor: colors.save,
     borderRadius: spacing.sm,
     paddingVertical: spacing.sm,
-    marginTop: spacing.xs,
+    marginTop: spacing.sm,
   },
   addBtnText: { color: colors.save, fontWeight: '600', fontSize: typography.fontSize.sm },
+  editHint: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: spacing.md,
+  },
 });

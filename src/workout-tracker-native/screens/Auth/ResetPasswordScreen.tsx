@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,6 +36,8 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
   const [success,     setSuccess]     = useState(false);
   const [resending,   setResending]   = useState(false);
   const [resent,      setResent]      = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const checkAnim = useRef(new Animated.Value(0)).current;
 
   const handleVerify = async () => {
     setError('');
@@ -50,7 +53,14 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
         body: JSON.stringify({ email, otp: otp.trim() }),
       });
       if (res.ok) {
-        setStep(2);
+        setOtpVerified(true);
+        Animated.spring(checkAnim, {
+          toValue: 1,
+          friction: 4,
+          tension: 90,
+          useNativeDriver: true,
+        }).start();
+        setTimeout(() => setStep(2), 900);
       } else {
         try {
           const data = await res.json();
@@ -131,7 +141,7 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
             Your password has been updated. You can now sign in with your new password.
           </Text>
           <TouchableOpacity
-            style={styles.primaryBtn}
+            style={[styles.primaryBtn, styles.successBtn]}
             onPress={() => navigation.navigate('Login')}
             activeOpacity={0.85}
           >
@@ -153,17 +163,32 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
         >
           <TouchableOpacity
             style={styles.backBtn}
-            onPress={() => step === 2 ? (setStep(1), setError('')) : navigation.goBack()}
+            onPress={() => {
+              if (step === 2) {
+                setStep(1);
+                setError('');
+                setOtpVerified(false);
+                checkAnim.setValue(0);
+              } else {
+                navigation.goBack();
+              }
+            }}
           >
             <Ionicons name="chevron-back" size={24} color={AUTH.text} />
           </TouchableOpacity>
 
           <View style={styles.iconCircle}>
-            <Ionicons
-              name={step === 1 ? 'keypad-outline' : 'lock-closed-outline'}
-              size={32}
-              color={AUTH.accent}
-            />
+            {step === 1 && otpVerified ? (
+              <Animated.View style={{ opacity: checkAnim, transform: [{ scale: checkAnim }] }}>
+                <Ionicons name="checkmark-circle" size={40} color={AUTH.accent} />
+              </Animated.View>
+            ) : (
+              <Ionicons
+                name={step === 1 ? 'keypad-outline' : 'lock-closed-outline'}
+                size={32}
+                color={AUTH.accent}
+              />
+            )}
           </View>
 
           {step === 1 ? (
@@ -194,11 +219,11 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
               <TouchableOpacity
                 style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
                 onPress={handleVerify}
-                disabled={loading}
+                disabled={loading || otpVerified}
                 activeOpacity={0.85}
               >
                 <Text style={styles.primaryBtnText}>
-                  {loading ? 'Verifying…' : 'Verify Code'}
+                  {otpVerified ? 'Verified!' : loading ? 'Verifying…' : 'Verify Code'}
                 </Text>
               </TouchableOpacity>
 
@@ -295,6 +320,7 @@ const styles = StyleSheet.create({
   eyeBtn:    { padding: 4 },
 
   primaryBtn:         { backgroundColor: AUTH.accent, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
+  successBtn:         { alignSelf: 'stretch', marginTop: spacing.lg },
   primaryBtnDisabled: { opacity: 0.6 },
   primaryBtnText:     { fontSize: typography.fontSize.md, fontWeight: '700', color: '#000' },
 
