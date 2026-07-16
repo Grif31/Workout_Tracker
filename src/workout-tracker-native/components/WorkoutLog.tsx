@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, Alert, TouchableOpacity,
   Platform, Vibration, ScrollView,
   Keyboard, Modal, Dimensions,
-  Animated, AppState, FlatList, ActivityIndicator,
+  Animated, AppState, FlatList, ActivityIndicator, TextInput,
 } from 'react-native';
 import {
   scheduleRestTimerAlert,
@@ -137,10 +137,30 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const prAnim = useRef(new Animated.Value(0)).current;
   const prTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputFocusedRef = useRef(false);
+  const listRef = useRef<FlatList<ExerciseEntry>>(null);
+  const scrollOffsetRef = useRef(0);
+  const kbScreenYRef = useRef<number | null>(null);
+
+  // automaticallyAdjustKeyboardInsets adds scroll space but doesn't reliably
+  // scroll the focused input into view on the New Architecture — do it manually
+  const scrollFocusedInputAboveKeyboard = (kbTop: number) => {
+    const input: any = (TextInput as any).State?.currentlyFocusedInput?.();
+    if (!input?.measureInWindow) return;
+    input.measureInWindow((_x: number, y: number, _w: number, h: number) => {
+      const clearance = 56 + spacing.md; // floating +/- toolbar sits above the keyboard
+      const overshoot = y + h + clearance - kbTop;
+      if (overshoot > 0) {
+        listRef.current?.scrollToOffset({
+          offset: scrollOffsetRef.current + overshoot,
+          animated: true,
+        });
+      }
+    });
+  };
 
   const [exerciseList, setExerciseList] = useState<{ id: number; name: string; muscle_group: string; equipment?: string; image_url?: string; exercise_type?: string; is_custom?: boolean }[]>([]);
   const [recentExercises, setRecentExercises] = useState<{ name: string; exercise_template_id: number | null }[]>([]);
-  const [templates, setTemplates] = useState<{ id: number; name: string; exercises: { id: number; name: string; equipment?: string; image_url?: string; exercise_type?: string }[] }[]>([]);
+  const [templates, setTemplates] = useState<{ id: number; name: string; exercises: { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string }[] }[]>([]);
   const [exerciseModalVisible, setExerciseModalVisible] = useState(false);
   const [newExerciseFormVisible, setNewExerciseFormVisible] = useState(false);
   const [replacingExIndex, setReplacingExIndex] = useState<number | null>(null);
@@ -246,9 +266,13 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         // Independent of navigators, tab bars, or KeyboardAvoidingView quirks.
         setKbOverlap(Math.max(0, rootBottomRef.current - e.endCoordinates.screenY));
       }
+      kbScreenYRef.current = e.endCoordinates.screenY;
+      // Wait a frame so the keyboard metrics and layout settle before measuring
+      requestAnimationFrame(() => scrollFocusedInputAboveKeyboard(e.endCoordinates.screenY));
       setKeyboardVisible(true);
     });
     const hide = Keyboard.addListener(hideEvt, () => {
+      kbScreenYRef.current = null;
       setKeyboardVisible(false);
       // Delay so onFocus on the next input can fire first when switching inputs.
       // If an input gained focus within this window, inputFocusedRef will be true and we skip the clear.
@@ -284,12 +308,18 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     }
   };
 
+  // Wall-clock finish time of the running rest timer (null = not running or
+  // paused). The setInterval is suspended while the app is backgrounded, so
+  // this is the source of truth to resync from on foreground.
+  const restEndsAtRef = useRef<number | null>(null);
+
   // Separated from startRest so resumeRest can restart the tick without resetting restRemaining.
   const _runRestInterval = () => {
     restRef.current = setInterval(() => {
       setRestRemaining(prev => {
         if (prev <= 1) {
           clearInterval(restRef.current!);
+          restEndsAtRef.current = null;
           setRestActive(false);
           setRestPaused(false);
           if (vibrateRef.current) Vibration.vibrate([0, 300, 100, 300]);
@@ -300,6 +330,24 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     }, 1000);
   };
 
+  // JS timers freeze during app suspension — recompute remaining from the
+  // wall-clock finish time when the app returns to the foreground.
+  const resyncRestTimer = () => {
+    if (restEndsAtRef.current == null) return;
+    if (restRef.current) clearInterval(restRef.current);
+    const remaining = Math.ceil((restEndsAtRef.current - Date.now()) / 1000);
+    if (remaining <= 0) {
+      // Finished while backgrounded — the OS notification already alerted
+      restEndsAtRef.current = null;
+      setRestRemaining(0);
+      setRestActive(false);
+      setRestPaused(false);
+    } else {
+      setRestRemaining(remaining);
+      _runRestInterval();
+    }
+  };
+
   const startRest = async () => {
     if (restRef.current) clearInterval(restRef.current);
     const duration = defaultRest;
@@ -307,6 +355,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     setRestRemaining(duration);
     setRestActive(true);
     setRestPaused(false);
+    restEndsAtRef.current = Date.now() + duration * 1000;
     _runRestInterval();
     const alertsOff = await AsyncStorage.getItem('rest_timer_alerts_enabled');
     if (alertsOff !== 'false') scheduleRestTimerAlert(duration);
@@ -314,6 +363,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   const pauseRest = () => {
     if (restRef.current) clearInterval(restRef.current);
+    restEndsAtRef.current = null;
     setRestPaused(true);
     // The OS alert would still fire at the original wall-clock time — cancel
     // while paused; resumeRest re-schedules from the frozen remaining.
@@ -322,6 +372,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   const resumeRest = async () => {
     setRestPaused(false);
+    restEndsAtRef.current = Date.now() + restRemaining * 1000;
     _runRestInterval();
     const alertsOff = await AsyncStorage.getItem('rest_timer_alerts_enabled');
     if (alertsOff !== 'false') scheduleRestTimerAlert(restRemaining);
@@ -336,6 +387,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     // Re-schedule the OS alert to the adjusted finish time (paused timers have
     // no alert scheduled; resumeRest handles them)
     if (!restPaused) {
+      restEndsAtRef.current = Date.now() + next * 1000;
       const alertsOff = await AsyncStorage.getItem('rest_timer_alerts_enabled');
       if (alertsOff !== 'false') scheduleRestTimerAlert(next);
     }
@@ -343,6 +395,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   const stopRest = () => {
     if (restRef.current) clearInterval(restRef.current);
+    restEndsAtRef.current = null;
     setRestActive(false);
     setRestPaused(false);
     cancelRestTimerAlert();
@@ -391,6 +444,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         cancelLiveWorkoutNotification();
         // App resumed from background — update timer refs from checkpoint if JS was suspended.
         await restoreTimerCheckpoint();
+        resyncRestTimer();
         // Exercises are still in memory; discard the insurance backup.
         await AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
       }
@@ -788,6 +842,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         name: ex.name,
         exercise_template_id: ex.id,
         exercise_type: ex.exercise_type as ExerciseEntry['exercise_type'],
+        muscle_group: ex.muscle_group,
         equipment: ex.equipment,
         image_url: ex.image_url,
         sets: [initialSet],
@@ -1051,16 +1106,19 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       />
 
       <FlatList
+        ref={listRef}
         data={exercises}
         keyExtractor={(item) => item.uid}
         style={{ flex: 1 }}
         contentContainerStyle={styles.container}
-        // iOS: native keyboard inset handling — scrolls the focused input into
-        // view; the extra contentInset keeps it above the floating toolbar.
+        // iOS: the keyboard inset adds scrollable space below the content;
+        // scrollFocusedInputAboveKeyboard does the actual scrolling.
         automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
         contentInset={Platform.OS === 'ios' ? { bottom: 56 } : undefined}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        onScroll={e => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
+        scrollEventThrottle={16}
         onScrollBeginDrag={() => setOpenMenuIdx(null)}
         ListHeaderComponent={(
           <WorkoutHeader
@@ -1163,6 +1221,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             onFocusInput={(setIdx, field) => {
               inputFocusedRef.current = true;
               setFocusedInput({ exIdx: exIndex, setIdx, field });
+              // Keyboard already open (input-to-input focus change) — no
+              // keyboard event will fire, so scroll from here
+              if (kbScreenYRef.current != null) {
+                const kbTop = kbScreenYRef.current;
+                setTimeout(() => scrollFocusedInputAboveKeyboard(kbTop), 60);
+              }
             }}
             onBlurInput={() => { inputFocusedRef.current = false; }}
             onToggleSetDone={setIdx => toggleSetDone(exIndex, setIdx)}
@@ -1289,7 +1353,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                 style={styles.keyboardAdjBtn}
                 onPress={() => { setPlateCalcTarget(focusedInput); Keyboard.dismiss(); }}
               >
-                <Ionicons name="barbell-outline" size={16} color={colors.textPrimary} />
+                <Ionicons name="barbell-outline" size={18} color={colors.textPrimary} />
+                <Text style={styles.keyboardAdjText}>Plates</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -1479,12 +1544,18 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     right: 0,
   },
   keyboardAdjRow: {
+    flex: 1,
     flexDirection: 'row',
     gap: spacing.sm,
   },
   keyboardAdjBtn: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    minHeight: 44,
+    paddingVertical: spacing.sm,
     borderRadius: spacing.sm,
     backgroundColor: colors.background,
     borderWidth: 1,
@@ -1495,7 +1566,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
   },
-  keyboardDismissBtn: { padding: spacing.xs },
+  keyboardDismissBtn: { padding: spacing.sm },
 
   rpeModal: {
     position: 'absolute',

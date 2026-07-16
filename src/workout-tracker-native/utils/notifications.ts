@@ -6,12 +6,10 @@ import { apiFetch } from './api';
 const PROJECT_ID = '356b88e9-4302-43fc-b50a-6d83030b8fa6';
 const REMINDER_NOTIF_KEY    = 'workout_reminder_notif_id';
 const REST_TIMER_NOTIF_KEY  = 'rest_timer_notif_id';
-const LIVE_WORKOUT_NOTIF_KEY = 'live_workout_notif_id';
 
 // In-memory cache — avoids AsyncStorage reads while the app is running.
 // On restart the cache is empty; functions fall back to AsyncStorage.
 let restTimerNotifId: string | null = null;
-let liveWorkoutNotifId: string | null = null;
 
 // ── Permissions ──────────────────────────────────────────────
 
@@ -85,35 +83,56 @@ export async function setUpLiveWorkoutCategory(): Promise<void> {
   ]);
 }
 
-export async function postLiveWorkoutNotification(opts: {
+// Fixed identifier: posting again replaces the existing notification in
+// place, so concurrent posts can never produce duplicates, and cancel always
+// knows what to dismiss without any stored-id bookkeeping.
+const LIVE_WORKOUT_NOTIF_ID = 'live_workout';
+
+// Serialize post/cancel so they apply in call order — concurrent calls
+// (e.g. iOS emitting multiple background transitions, or two listeners
+// firing on the same event) previously raced, double-posting and orphaning
+// notifications that could then never be dismissed.
+let liveNotifQueue: Promise<unknown> = Promise.resolve();
+function enqueueLiveNotifOp<T>(op: () => Promise<T>): Promise<T> {
+  const run = liveNotifQueue.then(op, op);
+  liveNotifQueue = run.catch(() => {});
+  return run;
+}
+
+export function postLiveWorkoutNotification(opts: {
   workoutName: string;
   elapsed: string;
   setsDone: number;
   setsTotal: number;
   currentExercise?: string;
 }): Promise<void> {
-  await cancelLiveWorkoutNotification();
-  liveWorkoutNotifId = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: `${opts.workoutName}  ·  ${opts.elapsed}  —  ${opts.setsDone}/${opts.setsTotal} sets`,
-      body: opts.currentExercise ?? '',
-      categoryIdentifier: LIVE_WORKOUT_CATEGORY,
-      data: { type: 'live_workout' },
-      autoDismiss: false,
-      sticky: true,
-    } as any,
-    trigger: null,
+  return enqueueLiveNotifOp(async () => {
+    await Notifications.scheduleNotificationAsync({
+      identifier: LIVE_WORKOUT_NOTIF_ID,
+      content: {
+        title: `${opts.workoutName}  ·  ${opts.elapsed}  —  ${opts.setsDone}/${opts.setsTotal} sets`,
+        body: opts.currentExercise ?? '',
+        categoryIdentifier: LIVE_WORKOUT_CATEGORY,
+        data: { type: 'live_workout' },
+        autoDismiss: false,
+        sticky: true,
+      } as any,
+      trigger: null,
+    });
   });
-  await AsyncStorage.setItem(LIVE_WORKOUT_NOTIF_KEY, liveWorkoutNotifId);
 }
 
-export async function cancelLiveWorkoutNotification(): Promise<void> {
-  const id = liveWorkoutNotifId ?? await AsyncStorage.getItem(LIVE_WORKOUT_NOTIF_KEY);
-  if (id) {
-    await Notifications.dismissNotificationAsync(id).catch(() => {});
-    liveWorkoutNotifId = null;
-    await AsyncStorage.removeItem(LIVE_WORKOUT_NOTIF_KEY);
-  }
+export function cancelLiveWorkoutNotification(): Promise<void> {
+  return enqueueLiveNotifOp(async () => {
+    await Notifications.dismissNotificationAsync(LIVE_WORKOUT_NOTIF_ID).catch(() => {});
+    // Sweep orphans posted under random ids by older builds
+    const presented = await Notifications.getPresentedNotificationsAsync().catch(() => []);
+    for (const n of presented) {
+      if ((n.request.content.data as any)?.type === 'live_workout') {
+        await Notifications.dismissNotificationAsync(n.request.identifier).catch(() => {});
+      }
+    }
+  });
 }
 
 // ── Workout Reminders (daily scheduled) ──────────────────────

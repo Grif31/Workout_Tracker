@@ -37,8 +37,8 @@
 - [x] Wait for Apple review (~24 hours)
 
 ### Day 2-3: Send to Testers
-- [ ] Add testers in App Store Connect → TestFlight → External Testing
-- [ ] Send invite links to testers
+- [x] Add testers in App Store Connect → TestFlight → External Testing
+- [x] Send invite links to testers
 - [ ] Create a simple feedback form (Google Form)
 
 ### Day 4-7: Collect & Fix Feedback
@@ -65,7 +65,7 @@
 - [x] Capture: Dashboard / home
 - [x] Capture: Live workout logging
 - [ ] Capture: Exercise library
-- [ ] Capture: Progress charts
+- [x] Capture: Progress charts
 - [x] Capture: Strength Score screen
 - [x] Capture: Profile screen
 - [ ] Optional: add text overlays in Figma

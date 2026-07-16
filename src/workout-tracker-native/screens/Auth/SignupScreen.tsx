@@ -87,7 +87,7 @@ export default function SignupScreen({ navigation }: Props) {
         >
           {/* Back */}
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <Ionicons name="chevron-back" size={24} color={AUTH.text} />
+            <Ionicons name="arrow-back" size={24} color={AUTH.text} />
           </TouchableOpacity>
 
           {/* Header */}

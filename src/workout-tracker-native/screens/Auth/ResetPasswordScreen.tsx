@@ -174,7 +174,7 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
               }
             }}
           >
-            <Ionicons name="chevron-back" size={24} color={AUTH.text} />
+            <Ionicons name="arrow-back" size={24} color={AUTH.text} />
           </TouchableOpacity>
 
           <View style={styles.iconCircle}>

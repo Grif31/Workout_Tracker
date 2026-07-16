@@ -489,7 +489,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
         style={[styles.backBtn, { top: insets.top + spacing.sm }]}
         onPress={() => navigation.goBack()}
       >
-        <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+        <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
       </TouchableOpacity>
 
       {/* Controls */}

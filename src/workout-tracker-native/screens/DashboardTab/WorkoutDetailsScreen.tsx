@@ -9,6 +9,7 @@ export default function WorkoutDetailScreen({ route, navigation }: Props) {
   return (
     <WorkoutDetails
       workoutId={route.params.workoutId}
+      onBack={() => navigation.goBack()}
       onEdit={(prefill) => navigation.navigate('WorkoutLog', { prefill, workoutId: route.params.workoutId, editMode: true })}
       onDelete={() => navigation.goBack()}
       onPerformAgain={(prefill) => navigation.navigate('WorkoutLog', { prefill, editMode: false })}

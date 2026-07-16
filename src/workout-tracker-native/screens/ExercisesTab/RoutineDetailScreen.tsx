@@ -136,7 +136,7 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
     <View style={styles.container}>
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={8}>
-          <Ionicons name="chevron-back" size={26} color={colors.textPrimary} />
+          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <TouchableOpacity onPress={showMenu} style={styles.menuBtn} hitSlop={8} testID="menu-btn">
           <Ionicons name="ellipsis-vertical" size={22} color={colors.textPrimary} />

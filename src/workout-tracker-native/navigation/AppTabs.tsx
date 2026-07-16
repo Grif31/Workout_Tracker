@@ -68,7 +68,10 @@ function fmtElapsed(secs: number): string {
 
 function MiniWorkoutBar() {
   const { colors } = useTheme();
-  const { session, clearSession } = useWorkoutSession();
+  const { session, clearSession, isWorkoutOpen } = useWorkoutSession();
+  // Ref so the AppState closure reads the live value without resubscribing
+  const workoutOpenRef = useRef(isWorkoutOpen);
+  workoutOpenRef.current = isWorkoutOpen;
   const [elapsed, setElapsed] = useState(0);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const entranceAnim = useRef(new Animated.Value(0)).current;
@@ -104,6 +107,8 @@ function MiniWorkoutBar() {
     if (!session) return;
     const sub = AppState.addEventListener('change', async (nextState) => {
       if (nextState === 'background') {
+        // WorkoutLog posts with fresher state when it's open — never both
+        if (workoutOpenRef.current) return;
         const liveOff = await AsyncStorage.getItem('live_workout_notif_enabled');
         if (liveOff === 'false') return;
         const done = session.exercises.flatMap(e => e.sets).filter(s => s.done).length;

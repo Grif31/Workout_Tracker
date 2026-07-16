@@ -281,7 +281,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={8}>
-          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Personal Records</Text>
         <View style={{ width: 40 }} />

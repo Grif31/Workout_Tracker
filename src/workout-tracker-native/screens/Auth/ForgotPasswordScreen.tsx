@@ -66,7 +66,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
         <View style={styles.inner}>
           {/* Back */}
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <Ionicons name="chevron-back" size={24} color={AUTH.text} />
+            <Ionicons name="arrow-back" size={24} color={AUTH.text} />
           </TouchableOpacity>
 
           {/* Icon */}

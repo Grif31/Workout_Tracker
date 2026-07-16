@@ -58,6 +58,7 @@ export type PrefillWorkoutData = {
 
 type Props = {
   workoutId: number;
+  onBack?: () => void;
   onEdit?: (prefill: PrefillWorkoutData) => void;
   onDelete?: (workoutId: number) => void;
   onSaveAsTemplate?: () => void;
@@ -76,7 +77,7 @@ function fmtDuration(mins: number): string {
 }
 
 export default function WorkoutDetailsScreen({
-  workoutId, onEdit, onDelete, onSaveAsTemplate, onPerformAgain,
+  workoutId, onBack, onEdit, onDelete, onSaveAsTemplate, onPerformAgain,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -324,19 +325,27 @@ export default function WorkoutDetailsScreen({
 
   const workoutPrs = useMemo(() => {
     if (!workout) return [];
-    const seen = new Set<string>();
-    const out: { exercise_name: string; pr_type: string }[] = [];
+    // One row per exercise+type, but count every PR (e.g. two rep PRs at
+    // different weights) so the total matches the dashboard card's pr_count
+    const map = new Map<string, { exercise_name: string; pr_type: string; count: number }>();
     for (const ex of workout.exercises) {
       for (const s of ex.sets) {
         for (const t of s.pr_types ?? []) {
           if (t === 'estimated_1rm') continue;
           const key = `${ex.name}|${t}`;
-          if (!seen.has(key)) { seen.add(key); out.push({ exercise_name: ex.name, pr_type: t }); }
+          const entry = map.get(key);
+          if (entry) entry.count += 1;
+          else map.set(key, { exercise_name: ex.name, pr_type: t, count: 1 });
         }
       }
     }
-    return out;
+    return [...map.values()];
   }, [workout]);
+
+  const totalPrCount = useMemo(
+    () => workoutPrs.reduce((n, pr) => n + pr.count, 0),
+    [workoutPrs],
+  );
 
   if (loading || !workout) {
     return (
@@ -361,6 +370,11 @@ export default function WorkoutDetailsScreen({
         <View>
           {/* Title row */}
           <View style={styles.titleRow}>
+            {onBack && (
+              <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={8}>
+                <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+            )}
             <Text style={styles.title} numberOfLines={2}>{workout.name}</Text>
             <TouchableOpacity onPress={openMenu} style={styles.menuBtn}>
               <Ionicons name="ellipsis-vertical" size={22} color={colors.textPrimary} />
@@ -414,6 +428,7 @@ export default function WorkoutDetailsScreen({
                   <LaurelBranch height={20} color={PR_GOLD_TEXT} />
                   <Text style={styles.prHeaderText}>
                     {workoutPrs[0].exercise_name} — {PR_LABELS[workoutPrs[0].pr_type] ?? 'PR'}
+                    {workoutPrs[0].count > 1 ? ` ×${workoutPrs[0].count}` : ''}
                   </Text>
                   <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
                 </View>
@@ -425,7 +440,7 @@ export default function WorkoutDetailsScreen({
                     activeOpacity={0.8}
                   >
                     <LaurelBranch height={20} color={PR_GOLD_TEXT} />
-                    <Text style={styles.prHeaderText}>{workoutPrs.length} Personal Records</Text>
+                    <Text style={styles.prHeaderText}>{totalPrCount} Personal Records</Text>
                     <Text style={styles.prChevron}>{prExpanded ? '▲' : '▼'}</Text>
                     <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
                   </TouchableOpacity>
@@ -434,6 +449,7 @@ export default function WorkoutDetailsScreen({
                       <LaurelBranch height={18} color={PR_GOLD_TEXT} />
                       <Text style={styles.prRowText}>
                         {pr.exercise_name} — {PR_LABELS[pr.pr_type] ?? 'PR'}
+                        {pr.count > 1 ? ` ×${pr.count}` : ''}
                       </Text>
                       <LaurelBranch side="right" height={18} color={PR_GOLD_TEXT} />
                     </View>
@@ -699,6 +715,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginRight: spacing.sm,
   },
   menuBtn: { padding: spacing.xs },
+  backBtn: { padding: spacing.xs, marginRight: spacing.xs },
 
   metaRow: {
     flexDirection: 'row',

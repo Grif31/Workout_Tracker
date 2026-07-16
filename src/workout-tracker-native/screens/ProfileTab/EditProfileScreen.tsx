@@ -13,6 +13,7 @@ import {
   Modal,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -126,7 +127,12 @@ export default function EditProfileScreen({ navigation }: Props) {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Edit Profile</Text>
+      <View style={styles.titleRow}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={8}>
+          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <Text style={styles.title}>Edit Profile</Text>
+      </View>
 
       <TouchableOpacity onPress={pickImage} style={styles.avatarContainer}>
         <Image
@@ -271,11 +277,17 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     backgroundColor: colors.background,
     flexGrow: 1,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  backBtn: { padding: spacing.xs },
   title: {
     fontSize: typography.fontSize.lg,
     fontWeight: 'bold',
     color: colors.textPrimary,
-    marginBottom: spacing.md,
   },
   avatarContainer: {
     alignItems: 'center',

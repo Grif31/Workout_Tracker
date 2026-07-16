@@ -246,7 +246,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
           style={[styles.overlayBtn, { top: insets.top + spacing.sm, left: spacing.md }]}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
 
         {/* More options */}
