@@ -359,11 +359,11 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
         onClose={() => setPicker(null)}
         exercises={allExercises}
         onSelect={handlePickExercise}
-        onAddExercise={async (exName, muscle, equipment) => {
+        onAddExercise={async (exName, muscle, equipment, exerciseType) => {
           const res = await apiFetch('/api/exercises', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: exName, muscle_group: muscle, equipment }),
+            body: JSON.stringify({ name: exName, muscle_group: muscle, equipment, exercise_type: exerciseType ?? 'strength' }),
           });
           if (res.ok) {
             const updated = await apiFetch('/api/exercises');

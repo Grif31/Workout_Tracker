@@ -57,7 +57,7 @@ class ExerciseSchema(_Base):
     name          = fields.Str(required=True, validate=validate.Length(min=1))
     muscle_group  = fields.Str(load_default=None)
     equipment     = fields.Str(load_default=None)
-    exercise_type = fields.Str(load_default='strength', validate=validate.OneOf(['strength', 'cardio']))
+    exercise_type = fields.Str(load_default='strength', validate=validate.OneOf(['strength', 'cardio', 'duration']))
 
 # ── Workout ───────────────────────────────────────────────────
 class WorkoutSchema(_Base):

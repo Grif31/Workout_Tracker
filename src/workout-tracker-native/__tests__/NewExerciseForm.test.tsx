@@ -55,7 +55,7 @@ describe('NewExerciseForm', () => {
     fireEvent.press(getByText('Barbell'));
     fireEvent.press(getByText('Chest'));
     fireEvent.press(getByText('Save'));
-    expect(onSave).toHaveBeenCalledWith('Romanian Deadlift', expect.any(String), expect.any(String));
+    expect(onSave).toHaveBeenCalledWith('Romanian Deadlift', expect.any(String), expect.any(String), 'strength');
   });
 
   it('shows all muscle groups', () => {

@@ -915,7 +915,12 @@ def exercise_last_session():
         key=lambda s: s.order if s.order is not None else 0,
     )
     sets = [
-        {'reps': str(s.reps) if s.reps is not None else '', 'weight': str(s.weight) if s.weight is not None else '', 'set_type': getattr(s, 'set_type', 'N') or 'N'}
+        {
+            'reps': str(s.reps) if s.reps is not None else '',
+            'weight': str(s.weight) if s.weight is not None else '',
+            'set_type': getattr(s, 'set_type', 'N') or 'N',
+            'cardio_duration': str(s.cardio_duration) if s.cardio_duration is not None else '',
+        }
         for s in sorted_sets
     ]
     return jsonify({'sets': sets}), 200

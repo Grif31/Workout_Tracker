@@ -536,17 +536,34 @@ function GateCard({ missingFields, navigation, colors, styles }: any) {
       <Text style={styles.emptyTitle}>Set up your profile</Text>
       <Text style={styles.emptySubtitle}>
         {needsGender && needsBw
-          ? 'Add your gender and bodyweight to see your strength score'
+          ? 'Add your gender and log your bodyweight to see your strength score'
           : needsGender
-          ? 'Add your gender in Settings to see your strength score'
-          : 'Add your bodyweight in your profile to see your strength score'}
+          ? 'Add your gender to see your strength score'
+          : 'Log your bodyweight to see your strength score'}
       </Text>
-      <TouchableOpacity
-        style={[styles.gateBtn, { backgroundColor: colors.accent }]}
-        onPress={() => (navigation as any).navigate('ProfileTab', { screen: 'EditProfile', initial: false })}
-      >
-        <Text style={[styles.gateBtnText, { color: colors.accentText }]}>Complete Profile</Text>
-      </TouchableOpacity>
+      {needsGender && (
+        <TouchableOpacity
+          style={[styles.gateBtn, { backgroundColor: colors.accent }]}
+          onPress={() => (navigation as any).navigate('ProfileTab', { screen: 'EditProfile', initial: false })}
+        >
+          <Text style={[styles.gateBtnText, { color: colors.accentText }]}>Complete Profile</Text>
+        </TouchableOpacity>
+      )}
+      {needsBw && (
+        <TouchableOpacity
+          style={[
+            styles.gateBtn,
+            needsGender
+              ? { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.accent }
+              : { backgroundColor: colors.accent },
+          ]}
+          onPress={() => (navigation as any).navigate('ProfileTab', { screen: 'Measurements', initial: false })}
+        >
+          <Text style={[styles.gateBtnText, { color: needsGender ? colors.accent : colors.accentText }]}>
+            Log Bodyweight
+          </Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }

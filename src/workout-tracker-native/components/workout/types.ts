@@ -34,14 +34,14 @@ export type WorkoutSet = {
   intensity?: string;
 };
 
-export type PreviousSet = { reps: string; weight: string; set_type: string };
+export type PreviousSet = { reps: string; weight: string; set_type: string; cardio_duration?: string };
 
 export type ExerciseEntry = {
   uid: string;
   id?: number;
   name: string;
   exercise_template_id?: number;
-  exercise_type?: 'strength' | 'cardio';
+  exercise_type?: 'strength' | 'cardio' | 'duration';
   muscle_group?: string;
   equipment?: string;
   image_url?: string;
@@ -61,6 +61,26 @@ export const makeUid = () => Date.now().toString(36) + Math.random().toString(36
 // Added-weight work belongs on the separate 'Weighted' equipment variants.
 export const isBodyweight = (ex: { exercise_type?: string; equipment?: string }) =>
   ex.exercise_type !== 'cardio' && ex.equipment === 'Bodyweight';
+
+// Timed holds (planks, wall sits, dead hangs) — sets are a duration in
+// seconds, no reps or weight. Stored in the set's cardio_duration column
+// as minutes, same unit cardio uses; the UI converts to/from seconds.
+export const isDuration = (ex: { exercise_type?: string }) =>
+  ex.exercise_type === 'duration';
+
+// "45s" / "1:30" — hold-time display from a minutes value
+export function fmtHold(minutes: number): string {
+  const secs = Math.round(minutes * 60);
+  return secs < 60 ? `${secs}s` : fmtCountdown(secs);
+}
+
+// Blank set matching the exercise's logging mode
+export const makeInitialSet = (ex: { exercise_type?: string; equipment?: string }): WorkoutSet =>
+  ex.exercise_type === 'cardio'
+    ? { reps: '', weight: '', set_type: 'N', cardio_duration: '', distance: '', distance_unit: 'km', intensity: '' }
+    : isDuration(ex)
+    ? { reps: '', weight: '', set_type: 'N', cardio_duration: '' }
+    : { reps: '', weight: isBodyweight(ex) ? '0' : '', set_type: 'N' };
 
 export function fmtElapsed(secs: number): string {
   if (secs < 60) return `${secs}s`;

@@ -97,12 +97,12 @@ export default function ExercisesScreen({ navigation }: Props) {
     fetchRecentExercises();
   }, []));
 
-  const addNewExercise = async (name: string, muscle: string, equipment: string) => {
+  const addNewExercise = async (name: string, muscle: string, equipment: string, exerciseType?: string) => {
     try {
       const res = await apiFetch('/api/exercises', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, muscle_group: muscle, equipment }),
+        body: JSON.stringify({ name, muscle_group: muscle, equipment, exercise_type: exerciseType ?? 'strength' }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -316,7 +316,7 @@ export default function ExercisesScreen({ navigation }: Props) {
       <NewExerciseForm
         visible={showNewExerciseModal}
         onClose={() => setShowNewExerciseModal(false)}
-        onSave={(name, muscle, equipment) => { addNewExercise(name, muscle, equipment); setShowNewExerciseModal(false); }}
+        onSave={(name, muscle, equipment, exerciseType) => { addNewExercise(name, muscle, equipment, exerciseType); setShowNewExerciseModal(false); }}
         muscleGroups={muscleGroups}
       />
     </View>

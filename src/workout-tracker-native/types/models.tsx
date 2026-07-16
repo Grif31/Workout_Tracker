@@ -18,7 +18,7 @@ export type Exercise = {
   id: number
   name: string
   exercise_template_id?: number
-  exercise_type?: 'strength' | 'cardio'
+  exercise_type?: 'strength' | 'cardio' | 'duration'
   route_polyline?: string
   equipment?: string
   muscle_group?: string

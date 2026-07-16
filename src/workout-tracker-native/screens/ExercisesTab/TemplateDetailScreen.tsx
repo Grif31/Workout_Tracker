@@ -333,11 +333,11 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         exercises={allExercises}
         onSelect={handlePickExercise}
         initialMuscle={targetMuscles?.[0]}
-        onAddExercise={async (name, muscle) => {
+        onAddExercise={async (name, muscle, _equipment, exerciseType) => {
           const res = await apiFetch('/api/exercises', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, muscle_group: muscle }),
+            body: JSON.stringify({ name, muscle_group: muscle, exercise_type: exerciseType ?? 'strength' }),
           });
           if (res.ok) setAllExercises(await (await apiFetch('/api/exercises')).json());
         }}

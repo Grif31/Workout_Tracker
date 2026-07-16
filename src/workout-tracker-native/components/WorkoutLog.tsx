@@ -45,6 +45,8 @@ import {
   makeUid,
   fmtElapsed,
   isBodyweight,
+  isDuration,
+  makeInitialSet,
 } from './workout/types';
 import WorkoutHeader from './workout/WorkoutHeader';
 import ExerciseBlock from './workout/ExerciseBlock';
@@ -493,7 +495,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''),
           set_type: s.set_type ?? 'N',
           rpe: s.rpe != null ? String(s.rpe) : '',
-          cardio_duration: s.cardio_duration != null ? String(s.cardio_duration) : '',
+          // Duration exercises edit in seconds; the API stores minutes
+          cardio_duration: s.cardio_duration != null
+            ? (ex.exercise_type === 'duration'
+                ? String(Math.round(parseFloat(String(s.cardio_duration)) * 60))
+                : String(s.cardio_duration))
+            : '',
           distance: s.distance != null ? String(s.distance) : '',
           distance_unit: s.distance_unit ?? 'km',
           intensity: s.intensity != null ? String(s.intensity) : '',
@@ -522,7 +529,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                   if (data.sets?.length > 0) {
                     enriched[idx] = {
                       ...enriched[idx],
-                      sets: data.sets.map((s: any) => ({ reps: String(s.reps ?? ''), weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''), set_type: s.set_type ?? 'N' })),
+                      sets: prevSetsToEditable(ex, data.sets),
                       previousSets: data.sets,
                       currentPR: prData,
                     };
@@ -571,13 +578,13 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     } catch {}
   };
 
-  const addNewExercise = async (name: string, muscle: string, equipment: string) => {
+  const addNewExercise = async (name: string, muscle: string, equipment: string, exerciseType?: string) => {
     if (!name.trim()) return;
     try {
       const res = await apiFetch('/api/exercises', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, muscle_group: muscle, equipment }),
+        body: JSON.stringify({ name, muscle_group: muscle, equipment, exercise_type: exerciseType ?? 'strength' }),
       });
       const data = await res.json();
       if (res.ok) { fetchExercises(); Alert.alert('Success', 'Exercise added'); }
@@ -621,13 +628,19 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const toggleSetDone = (exIndex: number, setIndex: number) => {
     const ex = exercises[exIndex];
     const set = ex.sets[setIndex];
-    if (!set.done && (!set.reps.trim() || (!isBodyweight(ex) && !set.weight.trim()))) return;
+    if (!set.done) {
+      if (isDuration(ex)) {
+        if (!set.cardio_duration?.trim()) return;
+      } else if (!set.reps.trim() || (!isBodyweight(ex) && !set.weight.trim())) {
+        return;
+      }
+    }
     const nowDone = !set.done;
     const updated = [...exercises];
     updated[exIndex].sets[setIndex].done = nowDone;
     setExercises(updated);
     if (nowDone && autoStartRest && set.set_type !== 'W') startRest();
-    if (nowDone && ex.currentPR && ex.exercise_type !== 'cardio') {
+    if (nowDone && ex.currentPR && ex.exercise_type !== 'cardio' && !isDuration(ex)) {
       const w = parseFloat(set.weight);
       const r = parseFloat(set.reps);
       const e1rm = r <= 15 ? w * (1 + r / 30) : 0;
@@ -673,12 +686,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   const addSetToExercise = (exIndex: number) => {
     const updated = [...exercises];
-    const ex = updated[exIndex];
-    if (ex.exercise_type === 'cardio') {
-      updated[exIndex].sets.push({ reps: '', weight: '', set_type: 'N', cardio_duration: '', distance: '', distance_unit: 'km', intensity: '' });
-    } else {
-      updated[exIndex].sets.push({ reps: '', weight: isBodyweight(ex) ? '0' : '', set_type: 'N' });
-    }
+    updated[exIndex].sets.push(makeInitialSet(updated[exIndex]));
     setExercises(updated);
   };
 
@@ -724,12 +732,19 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     setExerciseModalVisible(true);
   };
 
+  // Turn last-session sets into editable set state for this exercise's logging mode
+  const prevSetsToEditable = (ex: { exercise_type?: string; equipment?: string }, sets: any[]): WorkoutSet[] =>
+    sets.map((s: any) => isDuration(ex)
+      ? {
+          reps: '', weight: '', set_type: s.set_type ?? 'N',
+          cardio_duration: s.cardio_duration && parseFloat(s.cardio_duration) > 0
+            ? String(Math.round(parseFloat(s.cardio_duration) * 60))
+            : '',
+        }
+      : { reps: String(s.reps ?? ''), weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''), set_type: s.set_type ?? 'N' });
+
   const addExToWorkout = async (exercise: { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string }) => {
-    const isCardio = exercise.exercise_type === 'cardio';
-    const bw = isBodyweight(exercise);
-    const initialSet: WorkoutSet = isCardio
-      ? { reps: '', weight: '', set_type: 'N', cardio_duration: '', distance: '', distance_unit: 'km', intensity: '' }
-      : { reps: '', weight: bw ? '0' : '', set_type: 'N' };
+    const initialSet: WorkoutSet = makeInitialSet(exercise);
 
     if (replacingExIndex !== null) {
       const targetIdx = replacingExIndex;
@@ -764,7 +779,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             if (data.sets?.length > 0) {
               return {
                 ...ex,
-                sets: data.sets.map((s: any) => ({ reps: String(s.reps ?? ''), weight: bw ? '0' : String(s.weight ?? ''), set_type: s.set_type ?? 'N' })),
+                sets: prevSetsToEditable(exercise, data.sets),
                 previousSets: data.sets,
                 currentPR: prData,
               };
@@ -809,9 +824,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             const updated = [...prev];
             updated[idx] = {
               ...updated[idx],
-              sets: data.sets.map((s: any) => ({
-                reps: String(s.reps ?? ''), weight: bw ? '0' : String(s.weight ?? ''), set_type: s.set_type ?? 'N',
-              })),
+              sets: prevSetsToEditable(exercise, data.sets),
               previousSets: data.sets,
               currentPR: prData,
             };
@@ -833,10 +846,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const applyTemplate = async (template: typeof templates[0]) => {
     setWorkoutName(template.name);
     const newExercises: ExerciseEntry[] = template.exercises.map(ex => {
-      const isCardio = ex.exercise_type === 'cardio';
-      const initialSet: WorkoutSet = isCardio
-        ? { reps: '', weight: '', set_type: 'N', cardio_duration: '', distance: '', distance_unit: 'km', intensity: '' }
-        : { reps: '', weight: isBodyweight(ex) ? '0' : '', set_type: 'N' };
+      const initialSet: WorkoutSet = makeInitialSet(ex);
       return {
         uid: makeUid(),
         name: ex.name,
@@ -908,6 +918,18 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             distance: Number(s.distance) || null,
             distance_unit: s.distance_unit || 'km',
             intensity: Number(s.intensity) || null,
+          };
+        }
+        if (isDuration(ex)) {
+          // UI edits in seconds; stored unit is minutes (matches cardio)
+          const secs = Number(s.cardio_duration);
+          return {
+            id: s.id,
+            order: setIndex,
+            set_type: s.set_type ?? 'N',
+            reps: null,
+            weight: null,
+            cardio_duration: secs > 0 ? Math.round((secs / 60) * 10000) / 10000 : null,
           };
         }
         return {
@@ -1101,7 +1123,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       <NewExerciseForm
         visible={newExerciseFormVisible}
         onClose={() => setNewExerciseFormVisible(false)}
-        onSave={(name, muscle, equipment) => { addNewExercise(name, muscle, equipment); setNewExerciseFormVisible(false); }}
+        onSave={(name, muscle, equipment, exerciseType) => { addNewExercise(name, muscle, equipment, exerciseType); setNewExerciseFormVisible(false); }}
         muscleGroups={muscleGroups}
       />
 

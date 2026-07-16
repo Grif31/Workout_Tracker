@@ -24,6 +24,7 @@ import { estimateCalories } from '../utils/cardioCalories';
 import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../constants/prColors';
 import { captureAndShare } from '../utils/shareCapture';
 import MuscleDiagram from './MuscleDiagram';
+import { fmtHold } from './workout/types';
 import WorkoutShareCard, { type ShareExercise } from './WorkoutShareCard';
 import CardioShareCard from './share/CardioShareCard';
 import { LaurelBranch } from './LaurelWreath';
@@ -551,6 +552,29 @@ export default function WorkoutDetailsScreen({
                   🔥 ~{kcal} kcal  ·  {totalDur.toFixed(0)} min  ·  {totalDistKm.toFixed(2)} km
                 </Text>
               </View>
+            </View>
+          );
+        }
+
+        if ((exercise.exercise_type ?? 'strength') === 'duration') {
+          return (
+            <View style={styles.exerciseCard}>
+              <Text style={styles.exerciseName}>{exercise.name}</Text>
+              {exercise.equipment ? (
+                <Text style={styles.equipmentText}>{exercise.equipment}</Text>
+              ) : null}
+              {exercise.notes ? (
+                <Text style={styles.exerciseNotes}>{exercise.notes}</Text>
+              ) : null}
+              {exercise.sets.map((s: any, i: number) => {
+                const mins = Number(s.cardio_duration) || 0;
+                return (
+                  <View key={i} style={styles.cardioBoutRow}>
+                    <Text style={[styles.setNumText, { color: colors.textSecondary, width: 20 }]}>{i + 1}</Text>
+                    <Text style={styles.cardioBoutText}>{mins > 0 ? `${fmtHold(mins)} hold` : '—'}</Text>
+                  </View>
+                );
+              })}
             </View>
           );
         }

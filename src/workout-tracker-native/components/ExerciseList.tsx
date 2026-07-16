@@ -38,7 +38,7 @@ type Props = {
   exercises: Exercise[];
   recentExercises?: RecentExercise[];
   onSelect: (exercise: SelectedExercise) => void;
-  onAddExercise: (name: string, muscle: string, equipment: string) => void;
+  onAddExercise: (name: string, muscle: string, equipment: string, exerciseType?: string) => void;
   muscleGroups: string[];
   multiSelect?: boolean;
   initialMuscle?: string;
@@ -302,8 +302,8 @@ export default function ExerciseListModal({
         <NewExerciseForm
           visible={formVisible}
           onClose={() => setFormVisible(false)}
-          onSave={(name, muscle, equipment) => {
-            onAddExercise(name, muscle, equipment);
+          onSave={(name, muscle, equipment, exerciseType) => {
+            onAddExercise(name, muscle, equipment, exerciseType);
             setFormVisible(false);
           }}
           muscleGroups={muscleGroups}

@@ -6,12 +6,19 @@ import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { equipmentTypes } from '../constants/equipmentTypes';
 
+export type NewExerciseType = 'strength' | 'duration';
+
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onSave: (name: string, muscle: string, equipment: string) => void;
+  onSave: (name: string, muscle: string, equipment: string, exerciseType: NewExerciseType) => void;
   muscleGroups: string[];
 };
+
+const LOGGING_TYPES: { value: NewExerciseType; label: string; hint: string }[] = [
+  { value: 'strength', label: 'Reps & Weight', hint: 'e.g. Bench Press' },
+  { value: 'duration', label: 'Timed Hold', hint: 'e.g. Plank' },
+];
 
 export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups }: Props) {
   const { colors } = useTheme();
@@ -19,6 +26,7 @@ export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups
   const [name, setName] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [equipment, setEquipment] = useState('');
+  const [exerciseType, setExerciseType] = useState<NewExerciseType>('strength');
 
   const toggle = (group: string) => {
     setSelected(prev =>
@@ -28,18 +36,21 @@ export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups
 
   const canSave = name.trim().length > 0 && selected.length > 0 && equipment.length > 0;
 
-  const handleSave = () => {
-    if (!canSave) return;
-    onSave(name.trim(), selected.join(', '), equipment);
+  const reset = () => {
     setName('');
     setSelected([]);
     setEquipment('');
+    setExerciseType('strength');
+  };
+
+  const handleSave = () => {
+    if (!canSave) return;
+    onSave(name.trim(), selected.join(', '), equipment, exerciseType);
+    reset();
   };
 
   const handleClose = () => {
-    setName('');
-    setSelected([]);
-    setEquipment('');
+    reset();
     onClose();
   };
 
@@ -65,6 +76,24 @@ export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups
             onChangeText={setName}
             autoFocus
           />
+
+          <Text style={styles.sectionTitle}>Logging</Text>
+          <View style={styles.equipmentGrid}>
+            {LOGGING_TYPES.map(t => {
+              const active = exerciseType === t.value;
+              return (
+                <TouchableOpacity
+                  key={t.value}
+                  style={[styles.equipmentChip, active && { backgroundColor: colors.accent + '20', borderColor: colors.accent }]}
+                  onPress={() => setExerciseType(t.value)}
+                >
+                  <Text style={[styles.equipmentChipText, active && { color: colors.accent, fontWeight: '700' }]}>
+                    {t.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
           <Text style={styles.sectionTitle}>Equipment</Text>
           <View style={styles.equipmentGrid}>

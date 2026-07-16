@@ -19,6 +19,8 @@ import { AUTH } from '../../theme/authColors';
 import { apiFetch } from '../../utils/api';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
+import { navigationRef } from '../../navigation/navigationRef';
+import { COACH_PROFILE_KEY, CoachProfile } from '../TrainingTab/CoachProfileModal';
 
 type Props = NativeStackScreenProps<OnboardingStackParamsList, 'Onboarding'> & { onComplete: () => void };
 
@@ -92,8 +94,16 @@ const STEPS = [
   },
 ];
 
-const DONE_TEXT_BUILD = "Perfect. Tap Continue to enter the app — I'll have your program ready in the Coach tab.";
 const DONE_TEXT_LATER = "No problem! When you're ready, you can generate a personalised program anytime from the Coach tab.\n\nTap Continue to enter the app.";
+const GENERATING_TEXT = "Perfect — building your personalised program now. This takes a few seconds… 🏗️";
+const GENERATE_FAILED_TEXT = "I couldn't build your program right now — you can generate one anytime from the Coach tab.\n\nTap Continue to enter the app.";
+
+type GeneratedRoutine = {
+  id: number;
+  name: string;
+  description: string;
+  days: { label: string; count: number }[];
+};
 
 export default function OnboardingScreen({ onComplete }: Props) {
   const { user } = useAuth();
@@ -107,6 +117,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
   const [chipsActive, setChipsActive] = useState(true);
   const [isDone, setIsDone] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [generatedRoutine, setGeneratedRoutine] = useState<GeneratedRoutine | null>(null);
   const [answers, setAnswers] = useState({
     goal: '', exp: '', days: 0,
     equipment: 'full_gym', sessionLength: '60', avoid: 'none',
@@ -144,9 +155,18 @@ export default function OnboardingScreen({ onComplete }: Props) {
     const isLast = currentStep === STEPS.length - 1;
     setTimeout(() => {
       if (isLast) {
+        if (newAnswers.routine) {
+          setMessages(prev => [
+            ...prev.filter(m => m.type !== 'typing'),
+            { id: nextId(), type: 'bot', text: GENERATING_TEXT },
+            { id: nextId(), type: 'typing' },
+          ]);
+          runGeneration(newAnswers);
+          return;
+        }
         setMessages(prev => [
           ...prev.filter(m => m.type !== 'typing'),
-          { id: nextId(), type: 'bot', text: newAnswers.routine ? DONE_TEXT_BUILD : DONE_TEXT_LATER },
+          { id: nextId(), type: 'bot', text: DONE_TEXT_LATER },
         ]);
         setIsDone(true);
       } else {
@@ -161,43 +181,119 @@ export default function OnboardingScreen({ onComplete }: Props) {
     }, 600);
   };
 
-  const handleContinue = async () => {
-    if (answers.routine) {
-      setGenerating(true);
-      try {
-        await apiFetch('/api/ai/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            days_per_week: answers.days,
-            goal: answers.goal,
-            experience: answers.exp,
-            equipment: answers.equipment,
-            session_length_min: parseInt(answers.sessionLength, 10),
-            avoid: answers.avoid,
-            generate_type: 'routine',
-          }),
-        });
-      } catch {
-        // non-blocking — continue regardless
-      } finally {
-        setGenerating(false);
-      }
-    }
-
+  // Write to the CURRENT coach profile key — the Coach tab reads coach_profile,
+  // not the legacy coach_settings key (which only migrated when the profile
+  // modal was opened, so generation used defaults until then)
+  const persistAnswers = async (a: typeof answers) => {
+    const profile: CoachProfile = {
+      goal: a.goal || 'general',
+      experience: a.exp || 'beginner',
+      equipment: a.equipment,
+      days_per_week: a.days || 3,
+      session_length_min: parseInt(a.sessionLength, 10) || 60,
+      avoid: a.avoid && a.avoid !== 'none' ? [a.avoid] : [],
+      notes: '',
+    };
     await AsyncStorage.multiSet([
-      [`coach_settings_${user?.id}`, JSON.stringify({
-        days: answers.days, goal: answers.goal, exp: answers.exp,
-        equipment: answers.equipment, sessionLength: answers.sessionLength, avoid: answers.avoid,
-      })],
-      ['user_goal', answers.goal],
-      ['user_experience', answers.exp],
-      ['user_days_per_week', String(answers.days)],
-      [`workout_weekly_goal_${user?.id}`, String(answers.days)],
+      [`${COACH_PROFILE_KEY}_${user?.id}`, JSON.stringify(profile)],
+      ['user_goal', a.goal],
+      ['user_experience', a.exp],
+      ['user_days_per_week', String(a.days)],
+      [`workout_weekly_goal_${user?.id}`, String(a.days)],
       ['onboarding_complete', 'true'],
     ]);
+  };
 
+  const runGeneration = async (a: typeof answers) => {
+    setGenerating(true);
+    try {
+      const res = await apiFetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          days_per_week: a.days,
+          goal: a.goal,
+          experience: a.exp,
+          equipment: a.equipment,
+          session_length_min: parseInt(a.sessionLength, 10),
+          avoid: a.avoid,
+          generate_type: 'routine',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error();
+
+      // /api/ai/generate only returns a preview — persist it so the routine
+      // actually exists when the user lands in the app
+      const toProgramming = (exs: any[]) => exs
+        .filter(e => e.prescribed_sets)
+        .map(e => ({
+          exercise_template_id: e.id,
+          sets: e.prescribed_sets,
+          reps: e.prescribed_reps ?? '',
+          rpe: e.prescribed_rpe ?? null,
+        }));
+      const saveRes = await apiFetch('/api/ai/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'routine',
+          name: data.name,
+          description: data.description || null,
+          days: (data.days ?? []).map((d: any) => ({
+            label: d.label,
+            exercise_ids: d.exercises.map((e: any) => e.id),
+            programming: toProgramming(d.exercises),
+          })),
+        }),
+      });
+      const saved = await saveRes.json();
+      if (!saveRes.ok) throw new Error();
+
+      setGeneratedRoutine({
+        id: saved.id,
+        name: data.name,
+        description: data.description ?? '',
+        days: (data.days ?? []).map((d: any) => ({ label: d.label, count: d.exercises.length })),
+      });
+      setMessages(prev => [
+        ...prev.filter(m => m.type !== 'typing'),
+        { id: nextId(), type: 'bot', text: "Done! Here's your program — take a quick look:" },
+      ]);
+    } catch {
+      setMessages(prev => [
+        ...prev.filter(m => m.type !== 'typing'),
+        { id: nextId(), type: 'bot', text: GENERATE_FAILED_TEXT },
+      ]);
+      setIsDone(true);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleContinue = async () => {
+    await persistAnswers(answers);
     onComplete();
+  };
+
+  const handleViewNow = async () => {
+    const routine = generatedRoutine;
+    await persistAnswers(answers);
+    onComplete();
+    if (!routine) return;
+    // AppTabs mounts right after onComplete flips the root navigator — retry
+    // a couple of times until the tab routes exist, then deep-link in
+    const tryNav = (attempt: number) => {
+      if (navigationRef.isReady() && navigationRef.getCurrentRoute()?.name !== 'RoutineDetail') {
+        (navigationRef as any).navigate('TrainingTab', {
+          screen: 'RoutineDetail',
+          params: { routineId: routine.id, routineName: routine.name },
+          initial: false,
+        });
+      }
+      if (attempt < 2) setTimeout(() => tryNav(attempt + 1), 600);
+    };
+    setTimeout(() => tryNav(0), 400);
   };
 
   const handleSkip = () => {
@@ -225,7 +321,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
       <StatusBar barStyle="light-content" backgroundColor={AUTH.bg} />
 
       <View style={styles.header}>
-        {!isDone ? (
+        {!isDone && !generatedRoutine ? (
           <TouchableOpacity onPress={handleSkip} style={styles.skipBtn}>
             <Text style={styles.skipText}>Skip</Text>
           </TouchableOpacity>
@@ -296,8 +392,33 @@ export default function OnboardingScreen({ onComplete }: Props) {
         </View>
       )}
 
+      {/* Generated routine preview */}
+      {generatedRoutine && (
+        <View style={styles.footer}>
+          <View style={styles.previewCard}>
+            <Text style={styles.previewName} numberOfLines={1}>{generatedRoutine.name}</Text>
+            {!!generatedRoutine.description && (
+              <Text style={styles.previewDesc} numberOfLines={2}>{generatedRoutine.description}</Text>
+            )}
+            {generatedRoutine.days.map((d, i) => (
+              <View key={i} style={styles.previewDayRow}>
+                <Ionicons name="calendar-outline" size={14} color={AUTH.accent} />
+                <Text style={styles.previewDayLabel} numberOfLines={1}>{d.label}</Text>
+                <Text style={styles.previewDayCount}>{d.count} exercise{d.count !== 1 ? 's' : ''}</Text>
+              </View>
+            ))}
+          </View>
+          <TouchableOpacity style={styles.continueBtn} onPress={handleViewNow} activeOpacity={0.85}>
+            <Text style={styles.continueBtnText}>View My Program</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.laterBtn} onPress={handleContinue} activeOpacity={0.7}>
+            <Text style={styles.laterBtnText}>I'll check it later</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Continue button when done */}
-      {isDone && (
+      {isDone && !generatedRoutine && (
         <View style={styles.footer}>
           <TouchableOpacity
             style={styles.continueBtn}
@@ -392,4 +513,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   continueBtnText: { fontSize: typography.fontSize.md, fontWeight: '700', color: AUTH.bg },
+
+  previewCard: {
+    backgroundColor: AUTH.card,
+    borderWidth: 1,
+    borderColor: AUTH.border,
+    borderRadius: 14,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    gap: 4,
+  },
+  previewName: { fontSize: typography.fontSize.md, fontWeight: '700', color: AUTH.text },
+  previewDesc: { fontSize: typography.fontSize.sm, color: AUTH.subtext, lineHeight: 18, marginBottom: 2 },
+  previewDayRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: 2 },
+  previewDayLabel: { flex: 1, fontSize: typography.fontSize.sm, color: AUTH.text },
+  previewDayCount: { fontSize: typography.fontSize.sm, color: AUTH.subtext },
+
+  laterBtn: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
+  laterBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: AUTH.subtext },
 });
