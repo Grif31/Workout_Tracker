@@ -14,6 +14,7 @@ import { ProfileStackParamsList } from '../../navigation/types';
 import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
 import { apiFetch } from '../../utils/api';
+import { fmtHold } from '../../components/workout/types';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'PersonalRecords'>;
 
@@ -22,7 +23,7 @@ export type PR = {
   exercise_template_id: number;
   exercise_name: string;
   equipment?: string | null;
-  pr_type: 'max_weight' | 'max_reps' | 'estimated_1rm' | 'best_time' | 'best_distance';
+  pr_type: 'max_weight' | 'max_reps' | 'estimated_1rm' | 'best_time' | 'best_distance' | 'max_duration';
   pr_label: string;
   value: number;
   weight_context: number | null;
@@ -34,7 +35,7 @@ export type PR = {
 const TABS = [
   { key: 'max_weight' as const, label: 'Max Weight' },
   { key: 'max_reps'   as const, label: 'Max Reps'   },
-  { key: 'cardio'     as const, label: 'Cardio'      },
+  { key: 'cardio'     as const, label: 'Time'        },
 ];
 
 type RepsEntry = { weight: number; reps: number; achieved_at: string };
@@ -48,7 +49,8 @@ type RepsSection = {
 
 type CardioEntry =
   | { kind: 'time'; label: string; time_min: number; achieved_at: string }
-  | { kind: 'distance'; label: string; distance_km: number; achieved_at: string };
+  | { kind: 'distance'; label: string; distance_km: number; achieved_at: string }
+  | { kind: 'hold'; label: string; time_min: number; achieved_at: string };
 type CardioSection = { title: string; exercise_template_id: number; data: CardioEntry[] };
 
 
@@ -163,14 +165,16 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
   const cardioSections: CardioSection[] = useMemo(() => {
     const map = new Map<number, CardioSection>();
     prs
-      .filter(p => p.pr_type === 'best_time' || p.pr_type === 'best_distance')
+      .filter(p => p.pr_type === 'best_time' || p.pr_type === 'best_distance' || p.pr_type === 'max_duration')
       .forEach(p => {
         const key = p.exercise_template_id;
         if (!map.has(key)) map.set(key, { title: p.exercise_name, exercise_template_id: key, data: [] });
         if (p.pr_type === 'best_time') {
           map.get(key)!.data.push({ kind: 'time', label: p.pr_label.replace(' Best Time', ''), time_min: p.value, achieved_at: p.achieved_at });
-        } else {
+        } else if (p.pr_type === 'best_distance') {
           map.get(key)!.data.push({ kind: 'distance', label: p.pr_label.replace(' Best Distance', ''), distance_km: p.value, achieved_at: p.achieved_at });
+        } else {
+          map.get(key)!.data.push({ kind: 'hold', label: 'Longest Hold', time_min: p.value, achieved_at: p.achieved_at });
         }
       });
     return [...map.values()].sort((a, b) => a.title.localeCompare(b.title));
@@ -471,7 +475,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
           keyExtractor={(item, i) => `cardio-${i}`}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
-            <Text style={styles.empty}>No cardio records yet.{'\n'}Log a run or ride to see your best times.</Text>
+            <Text style={styles.empty}>No time records yet.{'\n'}Log a run, ride, or timed hold to see your bests.</Text>
           }
           renderSectionHeader={({ section }) => (
             <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
@@ -496,13 +500,13 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                     <View style={styles.topValueRow}>
                       <LaurelBranch height={18} color={PR_GOLD} />
                       <Text style={[styles.rowValue, { color: PR_GOLD_TEXT }]}>
-                        {item.kind === 'time' ? fmtTime(item.time_min) : `${item.distance_km.toFixed(2)} km`}
+                        {item.kind === 'time' ? fmtTime(item.time_min) : item.kind === 'hold' ? fmtHold(item.time_min) : `${item.distance_km.toFixed(2)} km`}
                       </Text>
                       <LaurelBranch side="right" height={18} color={PR_GOLD} />
                     </View>
                   ) : (
                     <Text style={styles.rowValue}>
-                      {item.kind === 'time' ? fmtTime(item.time_min) : `${item.distance_km.toFixed(2)} km`}
+                      {item.kind === 'time' ? fmtTime(item.time_min) : item.kind === 'hold' ? fmtHold(item.time_min) : `${item.distance_km.toFixed(2)} km`}
                     </Text>
                   )}
                 </View>

@@ -24,6 +24,8 @@ type Props = {
   onToggleDone: () => void;
   onOpenRpePicker: () => void;
   onDelete: () => void;
+  /** Lets the keyboard toolbar's Next button focus specific inputs */
+  registerInputRef?: (field: 'reps' | 'weight', ref: TextInput | null) => void;
 };
 
 export default function SetRow({
@@ -43,6 +45,7 @@ export default function SetRow({
   onToggleDone,
   onOpenRpePicker,
   onDelete,
+  registerInputRef,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -81,6 +84,7 @@ export default function SetRow({
         <Text style={[styles.prevCellText, colStyles.prev]}>{prevText}</Text>
 
         <TextInput
+          ref={r => registerInputRef?.('reps', r)}
           style={[styles.setInput, colStyles.input, isDone && styles.setInputDone]}
           placeholder="—"
           placeholderTextColor={colors.placeholder}
@@ -94,6 +98,7 @@ export default function SetRow({
 
         {!bodyweight && (
           <TextInput
+            ref={r => registerInputRef?.('weight', r)}
             style={[styles.setInput, colStyles.input, isDone && styles.setInputDone]}
             placeholder="—"
             placeholderTextColor={colors.placeholder}

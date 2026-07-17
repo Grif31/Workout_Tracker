@@ -26,6 +26,7 @@ PR_LABELS = {
     'max_weight':    'Max Weight',
     'max_reps':      'Max Reps',
     'estimated_1rm': 'Estimated 1RM',
+    'max_duration':  'Longest Hold',
 }
 
 
@@ -100,8 +101,9 @@ def get_prs_for_exercise(exercise_template_id):
         .all()
     )
 
-    max_weight_pr = next((p for p in prs if p.pr_type == 'max_weight'), None)
-    est_1rm_pr    = next((p for p in prs if p.pr_type == 'estimated_1rm'), None)
+    max_weight_pr   = next((p for p in prs if p.pr_type == 'max_weight'), None)
+    est_1rm_pr      = next((p for p in prs if p.pr_type == 'estimated_1rm'), None)
+    max_duration_pr = next((p for p in prs if p.pr_type == 'max_duration'), None)
     reps_prs = sorted(
         [p for p in prs if p.pr_type == 'max_reps' and p.weight_context >= 0],
         key=lambda p: p.weight_context,
@@ -119,6 +121,7 @@ def get_prs_for_exercise(exercise_template_id):
     return jsonify({
         'max_weight':    max_weight_pr.value if max_weight_pr else None,
         'estimated_1rm': est_1rm_pr.value if est_1rm_pr else None,
+        'max_duration':  max_duration_pr.value if max_duration_pr else None,
         'per_weight_reps': [
             {
                 'weight':      p.weight_context,

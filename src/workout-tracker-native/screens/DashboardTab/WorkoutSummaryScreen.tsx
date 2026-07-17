@@ -47,7 +47,11 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const [greekRank, setGreekRank] = useState<string | null>(null);
   const [selectedFrame, setSelectedFrame] = useState('Neophyte');
 
-  const PR_TYPE_ORDER: Record<string, number> = { max_weight: 0, max_reps: 1, best_distance: 2, best_time: 3 };
+  const PR_TYPE_ORDER: Record<string, number> = { max_weight: 0, max_reps: 1, max_duration: 2, best_distance: 3, best_time: 4 };
+  const PR_TYPE_LABELS: Record<string, string> = {
+    max_weight: 'Max Weight', max_reps: 'Rep Record', max_duration: 'Longest Hold',
+    best_time: 'Best Time', best_distance: 'Best Distance',
+  };
   const filteredPrs = prs
     .filter(pr => pr.pr_type !== 'estimated_1rm')
     .sort((a, b) => {
@@ -182,7 +186,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
               <View style={s.prDropdownHeader}>
                 <LaurelBranch height={20} color={PR_GOLD_TEXT} />
                 <Text style={s.prText}>
-                  {filteredPrs[0].exercise_name} — new {filteredPrs[0].pr_type.replace(/_/g, ' ')} PR!
+                  {filteredPrs[0].exercise_name} — new {PR_TYPE_LABELS[filteredPrs[0].pr_type] ?? filteredPrs[0].pr_type.replace(/_/g, ' ')} PR!
                 </Text>
                 <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
               </View>
@@ -204,7 +208,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
                   <View key={i} style={s.prBanner}>
                     <LaurelBranch height={20} color={PR_GOLD_TEXT} />
                     <Text style={s.prText}>
-                      {pr.exercise_name} — new {pr.pr_type.replace(/_/g, ' ')} PR!
+                      {pr.exercise_name} — new {PR_TYPE_LABELS[pr.pr_type] ?? pr.pr_type.replace(/_/g, ' ')} PR!
                     </Text>
                     <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
                   </View>

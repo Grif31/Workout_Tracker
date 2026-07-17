@@ -33,6 +33,7 @@ import { appCache } from '../../utils/appCache';
 import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
+import { fmtHold } from '../../components/workout/types';
 
 function SectionRule({ label, style }: { label: string; style?: object }) {
   const { colors } = useTheme();
@@ -395,7 +396,9 @@ export default function ProfileScreen({ navigation }: Props) {
                             ? `${pr.value} reps`
                             : pr.pr_type === 'best_time'
                               ? fmtTime(pr.value)
-                              : `${pr.value.toFixed(1)} km`}
+                              : pr.pr_type === 'max_duration'
+                                ? fmtHold(pr.value)
+                                : `${pr.value.toFixed(1)} km`}
                       </Text>
                       <Text style={styles.prCardType}>
                         {pr.pr_type === 'max_weight' ? 'Max Weight'
@@ -861,6 +864,7 @@ export default function ProfileScreen({ navigation }: Props) {
                     else if (p.pr_type === 'max_reps') { label = 'Max Reps'; valueStr = `${p.value} reps${p.weight_context != null ? ` @ ${p.weight_context} ${unit}` : ''}`; }
                     else if (p.pr_type === 'best_time') { valueStr = fmtTime(p.value); }
                     else if (p.pr_type === 'best_distance') { valueStr = `${p.value.toFixed(1)} km`; }
+                    else if (p.pr_type === 'max_duration') { label = 'Longest Hold'; valueStr = fmtHold(p.value); }
                     opts.push({ label, value: valueStr, prType: p.pr_type, context: p.weight_context ?? null });
                   }
                   return opts;

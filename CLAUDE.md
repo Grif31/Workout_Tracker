@@ -213,6 +213,7 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 | `workout_vibrate_${uid}` | true | Vibrate when rest timer completes |
 | `workout_show_rpe_${uid}` | false | Show RPE input per set |
 | `workout_show_plate_calc_${uid}` | true | Show plate calculator in workout |
+| `workout_repeat_last_set_${uid}` | false | Add Set pre-fills the new set with the last set's values |
 | `profile_frame_rank_${uid}` | 'Neophyte' | Selected avatar frame rank name |
 | `@pr_pins_${uid}` | — | JSON array of 3 pinned PR slots on Profile (Pin\|null)[] |
 | `coach_profile_${uid}` | — | Coach personalization JSON (goal/equipment/schedule/injuries) |
@@ -251,7 +252,7 @@ return jsonify({ 'message': 'error reason' }), 400   # client error
 
 ## Key Data Model Notes
 
-- **Exercise types:** `'strength'` (default) or `'cardio'`
+- **Exercise types:** `'strength'` (default), `'cardio'`, or `'duration'` (timed holds — planks, wall sits; sets store the hold in `cardio_duration` as minutes, UI edits seconds; no reps/weight, no PRs, stays a strength workout)
 - **Set types:** `'N'` (normal), `'W'` (warm-up), `'D'` (drop set), `'F'` (failure)
 - **PR types (strength):** `max_weight`, `estimated_1rm`, `max_reps` (per weight, `weight_context` = the weight) — never surface `estimated_1rm` as a PR label to users
 - **PR types (cardio):** `best_time` (`weight_context` = distance milestone in km) and `best_distance` (`weight_context` = duration milestone in minutes)

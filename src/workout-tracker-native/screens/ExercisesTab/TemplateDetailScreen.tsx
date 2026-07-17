@@ -36,6 +36,13 @@ const parseRepsMin = (reps: string): string => {
   return m ? m[1] : '';
 };
 
+// AI hold prescriptions arrive as seconds strings like "40s" or "30-60s";
+// prefill wants minutes (the unit WorkoutLog converts from)
+const parseHoldMinutes = (reps: string): string => {
+  const m = (reps ?? '').match(/(\d+)/);
+  return m ? String(parseInt(m[1], 10) / 60) : '';
+};
+
 export default function TemplateDetailScreen({ route, navigation }: Props) {
   const { templateId, muscleGroups: targetMuscles } = route.params;
   const { colors } = useTheme();
@@ -213,11 +220,15 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
             muscle_group: ex.muscle_group,
             equipment: ex.equipment,
             sets: prog
-              ? Array(prog.sets).fill(null).map(() => ({
-                  reps: parseRepsMin(prog.reps),
-                  weight: '',
-                  rpe: prog.rpe != null ? String(prog.rpe) : undefined,
-                }))
+              ? Array(prog.sets).fill(null).map(() => (
+                  ex.exercise_type === 'duration'
+                    ? { reps: '', weight: '', cardio_duration: parseHoldMinutes(prog.reps) }
+                    : {
+                        reps: parseRepsMin(prog.reps),
+                        weight: '',
+                        rpe: prog.rpe != null ? String(prog.rpe) : undefined,
+                      }
+                ))
               : [{ reps: '', weight: '' }],
           };
         }),
@@ -347,6 +358,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
       <ExerciseProgrammingModal
         visible={editExId !== null}
         exerciseName={editExercise?.name ?? ''}
+        isHold={editExercise?.exercise_type === 'duration'}
         initial={editExId != null ? progMap[editExId] ?? null : null}
         onClose={() => setEditExId(null)}
         onSave={handleProgrammingSave}

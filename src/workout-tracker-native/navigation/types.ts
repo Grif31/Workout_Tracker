@@ -39,6 +39,7 @@ export type PreviewExercise = {
   id: number;
   name: string;
   muscle_group: string;
+  exercise_type?: string;
   prescribed_sets?: number;
   prescribed_reps?: string;
   prescribed_rpe?: number;

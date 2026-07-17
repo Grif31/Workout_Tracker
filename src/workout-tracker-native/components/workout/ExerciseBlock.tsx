@@ -29,6 +29,7 @@ type Props = {
   onStartRest: () => void;
   onOpenMenu: (e: any) => void;
   onUpdateCardioField: (setIdx: number, field: string, value: string) => void;
+  onRegisterInput?: (setIdx: number, field: 'reps' | 'weight', ref: any) => void;
 };
 
 export default function ExerciseBlock({
@@ -51,6 +52,7 @@ export default function ExerciseBlock({
   onStartRest,
   onOpenMenu,
   onUpdateCardioField,
+  onRegisterInput,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -185,6 +187,7 @@ export default function ExerciseBlock({
                       onToggleDone={() => onToggleSetDone(setIndex)}
                       onOpenRpePicker={() => onOpenRpePicker(setIndex)}
                       onDelete={() => onDeleteSet(setIndex)}
+                      registerInputRef={(field, ref) => onRegisterInput?.(setIndex, field, ref)}
                     />
                   );
                 })}

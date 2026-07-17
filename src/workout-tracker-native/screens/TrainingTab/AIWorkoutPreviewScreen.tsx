@@ -186,6 +186,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
             id: full.id,
             name: full.name,
             muscle_group: full.muscle_group,
+            exercise_type: full.exercise_type,
             prescribed_sets: e.prescribed_sets,
             prescribed_reps: e.prescribed_reps,
             prescribed_rpe: e.prescribed_rpe,
@@ -196,7 +197,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
         Alert.alert('Already added', `${full.name} is already in ${inThisList}`);
         return;
       }
-      setList(picker.scope, prev => [...prev, { id: full.id, name: full.name, muscle_group: full.muscle_group }]);
+      setList(picker.scope, prev => [...prev, { id: full.id, name: full.name, muscle_group: full.muscle_group, exercise_type: full.exercise_type }]);
     }
     setPicker(null);
   }, [picker, exercises, days, allExercises]);
@@ -376,6 +377,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
       <ExerciseProgrammingModal
         visible={editTarget !== null}
         exerciseName={editExercise?.name ?? ''}
+        isHold={editExercise?.exercise_type === 'duration'}
         initial={editExercise
           ? { sets: editExercise.prescribed_sets, reps: editExercise.prescribed_reps, rpe: editExercise.prescribed_rpe }
           : null}

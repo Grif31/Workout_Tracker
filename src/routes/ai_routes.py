@@ -69,6 +69,7 @@ def _match_exercises(exercise_items: list) -> list[dict]:
                 'id': tmpl.id,
                 'name': tmpl.name,
                 'muscle_group': tmpl.muscle_group or '',
+                'exercise_type': (tmpl.exercise_type or 'strength').lower(),
                 'prescribed_sets': p_sets,
                 'prescribed_reps': p_reps,
                 'prescribed_rpe':  p_rpe,
@@ -373,7 +374,9 @@ def _build_prompt(data: dict, generate_type: str, user_context: dict | None = No
         f"3. Equipment constraint: ONLY use exercises achievable with the client's equipment.\n"
         f"   Valid exercise examples: {EQUIP_EXAMPLES.get(equipment, '')}\n"
         f"4. Injuries: {avoid_directive}\n"
-        f"5. Use standard exercise names (e.g. 'Bench Press', 'Pull-Up', 'Hip Thrust', 'Dumbbell Row').\n\n"
+        f"5. Use standard exercise names (e.g. 'Bench Press', 'Pull-Up', 'Hip Thrust', 'Dumbbell Row').\n"
+        f"6. Timed holds (Plank, Side Plank, Wall Sit, Hollow Hold, L-Sit, Dead Hang): write \"reps\" as a"
+        f" hold duration in seconds with an 's' suffix, e.g. \"40s\" or \"30-60s\".\n\n"
         f"Respond with ONLY valid JSON — no markdown, no explanation:\n"
         f"{json_format}"
     )

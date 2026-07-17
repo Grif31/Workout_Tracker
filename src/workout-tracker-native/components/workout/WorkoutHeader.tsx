@@ -30,6 +30,8 @@ type Props = {
   onShowRpeChange: (val: boolean) => void;
   showPlateCalc: boolean;
   onShowPlateCalcChange: (val: boolean) => void;
+  repeatLastSet: boolean;
+  onRepeatLastSetChange: (val: boolean) => void;
   exercises: ExerciseEntry[];
   weightUnit: string;
   activeMuscles: string[];
@@ -55,6 +57,8 @@ export default function WorkoutHeader({
   onShowRpeChange,
   showPlateCalc,
   onShowPlateCalcChange,
+  repeatLastSet,
+  onRepeatLastSetChange,
   exercises,
   weightUnit,
   activeMuscles,
@@ -239,6 +243,19 @@ export default function WorkoutHeader({
               <Switch
                 value={showPlateCalc}
                 onValueChange={onShowPlateCalcChange}
+                trackColor={{ false: colors.border, true: colors.save }}
+                thumbColor="#fff"
+              />
+            </View>
+            <View style={styles.settingsDivider} />
+            <View style={styles.settingsItem}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingsLabel}>Repeat last set</Text>
+                <Text style={styles.settingsHint}>Automatically repeat the last set when adding new sets</Text>
+              </View>
+              <Switch
+                value={repeatLastSet}
+                onValueChange={onRepeatLastSetChange}
                 trackColor={{ false: colors.border, true: colors.save }}
                 thumbColor="#fff"
               />

@@ -22,6 +22,7 @@ export type SessionExercise = {
     max_weight?: number | null;
     estimated_1rm?: number | null;
     per_weight_reps?: { weight: number; max_reps: number }[];
+    max_duration?: number | null;
   };
   notes?: string;
 };

@@ -322,6 +322,7 @@ export default function WorkoutDetailsScreen({
     max_reps: 'Rep Record',
     best_time: 'Best Time',
     best_distance: 'Best Distance',
+    max_duration: 'Longest Hold',
   };
 
   const workoutPrs = useMemo(() => {
@@ -568,10 +569,14 @@ export default function WorkoutDetailsScreen({
               ) : null}
               {exercise.sets.map((s: any, i: number) => {
                 const mins = Number(s.cardio_duration) || 0;
+                const isHoldPr = (s.pr_types ?? []).includes('max_duration');
                 return (
                   <View key={i} style={styles.cardioBoutRow}>
                     <Text style={[styles.setNumText, { color: colors.textSecondary, width: 20 }]}>{i + 1}</Text>
-                    <Text style={styles.cardioBoutText}>{mins > 0 ? `${fmtHold(mins)} hold` : '—'}</Text>
+                    <Text style={[styles.cardioBoutText, isHoldPr && styles.prGoldText]}>
+                      {mins > 0 ? `${fmtHold(mins)} hold` : '—'}
+                    </Text>
+                    {isHoldPr && <Ionicons name="trophy" size={14} color={PR_GOLD} />}
                   </View>
                 );
               })}

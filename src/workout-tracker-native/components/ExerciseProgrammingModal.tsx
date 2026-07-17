@@ -14,6 +14,8 @@ type Props = {
   visible: boolean;
   exerciseName: string;
   initial?: { sets?: number | null; reps?: string | null; rpe?: number | null } | null;
+  /** Timed-hold exercise — reps field is a hold duration (e.g. "40s") */
+  isHold?: boolean;
   onClose: () => void;
   /** null = remove programming from the exercise */
   onSave: (value: ProgrammingValue | null) => void;
@@ -22,7 +24,7 @@ type Props = {
 const RPE_OPTIONS = [5, 6, 7, 8, 9, 10];
 const MAX_SETS = 10;
 
-export default function ExerciseProgrammingModal({ visible, exerciseName, initial, onClose, onSave }: Props) {
+export default function ExerciseProgrammingModal({ visible, exerciseName, initial, isHold, onClose, onSave }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -70,12 +72,12 @@ export default function ExerciseProgrammingModal({ visible, exerciseName, initia
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.fieldLabel}>Reps</Text>
+          <Text style={styles.fieldLabel}>{isHold ? 'Hold Time' : 'Reps'}</Text>
           <TextInput
             style={styles.repsInput}
             value={reps}
             onChangeText={setReps}
-            placeholder="e.g. 8–12 or 5"
+            placeholder={isHold ? 'e.g. 40s or 30–60s' : 'e.g. 8–12 or 5'}
             placeholderTextColor={colors.placeholder}
           />
 

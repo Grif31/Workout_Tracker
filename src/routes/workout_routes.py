@@ -220,6 +220,57 @@ def _compute_and_upsert_prs(user_id, exercise_set_pairs, workout_date):
     return new_prs
 
 
+def _compute_and_upsert_duration_prs(user_id, exercise_set_pairs, workout_date):
+    """Longest-hold PRs for duration exercises (planks, wall sits, dead hangs).
+
+    max_duration: one record per exercise (weight_context = -1). Value is the
+    hold length in minutes — the same unit sets store in cardio_duration.
+    """
+    new_prs = []
+    for exercise, sets in exercise_set_pairs:
+        if not exercise.exercise_template_id:
+            continue
+        valid = [(s.cardio_duration, s.id) for s in sets
+                 if s.cardio_duration and s.cardio_duration > 0 and s.set_type != 'W']
+        if not valid:
+            continue
+
+        best = max(d for d, _ in valid)
+        pr_set_id = next(sid for d, sid in valid if d == best)
+
+        existing = PersonalRecord.query.filter_by(
+            user_id=user_id,
+            exercise_template_id=exercise.exercise_template_id,
+            pr_type='max_duration',
+            weight_context=-1.0,
+        ).first()
+
+        if existing and best <= existing.value:
+            continue
+
+        if existing:
+            existing.value       = round(best, 4)
+            existing.achieved_at = workout_date
+            existing.set_id      = pr_set_id
+        else:
+            db.session.add(PersonalRecord(
+                user_id=user_id,
+                exercise_template_id=exercise.exercise_template_id,
+                pr_type='max_duration',
+                value=round(best, 4),
+                achieved_at=workout_date,
+                set_id=pr_set_id,
+                weight_context=-1.0,
+            ))
+
+        new_prs.append({
+            'exercise_name': exercise.name,
+            'pr_type': 'max_duration',
+            'value': round(best, 4),
+        })
+    return new_prs
+
+
 def _recompute_prs_for_templates(user_id, template_ids):
     """Recompute PRs from scratch across all workouts for the given template IDs.
     Called after a workout is edited or deleted to correct stale PR values.
@@ -259,6 +310,20 @@ def _recompute_prs_for_templates(user_id, template_ids):
         )
         for exercise, wdate in cardio_rows:
             _compute_and_upsert_cardio_prs(user_id, [(exercise, exercise.sets)], wdate)
+
+        # Same for longest-hold PRs on duration exercises
+        duration_rows = (
+            db.session.query(Exercise, Workout.date)
+            .join(Workout, Exercise.workout_id == Workout.id)
+            .filter(
+                Workout.user_id == user_id,
+                Exercise.exercise_template_id == template_id,
+                db.func.lower(Exercise.exercise_type) == 'duration',
+            )
+            .all()
+        )
+        for exercise, wdate in duration_rows:
+            _compute_and_upsert_duration_prs(user_id, [(exercise, exercise.sets)], wdate)
 
         if not rows:
             continue
@@ -531,8 +596,10 @@ def add_workout():
         new_workout.calculate_volume(weight_unit=user.weight_unit or 'lbs')
         strength_pairs = [(ex, s) for ex, s in exercise_set_pairs if (ex.exercise_type or 'strength').lower() == 'strength']
         cardio_pairs   = [(ex, s) for ex, s in exercise_set_pairs if (ex.exercise_type or 'strength').lower() == 'cardio']
+        duration_pairs = [(ex, s) for ex, s in exercise_set_pairs if (ex.exercise_type or 'strength').lower() == 'duration']
         new_prs = _compute_and_upsert_prs(current_user_id, strength_pairs, workout_date)
         new_prs += _compute_and_upsert_cardio_prs(current_user_id, cardio_pairs, workout_date)
+        new_prs += _compute_and_upsert_duration_prs(current_user_id, duration_pairs, workout_date)
         db.session.commit()
 
         total_volume = 0

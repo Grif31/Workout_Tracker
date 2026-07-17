@@ -74,6 +74,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const vibrateKey         = `${VIBRATE_KEY}_${uid}`;
   const rpeKey             = `${RPE_KEY}_${uid}`;
   const plateCalcKey       = `workout_show_plate_calc_${uid}`;
+  const repeatLastSetKey   = `workout_repeat_last_set_${uid}`;
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const SET_TYPE_COLORS = useMemo<Record<SetType, string>>(() => ({
@@ -121,7 +122,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const [vibrateOnComplete, setVibrateOnComplete] = useState(true);
   const [showRpe, setShowRpe] = useState(false);
   const [showPlateCalc, setShowPlateCalc] = useState(true);
+  const [repeatLastSet, setRepeatLastSet] = useState(false);
   const [focusedInput, setFocusedInput] = useState<{ exIdx: number; setIdx: number; field: 'reps' | 'weight' } | null>(null);
+  // Live TextInput refs keyed `${exIdx}:${setIdx}:${field}` — lets the
+  // keyboard toolbar's Next button move focus between set inputs
+  const inputRefs = useRef<Map<string, TextInput | null>>(new Map());
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   // How far the keyboard overlaps THIS view (screen coords) — the toolbar's `bottom`
   const [kbOverlap, setKbOverlap] = useState(0);
@@ -190,13 +195,15 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       AsyncStorage.getItem(vibrateKey),
       AsyncStorage.getItem(rpeKey),
       AsyncStorage.getItem(plateCalcKey),
-    ]).then(([timerVal, autoRestVal, vibrateVal, rpeVal, plateCalcVal]) => {
+      AsyncStorage.getItem(repeatLastSetKey),
+    ]).then(([timerVal, autoRestVal, vibrateVal, rpeVal, plateCalcVal, repeatVal]) => {
       const n = timerVal ? parseInt(timerVal, 10) : NaN;
       if (!isNaN(n)) { setDefaultRest(n); setRestRemaining(n); setRestTotal(n); }
       if (autoRestVal !== null) setAutoStartRest(autoRestVal === 'true');
       if (vibrateVal !== null) setVibrateOnComplete(vibrateVal !== 'false');
       if (rpeVal !== null) setShowRpe(rpeVal === 'true');
       if (plateCalcVal !== null) setShowPlateCalc(plateCalcVal !== 'false');
+      if (repeatVal !== null) setRepeatLastSet(repeatVal === 'true');
     });
   }, []);
 
@@ -522,7 +529,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                 let prData: ExerciseEntry['currentPR'] | undefined;
                 if (prRes?.ok) {
                   const pr = await prRes.json();
-                  prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps };
+                  prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps, max_duration: pr.max_duration };
                 }
                 if (lastRes.ok) {
                   const data = await lastRes.json();
@@ -593,6 +600,38 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   };
 
   const weightDelta = weightUnit === 'kg' ? 2.5 : 5;
+
+  // Advance focus: reps → weight (same set) → reps of next set → … → next
+  // strength exercise. Skips done sets (their inputs are not editable).
+  const focusNextInput = () => {
+    if (!focusedInput) return;
+    const { exIdx, setIdx, field } = focusedInput;
+    const candidates: [number, number, EditableSetField][] = [];
+    const pushSet = (e: number, s: number) => {
+      const ex = exercises[e];
+      if (!ex || ex.sets[s]?.done) return;
+      candidates.push([e, s, 'reps']);
+      if (!isBodyweight(ex)) candidates.push([e, s, 'weight']);
+    };
+    // From reps, weight of the same set comes first
+    if (field === 'reps' && !isBodyweight(exercises[exIdx] ?? {}) && !exercises[exIdx]?.sets[setIdx]?.done) {
+      candidates.push([exIdx, setIdx, 'weight']);
+    }
+    // Remaining sets of this exercise
+    for (let s = setIdx + 1; s < (exercises[exIdx]?.sets.length ?? 0); s++) pushSet(exIdx, s);
+    // Following strength exercises
+    for (let e = exIdx + 1; e < exercises.length; e++) {
+      const ex = exercises[e];
+      if (ex.exercise_type === 'cardio' || isDuration(ex)) continue;
+      for (let s = 0; s < ex.sets.length; s++) pushSet(e, s);
+    }
+    for (const [e, s, f] of candidates) {
+      const ref = inputRefs.current.get(`${e}:${s}:${f}`);
+      if (ref) { ref.focus(); return; }
+    }
+    Keyboard.dismiss();
+    setFocusedInput(null);
+  };
 
   const updateSetField = (exIndex: number, setIndex: number, field: EditableSetField, value: string) => {
     const updated = [...exercises];
@@ -682,11 +721,32 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         }));
       }
     }
+    if (nowDone && ex.currentPR && isDuration(ex)) {
+      const secs = parseFloat(set.cardio_duration ?? '');
+      const mins = secs / 60;
+      const pr = ex.currentPR;
+      if (!isNaN(secs) && secs > 0 && pr.max_duration != null && mins > pr.max_duration) {
+        showPRBanner(ex.name, 'Longest Hold');
+        // Advance currentPR so subsequent sets in the same session don't re-trigger
+        setExercises(prev => prev.map((e, i) =>
+          i === exIndex ? { ...e, currentPR: { ...e.currentPR!, max_duration: mins } } : e
+        ));
+      }
+    }
   };
 
   const addSetToExercise = (exIndex: number) => {
     const updated = [...exercises];
-    updated[exIndex].sets.push(makeInitialSet(updated[exIndex]));
+    const ex = updated[exIndex];
+    const last = ex.sets[ex.sets.length - 1];
+    if (repeatLastSet && last && ex.exercise_type !== 'cardio') {
+      // Repeat-last-set setting: new set starts pre-filled with the last set's values
+      updated[exIndex].sets.push(isDuration(ex)
+        ? { reps: '', weight: '', set_type: 'N', cardio_duration: last.cardio_duration ?? '' }
+        : { reps: last.reps, weight: last.weight, set_type: 'N', rpe: last.rpe });
+    } else {
+      updated[exIndex].sets.push(makeInitialSet(ex));
+    }
     setExercises(updated);
   };
 
@@ -770,7 +830,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         let prData: ExerciseEntry['currentPR'] | undefined;
         if (prRes?.ok) {
           const pr = await prRes.json();
-          prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps };
+          prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps, max_duration: pr.max_duration };
         }
         if (lastRes.ok) {
           const data = await lastRes.json();
@@ -812,7 +872,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       let prData: ExerciseEntry['currentPR'] | undefined;
       if (prRes?.ok) {
         const pr = await prRes.json();
-        prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps };
+        prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps, max_duration: pr.max_duration };
       }
 
       if (lastRes.ok) {
@@ -873,7 +933,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           let prData: ExerciseEntry['currentPR'] | undefined;
           if (prRes?.ok) {
             const pr = await prRes.json();
-            prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps };
+            prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps, max_duration: pr.max_duration };
           }
           if (lastRes.ok) {
             const data = await lastRes.json();
@@ -1175,6 +1235,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
               setShowPlateCalc(val);
               AsyncStorage.setItem(plateCalcKey, String(val));
             }}
+            repeatLastSet={repeatLastSet}
+            onRepeatLastSetChange={val => {
+              setRepeatLastSet(val);
+              AsyncStorage.setItem(repeatLastSetKey, String(val));
+            }}
             exercises={exercises}
             weightUnit={weightUnit}
             activeMuscles={activeMuscles}
@@ -1255,6 +1320,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             onOpenRpePicker={setIdx => setRpePickerTarget({ exIdx: exIndex, setIdx })}
             onDeleteSet={setIdx => deleteSet(exIndex, setIdx)}
             onAddSet={() => addSetToExercise(exIndex)}
+            onRegisterInput={(setIdx, field, ref) => {
+              inputRefs.current.set(`${exIndex}:${setIdx}:${field}`, ref);
+            }}
             onStartRest={startRest}
             onOpenMenu={(e) => {
               const { pageX, pageY } = e.nativeEvent;
@@ -1379,6 +1447,13 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                 <Text style={styles.keyboardAdjText}>Plates</Text>
               </TouchableOpacity>
             )}
+            <TouchableOpacity
+              style={[styles.keyboardAdjBtn, { backgroundColor: colors.accent, borderColor: colors.accent }]}
+              onPress={focusNextInput}
+            >
+              <Text style={[styles.keyboardAdjText, { color: colors.accentText }]}>Next</Text>
+              <Ionicons name="arrow-forward" size={16} color={colors.accentText} />
+            </TouchableOpacity>
           </View>
           <TouchableOpacity onPress={() => { Keyboard.dismiss(); setFocusedInput(null); }} style={styles.keyboardDismissBtn}>
             <Ionicons name="chevron-down" size={20} color={colors.textPrimary} />
