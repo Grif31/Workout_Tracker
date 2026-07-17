@@ -72,7 +72,7 @@ export default function ExerciseListModal({
     ex.equipment ? `${ex.name} (${ex.equipment})` : ex.name;
 
   const strengthExercises = useMemo(
-    () => exercises.filter(ex => (ex.exercise_type || 'strength') === 'strength'),
+    () => exercises.filter(ex => ex.exercise_type !== 'cardio'),
     [exercises],
   );
   const cardioExercises = useMemo(

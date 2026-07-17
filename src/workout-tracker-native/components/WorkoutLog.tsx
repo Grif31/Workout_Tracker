@@ -1448,11 +1448,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
               </TouchableOpacity>
             )}
             <TouchableOpacity
-              style={[styles.keyboardAdjBtn, { backgroundColor: colors.accent, borderColor: colors.accent }]}
+              style={[styles.keyboardAdjBtn, styles.keyboardNextBtn]}
               onPress={focusNextInput}
+              accessibilityLabel="Next field"
             >
-              <Text style={[styles.keyboardAdjText, { color: colors.accentText }]}>Next</Text>
-              <Ionicons name="arrow-forward" size={16} color={colors.accentText} />
+              <Ionicons name="checkmark" size={20} color={colors.accentText} />
             </TouchableOpacity>
           </View>
           <TouchableOpacity onPress={() => { Keyboard.dismiss(); setFocusedInput(null); }} style={styles.keyboardDismissBtn}>
@@ -1657,6 +1657,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  keyboardNextBtn: {
+    flex: 0,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   keyboardAdjText: {
     fontSize: typography.fontSize.md,

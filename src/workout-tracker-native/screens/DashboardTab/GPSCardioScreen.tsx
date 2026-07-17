@@ -21,6 +21,7 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
 import { enqueueWorkout } from '../../utils/offlineQueue';
+import { getExerciseCache, setExerciseCache } from '../../utils/exerciseCache';
 import {
   onGpsLocation,
   startBackgroundTracking,
@@ -46,6 +47,46 @@ type TrackingState = 'idle' | 'running' | 'paused';
 
 const ACTIVITIES = ['Run', 'Cycle', 'Walk', 'Hike'] as const;
 type Activity = typeof ACTIVITIES[number];
+
+// Maps a GPS activity chip to the matching global (outdoor, no-equipment)
+// cardio exercise template from the seeded library, so tracked runs/rides/
+// walks/hikes get exercise_template_id set — required for PR tracking and
+// exercise history (see _compute_and_upsert_cardio_prs in workout_routes.py).
+const ACTIVITY_TEMPLATE_NAME: Record<Activity, string> = {
+  Run: 'Running',
+  Cycle: 'Cycling',
+  Walk: 'Walking',
+  Hike: 'Hiking',
+};
+
+async function resolveCardioTemplateId(
+  activity: Activity,
+  userId?: number | string | null,
+): Promise<number | null> {
+  const templateName = ACTIVITY_TEMPLATE_NAME[activity];
+  const findMatch = (list: any[]) =>
+    list.find(ex => ex.name === templateName && ex.exercise_type === 'cardio' && !ex.equipment);
+
+  const cached = await getExerciseCache(userId);
+  if (cached) {
+    const found = findMatch(cached);
+    if (found) return found.id;
+  }
+
+  try {
+    const res = await apiFetch('/api/exercises');
+    if (res.ok) {
+      const data = await res.json();
+      setExerciseCache(data, userId);
+      const found = findMatch(data);
+      if (found) return found.id;
+    }
+  } catch {
+    // offline — fall through to null, workout still saves without PR tracking
+  }
+
+  return null;
+}
 
 // GPS fixes worse than this add phantom distance and jagged routes — drop them
 const MAX_ACCURACY_M = 30;
@@ -363,6 +404,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const exerciseTemplateId = await resolveCardioTemplateId(activity, user?.id);
 
     const body = {
       workoutName: workoutName.trim() || activity,
@@ -370,6 +412,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
       duration: Math.round(durationMin),
       exercises: [{
         name: activity,
+        exercise_template_id: exerciseTemplateId,
         exercise_type: 'cardio',
         route_polyline: encodedPolyline,
         sets: [{

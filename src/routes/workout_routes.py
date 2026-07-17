@@ -615,9 +615,9 @@ def add_workout():
                         if m and m not in muscles_worked:
                             muscles_worked.append(m)
             for s in sets:
+                total_sets += 1
                 if s.reps:
                     total_reps += s.reps
-                    total_sets += 1
                     if s.weight:
                         total_volume += s.reps * s.weight
 

@@ -438,9 +438,8 @@ Check off items as you complete them.
 - [x] **Dark mode — auto-detect system setting**
   - [x] On app start, read `Appearance.getColorScheme()` as the default if no AsyncStorage preference is saved
   - [x] Subscribe to `Appearance.addChangeListener` so the theme switches instantly when the device setting changes
-- [ ] **Weekly routine schedule** — assign routine days to specific weekdays (e.g. Mon = Push, Wed = Pull) so the Dashboard can suggest today's session
 - [x] Push notifications (rest timer alerts, workout reminders)
-- [ ] Workout notes / photo attachments (capture form on a lift)
+- [x] Workout notes
 - [x] Muscle group body diagram on Exercise Detail — highlight primary/secondary muscles
 - [ ] **Supersets** — group two exercises together in a workout so they alternate A/B sets and share a rest timer
   - [ ] Add `superset_group` field (nullable int) to the `Exercise` model; exercises sharing the same value are paired
@@ -611,6 +610,8 @@ Check off items as you complete them.
 
 - [ ] **Push notification** (optional, post-launch): "You've been overtaken on the leaderboard!" via Expo push (reuse existing `push_service.py`)
 
+---
+
 ### 10f. Workout Posts & Activity Feed — Backend
 > Users can choose to share a completed workout with their followers. Sharing is always opt-in — workouts are private by default.
 
@@ -661,3 +662,87 @@ Check off items as you complete them.
   - [ ] Tapping notification deep-links to the post in `FeedScreen`
 
 - [ ] **Navigation** — add `FeedScreen` and `LeaderboardScreen` as top tabs inside a dedicated **Social tab** (5th bottom tab, positioned to the right of Dashboard); add `SocialStack` / `SocialTab` to `AppTabs.tsx` and all screen types to `navigation/types.ts`; tab order: Dashboard · Training · Social · Exercises · Profile
+
+---
+
+## 🏆 12. PR Dashboard
+> A dedicated screen for viewing personal records — recent PRs across all exercises plus workout-level records (best single-workout volume, best single-workout rep count) that aren't tracked as per-exercise PRs today.
+
+- [ ] **Backend — workout-level records**
+  - [ ] Add a query/endpoint (e.g. `GET /api/personal-records/workout-bests`) returning the user's highest `Workout.volume` and highest total-reps-in-a-workout (sum of `reps` across all sets in one workout), each with the workout id/name/date
+  - [ ] Decide whether these are stored (a `workout_id` + type row, similar to `PersonalRecord`) or computed on read — computed is simpler and avoids a migration if query cost is acceptable
+
+- [ ] **Backend — recent PRs feed**
+  - [ ] Extend or reuse `GET /api/personal-records` to support "recent" ordering (already has a `created_at`/date on each record — confirm and sort by it) so the dashboard can show a chronological feed, not just current bests per exercise
+  - [ ] Include the source workout on each PR — `PersonalRecord.set_id` → `Set` → `Exercise` → `Workout` already links back; join it so each PR row carries `workout_id`, workout name, and date without an extra round trip
+  - [ ] Add a "days since last PR" value per exercise (`achieved_at` on the most recent `PersonalRecord` row for that `exercise_template_id`) — surfaces lifts that have stalled
+  - [ ] Add a PR streak stat — consecutive workouts (or weeks) with at least one PR logged, distinct from the existing workout-attendance streak; compute from `PersonalRecord.achieved_at` grouped by workout/week
+
+- [ ] **`PRDashboardScreen`** (new screen, likely `screens/ProfileTab/` alongside `PersonalRecordsScreen.tsx`, or a tab within it)
+  - [ ] "Recent PRs" list — chronological feed of PR events (exercise name, PR type, value, date), reusing `PR_TYPE_LABELS` conventions from `WorkoutSummaryScreen.tsx`
+  - [ ] Each PR card taps through to the workout it happened in (`WorkoutDetails`) using the joined `workout_id`
+  - [ ] "Workout Records" section — best single-workout volume, best single-workout rep count (card each, tap to view that workout in `WorkoutDetails`)
+  - [ ] Entry point from `ProfileScreen` (near or merged with existing Personal Records section)
+  - [ ] Momentum context instead of a flat list — e.g. "3 PRs this month" count and/or a small trend line per exercise, so the screen shows progress, not just a log
+  - [ ] PR streak badge and per-exercise "X days since last PR" shown alongside the recent feed
+  - [ ] Filter "Recent PRs" by type via chips (Weight / Reps / Time / Distance), mirroring the muscle-group chip pattern in `ExerciseList.tsx`
+  - [ ] "Share PR" button on a PR card — reuse the `react-native-view-shot` + `expo-sharing` capture flow already built for `WorkoutShareCard`
+
+- [ ] **Near-PR hint during logging** (`WorkoutLog.tsx` / `SetRow.tsx`) — while a set is focused, if the entered weight/reps is within ~5% of that exercise's current PR, show a small inline hint (e.g. "5 lbs from your PR"). Reuses the existing `prevSet` ghost-text plumbing in `SetRow.tsx`; surfaces the PR moment while it's still actionable instead of only after saving
+
+---
+
+## 📅 13. Weekly Summary
+> A recap card summarizing the user's past week — workouts, volume, distance, PRs, bodyweight change. Surfaces automatically on the Dashboard at the start of each new week, and is always viewable from the Progress section.
+
+- [ ] **Backend** (`routes/stats_routes.py`)
+  - [ ] Add `GET /api/stats/weekly-summary?week=<iso-week or date>` (default: most recently completed week) returning: workout count, total volume, total reps, total cardio distance (per unit), PRs earned that week, bodyweight change (first vs. last entry in the week, or vs. prior week's last entry)
+  - [ ] Only include fields the user actually has data for that week (e.g. omit distance if no cardio logged) so the frontend can conditionally render sections
+  - [ ] Include muscle group breakdown for the week — reuse the `muscle_sets` query from `GET /api/stats/muscle-volume`, scoped to the summary's week, to surface most-trained muscle group
+  - [ ] Include which days of the week had a workout (array of dates or weekday booleans) for a Mon–Sun consistency dot row
+  - [ ] Include total training time — sum of `Workout.duration` across the week's workouts
+  - [ ] Include "most improved lift" — the exercise with the largest estimated-1RM increase over the week (compare first vs. last `estimated_1rm` PR snapshot in range, or recompute from sets)
+  - [ ] Include a 4-week rolling average (volume, workouts) alongside the single prior-week comparison, so the week-over-week delta isn't thrown off by one unusually big or skipped week
+  - [ ] Include avg RPE for the week, only when the user has RPE enabled (`workout_show_rpe_${uid}`) and has logged any RPE values that week
+  - [ ] Include total calories burned for cardio activities — currently computed client-side per activity in `cardioCalories.ts` and never persisted; needs either storing calories per cardio set/workout on save or recomputing weekly from stored cardio fields (bigger lift than the other fields — do last)
+
+- [ ] **Dashboard surfacing**
+  - [ ] On app open, if it's a new week (Mon by default, or user's configured week start) and last week has ≥1 workout logged and the summary hasn't been shown yet, show the Weekly Summary card/modal
+  - [ ] Persist "last shown week" to AsyncStorage (per-user key) so it only appears once per week
+  - [ ] Dismiss/close leads back to normal Dashboard
+
+- [ ] **`WeeklySummaryScreen` or card** (Progress section of Training tab)
+  - [ ] Always-accessible entry point to view the most recent (or a past) weekly summary, not just the auto-popup
+  - [ ] Stat rows conditionally rendered per the backend response: Workouts, Volume, Distance, PRs earned (list), Bodyweight change
+  - [ ] Reuse `PR_TYPE_LABELS` / stat card styling patterns from `WorkoutSummaryScreen.tsx` for visual consistency
+  - [ ] Show delta vs. the prior week (▲/▼ %) for workouts and volume — reuse the `last_week_total` comparison pattern already computed in `GET /api/stats/muscle-volume`
+  - [ ] Also show the 4-week rolling average alongside the single-week delta, so a spike/dip reads in context rather than in isolation
+  - [ ] Tie workout count to the user's `workout_weekly_goal_${uid}` — show "3/4 workouts toward your goal" instead of a bare number
+  - [ ] Surface the current weekly streak (already tracked, dashboard 🔥 badge) inside the summary card
+  - [ ] Most-trained muscle group line ("Chest was your focus this week")
+  - [ ] Mon–Sun dot row showing which days had a workout
+  - [ ] Total training time stat alongside Volume/Reps
+  - [ ] "Most improved lift" callout when applicable (exercise + 1RM gain)
+  - [ ] Avg RPE stat, shown only when the user has RPE enabled and logged any that week
+  - [ ] Calories burned stat (cardio weeks only), once the backend persists/derives it
+
+- [ ] **Push the recap, don't just wait for app open** — fire a push via the existing APScheduler re-engagement job (`app.py`) each week alongside the in-app popup, so a user who doesn't open the app Monday still gets "Your week: 4 workouts, 12,400 lbs 💪"; tapping deep-links into `WeeklySummaryScreen`
+
+---
+
+## 🧠 14. Smart Training Assists
+> Newer feature ideas that build on infrastructure already in place — set types, the coach injury profile, and the AI generation endpoint.
+
+- [ ] **Auto warm-up set suggestions** (`WorkoutLog.tsx`)
+  - [ ] When a user enters their first working-set weight for an exercise, offer to auto-insert 2–3 warm-up sets (e.g. 40% / 60% / 80% of that weight) using the existing `set_type: 'W'` support
+  - [ ] Rounds suggested weights to the user's plate increment (`weightDelta`, already used for the −/+ keyboard buttons)
+  - [ ] One-tap "Add warm-ups" action, editable/removable like any other set afterward
+
+- [ ] **Exercise substitution for flagged injuries** (`CoachProfileModal.tsx` injuries field + `ai_routes.py`)
+  - [ ] `GET /api/exercises/<id>/alternatives` — same primary `muscle_group`, different equipment, excluding exercises that hit the user's flagged injury area (reuse the injury list already collected in the coach profile)
+  - [ ] Surface a "Swap exercise" option in `ExerciseBlock`'s 3-dot menu that opens a small picker of alternatives instead of the full exercise library
+  - [ ] AI coach already asks about injuries — use the same data here instead of collecting it twice
+
+- [ ] **Plateau / deload nudge** (depends on §10 "PR velocity" being built first)
+  - [ ] When `GET /api/stats/pr-velocity` reports a plateau (<1%/month over 8 weeks) for a lift the user trains regularly, show a one-time dismissible card on `CoachScreen`: "Bench Press has plateaued — consider a deload week"
+  - [ ] Tapping it could pre-fill an AI-generated deload routine via the existing `POST /api/ai/generate` flow (lower volume/intensity for a week)
