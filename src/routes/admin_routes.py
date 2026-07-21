@@ -4,8 +4,17 @@ import secrets
 import urllib.parse
 from functools import wraps
 import requests as http_requests
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, current_app, jsonify, request
 from models import db, ExerciseTemplate
+
+_RAPIDAPI_HOST = 'exercisedb.p.rapidapi.com'
+_RAPIDAPI_IMAGE_HEADERS = {'User-Agent': 'Mozilla/5.0 (compatible; AreteAdmin/1.0)'}
+# Cloudflare's bot-fight-mode 403s (error 1010) requests with no User-Agent,
+# so every RapidAPI call here sends one alongside the API key headers.
+
+
+def _rapidapi_headers(api_key: str) -> dict:
+    return {'X-RapidAPI-Key': api_key, 'X-RapidAPI-Host': _RAPIDAPI_HOST, **_RAPIDAPI_IMAGE_HEADERS}
 
 _OUR_TO_EXERCISEDB_EQUIP = {
     'Barbell':       'barbell',
@@ -346,7 +355,8 @@ ADMIN_PAGE = """<!DOCTYPE html>
           const safeGif = esc(s.gifUrl);
           const safeEquip = esc(s.equipment);
           const safeLabel = esc(s.name);
-          return `<div class="sug-thumb" title="${safeLabel}" onclick="selectSuggest(${id}, '${safeGif}')">
+          const safeDbId = esc(s.exercisedbId);
+          return `<div class="sug-thumb" title="${safeLabel}" onclick="selectSuggest(${id}, '${safeDbId}')">
             <img src="${safeGif}" loading="lazy">
             <div class="sug-label">${safeEquip}</div>
           </div>`;
@@ -359,12 +369,37 @@ ADMIN_PAGE = """<!DOCTYPE html>
       }
     }
 
-    function selectSuggest(id, url) {
-      const input = document.getElementById('input-' + id);
-      if (input) input.value = url;
-      previewUrl(id, url);
+    async function selectSuggest(id, exercisedbId) {
       const row = document.getElementById('suggest-' + id);
-      if (row) row.innerHTML = '';
+      const status = document.getElementById('status-' + id);
+      if (row) row.innerHTML = '<span class="no-suggest">Saving…</span>';
+      try {
+        const res = await fetch('/admin/exercises/' + id + '/apply-suggestion', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ exercisedb_id: exercisedbId }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          if (row) row.innerHTML = '<span class="no-suggest">' + esc(data.message || 'Error saving image.') + '</span>';
+          return;
+        }
+        const input = document.getElementById('input-' + id);
+        if (input) input.value = data.image_url;
+        previewUrl(id, data.image_url);
+        const ex = exercises.find(e => e.id === id);
+        if (ex) ex.image_url = data.image_url;
+        const card = document.getElementById('card-' + id);
+        if (card) { card.classList.add('saved'); setTimeout(() => card.classList.remove('saved'), 1500); }
+        if (status) {
+          status.textContent = '✓ Saved';
+          status.className = 'status ok';
+          setTimeout(() => { status.textContent = ''; }, 2500);
+        }
+        if (row) row.innerHTML = '';
+      } catch {
+        if (row) row.innerHTML = '<span class="no-suggest">Network error.</span>';
+      }
     }
 
     init();
@@ -420,12 +455,8 @@ def suggest_exercise_image(exercise_id):
 
     name_encoded = urllib.parse.quote(ex.name.lower())
     url = f'https://exercisedb.p.rapidapi.com/exercises/name/{name_encoded}?limit=20'
-    headers = {
-        'X-RapidAPI-Key':  api_key,
-        'X-RapidAPI-Host': 'exercisedb.p.rapidapi.com',
-    }
     try:
-        resp = http_requests.get(url, headers=headers, timeout=15)
+        resp = http_requests.get(url, headers=_rapidapi_headers(api_key), timeout=15)
         resp.raise_for_status()
         data = resp.json()
     except Exception as exc:
@@ -436,8 +467,82 @@ def suggest_exercise_image(exercise_id):
     # Sort: equipment-matching results first
     data.sort(key=lambda item: 0 if item['equipment'] == target_equip else 1)
 
+    # This dataset's ids (e.g. "0025") only resolve through RapidAPI's own
+    # /image endpoint, which requires the API key as a header — they are NOT
+    # valid on the public v2.exercisedb.io CDN (that's a different, newer
+    # dataset with its own id scheme; hitting it with these ids 422s). So the
+    # thumbnail src has to go through our own proxy route, which holds the key
+    # server-side, rather than pointing straight at ExerciseDB.
     results = [
-        {'name': item['name'], 'equipment': item['equipment'], 'gifUrl': f'https://v2.exercisedb.io/image/{item["id"]}'}
+        {
+            'name': item['name'],
+            'equipment': item['equipment'],
+            'exercisedbId': item['id'],
+            'gifUrl': f'/admin/exercises/image-proxy/{item["id"]}',
+        }
         for item in data[:8]
     ]
     return jsonify(results)
+
+
+@admin_bp.get('/exercises/image-proxy/<exercisedb_id>')
+@_require_admin
+def exercise_image_proxy(exercisedb_id):
+    """Streams a suggestion thumbnail through the server so the admin page can
+    render it without exposing the RapidAPI key to the browser."""
+    api_key = os.environ.get('RAPIDAPI_KEY', '')
+    if not api_key:
+        return Response(status=503)
+    try:
+        resp = http_requests.get(
+            f'https://{_RAPIDAPI_HOST}/image',
+            params={'exerciseId': exercisedb_id, 'resolution': '360'},
+            headers=_rapidapi_headers(api_key),
+            timeout=15,
+        )
+        resp.raise_for_status()
+    except Exception:
+        return Response(status=502)
+    return Response(resp.content, mimetype=resp.headers.get('Content-Type', 'image/gif'))
+
+
+@admin_bp.post('/exercises/<int:exercise_id>/apply-suggestion')
+@_require_admin
+def apply_exercise_suggestion(exercise_id):
+    """Downloads the chosen ExerciseDB GIF server-side and re-hosts it under
+    our own /static path — the mobile app's <Image> can't attach the
+    RapidAPI key header, so the final image_url can never point directly at
+    ExerciseDB; it has to be a file we actually store, same as avatars."""
+    ex = db.session.get(ExerciseTemplate, exercise_id)
+    if not ex:
+        return jsonify({'message': 'Not found'}), 404
+
+    data = request.get_json(silent=True) or {}
+    exercisedb_id = data.get('exercisedb_id')
+    if not exercisedb_id:
+        return jsonify({'message': 'exercisedb_id required'}), 400
+
+    api_key = os.environ.get('RAPIDAPI_KEY', '')
+    if not api_key:
+        return jsonify({'message': 'RAPIDAPI_KEY not configured on server'}), 503
+
+    try:
+        resp = http_requests.get(
+            f'https://{_RAPIDAPI_HOST}/image',
+            params={'exerciseId': exercisedb_id, 'resolution': '360'},
+            headers=_rapidapi_headers(api_key),
+            timeout=15,
+        )
+        resp.raise_for_status()
+    except Exception as exc:
+        return jsonify({'message': f'Could not fetch image: {exc}'}), 502
+
+    images_dir = os.path.join(current_app.static_folder, 'exercise_images')
+    os.makedirs(images_dir, exist_ok=True)
+    filename = f'{exercise_id}.gif'
+    with open(os.path.join(images_dir, filename), 'wb') as f:
+        f.write(resp.content)
+
+    ex.image_url = f'/static/exercise_images/{filename}'
+    db.session.commit()
+    return jsonify({'image_url': ex.image_url})

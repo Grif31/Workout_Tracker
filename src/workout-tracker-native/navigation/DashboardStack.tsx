@@ -22,7 +22,11 @@ export function DashboardStack() {
       <Stack.Screen name="WorkoutDetails" component={WorkoutDetailScreen} />
       <Stack.Screen name="CardioDetails" component={CardioDetailsScreen} options={{ contentStyle: { paddingTop: 0 } }} />
       <Stack.Screen name="WorkoutSummary" component={WorkoutSummaryScreen} options={{ contentStyle: { paddingTop: 0 } }} />
-      <Stack.Screen name="WorkoutLog" component={LogWorkoutScreen} options={{ animation: 'slide_from_bottom' }} />
+      <Stack.Screen
+        name="WorkoutLog"
+        component={LogWorkoutScreen}
+        options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
+      />
       <Stack.Screen name="GPSCardio" component={GPSCardioScreen} options={{ contentStyle: { paddingTop: 0 } }} />
       <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen as any} options={{ presentation: 'modal', contentStyle: { paddingTop: 0 } }} />
       <Stack.Screen name="GreekRankIntro" component={GreekRankIntroScreen} options={{ contentStyle: { paddingTop: 0 }, animation: 'fade' }} />

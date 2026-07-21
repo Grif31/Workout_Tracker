@@ -41,15 +41,31 @@ export function registerUnauthCallback(cb: () => void) {
 }
 
 // Exchanges the refresh token for a new access token, updates the module store
-// and AsyncStorage, then returns the new token. Returns null on any failure.
-async function doRefresh(): Promise<string | null> {
-  if (!_refresh) return null;
+// and AsyncStorage. `invalid: true` means the server itself rejected the
+// refresh token (401/422 — genuinely expired or malformed), which is the only
+// case that should force a logout. A thrown network error or a server-side
+// failure (5xx) doesn't tell us anything about whether the token is still
+// good, so those come back as `invalid: false` — the caller should leave the
+// session alone and let this one request fail instead of signing the user out
+// (e.g. a phone reconnecting after being locked mid-workout must not be read
+// as "session expired").
+type RefreshOutcome = { ok: true; token: string } | { ok: false; invalid: boolean };
+
+async function doRefresh(): Promise<RefreshOutcome> {
+  if (!_refresh) return { ok: false, invalid: true };
+  let res: Response;
   try {
-    const res = await fetch(`${BASE}/api/refresh`, {
+    res = await fetch(`${BASE}/api/refresh`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${_refresh}` },
     });
-    if (!res.ok) return null;
+  } catch {
+    return { ok: false, invalid: false };
+  }
+  if (!res.ok) {
+    return { ok: false, invalid: res.status === 401 || res.status === 422 };
+  }
+  try {
     const data = await res.json();
     const newAccess = data.access_token as string;
     _access = newAccess;
@@ -58,9 +74,9 @@ async function doRefresh(): Promise<string | null> {
       _refresh = data.refresh_token as string;
       await AsyncStorage.setItem('refresh_token', data.refresh_token);
     }
-    return newAccess;
+    return { ok: true, token: newAccess };
   } catch {
-    return null;
+    return { ok: false, invalid: false };
   }
 }
 
@@ -83,23 +99,27 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   }
 
   if (res.status === 401 && _refresh) {
-    const newAccess = await doRefresh();
-    if (newAccess) {
+    const outcome = await doRefresh();
+    if (outcome.ok) {
       // Retry the original request with the refreshed token.
-      headers.set('Authorization', `Bearer ${newAccess}`);
+      headers.set('Authorization', `Bearer ${outcome.token}`);
       try {
         res = await fetch(`${BASE}${path}`, { ...init, headers });
       } catch {
         showToast(NETWORK_ERROR_MSG);
         throw new Error('Network request failed');
       }
-    } else {
+    } else if (outcome.invalid) {
       // Refresh token is expired or invalid — session is unrecoverable.
       // Wipe everything and send the user back to the login screen.
       clearTokens();
       await AsyncStorage.multiRemove(['token', 'refresh_token', 'user']);
       _onUnauthenticated?.();
     }
+    // else: refresh failed for a transient reason (network/server trouble) —
+    // leave tokens and session alone; this request just stays a 401 and the
+    // caller's normal error handling applies. The user stays logged in and can
+    // retry once connectivity is back.
   }
 
   return res;

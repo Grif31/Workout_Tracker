@@ -183,7 +183,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     setWorkoutOpen(true);
     return () => {
       setWorkoutOpen(false);
-      AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
+      // Deliberately NOT clearing WORKOUT_BACKUP_KEY here — every legitimate
+      // "this workout is done" path (submit, offline save, discard) already
+      // clears it at its own point of completion. Clearing it unconditionally
+      // on every unmount meant an involuntary teardown (e.g. a forced logout
+      // from a failed token refresh) wiped the one crash-recovery copy of an
+      // in-progress workout moments before it was needed.
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -454,8 +459,14 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         // App resumed from background — update timer refs from checkpoint if JS was suspended.
         await restoreTimerCheckpoint();
         resyncRestTimer();
-        // Exercises are still in memory; discard the insurance backup.
-        await AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
+        // Deliberately NOT clearing WORKOUT_BACKUP_KEY here even though
+        // exercises are still in memory right now — a token refresh triggered
+        // by the next API call could still force a logout (e.g. a transient
+        // network failure right after reconnecting), which unmounts this
+        // screen a moment later. The backup gets overwritten wholesale next
+        // time the app backgrounds, and is explicitly cleared by every real
+        // completion path (submit, offline save, discard), so leaving it here
+        // costs nothing and is the only thing that survives that scenario.
       }
     });
     return () => sub.remove();

@@ -24,7 +24,11 @@ export function TrainingStack() {
       <Stack.Screen name="CreateRoutine" component={CreateRoutineScreen} />
       <Stack.Screen name="RoutineDetail" component={RoutineDetailScreen} />
       <Stack.Screen name="TemplateDetail" component={TemplateDetailScreen} />
-      <Stack.Screen name="LogRoutine" component={LogRoutineScreen} options={{ animation: 'slide_from_bottom' }} />
+      <Stack.Screen
+        name="LogRoutine"
+        component={LogRoutineScreen}
+        options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
+      />
       <Stack.Screen name="WorkoutDetails" component={WorkoutDetailScreen} />
       <Stack.Screen name="WorkoutSummary" component={WorkoutSummaryScreen} options={{ contentStyle: { paddingTop: 0 } }} />
       <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen} options={{ presentation: 'modal', contentStyle: { paddingTop: 0 } }} />
