@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
+import { resolveMediaUrl } from '../../utils/api';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { type ExerciseEntry, type SetType, colStyles, isBodyweight, isDuration } from './types';
@@ -65,7 +66,7 @@ export default function ExerciseBlock({
         <View style={styles.exHeaderRow}>
           <View style={styles.exDiagramBtn}>
             {exercise.image_url ? (
-              <Image source={{ uri: exercise.image_url }} style={styles.exDiagram} resizeMode="cover" />
+              <Image source={{ uri: resolveMediaUrl(exercise.image_url) }} style={styles.exDiagram} resizeMode="cover" />
             ) : (
               <View style={[styles.exDiagram, styles.exDiagramPlaceholder]}>
                 <Ionicons name="barbell-outline" size={22} color={colors.textSecondary} />

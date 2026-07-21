@@ -14,7 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LineChart, BarChart } from 'react-native-gifted-charts';
 import { useAuth } from '../../context/AuthContext';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, resolveMediaUrl } from '../../utils/api';
 import { ExerciseDetailParams } from '../../navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
@@ -659,7 +659,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         {/* Hero image — only shown when an image exists */}
         {imageUrl ? (
           <View style={styles.heroContainer}>
-            <Image source={{ uri: imageUrl }} style={styles.heroImage} resizeMode="cover" />
+            <Image source={{ uri: resolveMediaUrl(imageUrl) }} style={styles.heroImage} resizeMode="cover" />
           </View>
         ) : null}
         <View style={styles.content}>

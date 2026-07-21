@@ -16,6 +16,20 @@ _RAPIDAPI_IMAGE_HEADERS = {'User-Agent': 'Mozilla/5.0 (compatible; AreteAdmin/1.
 def _rapidapi_headers(api_key: str) -> dict:
     return {'X-RapidAPI-Key': api_key, 'X-RapidAPI-Host': _RAPIDAPI_HOST, **_RAPIDAPI_IMAGE_HEADERS}
 
+
+def _rapidapi_error_message(exc: Exception) -> str:
+    """RapidAPI puts the actually-useful text (e.g. "monthly quota exceeded")
+    in the response body's JSON, not in the exception string — surface that
+    instead of a raw "429 Client Error: ..." message that just looks like a
+    generic failure."""
+    response = getattr(exc, 'response', None)
+    if response is not None:
+        try:
+            return response.json().get('message', str(exc))
+        except Exception:
+            pass
+    return str(exc)
+
 _OUR_TO_EXERCISEDB_EQUIP = {
     'Barbell':       'barbell',
     'Dumbbell':      'dumbbell',
@@ -357,7 +371,11 @@ ADMIN_PAGE = """<!DOCTYPE html>
         const qs = q ? '?q=' + encodeURIComponent(q) : '';
         const res = await fetch('/admin/exercises/' + id + '/suggest' + qs);
         const data = await res.json();
-        if (!res.ok || !data.length) {
+        if (!res.ok) {
+          row.innerHTML = '<span class="no-suggest">' + esc(data.message || 'Error loading suggestions.') + '</span>';
+          return;
+        }
+        if (!data.length) {
           row.innerHTML = '<span class="no-suggest">No suggestions found.</span>';
           return;
         }
@@ -478,7 +496,7 @@ def suggest_exercise_image(exercise_id):
         resp.raise_for_status()
         data = resp.json()
     except Exception as exc:
-        return jsonify({'message': str(exc)}), 502
+        return jsonify({'message': _rapidapi_error_message(exc)}), 502
 
     target_equip = _OUR_TO_EXERCISEDB_EQUIP.get(ex.equipment or '', '').lower()
 
@@ -553,7 +571,7 @@ def apply_exercise_suggestion(exercise_id):
         )
         resp.raise_for_status()
     except Exception as exc:
-        return jsonify({'message': f'Could not fetch image: {exc}'}), 502
+        return jsonify({'message': f'Could not fetch image: {_rapidapi_error_message(exc)}'}), 502
 
     images_dir = os.path.join(current_app.static_folder, 'exercise_images')
     os.makedirs(images_dir, exist_ok=True)

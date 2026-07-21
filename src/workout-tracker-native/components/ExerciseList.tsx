@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NewExerciseForm from './NewExerciseForm';
+import { resolveMediaUrl } from '../utils/api';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -188,7 +189,7 @@ export default function ExerciseListModal({
         onPress={() => handleSelect(item)}
       >
         {item.image_url ? (
-          <Image source={{ uri: item.image_url }} style={styles.cardImage} />
+          <Image source={{ uri: resolveMediaUrl(item.image_url) }} style={styles.cardImage} />
         ) : (
           <View style={styles.cardImagePlaceholder}>
             <Ionicons

@@ -22,7 +22,7 @@ import { typography } from 'theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { equipmentTypes } from '../../constants/equipmentTypes';
 import NewExerciseForm from '../../components/NewExerciseForm';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, resolveMediaUrl } from '../../utils/api';
 
 function SectionRule({ label }: { label: string }) {
   const { colors } = useTheme();
@@ -161,7 +161,7 @@ export default function ExercisesScreen({ navigation }: Props) {
         })}
       >
         {item.image_url ? (
-          <Image source={{ uri: item.image_url }} style={styles.exerciseImage} resizeMode="cover" />
+          <Image source={{ uri: resolveMediaUrl(item.image_url) }} style={styles.exerciseImage} resizeMode="cover" />
         ) : (
           <View style={[styles.exerciseImage, styles.exerciseImagePlaceholder]}>
             <Ionicons name={isCardio ? 'bicycle-outline' : 'barbell-outline'} size={26} color={colors.accent} />
