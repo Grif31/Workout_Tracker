@@ -176,6 +176,12 @@ ADMIN_PAGE = """<!DOCTYPE html>
     }
     .btn-suggest:hover { background: rgba(10,132,255,0.1); }
     .btn-suggest:disabled { opacity: 0.5; cursor: default; }
+    .gif-search {
+      background: #1C1C1E; border: 1px solid #3A3A3C; border-radius: 7px;
+      color: #F2F2F7; font-size: 12px; padding: 7px 10px;
+      width: 130px;
+    }
+    .gif-search:focus { outline: none; border-color: #0A84FF; }
     .status { font-size: 11px; }
     .status.ok  { color: #30D158; }
     .status.err { color: #FF453A; }
@@ -183,8 +189,7 @@ ADMIN_PAGE = """<!DOCTYPE html>
       display: flex;
       gap: 8px;
       padding: 0 12px 10px;
-      overflow-x: auto;
-      flex-wrap: nowrap;
+      flex-wrap: wrap;
     }
     .sug-thumb {
       flex-shrink: 0;
@@ -283,7 +288,10 @@ ADMIN_PAGE = """<!DOCTYPE html>
             <button class="btn-save" onclick="save(${ex.id})">Save</button>
             <button class="btn-clear" onclick="doClear(${ex.id})">Clear</button>
             <span class="status" id="status-${ex.id}"></span>
-            <button class="btn-suggest" id="suggest-btn-${ex.id}" onclick="suggest(${ex.id})">Suggest</button>
+            <input class="gif-search" type="text" id="gifq-${ex.id}" placeholder="Search ExerciseDB…"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault(); suggest(${ex.id}, this.value);}">
+            <button class="btn-suggest" id="suggest-btn-${ex.id}"
+                    onclick="suggest(${ex.id}, document.getElementById('gifq-${ex.id}').value)">Suggest</button>
           </div>
         </div>`;
     }
@@ -338,14 +346,16 @@ ADMIN_PAGE = """<!DOCTYPE html>
       }
     }
 
-    async function suggest(id) {
+    async function suggest(id, query) {
       const btn = document.getElementById('suggest-btn-' + id);
       const row = document.getElementById('suggest-' + id);
       btn.textContent = 'Loading…';
       btn.disabled = true;
       row.innerHTML = '';
       try {
-        const res = await fetch('/admin/exercises/' + id + '/suggest');
+        const q = (query || '').trim();
+        const qs = q ? '?q=' + encodeURIComponent(q) : '';
+        const res = await fetch('/admin/exercises/' + id + '/suggest' + qs);
         const data = await res.json();
         if (!res.ok || !data.length) {
           row.innerHTML = '<span class="no-suggest">No suggestions found.</span>';
@@ -444,7 +454,12 @@ def update_exercise_image(exercise_id):
 @admin_bp.get('/exercises/<int:exercise_id>/suggest')
 @_require_admin
 def suggest_exercise_image(exercise_id):
-    """Search ExerciseDB for GIFs matching this exercise's name + equipment."""
+    """Search ExerciseDB for GIFs matching this exercise's name + equipment.
+
+    Defaults to searching by this exercise's own name, but accepts an
+    optional ?q= override so the admin page can search ExerciseDB directly
+    when the auto-match misses a GIF that exists under a different name.
+    """
     ex = db.session.get(ExerciseTemplate, exercise_id)
     if not ex:
         return jsonify({'message': 'Not found'}), 404
@@ -453,8 +468,11 @@ def suggest_exercise_image(exercise_id):
     if not api_key:
         return jsonify({'message': 'RAPIDAPI_KEY not configured on server'}), 503
 
-    name_encoded = urllib.parse.quote(ex.name.lower())
-    url = f'https://exercisedb.p.rapidapi.com/exercises/name/{name_encoded}?limit=20'
+    query = (request.args.get('q') or ex.name).strip().lower()
+    if not query:
+        return jsonify({'message': 'Search query required'}), 400
+    name_encoded = urllib.parse.quote(query)
+    url = f'https://exercisedb.p.rapidapi.com/exercises/name/{name_encoded}?limit=30'
     try:
         resp = http_requests.get(url, headers=_rapidapi_headers(api_key), timeout=15)
         resp.raise_for_status()
@@ -480,7 +498,7 @@ def suggest_exercise_image(exercise_id):
             'exercisedbId': item['id'],
             'gifUrl': f'/admin/exercises/image-proxy/{item["id"]}',
         }
-        for item in data[:8]
+        for item in data[:20]
     ]
     return jsonify(results)
 

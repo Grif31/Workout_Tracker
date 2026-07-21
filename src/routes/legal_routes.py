@@ -176,7 +176,7 @@ HOMEPAGE = """<!DOCTYPE html>
 
   <!-- Header -->
   <header>
-    <div class="logo"><img src="/static/arete_name.png" alt="Aretē Fitness"></div>
+    <div class="logo"><img src="/static/Arete_name.png" alt="Aretē Fitness"></div>
     <p class="tagline">Pursue excellence. Track every rep.</p>
     <div class="cta-row">
       <a href="https://apps.apple.com/app/id6744030558" class="btn btn-green">Download on the App Store</a>
