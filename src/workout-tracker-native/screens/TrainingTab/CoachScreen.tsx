@@ -1065,6 +1065,16 @@ export default function CoachScreen({ navigation }: Props) {
                   </TouchableOpacity>
                 </View>
 
+                {/* Weekly Summary entry point */}
+                <TouchableOpacity
+                  style={styles.weeklySummaryCard}
+                  onPress={() => navigation.navigate('WeeklySummary')}
+                >
+                  <Ionicons name="calendar-outline" size={20} color={colors.accent} />
+                  <Text style={styles.weeklySummaryText}>Weekly Summary</Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
+
                 {/* Chart card */}
                 <View style={styles.chartCard}>
                   <View style={styles.chartHeader}>
@@ -1342,6 +1352,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   goalCirclesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: spacing.sm },
   goalCircle: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   goalSideSub: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
+  weeklySummaryCard: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.surface, borderRadius: spacing.sm, borderWidth: 1, borderColor: colors.border,
+    padding: spacing.md, marginBottom: spacing.md,
+  },
+  weeklySummaryText: { flex: 1, fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
   chartCard: {
     backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md,
     marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, overflow: 'hidden',

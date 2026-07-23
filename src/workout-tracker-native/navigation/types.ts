@@ -21,6 +21,25 @@ export type WorkoutSummaryParams = {
   muscles: string[];
   isFirstWorkout: boolean;
 };
+
+export type WeeklySummaryData = {
+  week_start: string;
+  week_end: string;
+  workouts: number;
+  training_days: string[];
+  total_duration_min: number;
+  total_volume: number;
+  total_reps: number;
+  distance_km?: number;
+  prs: Array<{ exercise_name: string; pr_type: string; value: number; weight_context?: number }>;
+  bodyweight_change?: { start: number; end: number };
+  muscle_sets: Record<string, number>;
+  weight_unit: 'lbs' | 'kg';
+};
+// Optional prefetched payload — the auto-popup passes data it already fetched
+// so the screen doesn't re-request it; the manual entry point navigates with
+// no params and lets the screen fetch the default (most recent completed) week.
+export type WeeklySummaryParams = { data?: WeeklySummaryData } | undefined;
 export type DashboardStackParamsList = {
     DashboardHome: undefined;
     WorkoutDetails: { workoutId: number };
@@ -30,6 +49,7 @@ export type DashboardStackParamsList = {
     GPSCardio: undefined;
     ExerciseDetail: ExerciseDetailParams;
     GreekRankIntro: undefined;
+    WeeklySummary: WeeklySummaryParams;
 };
 export type ExercisesStackParamsList = {
     ExercisesHome: undefined;
@@ -56,6 +76,7 @@ export type TrainingStackParamsList = {
     WorkoutSummary: WorkoutSummaryParams;
     ExerciseDetail: ExerciseDetailParams;
     StrengthScore: undefined;
+    WeeklySummary: WeeklySummaryParams;
     AIWorkoutPreview: {
         generateType: 'routine' | 'template';
         name: string;

@@ -18,6 +18,7 @@ import { apiFetch } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { PR_GOLD_TEXT } from '../../constants/prColors';
+import { WEEKLY_SUMMARY_LAST_SHOWN_KEY } from './WeeklySummaryScreen';
 
 function SectionRule({ label, style }: { label: string; style?: object }) {
   const { colors } = useTheme();
@@ -259,6 +260,33 @@ export default function DashboardScreen({ navigation }: Props) {
     }
   }, []);
 
+  // Auto-popup: at most once per week, if last week had >=1 workout. Not part
+  // of the Promise.all below — this shouldn't hold up the dashboard's own
+  // loading state, it's a secondary check.
+  const checkWeeklySummaryPopup = async () => {
+    const uid = authUser?.id;
+    if (!uid) return;
+    try {
+      const today = new Date();
+      const mondayOffset = (today.getDay() + 6) % 7; // getDay(): 0=Sun → offset back to Monday
+      const monday = new Date(today);
+      monday.setDate(today.getDate() - mondayOffset);
+      const mondayStr = toLocalDateStr(monday);
+
+      const key = `${WEEKLY_SUMMARY_LAST_SHOWN_KEY}_${uid}`;
+      const lastShown = await AsyncStorage.getItem(key);
+      if (lastShown === mondayStr) return; // already checked/shown this week
+
+      const res = await apiFetch('/api/stats/weekly-summary');
+      if (!res.ok) return;
+      const data = await res.json();
+      await AsyncStorage.setItem(key, mondayStr);
+      if (data.workouts >= 1) {
+        navigation.navigate('WeeklySummary', { data });
+      }
+    } catch { /* silently fail — this is a nice-to-have, not critical */ }
+  };
+
   useFocusEffect(useCallback(() => {
     const firstLoad = !hasLoaded.current;
     if (firstLoad) setLoading(true);
@@ -266,6 +294,7 @@ export default function DashboardScreen({ navigation }: Props) {
       setLoading(false);
       hasLoaded.current = true;
     });
+    checkWeeklySummaryPopup();
   }, []));
 
   const handleRefresh = () => {

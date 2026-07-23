@@ -893,6 +893,227 @@ def muscle_volume():
     }), 200
 
 
+@stats_bp.get('/api/stats/weekly-summary')
+@jwt_required()
+def weekly_summary():
+    """Recap of a completed week: workouts, volume, reps, cardio distance,
+    PRs earned, bodyweight change, muscle-group breakdown, training days, and
+    total training time. Defaults to the most recently COMPLETED week (not
+    the current in-progress one) unless ?week=<date within a week> is given.
+    Fields are omitted entirely (not zeroed) when the user has no relevant
+    data that week, so the frontend can conditionally render sections.
+    """
+    from datetime import date, timedelta
+    user_id = get_jwt_identity()
+    user = db.session.get(User, int(user_id))
+    kg_to_lbs = 2.20462 if (user.weight_unit or 'lbs') == 'kg' else 1.0
+
+    local_date_str = request.args.get('local_date')
+    try:
+        today = date.fromisoformat(local_date_str) if local_date_str else date.today()
+    except ValueError:
+        today = date.today()
+    this_week_start = today - timedelta(days=today.weekday())
+
+    week_param = request.args.get('week')
+    if week_param:
+        try:
+            target = date.fromisoformat(week_param)
+            week_start = target - timedelta(days=target.weekday())
+        except ValueError:
+            week_start = this_week_start - timedelta(weeks=1)
+    else:
+        week_start = this_week_start - timedelta(weeks=1)
+    week_end = week_start + timedelta(weeks=1)
+
+    not_warmup = db.or_(Set.set_type.is_(None), Set.set_type != 'W')
+    not_cardio = db.func.lower(Exercise.exercise_type) != 'cardio'
+
+    workout_rows = (
+        db.session.query(Workout.id, Workout.date, Workout.duration)
+        .filter(Workout.user_id == user_id, Workout.date >= week_start, Workout.date < week_end)
+        .all()
+    )
+    training_days = sorted({w.date.date().isoformat() for w in workout_rows})
+
+    resp: dict = {
+        'week_start': week_start.isoformat(),
+        'week_end': week_end.isoformat(),
+        'workouts': len(workout_rows),
+        'training_days': training_days,
+        'total_duration_min': sum(w.duration or 0 for w in workout_rows),
+        'weight_unit': user.weight_unit or 'lbs',
+    }
+
+    # Volume + reps — same SQL-aggregate pattern as profile_stats, same
+    # canonical-lbs convention for total_volume (Set.weight is stored in the
+    # user's current unit, so this multiplies up to lbs like profile_stats
+    # and Workout.volume both do).
+    vol_reps_row = (
+        db.session.query(
+            db.func.sum(Set.reps * Set.weight).label('volume'),
+            db.func.sum(Set.reps).label('reps'),
+        )
+        .join(Exercise, Set.exercise_id == Exercise.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .filter(
+            Workout.user_id == user_id,
+            Workout.date >= week_start, Workout.date < week_end,
+            Set.reps.isnot(None), Set.weight.isnot(None), Set.set_type != 'W',
+        )
+        .first()
+    )
+    resp['total_volume'] = round((vol_reps_row.volume or 0) * kg_to_lbs)
+    resp['total_reps'] = int(vol_reps_row.reps or 0)
+
+    # Cardio distance, normalized to km (same canonical-unit-then-convert-on-
+    # display idea as Workout.volume) — omitted if no cardio logged.
+    distance_rows = (
+        db.session.query(Set.distance, Set.distance_unit)
+        .join(Exercise, Set.exercise_id == Exercise.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .filter(
+            Workout.user_id == user_id,
+            Workout.date >= week_start, Workout.date < week_end,
+            Exercise.exercise_type == 'cardio',
+            Set.distance.isnot(None),
+        )
+        .all()
+    )
+    if distance_rows:
+        total_km = sum((d * 1.60934 if (unit or 'km') == 'mi' else d) for d, unit in distance_rows)
+        if total_km > 0:
+            resp['distance_km'] = round(total_km, 2)
+
+    # PRs earned this week — excludes estimated_1rm per the app-wide rule
+    # (never surface it as a PR label). achieved_at reflects when a PR was
+    # last set OR recomputed (editing a past workout can rebuild it), not
+    # strictly immutable history.
+    pr_rows = (
+        db.session.query(ExerciseTemplate.name, PersonalRecord.pr_type, PersonalRecord.value, PersonalRecord.weight_context)
+        .join(ExerciseTemplate, PersonalRecord.exercise_template_id == ExerciseTemplate.id)
+        .filter(
+            PersonalRecord.user_id == user_id,
+            PersonalRecord.pr_type != 'estimated_1rm',
+            PersonalRecord.achieved_at >= week_start,
+            PersonalRecord.achieved_at < week_end,
+        )
+        .all()
+    )
+    resp['prs'] = [
+        {'exercise_name': name, 'pr_type': pr_type, 'value': value, 'weight_context': weight_context}
+        for name, pr_type, value, weight_context in pr_rows
+    ]
+
+    # Bodyweight change — PR values/bodyweight logs are stored in the user's
+    # current unit already (no kg_to_lbs conversion, unlike total_volume
+    # above). Omitted entirely if no log entries fall in this week — never
+    # fall back to User.bodyweight or a wider range.
+    bw_rows = (
+        db.session.query(BodyweightLog.weight)
+        .filter(
+            BodyweightLog.user_id == user_id,
+            BodyweightLog.date >= week_start, BodyweightLog.date < week_end,
+        )
+        .order_by(BodyweightLog.date.asc())
+        .all()
+    )
+    if bw_rows:
+        resp['bodyweight_change'] = {'start': bw_rows[0].weight, 'end': bw_rows[-1].weight}
+
+    # Muscle-group breakdown — same single-pass join shape as ai_routes.py's
+    # _muscle_sets_range, adapted here since that one is a private closure.
+    muscle_rows = (
+        db.session.query(ExerciseMuscleMapping.muscle_group, db.func.count(Set.id).label('cnt'))
+        .join(Exercise, ExerciseMuscleMapping.exercise_template_id == Exercise.exercise_template_id)
+        .join(Set, Set.exercise_id == Exercise.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .filter(
+            Workout.user_id == user_id,
+            Workout.date >= week_start, Workout.date < week_end,
+            not_warmup, not_cardio,
+            Set.reps.isnot(None),
+        )
+        .group_by(ExerciseMuscleMapping.muscle_group)
+        .all()
+    )
+    resp['muscle_sets'] = {m: c for m, c in muscle_rows}
+
+    return jsonify(resp), 200
+
+
+@stats_bp.get('/api/stats/weekly-summary/history')
+@jwt_required()
+def weekly_summary_history():
+    """Condensed list of past completed weeks (date range, workout count,
+    volume) for a history/browse view — full per-week detail stays behind
+    GET /api/stats/weekly-summary?week=<date>. Bucketed in Python rather than
+    a SQL date_trunc grouping since the test suite runs on SQLite (production
+    is Postgres) and date_trunc isn't portable across both.
+    """
+    from datetime import date, timedelta
+    user_id = get_jwt_identity()
+    user = db.session.get(User, int(user_id))
+    kg_to_lbs = 2.20462 if (user.weight_unit or 'lbs') == 'kg' else 1.0
+
+    local_date_str = request.args.get('local_date')
+    try:
+        today = date.fromisoformat(local_date_str) if local_date_str else date.today()
+    except ValueError:
+        today = date.today()
+    this_week_start = today - timedelta(days=today.weekday())
+
+    weeks_back = min(request.args.get('weeks', default=12, type=int), 52)
+    history_start = this_week_start - timedelta(weeks=weeks_back)
+
+    # Step 1: every workout in range, bucketed by its Monday week-start —
+    # counted here (not via the joined query below) so a workout with zero
+    # sets logged still counts toward that week's workout count.
+    workout_rows = (
+        db.session.query(Workout.id, Workout.date)
+        .filter(Workout.user_id == user_id, Workout.date >= history_start, Workout.date < this_week_start)
+        .all()
+    )
+    workout_week: dict[int, date] = {}
+    workouts_per_week: dict[date, set] = {}
+    for wid, wdate in workout_rows:
+        wk = wdate.date() - timedelta(days=wdate.date().weekday())
+        workout_week[wid] = wk
+        workouts_per_week.setdefault(wk, set()).add(wid)
+
+    # Step 2: volume per workout, merged into the same week buckets via the
+    # workout->week map from step 1 (an inner join here would silently drop
+    # workouts with no sets from the count, hence doing it in two passes).
+    volume_per_week: dict[date, float] = {}
+    if workout_week:
+        set_rows = (
+            db.session.query(Exercise.workout_id, Set.reps, Set.weight)
+            .join(Exercise, Set.exercise_id == Exercise.id)
+            .filter(
+                Exercise.workout_id.in_(workout_week.keys()),
+                Set.reps.isnot(None), Set.weight.isnot(None), Set.set_type != 'W',
+            )
+            .all()
+        )
+        for wid, reps, weight in set_rows:
+            wk = workout_week.get(wid)
+            if wk is None:
+                continue
+            volume_per_week[wk] = volume_per_week.get(wk, 0.0) + reps * weight
+
+    history = [
+        {
+            'week_start': wk.isoformat(),
+            'week_end': (wk + timedelta(weeks=1)).isoformat(),
+            'workouts': len(ids),
+            'total_volume': round(volume_per_week.get(wk, 0.0) * kg_to_lbs),
+        }
+        for wk, ids in sorted(workouts_per_week.items(), reverse=True)
+    ]
+
+    return jsonify(history), 200
+
+
 @stats_bp.get('/api/stats/strength-score/history')
 @jwt_required()
 def strength_score_history():
