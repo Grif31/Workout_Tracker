@@ -112,7 +112,7 @@ export default function ExerciseBlock({
               <>
                 {exercise.sets.map((set, setIndex) => (
                   <CardioSetRow
-                    key={setIndex}
+                    key={set.uid}
                     set={set}
                     setIndex={setIndex}
                     onChangeField={(field, value) => onUpdateCardioField(setIndex, field, value)}
@@ -136,7 +136,7 @@ export default function ExerciseBlock({
 
                 {exercise.sets.map((set, setIndex) => (
                   <DurationSetRow
-                    key={setIndex}
+                    key={set.uid}
                     set={set}
                     setIndex={setIndex}
                     prevSet={exercise.previousSets?.[setIndex]}
@@ -171,7 +171,7 @@ export default function ExerciseBlock({
                   const prev = exercise.previousSets?.[setIndex];
                   return (
                     <SetRow
-                      key={setIndex}
+                      key={set.uid}
                       set={set}
                       setIndex={setIndex}
                       prevSet={prev}

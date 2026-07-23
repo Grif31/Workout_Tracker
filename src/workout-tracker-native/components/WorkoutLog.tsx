@@ -508,6 +508,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         equipment: ex.equipment,
         notes: ex.notes ?? undefined,
         sets: ex.sets.map((s: any) => ({
+          uid: makeUid(),
           id: s.id,
           reps: String(s.reps ?? ''),
           weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''),
@@ -753,8 +754,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     if (repeatLastSet && last && ex.exercise_type !== 'cardio') {
       // Repeat-last-set setting: new set starts pre-filled with the last set's values
       updated[exIndex].sets.push(isDuration(ex)
-        ? { reps: '', weight: '', set_type: 'N', cardio_duration: last.cardio_duration ?? '' }
-        : { reps: last.reps, weight: last.weight, set_type: 'N', rpe: last.rpe });
+        ? { uid: makeUid(), reps: '', weight: '', set_type: 'N', cardio_duration: last.cardio_duration ?? '' }
+        : { uid: makeUid(), reps: last.reps, weight: last.weight, set_type: 'N', rpe: last.rpe });
     } else {
       updated[exIndex].sets.push(makeInitialSet(ex));
     }
@@ -807,12 +808,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const prevSetsToEditable = (ex: { exercise_type?: string; equipment?: string }, sets: any[]): WorkoutSet[] =>
     sets.map((s: any) => isDuration(ex)
       ? {
-          reps: '', weight: '', set_type: s.set_type ?? 'N',
+          uid: makeUid(), reps: '', weight: '', set_type: s.set_type ?? 'N',
           cardio_duration: s.cardio_duration && parseFloat(s.cardio_duration) > 0
             ? String(Math.round(parseFloat(s.cardio_duration) * 60))
             : '',
         }
-      : { reps: String(s.reps ?? ''), weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''), set_type: s.set_type ?? 'N' });
+      : { uid: makeUid(), reps: String(s.reps ?? ''), weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''), set_type: s.set_type ?? 'N' });
 
   const addExToWorkout = async (exercise: { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string }) => {
     const initialSet: WorkoutSet = makeInitialSet(exercise);
@@ -951,7 +952,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             if (data.sets?.length > 0) {
               enriched[idx] = {
                 ...enriched[idx],
-                sets: data.sets.map((s: any) => ({ reps: String(s.reps ?? ''), weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''), set_type: s.set_type ?? 'N' })),
+                sets: data.sets.map((s: any) => ({ uid: makeUid(), reps: String(s.reps ?? ''), weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''), set_type: s.set_type ?? 'N' })),
                 previousSets: data.sets,
                 currentPR: prData,
               };

@@ -22,6 +22,7 @@ export const SET_TYPES = ['N', 'W', 'D', 'F'] as const;
 export type SetType = typeof SET_TYPES[number];
 
 export type WorkoutSet = {
+  uid: string;
   id?: number;
   reps: string;
   weight: string;
@@ -78,10 +79,10 @@ export function fmtHold(minutes: number): string {
 // Blank set matching the exercise's logging mode
 export const makeInitialSet = (ex: { exercise_type?: string; equipment?: string }): WorkoutSet =>
   ex.exercise_type === 'cardio'
-    ? { reps: '', weight: '', set_type: 'N', cardio_duration: '', distance: '', distance_unit: 'km', intensity: '' }
+    ? { uid: makeUid(), reps: '', weight: '', set_type: 'N', cardio_duration: '', distance: '', distance_unit: 'km', intensity: '' }
     : isDuration(ex)
-    ? { reps: '', weight: '', set_type: 'N', cardio_duration: '' }
-    : { reps: '', weight: isBodyweight(ex) ? '0' : '', set_type: 'N' };
+    ? { uid: makeUid(), reps: '', weight: '', set_type: 'N', cardio_duration: '' }
+    : { uid: makeUid(), reps: '', weight: isBodyweight(ex) ? '0' : '', set_type: 'N' };
 
 export function fmtElapsed(secs: number): string {
   if (secs < 60) return `${secs}s`;
