@@ -554,6 +554,84 @@ class TestStrengthScoreUnits:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/stats/strength-score — additive response fields (age_factor,
+# bodyweight_updated_at, coverage). Purely additive — must not change any of
+# the existing fields asserted above.
+# ---------------------------------------------------------------------------
+
+class TestStrengthScoreAdditiveFields:
+
+    def _seed_bench_template(self):
+        from models import ExerciseTemplate
+        tmpl = ExerciseTemplate(name='Bench Press', equipment='Barbell', standards_key='Bench Press')
+        db.session.add(tmpl)
+        db.session.commit()
+        return tmpl.id
+
+    def _score(self, client, token):
+        res = client.get('/api/stats/strength-score', headers=auth_headers(token))
+        assert res.status_code == 200
+        return res.get_json()
+
+    def test_age_factor_defaults_to_one_without_birth_date(self, client, auth_token):
+        tmpl_id = self._seed_bench_template()
+        h = auth_headers(auth_token)
+        client.patch('/api/me', json={'gender': 'male', 'bodyweight': 180, 'weight_unit': 'lbs'}, headers=h)
+        client.post('/api/workouts', json={
+            'workoutName': 'Bench',
+            'exercises': [{'name': 'Bench Press', 'exercise_template_id': tmpl_id,
+                           'sets': [{'reps': 1, 'weight': 200}]}],
+        }, headers=h)
+
+        data = self._score(client, auth_token)
+        assert data['age_factor'] == 1.0
+        assert data['age_adjusted'] is False
+
+    def test_bodyweight_updated_at_none_without_a_log_entry(self, client, auth_token):
+        tmpl_id = self._seed_bench_template()
+        h = auth_headers(auth_token)
+        # PATCH /api/me sets User.bodyweight directly — no BodyweightLog row exists yet
+        client.patch('/api/me', json={'gender': 'male', 'bodyweight': 180, 'weight_unit': 'lbs'}, headers=h)
+        client.post('/api/workouts', json={
+            'workoutName': 'Bench',
+            'exercises': [{'name': 'Bench Press', 'exercise_template_id': tmpl_id,
+                           'sets': [{'reps': 1, 'weight': 200}]}],
+        }, headers=h)
+
+        data = self._score(client, auth_token)
+        assert data['bodyweight_updated_at'] is None
+
+    def test_bodyweight_updated_at_reflects_latest_log_entry(self, client, auth_token):
+        tmpl_id = self._seed_bench_template()
+        h = auth_headers(auth_token)
+        client.patch('/api/me', json={'gender': 'male', 'bodyweight': 180, 'weight_unit': 'lbs'}, headers=h)
+        client.post('/api/bodyweight', json={'weight': 180}, headers=h)
+        client.post('/api/workouts', json={
+            'workoutName': 'Bench',
+            'exercises': [{'name': 'Bench Press', 'exercise_template_id': tmpl_id,
+                           'sets': [{'reps': 1, 'weight': 200}]}],
+        }, headers=h)
+
+        data = self._score(client, auth_token)
+        assert data['bodyweight_updated_at'] is not None
+
+    def test_coverage_reflects_tracked_vs_total_big6(self, client, auth_token):
+        tmpl_id = self._seed_bench_template()
+        h = auth_headers(auth_token)
+        client.patch('/api/me', json={'gender': 'male', 'bodyweight': 180, 'weight_unit': 'lbs'}, headers=h)
+        client.post('/api/workouts', json={
+            'workoutName': 'Bench',
+            'exercises': [{'name': 'Bench Press', 'exercise_template_id': tmpl_id,
+                           'sets': [{'reps': 1, 'weight': 200}]}],
+        }, headers=h)
+
+        data = self._score(client, auth_token)
+        assert data['coverage']['big6'] == {'tracked': 1, 'total': 6}
+        assert data['coverage']['compound']['tracked'] == 0
+        assert data['coverage']['isolation']['tracked'] == 0
+
+
+# ---------------------------------------------------------------------------
 # GET /api/stats/strength-score — pull-up bodyweight fallback uses the
 # ADDED-weight scale (standards are calibrated on weight added to the bar/belt)
 # ---------------------------------------------------------------------------

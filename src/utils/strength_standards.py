@@ -308,21 +308,39 @@ def greek_rank_from_score(score: float) -> str:
     return 'Aretē'
 
 
+# Anchors sit at the midpoint of each former decade band, so the factor at
+# each anchor age is unchanged from the old step function — only the
+# transition BETWEEN anchors is now a ramp instead of a cliff at the boundary.
+_AGE_FACTOR_ANCHORS: list[tuple[int, float]] = [
+    (25, 1.00),
+    (35, 1.03),
+    (45, 1.08),
+    (55, 1.16),
+    (65, 1.26),
+    (75, 1.38),
+]
+
+
 def age_scaling_factor(age: int) -> float:
     """Multiplier applied to bw_ratio before percentile lookup to credit older lifters.
     Based on Masters powerlifting age coefficients (inverse of expected strength decline).
-    Standards are calibrated for the 18–29 peak; older ratios are scaled up accordingly."""
-    if age < 30:
-        return 1.00
-    if age < 40:
-        return 1.03
-    if age < 50:
-        return 1.08
-    if age < 60:
-        return 1.16
-    if age < 70:
-        return 1.26
-    return 1.38
+    Standards are calibrated for the 18–29 peak; older ratios are scaled up accordingly.
+
+    Piecewise-linear interpolation between anchor points rather than a hard
+    step per decade, so the score doesn't jump abruptly the instant a user's
+    age crosses a boundary (e.g. turning 30 no longer means an overnight +3%
+    swing — the old function returned exactly 1.00 the day before and 1.03
+    the day after).
+    """
+    if age <= _AGE_FACTOR_ANCHORS[0][0]:
+        return _AGE_FACTOR_ANCHORS[0][1]
+    if age >= _AGE_FACTOR_ANCHORS[-1][0]:
+        return _AGE_FACTOR_ANCHORS[-1][1]
+    for (age_lo, factor_lo), (age_hi, factor_hi) in zip(_AGE_FACTOR_ANCHORS, _AGE_FACTOR_ANCHORS[1:]):
+        if age_lo <= age <= age_hi:
+            t = (age - age_lo) / (age_hi - age_lo)
+            return factor_lo + t * (factor_hi - factor_lo)
+    return _AGE_FACTOR_ANCHORS[-1][1]
 
 
 def compute_percentile(exercise: str, gender: str, bw_ratio: float) -> float | None:

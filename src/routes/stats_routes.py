@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm import selectinload
-from models import db, Workout, Exercise, Set, User, ExerciseTemplate, PersonalRecord, StrengthScoreSnapshot, ExerciseMuscleMapping
+from models import db, Workout, Exercise, Set, User, ExerciseTemplate, PersonalRecord, StrengthScoreSnapshot, ExerciseMuscleMapping, BodyweightLog
 from utils.strength_standards import epley_1rm
 
 stats_bp = Blueprint('stats_bp', __name__)
@@ -512,6 +512,15 @@ def strength_score():
     unit_to_lbs = kg_to_lbs if (user.weight_unit or 'lbs') == 'kg' else 1.0
     bw_lbs = user.bodyweight * unit_to_lbs
 
+    # Most recent bodyweight log entry — surfaced so the UI can flag a stale
+    # bodyweight (the score uses the live User.bodyweight scalar, which can
+    # silently drift out of date if the user hasn't logged in a while).
+    last_bw_log_date = (
+        db.session.query(db.func.max(BodyweightLog.date))
+        .filter(BodyweightLog.user_id == user_id)
+        .scalar()
+    )
+
     from datetime import date as _date
     today = _date.today()
     if user.birth_date:
@@ -615,6 +624,18 @@ def strength_score():
     compound_avg = _mean(compound_scores) if compound_scores else None
     isolation_avg = _mean(isolation_scores) if isolation_scores else None
 
+    # Coverage — how many of the exercises this user's gender has standards
+    # for are actually tracked, per category. The formula above silently skips
+    # missing exercises rather than penalizing them, so this is a transparency
+    # addition only — it doesn't change `overall`.
+    compound_total  = sum(1 for k in valid_keys if k not in BIG_6 and k in COMPOUND_SECONDARY)
+    isolation_total = sum(1 for k in valid_keys if k not in BIG_6 and k not in COMPOUND_SECONDARY)
+    coverage = {
+        'big6':      {'tracked': len(big6_scores),      'total': len(BIG_6)},
+        'compound':  {'tracked': len(compound_scores),  'total': compound_total},
+        'isolation': {'tracked': len(isolation_scores), 'total': isolation_total},
+    }
+
     parts = []
     if big6_avg     is not None: parts.append((0.70, big6_avg))
     if compound_avg is not None: parts.append((0.20, compound_avg))
@@ -714,6 +735,9 @@ def strength_score():
         'muscle_groups_used': len(muscle_groups),
         'age_adjusted': age_factor > 1.0,
         'age': user_age,
+        'age_factor': round(age_factor, 3),
+        'bodyweight_updated_at': last_bw_log_date.isoformat() if last_bw_log_date else None,
+        'coverage': coverage,
         'weight_unit': user.weight_unit or 'lbs',
         'last_updated': datetime.now().isoformat(),
     }

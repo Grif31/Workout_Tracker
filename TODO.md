@@ -416,7 +416,7 @@ Check off items as you complete them.
 
 - [x] **Backend endpoint** (`src/routes/stats_routes.py`)
   - [x] `GET /api/stats/strength-score` — requires gender + bodyweight set; returns per-exercise percentiles + overall
-  - [x] Overall = Big 6 average (equal weight, skip exercises with no data); supplemental lifts averaged separately; final = 70% Big 6 + 30% supplemental (if no supplemental, 100% Big 6)
+  - [x] Overall = three-tier weighted average (equal weight within each tier, skip exercises with no data): Big 6 = 70%, compound-secondary = 20%, isolation = 10%; missing tiers are dropped and the remaining weights renormalize automatically
   - [x] `GET /api/stats/strength-score/history` — returns `[{ date, score }]` from `StrengthScoreSnapshot`
 
 - [x] **`StrengthScoreScreen`** (`screens/TrainingTab/StrengthScoreScreen.tsx`)
