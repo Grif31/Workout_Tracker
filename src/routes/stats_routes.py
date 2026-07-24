@@ -1163,8 +1163,12 @@ def weekly_summary():
     # (never surface it as a PR label). achieved_at reflects when a PR was
     # last set OR recomputed (editing a past workout can rebuild it), not
     # strictly immutable history.
+    # Full ORM objects (not just specific columns) so `tmpl.muscle_group` — a
+    # Python @property assembled from muscle_mappings, not a mapped column —
+    # can be read directly; PR lists here are small and capped, so the N+1
+    # lazy-load this triggers per exercise is negligible.
     pr_rows = (
-        db.session.query(ExerciseTemplate.name, PersonalRecord.pr_type, PersonalRecord.value, PersonalRecord.weight_context)
+        db.session.query(PersonalRecord, ExerciseTemplate)
         .join(ExerciseTemplate, PersonalRecord.exercise_template_id == ExerciseTemplate.id)
         .filter(
             PersonalRecord.user_id == user_id,
@@ -1176,10 +1180,16 @@ def weekly_summary():
     )
     resp['prs'] = [
         {
-            'exercise_name': name, 'pr_type': pr_type, 'value': value,
-            'weight_context': None if weight_context is None or weight_context < 0 else weight_context,
+            'exercise_template_id': tmpl.id, 'exercise_name': tmpl.name, 'equipment': tmpl.equipment,
+            # ExerciseDetailScreen's isCardio check is a literal `muscleGroup === 'Cardio'`
+            # string comparison (matches ExercisesScreen.tsx's own navigation call) —
+            # the real muscle_mappings-derived string isn't meaningful for cardio.
+            'muscle_group': 'Cardio' if tmpl.exercise_type == 'cardio' else tmpl.muscle_group,
+            'image_url': tmpl.image_url, 'is_custom': tmpl.user_id is not None,
+            'pr_type': pr.pr_type, 'value': pr.value,
+            'weight_context': None if pr.weight_context is None or pr.weight_context < 0 else pr.weight_context,
         }
-        for name, pr_type, value, weight_context in pr_rows
+        for pr, tmpl in pr_rows
     ]
 
     # Bodyweight change — PR values/bodyweight logs are stored in the user's

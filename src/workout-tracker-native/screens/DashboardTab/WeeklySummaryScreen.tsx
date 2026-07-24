@@ -1,8 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, Pressable,
+  Animated as RNAnimated, Platform,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,12 +13,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
+import { captureAndShare } from '../../utils/shareCapture';
 import { DashboardStackParamsList, WeeklySummaryData } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
+import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
 import { fmtHold, RPE_KEY } from '../../components/workout/types';
 import { LaurelBranch } from '../../components/LaurelWreath';
+import WeeklySummaryShareCard from '../../components/WeeklySummaryShareCard';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WeeklySummary'>;
 
@@ -29,7 +33,23 @@ const PR_TYPE_LABELS: Record<string, string> = {
   best_time: 'Best Time', best_distance: 'Best Distance',
 };
 
-type HistoryRow = { week_start: string; week_end: string; workouts: number; total_volume: number };
+// Same priority order as WorkoutSummaryScreen's PR_TYPE_ORDER — surfaces the
+// most notable PR types first so the cap below keeps the best ones.
+const PR_TYPE_ORDER: Record<string, number> = {
+  max_weight: 0, max_reps: 1, max_duration: 2, best_distance: 3, best_time: 4,
+};
+const MAX_PRS_SHOWN = 5;
+
+// The "weight" behind a PR, for sorting heaviest-first within a type — only
+// max_weight (the value itself) and max_reps (weight_context, the weight the
+// reps were done at) actually have one; other types (time/distance/hold)
+// have no weight concept, so they keep their existing relative order.
+function prWeightValue(pr: { pr_type: string; value: number; weight_context?: number }): number {
+  if (pr.pr_type === 'max_weight') return pr.value;
+  if (pr.pr_type === 'max_reps') return pr.weight_context ?? 0;
+  return 0;
+}
+
 
 const WEEKDAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -55,10 +75,14 @@ function parseLocalDate(iso: string): Date {
   return new Date(y, m - 1, d);
 }
 
+function toIsoDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function addDaysStr(iso: string, days: number): string {
   const d = parseLocalDate(iso);
   d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return toIsoDateStr(d);
 }
 
 function fmtDateRange(startIso: string, endIsoExclusive: string): string {
@@ -115,12 +139,14 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(!route.params?.data);
   const [error, setError] = useState(false);
   const [latestWeekStart, setLatestWeekStart] = useState<string | null>(route.params?.data?.week_start ?? null);
-  const [history, setHistory] = useState<HistoryRow[] | null>(null);
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [prsModalVisible, setPrsModalVisible] = useState(false);
   const [selectedMuscleIdx, setSelectedMuscleIdx] = useState<number | null>(null);
   const [weeklyGoal, setWeeklyGoal] = useState(3);
   const [rpeEnabled, setRpeEnabled] = useState(false);
   const [streak, setStreak] = useState<number | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const shareCardRef = useRef<View>(null);
 
   const fetchWeek = useCallback(async (week?: string) => {
     setLoading(true);
@@ -143,13 +169,6 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
   useEffect(() => {
     if (!route.params?.data) fetchWeek();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    apiFetch('/api/stats/weekly-summary/history')
-      .then(res => (res.ok ? res.json() : []))
-      .then(setHistory)
-      .catch(() => setHistory([]));
   }, []);
 
   useEffect(() => {
@@ -195,7 +214,30 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
     return top;
   }, [data, mode]);
   const totalMuscleSets = useMemo(() => muscleSlices.reduce((sum, s) => sum + s.count, 0), [muscleSlices]);
-  const toggleMuscleSlice = (i: number) => setSelectedMuscleIdx(prev => (prev === i ? null : i));
+  // Per-muscle scale value for the legend-row pop, keyed by name so it
+  // survives across weeks with a different number/order of slices. Plain RN
+  // Animated (not Reanimated) — Reanimated worklets crash at runtime in this
+  // app, same reason RestTimer.tsx uses this API instead.
+  const legendScales = useRef<Map<string, RNAnimated.Value>>(new Map());
+  const getLegendScale = (muscle: string) => {
+    if (!legendScales.current.has(muscle)) {
+      legendScales.current.set(muscle, new RNAnimated.Value(1));
+    }
+    return legendScales.current.get(muscle)!;
+  };
+  const popLegendRow = (muscle: string) => {
+    const v = getLegendScale(muscle);
+    v.setValue(1);
+    RNAnimated.sequence([
+      RNAnimated.timing(v, { toValue: 1.08, duration: 100, useNativeDriver: true }),
+      RNAnimated.spring(v, { toValue: 1, friction: 4, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const toggleMuscleSlice = (i: number) => {
+    setSelectedMuscleIdx(prev => (prev === i ? null : i));
+    if (muscleSlices[i]) popLegendRow(muscleSlices[i].muscle);
+  };
 
   // Top muscle by raw (unsliced) count — separate from `muscleSlices`, which
   // folds anything past the top 5 into "Other" for the pie chart. Using the
@@ -205,6 +247,18 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
     const sorted = Object.entries(data.muscle_sets).sort((a, b) => b[1] - a[1]);
     return sorted.length > 0 ? sorted[0][0] : null;
   }, [data]);
+
+  // Cap the PR list so a big week doesn't turn into a wall of rows — most
+  // notable PR types (per PR_TYPE_ORDER) surface first, rest are summarized.
+  const sortedPrs = useMemo(() => {
+    if (!data) return [];
+    return [...data.prs].sort((a, b) => {
+      const typeDiff = (PR_TYPE_ORDER[a.pr_type] ?? 9) - (PR_TYPE_ORDER[b.pr_type] ?? 9);
+      return typeDiff !== 0 ? typeDiff : prWeightValue(b) - prWeightValue(a);
+    });
+  }, [data]);
+  const visiblePrs = useMemo(() => sortedPrs.slice(0, MAX_PRS_SHOWN), [sortedPrs]);
+  const hiddenPrCount = sortedPrs.length - visiblePrs.length;
 
   // Delta vs. the week before — omitted entirely when there's nothing to
   // compare (both weeks zero) or no change; "New" when starting from zero
@@ -242,14 +296,96 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
     );
   };
 
+  const goToExercise = (pr: WeeklySummaryData['prs'][number]) => {
+    setPrsModalVisible(false);
+    navigation.navigate('ExerciseDetail', {
+      exerciseId: pr.exercise_template_id,
+      exerciseName: pr.exercise_name,
+      equipment: pr.equipment,
+      muscleGroup: pr.muscle_group,
+      imageUrl: pr.image_url,
+      isCustom: pr.is_custom,
+    });
+  };
+
+  const renderPrRow = (pr: WeeklySummaryData['prs'][number], i: number, weightUnit: string) => (
+    <React.Fragment key={i}>
+      {i > 0 && <View style={styles.divider} />}
+      <TouchableOpacity style={styles.prRow} activeOpacity={0.7} onPress={() => goToExercise(pr)}>
+        <View style={styles.prInfo}>
+          <Text style={styles.prExercise}>
+            {pr.exercise_name}
+            {pr.equipment && pr.equipment !== 'Bodyweight' && (
+              <Text style={styles.prEquipment}> · {pr.equipment}</Text>
+            )}
+          </Text>
+          <Text style={styles.prTypeLabel}>{PR_TYPE_LABELS[pr.pr_type] ?? pr.pr_type}</Text>
+        </View>
+        <View style={styles.topValueRow}>
+          <LaurelBranch height={18} color={PR_GOLD} />
+          <Text style={styles.prValue}>{formatPrValue(pr, weightUnit)}</Text>
+          <LaurelBranch side="right" height={18} color={PR_GOLD} />
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} style={{ alignSelf: 'center' }} />
+      </TouchableOpacity>
+    </React.Fragment>
+  );
+
+  const handleShare = async () => {
+    setSharing(true);
+    try {
+      await captureAndShare(shareCardRef, 'Share your week');
+    } catch {
+      // user cancelled or capture failed — no-op
+    } finally {
+      setSharing(false);
+    }
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Off-screen card for screenshot capture */}
+      {data && data.workouts > 0 && (
+        <View
+          ref={shareCardRef}
+          style={{ position: 'absolute', left: -9999, top: -9999 }}
+          collapsable={false}
+        >
+          <WeeklySummaryShareCard
+            dateRange={fmtDateRange(data.week_start, data.week_end)}
+            workouts={data.workouts}
+            totalVolume={data.total_volume}
+            totalReps={data.total_reps}
+            totalDurationMin={data.total_duration_min}
+            weightUnit={data.weight_unit}
+            prCount={data.prs.length}
+            prLabel={data.prs.length === 1
+              ? `New ${data.prs[0].exercise_name} ${PR_TYPE_LABELS[data.prs[0].pr_type] ?? 'PR'}!`
+              : undefined}
+            topMuscle={topMuscle !== 'Other' ? topMuscle : null}
+            mostImprovedLift={data.most_improved_lift}
+            streak={streak}
+            accentColor={colors.accent}
+          />
+        </View>
+      )}
+
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Weekly Summary</Text>
-        <View style={{ width: 24 }} />
+        {data && data.workouts > 0 ? (
+          <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={8}>
+            {sharing ? (
+              <ActivityIndicator color={colors.textPrimary} size="small" />
+            ) : (
+              <Ionicons name="share-outline" size={22} color={colors.textPrimary} />
+            )}
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 24 }} />
+        )}
       </View>
 
       {data && (
@@ -404,19 +540,22 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
                       {muscleSlices.map((s, i) => {
                         const selected = selectedMuscleIdx === i;
                         return (
-                          <TouchableOpacity
-                            key={s.muscle}
-                            style={[styles.legendRow, selected && { backgroundColor: s.color + '22' }]}
-                            onPress={() => toggleMuscleSlice(i)}
-                            activeOpacity={0.7}
-                          >
-                            <View style={[styles.legendDot, { backgroundColor: s.color }]} />
-                            <Text style={[styles.muscleName, selected && { fontWeight: '800' }]} numberOfLines={1}>
-                              {s.muscle}
-                            </Text>
-                            <Text style={styles.muscleCount}>
-                              {selected ? `${s.count} set${s.count !== 1 ? 's' : ''}` : `${Math.round((s.count / totalMuscleSets) * 100)}%`}
-                            </Text>
+                          <TouchableOpacity key={s.muscle} onPress={() => toggleMuscleSlice(i)} activeOpacity={0.7}>
+                            <RNAnimated.View
+                              style={[
+                                styles.legendRow,
+                                selected && { backgroundColor: s.color + '22' },
+                                { transform: [{ scale: getLegendScale(s.muscle) }] },
+                              ]}
+                            >
+                              <View style={[styles.legendDot, { backgroundColor: s.color }]} />
+                              <Text style={[styles.muscleName, selected && { fontWeight: '800' }]} numberOfLines={1}>
+                                {s.muscle}
+                              </Text>
+                              <Text style={styles.muscleCount}>
+                                {selected ? `${s.count} set${s.count !== 1 ? 's' : ''}` : `${Math.round((s.count / totalMuscleSets) * 100)}%`}
+                              </Text>
+                            </RNAnimated.View>
                           </TouchableOpacity>
                         );
                       })}
@@ -427,14 +566,20 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
 
               {data.most_improved_lift && (
                 <Animated.View entering={FadeInDown.delay(350).duration(400)} style={styles.section}>
+                  <Text style={styles.sectionTitle}>Most Improved Lift</Text>
                   <View style={[styles.card, styles.milCard]}>
                     <Ionicons name="trending-up" size={20} color={colors.accent} />
-                    <Text style={styles.milText}>
-                      <Text style={styles.milExercise}>{data.most_improved_lift.exercise_name}</Text>
-                      {': Est. 1RM up to '}
-                      <Text style={styles.milExercise}>{data.most_improved_lift.this_best} {data.weight_unit}</Text>
-                      {' (+'}{data.most_improved_lift.gain}{')'}
-                    </Text>
+                    <View style={styles.milInfo}>
+                      <Text style={styles.milExercise} numberOfLines={1}>{data.most_improved_lift.exercise_name}</Text>
+                      <View style={styles.milStatRow}>
+                        <Text style={styles.milText}>
+                          Est. 1RM up to {data.most_improved_lift.this_best} {data.weight_unit}
+                        </Text>
+                        <View style={styles.milGainBadge}>
+                          <Text style={styles.milGainText}>+{data.most_improved_lift.gain}</Text>
+                        </View>
+                      </View>
+                    </View>
                   </View>
                 </Animated.View>
               )}
@@ -448,23 +593,17 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
                     </Text>
                     <LaurelBranch side="right" height={16} color={PR_GOLD} />
                   </View>
-                  <View style={styles.prCard}>
-                    {data.prs.map((pr, i) => (
-                      <React.Fragment key={i}>
-                        {i > 0 && <View style={styles.prDivider} />}
-                        <View style={styles.prRow}>
-                          <View style={styles.prInfo}>
-                            <Text style={styles.prExercise} numberOfLines={1}>{pr.exercise_name}</Text>
-                            <Text style={styles.prTypeLabel}>{PR_TYPE_LABELS[pr.pr_type] ?? pr.pr_type}</Text>
-                          </View>
-                          <View style={styles.topValueRow}>
-                            <LaurelBranch height={18} color={PR_GOLD} />
-                            <Text style={styles.prValue}>{formatPrValue(pr, data.weight_unit)}</Text>
-                            <LaurelBranch side="right" height={18} color={PR_GOLD} />
-                          </View>
-                        </View>
-                      </React.Fragment>
-                    ))}
+                  <View style={styles.card}>
+                    {visiblePrs.map((pr, i) => renderPrRow(pr, i, data.weight_unit))}
+                    {hiddenPrCount > 0 && (
+                      <>
+                        <View style={styles.divider} />
+                        <TouchableOpacity style={styles.prMoreBtn} onPress={() => setPrsModalVisible(true)}>
+                          <Text style={styles.prMoreText}>+{hiddenPrCount} more this week</Text>
+                          <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                      </>
+                    )}
                   </View>
                 </Animated.View>
               )}
@@ -475,32 +614,73 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
         </ScrollView>
       ) : null}
 
-      <Modal visible={pickerVisible} transparent animationType="fade" onRequestClose={() => setPickerVisible(false)}>
+      {/* Android's DateTimePicker has no inline UI — mounting it pops the
+          system's own calendar dialog, so it needs no wrapping Modal/overlay
+          at all (matches WorkoutHeader.tsx's platform handling). */}
+      {pickerVisible && Platform.OS === 'android' && (
+        <DateTimePicker
+          value={data ? parseLocalDate(data.week_start) : new Date()}
+          mode="date"
+          display="default"
+          maximumDate={new Date()}
+          onChange={(_event: any, date?: Date) => {
+            setPickerVisible(false);
+            if (date) goToWeek(toIsoDateStr(date));
+          }}
+        />
+      )}
+
+      <Modal
+        visible={pickerVisible && Platform.OS === 'ios'}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickerVisible(false)}
+      >
         <Pressable style={styles.pickerOverlay} onPress={() => setPickerVisible(false)}>
           <Pressable style={[styles.pickerCard, { marginTop: insets.top + 96 }]} onPress={() => {}}>
-            <Text style={styles.pickerTitle}>Past Weeks</Text>
-            <ScrollView style={{ maxHeight: 360 }}>
-              {(history ?? []).map((row, i) => (
-                <React.Fragment key={row.week_start}>
-                  {i > 0 && <View style={styles.divider} />}
-                  <TouchableOpacity
-                    style={styles.historyRow}
-                    onPress={() => { goToWeek(row.week_start); setPickerVisible(false); }}
-                  >
-                    <Text style={styles.historyDate}>{fmtDateRange(row.week_start, row.week_end)}</Text>
-                    <View style={{ flexDirection: 'row', gap: spacing.md }}>
-                      <Text style={styles.historyStat}>{row.workouts} wk</Text>
-                      <Text style={styles.historyStat}>{row.total_volume.toLocaleString()}</Text>
-                    </View>
-                  </TouchableOpacity>
-                </React.Fragment>
-              ))}
-              {history && history.length === 0 && (
-                <Text style={styles.emptySubtitle}>No past weeks yet</Text>
-              )}
-            </ScrollView>
+            <Text style={styles.pickerTitle}>Pick a Week</Text>
+            <DateTimePicker
+              value={data ? parseLocalDate(data.week_start) : new Date()}
+              mode="date"
+              display="inline"
+              maximumDate={new Date()}
+              themeVariant={mode === 'dark' ? 'dark' : 'light'}
+              textColor={colors.textPrimary}
+              accentColor={colors.accent}
+              onChange={(_event: any, date?: Date) => {
+                if (date) { goToWeek(toIsoDateStr(date)); setPickerVisible(false); }
+              }}
+            />
           </Pressable>
         </Pressable>
+      </Modal>
+
+      <Modal
+        visible={prsModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setPrsModalVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => setPrsModalVisible(false)} hitSlop={8}>
+              <Ionicons name="close" size={24} color={colors.textPrimary} />
+            </TouchableOpacity>
+            <View style={styles.prSectionTitleRow}>
+              <LaurelBranch height={16} color={PR_GOLD} />
+              <Text style={[styles.headerTitle, { color: PR_GOLD_TEXT }]}>
+                Personal Records ({sortedPrs.length})
+              </Text>
+              <LaurelBranch side="right" height={16} color={PR_GOLD} />
+            </View>
+            <View style={{ width: 24 }} />
+          </View>
+          <ScrollView contentContainerStyle={{ padding: spacing.md }}>
+            <View style={styles.card}>
+              {sortedPrs.map((pr, i) => renderPrRow(pr, i, data?.weight_unit ?? 'lbs'))}
+            </View>
+          </ScrollView>
+        </View>
       </Modal>
     </View>
   );
@@ -536,8 +716,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   statsRowWrap: { flexWrap: 'wrap' },
   statBox: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: 14, alignItems: 'center' },
   statBoxWrap: { flexBasis: '30%', flexGrow: 1 },
-  statValue: { fontSize: typography.fontSize.xl, fontWeight: '700', color: colors.textPrimary },
-  statLabel: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  statValue: { fontSize: typography.fontSize.xl, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
+  statLabel: { fontSize: 12, color: colors.textSecondary, marginTop: 2, textAlign: 'center' },
   deltaRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 4 },
   deltaText: { fontSize: 11, fontWeight: '700' },
   avgCaption: { fontSize: 10, color: colors.textSecondary, marginTop: 2 },
@@ -551,8 +731,15 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   milCard: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md,
   },
-  milText: { flex: 1, fontSize: typography.fontSize.sm, color: colors.textPrimary, lineHeight: 20 },
-  milExercise: { fontWeight: '700' },
+  milInfo: { flex: 1, gap: 4 },
+  milExercise: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
+  milStatRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
+  milText: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+  milGainBadge: {
+    backgroundColor: colors.save + '22', borderRadius: 6,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  milGainText: { fontSize: 12, fontWeight: '700', color: colors.save },
   pieCard: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     padding: spacing.md, overflow: 'visible',
@@ -568,26 +755,24 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   muscleName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary, flex: 1 },
   muscleCount: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
   prSectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  prCard: { backgroundColor: PR_GOLD_BG, borderRadius: 14, overflow: 'hidden' },
-  prDivider: { height: 1, backgroundColor: PR_GOLD, opacity: 0.35, marginHorizontal: spacing.md },
   prRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm,
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2,
   },
-  topValueRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  topValueRow: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0 },
   prInfo: { flex: 1 },
-  prExercise: { fontSize: typography.fontSize.md, fontWeight: '700', color: PR_GOLD_TEXT },
+  prExercise: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
+  prEquipment: { fontSize: typography.fontSize.sm, fontWeight: '400', color: colors.textSecondary },
   prTypeLabel: {
-    fontSize: 12, color: PR_GOLD_TEXT, opacity: 0.75, textTransform: 'uppercase',
+    fontSize: 12, color: colors.textSecondary, textTransform: 'uppercase',
     letterSpacing: 0.4, marginTop: 1,
   },
   prValue: { fontSize: typography.fontSize.md, fontWeight: '800', color: PR_GOLD_TEXT },
-  historyRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+  prMoreBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+    paddingVertical: spacing.sm,
   },
-  historyDate: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
-  historyStat: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+  prMoreText: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
   pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center' },
   pickerCard: {
     width: '88%', maxWidth: 420, backgroundColor: colors.surface, borderRadius: radius.md,

@@ -604,6 +604,26 @@ class TestWeeklySummary:
         assert len(data['prs']) > 0
         assert 'estimated_1rm' not in {p['pr_type'] for p in data['prs']}
 
+    def test_pr_includes_equipment(self, client, auth_token):
+        last_monday = _this_week_monday() - timedelta(weeks=1)
+        res = client.post(
+            '/api/exercises',
+            json={'name': 'Bench Press', 'muscle_group': 'Chest', 'equipment': 'Barbell'},
+            headers=auth_headers(auth_token),
+        )
+        tid = res.get_json()['id']
+        payload = {
+            'workoutName': 'PR Day', 'date': last_monday.isoformat(),
+            'exercises': [{'name': 'Bench Press', 'exercise_template_id': tid,
+                           'sets': [{'reps': 5, 'weight': 200}]}],
+        }
+        client.post('/api/workouts', json=payload, headers=auth_headers(auth_token))
+        data = self._get(client, auth_token).get_json()
+        assert data['prs'][0]['equipment'] == 'Barbell'
+        assert data['prs'][0]['exercise_template_id'] == tid
+        assert data['prs'][0]['muscle_group'] == 'Chest'
+        assert data['prs'][0]['is_custom'] is True  # POST /api/exercises sets user_id on the new template
+
     def test_pr_from_two_weeks_ago_excluded(self, client, auth_token):
         two_weeks_ago_monday = _this_week_monday() - timedelta(weeks=2)
         tid = _create_template(client, auth_token, 'Bench Press', 'Chest')
@@ -647,6 +667,30 @@ class TestWeeklySummary:
         assert res.status_code == 201
         data = self._get(client, auth_token).get_json()
         assert data['distance_km'] == pytest.approx(5.0)
+
+    def test_cardio_pr_muscle_group_is_literal_cardio(self, client, auth_token):
+        # ExerciseDetailScreen's isCardio check is a literal `muscleGroup === 'Cardio'`
+        # string comparison (matches ExercisesScreen.tsx's own navigation call) — a
+        # cardio PR's real muscle mapping (e.g. 'Core') isn't what should be sent.
+        last_monday = _this_week_monday() - timedelta(weeks=1)
+        h = auth_headers(auth_token)
+        res = client.post(
+            '/api/exercises',
+            json={'name': 'Running', 'muscle_group': 'Core', 'exercise_type': 'cardio'},
+            headers=h,
+        )
+        tid = res.get_json()['id']
+        payload = {
+            'workoutName': 'Run', 'date': last_monday.isoformat(),
+            'exercises': [{'name': 'Running', 'exercise_template_id': tid, 'exercise_type': 'cardio',
+                           'sets': [{'cardio_duration': 20, 'distance': 5, 'distance_unit': 'km'}]}],
+        }
+        res = client.post('/api/workouts', json=payload, headers=h)
+        assert res.status_code == 201
+        data = self._get(client, auth_token).get_json()
+        cardio_prs = [p for p in data['prs'] if p['pr_type'] in ('best_time', 'best_distance')]
+        assert len(cardio_prs) > 0
+        assert all(p['muscle_group'] == 'Cardio' for p in cardio_prs)
 
     def test_distance_km_omitted_without_cardio(self, client, auth_token):
         last_monday = _this_week_monday() - timedelta(weeks=1)

@@ -38,7 +38,11 @@ export type WeeklySummaryData = {
   avg_rpe?: number;
   calories_burned?: number;
   distance_km?: number;
-  prs: Array<{ exercise_name: string; pr_type: string; value: number; weight_context?: number }>;
+  prs: Array<{
+    exercise_template_id: number; exercise_name: string; equipment?: string;
+    muscle_group?: string; image_url?: string; is_custom?: boolean;
+    pr_type: string; value: number; weight_context?: number;
+  }>;
   bodyweight_change?: { start: number; end: number };
   muscle_sets: Record<string, number>;
   weight_unit: 'lbs' | 'kg';

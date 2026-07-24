@@ -36,6 +36,7 @@ type MuscleVolumeData = {
   week_start: string;
 };
 type WeeklySummaryPreview = {
+  week_start: string;
   workouts: number;
   total_volume: number;
   distance_km?: number;
@@ -348,7 +349,7 @@ export default function CoachScreen({ navigation }: Props) {
       if (res.ok) {
         const data = await res.json();
         const preview: WeeklySummaryPreview = {
-          workouts: data.workouts, total_volume: data.total_volume,
+          week_start: data.week_start, workouts: data.workouts, total_volume: data.total_volume,
           distance_km: data.distance_km, weight_unit: data.weight_unit,
         };
         setWeeklySummaryPreview(preview);
@@ -572,11 +573,12 @@ export default function CoachScreen({ navigation }: Props) {
   const weeklySummarySubtitle = () => {
     const p = weeklySummaryPreview;
     if (!p) return 'Workouts, volume, and PRs from last week';
-    if (p.workouts === 0) return 'No workouts logged last week';
+    const dateRange = weekRangeLabel(p.week_start);
+    if (p.workouts === 0) return `${dateRange} · No workouts logged`;
     const workoutsStr = `${p.workouts} workout${p.workouts !== 1 ? 's' : ''}`;
-    if (p.total_volume > 0) return `${workoutsStr} · ${p.total_volume.toLocaleString()} ${p.weight_unit}`;
-    if (p.distance_km != null) return `${workoutsStr} · ${p.distance_km}km`;
-    return `${workoutsStr} last week`;
+    if (p.total_volume > 0) return `${dateRange} · ${workoutsStr} · ${p.total_volume.toLocaleString()} ${p.weight_unit}`;
+    if (p.distance_km != null) return `${dateRange} · ${workoutsStr} · ${p.distance_km}km`;
+    return `${dateRange} · ${workoutsStr}`;
   };
 
   const renderMuscleVolumeCard = () => {
@@ -1109,7 +1111,7 @@ export default function CoachScreen({ navigation }: Props) {
                   <Ionicons name="calendar-outline" size={20} color={colors.accent} />
                   <View style={styles.weeklySummaryTextWrap}>
                     <Text style={styles.weeklySummaryText}>Weekly Summary</Text>
-                    <Text style={styles.weeklySummarySub}>{weeklySummarySubtitle()}</Text>
+                    <Text style={styles.weeklySummarySub} numberOfLines={1}>{weeklySummarySubtitle()}</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
                 </TouchableOpacity>
