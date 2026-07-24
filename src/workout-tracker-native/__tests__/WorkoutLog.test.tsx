@@ -12,16 +12,6 @@ jest.mock('react-native-gesture-handler', () => {
     PanGestureHandler: ({ children }: any) => <View>{children}</View>,
   };
 });
-jest.mock('react-native-draggable-flatlist', () => {
-  const { FlatList } = require('react-native');
-  return {
-    __esModule: true,
-    default: FlatList,
-    ScaleDecorator: ({ children }: any) => children,
-    ShadowDecorator: ({ children }: any) => children,
-    OpacityDecorator: ({ children }: any) => children,
-  };
-});
 jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => {
   const { View } = require('react-native');
   return ({ children }: any) => <View>{children}</View>;

@@ -390,38 +390,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     lineHeight: 16,
   },
 
-  templateSection: {
-    marginBottom: spacing.md,
-  },
-  templateSectionLabel: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: spacing.sm,
-  },
-  templateScrollContent: {
-    gap: spacing.sm,
-    paddingRight: spacing.md,
-  },
-  templateChip: {
-    borderRadius: spacing.sm,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    minWidth: 120,
-    maxWidth: 180,
-  },
-  templateChipName: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '700',
-  },
-  templateChipSub: {
-    fontSize: typography.fontSize.xs,
-    marginTop: 2,
-  },
-
   summaryBar: {
     flexDirection: 'row',
     backgroundColor: colors.surface,

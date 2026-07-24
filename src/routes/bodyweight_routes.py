@@ -1,5 +1,5 @@
 from datetime import datetime
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, BodyweightLog, User
 from schemas import BodyweightSchema

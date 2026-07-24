@@ -14,7 +14,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamsList } from '../../navigation/types';
 import { useSocialAuth } from '../../hooks/useSocialAuth';
 import { AUTH } from '../../theme/authColors';
-import { spacing, radius } from '../../theme/spacing';
+import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 
 type Props = NativeStackScreenProps<AuthStackParamsList, 'Welcome'>;
@@ -136,32 +136,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: AUTH.text,
-  },
-
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: spacing.md,
-    gap: 10,
-  },
-  line: { flex: 1, height: 1, backgroundColor: AUTH.border },
-  dividerText: { fontSize: 13, color: AUTH.subtext },
-
-  socialRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.md,
-    marginBottom: 20,
-  },
-  iconBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: AUTH.border,
-    backgroundColor: AUTH.card,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 
   footer: {

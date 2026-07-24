@@ -8,16 +8,6 @@ jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl:
 jest.mock('theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));
 jest.mock('constants/muscleGroups', () => ({ muscleGroups: ['All', 'Chest', 'Back'] }));
 jest.mock('components/ExerciseList', () => () => null);
-jest.mock('react-native-draggable-flatlist', () => ({
-  __esModule: true,
-  default: () => null,
-  NestableScrollContainer: ({ children }: any) => children,
-  NestableDraggableFlatList: ({ data, renderItem }: any) => {
-    const { View } = require('react-native');
-    return <View>{data.map((item: any, i: number) => renderItem({ item, index: i, drag: jest.fn(), isActive: false }))}</View>;
-  },
-  ScaleDecorator: ({ children }: any) => children,
-}));
 
 const nav = createMockNavigation();
 const route = createMockRoute('CreateRoutine');

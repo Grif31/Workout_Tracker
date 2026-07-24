@@ -70,8 +70,6 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
   const loadOfferings = async () => {
     try {
       const o = await Purchases.getOfferings();
-      console.log('[RC] current offering:', JSON.stringify(o?.current?.identifier));
-      console.log('[RC] all offering keys:', Object.keys(o?.all ?? {}));
       setOfferings(o);
     } catch (e) {
       console.error('[RC] getOfferings error:', e);

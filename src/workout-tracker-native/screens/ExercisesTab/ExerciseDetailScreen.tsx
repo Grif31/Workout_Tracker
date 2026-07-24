@@ -769,13 +769,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  heroPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   closeBtn: {
     position: 'absolute',
     zIndex: 10,
@@ -962,11 +955,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textSecondary,
     fontStyle: 'italic',
     marginBottom: spacing.xs,
-  },
-  historyDetail: {
-    color: colors.textSecondary,
-    fontSize: typography.fontSize.sm,
-    paddingVertical: 2,
   },
   historySetRow: {
     flexDirection: 'row',

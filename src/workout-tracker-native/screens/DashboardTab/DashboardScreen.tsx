@@ -691,7 +691,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
   },
   logDayBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
-  noRoutineText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontStyle: 'italic' },
 
   // Workout cards
   workoutCard: {

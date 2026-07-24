@@ -769,15 +769,4 @@ const createStyles = (colors: Colors) =>
       borderBottomColor: colors.border,
       marginBottom: spacing.xs,
     },
-    modalOption: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.md,
-    },
-    modalOptionText: {
-      fontSize: typography.fontSize.md,
-      color: colors.textPrimary,
-    },
   });

@@ -1013,14 +1013,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: 32,
     backgroundColor: colors.border,
   },
-  rankBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-    gap: spacing.xs,
-  },
   rankBadgePill: {
     borderRadius: 20,
     paddingHorizontal: spacing.md,
@@ -1031,13 +1023,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   userInfo: { flex: 1 },
   value: { fontSize: typography.fontSize.md, fontWeight: '600', marginBottom: 4 },
   workoutCount: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
-  sectionTitle: {
-    fontSize: typography.fontSize.md,
-    fontWeight: '600',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    color: colors.textPrimary,
-  },
   emptyText: {
     textAlign: 'center',
     color: colors.textSecondary,

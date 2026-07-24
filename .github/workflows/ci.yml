@@ -18,6 +18,15 @@ jobs:
     defaults:
       run:
         working-directory: src
+    env:
+      # Dummy value, never a real secret — app.py's module-level `app =
+      # create_app()` (needed for `gunicorn app:app` in railway.json) runs
+      # unconditionally on import and fails fast if JWT_SECRET_KEY is unset
+      # or still the 'dev-secret-key' default. Locally this is masked by
+      # .env (gitignored, never reaches CI); this just satisfies that same
+      # check here — the test suite itself uses its own JWT_SECRET_KEY via
+      # conftest.py's test_config, not this one.
+      JWT_SECRET_KEY: ci-dummy-secret-not-used-in-production
     steps:
       - uses: actions/checkout@v4
 

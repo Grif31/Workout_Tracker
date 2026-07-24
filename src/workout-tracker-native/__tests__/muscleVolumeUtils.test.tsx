@@ -2,7 +2,7 @@
  * @jest-environment node
  *
  * Unit tests for the pure utility functions used by the muscle volume card.
- * These functions live in TrainingScreen.tsx but their logic is self-contained.
+ * These functions live in CoachScreen.tsx but their logic is self-contained.
  */
 
 // ── Mirrors of the helpers under test ────────────────────────────────────────

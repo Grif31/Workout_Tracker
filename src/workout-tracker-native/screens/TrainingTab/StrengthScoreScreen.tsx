@@ -154,7 +154,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
         return;
       }
       if (!res.ok) {
-        console.warn('[StrengthScore] API error', res.status);
+        if (__DEV__) console.warn('[StrengthScore] API error', res.status);
         setError(true);
         return;
       }
@@ -166,7 +166,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
       setError(false);
       appCache.set('strength_score', data);
       checkRankUp(data);
-    } catch (e) { console.warn('[StrengthScore] fetch failed', e); setError(true); }
+    } catch (e) { if (__DEV__) console.warn('[StrengthScore] fetch failed', e); setError(true); }
   };
 
   const handleRefresh = async () => {

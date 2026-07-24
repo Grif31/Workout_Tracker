@@ -1364,7 +1364,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderBottomColor: colors.border,
   },
   tabBtn: { flex: 1, alignItems: 'center', paddingBottom: 10 },
-  tabBtnActive: {},
   tabBtnText: {
     fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary,
     textTransform: 'uppercase', letterSpacing: 1.2, paddingTop: spacing.sm, marginBottom: 6,
@@ -1460,7 +1459,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
 
   // ── Training tab ────────────────────────────────────────────────────────────
   trainingScroll: { flex: 1, paddingHorizontal: spacing.md },
-  sectionLabel: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.sm },
   activeBlock: { backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 3, borderLeftColor: colors.accent },
   activeRoutineNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   activeRoutineName: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, flex: 1 },
@@ -1475,7 +1473,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   newTemplateBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   newTemplateBtnText: { color: colors.save, fontWeight: '600', fontSize: typography.fontSize.sm },
-  trainingSectionHeader: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.sm },
   sectionRuleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   sectionRuleLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   sectionRuleLabel: { fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1.2 },
@@ -1483,7 +1480,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   cardRow: { flexDirection: 'row', alignItems: 'center' },
   cardName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
   cardSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
-  cardDesc: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
   routineGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   routineCard: {
     backgroundColor: colors.surface, borderRadius: spacing.sm,
@@ -1519,17 +1515,13 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   coachGreeting: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 20 },
   profileBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   profileBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.accent },
-  generateSection: { marginBottom: spacing.md },
   aiCoachCard: { marginBottom: spacing.md, gap: spacing.sm },
-  generateTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.8 },
   generateBtnRow: { flexDirection: 'row', gap: spacing.sm },
   generateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.save, borderRadius: spacing.sm, paddingVertical: 12 },
   generateBtnText: { color: colors.accentText, fontWeight: '700', fontSize: typography.fontSize.sm },
   generateBtnOutline: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.save, borderRadius: spacing.sm, paddingVertical: 12 },
   generateBtnOutlineText: { color: colors.save, fontWeight: '700', fontSize: typography.fontSize.sm },
-  insightsSection: { gap: spacing.sm },
   insightsSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm },
-  insightsTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.8 }, // kept for fallback
   refreshBtn: { padding: spacing.xs },
   insightCard: {
     flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start',

@@ -299,7 +299,6 @@ def profile_stats():
         prev_day = d
 
     # ── Monthly streak ────────────────────────────────────────────────────
-    import calendar as cal
     monthly_goal = weekly_goal * 4
     month_counts: dict = defaultdict(int)
     for w_date in workout_dates:
@@ -525,7 +524,7 @@ def strength_score():
     from datetime import datetime, timedelta
     from statistics import mean as _mean
     from utils.strength_standards import (
-        STANDARDS, BIG_6, COMPOUND_SECONDARY, MUSCLE_GROUP_MAP,
+        STANDARDS, BIG_6, COMPOUND_SECONDARY,
         percentile_to_strength_rank, greek_rank_from_score, compute_percentile,
         compute_weight_at_percentile, compute_muscle_group_scores,
         compute_consistency_score, compute_dedication_score,

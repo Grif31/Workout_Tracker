@@ -384,32 +384,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   halfInputWrapper: {
     flex: 1,
   },
-  unitToggle: {
-    flexDirection: 'row',
-    marginBottom: spacing.md,
-    borderRadius: spacing.sm,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.border,
-    height: 52,
-    alignSelf: 'flex-start',
-  },
-  unitBtn: {
-    paddingHorizontal: spacing.md,
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-  },
-  unitBtnActive: {
-    backgroundColor: colors.save,
-  },
-  unitBtnText: {
-    color: colors.textSecondary,
-    fontWeight: '600',
-    fontSize: typography.fontSize.sm,
-  },
-  unitBtnTextActive: {
-    color: colors.accentText,
-  },
   saveButton: {
     backgroundColor: colors.save,
     borderRadius: spacing.sm,

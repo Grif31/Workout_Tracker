@@ -701,10 +701,10 @@ Check off items as you complete them.
   - [x] Include muscle group breakdown for the week — reuse the `muscle_sets` query from `GET /api/stats/muscle-volume`, scoped to the summary's week, to surface most-trained muscle group
   - [x] Include which days of the week had a workout (array of dates or weekday booleans) for a Mon–Sun consistency dot row
   - [x] Include total training time — sum of `Workout.duration` across the week's workouts
-  - [ ] Include "most improved lift" — the exercise with the largest estimated-1RM increase over the week (compare first vs. last `estimated_1rm` PR snapshot in range, or recompute from sets)
-  - [ ] Include a 4-week rolling average (volume, workouts) alongside the single prior-week comparison, so the week-over-week delta isn't thrown off by one unusually big or skipped week
-  - [ ] Include avg RPE for the week, only when the user has RPE enabled (`workout_show_rpe_${uid}`) and has logged any RPE values that week
-  - [ ] Include total calories burned for cardio activities — currently computed client-side per activity in `cardioCalories.ts` and never persisted; needs either storing calories per cardio set/workout on save or recomputing weekly from stored cardio fields (bigger lift than the other fields — do last)
+  - [x] Include "most improved lift" — the exercise with the largest estimated-1RM increase over the week (compare first vs. last `estimated_1rm` PR snapshot in range, or recompute from sets) — recomputed from `Set` data via Epley 1RM (this week's best vs. last week's best), since `PersonalRecord` rows have no history
+  - [x] Include a 4-week rolling average (volume, workouts) alongside the single prior-week comparison, so the week-over-week delta isn't thrown off by one unusually big or skipped week
+  - [x] Include avg RPE for the week, only when the user has RPE enabled (`workout_show_rpe_${uid}`) and has logged any RPE values that week
+  - [x] Include total calories burned for cardio activities — turned out NOT to need new persistence; ported `cardioCalories.ts`'s MET-table formula into Python and recompute weekly from already-stored `Set.cardio_duration`/`distance` fields
 
 - [x] **Dashboard surfacing**
   - [x] On app open, if it's a new week (Mon by default, or user's configured week start) and last week has ≥1 workout logged and the summary hasn't been shown yet, show the Weekly Summary card/modal
@@ -716,15 +716,15 @@ Check off items as you complete them.
   - [x] Stat rows conditionally rendered per the backend response: Workouts, Volume, Distance, PRs earned (list), Bodyweight change
   - [x] Reuse `PR_TYPE_LABELS` / stat card styling patterns from `WorkoutSummaryScreen.tsx` for visual consistency
   - [x] Show delta vs. the prior week (▲/▼ %) for workouts and volume — reuse the `last_week_total` comparison pattern already computed in `GET /api/stats/muscle-volume`
-  - [ ] Also show the 4-week rolling average alongside the single-week delta, so a spike/dip reads in context rather than in isolation
-  - [ ] Tie workout count to the user's `workout_weekly_goal_${uid}` — show "3/4 workouts toward your goal" instead of a bare number
-  - [ ] Surface the current weekly streak (already tracked, dashboard 🔥 badge) inside the summary card
-  - [ ] Most-trained muscle group line ("Chest was your focus this week")
-  - [ ] Mon–Sun dot row showing which days had a workout
-  - [ ] Total training time stat alongside Volume/Reps
-  - [ ] "Most improved lift" callout when applicable (exercise + 1RM gain)
-  - [ ] Avg RPE stat, shown only when the user has RPE enabled and logged any that week
-  - [ ] Calories burned stat (cardio weeks only), once the backend persists/derives it
+  - [x] Also show the 4-week rolling average alongside the single-week delta, so a spike/dip reads in context rather than in isolation
+  - [x] Tie workout count to the user's `workout_weekly_goal_${uid}` — show "3/4 workouts toward your goal" instead of a bare number
+  - [x] Surface the current weekly streak (already tracked, dashboard 🔥 badge) inside the summary card
+  - [x] Most-trained muscle group line ("Chest was your focus this week")
+  - [x] Mon–Sun dot row showing which days had a workout
+  - [x] Total training time stat alongside Volume/Reps
+  - [x] "Most improved lift" callout when applicable (exercise + 1RM gain)
+  - [x] Avg RPE stat, shown only when the user has RPE enabled and logged any that week
+  - [x] Calories burned stat (cardio weeks only), once the backend persists/derives it
 
 - [ ] **Push the recap, don't just wait for app open** — fire a push via the existing APScheduler re-engagement job (`app.py`) each week alongside the in-app popup, so a user who doesn't open the app Monday still gets "Your week: 4 workouts, 12,400 lbs 💪"; tapping deep-links into `WeeklySummaryScreen`
 

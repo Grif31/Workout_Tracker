@@ -1,7 +1,7 @@
 import json
 
 from flask import Blueprint, request, jsonify, g
-from models import db, WorkoutTemplate, WorkoutTemplateExercise, ExerciseTemplate
+from models import db, WorkoutTemplate, WorkoutTemplateExercise
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from schemas import WorkoutTemplateSchema
 from utils.validation import validate_body
