@@ -824,17 +824,24 @@ def muscle_volume():
         .all()
     )
 
-    # Step 2: look up muscle groups for those templates, accumulate in Python
+    # Step 2: look up muscle groups for those templates, accumulate in Python.
+    # Secondary movers get half credit — a set still stimulates them, just
+    # less directly than the primary target.
     template_set_map = {row.exercise_template_id: row.set_count for row in week_template_rows}
-    muscle_sets: dict[str, int] = {}
+    muscle_sets: dict[str, float] = {}
     if template_set_map:
         mappings = (
-            db.session.query(ExerciseMuscleMapping.exercise_template_id, ExerciseMuscleMapping.muscle_group)
+            db.session.query(
+                ExerciseMuscleMapping.exercise_template_id,
+                ExerciseMuscleMapping.muscle_group,
+                ExerciseMuscleMapping.is_primary,
+            )
             .filter(ExerciseMuscleMapping.exercise_template_id.in_(list(template_set_map.keys())))
             .all()
         )
-        for tmpl_id, muscle in mappings:
-            muscle_sets[muscle] = muscle_sets.get(muscle, 0) + template_set_map[tmpl_id]
+        for tmpl_id, muscle, is_primary in mappings:
+            credit = template_set_map[tmpl_id] * (1.0 if is_primary else 0.5)
+            muscle_sets[muscle] = muscle_sets.get(muscle, 0) + credit
 
     # Last trained date per muscle group (all time) — same two-step approach
     last_template_rows = (
@@ -966,6 +973,30 @@ def weekly_summary():
     resp['total_volume'] = round((vol_reps_row.volume or 0) * kg_to_lbs)
     resp['total_reps'] = int(vol_reps_row.reps or 0)
 
+    # Prior-week workouts/volume, for the ▲/▼ delta shown alongside this
+    # week's stats — same "always present, 0 if none" convention as
+    # muscle-volume's last_week_total (not the omit-if-absent convention used
+    # for the feature-specific fields below, since every week has a count).
+    prev_week_start = week_start - timedelta(weeks=1)
+    prev_workout_count = (
+        db.session.query(db.func.count(Workout.id))
+        .filter(Workout.user_id == user_id, Workout.date >= prev_week_start, Workout.date < week_start)
+        .scalar() or 0
+    )
+    prev_vol_row = (
+        db.session.query(db.func.sum(Set.reps * Set.weight).label('volume'))
+        .join(Exercise, Set.exercise_id == Exercise.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .filter(
+            Workout.user_id == user_id,
+            Workout.date >= prev_week_start, Workout.date < week_start,
+            Set.reps.isnot(None), Set.weight.isnot(None), Set.set_type != 'W',
+        )
+        .first()
+    )
+    resp['prev_week_workouts'] = prev_workout_count
+    resp['prev_week_volume'] = round((prev_vol_row.volume or 0) * kg_to_lbs)
+
     # Cardio distance, normalized to km (same canonical-unit-then-convert-on-
     # display idea as Workout.volume) — omitted if no cardio logged.
     distance_rows = (
@@ -1001,7 +1032,10 @@ def weekly_summary():
         .all()
     )
     resp['prs'] = [
-        {'exercise_name': name, 'pr_type': pr_type, 'value': value, 'weight_context': weight_context}
+        {
+            'exercise_name': name, 'pr_type': pr_type, 'value': value,
+            'weight_context': None if weight_context is None or weight_context < 0 else weight_context,
+        }
         for name, pr_type, value, weight_context in pr_rows
     ]
 
@@ -1023,8 +1057,11 @@ def weekly_summary():
 
     # Muscle-group breakdown — same single-pass join shape as ai_routes.py's
     # _muscle_sets_range, adapted here since that one is a private closure.
+    # Secondary movers get half credit (a set still stimulates them, just less
+    # directly than the primary target), matching muscle_volume()'s weighting.
+    set_credit = db.case((ExerciseMuscleMapping.is_primary == True, 1.0), else_=0.5)
     muscle_rows = (
-        db.session.query(ExerciseMuscleMapping.muscle_group, db.func.count(Set.id).label('cnt'))
+        db.session.query(ExerciseMuscleMapping.muscle_group, db.func.sum(set_credit).label('cnt'))
         .join(Exercise, ExerciseMuscleMapping.exercise_template_id == Exercise.exercise_template_id)
         .join(Set, Set.exercise_id == Exercise.id)
         .join(Workout, Exercise.workout_id == Workout.id)

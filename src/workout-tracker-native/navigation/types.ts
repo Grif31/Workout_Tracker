@@ -30,6 +30,8 @@ export type WeeklySummaryData = {
   total_duration_min: number;
   total_volume: number;
   total_reps: number;
+  prev_week_workouts: number;
+  prev_week_volume: number;
   distance_km?: number;
   prs: Array<{ exercise_name: string; pr_type: string; value: number; weight_context?: number }>;
   bodyweight_change?: { start: number; end: number };

@@ -384,6 +384,13 @@ class TestMuscleVolume:
         data = self._get(client, auth_token).get_json()
         assert data['muscle_sets'].get('Chest', 0) == 5
 
+    def test_secondary_muscle_gets_half_credit(self, client, auth_token):
+        tid = _create_template(client, auth_token, 'Bench Press', 'Chest,Triceps')
+        _create_mapped_workout(client, auth_token, tid, n_sets=4)
+        data = self._get(client, auth_token).get_json()
+        assert data['muscle_sets'].get('Chest', 0) == 4
+        assert data['muscle_sets'].get('Triceps', 0) == 2
+
     def test_total_sets_equals_sum_of_muscle_sets(self, client, auth_token):
         t1 = _create_template(client, auth_token, 'Bench Press', 'Chest')
         t2 = _create_template(client, auth_token, 'Pull-up', 'Back')
@@ -509,7 +516,8 @@ class TestWeeklySummary:
         data = self._get(client, auth_token).get_json()
         for key in ('week_start', 'week_end', 'workouts', 'training_days',
                     'total_duration_min', 'total_volume', 'total_reps',
-                    'prs', 'muscle_sets', 'weight_unit'):
+                    'prs', 'muscle_sets', 'weight_unit',
+                    'prev_week_workouts', 'prev_week_volume'):
             assert key in data
 
     def test_defaults_to_last_completed_week(self, client, auth_token):
@@ -524,6 +532,34 @@ class TestWeeklySummary:
         assert data['prs'] == []
         assert 'distance_km' not in data
         assert 'bodyweight_change' not in data
+
+    def test_prev_week_defaults_to_zero(self, client, auth_token):
+        data = self._get(client, auth_token).get_json()
+        assert data['prev_week_workouts'] == 0
+        assert data['prev_week_volume'] == 0
+
+    def test_prev_week_workouts_and_volume_computed(self, client, auth_token, app):
+        two_weeks_ago_monday = _this_week_monday() - timedelta(weeks=2)
+        tid = _create_template(client, auth_token)
+        wid = _create_mapped_workout(client, auth_token, tid, n_sets=3)
+        _backdate(app, wid, two_weeks_ago_monday)
+
+        data = self._get(client, auth_token).get_json()  # defaults to last completed week
+        assert data['prev_week_workouts'] == 1
+        assert data['prev_week_volume'] == 3 * 8 * 100
+        # Doesn't leak into the current (last-completed) week's own totals
+        assert data['workouts'] == 0
+        assert data['total_volume'] == 0
+
+    def test_prev_week_isolated_per_user(self, client, auth_token, auth_token2, app):
+        two_weeks_ago_monday = _this_week_monday() - timedelta(weeks=2)
+        tid = _create_template(client, auth_token)
+        wid = _create_mapped_workout(client, auth_token, tid, n_sets=3)
+        _backdate(app, wid, two_weeks_ago_monday)
+
+        data = self._get(client, auth_token2).get_json()
+        assert data['prev_week_workouts'] == 0
+        assert data['prev_week_volume'] == 0
 
     def test_workout_last_week_counted(self, client, auth_token):
         last_monday = _this_week_monday() - timedelta(weeks=1)
@@ -632,6 +668,22 @@ class TestWeeklySummary:
         client.post('/api/workouts', json=payload, headers=auth_headers(auth_token))
         data = self._get(client, auth_token).get_json()
         assert data['muscle_sets'].get('Chest', 0) == 2
+
+    def test_secondary_muscle_gets_half_credit(self, client, auth_token):
+        last_monday = _this_week_monday() - timedelta(weeks=1)
+        tid = _create_template(client, auth_token, 'Bench Press', 'Chest,Triceps')
+        payload = {
+            'workoutName': 'Chest Day',
+            'date': last_monday.isoformat(),
+            'exercises': [{
+                'name': 'Bench Press', 'exercise_template_id': tid,
+                'sets': [{'reps': 8, 'weight': 100}, {'reps': 8, 'weight': 100}],
+            }],
+        }
+        client.post('/api/workouts', json=payload, headers=auth_headers(auth_token))
+        data = self._get(client, auth_token).get_json()
+        assert data['muscle_sets'].get('Chest', 0) == 2
+        assert data['muscle_sets'].get('Triceps', 0) == 1
 
     def test_local_date_fixes_utc_boundary(self, client, auth_token, app):
         # Same bug/fix as muscle-volume's test of the same name, adapted for

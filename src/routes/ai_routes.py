@@ -390,9 +390,14 @@ def _build_insights_context(user_id: int) -> dict:
     not_warmup = db.or_(Set.set_type.is_(None), Set.set_type != 'W')
     not_cardio = db.func.lower(Exercise.exercise_type) != 'cardio'
 
+    # Secondary movers get half credit — a set still stimulates them, just
+    # less directly than the primary target, so it shouldn't count as a full
+    # set toward that muscle's weekly volume.
+    set_credit = db.case((ExerciseMuscleMapping.is_primary == True, 1.0), else_=0.5)
+
     def _muscle_sets_range(start, end):
         rows = (
-            db.session.query(ExerciseMuscleMapping.muscle_group, db.func.count(Set.id).label('cnt'))
+            db.session.query(ExerciseMuscleMapping.muscle_group, db.func.sum(set_credit).label('cnt'))
             .join(Exercise, ExerciseMuscleMapping.exercise_template_id == Exercise.exercise_template_id)
             .join(Set, Set.exercise_id == Exercise.id)
             .join(Workout, Exercise.workout_id == Workout.id)
