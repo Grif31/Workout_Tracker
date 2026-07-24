@@ -32,6 +32,11 @@ export type WeeklySummaryData = {
   total_reps: number;
   prev_week_workouts: number;
   prev_week_volume: number;
+  rolling_avg_workouts: number;
+  rolling_avg_volume: number;
+  most_improved_lift?: { exercise_name: string; prev_best: number; this_best: number; gain: number };
+  avg_rpe?: number;
+  calories_burned?: number;
   distance_km?: number;
   prs: Array<{ exercise_name: string; pr_type: string; value: number; weight_context?: number }>;
   bodyweight_change?: { start: number; end: number };

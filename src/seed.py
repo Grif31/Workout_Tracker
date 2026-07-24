@@ -219,6 +219,28 @@ EXERCISES = [
     ('Decline Crunch',          'Core',                      'Bodyweight'),
 ]
 
+# Exercises where more than one muscle group is genuinely co-primary — the
+# default mapping rule (first-listed muscle in EXERCISES = primary, rest =
+# secondary) doesn't fit these; the extra muscles below are promoted to
+# primary too instead of relying on list order. Reviewed by hand, not
+# inferred — squat and hip-hinge patterns stimulate these pairs equally
+# unless the exercise variation is deliberately biasing one side.
+MULTI_PRIMARY_OVERRIDES = {
+    # Squat pattern: quads + glutes co-primary, hamstrings secondary (stabilizer)
+    'Squat':                 {'Quads', 'Glutes'},
+    'Leg Press':              {'Quads', 'Glutes'},
+    'Hack Squat':              {'Quads', 'Glutes'},
+    'Lunges':                  {'Quads', 'Glutes'},
+    'Bulgarian Split Squat':   {'Quads', 'Glutes'},
+    # Hip-hinge pattern: hamstrings + glutes co-primary, back secondary (stabilizer)
+    'Romanian Deadlift':       {'Hamstrings', 'Glutes'},
+    'Good Morning':            {'Hamstrings', 'Glutes'},
+    # Conventional deadlift: posterior-chain compound — back + hamstrings +
+    # glutes all fairly primary, quads more secondary (drive off the floor only)
+    'Deadlift':                {'Back', 'Hamstrings', 'Glutes'},
+    'Sumo Deadlift':           {'Back', 'Hamstrings', 'Glutes'},
+}
+
 # Cardio exercises: (name, equipment)
 CARDIO_EXERCISES = [
     ('Running', None),
@@ -401,18 +423,26 @@ def update_muscles():
             print(f'[{i}/{total}] Not found (skipping): {name} ({equipment})')
             skipped += 1
             continue
-        if ex.muscle_group == muscle_group:
+        # MULTI_PRIMARY_OVERRIDES exercises always rebuild: the assembled
+        # muscle_group property lists primaries first, so once a second
+        # muscle is promoted to primary the computed string reorders and
+        # will never equal the static EXERCISES string again — comparing by
+        # string alone would either perpetually skip them (before the first
+        # fix) or perpetually "update" them (after it); forcing a rebuild
+        # keeps this idempotent either way.
+        if ex.muscle_group == muscle_group and name not in MULTI_PRIMARY_OVERRIDES:
             print(f'[{i}/{total}] Already up to date: {name} ({equipment})')
             skipped += 1
             continue
         print(f'[{i}/{total}] Updating: {name} ({equipment})  {ex.muscle_group!r} -> {muscle_group!r}')
         ExerciseMuscleMapping.query.filter_by(exercise_template_id=ex.id).delete()
         parts = [p.strip() for p in muscle_group.split(',') if p.strip()]
+        extra_primaries = MULTI_PRIMARY_OVERRIDES.get(name, set())
         for j, mg in enumerate(parts):
             db.session.add(ExerciseMuscleMapping(
                 exercise_template_id=ex.id,
                 muscle_group=mg,
-                is_primary=(j == 0),
+                is_primary=(j == 0) or (mg in extra_primaries),
             ))
         updated += 1
     db.session.commit()
@@ -477,11 +507,12 @@ def main():
             db.session.add(new_ex)
             db.session.flush()
             parts = [p.strip() for p in muscle_group.split(',') if p.strip()]
+            extra_primaries = MULTI_PRIMARY_OVERRIDES.get(name, set())
             for j, mg in enumerate(parts):
                 db.session.add(ExerciseMuscleMapping(
                     exercise_template_id=new_ex.id,
                     muscle_group=mg,
-                    is_primary=(j == 0),
+                    is_primary=(j == 0) or (mg in extra_primaries),
                 ))
             added += 1
 

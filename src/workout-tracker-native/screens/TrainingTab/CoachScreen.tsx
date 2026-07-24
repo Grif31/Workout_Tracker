@@ -35,6 +35,12 @@ type MuscleVolumeData = {
   last_week_total: number;
   week_start: string;
 };
+type WeeklySummaryPreview = {
+  workouts: number;
+  total_volume: number;
+  distance_km?: number;
+  weight_unit: string;
+};
 type WorkoutTemplate = { id: number; name: string; exercises: Exercise[] };
 type RoutineDay = {
   id: number; day_order: number; label: string;
@@ -118,8 +124,9 @@ export default function CoachScreen({ navigation }: Props) {
   const contentOpacity = useRef(new Animated.Value(1)).current;
   const insightAnimsRef = useRef<Animated.Value[]>([]);
 
+  
   // Mutable refs so the stable PanResponder can read current values without stale closure
-  const activeTabRef = useRef<typeof TAB_NAMES[number]>('training');
+  const activeTabRef = useRef<typeof TAB_NAMES[number]>('progress');
   const handleTabChangeRef = useRef<(tab: typeof TAB_NAMES[number]) => void>(() => {});
 
   const swipeResponder = useRef(
@@ -181,6 +188,7 @@ export default function CoachScreen({ navigation }: Props) {
   const [strengthPercentile, setStrengthPercentile] = useState<number | null>(null);
   const [strengthRankLabel, setStrengthRankLabel] = useState<string | null>(null);
   const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeData | null>(null);
+  const [weeklySummaryPreview, setWeeklySummaryPreview] = useState<WeeklySummaryPreview | null>(null);
   const [rangePickerVisible, setRangePickerVisible] = useState(false);
   const [goalModalVisible, setGoalModalVisible] = useState(false);
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
@@ -250,6 +258,8 @@ export default function CoachScreen({ navigation }: Props) {
     if (me?.active_routine_id) fetchActiveRoutine();
     const mv = appCache.get<MuscleVolumeData>('muscle_volume');
     if (mv) setMuscleVolume(mv);
+    const wsp = appCache.get<WeeklySummaryPreview>('weekly_summary_preview');
+    if (wsp) setWeeklySummaryPreview(wsp);
     const prog30 = appCache.get<{ buckets: ProgressBucket[] }>('progress');
     if (prog30?.buckets?.length) setThisWeekCount(prog30.buckets[prog30.buckets.length - 1]?.count ?? 0);
   }, []);
@@ -332,6 +342,21 @@ export default function CoachScreen({ navigation }: Props) {
     } catch { }
   };
 
+  const fetchWeeklySummaryPreview = async () => {
+    try {
+      const res = await apiFetch('/api/stats/weekly-summary');
+      if (res.ok) {
+        const data = await res.json();
+        const preview: WeeklySummaryPreview = {
+          workouts: data.workouts, total_volume: data.total_volume,
+          distance_km: data.distance_km, weight_unit: data.weight_unit,
+        };
+        setWeeklySummaryPreview(preview);
+        appCache.set('weekly_summary_preview', preview);
+      }
+    } catch { }
+  };
+
   useFocusEffect(useCallback(() => {
     fetchProgressData(chartRange);
     fetchTemplates();
@@ -340,6 +365,7 @@ export default function CoachScreen({ navigation }: Props) {
     fetchStrengthScore();
     fetchMuscleGroupData();
     fetchThisWeekCount();
+    fetchWeeklySummaryPreview();
 
   }, [user?.active_routine_id, chartRange]));
 
@@ -542,6 +568,16 @@ export default function CoachScreen({ navigation }: Props) {
       </View>
     </View>
   );
+
+  const weeklySummarySubtitle = () => {
+    const p = weeklySummaryPreview;
+    if (!p) return 'Workouts, volume, and PRs from last week';
+    if (p.workouts === 0) return 'No workouts logged last week';
+    const workoutsStr = `${p.workouts} workout${p.workouts !== 1 ? 's' : ''}`;
+    if (p.total_volume > 0) return `${workoutsStr} · ${p.total_volume.toLocaleString()} ${p.weight_unit}`;
+    if (p.distance_km != null) return `${workoutsStr} · ${p.distance_km}km`;
+    return `${workoutsStr} last week`;
+  };
 
   const renderMuscleVolumeCard = () => {
     if (!muscleVolume) return null;
@@ -1071,7 +1107,10 @@ export default function CoachScreen({ navigation }: Props) {
                   onPress={() => navigation.navigate('WeeklySummary')}
                 >
                   <Ionicons name="calendar-outline" size={20} color={colors.accent} />
-                  <Text style={styles.weeklySummaryText}>Weekly Summary</Text>
+                  <View style={styles.weeklySummaryTextWrap}>
+                    <Text style={styles.weeklySummaryText}>Weekly Summary</Text>
+                    <Text style={styles.weeklySummarySub}>{weeklySummarySubtitle()}</Text>
+                  </View>
                   <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
                 </TouchableOpacity>
 
@@ -1357,7 +1396,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     backgroundColor: colors.surface, borderRadius: spacing.sm, borderWidth: 1, borderColor: colors.border,
     padding: spacing.md, marginBottom: spacing.md,
   },
-  weeklySummaryText: { flex: 1, fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
+  weeklySummaryTextWrap: { flex: 1 },
+  weeklySummaryText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
+  weeklySummarySub: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
   chartCard: {
     backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md,
     marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, overflow: 'hidden',

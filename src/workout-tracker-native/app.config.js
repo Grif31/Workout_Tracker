@@ -5,7 +5,7 @@ module.exports = {
     name: IS_DEV ? 'Aretē (Dev)' : 'Aretē',
     slug: 'workout-tracker-native',
     scheme: 'aretefitness',
-    version: '1.0.1',
+    version: '1.0.2',
     orientation: 'portrait',
     icon: './assets/Arete_icon.png',
     userInterfaceStyle: 'automatic',
@@ -18,7 +18,7 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: IS_DEV ? 'com.aretefitness.app.dev' : 'com.aretefitness.app',
-      buildNumber: '2',
+      buildNumber: '3',
       entitlements: {
         'com.apple.developer.usernotifications.time-sensitive': true,
       },
@@ -40,7 +40,7 @@ module.exports = {
       },
       edgeToEdgeEnabled: true,
       package: IS_DEV ? 'com.aretefitness.app.dev' : 'com.aretefitness.app',
-      versionCode: 2,
+      versionCode: 3,
       permissions: [
         'android.permission.ACCESS_FINE_LOCATION',
         'android.permission.ACCESS_COARSE_LOCATION',

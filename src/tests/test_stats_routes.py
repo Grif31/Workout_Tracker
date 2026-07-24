@@ -517,7 +517,8 @@ class TestWeeklySummary:
         for key in ('week_start', 'week_end', 'workouts', 'training_days',
                     'total_duration_min', 'total_volume', 'total_reps',
                     'prs', 'muscle_sets', 'weight_unit',
-                    'prev_week_workouts', 'prev_week_volume'):
+                    'prev_week_workouts', 'prev_week_volume',
+                    'rolling_avg_workouts', 'rolling_avg_volume'):
             assert key in data
 
     def test_defaults_to_last_completed_week(self, client, auth_token):
@@ -711,6 +712,151 @@ class TestWeeklySummary:
         client.post('/api/workouts', json=payload, headers=auth_headers(auth_token))
         data = self._get(client, auth_token2).get_json()
         assert data['workouts'] == 0
+
+    # -- Rolling 4-week average --
+
+    def test_rolling_avg_defaults_to_zero(self, client, auth_token):
+        data = self._get(client, auth_token).get_json()
+        assert data['rolling_avg_workouts'] == 0
+        assert data['rolling_avg_volume'] == 0
+
+    def test_rolling_avg_computed_over_prior_4_weeks(self, client, auth_token, app):
+        monday = _this_week_monday()
+        weeks_back = [monday - timedelta(weeks=n) for n in (2, 3, 4, 5)]
+        for i, wk in enumerate(weeks_back):
+            tid = _create_template(client, auth_token, name=f'Bench Press {i}')
+            wid = _create_mapped_workout(client, auth_token, tid, n_sets=2)
+            _backdate(app, wid, wk)
+
+        data = self._get(client, auth_token).get_json()
+        assert data['rolling_avg_workouts'] == 1.0  # 4 workouts over 4 weeks
+        assert data['rolling_avg_volume'] == round(4 * 2 * 8 * 100 / 4.0)
+
+    def test_rolling_avg_excludes_the_displayed_week_itself(self, client, auth_token, app):
+        last_completed_week = _this_week_monday() - timedelta(weeks=1)
+        tid = _create_template(client, auth_token)
+        wid = _create_mapped_workout(client, auth_token, tid, n_sets=3)
+        _backdate(app, wid, last_completed_week)
+        data = self._get(client, auth_token).get_json()
+        assert data['rolling_avg_workouts'] == 0
+        assert data['rolling_avg_volume'] == 0
+
+    # -- Most-improved lift --
+
+    def test_most_improved_lift_present_with_correct_gain(self, client, auth_token):
+        monday = _this_week_monday()
+        last_completed_week = monday - timedelta(weeks=1)
+        two_weeks_ago = monday - timedelta(weeks=2)
+        h = auth_headers(auth_token)
+        tid = _create_template(client, auth_token, 'Bench Press', 'Chest')
+
+        # Two weeks ago: 100 x 5 -> epley 1RM = 100*(1+5/30) = 116.67
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Old', 'date': two_weeks_ago.isoformat(),
+            'exercises': [{'name': 'Bench Press', 'exercise_template_id': tid,
+                           'sets': [{'reps': 5, 'weight': 100}]}],
+        }, headers=h)
+        assert res.status_code == 201
+
+        # Last completed week: 100 x 10 -> epley 1RM = 100*(1+10/30) = 133.33 (higher)
+        res = client.post('/api/workouts', json={
+            'workoutName': 'New', 'date': last_completed_week.isoformat(),
+            'exercises': [{'name': 'Bench Press', 'exercise_template_id': tid,
+                           'sets': [{'reps': 10, 'weight': 100}]}],
+        }, headers=h)
+        assert res.status_code == 201
+
+        data = self._get(client, auth_token).get_json()
+        mil = data.get('most_improved_lift')
+        assert mil is not None
+        assert mil['exercise_name'] == 'Bench Press'
+        assert mil['prev_best'] == pytest.approx(116.67, abs=0.1)
+        assert mil['this_best'] == pytest.approx(133.33, abs=0.1)
+        assert mil['gain'] == pytest.approx(16.67, abs=0.1)
+
+    def test_most_improved_lift_omitted_when_no_overlap(self, client, auth_token, app):
+        last_completed_week = _this_week_monday() - timedelta(weeks=1)
+        tid = _create_template(client, auth_token)
+        wid = _create_mapped_workout(client, auth_token, tid, n_sets=2)
+        _backdate(app, wid, last_completed_week)
+        data = self._get(client, auth_token).get_json()
+        assert 'most_improved_lift' not in data
+
+    def test_most_improved_lift_omitted_when_this_week_lower(self, client, auth_token):
+        monday = _this_week_monday()
+        last_completed_week = monday - timedelta(weeks=1)
+        two_weeks_ago = monday - timedelta(weeks=2)
+        h = auth_headers(auth_token)
+        tid = _create_template(client, auth_token, 'Bench Press', 'Chest')
+
+        client.post('/api/workouts', json={
+            'workoutName': 'Old', 'date': two_weeks_ago.isoformat(),
+            'exercises': [{'name': 'Bench Press', 'exercise_template_id': tid,
+                           'sets': [{'reps': 10, 'weight': 100}]}],  # higher epley
+        }, headers=h)
+        client.post('/api/workouts', json={
+            'workoutName': 'New', 'date': last_completed_week.isoformat(),
+            'exercises': [{'name': 'Bench Press', 'exercise_template_id': tid,
+                           'sets': [{'reps': 5, 'weight': 100}]}],  # lower epley
+        }, headers=h)
+
+        data = self._get(client, auth_token).get_json()
+        assert 'most_improved_lift' not in data
+
+    # -- Avg RPE --
+
+    def test_avg_rpe_present_when_logged(self, client, auth_token):
+        last_completed_week = _this_week_monday() - timedelta(weeks=1)
+        h = auth_headers(auth_token)
+        tid = _create_template(client, auth_token)
+        res = client.post('/api/workouts', json={
+            'workoutName': 'RPE Day', 'date': last_completed_week.isoformat(),
+            'exercises': [{'name': 'Bench Press', 'exercise_template_id': tid,
+                           'sets': [{'reps': 8, 'weight': 100, 'rpe': 7},
+                                    {'reps': 8, 'weight': 100, 'rpe': 9}]}],
+        }, headers=h)
+        assert res.status_code == 201
+        data = self._get(client, auth_token).get_json()
+        assert data['avg_rpe'] == 8.0
+
+    def test_avg_rpe_omitted_without_any_logged(self, client, auth_token):
+        data = self._get(client, auth_token).get_json()
+        assert 'avg_rpe' not in data
+
+    # -- Calories burned --
+
+    def test_calories_present_for_cardio_with_bodyweight_set(self, client, auth_token):
+        last_completed_week = _this_week_monday() - timedelta(weeks=1)
+        h = auth_headers(auth_token)
+        client.patch('/api/me', json={'bodyweight': 180, 'weight_unit': 'lbs'}, headers=h)
+        tid = _create_template(client, auth_token, 'Running', 'Core')
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Run', 'date': last_completed_week.isoformat(),
+            'exercises': [{'name': 'Running', 'exercise_template_id': tid, 'exercise_type': 'cardio',
+                           'sets': [{'cardio_duration': 30, 'distance': 5, 'distance_unit': 'km'}]}],
+        }, headers=h)
+        assert res.status_code == 201
+        data = self._get(client, auth_token).get_json()
+        assert data.get('calories_burned', 0) > 0
+
+    def test_calories_omitted_without_cardio(self, client, auth_token):
+        h = auth_headers(auth_token)
+        client.patch('/api/me', json={'bodyweight': 180, 'weight_unit': 'lbs'}, headers=h)
+        data = self._get(client, auth_token).get_json()
+        assert 'calories_burned' not in data
+
+    def test_calories_omitted_without_bodyweight(self, client, auth_token):
+        last_completed_week = _this_week_monday() - timedelta(weeks=1)
+        h = auth_headers(auth_token)
+        tid = _create_template(client, auth_token, 'Running', 'Core')
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Run', 'date': last_completed_week.isoformat(),
+            'exercises': [{'name': 'Running', 'exercise_template_id': tid, 'exercise_type': 'cardio',
+                           'sets': [{'cardio_duration': 30, 'distance': 5, 'distance_unit': 'km'}]}],
+        }, headers=h)
+        assert res.status_code == 201
+        data = self._get(client, auth_token).get_json()
+        assert 'calories_burned' not in data
 
 
 # ---------------------------------------------------------------------------

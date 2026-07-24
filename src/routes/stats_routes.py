@@ -6,6 +6,43 @@ from utils.strength_standards import epley_1rm
 
 stats_bp = Blueprint('stats_bp', __name__)
 
+# Deliberate Python port of workout-tracker-native/utils/cardioCalories.ts —
+# used by weekly_summary() to estimate calories burned from stored cardio Set
+# fields. Keep both in sync if the MET table or speed-scaling formulas change.
+_FLAT_MET = {
+    'running': 9.8, 'run': 9.8,
+    'cycling': 8.0, 'cycle': 8.0, 'bike': 8.0,
+    'rowing': 7.0, 'row': 7.0,
+    'swimming': 7.0, 'swim': 7.0,
+    'elliptical': 5.0,
+    'walking': 3.5, 'walk': 3.5,
+    'hiking': 6.0, 'hike': 6.0,
+}
+
+
+def _cardio_speed_kmh(duration_min, distance, distance_unit):
+    """Derive speed from stored distance/duration, in km/h — None if not derivable."""
+    if not distance or not duration_min:
+        return None
+    distance_km = distance * 1.60934 if (distance_unit or 'km') == 'mi' else distance
+    return distance_km / (duration_min / 60.0)
+
+
+def _estimate_calories(activity_name, duration_min, weight_kg, speed_kmh=None):
+    name = (activity_name or '').lower()
+    if speed_kmh and speed_kmh > 0:
+        if name in ('run', 'running'):
+            met = max(6.0, speed_kmh)
+        elif name in ('cycle', 'cycling', 'bike'):
+            met = max(4.0, speed_kmh * 0.45 + 2.0)
+        elif name in ('walk', 'walking'):
+            met = max(2.5, speed_kmh * 0.5 + 1.5)
+        else:
+            met = _FLAT_MET.get(name, 6.0)
+    else:
+        met = _FLAT_MET.get(name, 6.0)
+    return met * weight_kg * (duration_min / 60.0)
+
 
 @stats_bp.get('/api/stats/exercise')
 @jwt_required()
@@ -996,6 +1033,113 @@ def weekly_summary():
     )
     resp['prev_week_workouts'] = prev_workout_count
     resp['prev_week_volume'] = round((prev_vol_row.volume or 0) * kg_to_lbs)
+
+    # Rolling 4-week average (workouts, volume) — the 4 calendar weeks
+    # strictly before the displayed week, always divided by 4 (missing weeks
+    # count as 0) so a spike/dip reads against a stable baseline rather than
+    # just the single prior week. Always present, same convention as
+    # prev_week_* above.
+    rolling_start = week_start - timedelta(weeks=4)
+    rolling_workout_count = (
+        db.session.query(db.func.count(Workout.id))
+        .filter(Workout.user_id == user_id, Workout.date >= rolling_start, Workout.date < week_start)
+        .scalar() or 0
+    )
+    rolling_vol_row = (
+        db.session.query(db.func.sum(Set.reps * Set.weight).label('volume'))
+        .join(Exercise, Set.exercise_id == Exercise.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .filter(
+            Workout.user_id == user_id,
+            Workout.date >= rolling_start, Workout.date < week_start,
+            Set.reps.isnot(None), Set.weight.isnot(None), Set.set_type != 'W',
+        )
+        .first()
+    )
+    resp['rolling_avg_workouts'] = round(rolling_workout_count / 4.0, 1)
+    resp['rolling_avg_volume'] = round((rolling_vol_row.volume or 0) * kg_to_lbs / 4.0)
+
+    # Most-improved lift — best Epley-estimated 1RM this week vs. the prior
+    # week, per exercise; the exercise with the largest positive gain wins.
+    # PersonalRecord has no history (rows are overwritten in place), so this
+    # is computed directly from Set data rather than from PR rows.
+    epley_expr = db.case((Set.reps <= 1, Set.weight), else_=Set.weight * (1 + Set.reps / 30.0))
+
+    def _best_1rm_by_exercise(start, end):
+        rows = (
+            db.session.query(Exercise.exercise_template_id, db.func.max(epley_expr).label('best'))
+            .join(Set, Set.exercise_id == Exercise.id)
+            .join(Workout, Exercise.workout_id == Workout.id)
+            .filter(
+                Workout.user_id == user_id,
+                Workout.date >= start, Workout.date < end,
+                not_warmup, not_cardio,
+                Set.reps.isnot(None), Set.weight.isnot(None),
+                Exercise.exercise_template_id.isnot(None),
+            )
+            .group_by(Exercise.exercise_template_id)
+            .all()
+        )
+        return {r.exercise_template_id: r.best for r in rows}
+
+    this_1rm = _best_1rm_by_exercise(week_start, week_end)
+    prev_1rm = _best_1rm_by_exercise(prev_week_start, week_start)
+    gains = {
+        tid: this_1rm[tid] - prev_1rm[tid]
+        for tid in this_1rm.keys() & prev_1rm.keys()
+        if this_1rm[tid] > prev_1rm[tid]
+    }
+    if gains:
+        best_tid = max(gains, key=gains.get)
+        tmpl = db.session.get(ExerciseTemplate, best_tid)
+        resp['most_improved_lift'] = {
+            'exercise_name': tmpl.name,
+            'prev_best': round(prev_1rm[best_tid] * kg_to_lbs, 1),
+            'this_best': round(this_1rm[best_tid] * kg_to_lbs, 1),
+            'gain': round(gains[best_tid] * kg_to_lbs, 1),
+        }
+
+    # Avg RPE — omitted if nobody logged an RPE value this week.
+    avg_rpe = (
+        db.session.query(db.func.avg(Set.rpe))
+        .join(Exercise, Set.exercise_id == Exercise.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .filter(
+            Workout.user_id == user_id,
+            Workout.date >= week_start, Workout.date < week_end,
+            not_warmup, Set.rpe.isnot(None),
+        )
+        .scalar()
+    )
+    if avg_rpe is not None:
+        resp['avg_rpe'] = round(avg_rpe, 1)
+
+    # Calories burned (cardio only) — deliberate Python port of
+    # utils/cardioCalories.ts's MET-table formula; keep both in sync if the
+    # MET table ever changes. Omitted if no cardio logged, or if the user has
+    # never set a bodyweight (can't estimate calories without body mass).
+    if user.bodyweight:
+        weight_kg = user.bodyweight * (0.453592 if (user.weight_unit or 'lbs') == 'lbs' else 1.0)
+        cardio_set_rows = (
+            db.session.query(Exercise.name, Set.cardio_duration, Set.distance, Set.distance_unit)
+            .join(Exercise, Set.exercise_id == Exercise.id)
+            .join(Workout, Exercise.workout_id == Workout.id)
+            .filter(
+                Workout.user_id == user_id,
+                Workout.date >= week_start, Workout.date < week_end,
+                Exercise.exercise_type == 'cardio',
+                Set.cardio_duration.isnot(None),
+            )
+            .all()
+        )
+        if cardio_set_rows:
+            total_calories = sum(
+                _estimate_calories(name, duration, weight_kg,
+                                    _cardio_speed_kmh(duration, distance, distance_unit))
+                for name, duration, distance, distance_unit in cardio_set_rows
+            )
+            if total_calories > 0:
+                resp['calories_burned'] = round(total_calories)
 
     # Cardio distance, normalized to km (same canonical-unit-then-convert-on-
     # display idea as Workout.volume) — omitted if no cardio logged.

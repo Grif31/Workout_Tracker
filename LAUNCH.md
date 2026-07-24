@@ -39,13 +39,13 @@
 ### Day 2-3: Send to Testers
 - [x] Add testers in App Store Connect → TestFlight → External Testing
 - [x] Send invite links to testers
-- [ ] Create a simple feedback form (Google Form)
+- [x] Create a simple feedback form (Google Form)
 
 ### Day 4-7: Collect & Fix Feedback
-- [ ] Monitor crash reports in App Store Connect
-- [ ] Fix bugs reported by testers
-- [ ] Push JS fixes (hot reload — no new build needed)
-- [ ] Submit updated build to TestFlight if native changes were made
+- [x] Monitor crash reports in App Store Connect
+- [x] Fix bugs reported by testers
+- [x] Push JS fixes (hot reload — no new build needed)
+- [x] Submit updated build to TestFlight if native changes were made
 
 ---
 

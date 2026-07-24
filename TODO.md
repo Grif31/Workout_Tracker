@@ -695,27 +695,27 @@ Check off items as you complete them.
 ## 📅 13. Weekly Summary
 > A recap card summarizing the user's past week — workouts, volume, distance, PRs, bodyweight change. Surfaces automatically on the Dashboard at the start of each new week, and is always viewable from the Progress section.
 
-- [ ] **Backend** (`routes/stats_routes.py`)
-  - [ ] Add `GET /api/stats/weekly-summary?week=<iso-week or date>` (default: most recently completed week) returning: workout count, total volume, total reps, total cardio distance (per unit), PRs earned that week, bodyweight change (first vs. last entry in the week, or vs. prior week's last entry)
-  - [ ] Only include fields the user actually has data for that week (e.g. omit distance if no cardio logged) so the frontend can conditionally render sections
-  - [ ] Include muscle group breakdown for the week — reuse the `muscle_sets` query from `GET /api/stats/muscle-volume`, scoped to the summary's week, to surface most-trained muscle group
-  - [ ] Include which days of the week had a workout (array of dates or weekday booleans) for a Mon–Sun consistency dot row
-  - [ ] Include total training time — sum of `Workout.duration` across the week's workouts
+- [x] **Backend** (`routes/stats_routes.py`)
+  - [x] Add `GET /api/stats/weekly-summary?week=<iso-week or date>` (default: most recently completed week) returning: workout count, total volume, total reps, total cardio distance (per unit), PRs earned that week, bodyweight change (first vs. last entry in the week, or vs. prior week's last entry)
+  - [x] Only include fields the user actually has data for that week (e.g. omit distance if no cardio logged) so the frontend can conditionally render sections
+  - [x] Include muscle group breakdown for the week — reuse the `muscle_sets` query from `GET /api/stats/muscle-volume`, scoped to the summary's week, to surface most-trained muscle group
+  - [x] Include which days of the week had a workout (array of dates or weekday booleans) for a Mon–Sun consistency dot row
+  - [x] Include total training time — sum of `Workout.duration` across the week's workouts
   - [ ] Include "most improved lift" — the exercise with the largest estimated-1RM increase over the week (compare first vs. last `estimated_1rm` PR snapshot in range, or recompute from sets)
   - [ ] Include a 4-week rolling average (volume, workouts) alongside the single prior-week comparison, so the week-over-week delta isn't thrown off by one unusually big or skipped week
   - [ ] Include avg RPE for the week, only when the user has RPE enabled (`workout_show_rpe_${uid}`) and has logged any RPE values that week
   - [ ] Include total calories burned for cardio activities — currently computed client-side per activity in `cardioCalories.ts` and never persisted; needs either storing calories per cardio set/workout on save or recomputing weekly from stored cardio fields (bigger lift than the other fields — do last)
 
-- [ ] **Dashboard surfacing**
-  - [ ] On app open, if it's a new week (Mon by default, or user's configured week start) and last week has ≥1 workout logged and the summary hasn't been shown yet, show the Weekly Summary card/modal
-  - [ ] Persist "last shown week" to AsyncStorage (per-user key) so it only appears once per week
-  - [ ] Dismiss/close leads back to normal Dashboard
+- [x] **Dashboard surfacing**
+  - [x] On app open, if it's a new week (Mon by default, or user's configured week start) and last week has ≥1 workout logged and the summary hasn't been shown yet, show the Weekly Summary card/modal
+  - [x] Persist "last shown week" to AsyncStorage (per-user key) so it only appears once per week
+  - [x] Dismiss/close leads back to normal Dashboard
 
-- [ ] **`WeeklySummaryScreen` or card** (Progress section of Training tab)
-  - [ ] Always-accessible entry point to view the most recent (or a past) weekly summary, not just the auto-popup
-  - [ ] Stat rows conditionally rendered per the backend response: Workouts, Volume, Distance, PRs earned (list), Bodyweight change
-  - [ ] Reuse `PR_TYPE_LABELS` / stat card styling patterns from `WorkoutSummaryScreen.tsx` for visual consistency
-  - [ ] Show delta vs. the prior week (▲/▼ %) for workouts and volume — reuse the `last_week_total` comparison pattern already computed in `GET /api/stats/muscle-volume`
+- [x] **`WeeklySummaryScreen` or card** (Progress section of Training tab)
+  - [x] Always-accessible entry point to view the most recent (or a past) weekly summary, not just the auto-popup
+  - [x] Stat rows conditionally rendered per the backend response: Workouts, Volume, Distance, PRs earned (list), Bodyweight change
+  - [x] Reuse `PR_TYPE_LABELS` / stat card styling patterns from `WorkoutSummaryScreen.tsx` for visual consistency
+  - [x] Show delta vs. the prior week (▲/▼ %) for workouts and volume — reuse the `last_week_total` comparison pattern already computed in `GET /api/stats/muscle-volume`
   - [ ] Also show the 4-week rolling average alongside the single-week delta, so a spike/dip reads in context rather than in isolation
   - [ ] Tie workout count to the user's `workout_weekly_goal_${uid}` — show "3/4 workouts toward your goal" instead of a bare number
   - [ ] Surface the current weekly streak (already tracked, dashboard 🔥 badge) inside the summary card

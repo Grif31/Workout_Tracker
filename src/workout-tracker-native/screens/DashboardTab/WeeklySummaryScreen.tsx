@@ -7,13 +7,16 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { PieChart } from 'react-native-gifted-charts';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, type Colors } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
 import { DashboardStackParamsList, WeeklySummaryData } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
-import { fmtHold } from '../../components/workout/types';
+import { fmtHold, RPE_KEY } from '../../components/workout/types';
+import { LaurelBranch } from '../../components/LaurelWreath';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WeeklySummary'>;
 
@@ -104,6 +107,7 @@ function formatPrValue(pr: { pr_type: string; value: number; weight_context?: nu
 
 export default function WeeklySummaryScreen({ navigation, route }: Props) {
   const { colors, mode } = useTheme();
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -114,6 +118,9 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
   const [history, setHistory] = useState<HistoryRow[] | null>(null);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [selectedMuscleIdx, setSelectedMuscleIdx] = useState<number | null>(null);
+  const [weeklyGoal, setWeeklyGoal] = useState(3);
+  const [rpeEnabled, setRpeEnabled] = useState(false);
+  const [streak, setStreak] = useState<number | null>(null);
 
   const fetchWeek = useCallback(async (week?: string) => {
     setLoading(true);
@@ -145,6 +152,23 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
       .catch(() => setHistory([]));
   }, []);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    AsyncStorage.multiGet([`workout_weekly_goal_${user.id}`, `${RPE_KEY}_${user.id}`]).then(pairs => {
+      const [goalRaw, rpeRaw] = pairs.map(p => p[1]);
+      const goal = goalRaw ? parseInt(goalRaw, 10) : 3;
+      setWeeklyGoal(Number.isFinite(goal) && goal > 0 ? goal : 3);
+      setRpeEnabled(rpeRaw === 'true');
+    });
+  }, [user?.id]);
+
+  useEffect(() => {
+    apiFetch(`/api/stats/profile?weekly_goal=${weeklyGoal}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(ps => setStreak(ps?.current_streak ?? null))
+      .catch(() => setStreak(null));
+  }, [weeklyGoal]);
+
   const isAtLatest = !!data && data.week_start === latestWeekStart;
   const goToWeek = (week: string) => fetchWeek(week);
   const goPrevWeek = () => data && goToWeek(addDaysStr(data.week_start, -7));
@@ -173,6 +197,15 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
   const totalMuscleSets = useMemo(() => muscleSlices.reduce((sum, s) => sum + s.count, 0), [muscleSlices]);
   const toggleMuscleSlice = (i: number) => setSelectedMuscleIdx(prev => (prev === i ? null : i));
 
+  // Top muscle by raw (unsliced) count — separate from `muscleSlices`, which
+  // folds anything past the top 5 into "Other" for the pie chart. Using the
+  // raw data here means this callout never names "Other" as the focus.
+  const topMuscle = useMemo(() => {
+    if (!data) return null;
+    const sorted = Object.entries(data.muscle_sets).sort((a, b) => b[1] - a[1]);
+    return sorted.length > 0 ? sorted[0][0] : null;
+  }, [data]);
+
   // Delta vs. the week before — omitted entirely when there's nothing to
   // compare (both weeks zero) or no change; "New" when starting from zero
   // avoids a divide-by-zero / infinite percentage.
@@ -195,6 +228,17 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
         <Ionicons name={up ? 'trending-up' : 'trending-down'} size={11} color={deltaColor} />
         <Text style={[styles.deltaText, { color: deltaColor }]}>{up ? '+' : ''}{pct}%</Text>
       </View>
+    );
+  };
+
+  // 4-week rolling average, shown alongside the vs.-last-week delta above so
+  // a spike/dip reads against a stable baseline rather than just one prior week.
+  const renderRollingAvg = (avg: number, isVolume: boolean) => {
+    if (avg === 0) return null;
+    return (
+      <Text style={styles.avgCaption}>
+        avg {isVolume ? Math.round(avg).toLocaleString() : avg}
+      </Text>
     );
   };
 
@@ -246,41 +290,63 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
             </Animated.View>
           ) : (
             <>
+              {streak != null && streak >= 1 && (
+                <Animated.View entering={FadeInDown.duration(400)} style={styles.streakRow}>
+                  <Text style={styles.streakText}>🔥 {streak} week streak</Text>
+                </Animated.View>
+              )}
+
               <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.section}>
                 <View style={styles.statsRow}>
                   <View style={styles.statBox}>
-                    <Text style={styles.statValue}>{data.workouts}</Text>
+                    <Text style={[styles.statValue, data.workouts >= weeklyGoal && { color: colors.save }]}>
+                      {data.workouts}/{weeklyGoal}
+                    </Text>
                     <Text style={styles.statLabel}>Workouts</Text>
                     {renderStatDelta(data.workouts, data.prev_week_workouts)}
+                    {renderRollingAvg(data.rolling_avg_workouts, false)}
                   </View>
                   <View style={styles.statBox}>
                     <Text style={styles.statValue}>{data.total_volume.toLocaleString()}</Text>
                     <Text style={styles.statLabel}>Volume ({data.weight_unit})</Text>
                     {renderStatDelta(data.total_volume, data.prev_week_volume)}
+                    {renderRollingAvg(data.rolling_avg_volume, true)}
                   </View>
                   <View style={styles.statBox}>
                     <Text style={styles.statValue}>{data.total_reps}</Text>
                     <Text style={styles.statLabel}>Reps</Text>
                   </View>
                 </View>
-                <View style={[styles.statsRow, { marginTop: spacing.sm }]}>
-                  <View style={styles.statBox}>
+                <View style={[styles.statsRow, styles.statsRowWrap, { marginTop: spacing.sm }]}>
+                  <View style={[styles.statBox, styles.statBoxWrap]}>
                     <Text style={styles.statValue}>{fmtDuration(data.total_duration_min)}</Text>
                     <Text style={styles.statLabel}>Training Time</Text>
                   </View>
                   {data.distance_km != null && (
-                    <View style={styles.statBox}>
+                    <View style={[styles.statBox, styles.statBoxWrap]}>
                       <Text style={styles.statValue}>{data.distance_km}</Text>
                       <Text style={styles.statLabel}>km</Text>
                     </View>
                   )}
                   {data.bodyweight_change && (
-                    <View style={styles.statBox}>
+                    <View style={[styles.statBox, styles.statBoxWrap]}>
                       <Text style={styles.statValue}>
                         {data.bodyweight_change.end > data.bodyweight_change.start ? '+' : ''}
                         {(data.bodyweight_change.end - data.bodyweight_change.start).toFixed(1)}
                       </Text>
                       <Text style={styles.statLabel}>{data.weight_unit} Change</Text>
+                    </View>
+                  )}
+                  {data.avg_rpe != null && rpeEnabled && (
+                    <View style={[styles.statBox, styles.statBoxWrap]}>
+                      <Text style={styles.statValue}>{data.avg_rpe}</Text>
+                      <Text style={styles.statLabel}>Avg RPE</Text>
+                    </View>
+                  )}
+                  {data.calories_burned != null && (
+                    <View style={[styles.statBox, styles.statBoxWrap]}>
+                      <Text style={styles.statValue}>{data.calories_burned.toLocaleString()}</Text>
+                      <Text style={styles.statLabel}>Calories</Text>
                     </View>
                   )}
                 </View>
@@ -304,6 +370,9 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
               {muscleSlices.length > 0 && (
                 <Animated.View entering={FadeInDown.delay(300).duration(400)} style={styles.section}>
                   <Text style={styles.sectionTitle}>Muscle Groups</Text>
+                  {topMuscle && topMuscle !== 'Other' && (
+                    <Text style={styles.focusLine}>{topMuscle} was your focus this week</Text>
+                  )}
                   <View style={[styles.card, styles.pieCard]}>
                     <PieChart
                       data={muscleSlices.map((s, i) => ({
@@ -356,27 +425,43 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
                 </Animated.View>
               )}
 
+              {data.most_improved_lift && (
+                <Animated.View entering={FadeInDown.delay(350).duration(400)} style={styles.section}>
+                  <View style={[styles.card, styles.milCard]}>
+                    <Ionicons name="trending-up" size={20} color={colors.accent} />
+                    <Text style={styles.milText}>
+                      <Text style={styles.milExercise}>{data.most_improved_lift.exercise_name}</Text>
+                      {': Est. 1RM up to '}
+                      <Text style={styles.milExercise}>{data.most_improved_lift.this_best} {data.weight_unit}</Text>
+                      {' (+'}{data.most_improved_lift.gain}{')'}
+                    </Text>
+                  </View>
+                </Animated.View>
+              )}
+
               {data.prs.length > 0 && (
                 <Animated.View entering={FadeInDown.delay(400).duration(400)} style={styles.section}>
                   <View style={styles.prSectionTitleRow}>
-                    <Ionicons name="trophy" size={14} color={PR_GOLD_TEXT} />
+                    <LaurelBranch height={16} color={PR_GOLD} />
                     <Text style={[styles.sectionTitle, { color: PR_GOLD_TEXT }]}>
                       Personal Records ({data.prs.length})
                     </Text>
+                    <LaurelBranch side="right" height={16} color={PR_GOLD} />
                   </View>
                   <View style={styles.prCard}>
                     {data.prs.map((pr, i) => (
                       <React.Fragment key={i}>
                         {i > 0 && <View style={styles.prDivider} />}
                         <View style={styles.prRow}>
-                          <View style={styles.prIconWrap}>
-                            <Ionicons name="trophy" size={16} color={PR_GOLD_TEXT} />
-                          </View>
                           <View style={styles.prInfo}>
                             <Text style={styles.prExercise} numberOfLines={1}>{pr.exercise_name}</Text>
                             <Text style={styles.prTypeLabel}>{PR_TYPE_LABELS[pr.pr_type] ?? pr.pr_type}</Text>
                           </View>
-                          <Text style={styles.prValue}>{formatPrValue(pr, data.weight_unit)}</Text>
+                          <View style={styles.topValueRow}>
+                            <LaurelBranch height={18} color={PR_GOLD} />
+                            <Text style={styles.prValue}>{formatPrValue(pr, data.weight_unit)}</Text>
+                            <LaurelBranch side="right" height={18} color={PR_GOLD} />
+                          </View>
                         </View>
                       </React.Fragment>
                     ))}
@@ -445,18 +530,29 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary,
     textTransform: 'uppercase', letterSpacing: 0.8,
   },
+  streakRow: { alignItems: 'center' },
+  streakText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
   statsRow: { flexDirection: 'row', gap: 10 },
+  statsRowWrap: { flexWrap: 'wrap' },
   statBox: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: 14, alignItems: 'center' },
+  statBoxWrap: { flexBasis: '30%', flexGrow: 1 },
   statValue: { fontSize: typography.fontSize.xl, fontWeight: '700', color: colors.textPrimary },
   statLabel: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   deltaRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 4 },
   deltaText: { fontSize: 11, fontWeight: '700' },
+  avgCaption: { fontSize: 10, color: colors.textSecondary, marginTop: 2 },
   dayRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md },
   dayDotWrap: { alignItems: 'center', gap: 6 },
   dayDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: colors.border },
   dayLabel: { fontSize: 11, color: colors.textSecondary, fontWeight: '600' },
+  focusLine: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontStyle: 'italic' },
   card: { backgroundColor: colors.surface, borderRadius: 14, overflow: 'hidden' },
   divider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.md },
+  milCard: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md,
+  },
+  milText: { flex: 1, fontSize: typography.fontSize.sm, color: colors.textPrimary, lineHeight: 20 },
+  milExercise: { fontWeight: '700' },
   pieCard: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     padding: spacing.md, overflow: 'visible',
@@ -478,10 +574,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2,
   },
-  prIconWrap: {
-    width: 30, height: 30, borderRadius: 15, backgroundColor: PR_GOLD,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  topValueRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   prInfo: { flex: 1 },
   prExercise: { fontSize: typography.fontSize.md, fontWeight: '700', color: PR_GOLD_TEXT },
   prTypeLabel: {
