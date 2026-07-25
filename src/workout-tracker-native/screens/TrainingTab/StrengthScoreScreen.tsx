@@ -24,6 +24,19 @@ import { STRENGTH_TIERS, SCORE_RANK_COLORS } from '../../constants/strengthRanks
 import LaurelBranch from '../../components/LaurelWreath';
 import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
 
+function SectionRule({ label, style }: { label: string; style?: object }) {
+  const { colors } = useTheme();
+  return (
+    <View style={[{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm }, style]}>
+      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
+      <Text style={{ fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginHorizontal: spacing.sm }}>
+        {label}
+      </Text>
+      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
+    </View>
+  );
+}
+
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'StrengthScore'>;
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -54,7 +67,7 @@ interface ScoreData {
   muscle_groups_used: number;
   big6?: Array<{ exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; estimated_1rm?: number | null; thresholds?: { percentile: number; rank: string; weight: number }[]; has_data: boolean }>;
   supplemental?: Array<{ exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; estimated_1rm?: number | null; thresholds?: { percentile: number; rank: string; weight: number }[]; has_data: boolean }>;
-  supplemental_coverage?: Array<{ exercise: string; category: 'compound' | 'isolation'; has_data: boolean }>;
+  supplemental_coverage?: Array<{ exercise: string; category: 'compound' | 'isolation'; has_data: boolean; true_1rm?: number | null }>;
   muscle_groups?: Array<{ name: string; score: number; rank: { label: string; tier: number; display: string } }>;
   age_adjusted?: boolean;
   age?: number | null;
@@ -114,6 +127,9 @@ export default function StrengthScoreScreen({ navigation }: Props) {
 
   // "More Lifts" coverage modal — which supplemental lifts are tracked vs. not
   const [coverageModalVisible, setCoverageModalVisible] = useState(false);
+
+  // Hero card starts collapsed to just the score + based-on line
+  const [heroExpanded, setHeroExpanded] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -263,6 +279,15 @@ export default function StrengthScoreScreen({ navigation }: Props) {
     }
   }
 
+  // Whether the hero card has anything worth expanding to reveal
+  const hasExtraHeroContent = !!(
+    (scoreData?.age_adjusted && scoreData?.age != null)
+    || bwFreshnessCaption
+    || scoreData?.big6
+    || (strongestLift && weakestLift && strongestLift.exercise !== weakestLift.exercise)
+    || scoreData?.greek_rank
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Header */}
@@ -358,37 +383,47 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                 Based on {scoreData.exercises_used} exercise{scoreData.exercises_used !== 1 ? 's' : ''} across {scoreData.muscle_groups_used} muscle group{scoreData.muscle_groups_used !== 1 ? 's' : ''}
                 {scoreData.last_updated ? `  ·  Updated ${timeAgo(scoreData.last_updated)}` : ''}
               </Text>
-              {scoreData.age_adjusted && scoreData.age != null && (
-                <View style={styles.ageBadge}>
-                  <Text style={styles.ageBadgeText}>
-                    Age-adjusted{scoreData.age_factor != null ? ` +${Math.round((scoreData.age_factor - 1) * 100)}%` : ''} · {scoreData.age}
-                  </Text>
-                </View>
+              {heroExpanded && (
+                <>
+                  {scoreData.age_adjusted && scoreData.age != null && (
+                    <View style={styles.ageBadge}>
+                      <Text style={styles.ageBadgeText}>
+                        Age-adjusted{scoreData.age_factor != null ? ` +${Math.round((scoreData.age_factor - 1) * 100)}%` : ''} · {scoreData.age}
+                      </Text>
+                    </View>
+                  )}
+                  {bwFreshnessCaption && (
+                    <TouchableOpacity
+                      onPress={() => (navigation as any).navigate('ProfileTab', { screen: 'Measurements', initial: false })}
+                    >
+                      <Text style={[styles.coverageText, { color: colors.accent }]}>{bwFreshnessCaption}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {scoreData.big6 && (
+                    <Text style={[styles.coverageText, firstMissingBig6 && { color: colors.accent }]}>
+                      {big6TrackedCount} of 6 Big Lifts tracked{firstMissingBig6 ? ` — try logging ${firstMissingBig6.exercise}` : ''}
+                    </Text>
+                  )}
+                  {strongestLift && weakestLift && strongestLift.exercise !== weakestLift.exercise && (
+                    <Text style={styles.insightText}>
+                      Your {strongestLift.exercise} is your strongest relative lift; {weakestLift.exercise} has the most room to grow.
+                    </Text>
+                  )}
+                  {scoreData.greek_rank && (
+                    <TouchableOpacity
+                      onPress={() => (navigation as any).navigate('ProfileTab', { screen: 'GreekRank', initial: false })}
+                    >
+                      <Text style={styles.greekTeaserText}>
+                        Strength is 45% of your Greek Rank ({scoreData.greek_rank}) →
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </>
               )}
-              {bwFreshnessCaption && (
-                <TouchableOpacity
-                  onPress={() => (navigation as any).navigate('ProfileTab', { screen: 'Measurements', initial: false })}
-                >
-                  <Text style={[styles.coverageText, { color: colors.accent }]}>{bwFreshnessCaption}</Text>
-                </TouchableOpacity>
-              )}
-              {scoreData.big6 && (
-                <Text style={[styles.coverageText, firstMissingBig6 && { color: colors.accent }]}>
-                  {big6TrackedCount} of 6 Big Lifts tracked{firstMissingBig6 ? ` — try logging ${firstMissingBig6.exercise}` : ''}
-                </Text>
-              )}
-              {strongestLift && weakestLift && strongestLift.exercise !== weakestLift.exercise && (
-                <Text style={styles.insightText}>
-                  Your {strongestLift.exercise} is your strongest relative lift; {weakestLift.exercise} has the most room to grow.
-                </Text>
-              )}
-              {scoreData.greek_rank && (
-                <TouchableOpacity
-                  onPress={() => (navigation as any).navigate('ProfileTab', { screen: 'GreekRank', initial: false })}
-                >
-                  <Text style={styles.greekTeaserText}>
-                    Strength is 45% of your Greek Rank ({scoreData.greek_rank}) →
-                  </Text>
+              {hasExtraHeroContent && (
+                <TouchableOpacity style={styles.heroExpandToggle} onPress={() => setHeroExpanded(v => !v)} hitSlop={8}>
+                  <Text style={styles.heroExpandText}>{heroExpanded ? 'Show less' : 'Show more'}</Text>
+                  <Ionicons name={heroExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
                 </TouchableOpacity>
               )}
             </View>
@@ -397,7 +432,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
           {/* Muscle Group Scores */}
           {scoreData.muscle_groups && scoreData.muscle_groups.length > 0 && (
             <Reanimated.View entering={FadeInDown.delay(100).duration(400)}>
-              <Text style={styles.sectionTitle}>Muscle Group Ranks</Text>
+              <SectionRule label="Muscle Group Ranks" />
               <MuscleDiagram
                 muscles={scoreData.muscle_groups.map(mg => mg.name)}
                 muscleColors={Object.fromEntries(
@@ -443,7 +478,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
           {/* Big 6 Lifts */}
           {scoreData.big6 && (
             <Reanimated.View entering={FadeInDown.delay(200).duration(400)}>
-              <Text style={styles.sectionTitle}>Big 6 Lifts</Text>
+              <SectionRule label="Big 6 Lifts" />
               <View style={styles.card}>
                 {scoreData.big6.map((ex, i) => {
                   const exColor = ex.rank ? (SCORE_RANK_COLORS[ex.rank.label] ?? colors.accent) : colors.border;
@@ -494,18 +529,11 @@ export default function StrengthScoreScreen({ navigation }: Props) {
           {scoreData.supplemental && scoreData.supplemental.length > 0 && (
             <Reanimated.View entering={FadeInDown.delay(300).duration(400)}>
               <View style={styles.moreLiftsTitleRow}>
-                <Text style={[styles.sectionTitle, { marginTop: 0 }]}>More Lifts</Text>
+                <SectionRule label="More Lifts" style={{ flex: 1, marginBottom: 0 }} />
                 <TouchableOpacity onPress={() => setCoverageModalVisible(true)} hitSlop={8}>
-                  <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} />
+                  <Ionicons name="information-circle-outline" size={22} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
-              {scoreData.coverage && (
-                <Text style={styles.coverageText}>
-                  {scoreData.coverage.compound.tracked} of {scoreData.coverage.compound.total} Compound Lifts tracked
-                  {'  ·  '}
-                  {scoreData.coverage.isolation.tracked} of {scoreData.coverage.isolation.total} Isolation Lifts tracked
-                </Text>
-              )}
               <View style={styles.card}>
                 {scoreData.supplemental.map((ex, i) => {
                   const exColor = ex.rank ? (SCORE_RANK_COLORS[ex.rank.label] ?? colors.accent) : colors.border;
@@ -566,7 +594,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
             const maxV = minV + step * NO_OF_SECTIONS;
             return (
               <Reanimated.View entering={FadeInDown.delay(400).duration(400)}>
-                <Text style={styles.sectionTitle}>Score Over Time</Text>
+                <SectionRule label="Score Over Time" />
                 <View style={[styles.card, { padding: spacing.sm }]}>
                   <LineChart
                     data={chartData}
@@ -669,7 +697,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                   </View>
 
                   {/* Rank tier distribution bar */}
-                  <Text style={[styles.sectionTitle, { marginTop: spacing.sm }]}>Where You Rank</Text>
+                  <SectionRule label="Where You Rank" style={{ marginTop: spacing.sm }} />
                   <View style={{ marginTop: spacing.xs }}>
                     {/* Marker line */}
                     <View style={{ height: 12, position: 'relative', marginBottom: 2 }}>
@@ -792,51 +820,80 @@ export default function StrengthScoreScreen({ navigation }: Props) {
         </TouchableOpacity>
       </Modal>
 
-      {/* "More Lifts" coverage modal */}
-      <Modal visible={coverageModalVisible} transparent animationType="slide" onRequestClose={() => setCoverageModalVisible(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setCoverageModalVisible(false)}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>More Lifts Coverage</Text>
-            <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
-              {(() => {
-                const coverage = scoreData?.supplemental_coverage ?? [];
-                const tracked = coverage.filter(c => c.has_data);
-                const untracked = coverage.filter(c => !c.has_data);
-                return (
-                  <>
-                    {tracked.length > 0 && (
-                      <View style={styles.infoSection}>
-                        <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>
-                          Tracked ({tracked.length})
-                        </Text>
-                        {tracked.map(c => (
-                          <View key={c.exercise} style={styles.coverageRow}>
-                            <Ionicons name="checkmark-circle" size={16} color={colors.save} />
-                            <Text style={[styles.coverageRowText, { color: colors.textPrimary }]}>{c.exercise}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                    {untracked.length > 0 && (
-                      <View style={styles.infoSection}>
-                        <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>
-                          Not Yet Tracked ({untracked.length})
-                        </Text>
-                        {untracked.map(c => (
-                          <View key={c.exercise} style={styles.coverageRow}>
-                            <Ionicons name="ellipse-outline" size={16} color={colors.textSecondary} />
-                            <Text style={[styles.coverageRowText, { color: colors.textSecondary }]}>{c.exercise}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                  </>
-                );
-              })()}
-            </ScrollView>
+      {/* "More Lifts" coverage page */}
+      <Modal
+        visible={coverageModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setCoverageModalVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => setCoverageModalVisible(false)} hitSlop={8}>
+              <Ionicons name="close" size={24} color={colors.textPrimary} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>More Lifts Coverage</Text>
+            {scoreData?.supplemental_coverage ? (
+              <Text style={[styles.coverageCountBadge, { color: colors.textSecondary }]}>
+                {scoreData.supplemental_coverage.filter(c => c.has_data).length}/{scoreData.supplemental_coverage.length}
+              </Text>
+            ) : (
+              <View style={{ width: 24 }} />
+            )}
           </View>
-        </TouchableOpacity>
+          <ScrollView contentContainerStyle={{ padding: spacing.md }}>
+            {(() => {
+              const coverage = scoreData?.supplemental_coverage ?? [];
+              const compound = coverage.filter(c => c.category === 'compound');
+              const isolation = coverage.filter(c => c.category === 'isolation');
+
+              const renderGrid = (items: typeof coverage) => (
+                <View style={[styles.card, styles.coverageGrid]}>
+                  {items.map(c => (
+                    <View key={c.exercise} style={styles.coverageGridItem}>
+                      <Ionicons
+                        name={c.has_data ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={16}
+                        color={c.has_data ? colors.save : colors.textSecondary}
+                        style={{ marginTop: 2 }}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[styles.coverageRowText, { color: c.has_data ? colors.textPrimary : colors.textSecondary }]}
+                          numberOfLines={1}
+                        >
+                          {c.exercise}
+                        </Text>
+                        {c.true_1rm != null && (
+                          <Text style={styles.coverageOneRm} numberOfLines={1}>
+                            {c.true_1rm} {scoreData?.weight_unit ?? 'lbs'}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              );
+
+              return (
+                <>
+                  {compound.length > 0 && (
+                    <>
+                      <SectionRule label="Compound" />
+                      {renderGrid(compound)}
+                    </>
+                  )}
+                  {isolation.length > 0 && (
+                    <>
+                      <SectionRule label="Isolation" style={{ marginTop: spacing.md }} />
+                      {renderGrid(isolation)}
+                    </>
+                  )}
+                </>
+              );
+            })()}
+          </ScrollView>
+        </View>
       </Modal>
     </View>
   );
@@ -966,6 +1023,11 @@ const createStyles = (colors: Colors) =>
     coverageText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
     insightText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2, lineHeight: 18 },
     greekTeaserText: { fontSize: typography.fontSize.sm, color: colors.accent, fontWeight: '600', marginTop: 4 },
+    heroExpandToggle: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+      marginTop: spacing.sm, paddingVertical: spacing.xs,
+    },
+    heroExpandText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
     rankUpBanner: {
       flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
       backgroundColor: PR_GOLD, borderRadius: 10, padding: spacing.sm,
@@ -987,10 +1049,6 @@ const createStyles = (colors: Colors) =>
       paddingVertical: 3,
     },
     ageBadgeText: { fontSize: typography.fontSize.xs, color: colors.accent, fontWeight: '600' },
-    sectionTitle: {
-      fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary,
-      textTransform: 'uppercase', letterSpacing: 0.8, marginTop: spacing.sm,
-    },
     card: { backgroundColor: colors.surface, borderRadius: 14, overflow: 'hidden' },
     divider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.md },
     mgRow: {
@@ -1045,9 +1103,17 @@ const createStyles = (colors: Colors) =>
     infoSection: { gap: 4 },
     infoHeading: { fontSize: typography.fontSize.md, fontWeight: '700' },
     infoBody: { fontSize: typography.fontSize.sm, lineHeight: 20 },
-    moreLiftsTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm },
-    coverageRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingVertical: 4 },
-    coverageRowText: { fontSize: typography.fontSize.sm },
+    moreLiftsTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm, marginBottom: spacing.sm },
+    coverageCountBadge: { fontSize: typography.fontSize.md, fontWeight: '700' },
+    coverageGrid: {
+      flexDirection: 'row', flexWrap: 'wrap', paddingVertical: spacing.xs, paddingHorizontal: spacing.sm,
+    },
+    coverageGridItem: {
+      flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs,
+      width: '50%', paddingHorizontal: spacing.xs, paddingVertical: spacing.sm,
+    },
+    coverageRowText: { fontSize: typography.fontSize.md, flexShrink: 1 },
+    coverageOneRm: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 1 },
     legendRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.xs },
     legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
     legendDot: { width: 8, height: 8, borderRadius: 4 },

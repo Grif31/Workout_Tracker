@@ -586,6 +586,7 @@ def strength_score():
 
     exercise_percentiles: dict[str, float] = {}
     exercise_1rms: dict[str, float] = {}
+    exercise_true_1rms: dict[str, float] = {}
 
     for exercise_name, template_ids in templates_by_key.items():
         # True 1RM (reps=1 sets)
@@ -646,6 +647,8 @@ def strength_score():
             exercise_percentiles[exercise_name] = pct
             # Display value goes back to the user's unit
             exercise_1rms[exercise_name] = round(best_1rm / unit_to_lbs, 1)
+            if true_1rm > 0:
+                exercise_true_1rms[exercise_name] = round(true_1rm / unit_to_lbs, 1)
 
     if not exercise_percentiles:
         return jsonify({'missing': 'data'}), 422
@@ -775,6 +778,7 @@ def strength_score():
                 'exercise': name,
                 'category': 'compound' if name in COMPOUND_SECONDARY else 'isolation',
                 'has_data': name in exercise_percentiles,
+                'true_1rm': exercise_true_1rms.get(name),
             }
             for name in valid_keys if name not in BIG_6
         ],
