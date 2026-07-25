@@ -35,6 +35,10 @@ export type WeeklySummaryData = {
   rolling_avg_workouts: number;
   rolling_avg_volume: number;
   most_improved_lift?: { exercise_name: string; prev_best: number; this_best: number; gain: number };
+  most_improved_cardio?: {
+    exercise_name: string; pr_type: 'best_time' | 'best_distance'; milestone_label: string;
+    prev_best: number; this_best: number; gain: number;
+  };
   avg_rpe?: number;
   calories_burned?: number;
   distance_km?: number;

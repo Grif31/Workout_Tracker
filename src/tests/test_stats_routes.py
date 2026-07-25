@@ -847,6 +847,116 @@ class TestWeeklySummary:
         data = self._get(client, auth_token).get_json()
         assert 'most_improved_lift' not in data
 
+    def test_most_improved_lift_omitted_when_below_standing_pr(self, client, auth_token):
+        # Regression test: a lift that beats the immediately-prior week but
+        # is still below the user's real all-time PR (set even earlier) must
+        # never be flagged — the check must be gated on a genuine new
+        # PersonalRecord, not just "better than last week specifically".
+        monday = _this_week_monday()
+        last_completed_week = monday - timedelta(weeks=1)
+        two_weeks_ago = monday - timedelta(weeks=2)
+        three_weeks_ago = monday - timedelta(weeks=3)
+        h = auth_headers(auth_token)
+        tid = _create_template(client, auth_token, 'Incline Bench', 'Chest')
+
+        # Three weeks ago: a heavy single sets the real standing PR (epley 240, no rep bonus)
+        client.post('/api/workouts', json={
+            'workoutName': 'Heavy Single', 'date': three_weeks_ago.isoformat(),
+            'exercises': [{'name': 'Incline Bench', 'exercise_template_id': tid,
+                           'sets': [{'reps': 1, 'weight': 240}]}],
+        }, headers=h)
+
+        # Two weeks ago: a much lighter week — this becomes prev_1rm for the displayed week
+        client.post('/api/workouts', json={
+            'workoutName': 'Light', 'date': two_weeks_ago.isoformat(),
+            'exercises': [{'name': 'Incline Bench', 'exercise_template_id': tid,
+                           'sets': [{'reps': 5, 'weight': 100}]}],  # epley 116.67
+        }, headers=h)
+
+        # Last completed week: better than two weeks ago, but still below the real PR
+        client.post('/api/workouts', json={
+            'workoutName': 'Better but not a PR', 'date': last_completed_week.isoformat(),
+            'exercises': [{'name': 'Incline Bench', 'exercise_template_id': tid,
+                           'sets': [{'reps': 10, 'weight': 100}]}],  # epley 133.33, still < 240
+        }, headers=h)
+
+        data = self._get(client, auth_token).get_json()
+        assert 'most_improved_lift' not in data
+
+    # -- Most-improved cardio --
+
+    def test_most_improved_cardio_present_with_correct_gain(self, client, auth_token):
+        monday = _this_week_monday()
+        last_completed_week = monday - timedelta(weeks=1)
+        two_weeks_ago = monday - timedelta(weeks=2)
+        h = auth_headers(auth_token)
+        tid = _create_template(client, auth_token, 'Running', 'Core')
+
+        # Two weeks ago: 5km in 30 min -> 5K best_time PR = 30 (the baseline)
+        client.post('/api/workouts', json={
+            'workoutName': 'Slow 5K', 'date': two_weeks_ago.isoformat(),
+            'exercises': [{'name': 'Running', 'exercise_template_id': tid, 'exercise_type': 'cardio',
+                           'sets': [{'cardio_duration': 30, 'distance': 5, 'distance_unit': 'km'}]}],
+        }, headers=h)
+
+        # Last completed week: 5km in 25 min -> beats the standing 5K PR
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Faster 5K', 'date': last_completed_week.isoformat(),
+            'exercises': [{'name': 'Running', 'exercise_template_id': tid, 'exercise_type': 'cardio',
+                           'sets': [{'cardio_duration': 25, 'distance': 5, 'distance_unit': 'km'}]}],
+        }, headers=h)
+        assert res.status_code == 201
+
+        data = self._get(client, auth_token).get_json()
+        mic = data.get('most_improved_cardio')
+        assert mic is not None
+        assert mic['exercise_name'] == 'Running'
+        assert mic['pr_type'] == 'best_time'
+        assert mic['milestone_label'] == '5K'
+        assert mic['prev_best'] == pytest.approx(30.0, abs=0.01)
+        assert mic['this_best'] == pytest.approx(25.0, abs=0.01)
+        assert mic['gain'] == pytest.approx(5.0, abs=0.01)
+
+    def test_most_improved_cardio_omitted_when_no_overlap(self, client, auth_token):
+        last_completed_week = _this_week_monday() - timedelta(weeks=1)
+        h = auth_headers(auth_token)
+        tid = _create_template(client, auth_token, 'Running', 'Core')
+
+        res = client.post('/api/workouts', json={
+            'workoutName': '5K', 'date': last_completed_week.isoformat(),
+            'exercises': [{'name': 'Running', 'exercise_template_id': tid, 'exercise_type': 'cardio',
+                           'sets': [{'cardio_duration': 25, 'distance': 5, 'distance_unit': 'km'}]}],
+        }, headers=h)
+        assert res.status_code == 201
+
+        data = self._get(client, auth_token).get_json()
+        assert 'most_improved_cardio' not in data
+
+    def test_most_improved_cardio_omitted_when_not_a_new_pr(self, client, auth_token):
+        monday = _this_week_monday()
+        last_completed_week = monday - timedelta(weeks=1)
+        three_weeks_ago = monday - timedelta(weeks=3)
+        h = auth_headers(auth_token)
+        tid = _create_template(client, auth_token, 'Running', 'Core')
+
+        # Three weeks ago: a fast 5K sets the real standing PR
+        client.post('/api/workouts', json={
+            'workoutName': 'Fast 5K', 'date': three_weeks_ago.isoformat(),
+            'exercises': [{'name': 'Running', 'exercise_template_id': tid, 'exercise_type': 'cardio',
+                           'sets': [{'cardio_duration': 20, 'distance': 5, 'distance_unit': 'km'}]}],
+        }, headers=h)
+
+        # Last completed week: slower than the standing PR -> not a new PR
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Slower 5K', 'date': last_completed_week.isoformat(),
+            'exercises': [{'name': 'Running', 'exercise_template_id': tid, 'exercise_type': 'cardio',
+                           'sets': [{'cardio_duration': 28, 'distance': 5, 'distance_unit': 'km'}]}],
+        }, headers=h)
+        assert res.status_code == 201
+
+        data = self._get(client, auth_token).get_json()
+        assert 'most_improved_cardio' not in data
+
     # -- Avg RPE --
 
     def test_avg_rpe_present_when_logged(self, client, auth_token):

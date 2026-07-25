@@ -3,6 +3,8 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm import selectinload
 from models import db, Workout, Exercise, Set, User, ExerciseTemplate, PersonalRecord, StrengthScoreSnapshot, ExerciseMuscleMapping, BodyweightLog
 from utils.strength_standards import epley_1rm
+from utils.lift_progress import compute_most_improved_lift
+from utils.cardio_progress import compute_most_improved_cardio
 
 stats_bp = Blueprint('stats_bp', __name__)
 
@@ -1058,45 +1060,18 @@ def weekly_summary():
     resp['rolling_avg_workouts'] = round(rolling_workout_count / 4.0, 1)
     resp['rolling_avg_volume'] = round((rolling_vol_row.volume or 0) * kg_to_lbs / 4.0)
 
-    # Most-improved lift — best Epley-estimated 1RM this week vs. the prior
-    # week, per exercise; the exercise with the largest positive gain wins.
-    # PersonalRecord has no history (rows are overwritten in place), so this
-    # is computed directly from Set data rather than from PR rows.
-    epley_expr = db.case((Set.reps <= 1, Set.weight), else_=Set.weight * (1 + Set.reps / 30.0))
+    # Most-improved lift — shared helper so it can also feed the AI coach's
+    # insight context without duplicating the query logic.
+    most_improved = compute_most_improved_lift(user_id, week_start, week_end, prev_week_start, kg_to_lbs)
+    if most_improved:
+        resp['most_improved_lift'] = most_improved
 
-    def _best_1rm_by_exercise(start, end):
-        rows = (
-            db.session.query(Exercise.exercise_template_id, db.func.max(epley_expr).label('best'))
-            .join(Set, Set.exercise_id == Exercise.id)
-            .join(Workout, Exercise.workout_id == Workout.id)
-            .filter(
-                Workout.user_id == user_id,
-                Workout.date >= start, Workout.date < end,
-                not_warmup, not_cardio,
-                Set.reps.isnot(None), Set.weight.isnot(None),
-                Exercise.exercise_template_id.isnot(None),
-            )
-            .group_by(Exercise.exercise_template_id)
-            .all()
-        )
-        return {r.exercise_template_id: r.best for r in rows}
-
-    this_1rm = _best_1rm_by_exercise(week_start, week_end)
-    prev_1rm = _best_1rm_by_exercise(prev_week_start, week_start)
-    gains = {
-        tid: this_1rm[tid] - prev_1rm[tid]
-        for tid in this_1rm.keys() & prev_1rm.keys()
-        if this_1rm[tid] > prev_1rm[tid]
-    }
-    if gains:
-        best_tid = max(gains, key=gains.get)
-        tmpl = db.session.get(ExerciseTemplate, best_tid)
-        resp['most_improved_lift'] = {
-            'exercise_name': tmpl.name,
-            'prev_best': round(prev_1rm[best_tid] * kg_to_lbs, 1),
-            'this_best': round(this_1rm[best_tid] * kg_to_lbs, 1),
-            'gain': round(gains[best_tid] * kg_to_lbs, 1),
-        }
+    # Most-improved cardio — independent from most_improved_lift (a week can
+    # surface both), since cardio PRs are milestone-based rather than a
+    # single per-exercise 1RM.
+    most_improved_cardio = compute_most_improved_cardio(user_id, week_start, week_end, prev_week_start)
+    if most_improved_cardio:
+        resp['most_improved_cardio'] = most_improved_cardio
 
     # Avg RPE — omitted if nobody logged an RPE value this week.
     avg_rpe = (

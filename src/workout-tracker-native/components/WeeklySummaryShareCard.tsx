@@ -13,7 +13,8 @@ type WeeklySummaryShareCardProps = {
   prCount: number;
   prLabel?: string;
   topMuscle?: string | null;
-  mostImprovedLift?: { exercise_name: string; gain: number } | null;
+  mostImprovedLift?: { exercise_name: string } | null;
+  mostImprovedCardio?: { exercise_name: string } | null;
   streak?: number | null;
   accentColor: string;
 };
@@ -29,7 +30,7 @@ function fmtDurationMin(min: number): string {
 const WeeklySummaryShareCard = forwardRef<View, WeeklySummaryShareCardProps>(
   ({
     dateRange, workouts, totalVolume, totalReps, totalDurationMin, weightUnit,
-    prCount, prLabel, topMuscle, mostImprovedLift, streak, accentColor,
+    prCount, prLabel, topMuscle, mostImprovedLift, mostImprovedCardio, streak, accentColor,
   }, ref) => {
     // All-bodyweight weeks have 0 volume — reps become the brag number
     const heroValue = totalVolume > 0 ? totalVolume.toLocaleString() : totalReps.toLocaleString();
@@ -38,7 +39,8 @@ const WeeklySummaryShareCard = forwardRef<View, WeeklySummaryShareCardProps>(
     const highlights = [
       streak != null && streak >= 1 ? `🔥 ${streak} week streak` : null,
       topMuscle ? `${topMuscle} was the focus` : null,
-      mostImprovedLift ? `${mostImprovedLift.exercise_name} up ${mostImprovedLift.gain} ${weightUnit}` : null,
+      mostImprovedLift ? `Most Improved: ${mostImprovedLift.exercise_name}` : null,
+      mostImprovedCardio ? `Most Improved Cardio: ${mostImprovedCardio.exercise_name}` : null,
     ].filter((s): s is string => !!s);
 
     return (

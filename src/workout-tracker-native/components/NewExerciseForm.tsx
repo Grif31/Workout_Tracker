@@ -6,7 +6,7 @@ import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { equipmentTypes } from '../constants/equipmentTypes';
 
-export type NewExerciseType = 'strength' | 'duration';
+export type NewExerciseType = 'strength' | 'duration' | 'distance';
 
 type Props = {
   visible: boolean;

@@ -364,6 +364,7 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
               : undefined}
             topMuscle={topMuscle !== 'Other' ? topMuscle : null}
             mostImprovedLift={data.most_improved_lift}
+            mostImprovedCardio={data.most_improved_cardio}
             streak={streak}
             accentColor={colors.accent}
           />
@@ -577,6 +578,32 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
                         </Text>
                         <View style={styles.milGainBadge}>
                           <Text style={styles.milGainText}>+{data.most_improved_lift.gain}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                </Animated.View>
+              )}
+
+              {data.most_improved_cardio && (
+                <Animated.View entering={FadeInDown.delay(360).duration(400)} style={styles.section}>
+                  <Text style={styles.sectionTitle}>Most Improved Cardio</Text>
+                  <View style={[styles.card, styles.milCard]}>
+                    <Ionicons name="trending-up" size={20} color={colors.accent} />
+                    <View style={styles.milInfo}>
+                      <Text style={styles.milExercise} numberOfLines={1}>{data.most_improved_cardio.exercise_name}</Text>
+                      <View style={styles.milStatRow}>
+                        <Text style={styles.milText}>
+                          {data.most_improved_cardio.pr_type === 'best_time'
+                            ? `${data.most_improved_cardio.milestone_label} time down to ${fmtTime(data.most_improved_cardio.this_best)}`
+                            : `${data.most_improved_cardio.milestone_label} distance up to ${data.most_improved_cardio.this_best.toFixed(2)}km`}
+                        </Text>
+                        <View style={styles.milGainBadge}>
+                          <Text style={styles.milGainText}>
+                            {data.most_improved_cardio.pr_type === 'best_time'
+                              ? `-${fmtTime(data.most_improved_cardio.gain)}`
+                              : `+${data.most_improved_cardio.gain.toFixed(2)}km`}
+                          </Text>
                         </View>
                       </View>
                     </View>
