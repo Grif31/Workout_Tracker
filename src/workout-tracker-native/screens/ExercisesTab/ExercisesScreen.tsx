@@ -98,11 +98,15 @@ export default function ExercisesScreen({ navigation }: Props) {
   }, []));
 
   const addNewExercise = async (name: string, muscle: string, equipment: string, exerciseType?: string) => {
+    // NewExerciseForm's 'distance' logging type is a friendlier label for what
+    // the backend just calls 'cardio' — ExerciseTemplate.exercise_type only
+    // recognizes 'strength' | 'cardio' | 'duration'.
+    const backendExerciseType = exerciseType === 'distance' ? 'cardio' : (exerciseType ?? 'strength');
     try {
       const res = await apiFetch('/api/exercises', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, muscle_group: muscle, equipment, exercise_type: exerciseType ?? 'strength' }),
+        body: JSON.stringify({ name, muscle_group: muscle, equipment, exercise_type: backendExerciseType }),
       });
       const data = await res.json();
       if (res.ok) {

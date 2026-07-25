@@ -54,6 +54,7 @@ interface ScoreData {
   muscle_groups_used: number;
   big6?: Array<{ exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; estimated_1rm?: number | null; thresholds?: { percentile: number; rank: string; weight: number }[]; has_data: boolean }>;
   supplemental?: Array<{ exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; estimated_1rm?: number | null; thresholds?: { percentile: number; rank: string; weight: number }[]; has_data: boolean }>;
+  supplemental_coverage?: Array<{ exercise: string; category: 'compound' | 'isolation'; has_data: boolean }>;
   muscle_groups?: Array<{ name: string; score: number; rank: { label: string; tier: number; display: string } }>;
   age_adjusted?: boolean;
   age?: number | null;
@@ -110,6 +111,9 @@ export default function StrengthScoreScreen({ navigation }: Props) {
 
   // Info modal
   const [infoVisible, setInfoVisible] = useState(false);
+
+  // "More Lifts" coverage modal — which supplemental lifts are tracked vs. not
+  const [coverageModalVisible, setCoverageModalVisible] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -489,7 +493,12 @@ export default function StrengthScoreScreen({ navigation }: Props) {
           {/* More Lifts */}
           {scoreData.supplemental && scoreData.supplemental.length > 0 && (
             <Reanimated.View entering={FadeInDown.delay(300).duration(400)}>
-              <Text style={styles.sectionTitle}>More Lifts</Text>
+              <View style={styles.moreLiftsTitleRow}>
+                <Text style={[styles.sectionTitle, { marginTop: 0 }]}>More Lifts</Text>
+                <TouchableOpacity onPress={() => setCoverageModalVisible(true)} hitSlop={8}>
+                  <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
               {scoreData.coverage && (
                 <Text style={styles.coverageText}>
                   {scoreData.coverage.compound.tracked} of {scoreData.coverage.compound.total} Compound Lifts tracked
@@ -782,6 +791,53 @@ export default function StrengthScoreScreen({ navigation }: Props) {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* "More Lifts" coverage modal */}
+      <Modal visible={coverageModalVisible} transparent animationType="slide" onRequestClose={() => setCoverageModalVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setCoverageModalVisible(false)}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>More Lifts Coverage</Text>
+            <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+              {(() => {
+                const coverage = scoreData?.supplemental_coverage ?? [];
+                const tracked = coverage.filter(c => c.has_data);
+                const untracked = coverage.filter(c => !c.has_data);
+                return (
+                  <>
+                    {tracked.length > 0 && (
+                      <View style={styles.infoSection}>
+                        <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>
+                          Tracked ({tracked.length})
+                        </Text>
+                        {tracked.map(c => (
+                          <View key={c.exercise} style={styles.coverageRow}>
+                            <Ionicons name="checkmark-circle" size={16} color={colors.save} />
+                            <Text style={[styles.coverageRowText, { color: colors.textPrimary }]}>{c.exercise}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                    {untracked.length > 0 && (
+                      <View style={styles.infoSection}>
+                        <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>
+                          Not Yet Tracked ({untracked.length})
+                        </Text>
+                        {untracked.map(c => (
+                          <View key={c.exercise} style={styles.coverageRow}>
+                            <Ionicons name="ellipse-outline" size={16} color={colors.textSecondary} />
+                            <Text style={[styles.coverageRowText, { color: colors.textSecondary }]}>{c.exercise}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </>
+                );
+              })()}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -989,6 +1045,9 @@ const createStyles = (colors: Colors) =>
     infoSection: { gap: 4 },
     infoHeading: { fontSize: typography.fontSize.md, fontWeight: '700' },
     infoBody: { fontSize: typography.fontSize.sm, lineHeight: 20 },
+    moreLiftsTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm },
+    coverageRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingVertical: 4 },
+    coverageRowText: { fontSize: typography.fontSize.sm },
     legendRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.xs },
     legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
     legendDot: { width: 8, height: 8, borderRadius: 4 },

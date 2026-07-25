@@ -18,6 +18,7 @@ type Props = {
 const LOGGING_TYPES: { value: NewExerciseType; label: string; hint: string }[] = [
   { value: 'strength', label: 'Reps & Weight', hint: 'e.g. Bench Press' },
   { value: 'duration', label: 'Timed Hold', hint: 'e.g. Plank' },
+  { value: 'distance', label: 'Distance & Time', hint: 'e.g. Running' },
 ];
 
 export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups }: Props) {

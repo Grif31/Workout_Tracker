@@ -58,6 +58,18 @@ describe('NewExerciseForm', () => {
     expect(onSave).toHaveBeenCalledWith('Romanian Deadlift', expect.any(String), expect.any(String), 'strength');
   });
 
+  it('calls onSave with distance type when Distance & Time is selected', () => {
+    const { getByText, getByPlaceholderText } = render(
+      <NewExerciseForm visible={true} onClose={onClose} onSave={onSave} muscleGroups={muscleGroups} />
+    );
+    fireEvent.changeText(getByPlaceholderText('Exercise name'), 'Trail Running');
+    fireEvent.press(getByText('Distance & Time'));
+    fireEvent.press(getByText('Barbell'));
+    fireEvent.press(getByText('Chest'));
+    fireEvent.press(getByText('Save'));
+    expect(onSave).toHaveBeenCalledWith('Trail Running', expect.any(String), expect.any(String), 'distance');
+  });
+
   it('shows all muscle groups', () => {
     const { getByText } = render(
       <NewExerciseForm visible={true} onClose={onClose} onSave={onSave} muscleGroups={muscleGroups} />

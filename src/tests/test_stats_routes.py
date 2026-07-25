@@ -1250,6 +1250,30 @@ class TestStrengthScoreAdditiveFields:
         assert data['coverage']['compound']['tracked'] == 0
         assert data['coverage']['isolation']['tracked'] == 0
 
+    def test_supplemental_coverage_lists_tracked_and_untracked(self, client, auth_token):
+        from models import ExerciseTemplate
+        tmpl = ExerciseTemplate(name='Romanian Deadlift', equipment='Barbell', standards_key='Romanian Deadlift')
+        db.session.add(tmpl)
+        db.session.commit()
+        h = auth_headers(auth_token)
+        client.patch('/api/me', json={'gender': 'male', 'bodyweight': 180, 'weight_unit': 'lbs'}, headers=h)
+        client.post('/api/workouts', json={
+            'workoutName': 'Legs',
+            'exercises': [{'name': 'Romanian Deadlift', 'exercise_template_id': tmpl.id,
+                           'sets': [{'reps': 5, 'weight': 200}]}],
+        }, headers=h)
+
+        data = self._score(client, auth_token)
+        coverage = {c['exercise']: c for c in data['supplemental_coverage']}
+        assert coverage['Romanian Deadlift']['has_data'] is True
+        assert coverage['Romanian Deadlift']['category'] == 'compound'
+        # Some other compound/isolation lift the user never trained should show as untracked
+        untracked = [c for c in data['supplemental_coverage'] if not c['has_data']]
+        assert len(untracked) > 0
+        # Big 6 lifts have their own section — must never appear in this list
+        big6_names = {'Squat', 'Bench Press', 'Deadlift', 'Overhead Press', 'Barbell Row', 'Pull-up'}
+        assert not any(c['exercise'] in big6_names for c in data['supplemental_coverage'])
+
 
 # ---------------------------------------------------------------------------
 # GET /api/stats/strength-score — pull-up bodyweight fallback uses the

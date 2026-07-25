@@ -765,6 +765,22 @@ def strength_score():
         key=lambda x: (x['category'] != 'compound', -(x['percentile'] or 0)),
     )
 
+    # Full compound/isolation reference list (tracked AND not-yet-tracked) for
+    # the "More Lifts" info modal — deliberately separate from supp_list above,
+    # which only lists tracked lifts (what actually renders in the scrollable
+    # card) so that list doesn't balloon with dozens of untracked rows.
+    supp_coverage = sorted(
+        [
+            {
+                'exercise': name,
+                'category': 'compound' if name in COMPOUND_SECONDARY else 'isolation',
+                'has_data': name in exercise_percentiles,
+            }
+            for name in valid_keys if name not in BIG_6
+        ],
+        key=lambda x: (x['category'] != 'compound', not x['has_data'], x['exercise']),
+    )
+
     resp: dict = {
         'overall': round(overall, 1),
         'overall_rank': percentile_to_strength_rank(overall),
@@ -801,6 +817,7 @@ def strength_score():
         }
         resp['big6'] = big6_list
         resp['supplemental'] = supp_list
+        resp['supplemental_coverage'] = supp_coverage
         resp['muscle_groups'] = muscle_groups
 
     return jsonify(resp), 200
