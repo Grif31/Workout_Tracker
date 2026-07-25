@@ -47,6 +47,10 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_R;
 
 const LAST_TIER_KEY = 'strength_score_last_tier';
 
+function toLocalDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function timeAgo(isoStr: string): string {
   const mins = Math.floor((Date.now() - new Date(isoStr).getTime()) / 60000);
   if (mins < 1) return 'just now';
@@ -130,6 +134,9 @@ export default function StrengthScoreScreen({ navigation }: Props) {
 
   // Hero card starts collapsed to just the score + based-on line
   const [heroExpanded, setHeroExpanded] = useState(false);
+
+  // Score Over Time chart range — same client-side filter pattern as ExerciseDetailScreen
+  const [chartRange, setChartRange] = useState<'1M' | '3M' | '6M' | 'All'>('3M');
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -233,24 +240,36 @@ export default function StrengthScoreScreen({ navigation }: Props) {
     }).start();
   }, [scoreData?.overall]);
 
+  // Snapshots only save once per 24h, so "today" may not have one yet — append
+  // the live score as today's point so the chart always ends on the current day.
+  const historyWithToday = useMemo(() => {
+    if (!scoreData) return history;
+    const now = new Date();
+    const last = history[history.length - 1];
+    if (last && toLocalDateStr(new Date(last.date)) === toLocalDateStr(now)) return history;
+    const localIso = `${toLocalDateStr(now)}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
+    return [...history, { date: localIso, score: scoreData.overall }];
+  }, [history, scoreData]);
+
   // Cap visible x-axis labels at ~5 (evenly spaced + always the last point) so
   // dense history doesn't overlap into unreadable clutter. Parsed via `Date`
   // (not string-sliced) so it's correct regardless of the exact ISO format
   // the backend sends — same approach ExerciseDetailScreen's charts use.
-  const chartData = history.map((h, i) => {
+  const rangedHistory = useMemo(() => {
+    if (chartRange === 'All') return historyWithToday;
+    const months = chartRange === '1M' ? 1 : chartRange === '3M' ? 3 : 6;
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - months);
+    return historyWithToday.filter(h => new Date(h.date) >= cutoff);
+  }, [historyWithToday, chartRange]);
+  const chartData = rangedHistory.map((h, i) => {
     const d = new Date(h.date);
     const dateLabel = `${d.getMonth() + 1}/${d.getDate()}`;
-    const labelEvery = history.length <= 6 ? 1 : Math.ceil(history.length / 5);
-    const showLabel = i % labelEvery === 0 || i === history.length - 1;
+    const labelEvery = rangedHistory.length <= 6 ? 1 : Math.ceil(rangedHistory.length / 5);
+    const showLabel = i % labelEvery === 0 || i === rangedHistory.length - 1;
     return { value: h.score, dateLabel, label: showLabel ? dateLabel : '' };
   });
   const CHART_W = Dimensions.get('window').width - spacing.md * 2 - spacing.sm * 2;
-
-  // Coverage: how many of the 6 canonical Big-Lift slots actually have data —
-  // the formula silently skips missing lifts rather than penalizing them, so
-  // this is purely a transparency addition, not a scoring change.
-  const big6TrackedCount = scoreData?.big6?.filter(e => e.has_data).length ?? 0;
-  const firstMissingBig6 = scoreData?.big6?.find(e => !e.has_data);
 
   // Strongest / weakest relative lift — pure client-side derivation from data
   // already in scoreData, only meaningful with at least 2 tracked lifts.
@@ -278,15 +297,6 @@ export default function StrengthScoreScreen({ navigation }: Props) {
       }
     }
   }
-
-  // Whether the hero card has anything worth expanding to reveal
-  const hasExtraHeroContent = !!(
-    (scoreData?.age_adjusted && scoreData?.age != null)
-    || bwFreshnessCaption
-    || scoreData?.big6
-    || (strongestLift && weakestLift && strongestLift.exercise !== weakestLift.exercise)
-    || scoreData?.greek_rank
-  );
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -342,7 +352,11 @@ export default function StrengthScoreScreen({ navigation }: Props) {
 
           {/* Hero card */}
           <Reanimated.View entering={FadeInDown.duration(400)}>
-            <View style={[styles.heroCard, { borderColor: rankColor }]}>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => setHeroExpanded(v => !v)}
+              style={[styles.heroCard, { borderColor: rankColor }]}
+            >
               <LinearGradient
                 colors={[rankColor + '26', colors.surface]}
                 style={StyleSheet.absoluteFillObject}
@@ -385,6 +399,9 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               </Text>
               {heroExpanded && (
                 <>
+                  <Text style={styles.insightText}>
+                    "Stronger than" compares your bodyweight-adjusted lifts to reference strength standards for your gender — not literally every lifter in the app.
+                  </Text>
                   {scoreData.age_adjusted && scoreData.age != null && (
                     <View style={styles.ageBadge}>
                       <Text style={styles.ageBadgeText}>
@@ -399,15 +416,21 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                       <Text style={[styles.coverageText, { color: colors.accent }]}>{bwFreshnessCaption}</Text>
                     </TouchableOpacity>
                   )}
-                  {scoreData.big6 && (
-                    <Text style={[styles.coverageText, firstMissingBig6 && { color: colors.accent }]}>
-                      {big6TrackedCount} of 6 Big Lifts tracked{firstMissingBig6 ? ` — try logging ${firstMissingBig6.exercise}` : ''}
-                    </Text>
-                  )}
                   {strongestLift && weakestLift && strongestLift.exercise !== weakestLift.exercise && (
-                    <Text style={styles.insightText}>
-                      Your {strongestLift.exercise} is your strongest relative lift; {weakestLift.exercise} has the most room to grow.
-                    </Text>
+                    <View style={styles.strongestWeakestRow}>
+                      <View style={styles.strongestWeakestCol}>
+                        <Text style={styles.strongestWeakestLabel}>Strongest</Text>
+                        <Text style={styles.strongestWeakestValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                          {strongestLift.exercise}
+                        </Text>
+                      </View>
+                      <View style={styles.strongestWeakestCol}>
+                        <Text style={styles.strongestWeakestLabel}>Weakest</Text>
+                        <Text style={styles.strongestWeakestValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                          {weakestLift.exercise}
+                        </Text>
+                      </View>
+                    </View>
                   )}
                   {scoreData.greek_rank && (
                     <TouchableOpacity
@@ -420,13 +443,11 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                   )}
                 </>
               )}
-              {hasExtraHeroContent && (
-                <TouchableOpacity style={styles.heroExpandToggle} onPress={() => setHeroExpanded(v => !v)} hitSlop={8}>
-                  <Text style={styles.heroExpandText}>{heroExpanded ? 'Show less' : 'Show more'}</Text>
-                  <Ionicons name={heroExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
-                </TouchableOpacity>
-              )}
-            </View>
+              <View style={styles.heroExpandToggle} pointerEvents="none">
+                <Text style={styles.heroExpandText}>{heroExpanded ? 'Show less' : 'Show more'}</Text>
+                <Ionicons name={heroExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
+              </View>
+            </TouchableOpacity>
           </Reanimated.View>
 
           {/* Muscle Group Scores */}
@@ -581,21 +602,35 @@ export default function StrengthScoreScreen({ navigation }: Props) {
           )}
 
           {/* Score History */}
-          {chartData.length >= 2 && (() => {
+          {historyWithToday.length >= 2 && (() => {
             const scores = chartData.map(d => d.value);
             const NO_OF_SECTIONS = 4;
             // Snap the y-axis range to whole-number, evenly-divisible steps so
             // every section boundary lands on a clean integer (e.g. 55/68/81/94
             // instead of 57.3/68.6/...) rather than relying on label rounding alone.
-            const rawMin = Math.max(0, Math.min(...scores) - 5);
-            const rawMax = Math.min(100, Math.max(...scores) + 5);
+            const rawMin = scores.length ? Math.max(0, Math.min(...scores) - 5) : 0;
+            const rawMax = scores.length ? Math.min(100, Math.max(...scores) + 5) : 100;
             const step = Math.max(1, Math.ceil((rawMax - rawMin) / NO_OF_SECTIONS));
             const minV = Math.floor(rawMin / step) * step;
             const maxV = minV + step * NO_OF_SECTIONS;
             return (
               <Reanimated.View entering={FadeInDown.delay(400).duration(400)}>
-                <SectionRule label="Score Over Time" />
+                <View style={styles.moreLiftsTitleRow}>
+                  <SectionRule label="Score Over Time" style={{ flex: 1, marginBottom: 0 }} />
+                  <View style={styles.rangeToggle}>
+                    {(['1M', '3M', '6M', 'All'] as const).map(r => (
+                      <TouchableOpacity
+                        key={r}
+                        style={[styles.rangeBtn, chartRange === r && { backgroundColor: colors.accent + '22' }]}
+                        onPress={() => setChartRange(r)}
+                      >
+                        <Text style={[styles.rangeBtnText, chartRange === r && { color: colors.accent, fontWeight: '700' }]}>{r}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
                 <View style={[styles.card, { padding: spacing.sm }]}>
+                  {chartData.length >= 2 ? (
                   <LineChart
                     data={chartData}
                     width={CHART_W}
@@ -651,6 +686,9 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                       ),
                     }}
                   />
+                  ) : (
+                    <Text style={styles.noDataText}>Not enough history in this range</Text>
+                  )}
                 </View>
               </Reanimated.View>
             );
@@ -1022,12 +1060,25 @@ const createStyles = (colors: Colors) =>
     basedOn: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
     coverageText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
     insightText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2, lineHeight: 18 },
+    strongestWeakestRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
+    strongestWeakestCol: { flex: 1 },
+    strongestWeakestLabel: {
+      fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary,
+      textTransform: 'uppercase', letterSpacing: 0.5,
+    },
+    strongestWeakestValue: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary, marginTop: 2 },
     greekTeaserText: { fontSize: typography.fontSize.sm, color: colors.accent, fontWeight: '600', marginTop: 4 },
     heroExpandToggle: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
       marginTop: spacing.sm, paddingVertical: spacing.xs,
     },
     heroExpandText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
+    rangeToggle: {
+      flexDirection: 'row', backgroundColor: colors.surface,
+      borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm + 2, padding: 2,
+    },
+    rangeBtn: { paddingVertical: 4, paddingHorizontal: 12, borderRadius: radius.sm, alignItems: 'center' },
+    rangeBtnText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
     rankUpBanner: {
       flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
       backgroundColor: PR_GOLD, borderRadius: 10, padding: spacing.sm,
