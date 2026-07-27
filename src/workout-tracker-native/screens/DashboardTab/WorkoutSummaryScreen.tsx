@@ -60,6 +60,19 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
       return (b.value ?? 0) - (a.value ?? 0);
     });
 
+  // Collapse repeats of the same exercise+type (e.g. two rep-record sets at
+  // different weights) into one row with a ×N suffix, matching WorkoutDetails.
+  const groupedPrs = useMemo(() => {
+    const map = new Map<string, { exercise_name: string; pr_type: string; count: number }>();
+    for (const pr of filteredPrs) {
+      const key = `${pr.exercise_name}|${pr.pr_type}`;
+      const entry = map.get(key);
+      if (entry) entry.count += 1;
+      else map.set(key, { exercise_name: pr.exercise_name, pr_type: pr.pr_type, count: 1 });
+    }
+    return [...map.values()];
+  }, [filteredPrs]);
+
   useEffect(() => {
     AsyncStorage.multiGet(['greek_rank_cached', `profile_frame_rank_${user?.id}`]).then(pairs => {
       const [rankRaw, frameRaw] = pairs.map(p => p[1]);
@@ -180,13 +193,14 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           <Text style={s.subline}>"{workoutName}"</Text>
         </Animated.View>
 
-        {filteredPrs.length > 0 && (
+        {groupedPrs.length > 0 && (
           <Animated.View entering={FadeInDown.delay(100).duration(400)} style={s.section}>
-            {filteredPrs.length === 1 ? (
+            {groupedPrs.length === 1 ? (
               <View style={s.prDropdownHeader}>
                 <LaurelBranch height={20} color={PR_GOLD_TEXT} />
                 <Text style={s.prText}>
-                  {filteredPrs[0].exercise_name} — new {PR_TYPE_LABELS[filteredPrs[0].pr_type] ?? filteredPrs[0].pr_type.replace(/_/g, ' ')} PR!
+                  {groupedPrs[0].exercise_name} — new {PR_TYPE_LABELS[groupedPrs[0].pr_type] ?? groupedPrs[0].pr_type.replace(/_/g, ' ')} PR!
+                  {groupedPrs[0].count > 1 ? ` ×${groupedPrs[0].count}` : ''}
                 </Text>
                 <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
               </View>
@@ -204,11 +218,12 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
                   <Text style={s.prChevron}>{prExpanded ? '▲' : '▼'}</Text>
                   <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
                 </TouchableOpacity>
-                {prExpanded && filteredPrs.map((pr, i) => (
+                {prExpanded && groupedPrs.map((pr, i) => (
                   <View key={i} style={s.prBanner}>
                     <LaurelBranch height={20} color={PR_GOLD_TEXT} />
                     <Text style={s.prText}>
                       {pr.exercise_name} — new {PR_TYPE_LABELS[pr.pr_type] ?? pr.pr_type.replace(/_/g, ' ')} PR!
+                      {pr.count > 1 ? ` ×${pr.count}` : ''}
                     </Text>
                     <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
                   </View>

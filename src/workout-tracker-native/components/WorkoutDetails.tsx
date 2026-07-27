@@ -485,7 +485,8 @@ export default function WorkoutDetailsScreen({
             const d = Number(b.distance) || 0;
             return s + ((b.distance_unit === 'mi' ? d * 1.60934 : d));
           }, 0);
-          const kcal = estimateCalories(exercise.name, totalDur, bodyKg);
+          const speedKmH = totalDur > 0 && totalDistKm > 0 ? totalDistKm / (totalDur / 60) : undefined;
+          const kcal = estimateCalories(exercise.name, totalDur, bodyKg, speedKmH);
 
           let routeCoords: { latitude: number; longitude: number }[] | null = null;
           if (exercise.route_polyline) {

@@ -5,7 +5,7 @@ module.exports = {
     name: IS_DEV ? 'Aretē (Dev)' : 'Aretē',
     slug: 'workout-tracker-native',
     scheme: 'aretefitness',
-    version: '1.0.2',
+    version: '1.1.0',
     orientation: 'portrait',
     icon: './assets/Arete_icon.png',
     userInterfaceStyle: 'automatic',

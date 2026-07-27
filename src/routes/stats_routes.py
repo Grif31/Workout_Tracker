@@ -60,10 +60,15 @@ def exercise_stats():
         .join(Workout, Exercise.workout_id == Workout.id)
         .options(selectinload(Exercise.sets))
         .filter(Workout.user_id == user_id)
-        .filter(db.func.lower(Exercise.name) == name.lower())
     )
+    # exercise_template_id is the real identity link — trust it alone when given.
+    # Logged Exercise.name can drift from the template's name (e.g. GPS-tracked
+    # runs historically saved as "Run" instead of the "Running" template name),
+    # so requiring both would wrongly exclude rows that clearly belong together.
     if template_id:
         query = query.filter(Exercise.exercise_template_id == template_id)
+    else:
+        query = query.filter(db.func.lower(Exercise.name) == name.lower())
     rows = query.order_by(Workout.date.asc()).all()
 
     if not rows:

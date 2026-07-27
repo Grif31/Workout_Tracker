@@ -1329,3 +1329,47 @@ class TestPullupFallbackScale:
         bw_pct = self._pullup_entry(client, auth_token)['percentile']
         weighted_pct = self._pullup_entry(client, auth_token2)['percentile']
         assert weighted_pct > bw_pct
+
+
+class TestExerciseStats:
+
+    def test_template_id_match_ignores_stale_exercise_name(self, client, auth_token):
+        # GPS-tracked runs historically saved Exercise.name as the raw activity
+        # chip label ("Run") instead of the template's name ("Running") — the
+        # PR tap-through and exercise list both navigate using the template's
+        # name, so the lookup must not require Exercise.name to match when a
+        # valid exercise_template_id is already given.
+        h = auth_headers(auth_token)
+        tid = _create_template(client, auth_token, 'Running', 'Core')
+        payload = {
+            'workoutName': 'Run',
+            'exercises': [{
+                'name': 'Run', 'exercise_template_id': tid, 'exercise_type': 'cardio',
+                'sets': [{'cardio_duration': 30, 'distance': 5, 'distance_unit': 'km'}],
+            }],
+        }
+        res = client.post('/api/workouts', json=payload, headers=h)
+        assert res.status_code == 201
+
+        res = client.get(f'/api/stats/exercise?name=Running&exercise_template_id={tid}', headers=h)
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data['exercise_type'] == 'cardio'
+        assert len(data['history']) == 1
+
+    def test_name_only_lookup_still_works_without_template_id(self, client, auth_token):
+        h = auth_headers(auth_token)
+        tid = _create_template(client, auth_token, 'Bench Press', 'Chest')
+        payload = {
+            'workoutName': 'Push Day',
+            'exercises': [{
+                'name': 'Bench Press', 'exercise_template_id': tid,
+                'sets': [{'reps': 5, 'weight': 135, 'set_type': 'N'}],
+            }],
+        }
+        res = client.post('/api/workouts', json=payload, headers=h)
+        assert res.status_code == 201
+
+        res = client.get('/api/stats/exercise?name=Bench Press', headers=h)
+        assert res.status_code == 200
+        assert len(res.get_json()['history']) == 1

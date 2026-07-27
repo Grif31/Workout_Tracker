@@ -99,7 +99,11 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
     const dur = Number(set?.cardio_duration) || 0;
     const dist = Number(set?.distance) || 0;
     const elev = set?.elevation_gain != null ? Number(set.elevation_gain) : null;
-    const speedKmH = dur > 0 && dist > 0 ? dist / (dur / 60) : 0;
+    // set.distance is stored in whatever unit was active when logged (distance_unit) —
+    // must convert to true km before deriving speed, or a miles-preference user's speed
+    // (and therefore the MET-based calorie estimate) comes out too low.
+    const distKm = set?.distance_unit === 'mi' ? dist * 1.60934 : dist;
+    const speedKmH = dur > 0 && distKm > 0 ? distKm / (dur / 60) : 0;
     const kcal = estimateCalories(ex?.name ?? '', dur, weightKg, speedKmH);
 
     let decodedCoords: Coord[] = [];

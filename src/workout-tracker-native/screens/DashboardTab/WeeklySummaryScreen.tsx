@@ -144,6 +144,7 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
   const [selectedMuscleIdx, setSelectedMuscleIdx] = useState<number | null>(null);
   const [weeklyGoal, setWeeklyGoal] = useState(3);
   const [rpeEnabled, setRpeEnabled] = useState(false);
+  const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('km');
   const [streak, setStreak] = useState<number | null>(null);
   const [sharing, setSharing] = useState(false);
   const shareCardRef = useRef<View>(null);
@@ -173,11 +174,12 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.multiGet([`workout_weekly_goal_${user.id}`, `${RPE_KEY}_${user.id}`]).then(pairs => {
-      const [goalRaw, rpeRaw] = pairs.map(p => p[1]);
+    AsyncStorage.multiGet([`workout_weekly_goal_${user.id}`, `${RPE_KEY}_${user.id}`, `gps_distance_unit_${user.id}`]).then(pairs => {
+      const [goalRaw, rpeRaw, distUnitRaw] = pairs.map(p => p[1]);
       const goal = goalRaw ? parseInt(goalRaw, 10) : 3;
       setWeeklyGoal(Number.isFinite(goal) && goal > 0 ? goal : 3);
       setRpeEnabled(rpeRaw === 'true');
+      setDistanceUnit(distUnitRaw === 'mi' ? 'mi' : 'km');
     });
   }, [user?.id]);
 
@@ -461,8 +463,10 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
                   </View>
                   {data.distance_km != null && (
                     <View style={[styles.statBox, styles.statBoxWrap]}>
-                      <Text style={styles.statValue}>{data.distance_km}</Text>
-                      <Text style={styles.statLabel}>km</Text>
+                      <Text style={styles.statValue}>
+                        {(distanceUnit === 'mi' ? data.distance_km * 0.621371 : data.distance_km).toFixed(2)}
+                      </Text>
+                      <Text style={styles.statLabel}>{distanceUnit}</Text>
                     </View>
                   )}
                   {data.bodyweight_change && (
@@ -596,13 +600,13 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
                         <Text style={styles.milText}>
                           {data.most_improved_cardio.pr_type === 'best_time'
                             ? `${data.most_improved_cardio.milestone_label} time down to ${fmtTime(data.most_improved_cardio.this_best)}`
-                            : `${data.most_improved_cardio.milestone_label} distance up to ${data.most_improved_cardio.this_best.toFixed(2)}km`}
+                            : `${data.most_improved_cardio.milestone_label} distance up to ${(distanceUnit === 'mi' ? data.most_improved_cardio.this_best * 0.621371 : data.most_improved_cardio.this_best).toFixed(2)}${distanceUnit}`}
                         </Text>
                         <View style={styles.milGainBadge}>
                           <Text style={styles.milGainText}>
                             {data.most_improved_cardio.pr_type === 'best_time'
                               ? `-${fmtTime(data.most_improved_cardio.gain)}`
-                              : `+${data.most_improved_cardio.gain.toFixed(2)}km`}
+                              : `+${(distanceUnit === 'mi' ? data.most_improved_cardio.gain * 0.621371 : data.most_improved_cardio.gain).toFixed(2)}${distanceUnit}`}
                           </Text>
                         </View>
                       </View>

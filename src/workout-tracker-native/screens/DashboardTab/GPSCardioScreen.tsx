@@ -411,7 +411,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
       date: dateStr,
       duration: Math.round(durationMin),
       exercises: [{
-        name: activity,
+        name: ACTIVITY_TEMPLATE_NAME[activity],
         exercise_template_id: exerciseTemplateId,
         exercise_type: 'cardio',
         route_polyline: encodedPolyline,
