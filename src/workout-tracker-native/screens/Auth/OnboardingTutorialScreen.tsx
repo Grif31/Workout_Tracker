@@ -104,7 +104,7 @@ export default function OnboardingTutorialScreen({ navigation }: Props) {
       listRef.current?.scrollToIndex({ index: next, animated: true });
       setActiveIndex(next);
     } else {
-      navigation.navigate('Onboarding');
+      navigation.navigate('OnboardingUnits');
     }
   };
 
@@ -122,7 +122,7 @@ export default function OnboardingTutorialScreen({ navigation }: Props) {
           resizeMode="contain"
         />
         {!isLast ? (
-          <TouchableOpacity onPress={() => navigation.navigate('Onboarding')} style={styles.skipBtn}>
+          <TouchableOpacity onPress={() => navigation.navigate('OnboardingUnits')} style={styles.skipBtn}>
             <Text style={styles.skipText}>Skip</Text>
           </TouchableOpacity>
         ) : (

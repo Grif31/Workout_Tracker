@@ -109,8 +109,15 @@ function fmtTime(mins: number): string {
 // weight_context is a sentinel -1 (not null) on this endpoint's raw query for
 // pr_types that don't use it (max_weight, estimated_1rm) — treat <0 as absent,
 // matching PersonalRecord.to_dict()'s convention everywhere else in the app.
-function formatPrValue(pr: { pr_type: string; value: number; weight_context?: number }, weightUnit: string): string {
+function formatPrValue(
+  pr: { pr_type: string; value: number; weight_context?: number },
+  weightUnit: string,
+  distanceUnit: 'km' | 'mi',
+): string {
   const ctx = pr.weight_context != null && pr.weight_context >= 0 ? pr.weight_context : null;
+  // best_time/best_distance store their distance-flavored fields in km — convert
+  // to the user's preferred unit, matching the rest of Weekly Summary's distance display.
+  const toDist = (km: number) => (distanceUnit === 'mi' ? km * 0.621371 : km);
   switch (pr.pr_type) {
     case 'max_weight':
       return `${pr.value} ${weightUnit}`;
@@ -119,9 +126,9 @@ function formatPrValue(pr: { pr_type: string; value: number; weight_context?: nu
         ? `${pr.value} reps @ ${ctx === 0 ? 'BW' : `${ctx} ${weightUnit}`}`
         : `${pr.value} reps`;
     case 'best_time':
-      return ctx != null ? `${fmtTime(pr.value)} / ${ctx}km` : fmtTime(pr.value);
+      return ctx != null ? `${fmtTime(pr.value)} / ${toDist(ctx).toFixed(2)}${distanceUnit}` : fmtTime(pr.value);
     case 'best_distance':
-      return ctx != null ? `${pr.value.toFixed(2)}km / ${ctx}min` : `${pr.value.toFixed(2)}km`;
+      return ctx != null ? `${toDist(pr.value).toFixed(2)}${distanceUnit} / ${ctx}min` : `${toDist(pr.value).toFixed(2)}${distanceUnit}`;
     case 'max_duration':
       return fmtHold(pr.value);
     default:
@@ -144,7 +151,7 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
   const [selectedMuscleIdx, setSelectedMuscleIdx] = useState<number | null>(null);
   const [weeklyGoal, setWeeklyGoal] = useState(3);
   const [rpeEnabled, setRpeEnabled] = useState(false);
-  const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('km');
+  const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
   const [streak, setStreak] = useState<number | null>(null);
   const [sharing, setSharing] = useState(false);
   const shareCardRef = useRef<View>(null);
@@ -179,7 +186,7 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
       const goal = goalRaw ? parseInt(goalRaw, 10) : 3;
       setWeeklyGoal(Number.isFinite(goal) && goal > 0 ? goal : 3);
       setRpeEnabled(rpeRaw === 'true');
-      setDistanceUnit(distUnitRaw === 'mi' ? 'mi' : 'km');
+      setDistanceUnit(distUnitRaw === 'km' ? 'km' : 'mi');
     });
   }, [user?.id]);
 
@@ -325,7 +332,7 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
         </View>
         <View style={styles.topValueRow}>
           <LaurelBranch height={18} color={PR_GOLD} />
-          <Text style={styles.prValue}>{formatPrValue(pr, weightUnit)}</Text>
+          <Text style={styles.prValue}>{formatPrValue(pr, weightUnit, distanceUnit)}</Text>
           <LaurelBranch side="right" height={18} color={PR_GOLD} />
         </View>
         <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} style={{ alignSelf: 'center' }} />

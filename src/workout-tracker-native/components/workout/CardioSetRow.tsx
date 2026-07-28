@@ -95,10 +95,10 @@ export default function CardioSetRow({ set, setIndex, onChangeField, onDelete }:
               {['km', 'mi'].map(u => (
                 <TouchableOpacity
                   key={u}
-                  style={[styles.cardioUnitBtn, (set.distance_unit || 'km') === u && { backgroundColor: colors.accent }]}
+                  style={[styles.cardioUnitBtn, (set.distance_unit || 'mi') === u && { backgroundColor: colors.accent }]}
                   onPress={() => onChangeField('distance_unit', u)}
                 >
-                  <Text style={{ fontSize: typography.fontSize.xs, fontWeight: '700', color: (set.distance_unit || 'km') === u ? colors.accentText : colors.textSecondary }}>
+                  <Text style={{ fontSize: typography.fontSize.xs, fontWeight: '700', color: (set.distance_unit || 'mi') === u ? colors.accentText : colors.textSecondary }}>
                     {u}
                   </Text>
                 </TouchableOpacity>

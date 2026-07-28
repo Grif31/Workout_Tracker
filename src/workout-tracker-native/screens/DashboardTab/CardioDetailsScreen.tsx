@@ -66,13 +66,13 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
   const [workout, setWorkout] = useState<CardioWorkout | null>(null);
   const [loading, setLoading] = useState(true);
   const shareCardRef = useRef<View>(null);
-  const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('km');
+  const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
   const [renameVisible, setRenameVisible] = useState(false);
   const [renameText, setRenameText] = useState('');
 
   useEffect(() => {
     AsyncStorage.getItem(`gps_distance_unit_${user?.id}`).then(v => {
-      if (v === 'mi') setDistanceUnit('mi');
+      setDistanceUnit(v === 'km' ? 'km' : 'mi');
     });
   }, []);
 

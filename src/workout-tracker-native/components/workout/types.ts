@@ -79,7 +79,7 @@ export function fmtHold(minutes: number): string {
 // Blank set matching the exercise's logging mode
 export const makeInitialSet = (ex: { exercise_type?: string; equipment?: string }): WorkoutSet =>
   ex.exercise_type === 'cardio'
-    ? { uid: makeUid(), reps: '', weight: '', set_type: 'N', cardio_duration: '', distance: '', distance_unit: 'km', intensity: '' }
+    ? { uid: makeUid(), reps: '', weight: '', set_type: 'N', cardio_duration: '', distance: '', distance_unit: 'mi', intensity: '' }
     : isDuration(ex)
     ? { uid: makeUid(), reps: '', weight: '', set_type: 'N', cardio_duration: '' }
     : { uid: makeUid(), reps: '', weight: isBodyweight(ex) ? '0' : '', set_type: 'N' };

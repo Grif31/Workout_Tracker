@@ -9,6 +9,7 @@ export type ExerciseDetailParams = {
   description?: string;
   imageUrl?: string;
   isCustom?: boolean;
+  initialTab?: 'about' | 'stats' | 'history';
 };
 
 export type WorkoutSummaryParams = {
@@ -135,8 +136,10 @@ export type AuthStackParamsList = {
 }
 
 export type OnboardingStackParamsList = {
-    Onboarding:         undefined;
-    OnboardingTutorial: undefined;
+    Onboarding:             undefined;
+    OnboardingTutorial:     undefined;
+    OnboardingUnits:        undefined;
+    OnboardingPersonalInfo: undefined;
 }
 
 export type RootStackParamsList = {

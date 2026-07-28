@@ -89,6 +89,14 @@ export default function ProfileScreen({ navigation }: Props) {
   const weeklyGoalKey = `workout_weekly_goal_${user?.id}`;
 
   const [selectedFrame, setSelectedFrame] = useState('Neophyte');
+  const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
+
+  useEffect(() => {
+    if (!user?.id) return;
+    AsyncStorage.getItem(`gps_distance_unit_${user.id}`).then(v => {
+      setDistanceUnit(v === 'km' ? 'km' : 'mi');
+    });
+  }, [user?.id]);
   const [greekRank, setGreekRank]         = useState<string | null>(null);
 
   const [calendarVisible, setCalendarVisible]       = useState(false);
@@ -398,7 +406,7 @@ export default function ProfileScreen({ navigation }: Props) {
                               ? fmtTime(pr.value)
                               : pr.pr_type === 'max_duration'
                                 ? fmtHold(pr.value)
-                                : `${pr.value.toFixed(1)} km`}
+                                : `${(distanceUnit === 'mi' ? pr.value * 0.621371 : pr.value).toFixed(1)} ${distanceUnit}`}
                       </Text>
                       <Text style={styles.prCardType}>
                         {pr.pr_type === 'max_weight' ? 'Max Weight'
@@ -863,7 +871,7 @@ export default function ProfileScreen({ navigation }: Props) {
                     else if (p.pr_type === 'estimated_1rm') { label = 'Est. 1RM'; valueStr = `${p.value} ${unit}`; }
                     else if (p.pr_type === 'max_reps') { label = 'Max Reps'; valueStr = `${p.value} reps${p.weight_context != null ? ` @ ${p.weight_context} ${unit}` : ''}`; }
                     else if (p.pr_type === 'best_time') { valueStr = fmtTime(p.value); }
-                    else if (p.pr_type === 'best_distance') { valueStr = `${p.value.toFixed(1)} km`; }
+                    else if (p.pr_type === 'best_distance') { valueStr = `${(distanceUnit === 'mi' ? p.value * 0.621371 : p.value).toFixed(1)} ${distanceUnit}`; }
                     else if (p.pr_type === 'max_duration') { label = 'Longest Hold'; valueStr = fmtHold(p.value); }
                     opts.push({ label, value: valueStr, prType: p.pr_type, context: p.weight_context ?? null });
                   }

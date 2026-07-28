@@ -1,10 +1,11 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator,
   Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useActionSheet } from '@expo/react-native-action-sheet';
 import polylineLib from '@mapbox/polyline';
 
@@ -90,6 +91,7 @@ export default function WorkoutDetailsScreen({
   }), [colors]);
 
   const { showActionSheetWithOptions } = useActionSheet();
+  const navigation = useNavigation<any>();
   const { user } = useAuth();
   const weightUnit = user?.weight_unit === 'kg' ? 'kg' : 'lbs';
 
@@ -100,6 +102,14 @@ export default function WorkoutDetailsScreen({
   const [templateModal, setTemplateModal] = useState<{ visible: boolean; name: string; excluded: number }>({
     visible: false, name: '', excluded: 0,
   });
+  const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
+
+  useEffect(() => {
+    if (!user?.id) return;
+    AsyncStorage.getItem(`gps_distance_unit_${user.id}`).then(v => {
+      setDistanceUnit(v === 'km' ? 'km' : 'mi');
+    });
+  }, [user?.id]);
 
   useFocusEffect(useCallback(() => { fetchWorkout(); }, [workoutId]));
 
@@ -137,7 +147,7 @@ export default function WorkoutDetailsScreen({
           rpe: mode === 'edit' ? (s.rpe != null ? String(s.rpe) : '') : '',
           cardio_duration: mode === 'edit' ? (s.cardio_duration ?? '') : '',
           distance: mode === 'edit' ? (s.distance ?? '') : '',
-          distance_unit: mode === 'edit' ? (s.distance_unit ?? 'km') : 'km',
+          distance_unit: mode === 'edit' ? (s.distance_unit ?? 'km') : 'mi',
           intensity: mode === 'edit' ? (s.intensity ?? '') : '',
         })),
       })),
@@ -272,6 +282,23 @@ export default function WorkoutDetailsScreen({
 
     options.push('Share Workout');
     handlers.push(handleShare);
+
+    const cardioExercise = workout.exercises[0];
+    if (cardioExercise?.exercise_type === 'cardio' && cardioExercise.exercise_template_id != null) {
+      options.push('View History');
+      handlers.push(() => {
+        navigation.navigate('ExercisesTab', {
+          screen: 'ExerciseDetail',
+          params: {
+            exerciseId: cardioExercise.exercise_template_id,
+            exerciseName: cardioExercise.name,
+            muscleGroup: 'Cardio',
+            initialTab: 'history',
+          },
+          initial: false,
+        });
+      });
+    }
 
     if (onSaveAsTemplate) {
       options.push('Save as Template');
@@ -538,7 +565,7 @@ export default function WorkoutDetailsScreen({
                   ? `${Math.floor(dur)}:${String(Math.round((dur % 1) * 60)).padStart(2, '0')} min`
                   : null;
                 const distStr = dist > 0 ? `${dist} ${s.distance_unit || 'km'}` : null;
-                const paceStr = intensity > 0 ? `${intensity.toFixed(2)} min/km` : null;
+                const paceStr = intensity > 0 ? `${intensity.toFixed(2)} min/${s.distance_unit || 'km'}` : null;
                 return (
                   <View key={i} style={styles.cardioBoutRow}>
                     <Text style={[styles.setNumText, { color: colors.textSecondary, width: 20 }]}>{i + 1}</Text>
@@ -551,7 +578,7 @@ export default function WorkoutDetailsScreen({
 
               <View style={styles.cardioSummaryBar}>
                 <Text style={styles.cardioSummaryText}>
-                  🔥 ~{kcal} kcal  ·  {totalDur.toFixed(0)} min  ·  {totalDistKm.toFixed(2)} km
+                  🔥 ~{kcal} kcal  ·  {totalDur.toFixed(0)} min  ·  {(distanceUnit === 'mi' ? totalDistKm * 0.621371 : totalDistKm).toFixed(2)} {distanceUnit}
                 </Text>
               </View>
             </View>

@@ -27,7 +27,7 @@ type Props = NativeStackScreenProps<DashboardStackParamsList, 'WorkoutSummary'>;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-type SetData = { id: number; reps?: number; weight?: number; set_type: string; cardio_duration?: number; distance?: number };
+type SetData = { id: number; reps?: number; weight?: number; set_type: string; cardio_duration?: number; distance?: number; distance_unit?: string };
 type ExerciseData = { id: number; name: string; sets: SetData[] };
 
 export default function WorkoutSummaryScreen({ route, navigation }: Props) {
@@ -134,7 +134,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
     if (set.cardio_duration) {
       const parts = [];
       if (set.cardio_duration) parts.push(`${set.cardio_duration}min`);
-      if (set.distance) parts.push(`${set.distance}km`);
+      if (set.distance) parts.push(`${set.distance}${set.distance_unit || 'km'}`);
       return parts.join(' · ') || '—';
     }
     if (set.reps && set.weight) return `${set.reps} × ${set.weight}${weightUnit}`;

@@ -111,6 +111,14 @@ export default function CoachScreen({ navigation }: Props) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [activeTab, setActiveTab] = useState<'training' | 'progress' | 'coach'>('training');
   const weightUnit: WeightUnit = (user as any)?.weight_unit === 'kg' ? 'kg' : 'lbs';
+  const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
+
+  useEffect(() => {
+    if (!user?.id) return;
+    AsyncStorage.getItem(`gps_distance_unit_${user.id}`).then(v => {
+      setDistanceUnit(v === 'km' ? 'km' : 'mi');
+    });
+  }, [user?.id]);
 
   const METRICS: ChartMetric[] = ['volume', 'sets', 'workouts'];
   const metricAnimRef = useRef(new Animated.Value(0)).current;
@@ -577,7 +585,10 @@ export default function CoachScreen({ navigation }: Props) {
     if (p.workouts === 0) return `${dateRange} · No workouts logged`;
     const workoutsStr = `${p.workouts} workout${p.workouts !== 1 ? 's' : ''}`;
     if (p.total_volume > 0) return `${dateRange} · ${workoutsStr} · ${p.total_volume.toLocaleString()} ${p.weight_unit}`;
-    if (p.distance_km != null) return `${dateRange} · ${workoutsStr} · ${p.distance_km}km`;
+    if (p.distance_km != null) {
+      const dist = distanceUnit === 'mi' ? p.distance_km * 0.621371 : p.distance_km;
+      return `${dateRange} · ${workoutsStr} · ${dist.toFixed(2)}${distanceUnit}`;
+    }
     return `${dateRange} · ${workoutsStr}`;
   };
 

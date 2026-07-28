@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LineChart, BarChart } from 'react-native-gifted-charts';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch, resolveMediaUrl } from '../../utils/api';
 import { ExerciseDetailParams } from '../../navigation/types';
@@ -116,11 +117,13 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     description,
     imageUrl,
     isCustom,
+    initialTab,
   } = route.params;
 
-  const [activeTab, setActiveTab] = useState<'about' | 'stats' | 'history'>('about');
+  const [activeTab, setActiveTab] = useState<'about' | 'stats' | 'history'>(initialTab ?? 'about');
   const [loading, setLoading] = useState(true);
   const [exerciseType, setExerciseType] = useState<'strength' | 'cardio'>('strength');
+  const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
   const [stats, setStats] = useState<ExerciseStats>({
     estimatedOneRepMax: 0,
     totalSets: 0,
@@ -333,6 +336,13 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     fetchWgerDetails();
   }, [fetchExerciseData, fetchWgerDetails]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    AsyncStorage.getItem(`gps_distance_unit_${user.id}`).then(v => {
+      setDistanceUnit(v === 'km' ? 'km' : 'mi');
+    });
+  }, [user?.id]);
+
   const isCardio = muscleGroup === 'Cardio';
   const muscles = isCardio ? [] : (muscleGroup?.split(',').map((m: string) => m.trim()).filter(Boolean) ?? []);
   const primaryMuscle = muscles[0] ?? muscleGroup ?? '';
@@ -491,10 +501,10 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     );
   };
 
-  const fmtPace = (pace: number) => {
+  const fmtPace = (pace: number, unit: string) => {
     const m = Math.floor(pace);
     const s = Math.round((pace - m) * 60);
-    return `${m}:${String(s).padStart(2, '0')} /km`;
+    return `${m}:${String(s).padStart(2, '0')} /${unit}`;
   };
 
   const renderCardioStats = () => {
@@ -502,21 +512,25 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     if (!cardioStats || cardioStats.session_count === 0) {
       return <Text style={styles.emptyText}>Log this exercise to see your stats.</Text>;
     }
+    // cardioStats comes from the backend always normalized to km/min-per-km —
+    // convert to the user's preferred unit before display.
     const { total_distance, total_duration, session_count, avg_pace } = cardioStats;
+    const distDisplay = distanceUnit === 'mi' ? total_distance * 0.621371 : total_distance;
+    const paceDisplay = avg_pace != null ? (distanceUnit === 'mi' ? avg_pace * 1.60934 : avg_pace) : null;
     return (
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
           <Text style={styles.statLabel}>Total Distance</Text>
-          <Text style={styles.statValue}>{total_distance.toFixed(2)} km</Text>
+          <Text style={styles.statValue}>{distDisplay.toFixed(2)} {distanceUnit}</Text>
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statLabel}>Total Time</Text>
           <Text style={styles.statValue}>{Math.round(total_duration)} min</Text>
         </View>
-        {avg_pace != null && (
+        {paceDisplay != null && (
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Avg Pace</Text>
-            <Text style={styles.statValue}>{fmtPace(avg_pace)}</Text>
+            <Text style={styles.statValue}>{fmtPace(paceDisplay, distanceUnit)}</Text>
           </View>
         )}
         <View style={styles.statCard}>
@@ -545,7 +559,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
               const parts: string[] = [];
               if (bout.cardio_duration) parts.push(`${Math.round(bout.cardio_duration)} min`);
               if (bout.distance) parts.push(`${bout.distance.toFixed(2)} ${bout.distance_unit}`);
-              if (bout.intensity) parts.push(`@ ${fmtPace(bout.intensity)}`);
+              if (bout.intensity) parts.push(`@ ${fmtPace(bout.intensity, bout.distance_unit || 'km')}`);
               return (
                 <View key={j} style={styles.historySetRow}>
                   <View style={styles.historySetBadge}>

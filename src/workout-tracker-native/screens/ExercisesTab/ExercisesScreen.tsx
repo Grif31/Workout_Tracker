@@ -123,7 +123,10 @@ export default function ExercisesScreen({ navigation }: Props) {
   const filteredExercises = useMemo(() => exerciseList.filter(ex => {
     const matchSearch = ex.name.toLowerCase().includes(search.toLowerCase());
     if (selectedMuscle === 'Cardio') return matchSearch && ex.exercise_type === 'cardio';
-    if (ex.exercise_type === 'cardio') return false;
+    // Cardio has no muscle group, so it only makes sense to exclude it when a
+    // specific muscle filter is active — leave it in under the default "All"
+    // filter so a name search (e.g. "Running") can still find it.
+    if (selectedMuscle !== 'All' && ex.exercise_type === 'cardio') return false;
     const matchMuscle = selectedMuscle === 'All' || ex.muscle_group?.split(',').map(m => m.trim()).includes(selectedMuscle);
     const matchEquipment = selectedEquipment === 'All' || ex.equipment === selectedEquipment;
     return matchSearch && matchMuscle && matchEquipment;

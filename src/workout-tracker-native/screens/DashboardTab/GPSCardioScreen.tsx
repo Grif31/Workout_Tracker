@@ -144,7 +144,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [workoutName, setWorkoutName] = useState('');
-  const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('km');
+  const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
   const [initialRegion, setInitialRegion] = useState<{
     latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number;
   } | undefined>(undefined);
@@ -260,7 +260,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
     cleanupOrphanedTracking();
     offerCheckpointRestore();
     AsyncStorage.getItem(`gps_distance_unit_${user?.id}`).then(v => {
-      if (v === 'mi') setDistanceUnit('mi');
+      setDistanceUnit(v === 'km' ? 'km' : 'mi');
     });
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -400,7 +400,10 @@ export default function GPSCardioScreen({ navigation }: Props) {
     const encodedPolyline = coords.length >= 2
       ? polylineLib.encode(coords.map(c => [c.latitude, c.longitude]))
       : null;
-    const avgPace = distanceKm > 0 ? durationMin / distanceKm : null;
+    // Must match displayDistance (and the saved distance_unit), not the true-km
+    // distanceKm — otherwise the saved pace silently differs from the live pace
+    // shown on screen whenever the user's unit preference is miles.
+    const avgPace = displayDistance > 0 ? durationMin / displayDistance : null;
 
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;

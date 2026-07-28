@@ -207,7 +207,7 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 | `plate_calc_bar_${uid}` | 'standard' | Last-used bar type in plate calculator |
 | `plate_calc_plates_${uid}` | all defaults | Enabled plate sizes in plate calculator (JSON number[]) |
 | `default_rest_timer_${uid}` | '90' | Default rest timer duration in seconds |
-| `gps_distance_unit_${uid}` | 'km' | Distance unit for GPS cardio activities ('km' or 'mi') |
+| `gps_distance_unit_${uid}` | 'mi' | Distance unit for GPS cardio activities ('km' or 'mi') |
 | `workout_weekly_goal_${uid}` | '3' | Weekly workout target (integer string) |
 | `workout_auto_rest_${uid}` | true | Auto-start rest timer after a set |
 | `workout_vibrate_${uid}` | true | Vibrate when rest timer completes |

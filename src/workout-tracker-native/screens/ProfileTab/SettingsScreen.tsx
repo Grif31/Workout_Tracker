@@ -57,7 +57,7 @@ export default function SettingsScreen({ navigation }: Props) {
   const perUserReminderMinKey  = `workout_reminder_minute_${uid}`;
 
   const [unitIsKg, setUnitIsKg]             = useState(user?.weight_unit === 'kg');
-  const [distanceIsKm, setDistanceIsKm]     = useState(true);
+  const [distanceIsKm, setDistanceIsKm]     = useState(false);
   const [restTimerSeconds, setRestTimerSeconds] = useState('90');
   const [savingUnit, setSavingUnit]         = useState(false);
   // Notification settings

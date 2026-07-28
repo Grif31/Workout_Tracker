@@ -1,10 +1,11 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, FlatList, SectionList, ScrollView,
   TouchableOpacity, StyleSheet, ActivityIndicator, TextInput,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
 import { useFocusEffect } from '@react-navigation/native';
@@ -67,7 +68,15 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery]           = useState('');
+  const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
   const searchRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    AsyncStorage.getItem(`gps_distance_unit_${user.id}`).then(v => {
+      setDistanceUnit(v === 'km' ? 'km' : 'mi');
+    });
+  }, [user?.id]);
 
   const toggleSearch = () => {
     if (searchOpen) {
@@ -218,6 +227,12 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
     const m = Math.floor(mins);
     const s = Math.round((mins - m) * 60);
     return `${m}:${String(s).padStart(2, '0')}`;
+  };
+
+  // distance_km is always true km — convert to the user's preferred unit for display.
+  const fmtDistance = (km: number) => {
+    const val = distanceUnit === 'mi' ? km * 0.621371 : km;
+    return `${val.toFixed(2)} ${distanceUnit}`;
   };
 
   const fmtDate = (iso: string) =>
@@ -500,13 +515,13 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                     <View style={styles.topValueRow}>
                       <LaurelBranch height={18} color={PR_GOLD} />
                       <Text style={[styles.rowValue, { color: PR_GOLD_TEXT }]}>
-                        {item.kind === 'time' ? fmtTime(item.time_min) : item.kind === 'hold' ? fmtHold(item.time_min) : `${item.distance_km.toFixed(2)} km`}
+                        {item.kind === 'time' ? fmtTime(item.time_min) : item.kind === 'hold' ? fmtHold(item.time_min) : fmtDistance(item.distance_km)}
                       </Text>
                       <LaurelBranch side="right" height={18} color={PR_GOLD} />
                     </View>
                   ) : (
                     <Text style={styles.rowValue}>
-                      {item.kind === 'time' ? fmtTime(item.time_min) : item.kind === 'hold' ? fmtHold(item.time_min) : `${item.distance_km.toFixed(2)} km`}
+                      {item.kind === 'time' ? fmtTime(item.time_min) : item.kind === 'hold' ? fmtHold(item.time_min) : fmtDistance(item.distance_km)}
                     </Text>
                   )}
                 </View>
