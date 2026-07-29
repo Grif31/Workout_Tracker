@@ -3,7 +3,7 @@ import os
 from datetime import timedelta, datetime
 from dotenv import load_dotenv
 import click
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify
 from flask_migrate import Migrate
 from models import db
 from flask_cors import CORS
@@ -102,14 +102,6 @@ def create_app(test_config=None):
             return jsonify({'message': exc.description}), exc.code
         app.logger.exception('Unhandled exception')
         return jsonify({'message': 'Internal server error'}), 500
-
-    @app.route('/privacy')
-    def privacy_policy():
-        return send_from_directory('static', 'privacy.html')
-
-    @app.route('/terms')
-    def terms_of_service():
-        return send_from_directory('static', 'terms.html')
 
     app.register_blueprint(user_bp)
     app.register_blueprint(auth_bp)
