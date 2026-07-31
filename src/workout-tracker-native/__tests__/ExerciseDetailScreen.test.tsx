@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, waitFor } from '@testing-library/react-native';
 import { mockFetchSequence, createMockNavigation, createMockRoute } from './testUtils';
 import ExerciseDetailScreen from '../screens/ExercisesTab/ExerciseDetailScreen';
 
@@ -41,18 +41,16 @@ describe('ExerciseDetailScreen', () => {
     await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
   });
 
-  it('shows About, Stats, History tabs', async () => {
+  it('shows Overview and History tabs', async () => {
     const { getByText } = render(<ExerciseDetailScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => {
-      expect(getByText('About')).toBeTruthy();
-      expect(getByText('Stats')).toBeTruthy();
+      expect(getByText('Overview')).toBeTruthy();
       expect(getByText('History')).toBeTruthy();
     });
   });
 
-  it('switches to Stats tab when pressed', async () => {
+  it('shows stats on the default Overview tab', async () => {
     const { getByText } = render(<ExerciseDetailScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => fireEvent.press(getByText('Stats')));
     await waitFor(() => expect(getByText(/280/)).toBeTruthy());
   });
 });

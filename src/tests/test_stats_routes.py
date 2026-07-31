@@ -1373,3 +1373,135 @@ class TestExerciseStats:
         res = client.get('/api/stats/exercise?name=Bench Press', headers=h)
         assert res.status_code == 200
         assert len(res.get_json()['history']) == 1
+
+    def test_description_present_for_tracked_exercise(self, client, auth_token):
+        h = auth_headers(auth_token)
+        from models import ExerciseTemplate
+        tmpl = ExerciseTemplate(name='Bench Press', description='Test description text.')
+        db.session.add(tmpl)
+        db.session.commit()
+        payload = {
+            'workoutName': 'Push Day',
+            'exercises': [{'name': 'Bench Press', 'exercise_template_id': tmpl.id,
+                           'sets': [{'reps': 5, 'weight': 135, 'set_type': 'N'}]}],
+        }
+        res = client.post('/api/workouts', json=payload, headers=h)
+        assert res.status_code == 201
+
+        res = client.get(f'/api/stats/exercise?name=Bench Press&exercise_template_id={tmpl.id}', headers=h)
+        assert res.status_code == 200
+        assert res.get_json()['description'] == 'Test description text.'
+
+    def test_description_present_even_with_no_logged_history(self, client, auth_token):
+        h = auth_headers(auth_token)
+        from models import ExerciseTemplate
+        tmpl = ExerciseTemplate(name='Squat', description='Squat description.')
+        db.session.add(tmpl)
+        db.session.commit()
+
+        res = client.get(f'/api/stats/exercise?name=Squat&exercise_template_id={tmpl.id}', headers=h)
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data['history'] == []
+        assert data['description'] == 'Squat description.'
+
+    def test_description_null_for_custom_exercise_without_seeded_text(self, client, auth_token):
+        h = auth_headers(auth_token)
+        tid = _create_template(client, auth_token, 'My Custom Move', 'Chest')
+        res = client.get(f'/api/stats/exercise?name=My Custom Move&exercise_template_id={tid}', headers=h)
+        assert res.status_code == 200
+        assert res.get_json()['description'] is None
+
+    def test_description_present_for_cardio_exercise(self, client, auth_token):
+        h = auth_headers(auth_token)
+        from models import ExerciseTemplate
+        tmpl = ExerciseTemplate(name='Running', exercise_type='cardio', description='Running description.')
+        db.session.add(tmpl)
+        db.session.commit()
+        payload = {
+            'workoutName': 'Run',
+            'exercises': [{'name': 'Running', 'exercise_template_id': tmpl.id, 'exercise_type': 'cardio',
+                           'sets': [{'cardio_duration': 30, 'distance': 5, 'distance_unit': 'km'}]}],
+        }
+        res = client.post('/api/workouts', json=payload, headers=h)
+        assert res.status_code == 201
+
+        res = client.get(f'/api/stats/exercise?name=Running&exercise_template_id={tmpl.id}', headers=h)
+        assert res.status_code == 200
+        assert res.get_json()['description'] == 'Running description.'
+
+
+class TestStrengthScoreForExercise:
+
+    def _seed_template(self, name='Bench Press', standards_key='Bench Press'):
+        from models import ExerciseTemplate
+        tmpl = ExerciseTemplate(name=name, standards_key=standards_key)
+        db.session.add(tmpl)
+        db.session.commit()
+        return tmpl.id
+
+    def test_requires_exercise_template_id_param(self, client, auth_token):
+        res = client.get('/api/stats/strength-score/exercise', headers=auth_headers(auth_token))
+        assert res.status_code == 400
+
+    def test_missing_gender_or_bodyweight_returns_422(self, client, auth_token):
+        tid = self._seed_template()
+        res = client.get(f'/api/stats/strength-score/exercise?exercise_template_id={tid}', headers=auth_headers(auth_token))
+        assert res.status_code == 422
+        assert 'gender' in res.get_json()['missing']
+
+    def test_has_data_false_for_untracked_exercise(self, client, auth_token):
+        h = auth_headers(auth_token)
+        client.patch('/api/me', json={'gender': 'male', 'bodyweight': 180, 'weight_unit': 'lbs'}, headers=h)
+        tid = self._seed_template()
+        res = client.get(f'/api/stats/strength-score/exercise?exercise_template_id={tid}', headers=h)
+        assert res.status_code == 200
+        assert res.get_json() == {'has_data': False}
+
+    def test_has_data_false_for_exercise_with_no_standards_key(self, client, auth_token):
+        h = auth_headers(auth_token)
+        client.patch('/api/me', json={'gender': 'male', 'bodyweight': 180, 'weight_unit': 'lbs'}, headers=h)
+        from models import ExerciseTemplate
+        tmpl = ExerciseTemplate(name='Some Custom Move')
+        db.session.add(tmpl)
+        db.session.commit()
+        res = client.get(f'/api/stats/strength-score/exercise?exercise_template_id={tmpl.id}', headers=h)
+        assert res.status_code == 200
+        assert res.get_json() == {'has_data': False}
+
+    def test_returns_percentile_and_rank_when_tracked(self, client, auth_token):
+        h = auth_headers(auth_token)
+        client.patch('/api/me', json={'gender': 'male', 'bodyweight': 180, 'weight_unit': 'lbs'}, headers=h)
+        tid = self._seed_template()
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Push Day',
+            'exercises': [{'name': 'Bench Press', 'exercise_template_id': tid,
+                           'sets': [{'reps': 5, 'weight': 185, 'set_type': 'N'}]}],
+        }, headers=h)
+        assert res.status_code == 201
+
+        res = client.get(f'/api/stats/strength-score/exercise?exercise_template_id={tid}', headers=h)
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data['has_data'] is True
+        assert data['percentile'] > 0
+        assert data['rank']['label']
+        assert data['estimated_1rm'] > 0
+
+    def test_matches_full_strength_score_percentile(self, client, auth_token):
+        # Cross-check: this endpoint and strength_score()'s own big6 list share
+        # _exercise_percentile_data, so they must agree on the same lift.
+        h = auth_headers(auth_token)
+        client.patch('/api/me', json={'gender': 'male', 'bodyweight': 180, 'weight_unit': 'lbs'}, headers=h)
+        tid = self._seed_template(name='Squat', standards_key='Squat')
+        client.post('/api/workouts', json={
+            'workoutName': 'Leg Day',
+            'exercises': [{'name': 'Squat', 'exercise_template_id': tid,
+                           'sets': [{'reps': 5, 'weight': 225, 'set_type': 'N'}]}],
+        }, headers=h)
+
+        full = client.get('/api/stats/strength-score', headers=h).get_json()
+        squat_entry = next(e for e in full['big6'] if e['exercise'] == 'Squat')
+        single = client.get(f'/api/stats/strength-score/exercise?exercise_template_id={tid}', headers=h).get_json()
+        assert single['percentile'] == squat_entry['percentile']
+        assert single['estimated_1rm'] == squat_entry['estimated_1rm']

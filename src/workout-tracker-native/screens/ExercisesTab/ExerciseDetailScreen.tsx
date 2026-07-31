@@ -22,15 +22,22 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { toDisplayWeight, toDisplayVolume, convertWeight, WeightUnit } from 'utils/units';
 import MuscleDiagram from '../../components/MuscleDiagram';
+import { SCORE_RANK_COLORS } from '../../constants/strengthRanks';
 
 const SCREEN_WIDTH  = Dimensions.get('window').width;
 const CHART_WIDTH   = SCREEN_WIDTH - spacing.md * 4;
-const TAB_SLIDE_WIDTH = (SCREEN_WIDTH - spacing.md * 2) / 3;
 
 
 type Props = {
   route: { params: ExerciseDetailParams };
-  navigation: { goBack: () => void };
+  navigation: { goBack: () => void; navigate: (...args: any[]) => void };
+};
+
+type ScoreEntry = {
+  has_data: boolean;
+  percentile?: number;
+  rank?: { label: string; tier: number; display: string };
+  estimated_1rm?: number;
 };
 
 type ExerciseStats = {
@@ -98,11 +105,7 @@ const exerciseDescriptions: Record<string, string> = {
 const defaultDescription =
   'Use a controlled tempo, keep good posture, and focus on the muscle while performing each repetition. Start light and increase load as form stays solid.';
 
-const tabLabels: Array<{ key: 'about' | 'stats' | 'history'; label: string }> = [
-  { key: 'about', label: 'About' },
-  { key: 'stats', label: 'Stats' },
-  { key: 'history', label: 'History' },
-];
+type TabKey = 'overview' | 'charts' | 'history';
 
 export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const { user } = useAuth();
@@ -120,7 +123,12 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     initialTab,
   } = route.params;
 
-  const [activeTab, setActiveTab] = useState<'about' | 'stats' | 'history'>(initialTab ?? 'about');
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab ?? 'overview');
+  // Held only for the duration of a tab transition — the outgoing tab renders
+  // as an absolutely-positioned overlay fading out while the incoming tab
+  // fades in underneath, so both are visible mid-crossfade instead of a
+  // fade-to-black-then-back-in.
+  const [prevTab, setPrevTab] = useState<TabKey | null>(null);
   const [loading, setLoading] = useState(true);
   const [exerciseType, setExerciseType] = useState<'strength' | 'cardio'>('strength');
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
@@ -141,9 +149,9 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const [chartVolume, setChartVolume] = useState<ChartPoint[]>([]);
   const [hasChartData, setHasChartData] = useState({ oneRm: false, maxW: false, vol: false });
   const [chartRange, setChartRange] = useState<'1M' | '3M' | '6M' | 'All'>('3M');
-  const [wgerDescription, setWgerDescription] = useState<string | null>(null);
-  const [wgerLoading, setWgerLoading] = useState(false);
+  const [templateDescription, setTemplateDescription] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [scoreEntry, setScoreEntry] = useState<ScoreEntry | null>(null);
 
   const handleDelete = () => {
     Alert.alert(
@@ -177,23 +185,43 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
 
   const tabAnimRef = useRef(new Animated.Value(0)).current;
   const contentFadeAnim = useRef(new Animated.Value(1)).current;
+  const prevFadeAnim = useRef(new Animated.Value(0)).current;
   const statAnims = useRef(Array.from({ length: 7 }, () => new Animated.Value(0))).current;
   const histAnims = useRef<Animated.Value[]>([]);
+
+  // Charts tab only exists once there's actually enough data for at least one
+  // chart — cardio has no charts at all today, so it never gets this tab.
+  const hasAnyChart = hasChartData.oneRm || hasChartData.maxW || hasChartData.vol;
+  const visibleTabs = useMemo(() => {
+    const tabs: Array<{ key: TabKey; label: string }> = [
+      { key: 'overview', label: 'Overview' },
+    ];
+    if (exerciseType === 'strength' && hasAnyChart) tabs.push({ key: 'charts', label: 'Charts' });
+    tabs.push({ key: 'history', label: 'History' });
+    return tabs;
+  }, [exerciseType, hasAnyChart]);
+
+  const tabSlideWidth = (SCREEN_WIDTH - spacing.md * 2) / visibleTabs.length;
   const sliderX = tabAnimRef.interpolate({
-    inputRange: [0, 1, 2],
-    outputRange: [0, TAB_SLIDE_WIDTH, TAB_SLIDE_WIDTH * 2],
+    inputRange: visibleTabs.map((_, i) => i),
+    outputRange: visibleTabs.map((_, i) => tabSlideWidth * i),
   });
 
-  const handleTabChange = (tab: 'about' | 'stats' | 'history') => {
-    const idx = tab === 'about' ? 0 : tab === 'stats' ? 1 : 2;
+  const handleTabChange = (tab: TabKey) => {
+    if (tab === activeTab) return;
+    const idx = visibleTabs.findIndex(t => t.key === tab);
     Animated.timing(tabAnimRef, { toValue: idx, duration: 200, useNativeDriver: true }).start();
-    Animated.timing(contentFadeAnim, { toValue: 0, duration: 100, useNativeDriver: true }).start(() => {
-      setActiveTab(tab);
-      Animated.timing(contentFadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
-    });
-  };
 
-  const stripHtml = (html: string) => html.replace(/<[^>]*>/g, '').trim();
+    setPrevTab(activeTab);
+    contentFadeAnim.setValue(0);
+    prevFadeAnim.setValue(1);
+    setActiveTab(tab);
+
+    Animated.parallel([
+      Animated.timing(contentFadeAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.timing(prevFadeAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
+    ]).start(() => setPrevTab(null));
+  };
 
   const fetchExerciseData = useCallback(async () => {
     if (!exerciseName) return;
@@ -202,6 +230,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
       const res = await apiFetch(`/api/stats/exercise?name=${encodeURIComponent(exerciseName)}&exercise_template_id=${exerciseId}`);
       if (!res.ok) return;
       const data = await res.json();
+      setTemplateDescription(data.description || null);
 
       if (data.exercise_type === 'cardio') {
         setExerciseType('cardio');
@@ -293,12 +322,12 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   }, [historySessions, chartRange, weightUnit]);
 
   useEffect(() => {
-    if (activeTab !== 'stats' || stats.totalSets === 0) return;
+    if (activeTab !== 'overview' || stats.totalSets === 0) return;
     statAnims.forEach(a => a.setValue(0));
     Animated.stagger(50, statAnims.map(a =>
       Animated.timing(a, { toValue: 1, duration: 260, useNativeDriver: true })
     )).start();
-  }, [activeTab]);
+  }, [activeTab, stats.totalSets]);
 
   useEffect(() => {
     if (activeTab !== 'history') return;
@@ -311,30 +340,9 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     )).start();
   }, [activeTab, historySessions.length, cardioHistory.length]);
 
-  const fetchWgerDetails = useCallback(async () => {
-    if (!exerciseName) return;
-    setWgerLoading(true);
-    try {
-      const query = encodeURIComponent(exerciseName);
-      const res = await fetch(`https://wger.de/api/v2/exercise?language=2&search=${query}`);
-      if (res.ok) {
-        const data = await res.json();
-        const result = Array.isArray(data.results) ? data.results[0] : null;
-        if (result?.description) {
-          setWgerDescription(stripHtml(result.description));
-        }
-      }
-    } catch {
-      // silently fall back to local description
-    } finally {
-      setWgerLoading(false);
-    }
-  }, [exerciseName]);
-
   useEffect(() => {
     fetchExerciseData();
-    fetchWgerDetails();
-  }, [fetchExerciseData, fetchWgerDetails]);
+  }, [fetchExerciseData]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -348,10 +356,21 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const primaryMuscle = muscles[0] ?? muscleGroup ?? '';
   const secondaryMuscles = muscles.slice(1);
 
+  // Strength Score badge — silently absent for cardio, untracked lifts, or a
+  // user missing gender/bodyweight (a 422 here just means res.ok is false).
+  useEffect(() => {
+    if (isCardio || !exerciseId) { setScoreEntry(null); return; }
+    apiFetch(`/api/stats/strength-score/exercise?exercise_template_id=${exerciseId}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => setScoreEntry(data?.has_data ? data : null))
+      .catch(() => setScoreEntry(null));
+  }, [isCardio, exerciseId]);
+
+  // templateDescription is the hand-curated per-exercise text (null for custom
+  // exercises, which have no seeded entry) — fall back to the generic
+  // per-muscle-group blurb, then the fully generic default.
   const exerciseDescription =
-    wgerLoading
-      ? 'Loading exercise details...'
-      : wgerDescription || description || (muscleGroup ? exerciseDescriptions[muscleGroup] : null) || defaultDescription;
+    templateDescription || description || (muscleGroup ? exerciseDescriptions[muscleGroup] : null) || defaultDescription;
 
   const fmtK = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : `${Math.round(v)}`);
 
@@ -520,6 +539,10 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     return (
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Sessions</Text>
+          <Text style={styles.statValue}>{session_count}</Text>
+        </View>
+        <View style={styles.statCard}>
           <Text style={styles.statLabel}>Total Distance</Text>
           <Text style={styles.statValue}>{distDisplay.toFixed(2)} {distanceUnit}</Text>
         </View>
@@ -533,10 +556,6 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
             <Text style={styles.statValue}>{fmtPace(paceDisplay, distanceUnit)}</Text>
           </View>
         )}
-        <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Sessions</Text>
-          <Text style={styles.statValue}>{session_count}</Text>
-        </View>
       </View>
     );
   };
@@ -582,46 +601,128 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
       return <Text style={styles.emptyText}>Log this exercise to see your stats.</Text>;
     }
     const strengthStatData = [
-      { label: 'Estimated 1RM', value: stats.estimatedOneRepMax ? toDisplayWeight(stats.estimatedOneRepMax, weightUnit) : '—' },
-      { label: 'Max Weight',    value: stats.maxWeight ? toDisplayWeight(stats.maxWeight, weightUnit) : '—' },
-      { label: 'Max Vol / Set', value: stats.maxVolume ? toDisplayVolume(stats.maxVolume, weightUnit) : '—' },
-      { label: 'Max Reps',      value: String(stats.maxReps || '—') },
+      { label: 'Workouts',      value: String(stats.workoutCount) },
       { label: 'Total Sets',    value: String(stats.totalSets) },
       { label: 'Total Reps',    value: String(stats.totalReps) },
-      { label: 'Workouts',      value: String(stats.workoutCount) },
+      { label: 'Estimated 1RM', value: stats.estimatedOneRepMax ? toDisplayWeight(stats.estimatedOneRepMax, weightUnit) : '—' },
+      { label: 'Max Weight',    value: stats.maxWeight ? toDisplayWeight(stats.maxWeight, weightUnit) : '—' },
+      { label: 'Max Reps',      value: String(stats.maxReps || '—') },
+      { label: 'Max Vol / Set', value: stats.maxVolume ? toDisplayVolume(stats.maxVolume, weightUnit) : '—' },
     ];
     return (
-      <View>
-        <View style={styles.statsGrid}>
-          {strengthStatData.map((s, i) => (
-            <Animated.View
-              key={i}
-              style={[styles.statCard, {
-                opacity: statAnims[i],
-                transform: [{ scale: statAnims[i].interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) }],
-              }]}
-            >
-              <Text style={styles.statLabel}>{s.label}</Text>
-              <Text style={styles.statValue}>{s.value}</Text>
-            </Animated.View>
-          ))}
-        </View>
-        {(hasChartData.oneRm || hasChartData.maxW || hasChartData.vol) && (
-          <View style={styles.progressHeaderRow}>
-            <Text style={styles.progressLabel}>Progress</Text>
-            <View style={styles.rangeToggle}>
-              {(['1M', '3M', '6M', 'All'] as const).map(r => (
-                <TouchableOpacity
-                  key={r}
-                  style={[styles.rangeBtn, chartRange === r && { backgroundColor: colors.accent + '22' }]}
-                  onPress={() => setChartRange(r)}
-                >
-                  <Text style={[styles.rangeBtnText, chartRange === r && { color: colors.accent, fontWeight: '700' }]}>{r}</Text>
-                </TouchableOpacity>
-              ))}
+      <View style={styles.statsGrid}>
+        {strengthStatData.map((s, i) => (
+          <Animated.View
+            key={i}
+            style={[styles.statCard, {
+              opacity: statAnims[i],
+              transform: [{ scale: statAnims[i].interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) }],
+            }]}
+          >
+            <Text style={styles.statLabel}>{s.label}</Text>
+            <Text style={styles.statValue}>{s.value}</Text>
+          </Animated.View>
+        ))}
+      </View>
+    );
+  };
+
+  const renderOverview = () => (
+    <>
+      {/* Primary / secondary muscles */}
+      {!isCardio && (primaryMuscle || secondaryMuscles.length > 0) && (
+        <View style={styles.muscleRow}>
+          {primaryMuscle ? (
+            <View style={styles.musclePill}>
+              <Text style={styles.musclePillLabel}>Primary</Text>
+              <Text style={styles.musclePillValue}>{primaryMuscle}</Text>
             </View>
+          ) : null}
+          {secondaryMuscles.length > 0 && (
+            <View style={styles.musclePill}>
+              <Text style={styles.musclePillLabel}>Also Works</Text>
+              <Text style={styles.musclePillValue}>{secondaryMuscles.join(', ')}</Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {scoreEntry?.rank && (
+        <TouchableOpacity
+          style={styles.scoreCard}
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('TrainingTab', { screen: 'StrengthScore', initial: false })}
+        >
+          <View style={[styles.miniRankBadge, {
+            backgroundColor: (SCORE_RANK_COLORS[scoreEntry.rank.label] ?? colors.accent) + '22',
+            borderColor: SCORE_RANK_COLORS[scoreEntry.rank.label] ?? colors.accent,
+          }]}>
+            <Text style={[styles.miniRankText, { color: SCORE_RANK_COLORS[scoreEntry.rank.label] ?? colors.accent }]}>
+              {scoreEntry.rank.display}
+            </Text>
           </View>
-        )}
+          <Text style={styles.scoreCardText}>
+            Stronger than {Math.round(scoreEntry.percentile ?? 0)}% of lifters
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+        </TouchableOpacity>
+      )}
+
+      {!isCardio && (
+        <View style={styles.diagramCard}>
+          <MuscleDiagram muscles={muscles} />
+        </View>
+      )}
+
+      {renderStats()}
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>How to perform</Text>
+        <Text style={styles.body}>{exerciseDescription}</Text>
+      </View>
+
+      {isCustom && (
+        <TouchableOpacity
+          style={styles.deleteBtn}
+          onPress={handleDelete}
+          disabled={deleting}
+          activeOpacity={0.7}
+        >
+          {deleting
+            ? <ActivityIndicator size="small" color={colors.danger} />
+            : <Text style={[styles.deleteBtnText, { color: colors.danger }]}>Delete Exercise</Text>
+          }
+        </TouchableOpacity>
+      )}
+    </>
+  );
+
+  const renderTabContent = (tab: TabKey) => {
+    switch (tab) {
+      case 'overview': return renderOverview();
+      case 'charts': return renderCharts();
+      case 'history': return renderHistory();
+    }
+  };
+
+  const renderCharts = () => {
+    if (loading) return <ActivityIndicator size="large" color={colors.save} />;
+    return (
+      <View>
+        <View style={styles.progressHeaderRow}>
+          <Text style={styles.progressLabel}>Progress</Text>
+          <View style={styles.rangeToggle}>
+            {(['1M', '3M', '6M', 'All'] as const).map(r => (
+              <TouchableOpacity
+                key={r}
+                style={[styles.rangeBtn, chartRange === r && { backgroundColor: colors.accent + '22' }]}
+                onPress={() => setChartRange(r)}
+              >
+                <Text style={[styles.rangeBtnText, chartRange === r && { color: colors.accent, fontWeight: '700' }]}>{r}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
         {renderChart(chart1RM, `Estimated 1RM over time (${weightUnit})`, colors.accent, hasChartData.oneRm)}
         {renderChart(chartMaxWeight, `Max weight over time (${weightUnit})`, colors.save, hasChartData.maxW)}
         {renderVolumeChart(chartVolume, hasChartData.vol)}
@@ -685,7 +786,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
 
         {/* Animated tab bar */}
         <View style={styles.tabBar}>
-          {tabLabels.map((tab, idx) => (
+          {visibleTabs.map((tab, idx) => (
             <React.Fragment key={tab.key}>
               {idx > 0 && <View style={styles.tabDivider} />}
               <TouchableOpacity
@@ -699,69 +800,22 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
               </TouchableOpacity>
             </React.Fragment>
           ))}
-          <Animated.View style={[styles.tabSlider, { backgroundColor: colors.accent, transform: [{ translateX: sliderX }] }]} />
+          <Animated.View style={[styles.tabSlider, { backgroundColor: colors.accent, width: tabSlideWidth, transform: [{ translateX: sliderX }] }]} />
         </View>
 
-        <Animated.View style={{ opacity: contentFadeAnim }}>
-          {activeTab === 'about' && (
-            <View style={styles.section}>
-              {/* Primary / secondary muscles */}
-              {!isCardio && (primaryMuscle || secondaryMuscles.length > 0) && (
-                <View style={styles.muscleRow}>
-                  {primaryMuscle ? (
-                    <View style={styles.musclePill}>
-                      <Text style={styles.musclePillLabel}>Primary</Text>
-                      <Text style={styles.musclePillValue}>{primaryMuscle}</Text>
-                    </View>
-                  ) : null}
-                  {secondaryMuscles.length > 0 && (
-                    <View style={styles.musclePill}>
-                      <Text style={styles.musclePillLabel}>Also Works</Text>
-                      <Text style={styles.musclePillValue}>{secondaryMuscles.join(', ')}</Text>
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {!isCardio && (
-                <View style={styles.diagramCard}>
-                  <MuscleDiagram muscles={muscles} />
-                </View>
-              )}
-
-              <View style={styles.card}>
-                <Text style={styles.sectionTitle}>How to perform</Text>
-                <Text style={styles.body}>{exerciseDescription}</Text>
-              </View>
-
-              {isCustom && (
-                <TouchableOpacity
-                  style={styles.deleteBtn}
-                  onPress={handleDelete}
-                  disabled={deleting}
-                  activeOpacity={0.7}
-                >
-                  {deleting
-                    ? <ActivityIndicator size="small" color={colors.danger} />
-                    : <Text style={[styles.deleteBtnText, { color: colors.danger }]}>Delete Exercise</Text>
-                  }
-                </TouchableOpacity>
-              )}
-            </View>
+        <View style={styles.crossfadeContainer}>
+          {prevTab && (
+            <Animated.View
+              style={[styles.section, styles.crossfadeOverlay, { opacity: prevFadeAnim }]}
+              pointerEvents="none"
+            >
+              {renderTabContent(prevTab)}
+            </Animated.View>
           )}
-
-          {activeTab === 'stats' && (
-            <View style={styles.section}>
-              {renderStats()}
-            </View>
-          )}
-
-          {activeTab === 'history' && (
-            <View style={styles.section}>
-              {renderHistory()}
-            </View>
-          )}
-        </Animated.View>
+          <Animated.View style={[styles.section, { opacity: contentFadeAnim }]}>
+            {renderTabContent(activeTab)}
+          </Animated.View>
+        </View>
         </View>
       </ScrollView>
     </View>
@@ -842,7 +896,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     left: 0,
-    width: TAB_SLIDE_WIDTH,
     height: 2,
   },
 
@@ -874,6 +927,15 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   section: {
     marginBottom: spacing.lg,
   },
+  crossfadeContainer: {
+    position: 'relative',
+  },
+  crossfadeOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
   sectionTitle: {
     fontSize: typography.fontSize.md,
     color: colors.textPrimary,
@@ -896,6 +958,33 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.md,
   },
+  scoreCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  scoreCardText: {
+    flex: 1,
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  miniRankBadge: {
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  miniRankText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+  },
   body: {
     fontSize: typography.fontSize.sm,
     color: colors.textPrimary,
@@ -905,11 +994,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   statCard: {
-    flexBasis: '31%',
-    flexGrow: 1,
+    flexBasis: '47%',
+    flexGrow: 0,
     backgroundColor: colors.surface,
     borderTopWidth: 2,
     borderRightWidth: 1,
@@ -919,22 +1008,22 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRightColor: colors.border,
     borderBottomColor: colors.border,
     borderLeftColor: colors.border,
-    borderRadius: 10,
-    paddingVertical: spacing.sm,
+    borderRadius: 12,
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.sm,
     alignItems: 'center',
   },
   statLabel: {
     color: colors.textSecondary,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.4,
-    marginBottom: 2,
+    marginBottom: 4,
     textAlign: 'center',
   },
   statValue: {
-    fontSize: typography.fontSize.md,
+    fontSize: typography.fontSize.lg,
     fontWeight: '700',
     color: colors.textPrimary,
     textAlign: 'center',

@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from app import create_app
 from models import db, ExerciseTemplate, ExerciseMuscleMapping
 from utils.strength_standards import SEEDER_STANDARDS_MAP
+from utils.exercise_descriptions import EXERCISE_DESCRIPTIONS
 
 EXERCISEDB_BASE      = 'https://exercisedb.p.rapidapi.com'
 EXERCISEDB_CACHE     = os.path.join(os.path.dirname(__file__), 'exercisedb_cache.json')
@@ -503,6 +504,7 @@ def main():
                 image_url=image_url,
                 exercise_type='strength',
                 standards_key=sk,
+                description=EXERCISE_DESCRIPTIONS.get(name),
             )
             db.session.add(new_ex)
             db.session.flush()
@@ -532,6 +534,7 @@ def main():
                 name=name,
                 equipment=equipment,
                 exercise_type='cardio',
+                description=EXERCISE_DESCRIPTIONS.get(name),
             )
             db.session.add(new_ex)
             db.session.flush()

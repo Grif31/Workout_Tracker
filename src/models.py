@@ -230,6 +230,7 @@ class ExerciseTemplate(db.Model):
     image_url = db.Column(db.Text, nullable=True)
     exercise_type = db.Column(db.String(10), nullable=False, server_default='strength')
     standards_key = db.Column(db.String(100), nullable=True, index=True)
+    description = db.Column(db.Text, nullable=True)
     # NULL = global library exercise visible to all users
     # Set = custom exercise created by that user, only visible to them
     user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=True, index=True)

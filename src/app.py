@@ -164,6 +164,35 @@ def create_app(test_config=None):
         else:
             click.echo('\nRe-run with --apply to write these changes.')
 
+    @app.cli.command('backfill-descriptions')
+    @click.option('--apply', 'do_apply', is_flag=True, default=False, help='Write changes to DB (omit for dry run)')
+    def backfill_descriptions(do_apply):
+        """One-time backfill of ExerciseTemplate.description for already-seeded
+        library exercises (added after those rows already existed in prod)."""
+        from models import ExerciseTemplate
+        from utils.exercise_descriptions import EXERCISE_DESCRIPTIONS
+
+        rows = ExerciseTemplate.query.filter(
+            ExerciseTemplate.name.in_(EXERCISE_DESCRIPTIONS.keys()),
+            ExerciseTemplate.description.is_(None),
+        ).all()
+
+        if not rows:
+            click.echo('Nothing to backfill — no matching rows with a null description.')
+            return
+
+        click.echo(f'{"[DRY RUN] " if not do_apply else ""}Found {len(rows)} row(s) to backfill:')
+        for ex in rows:
+            click.echo(f'  • {ex.name} ({ex.equipment or "no equipment"})  [id={ex.id}]')
+
+        if do_apply:
+            for ex in rows:
+                ex.description = EXERCISE_DESCRIPTIONS[ex.name]
+            db.session.commit()
+            click.echo(f'Done. {len(rows)} row(s) updated.')
+        else:
+            click.echo('\nRe-run with --apply to write these changes.')
+
     return app
 
 

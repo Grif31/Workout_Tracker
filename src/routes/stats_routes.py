@@ -55,6 +55,15 @@ def exercise_stats():
         return jsonify({'message': 'name param required'}), 400
     template_id = request.args.get('exercise_template_id', type=int)
 
+    # Hand-curated (or custom-exercise: none) "how to perform" text — fetched
+    # independently of whether the user has ever logged this exercise, so a
+    # brand-new exercise still gets a description on first view.
+    if template_id:
+        tmpl = db.session.get(ExerciseTemplate, template_id)
+    else:
+        tmpl = ExerciseTemplate.query.filter(db.func.lower(ExerciseTemplate.name) == name.lower()).first()
+    description = tmpl.description if tmpl else None
+
     query = (
         db.session.query(Exercise, Workout)
         .join(Workout, Exercise.workout_id == Workout.id)
@@ -72,13 +81,13 @@ def exercise_stats():
     rows = query.order_by(Workout.date.asc()).all()
 
     if not rows:
-        return jsonify({'exercise_name': name, 'personal_bests': {}, 'totals': {}, 'history': []})
+        return jsonify({'exercise_name': name, 'description': description, 'personal_bests': {}, 'totals': {}, 'history': []})
 
     # Determine exercise type from first row
     exercise_type = (rows[0][0].exercise_type or 'strength').lower()
 
     if exercise_type == 'cardio':
-        return _cardio_exercise_stats(name, rows)
+        return _cardio_exercise_stats(name, rows, description)
 
     from collections import defaultdict
     workout_map = defaultdict(lambda: {'workout': None, 'sets': [], 'notes': None})
@@ -148,13 +157,14 @@ def exercise_stats():
     return jsonify({
         'exercise_type': 'strength',
         'exercise_name': name,
+        'description': description,
         'personal_bests': personal_bests,
         'totals': totals,
         'history': list(reversed(history)),
     })
 
 
-def _cardio_exercise_stats(name, rows):
+def _cardio_exercise_stats(name, rows, description=None):
     from collections import defaultdict
     workout_map = defaultdict(lambda: {'workout': None, 'bouts': []})
     for exercise, workout in rows:
@@ -209,6 +219,7 @@ def _cardio_exercise_stats(name, rows):
     return jsonify({
         'exercise_type': 'cardio',
         'exercise_name': name,
+        'description': description,
         'totals': {
             'total_distance': round(total_distance, 2),
             'total_duration': round(total_duration, 1),
@@ -525,6 +536,74 @@ def recent_exercises():
     return jsonify({'recent': [{'name': r['name'], 'exercise_template_id': r['exercise_template_id']} for r in merged[:10]]})
 
 
+def _exercise_percentile_data(user_id, standards_key, template_ids, gender, unit_to_lbs, bw_lbs, age_factor):
+    """Best-1RM + percentile for one standards_key, shared by strength_score()
+    and the single-exercise lookup so both stay in sync. Returns None if the
+    user has no qualifying data for this lift (untracked, not an error)."""
+    from utils.strength_standards import compute_percentile
+
+    true_1rm_row = (
+        db.session.query(db.func.max(Set.weight))
+        .join(Exercise, Set.exercise_id == Exercise.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .filter(
+            Workout.user_id == user_id,
+            Exercise.exercise_template_id.in_(template_ids),
+            Set.reps == 1,
+            Set.weight.isnot(None),
+        )
+        .scalar()
+    )
+    true_1rm = float(true_1rm_row) * unit_to_lbs if true_1rm_row else 0.0
+
+    est_1rm_row = (
+        db.session.query(db.func.max(PersonalRecord.value))
+        .filter(
+            PersonalRecord.user_id == user_id,
+            PersonalRecord.exercise_template_id.in_(template_ids),
+            PersonalRecord.pr_type == 'estimated_1rm',
+        )
+        .scalar()
+    )
+    est_1rm = float(est_1rm_row) * unit_to_lbs if est_1rm_row else 0.0
+
+    best_1rm = max(true_1rm, est_1rm)
+
+    # Pull-up / Dip bodyweight fallback: standards (and logged weighted sets)
+    # are on the ADDED-weight scale, so estimate added 1RM as Epley total
+    # minus bodyweight: bw*(1 + r/30) - bw = bw*r/30.
+    if best_1rm == 0.0 and standards_key in ('Pull-up', 'Dips'):
+        max_reps_row = (
+            db.session.query(db.func.max(Set.reps))
+            .join(Exercise, Set.exercise_id == Exercise.id)
+            .join(Workout, Exercise.workout_id == Workout.id)
+            .filter(
+                Workout.user_id == user_id,
+                Exercise.exercise_template_id.in_(template_ids),
+                Set.weight == 0,
+                Set.reps.isnot(None),
+                Set.reps <= 15,
+            )
+            .scalar()
+        )
+        if max_reps_row and max_reps_row > 0:
+            best_1rm = bw_lbs * max_reps_row / 30
+
+    if best_1rm <= 0:
+        return None
+
+    bw_ratio = (best_1rm / bw_lbs) * age_factor
+    pct = compute_percentile(standards_key, gender, bw_ratio)
+    if pct is None:
+        return None
+
+    return {
+        'percentile': pct,
+        'best_1rm': round(best_1rm / unit_to_lbs, 1),
+        'true_1rm': round(true_1rm / unit_to_lbs, 1) if true_1rm > 0 else None,
+    }
+
+
 @stats_bp.get('/api/stats/strength-score')
 @jwt_required()
 def strength_score():
@@ -532,7 +611,7 @@ def strength_score():
     from statistics import mean as _mean
     from utils.strength_standards import (
         STANDARDS, BIG_6, COMPOUND_SECONDARY,
-        percentile_to_strength_rank, greek_rank_from_score, compute_percentile,
+        percentile_to_strength_rank, greek_rank_from_score,
         compute_weight_at_percentile, compute_muscle_group_scores,
         compute_consistency_score, compute_dedication_score,
         compute_volume_score, compute_greek_score, age_scaling_factor,
@@ -594,66 +673,12 @@ def strength_score():
     exercise_true_1rms: dict[str, float] = {}
 
     for exercise_name, template_ids in templates_by_key.items():
-        # True 1RM (reps=1 sets)
-        true_1rm_row = (
-            db.session.query(db.func.max(Set.weight))
-            .join(Exercise, Set.exercise_id == Exercise.id)
-            .join(Workout, Exercise.workout_id == Workout.id)
-            .filter(
-                Workout.user_id == user_id,
-                Exercise.exercise_template_id.in_(template_ids),
-                Set.reps == 1,
-                Set.weight.isnot(None),
-            )
-            .scalar()
-        )
-        true_1rm = float(true_1rm_row) * unit_to_lbs if true_1rm_row else 0.0
-
-        # Estimated 1RM from PersonalRecord
-        est_1rm_row = (
-            db.session.query(db.func.max(PersonalRecord.value))
-            .filter(
-                PersonalRecord.user_id == user_id,
-                PersonalRecord.exercise_template_id.in_(template_ids),
-                PersonalRecord.pr_type == 'estimated_1rm',
-            )
-            .scalar()
-        )
-        est_1rm = float(est_1rm_row) * unit_to_lbs if est_1rm_row else 0.0
-
-        best_1rm = max(true_1rm, est_1rm)
-
-        # Pull-up / Dip bodyweight fallback: standards (and logged weighted sets)
-        # are on the ADDED-weight scale, so estimate added 1RM as Epley total
-        # minus bodyweight: bw*(1 + r/30) - bw = bw*r/30.
-        if best_1rm == 0.0 and exercise_name in ('Pull-up', 'Dips'):
-            max_reps_row = (
-                db.session.query(db.func.max(Set.reps))
-                .join(Exercise, Set.exercise_id == Exercise.id)
-                .join(Workout, Exercise.workout_id == Workout.id)
-                .filter(
-                    Workout.user_id == user_id,
-                    Exercise.exercise_template_id.in_(template_ids),
-                    Set.weight == 0,
-                    Set.reps.isnot(None),
-                    Set.reps <= 15,
-                )
-                .scalar()
-            )
-            if max_reps_row and max_reps_row > 0:
-                best_1rm = bw_lbs * max_reps_row / 30
-
-        if best_1rm <= 0:
-            continue
-
-        bw_ratio = (best_1rm / bw_lbs) * age_factor
-        pct = compute_percentile(exercise_name, user.gender, bw_ratio)
-        if pct is not None:
-            exercise_percentiles[exercise_name] = pct
-            # Display value goes back to the user's unit
-            exercise_1rms[exercise_name] = round(best_1rm / unit_to_lbs, 1)
-            if true_1rm > 0:
-                exercise_true_1rms[exercise_name] = round(true_1rm / unit_to_lbs, 1)
+        result = _exercise_percentile_data(user_id, exercise_name, template_ids, user.gender, unit_to_lbs, bw_lbs, age_factor)
+        if result is not None:
+            exercise_percentiles[exercise_name] = result['percentile']
+            exercise_1rms[exercise_name] = result['best_1rm']
+            if result['true_1rm'] is not None:
+                exercise_true_1rms[exercise_name] = result['true_1rm']
 
     if not exercise_percentiles:
         return jsonify({'missing': 'data'}), 422
@@ -830,6 +855,66 @@ def strength_score():
         resp['muscle_groups'] = muscle_groups
 
     return jsonify(resp), 200
+
+
+@stats_bp.get('/api/stats/strength-score/exercise')
+@jwt_required()
+def strength_score_for_exercise():
+    """Lightweight single-lift percentile/rank lookup — for surfacing a Strength
+    Score badge on ExerciseDetailScreen without paying for the full strength_score()
+    computation (overall score, Greek rank, muscle groups, snapshot writes) on
+    every exercise-detail visit."""
+    from datetime import date as _date
+    from utils.strength_standards import STANDARDS, percentile_to_strength_rank, age_scaling_factor
+
+    user_id = get_jwt_identity()
+    user = db.session.get(User, int(user_id))
+
+    template_id = request.args.get('exercise_template_id', type=int)
+    if not template_id:
+        return jsonify({'message': 'exercise_template_id required'}), 400
+
+    missing = []
+    if not user.gender:
+        missing.append('gender')
+    if not user.bodyweight:
+        missing.append('bodyweight')
+    if missing:
+        return jsonify({'missing': missing}), 422
+
+    tmpl = db.session.get(ExerciseTemplate, template_id)
+    standards_key = tmpl.standards_key if tmpl else None
+    if not standards_key or standards_key not in STANDARDS.get(user.gender, {}):
+        return jsonify({'has_data': False}), 200
+
+    kg_to_lbs = 2.20462
+    unit_to_lbs = kg_to_lbs if (user.weight_unit or 'lbs') == 'kg' else 1.0
+    bw_lbs = user.bodyweight * unit_to_lbs
+
+    today = _date.today()
+    user_age = None
+    if user.birth_date:
+        user_age = today.year - user.birth_date.year - (
+            (today.month, today.day) < (user.birth_date.month, user.birth_date.day)
+        )
+    age_factor = age_scaling_factor(user_age) if user_age else 1.0
+
+    # Other templates sharing this standards_key (name variants map to the same lift)
+    template_ids = [
+        tid for (tid,) in
+        db.session.query(ExerciseTemplate.id).filter(ExerciseTemplate.standards_key == standards_key).all()
+    ]
+
+    result = _exercise_percentile_data(user_id, standards_key, template_ids, user.gender, unit_to_lbs, bw_lbs, age_factor)
+    if result is None:
+        return jsonify({'has_data': False}), 200
+
+    return jsonify({
+        'has_data': True,
+        'percentile': round(result['percentile'], 1),
+        'rank': percentile_to_strength_rank(result['percentile']),
+        'estimated_1rm': result['best_1rm'],
+    }), 200
 
 
 @stats_bp.get('/api/stats/muscle-volume')

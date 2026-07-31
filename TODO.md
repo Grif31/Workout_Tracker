@@ -331,6 +331,11 @@ Check off items as you complete them.
   - [ ] Configure the webhook URL + secret in the RevenueCat dashboard
   - [ ] Replace `is_pro = True` in `strength_score` with `user.is_premium`
 
+- [ ] **Railway static volume shadows git-tracked static files**
+  > Found 2026-07-29 while fixing the Privacy Policy/Terms 404 bug. Railway has a persistent volume mounted at `/app/static` (for `static/avatars/` and `static/progress_photos/`, so uploads survive redeploys), but mounting it at the whole `static/` directory instead of just those two subfolders means it shadows every other git-tracked static asset that isn't already present on the volume — a new file committed under `src/static/` will silently 404 in production even though it's correctly in the deployed image. `legal_routes.py`'s `/privacy`/`/terms` dodge this entirely by rendering in-memory strings instead of reading from disk, but any *future* static file (or a fix that reverts to `send_from_directory`) will hit this again.
+  - [ ] Reconfigure the Railway volume to mount only at `/app/static/avatars` and `/app/static/progress_photos` instead of the whole `static/` directory, so git-tracked static files stop being shadowed
+  - [ ] Confirm existing uploaded avatars/progress photos on the current volume still resolve correctly after remounting (path contents should carry over since the subpaths are unchanged)
+
 ---
 
 ## 📱 6. App Store / Play Store Submission
@@ -746,3 +751,49 @@ Check off items as you complete them.
 - [ ] **Plateau / deload nudge** (depends on §10 "PR velocity" being built first)
   - [ ] When `GET /api/stats/pr-velocity` reports a plateau (<1%/month over 8 weeks) for a lift the user trains regularly, show a one-time dismissible card on `CoachScreen`: "Bench Press has plateaued — consider a deload week"
   - [ ] Tapping it could pre-fill an AI-generated deload routine via the existing `POST /api/ai/generate` flow (lower volume/intensity for a week)
+
+---
+
+## 🏋️ 15. Exercise Details Upgrade
+> Revamp `ExerciseDetailScreen.tsx` — merge About + top-level stats into a single "Overview" tab, replace thin/generic descriptions with real per-exercise content, and polish the tab-switch animation. Grounded in a read of the current file: About and Stats are two separate tabs today (3 tabs total: About / Stats / History), and `description` resolves via a fallback chain (wger.de fuzzy name search → route-param `description`, which no navigation call site actually passes → one of 9 generic per-muscle-group blurbs → a hardcoded generic default) — so almost every exercise ends up with either a possibly-wrong wger match or the same shared paragraph as every other exercise in its muscle group.
+
+- [x] **Merge About + stats into a single "Overview" tab**
+  - [x] Collapse the 3-tab layout (About / Stats / History) down to 2 (Overview / History) — Overview combines the muscle pills, `MuscleDiagram`, description, and the single-number stat cards currently in Stats (Estimated 1RM, Max Weight, Max Vol/Set, Max Reps, Total Sets, Total Reps, Workouts for strength; Total Distance, Total Time, Avg Pace, Sessions for cardio)
+  - [x] Decide where the three time-series charts (1RM/max-weight/volume over time, currently under Stats' Progress section with a 1M/3M/6M/All range toggle) land in the merged layout — e.g. a collapsible "Show more" below the stat grid (matching the pattern already used on Strength Score's hero card) so Overview doesn't get overly long
+  - [x] Handle the cardio/strength asymmetry explicitly — cardio exercises currently get no muscle pills/diagram and no charts at all; decide what (if anything) fills that space in the merged Overview rather than leaving it blank
+
+- [x] **Real per-exercise description content**
+  - [x] Replace the wger.de fuzzy-match + generic-muscle-group-blurb fallback chain with actual per-exercise text
+  - [x] Decide sourcing: hand-curate for the seeded library exercises vs. one-time AI-generate-and-cache (e.g. a `description` column added to `ExerciseTemplate`, populated once via a backend script, spot-checked before shipping)
+  - [x] Keep a sane fallback for custom (user-created) exercises, which have no curated text to draw from
+
+- [x] **Show Strength Score rank inline in Overview**
+  - [x] For lifts with strength-standards data, surface the same percentile/rank badge used on `StrengthScoreScreen`'s lift rows directly in Overview, linking out to the full Strength Score screen instead of requiring a separate trip there
+
+- [x] **Smoother tab-switch animation**
+  - [x] Replace the current fade-out → swap tab → fade-in (two sequential 100ms `Animated.timing` calls) with a single crossfade (old content fading out while new content fades in at the same time) — still plain RN `Animated`, not Reanimated (worklets crash at runtime in this app)
+
+---
+
+## 🤖 16. AI Coach Upgrade
+> Better insights and better-generated workouts, grounded in what the AI Coach context builders actually feed the model today. Insights (`POST /api/ai/insights`) and generation (`POST /api/ai/generate`) are both real Claude Haiku calls with a context-building step, not rule-based — but the context is thinner than it could be: insights never call the existing `compute_most_improved_lift`/`compute_most_improved_cardio` helpers (only Weekly Summary does), and neither insights nor generation know what day of the week it is or what the user's own routine schedule looks like beyond its name — only rolling 7/14/28-day set counts.
+
+- [ ] **Feed "most improved lift" (and cardio) into AI Coach, not just Weekly Summary**
+  - [ ] Call `compute_most_improved_lift`/`compute_most_improved_cardio` (`utils/lift_progress.py`/`utils/cardio_progress.py`) from `_build_insights_context` (`ai_routes.py`) too, and surface a genuine recent win as its own insight rather than relying on the LLM to notice a PR buried in the raw `top_prs` list (which today only includes `estimated_1rm` PRs anyway — no cardio PR types feed insights at all)
+  - [ ] Also feed the recomputed most-improved result into `_build_user_context` (used by `POST /api/ai/generate`) so newly generated routines/templates can factor in a lift that's trending well (e.g. don't deload something that just hit a new PR)
+
+- [ ] **Give the coach real day-of-week / weekly-schedule awareness**
+  - [ ] Today's insight context only knows raw rolling-7-day set counts per muscle group (`_build_insights_context`) — it has no idea what day it is, and no knowledge of the user's routine schedule beyond its *name* (`active_routine_name`)
+  - [ ] Read the active routine's actual day-by-day exercise schedule (`RoutineDay` → exercises → primary muscle groups) so the coach can tell "Legs: 0 sets so far, but Thursday is leg day and it's only Tuesday" apart from "Legs: 0 sets, no leg day anywhere in this split — genuinely under-trained"
+  - [ ] Pass the current day-of-week and how many training days remain in the week into the prompt context, so `_build_insights_prompt`'s MEV/MRV flags (`OVER MRV`, `below MEV`, `not trained recently`) stop firing prematurely mid-week for muscles the split simply hasn't reached yet
+  - [ ] Apply the same day-of-week awareness in `_build_user_context` — `POST /api/ai/generate`'s "prioritise undertrained muscles" directive has the identical premature-judgment risk
+
+- [ ] **RPE-based fatigue signal**
+  - [ ] Insights currently only flag overreaching by comparing rolling set counts against `MUSCLE_MRV`/`MUSCLE_MEV` — `Set.rpe` is already logged but never read by `_build_insights_context`
+  - [ ] When a user has RPE enabled (`workout_show_rpe_${uid}`) and recent sets for a muscle group are consistently 9–10, surface that as its own distinct signal (real fatigue, not just volume) even when set count alone looks fine
+
+- [ ] **Distinct color for achievement insights**
+  - [ ] `renderInsightCard`'s left-border priority color currently only distinguishes `high`/`medium`/everything-else (`colors.danger`/`colors.warmup`/`colors.accent`) — give `type: 'achievement'` its own positive treatment (e.g. `colors.save`) so a genuine win visually reads differently from a routine reminder or neutral suggestion
+
+- [ ] **Wire the unused "Notes to Coach" field into generation**
+  - [ ] `CoachProfile.notes` (the "Notes to Coach" free-text field) is saved from `CoachProfileModal.tsx` but never sent to `POST /api/ai/generate` — `AiGenerateSchema` has no `notes` field at all. Either send it through and let the model factor it in, or remove the input if it's meant to stay cosmetic

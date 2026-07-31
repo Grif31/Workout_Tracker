@@ -9,7 +9,7 @@ export type ExerciseDetailParams = {
   description?: string;
   imageUrl?: string;
   isCustom?: boolean;
-  initialTab?: 'about' | 'stats' | 'history';
+  initialTab?: 'overview' | 'charts' | 'history';
 };
 
 export type WorkoutSummaryParams = {
