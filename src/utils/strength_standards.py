@@ -26,6 +26,7 @@ SEEDER_STANDARDS_MAP: dict[tuple[str, str | None], str] = {
     ('cable crossover',      'cable'):        'Cable Fly',
     ('pull up',              'bodyweight'):   'Pull-up',
     ('pull up',              'weighted'):     'Pull-up',
+    ('chin up',              'bodyweight'):   'Pull-up',
     ('lat pulldown',         'cable'):        'Lat Pulldown',
     ('lat pulldown',         'machine'):      'Lat Pulldown',
     ('bent over row',        'barbell'):      'Barbell Row',

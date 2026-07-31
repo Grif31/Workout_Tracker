@@ -200,6 +200,7 @@ export default function CoachScreen({ navigation }: Props) {
   const [weeklySummaryPreview, setWeeklySummaryPreview] = useState<WeeklySummaryPreview | null>(null);
   const [rangePickerVisible, setRangePickerVisible] = useState(false);
   const [goalModalVisible, setGoalModalVisible] = useState(false);
+  const [workingSetsInfoVisible, setWorkingSetsInfoVisible] = useState(false);
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
 
   // ── Training tab state ──────────────────────────────────────────────────────
@@ -638,7 +639,7 @@ export default function CoachScreen({ navigation }: Props) {
               </View>
             )}
           </View>
-          <Text style={[styles.mvCount, !isTrained && { color: colors.textSecondary }]}>
+          <Text style={[styles.mvCount, !isTrained && { color: colors.textSecondary }]} numberOfLines={1}>
             {isTrained ? sets : '–'}
           </Text>
           {isPremium && zoneLabel ? (
@@ -661,10 +662,7 @@ export default function CoachScreen({ navigation }: Props) {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
             <Text style={styles.mvTotalText}>{muscleVolume.total_sets} working sets</Text>
-            <TouchableOpacity onPress={() => Alert.alert(
-              'Working Sets',
-              'Counts sets taken close to failure (warmups excluded). MEV = minimum sets for growth, MAV = optimal range, MRV = maximum before recovery suffers.'
-            )}>
+            <TouchableOpacity onPress={() => setWorkingSetsInfoVisible(true)}>
               <Ionicons name="information-circle-outline" size={15} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
@@ -1240,6 +1238,52 @@ export default function CoachScreen({ navigation }: Props) {
         </TouchableOpacity>
       </Modal>
 
+      {/* Working Sets / Volume Zones Info Modal */}
+      <Modal visible={workingSetsInfoVisible} transparent animationType="slide" onRequestClose={() => setWorkingSetsInfoVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setWorkingSetsInfoVisible(false)}
+          />
+          <View style={[styles.goalModalBox, { maxHeight: Dimensions.get('window').height * 0.8, overflow: 'hidden' }]}>
+            <Text style={styles.goalModalTitle}>Working Sets & Volume Zones</Text>
+            <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
+              <Text style={styles.mevInfoBody}>
+                A "working set" is a set taken close to failure — warmups don't count. Your weekly working sets per muscle are compared against three volume landmarks from exercise science:
+              </Text>
+              <Text style={styles.mevInfoBody}>
+                <Text style={styles.mevInfoBold}>MEV</Text> (Minimum Effective Volume) — the least volume that still grows the muscle.{'\n'}
+                <Text style={styles.mevInfoBold}>MAV</Text> (Maximum Adaptive Volume) — the sweet spot for the most growth per set.{'\n'}
+                <Text style={styles.mevInfoBold}>MRV</Text> (Maximum Recoverable Volume) — the ceiling before fatigue outpaces recovery.
+              </Text>
+
+              <Text style={styles.mevTableTitle}>Weekly Set Guidelines</Text>
+              <View style={styles.mevTable}>
+                <View style={styles.mevTableRow}>
+                  <Text style={[styles.mevTableCell, styles.mevTableMuscleCell, styles.mevTableHeaderText]}>Muscle</Text>
+                  <Text style={[styles.mevTableCell, styles.mevTableHeaderText]}>MEV</Text>
+                  <Text style={[styles.mevTableCell, styles.mevTableHeaderText]}>MAV</Text>
+                  <Text style={[styles.mevTableCell, styles.mevTableHeaderText]}>MRV</Text>
+                </View>
+                {Object.entries(MUSCLE_STANDARDS).map(([muscle, std]) => (
+                  <View key={muscle} style={[styles.mevTableRow, styles.mevTableRowDivider]}>
+                    <Text style={[styles.mevTableCell, styles.mevTableMuscleCell]}>{muscle}</Text>
+                    <Text style={styles.mevTableCell}>{std.mev}</Text>
+                    <Text style={styles.mevTableCell}>{std.mav}</Text>
+                    <Text style={styles.mevTableCell}>{std.mrv}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <Text style={[styles.mevInfoBody, { marginBottom: spacing.md }]}>
+                These are general starting points, not a personal prescription — your real numbers shift with training experience, sleep, nutrition, stress, and genetics. A beginner may grow well below MEV; a more advanced lifter may need to push toward MRV to keep progressing.
+              </Text>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* Range Picker Modal */}
       <Modal visible={rangePickerVisible} transparent animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setRangePickerVisible(false)}>
@@ -1444,6 +1488,15 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   goalModalValue: { fontSize: 48, fontWeight: '700', color: colors.textPrimary, minWidth: 60, textAlign: 'center' },
   goalModalDone: { backgroundColor: colors.accent, borderRadius: spacing.sm, padding: spacing.md, alignItems: 'center' },
   goalModalDoneText: { color: colors.accentText, fontSize: typography.fontSize.md, fontWeight: '700' },
+  mevInfoBody: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.md },
+  mevInfoBold: { fontWeight: '700', color: colors.textPrimary },
+  mevTableTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs },
+  mevTable: { borderWidth: 1, borderColor: colors.border, borderRadius: spacing.sm, overflow: 'hidden', marginBottom: spacing.md },
+  mevTableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: spacing.sm },
+  mevTableRowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  mevTableCell: { flex: 1, fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center' },
+  mevTableMuscleCell: { flex: 1.4, textAlign: 'left', color: colors.textPrimary, fontWeight: '600' },
+  mevTableHeaderText: { fontWeight: '700', color: colors.textPrimary, fontSize: 11, textTransform: 'uppercase' },
   axisLabel: { fontSize: 9, color: colors.textSecondary },
 
   // Muscle volume card
@@ -1461,7 +1514,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   mvPremiumTrack: { height: 7, backgroundColor: colors.border, borderRadius: 3, overflow: 'visible', position: 'relative' },
   mvPremiumFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 3 },
   mvTick: { position: 'absolute', top: -2, bottom: -2, width: 1.5, backgroundColor: colors.background },
-  mvCount: { width: 22, fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, textAlign: 'right' },
+  mvCount: { width: 30, fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, textAlign: 'right' },
   mvZoneLabel: { width: 78, fontSize: 10, fontWeight: '600', textAlign: 'right' },
   mvLastTrained: { width: 78, fontSize: 10, color: colors.textSecondary, textAlign: 'right' },
   mvDivider: { paddingVertical: spacing.xs, marginVertical: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },

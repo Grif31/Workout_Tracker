@@ -10,6 +10,7 @@ import {
   Alert,
   Image,
   Dimensions,
+  PanResponder,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LineChart, BarChart } from 'react-native-gifted-charts';
@@ -23,6 +24,7 @@ import { typography } from '../../theme/typography';
 import { toDisplayWeight, toDisplayVolume, convertWeight, WeightUnit } from 'utils/units';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import { SCORE_RANK_COLORS } from '../../constants/strengthRanks';
+import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModal';
 
 const SCREEN_WIDTH  = Dimensions.get('window').width;
 const CHART_WIDTH   = SCREEN_WIDTH - spacing.md * 4;
@@ -33,12 +35,16 @@ type Props = {
   navigation: { goBack: () => void; navigate: (...args: any[]) => void };
 };
 
-type ScoreEntry = {
-  has_data: boolean;
-  percentile?: number;
-  rank?: { label: string; tier: number; display: string };
-  estimated_1rm?: number;
-};
+// Contrast-safe text color for a solid rank-color background — most rank colors
+// are dark/mid-tone (safe with white text) except Legend's bright gold.
+function contrastTextColor(hex: string): string {
+  const c = hex.replace('#', '');
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? '#1a1a1a' : '#fff';
+}
 
 type ExerciseStats = {
   estimatedOneRepMax: number;
@@ -151,7 +157,8 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const [chartRange, setChartRange] = useState<'1M' | '3M' | '6M' | 'All'>('3M');
   const [templateDescription, setTemplateDescription] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [scoreEntry, setScoreEntry] = useState<ScoreEntry | null>(null);
+  const [scoreEntry, setScoreEntry] = useState<LiftEntry | null>(null);
+  const [liftModalVisible, setLiftModalVisible] = useState(false);
 
   const handleDelete = () => {
     Alert.alert(
@@ -222,6 +229,23 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
       Animated.timing(prevFadeAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
     ]).start(() => setPrevTab(null));
   };
+
+  // Horizontal swipe between tabs — only claims the gesture once the drag is
+  // clearly more horizontal than vertical, so vertical scrolling of the
+  // ScrollView (and any nested chart touch handling) is left alone.
+  const swipeResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesture) =>
+      Math.abs(gesture.dx) > 16 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 2,
+    onPanResponderRelease: (_, gesture) => {
+      const idx = visibleTabs.findIndex(t => t.key === activeTab);
+      const SWIPE_THRESHOLD = 60;
+      if (gesture.dx <= -SWIPE_THRESHOLD && idx < visibleTabs.length - 1) {
+        handleTabChange(visibleTabs[idx + 1].key);
+      } else if (gesture.dx >= SWIPE_THRESHOLD && idx > 0) {
+        handleTabChange(visibleTabs[idx - 1].key);
+      }
+    },
+  }), [activeTab, visibleTabs]);
 
   const fetchExerciseData = useCallback(async () => {
     if (!exerciseName) return;
@@ -529,7 +553,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const renderCardioStats = () => {
     if (loading) return <ActivityIndicator size="large" color={colors.save} />;
     if (!cardioStats || cardioStats.session_count === 0) {
-      return <Text style={styles.emptyText}>Log this exercise to see your stats.</Text>;
+      return null;
     }
     // cardioStats comes from the backend always normalized to km/min-per-km —
     // convert to the user's preferred unit before display.
@@ -598,25 +622,27 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     if (exerciseType === 'cardio') return renderCardioStats();
     if (loading) return <ActivityIndicator size="large" color={colors.save} />;
     if (stats.totalSets === 0) {
-      return <Text style={styles.emptyText}>Log this exercise to see your stats.</Text>;
+      return null;
     }
-    const strengthStatData = [
-      { label: 'Workouts',      value: String(stats.workoutCount) },
-      { label: 'Total Sets',    value: String(stats.totalSets) },
-      { label: 'Total Reps',    value: String(stats.totalReps) },
+    const lifetimeStatData = [
+      { label: 'Workouts',   value: String(stats.workoutCount) },
+      { label: 'Total Sets', value: String(stats.totalSets) },
+      { label: 'Total Reps', value: String(stats.totalReps) },
+    ];
+    const prStatData = [
       { label: 'Estimated 1RM', value: stats.estimatedOneRepMax ? toDisplayWeight(stats.estimatedOneRepMax, weightUnit) : '—' },
       { label: 'Max Weight',    value: stats.maxWeight ? toDisplayWeight(stats.maxWeight, weightUnit) : '—' },
       { label: 'Max Reps',      value: String(stats.maxReps || '—') },
       { label: 'Max Vol / Set', value: stats.maxVolume ? toDisplayVolume(stats.maxVolume, weightUnit) : '—' },
     ];
-    return (
+    const renderGrid = (data: { label: string; value: string }[], animOffset: number) => (
       <View style={styles.statsGrid}>
-        {strengthStatData.map((s, i) => (
+        {data.map((s, i) => (
           <Animated.View
-            key={i}
+            key={s.label}
             style={[styles.statCard, {
-              opacity: statAnims[i],
-              transform: [{ scale: statAnims[i].interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) }],
+              opacity: statAnims[animOffset + i],
+              transform: [{ scale: statAnims[animOffset + i].interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) }],
             }]}
           >
             <Text style={styles.statLabel}>{s.label}</Text>
@@ -625,58 +651,101 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         ))}
       </View>
     );
+    const renderLifetimeBox = (data: { label: string; value: string }[], animOffset: number) => (
+      <View style={styles.lifetimeBox}>
+        {data.map((s, i) => (
+          <React.Fragment key={s.label}>
+            {i > 0 && <View style={styles.lifetimeDivider} />}
+            <Animated.View
+              style={[styles.lifetimeCell, {
+                opacity: statAnims[animOffset + i],
+                transform: [{ scale: statAnims[animOffset + i].interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) }],
+              }]}
+            >
+              <Text style={styles.statLabel}>{s.label}</Text>
+              <Text style={styles.statValue}>{s.value}</Text>
+            </Animated.View>
+          </React.Fragment>
+        ))}
+      </View>
+    );
+    return (
+      <>
+        <Text style={styles.sectionTitle}>Lifetime Stats</Text>
+        {renderLifetimeBox(lifetimeStatData, 0)}
+        <Text style={styles.sectionTitle}>Personal Records</Text>
+        {renderGrid(prStatData, lifetimeStatData.length)}
+      </>
+    );
   };
 
   const renderOverview = () => (
     <>
+      {!isCardio && (
+        <>
+          <Text style={styles.sectionTitle}>Muscle Breakdown</Text>
+          <View style={styles.diagramCard}>
+            <MuscleDiagram
+              muscles={muscles}
+              scale={0.85}
+              muscleColors={Object.fromEntries([
+                ...(primaryMuscle ? [[primaryMuscle, colors.accent]] : []),
+                ...secondaryMuscles.map(m => [m, colors.accent + '80']),
+              ])}
+            />
+          </View>
+        </>
+      )}
+
       {/* Primary / secondary muscles */}
       {!isCardio && (primaryMuscle || secondaryMuscles.length > 0) && (
         <View style={styles.muscleRow}>
           {primaryMuscle ? (
             <View style={styles.musclePill}>
-              <Text style={styles.musclePillLabel}>Primary</Text>
+              <View style={styles.musclePillLabelRow}>
+                <View style={[styles.muscleSwatch, { backgroundColor: colors.accent }]} />
+                <Text style={styles.musclePillLabel}>Primary</Text>
+              </View>
               <Text style={styles.musclePillValue}>{primaryMuscle}</Text>
             </View>
           ) : null}
           {secondaryMuscles.length > 0 && (
             <View style={styles.musclePill}>
-              <Text style={styles.musclePillLabel}>Also Works</Text>
+              <View style={styles.musclePillLabelRow}>
+                <View style={[styles.muscleSwatch, { backgroundColor: colors.accent + '80' }]} />
+                <Text style={styles.musclePillLabel}>Secondary</Text>
+              </View>
               <Text style={styles.musclePillValue}>{secondaryMuscles.join(', ')}</Text>
             </View>
           )}
         </View>
       )}
 
-      {scoreEntry?.rank && (
-        <TouchableOpacity
-          style={styles.scoreCard}
-          activeOpacity={0.7}
-          onPress={() => navigation.navigate('TrainingTab', { screen: 'StrengthScore', initial: false })}
-        >
-          <View style={[styles.miniRankBadge, {
-            backgroundColor: (SCORE_RANK_COLORS[scoreEntry.rank.label] ?? colors.accent) + '22',
-            borderColor: SCORE_RANK_COLORS[scoreEntry.rank.label] ?? colors.accent,
-          }]}>
-            <Text style={[styles.miniRankText, { color: SCORE_RANK_COLORS[scoreEntry.rank.label] ?? colors.accent }]}>
-              {scoreEntry.rank.display}
-            </Text>
-          </View>
-          <Text style={styles.scoreCardText}>
-            Stronger than {Math.round(scoreEntry.percentile ?? 0)}% of lifters
-          </Text>
-          <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
-        </TouchableOpacity>
-      )}
-
-      {!isCardio && (
-        <View style={styles.diagramCard}>
-          <MuscleDiagram muscles={muscles} />
-        </View>
-      )}
+      {scoreEntry?.rank && (() => {
+        const rankColor = SCORE_RANK_COLORS[scoreEntry.rank.label] ?? colors.accent;
+        const textColor = contrastTextColor(rankColor);
+        const pct = scoreEntry.percentile ?? 0;
+        return (
+          <TouchableOpacity
+            style={[styles.scoreCard, { backgroundColor: rankColor }]}
+            activeOpacity={0.8}
+            onPress={() => setLiftModalVisible(true)}
+          >
+            <View style={[styles.scoreCircle, { borderColor: textColor }]}>
+              <Text style={[styles.scoreCircleText, { color: textColor }]}>{Math.round(pct)}</Text>
+            </View>
+            <View style={styles.scoreCardTextCol}>
+              <Text style={[styles.scoreCardLabel, { color: textColor }]}>Strength Score</Text>
+              <Text style={[styles.scoreCardRank, { color: textColor }]}>{scoreEntry.rank.display}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={textColor} />
+          </TouchableOpacity>
+        );
+      })()}
 
       {renderStats()}
 
-      <View style={styles.card}>
+      <View style={styles.howToSection}>
         <Text style={styles.sectionTitle}>How to perform</Text>
         <Text style={styles.body}>{exerciseDescription}</Text>
       </View>
@@ -723,8 +792,8 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
             ))}
           </View>
         </View>
-        {renderChart(chart1RM, `Estimated 1RM over time (${weightUnit})`, colors.accent, hasChartData.oneRm)}
-        {renderChart(chartMaxWeight, `Max weight over time (${weightUnit})`, colors.save, hasChartData.maxW)}
+        {renderChart(chart1RM, `Estimated 1RM (${weightUnit})`, colors.accent, hasChartData.oneRm)}
+        {renderChart(chartMaxWeight, `Max weight (${weightUnit})`, colors.save, hasChartData.maxW)}
         {renderVolumeChart(chartVolume, hasChartData.vol)}
       </View>
     );
@@ -803,7 +872,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           <Animated.View style={[styles.tabSlider, { backgroundColor: colors.accent, width: tabSlideWidth, transform: [{ translateX: sliderX }] }]} />
         </View>
 
-        <View style={styles.crossfadeContainer}>
+        <View style={styles.crossfadeContainer} {...swipeResponder.panHandlers}>
           {prevTab && (
             <Animated.View
               style={[styles.section, styles.crossfadeOverlay, { opacity: prevFadeAnim }]}
@@ -818,6 +887,13 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         </View>
         </View>
       </ScrollView>
+
+      <LiftDetailModal
+        visible={liftModalVisible}
+        onClose={() => setLiftModalVisible(false)}
+        lift={scoreEntry}
+        weightUnit={weightUnit}
+      />
     </View>
   );
 }
@@ -907,16 +983,21 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   musclePill: {
     flex: 1,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.sm,
-    borderRadius: 14,
+  },
+  musclePillLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: spacing.xs,
+  },
+  muscleSwatch: {
+    width: 10,
+    height: 10,
+    borderRadius: 3,
   },
   musclePillLabel: {
     fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
-    marginBottom: spacing.xs,
     textTransform: 'uppercase',
   },
   musclePillValue: {
@@ -942,48 +1023,46 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '700',
     marginBottom: spacing.sm,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: spacing.md,
+  howToSection: {
     marginBottom: spacing.md,
   },
   diagramCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: spacing.md,
     marginBottom: spacing.md,
   },
   scoreCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: radius.lg,
-    padding: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
     marginBottom: spacing.md,
   },
-  scoreCardText: {
+  scoreCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scoreCircleText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '800',
+  },
+  scoreCardTextCol: {
     flex: 1,
+  },
+  scoreCardLabel: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  scoreCardRank: {
     fontSize: typography.fontSize.sm,
     fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  miniRankBadge: {
-    borderRadius: 6,
-    borderWidth: 1,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-  },
-  miniRankText: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '700',
+    marginTop: 2,
   },
   body: {
     fontSize: typography.fontSize.sm,
@@ -995,6 +1074,25 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
     marginBottom: spacing.md,
+  },
+  lifetimeBox: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    marginBottom: spacing.md,
+    overflow: 'hidden',
+  },
+  lifetimeCell: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+  },
+  lifetimeDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
   },
   statCard: {
     flexBasis: '47%',

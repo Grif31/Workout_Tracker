@@ -1505,3 +1505,6 @@ class TestStrengthScoreForExercise:
         single = client.get(f'/api/stats/strength-score/exercise?exercise_template_id={tid}', headers=h).get_json()
         assert single['percentile'] == squat_entry['percentile']
         assert single['estimated_1rm'] == squat_entry['estimated_1rm']
+        assert single['exercise'] == 'Squat'
+        assert single['thresholds'] == squat_entry['thresholds']
+        assert len(single['thresholds']) > 0

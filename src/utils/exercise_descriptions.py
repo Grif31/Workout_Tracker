@@ -35,6 +35,9 @@ EXERCISE_DESCRIPTIONS: dict[str, str] = {
     'Pull Up':
         'From a dead hang with an overhand grip, pull your chin above the bar by driving your elbows down toward your hips. '
         'Lower back to a full hang under control rather than dropping.',
+    'Chin Up':
+        'From a dead hang with an underhand, shoulder-width grip, pull your chin above the bar by driving your elbows down toward your hips. '
+        'The underhand grip brings the biceps in more than a standard pull-up. Lower back to a full hang under control rather than dropping.',
     'Lat Pulldown':
         'Grip the bar wider than shoulder-width and pull it down to your upper chest, driving your elbows down and back. '
         'Let the bar rise back up under control without leaning back excessively.',

@@ -604,6 +604,28 @@ def _exercise_percentile_data(user_id, standards_key, template_ids, gender, unit
     }
 
 
+_TIER_BOUNDARIES = [
+    (10,  'Beginner'),
+    (30,  'Intermediate'),
+    (60,  'Advanced'),
+    (80,  'Elite'),
+    (95,  'Legend'),
+]
+
+
+def _compute_thresholds(standards_key, gender, bw_lbs, unit_to_lbs):
+    """Weight needed at each rank-tier boundary for one lift, in the user's
+    display unit — shared by strength_score()'s big6/supplemental lists and
+    the single-exercise lookup so both stay in sync."""
+    from utils.strength_standards import compute_weight_at_percentile
+    thresholds = []
+    for boundary_pct, rank_name in _TIER_BOUNDARIES:
+        w = compute_weight_at_percentile(standards_key, gender, bw_lbs, boundary_pct)
+        if w is not None:
+            thresholds.append({'percentile': boundary_pct, 'rank': rank_name, 'weight': round(w / unit_to_lbs, 1)})
+    return thresholds
+
+
 @stats_bp.get('/api/stats/strength-score')
 @jwt_required()
 def strength_score():
@@ -612,7 +634,7 @@ def strength_score():
     from utils.strength_standards import (
         STANDARDS, BIG_6, COMPOUND_SECONDARY,
         percentile_to_strength_rank, greek_rank_from_score,
-        compute_weight_at_percentile, compute_muscle_group_scores,
+        compute_muscle_group_scores,
         compute_consistency_score, compute_dedication_score,
         compute_volume_score, compute_greek_score, age_scaling_factor,
     )
@@ -759,22 +781,9 @@ def strength_score():
     # premium fields and gating is client-only (see TODO.md).
     is_pro = True
 
-    _TIER_BOUNDARIES = [
-        (10,  'Beginner'),
-        (30,  'Intermediate'),
-        (60,  'Advanced'),
-        (80,  'Elite'),
-        (95,  'Legend'),
-    ]
-
     def _ex_entry(name):
         pct = exercise_percentiles.get(name)
-        thresholds = []
-        for boundary_pct, rank_name in _TIER_BOUNDARIES:
-            w = compute_weight_at_percentile(name, user.gender, bw_lbs, boundary_pct)
-            if w is not None:
-                thresholds.append({'percentile': boundary_pct, 'rank': rank_name,
-                                   'weight': round(w / unit_to_lbs, 1)})
+        thresholds = _compute_thresholds(name, user.gender, bw_lbs, unit_to_lbs)
         return {
             'exercise': name,
             'percentile': round(pct, 1) if pct is not None else None,
@@ -911,9 +920,11 @@ def strength_score_for_exercise():
 
     return jsonify({
         'has_data': True,
+        'exercise': tmpl.name,
         'percentile': round(result['percentile'], 1),
         'rank': percentile_to_strength_rank(result['percentile']),
         'estimated_1rm': result['best_1rm'],
+        'thresholds': _compute_thresholds(standards_key, user.gender, bw_lbs, unit_to_lbs),
     }), 200
 
 

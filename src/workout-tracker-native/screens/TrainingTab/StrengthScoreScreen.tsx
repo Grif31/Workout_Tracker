@@ -22,6 +22,7 @@ import { TrainingStackParamsList } from '../../navigation/types';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import { STRENGTH_TIERS, SCORE_RANK_COLORS } from '../../constants/strengthRanks';
 import LaurelBranch from '../../components/LaurelWreath';
+import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModal';
 import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
 
 function SectionRule({ label, style }: { label: string; style?: object }) {
@@ -122,7 +123,6 @@ export default function StrengthScoreScreen({ navigation }: Props) {
   const [groupModalVisible, setGroupModalVisible] = useState(false);
 
   // Lift detail modal
-  type LiftEntry = { exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; estimated_1rm?: number | null; thresholds?: { percentile: number; rank: string; weight: number }[]; has_data: boolean };
   const [selectedLift, setSelectedLift] = useState<LiftEntry | null>(null);
   const [liftModalVisible, setLiftModalVisible] = useState(false);
 
@@ -699,95 +699,12 @@ export default function StrengthScoreScreen({ navigation }: Props) {
       ) : null}
 
       {/* Lift detail modal */}
-      <Modal visible={liftModalVisible} transparent animationType="slide" onRequestClose={() => setLiftModalVisible(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setLiftModalVisible(false)}>
-          <View style={styles.modalSheet}>
-            {selectedLift?.has_data && (() => {
-              const liftColor = selectedLift.rank ? (SCORE_RANK_COLORS[selectedLift.rank.label] ?? colors.accent) : colors.accent;
-              const pct = selectedLift.percentile ?? 0;
-
-              // Rank tier segments for the distribution bar
-              const TIERS = STRENGTH_TIERS;
-              // modalSheet has paddingHorizontal: spacing.lg on each side
-              const BAR_W = Dimensions.get('window').width - spacing.lg * 2;
-
-              return (
-                <>
-                  <View style={styles.modalHandle} />
-                  <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>{selectedLift.exercise}</Text>
-
-                  {/* Hero stat */}
-                  <View style={styles.liftHero}>
-                    <Text style={[styles.liftPercentileText, { color: liftColor }]}>
-                      {pct < 10 ? '< 10th percentile' : `Stronger than ${Math.round(pct)}%`}
-                    </Text>
-                    {pct >= 10 && (
-                      <Text style={styles.liftPercentileSub}>of all lifters</Text>
-                    )}
-                    {selectedLift.rank && (
-                      <View style={[styles.miniRankBadge, { backgroundColor: liftColor + '22', borderColor: liftColor, alignSelf: 'center', marginTop: 4 }]}>
-                        <Text style={[styles.miniRankText, { color: liftColor }]}>{selectedLift.rank.display}</Text>
-                      </View>
-                    )}
-                    {selectedLift.estimated_1rm != null && (
-                      <Text style={styles.liftOneRM}>Est. 1RM: {selectedLift.estimated_1rm} {scoreData?.weight_unit ?? 'lbs'}</Text>
-                    )}
-                  </View>
-
-                  {/* Rank tier distribution bar */}
-                  <SectionRule label="Where You Rank" style={{ marginTop: spacing.sm }} />
-                  <View style={{ marginTop: spacing.xs }}>
-                    {/* Marker line */}
-                    <View style={{ height: 12, position: 'relative', marginBottom: 2 }}>
-                      <View style={[styles.markerTriangle, { left: (pct / 100) * BAR_W - 6 }]} />
-                    </View>
-                    {/* Segmented bar */}
-                    <View style={{ flexDirection: 'row', height: 18, borderRadius: 9, overflow: 'hidden' }}>
-                      {TIERS.map(tier => (
-                        <View
-                          key={tier.label}
-                          style={{ flex: tier.high - tier.low, backgroundColor: tier.color, opacity: pct >= tier.low ? 1 : 0.25 }}
-                        />
-                      ))}
-                    </View>
-                    {/* Labels + weight thresholds */}
-                    <View style={{ flexDirection: 'row', marginTop: spacing.xs }}>
-                      {TIERS.map(tier => {
-                        const threshold = (selectedLift as LiftEntry).thresholds?.find(t => t.rank === tier.label);
-                        const reached = pct >= tier.low;
-                        return (
-                          <View key={tier.label} style={{ flex: tier.high - tier.low, alignItems: 'center' }}>
-                            <Text style={[styles.tierBarLabel, { color: reached ? tier.color : colors.textSecondary }]} numberOfLines={1}>
-                              {tier.label}
-                            </Text>
-                            {threshold && (
-                              <Text style={[styles.tierBarWeight, { color: reached ? tier.color : colors.textSecondary }]} numberOfLines={1}>
-                                {threshold.weight} {scoreData?.weight_unit ?? 'lbs'}
-                              </Text>
-                            )}
-                          </View>
-                        );
-                      })}
-                    </View>
-                  </View>
-
-                  {/* Tier sub-rank dots */}
-                  {selectedLift.rank && (
-                    <View style={[styles.tierRow, { marginTop: spacing.md }]}>
-                      {[1, 2, 3].map(t => (
-                        <View key={t} style={[styles.tierDot, { backgroundColor: t <= selectedLift.rank!.tier ? liftColor : colors.border }]} />
-                      ))}
-                      <Text style={[styles.tierLabel, { color: colors.textSecondary }]}>
-                        Tier {selectedLift.rank.tier}/3 within {selectedLift.rank.label}
-                      </Text>
-                    </View>
-                  )}
-                </>
-              );
-            })()}
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      <LiftDetailModal
+        visible={liftModalVisible}
+        onClose={() => setLiftModalVisible(false)}
+        lift={selectedLift}
+        weightUnit={scoreData?.weight_unit ?? 'lbs'}
+      />
 
       {/* Info modal */}
       <Modal visible={infoVisible} transparent animationType="slide" onRequestClose={() => setInfoVisible(false)}>
@@ -1133,24 +1050,6 @@ const createStyles = (colors: Colors) =>
     tierLabel: { fontSize: typography.fontSize.sm, marginLeft: spacing.xs },
     groupScore: { fontSize: typography.fontSize.sm, textAlign: 'center' },
 
-    liftHero: { alignItems: 'center', gap: 4, paddingVertical: spacing.sm },
-    liftPercentileText: { fontSize: 36, fontWeight: '800' },
-    liftPercentileSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
-    liftOneRM: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 4 },
-    markerTriangle: {
-      position: 'absolute',
-      width: 0,
-      height: 0,
-      borderLeftWidth: 6,
-      borderRightWidth: 6,
-      borderTopWidth: 10,
-      borderLeftColor: 'transparent',
-      borderRightColor: 'transparent',
-      borderTopColor: colors.textPrimary,
-      top: 2,
-    },
-    tierBarLabel: { fontSize: 8, fontWeight: '600', textAlign: 'center' },
-    tierBarWeight: { fontSize: 7, textAlign: 'center', marginTop: 1 },
     infoSection: { gap: 4 },
     infoHeading: { fontSize: typography.fontSize.md, fontWeight: '700' },
     infoBody: { fontSize: typography.fontSize.sm, lineHeight: 20 },

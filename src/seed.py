@@ -71,6 +71,7 @@ EXERCISES = [
     # Back
     ('Pull Up',                 'Back, Biceps',              'Bodyweight'),
     ('Pull Up',                 'Back, Biceps',              'Weighted'),
+    ('Chin Up',                 'Back, Biceps',              'Bodyweight'),
     ('Lat Pulldown',            'Back, Biceps',              'Cable'),
     ('Lat Pulldown',            'Back, Biceps',              'Machine'),
     ('Bent Over Row',           'Back, Biceps',              'Barbell'),
@@ -482,7 +483,7 @@ def main():
         total = len(EXERCISES)
         for i, (name, muscle_group, equipment) in enumerate(EXERCISES, start=1):
             existing = ExerciseTemplate.query.filter_by(
-                name=name, equipment=equipment
+                name=name, equipment=equipment, user_id=None
             ).first()
             if existing:
                 print(f'[{i}/{total}] Skipping (exists): {name} ({equipment})')
@@ -522,7 +523,7 @@ def main():
         ctotal = len(CARDIO_EXERCISES)
         for i, (name, equipment) in enumerate(CARDIO_EXERCISES, start=1):
             existing = ExerciseTemplate.query.filter_by(
-                name=name, equipment=equipment, exercise_type='cardio'
+                name=name, equipment=equipment, exercise_type='cardio', user_id=None
             ).first()
             if existing:
                 print(f'[C {i}/{ctotal}] Skipping (exists): {name} ({equipment})')
