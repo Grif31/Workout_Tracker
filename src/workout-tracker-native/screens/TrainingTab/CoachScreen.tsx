@@ -109,7 +109,7 @@ export default function CoachScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const { isPremium } = usePurchase();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const [activeTab, setActiveTab] = useState<'training' | 'progress' | 'coach'>('training');
+  const [activeTab, setActiveTab] = useState<'training' | 'progress' | 'coach'>('progress');
   const weightUnit: WeightUnit = (user as any)?.weight_unit === 'kg' ? 'kg' : 'lbs';
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
 
@@ -129,7 +129,7 @@ export default function CoachScreen({ navigation }: Props) {
   const TAB_NAMES = ['training', 'progress', 'coach'] as const;
   const TAB_W = (SCREEN_WIDTH - spacing.md * 2) / 3;
   const SLIDER_W = TAB_W * 0.5;
-  const tabIndexAnim = useRef(new Animated.Value(0)).current;
+  const tabIndexAnim = useRef(new Animated.Value(1)).current;
   const contentOpacity = useRef(new Animated.Value(1)).current;
   const insightAnimsRef = useRef<Animated.Value[]>([]);
 

@@ -65,8 +65,8 @@ const SLIDES: Slide[] = [
   {
     type: 'screenshot',
     source: require('../../assets/screenshots/slide-dashboard.jpg'),
-    title: 'Strength & Cardio, One Place',
-    body: 'Every session lands on your dashboard — lifting workouts, runs, and GPS-tracked cardio side by side.',
+    title: 'Track Strength & Cardio',
+    body: 'Lifting workouts, runs, and GPS-tracked cardio all in one place.',
   },
   {
     type: 'screenshot',
@@ -94,9 +94,42 @@ const SLIDES: Slide[] = [
 ];
 
 export default function OnboardingTutorialScreen({ navigation }: Props) {
+  const [showWelcome, setShowWelcome] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
+
+  if (showWelcome) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor={AUTH.bg} />
+        <View style={styles.welcomeContainer}>
+          <View style={styles.welcomeContent}>
+            <Image
+              source={require('../../assets/Arete_name.png')}
+              style={styles.welcomeLogo}
+              resizeMode="contain"
+            />
+            <Text style={styles.welcomePronunciation}>/AH-reh-tay/</Text>
+            <Text style={styles.welcomeTagline}>Strive for Excellence</Text>
+          </View>
+
+          <View style={styles.welcomeButtons}>
+            <TouchableOpacity style={styles.nextBtn} onPress={() => setShowWelcome(false)} activeOpacity={0.85}>
+              <Text style={styles.nextBtnText}>Start Tutorial</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.welcomeSkipBtn}
+              onPress={() => navigation.navigate('OnboardingUnits')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.skipText}>Skip</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const advance = () => {
     if (activeIndex < SLIDES.length - 1) {
@@ -239,6 +272,49 @@ function PremiumCard() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: AUTH.bg },
+
+  // ── Welcome screen ───────────────────────────────────────────
+  welcomeContainer: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
+  },
+  welcomeContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  welcomeTo: {
+    fontSize: typography.fontSize.lg,
+    color: AUTH.subtext,
+    fontWeight: '500',
+  },
+  welcomeLogo: {
+    width: 240,
+    height: 64,
+    marginVertical: spacing.sm,
+  },
+  welcomePronunciation: {
+    fontSize: typography.fontSize.md,
+    color: AUTH.subtext,
+    fontStyle: 'italic',
+  },
+  welcomeTagline: {
+    fontSize: typography.fontSize.xl,
+    fontWeight: '700',
+    color: AUTH.accent,
+    marginTop: spacing.md,
+    textAlign: 'center',
+  },
+  welcomeButtons: {
+    gap: spacing.md,
+  },
+  welcomeSkipBtn: {
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+  },
 
   header: {
     flexDirection: 'row',

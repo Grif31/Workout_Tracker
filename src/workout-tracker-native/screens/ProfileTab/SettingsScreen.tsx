@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
@@ -33,7 +34,8 @@ import { HEALTH_SYNC_KEY, requestHealthKitPermission } from '../../utils/healthK
 import { REST_TIMER_KEY } from '../../components/workout/types';
 import { requestHealthConnectPermission } from '../../utils/healthConnect';
 
-const APP_VERSION = '1.0.0';
+// Reads the live app.config.js version so this never drifts out of sync again.
+const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 const REST_TIMER_PRESETS = [30, 45, 60, 90, 120, 150, 180, 240, 300];
 const GPS_DISTANCE_KEY = 'gps_distance_unit';
 const REMINDERS_KEY = 'workout_reminders_enabled';

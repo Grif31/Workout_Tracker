@@ -99,8 +99,11 @@ module.exports = {
       [
         'react-native-health',
         {
-          NSHealthShareUsageDescription: 'Aretē reads health data to display workout metrics.',
-          NSHealthUpdateUsageDescription: 'Aretē writes workout sessions to Apple Health.',
+          // The plugin's config keys are healthSharePermission/healthUpdatePermission,
+          // NOT the raw NSHealth*UsageDescription Info.plist key names — passing the
+          // wrong keys here silently falls back to the plugin's generic defaults.
+          healthSharePermission: 'Aretē reads health data to display workout metrics.',
+          healthUpdatePermission: 'Aretē writes workout sessions to Apple Health.',
         },
       ],
       'react-native-health-connect',
