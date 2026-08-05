@@ -18,12 +18,15 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
+import { captureAndShare } from '../../utils/shareCapture';
 import { TrainingStackParamsList } from '../../navigation/types';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import { STRENGTH_TIERS, SCORE_RANK_COLORS } from '../../constants/strengthRanks';
 import LaurelBranch from '../../components/LaurelWreath';
 import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModal';
+import StrengthScoreShareCard from '../../components/StrengthScoreShareCard';
 import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
+import { toLocalDateStr } from '../../utils/date';
 
 function SectionRule({ label, style }: { label: string; style?: object }) {
   const { colors } = useTheme();
@@ -47,10 +50,6 @@ const RING_R = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_R;
 
 const LAST_TIER_KEY = 'strength_score_last_tier';
-
-function toLocalDateStr(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 function timeAgo(isoStr: string): string {
   const mins = Math.floor((Date.now() - new Date(isoStr).getTime()) / 60000);
@@ -140,6 +139,9 @@ export default function StrengthScoreScreen({ navigation }: Props) {
 
   const [refreshing, setRefreshing] = useState(false);
 
+  const [sharing, setSharing] = useState(false);
+  const shareCardRef = useRef<View>(null);
+
   // Rank-up celebration: only fires when the tier is strictly higher than the
   // last one we saw for this user. A brand-new key (first time this user's
   // score has ever been checked) is seeded silently — otherwise every
@@ -200,6 +202,17 @@ export default function StrengthScoreScreen({ navigation }: Props) {
     setRefreshing(true);
     await fetchScore();
     setRefreshing(false);
+  };
+
+  const handleShare = async () => {
+    setSharing(true);
+    try {
+      await captureAndShare(shareCardRef, 'Share your Strength Score');
+    } catch {
+      // user cancelled or capture failed — no-op
+    } finally {
+      setSharing(false);
+    }
   };
 
   useFocusEffect(useCallback(() => {
@@ -300,15 +313,45 @@ export default function StrengthScoreScreen({ navigation }: Props) {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Off-screen card for screenshot capture */}
+      {scoreData && (
+        <View
+          ref={shareCardRef}
+          style={{ position: 'absolute', left: -9999, top: -9999 }}
+          collapsable={false}
+        >
+          <StrengthScoreShareCard
+            score={scoreData.overall}
+            rankLabel={scoreData.overall_rank.label}
+            exercisesUsed={scoreData.exercises_used}
+            muscleGroupsUsed={scoreData.muscle_groups_used}
+            accentColor={rankColor}
+            date={new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+            isRankUp={rankUpVisible}
+          />
+        </View>
+      )}
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Strength Score</Text>
-        <TouchableOpacity onPress={() => setInfoVisible(true)}>
-          <Ionicons name="information-circle-outline" size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
+        <View style={styles.headerIcons}>
+          {scoreData && (
+            <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={8}>
+              {sharing ? (
+                <ActivityIndicator color={colors.textPrimary} size="small" />
+              ) : (
+                <Ionicons name="share-outline" size={22} color={colors.textPrimary} />
+              )}
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={() => setInfoVisible(true)}>
+            <Ionicons name="information-circle-outline" size={24} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
@@ -347,6 +390,9 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               <LaurelBranch height={20} color={PR_GOLD_TEXT} />
               <Text style={styles.rankUpText}>Rank Up! {scoreData.overall_rank.display}</Text>
               <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
+              <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={8} style={styles.rankUpShareBtn}>
+                <Ionicons name="share-outline" size={16} color={PR_GOLD_TEXT} />
+              </TouchableOpacity>
             </Animated.View>
           )}
 
@@ -953,6 +999,7 @@ const createStyles = (colors: Colors) =>
       borderBottomWidth: 1, borderBottomColor: colors.border,
     },
     headerTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },
+    headerIcons: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.lg },
     emptyTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
     emptySubtitle: { fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center' },
@@ -1002,6 +1049,7 @@ const createStyles = (colors: Colors) =>
       justifyContent: 'center', marginBottom: spacing.xs,
     },
     rankUpText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: PR_GOLD_TEXT },
+    rankUpShareBtn: { marginLeft: spacing.xs },
     tooltipBubble: {
       backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
       borderRadius: 8, padding: spacing.xs, alignItems: 'center',
