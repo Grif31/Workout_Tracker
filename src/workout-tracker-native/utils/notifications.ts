@@ -45,19 +45,23 @@ export async function deregisterPushToken(): Promise<void> {
 
 export async function scheduleRestTimerAlert(seconds: number): Promise<void> {
   await cancelRestTimerAlert();
-  restTimerNotifId = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'Rest over — time to lift! 💪',
-      body: 'Your rest period has ended.',
-      sound: true,
-      interruptionLevel: 'timeSensitive',
-    } as any,
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-      seconds,
-    },
-  });
-  await AsyncStorage.setItem(REST_TIMER_NOTIF_KEY, restTimerNotifId);
+  const { status } = await Notifications.getPermissionsAsync();
+  if (status !== 'granted') return;
+  try {
+    restTimerNotifId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Rest over — time to lift! 💪',
+        body: 'Your rest period has ended.',
+        sound: true,
+        interruptionLevel: 'timeSensitive',
+      } as any,
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds,
+      },
+    });
+    await AsyncStorage.setItem(REST_TIMER_NOTIF_KEY, restTimerNotifId);
+  } catch {}
 }
 
 export async function cancelRestTimerAlert(): Promise<void> {
@@ -107,18 +111,22 @@ export function postLiveWorkoutNotification(opts: {
   currentExercise?: string;
 }): Promise<void> {
   return enqueueLiveNotifOp(async () => {
-    await Notifications.scheduleNotificationAsync({
-      identifier: LIVE_WORKOUT_NOTIF_ID,
-      content: {
-        title: `${opts.workoutName}  ·  ${opts.elapsed}  —  ${opts.setsDone}/${opts.setsTotal} sets`,
-        body: opts.currentExercise ?? '',
-        categoryIdentifier: LIVE_WORKOUT_CATEGORY,
-        data: { type: 'live_workout' },
-        autoDismiss: false,
-        sticky: true,
-      } as any,
-      trigger: null,
-    });
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') return;
+    try {
+      await Notifications.scheduleNotificationAsync({
+        identifier: LIVE_WORKOUT_NOTIF_ID,
+        content: {
+          title: `${opts.workoutName}  ·  ${opts.elapsed}  —  ${opts.setsDone}/${opts.setsTotal} sets`,
+          body: opts.currentExercise ?? '',
+          categoryIdentifier: LIVE_WORKOUT_CATEGORY,
+          data: { type: 'live_workout' },
+          autoDismiss: false,
+          sticky: true,
+        } as any,
+        trigger: null,
+      });
+    } catch {}
   });
 }
 
@@ -139,19 +147,23 @@ export function cancelLiveWorkoutNotification(): Promise<void> {
 
 export async function scheduleWorkoutReminder(hour: number, minute: number): Promise<void> {
   await cancelWorkoutReminder();
-  const id = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: "Time to work out! 💪",
-      body: "Don't forget your workout today.",
-      sound: true,
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour,
-      minute,
-    },
-  });
-  await AsyncStorage.setItem(REMINDER_NOTIF_KEY, id);
+  const { status } = await Notifications.getPermissionsAsync();
+  if (status !== 'granted') return;
+  try {
+    const id = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Time to work out! 💪",
+        body: "Don't forget your workout today.",
+        sound: true,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        hour,
+        minute,
+      },
+    });
+    await AsyncStorage.setItem(REMINDER_NOTIF_KEY, id);
+  } catch {}
 }
 
 export async function cancelWorkoutReminder(): Promise<void> {
