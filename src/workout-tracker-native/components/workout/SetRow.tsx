@@ -28,7 +28,7 @@ type Props = {
   registerInputRef?: (field: 'reps' | 'weight', ref: TextInput | null) => void;
 };
 
-export default function SetRow({
+function SetRow({
   set,
   setIndex,
   prevSet,
@@ -138,6 +138,8 @@ export default function SetRow({
     </Swipeable>
   );
 }
+
+export default React.memo(SetRow);
 
 const createStyles = (colors: Colors) => StyleSheet.create({
   setRow: {

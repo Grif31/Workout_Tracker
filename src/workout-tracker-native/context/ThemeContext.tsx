@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { Appearance } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -92,7 +92,7 @@ type ThemeContextType = {
 const ThemeContext = createContext<ThemeContextType>(null!);
 
 const KEY_MODE   = '@theme_mode';
-const KEY_ACCENT = '@theme_accent';
+export const KEY_ACCENT = '@theme_accent';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setMode]               = useState<'light' | 'dark'>('light');
@@ -134,24 +134,24 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return () => sub.remove();
   }, [pinnedMode]);
 
-  const toggleMode = () => {
+  const toggleMode = useCallback(() => {
     const next = mode === 'light' ? 'dark' : 'light';
     setMode(next);
     setPinnedMode(next);
     AsyncStorage.setItem(KEY_MODE, next);
-  };
+  }, [mode]);
 
-  const setAccentPreset = (preset: AccentPreset) => {
+  const setAccentPreset = useCallback((preset: AccentPreset) => {
     setAccentState(preset);
     AsyncStorage.setItem(KEY_ACCENT, preset.name);
-  };
+  }, []);
 
-  const resetAccent = () => {
+  const resetAccent = useCallback(() => {
     setAccentState(ACCENT_PRESETS[0]);
     AsyncStorage.removeItem(KEY_ACCENT);
-  };
+  }, []);
 
-  const loadAccentForUser = async (userId: number | string) => {
+  const loadAccentForUser = useCallback(async (userId: number | string) => {
     const saved = await AsyncStorage.getItem(`@theme_accent_${userId}`);
     if (saved) {
       const found = ACCENT_PRESETS.find(p => p.name === saved);
@@ -162,15 +162,23 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
     // No saved preference for this user — use default
     setAccentState(ACCENT_PRESETS[0]);
-  };
+  }, []);
 
   const colors = useMemo(() => buildColors(mode, accentPreset), [mode, accentPreset]);
+
+  // Memoized so consumers (nearly every screen/component in the app) don't
+  // re-render on every ThemeProvider render — only when something about the
+  // theme actually changes.
+  const value = useMemo<ThemeContextType>(() => ({
+    colors, mode, accentPreset, accentPresets: ACCENT_PRESETS,
+    toggleMode, setAccentPreset, resetAccent, loadAccentForUser,
+  }), [colors, mode, accentPreset, toggleMode, setAccentPreset, resetAccent, loadAccentForUser]);
 
   // Don't render until we've loaded saved preferences to avoid a flash
   if (!ready) return null;
 
   return (
-    <ThemeContext.Provider value={{ colors, mode, accentPreset, accentPresets: ACCENT_PRESETS, toggleMode, setAccentPreset, resetAccent, loadAccentForUser }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );

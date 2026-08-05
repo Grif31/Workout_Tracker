@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { type ExerciseEntry, fmtElapsed } from './types';
+import { fmtElapsed } from './types';
 import MuscleDiagram from '../MuscleDiagram';
 
 type Props = {
@@ -32,12 +32,14 @@ type Props = {
   onShowPlateCalcChange: (val: boolean) => void;
   repeatLastSet: boolean;
   onRepeatLastSetChange: (val: boolean) => void;
-  exercises: ExerciseEntry[];
+  exerciseCount: number;
+  totalSets: number;
+  totalVolume: number;
   weightUnit: string;
   activeMuscles: string[];
 };
 
-export default function WorkoutHeader({
+function WorkoutHeader({
   workoutName,
   onWorkoutNameChange,
   notes,
@@ -59,7 +61,9 @@ export default function WorkoutHeader({
   onShowPlateCalcChange,
   repeatLastSet,
   onRepeatLastSetChange,
-  exercises,
+  exerciseCount,
+  totalSets,
+  totalVolume,
   weightUnit,
   activeMuscles,
 }: Props) {
@@ -83,15 +87,6 @@ export default function WorkoutHeader({
       pulseAnim.setValue(1);
     }
   }, [timerPaused]);
-
-  const totalVolume = exercises.reduce((sum, ex) =>
-    sum + ex.sets.reduce((s, set) => {
-      const r = parseFloat(set.reps);
-      const w = parseFloat(set.weight);
-      return s + (isNaN(r) || isNaN(w) ? 0 : r * w);
-    }, 0), 0);
-
-  const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
 
   return (
     <View style={styles.formSection}>
@@ -265,11 +260,11 @@ export default function WorkoutHeader({
       </Modal>
 
 
-      {exercises.length > 0 && (
+      {exerciseCount > 0 && (
         <View style={styles.summaryBar}>
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{exercises.length}</Text>
-            <Text style={styles.summaryLabel}>{exercises.length === 1 ? 'Exercise' : 'Exercises'}</Text>
+            <Text style={styles.summaryValue}>{exerciseCount}</Text>
+            <Text style={styles.summaryLabel}>{exerciseCount === 1 ? 'Exercise' : 'Exercises'}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
@@ -284,10 +279,12 @@ export default function WorkoutHeader({
         </View>
       )}
 
-      {exercises.length > 0 && <Text style={styles.sectionLabel}>Exercises</Text>}
+      {exerciseCount > 0 && <Text style={styles.sectionLabel}>Exercises</Text>}
     </View>
   );
 }
+
+export default React.memo(WorkoutHeader);
 
 const createStyles = (colors: Colors) => StyleSheet.create({
   formSection: { paddingHorizontal: spacing.md },

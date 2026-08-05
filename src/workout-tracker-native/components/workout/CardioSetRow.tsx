@@ -14,7 +14,7 @@ type Props = {
   onDelete: () => void;
 };
 
-export default function CardioSetRow({ set, setIndex, onChangeField, onDelete }: Props) {
+function CardioSetRow({ set, setIndex, onChangeField, onDelete }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -118,6 +118,8 @@ export default function CardioSetRow({ set, setIndex, onChangeField, onDelete }:
     </Swipeable>
   );
 }
+
+export default React.memo(CardioSetRow);
 
 const createStyles = (colors: Colors) => StyleSheet.create({
   setTypeBadgeNum: { fontSize: 12, fontWeight: '700', lineHeight: 14 },

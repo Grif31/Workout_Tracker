@@ -1,6 +1,6 @@
 ﻿import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import { mockFetchSequence, createMockNavigation, createMockRoute } from './testUtils';
+import { createMockNavigation, createMockRoute } from './testUtils';
 import ExercisesScreen from '../screens/ExercisesTab/ExercisesScreen';
 
 jest.mock('navigation/types', () => ({}), { virtual: true });
@@ -20,10 +20,19 @@ const exercises = [
 
 describe('ExercisesScreen', () => {
   beforeEach(() => {
-    mockFetchSequence([
-      { data: exercises },          // fetchExercises
-      { data: { recent: [] } },    // fetchRecentExercises
-    ]);
+    // URL-aware (not call-order-based): fetchExercises and fetchRecentExercises
+    // fire independently and aren't guaranteed to reach fetch() in a fixed
+    // order (fetchExercises checks the exercise cache first), so a
+    // sequential-by-call-order mock isn't reliable here.
+    (global.fetch as jest.Mock) = jest.fn((url: string) => {
+      if (url.includes('/api/stats/recent-exercises')) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ recent: [] }) });
+      }
+      if (url.includes('/api/exercises')) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(exercises) });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) });
+    });
   });
 
   it('renders without crashing', () => {

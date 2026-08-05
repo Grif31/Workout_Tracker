@@ -17,23 +17,29 @@ type Props = {
   showRpe: boolean;
   weightUnit: string;
   setTypeColors: Record<SetType, string>;
-  onUpdateNotes: (val: string) => void;
+  // All callbacks below take exIndex as their first argument and are stable
+  // (useCallback'd) references from WorkoutLog — that's what lets this
+  // component be React.memo'd: WorkoutLog passes the SAME function to every
+  // exercise block on every render instead of a freshly-bound closure per
+  // block, so memo can actually skip re-rendering exercises the user isn't
+  // editing.
+  onUpdateNotes: (exIndex: number, val: string) => void;
   autoFocusNotes?: boolean;
-  onCycleSetType: (setIdx: number) => void;
-  onUpdateSetField: (setIdx: number, field: 'reps' | 'weight', val: string) => void;
-  onFocusInput: (setIdx: number, field: 'reps' | 'weight') => void;
+  onCycleSetType: (exIndex: number, setIdx: number) => void;
+  onUpdateSetField: (exIndex: number, setIdx: number, field: 'reps' | 'weight', val: string) => void;
+  onFocusInput: (exIndex: number, setIdx: number, field: 'reps' | 'weight') => void;
   onBlurInput: () => void;
-  onToggleSetDone: (setIdx: number) => void;
-  onOpenRpePicker: (setIdx: number) => void;
-  onDeleteSet: (setIdx: number) => void;
-  onAddSet: () => void;
+  onToggleSetDone: (exIndex: number, setIdx: number) => void;
+  onOpenRpePicker: (exIndex: number, setIdx: number) => void;
+  onDeleteSet: (exIndex: number, setIdx: number) => void;
+  onAddSet: (exIndex: number) => void;
   onStartRest: () => void;
-  onOpenMenu: (e: any) => void;
-  onUpdateCardioField: (setIdx: number, field: string, value: string) => void;
-  onRegisterInput?: (setIdx: number, field: 'reps' | 'weight', ref: any) => void;
+  onOpenMenu: (exIndex: number, e: any) => void;
+  onUpdateCardioField: (exIndex: number, setIdx: number, field: string, value: string) => void;
+  onRegisterInput?: (exIndex: number, setIdx: number, field: 'reps' | 'weight', ref: any) => void;
 };
 
-export default function ExerciseBlock({
+function ExerciseBlock({
   exercise,
   exIndex,
   collapsed,
@@ -84,7 +90,7 @@ export default function ExerciseBlock({
               <Ionicons name="timer-outline" size={20} color={colors.save} />
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={onOpenMenu}
+              onPress={e => onOpenMenu(exIndex, e)}
               style={styles.exIconBtn}
             >
               <Ionicons name="ellipsis-vertical" size={20} color={colors.textSecondary} />
@@ -99,7 +105,7 @@ export default function ExerciseBlock({
             placeholder="Add notes..."
             placeholderTextColor={colors.placeholder}
             value={exercise.notes}
-            onChangeText={onUpdateNotes}
+            onChangeText={val => onUpdateNotes(exIndex, val)}
             autoFocus={autoFocusNotes}
             multiline
           />
@@ -115,11 +121,11 @@ export default function ExerciseBlock({
                     key={set.uid}
                     set={set}
                     setIndex={setIndex}
-                    onChangeField={(field, value) => onUpdateCardioField(setIndex, field, value)}
-                    onDelete={() => onDeleteSet(setIndex)}
+                    onChangeField={(field, value) => onUpdateCardioField(exIndex, setIndex, field, value)}
+                    onDelete={() => onDeleteSet(exIndex, setIndex)}
                   />
                 ))}
-                <TouchableOpacity style={styles.addSetBtn} onPress={onAddSet}>
+                <TouchableOpacity style={styles.addSetBtn} onPress={() => onAddSet(exIndex)}>
                   <Ionicons name="add" size={15} color={colors.save} />
                   <Text style={styles.addSetText}>Add Bout</Text>
                 </TouchableOpacity>
@@ -140,14 +146,14 @@ export default function ExerciseBlock({
                     set={set}
                     setIndex={setIndex}
                     prevSet={exercise.previousSets?.[setIndex]}
-                    onChangeSeconds={val => onUpdateCardioField(setIndex, 'cardio_duration', val)}
+                    onChangeSeconds={val => onUpdateCardioField(exIndex, setIndex, 'cardio_duration', val)}
                     onBlur={onBlurInput}
-                    onToggleDone={() => onToggleSetDone(setIndex)}
-                    onDelete={() => onDeleteSet(setIndex)}
+                    onToggleDone={() => onToggleSetDone(exIndex, setIndex)}
+                    onDelete={() => onDeleteSet(exIndex, setIndex)}
                   />
                 ))}
 
-                <TouchableOpacity style={styles.addSetBtn} onPress={onAddSet}>
+                <TouchableOpacity style={styles.addSetBtn} onPress={() => onAddSet(exIndex)}>
                   <Ionicons name="add" size={15} color={colors.save} />
                   <Text style={styles.addSetText}>Add Set</Text>
                 </TouchableOpacity>
@@ -179,21 +185,21 @@ export default function ExerciseBlock({
                       bodyweight={bodyweight}
                       typeColor={tc}
                       setType={type}
-                      onCycleType={() => onCycleSetType(setIndex)}
-                      onChangeReps={val => onUpdateSetField(setIndex, 'reps', val)}
-                      onChangeWeight={val => onUpdateSetField(setIndex, 'weight', val)}
-                      onFocusReps={() => onFocusInput(setIndex, 'reps')}
-                      onFocusWeight={() => onFocusInput(setIndex, 'weight')}
+                      onCycleType={() => onCycleSetType(exIndex, setIndex)}
+                      onChangeReps={val => onUpdateSetField(exIndex, setIndex, 'reps', val)}
+                      onChangeWeight={val => onUpdateSetField(exIndex, setIndex, 'weight', val)}
+                      onFocusReps={() => onFocusInput(exIndex, setIndex, 'reps')}
+                      onFocusWeight={() => onFocusInput(exIndex, setIndex, 'weight')}
                       onBlur={onBlurInput}
-                      onToggleDone={() => onToggleSetDone(setIndex)}
-                      onOpenRpePicker={() => onOpenRpePicker(setIndex)}
-                      onDelete={() => onDeleteSet(setIndex)}
-                      registerInputRef={(field, ref) => onRegisterInput?.(setIndex, field, ref)}
+                      onToggleDone={() => onToggleSetDone(exIndex, setIndex)}
+                      onOpenRpePicker={() => onOpenRpePicker(exIndex, setIndex)}
+                      onDelete={() => onDeleteSet(exIndex, setIndex)}
+                      registerInputRef={(field, ref) => onRegisterInput?.(exIndex, setIndex, field, ref)}
                     />
                   );
                 })}
 
-                <TouchableOpacity style={styles.addSetBtn} onPress={onAddSet}>
+                <TouchableOpacity style={styles.addSetBtn} onPress={() => onAddSet(exIndex)}>
                   <Ionicons name="add" size={15} color={colors.save} />
                   <Text style={styles.addSetText}>Add Set</Text>
                 </TouchableOpacity>
@@ -204,6 +210,8 @@ export default function ExerciseBlock({
     </View>
   );
 }
+
+export default React.memo(ExerciseBlock);
 
 const createStyles = (colors: Colors) => StyleSheet.create({
   exerciseBlock: {

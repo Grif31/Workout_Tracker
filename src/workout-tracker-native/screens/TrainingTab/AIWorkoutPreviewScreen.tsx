@@ -9,6 +9,8 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
+import { loadExerciseList } from '../../utils/exerciseCache';
+import { useAuth } from '../../context/AuthContext';
 import ExerciseListModal from '../../components/ExerciseList';
 import ExerciseEditRow, { EXERCISE_ROW_HEIGHT } from '../../components/ExerciseEditRow';
 import DraggableList from '../../components/DraggableList';
@@ -32,6 +34,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
   const { generateType, description: initDesc, coachDays, coachGoal, coachExp, coachEquipment, coachSessionLength, coachAvoid } = route.params;
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const { user } = useAuth();
 
   const [name, setName] = useState(route.params.name);
   const [description, setDescription] = useState(initDesc ?? '');
@@ -47,8 +50,8 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
   const [listDragging, setListDragging] = useState(false);
 
   useEffect(() => {
-    apiFetch('/api/exercises').then(r => r.ok ? r.json() : []).then(setAllExercises).catch(() => {});
-  }, []);
+    loadExerciseList(user?.id, data => setAllExercises(data as AllExercise[]));
+  }, [user?.id]);
 
   const getList = (scope: Scope): PreviewExercise[] =>
     scope === 'template' ? exercises : days[scope]?.exercises ?? [];
@@ -367,8 +370,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
             body: JSON.stringify({ name: exName, muscle_group: muscle, equipment, exercise_type: exerciseType ?? 'strength' }),
           });
           if (res.ok) {
-            const updated = await apiFetch('/api/exercises');
-            if (updated.ok) setAllExercises(await updated.json());
+            await loadExerciseList(user?.id, data => setAllExercises(data as AllExercise[]));
           }
         }}
         muscleGroups={muscleGroups}

@@ -23,6 +23,8 @@ import { muscleGroups } from '../../constants/muscleGroups';
 import { equipmentTypes } from '../../constants/equipmentTypes';
 import NewExerciseForm from '../../components/NewExerciseForm';
 import { apiFetch, resolveMediaUrl } from '../../utils/api';
+import { loadExerciseList } from '../../utils/exerciseCache';
+import { useAuth } from '../../context/AuthContext';
 
 function SectionRule({ label }: { label: string }) {
   const { colors } = useTheme();
@@ -44,6 +46,7 @@ type Exercise = { id: number; name: string; muscle_group: string; equipment?: st
 export default function ExercisesScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const { user } = useAuth();
 
   const [exerciseList, setExerciseList] = useState<Exercise[]>([]);
   const [search, setSearch] = useState('');
@@ -73,13 +76,8 @@ export default function ExercisesScreen({ navigation }: Props) {
   };
 
   const fetchExercises = async () => {
-    try {
-      const res = await apiFetch('/api/exercises');
-      if (!res.ok) { Alert.alert('Error', 'Failed to load exercises'); return; }
-      setExerciseList(await res.json());
-    } catch {
-      Alert.alert('Error', 'Failed to load exercises');
-    }
+    const { ok, usedCache } = await loadExerciseList(user?.id, data => setExerciseList(data as Exercise[]));
+    if (!ok && !usedCache) Alert.alert('Error', 'Failed to load exercises');
   };
 
   const fetchRecentExercises = async () => {

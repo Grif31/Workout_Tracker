@@ -20,7 +20,7 @@ type Props = {
   onDelete: () => void;
 };
 
-export default function DurationSetRow({
+function DurationSetRow({
   set, setIndex, prevSet, onChangeSeconds, onFocus, onBlur, onToggleDone, onDelete,
 }: Props) {
   const { colors } = useTheme();
@@ -79,6 +79,8 @@ export default function DurationSetRow({
     </Swipeable>
   );
 }
+
+export default React.memo(DurationSetRow);
 
 const createStyles = (colors: Colors) => StyleSheet.create({
   setRow: {

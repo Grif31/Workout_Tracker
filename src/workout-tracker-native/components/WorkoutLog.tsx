@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, Alert, TouchableOpacity,
   Platform, Vibration, ScrollView,
@@ -13,13 +13,14 @@ import {
 } from '../utils/notifications';
 import NetInfo from '@react-native-community/netinfo';
 import { enqueueWorkout } from '../utils/offlineQueue';
-import { getExerciseCache, setExerciseCache } from '../utils/exerciseCache';
+import { loadExerciseList } from '../utils/exerciseCache';
 import { showToast } from '../utils/toast';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
+import { toLocalDateStr } from '../utils/date';
 import { useTheme } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -47,6 +48,7 @@ import {
   isBodyweight,
   isDuration,
   makeInitialSet,
+  usesBodyweightForVolume,
 } from './workout/types';
 import WorkoutHeader from './workout/WorkoutHeader';
 import ExerciseBlock from './workout/ExerciseBlock';
@@ -90,6 +92,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const [workoutName, setWorkoutName] = useState('');
   const [notes, setNotes] = useState('');
   const [exercises, setExercises] = useState<ExerciseEntry[]>([]);
+  // Lets stable (useCallback'd) handlers read the latest exercises without
+  // depending on `exercises` itself — depending on it would recreate the
+  // handler (and blow the memoization of every ExerciseBlock) on every
+  // keystroke, since exercises changes on every keystroke.
+  const exercisesRef = useRef(exercises);
+  exercisesRef.current = exercises;
   const activeMuscles = useMemo(() => {
     const seen = new Set<string>();
     const out: string[] = [];
@@ -101,6 +109,25 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     }
     return out;
   }, [exercises]);
+  // Computed here (not inside WorkoutHeader) so WorkoutHeader can be
+  // React.memo'd on primitive totals instead of needing the whole
+  // `exercises` array (which gets a new reference on every keystroke).
+  const workoutTotals = useMemo(() => {
+    const bw = user?.bodyweight ?? null;
+    let volume = 0;
+    let sets = 0;
+    for (const ex of exercises) {
+      const addsBodyweight = usesBodyweightForVolume(ex) && bw != null;
+      sets += ex.sets.length;
+      for (const set of ex.sets) {
+        const r = parseFloat(set.reps);
+        const w = parseFloat(set.weight);
+        if (isNaN(r) || isNaN(w)) continue;
+        volume += r * (addsBodyweight ? w + bw! : w);
+      }
+    }
+    return { totalVolume: volume, totalSets: sets };
+  }, [exercises, user?.bodyweight]);
   const [autoFocusNoteIdx, setAutoFocusNoteIdx] = useState<number | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
 
@@ -306,21 +333,26 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     return () => clearInterval(id);
   }, [editMode, timerPaused]);
 
-  const resetTimer = () => {
+  const resetTimer = useCallback(() => {
     baseRef.current = 0;
     startRef.current = new Date();
     setTimerPaused(false);
     setElapsed(0);
-  };
+  }, []);
 
-  const toggleTimer = () => {
-    if (timerPaused) {
+  const toggleTimer = useCallback(() => {
+    if (timerPausedRef.current) {
       setTimerPaused(false);
     } else {
-      baseRef.current = elapsed;
+      // Equivalent to reading the current `elapsed` state (that's exactly how
+      // the ticking effect computes it), but via refs so this stays stable
+      // across renders instead of depending on `elapsed` (which changes every
+      // second, and would recreate this callback — and break WorkoutHeader's
+      // memoization — that often).
+      baseRef.current = baseRef.current + Math.floor((Date.now() - startRef.current.getTime()) / 1000);
       setTimerPaused(true);
     }
-  };
+  }, []);
 
   // Wall-clock finish time of the running rest timer (null = not running or
   // paused). The setInterval is suspended while the app is backgrounded, so
@@ -328,7 +360,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const restEndsAtRef = useRef<number | null>(null);
 
   // Separated from startRest so resumeRest can restart the tick without resetting restRemaining.
-  const _runRestInterval = () => {
+  const _runRestInterval = useCallback(() => {
     restRef.current = setInterval(() => {
       setRestRemaining(prev => {
         if (prev <= 1) {
@@ -342,7 +374,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         return prev - 1;
       });
     }, 1000);
-  };
+  }, []);
 
   // JS timers freeze during app suspension — recompute remaining from the
   // wall-clock finish time when the app returns to the foreground.
@@ -362,7 +394,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     }
   };
 
-  const startRest = async () => {
+  const startRest = useCallback(async () => {
     if (restRef.current) clearInterval(restRef.current);
     const duration = defaultRest;
     setRestTotal(duration);
@@ -373,7 +405,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     _runRestInterval();
     const alertsOff = await AsyncStorage.getItem('rest_timer_alerts_enabled');
     if (alertsOff !== 'false') scheduleRestTimerAlert(duration);
-  };
+  }, [defaultRest, _runRestInterval]);
 
   const pauseRest = () => {
     if (restRef.current) clearInterval(restRef.current);
@@ -473,7 +505,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercises, workoutName, editMode]);
 
-  const showPRBanner = (exerciseName: string, prType: string) => {
+  const showPRBanner = useCallback((exerciseName: string, prType: string) => {
     if (prTimerRef.current) clearTimeout(prTimerRef.current);
     setPrBanner({ name: exerciseName, type: prType });
     prAnim.setValue(0);
@@ -483,7 +515,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         setPrBanner(null);
       });
     }, 3500);
-  };
+  }, [prAnim]);
 
   useEffect(() => () => { if (prTimerRef.current) clearTimeout(prTimerRef.current); }, []);
 
@@ -577,17 +609,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   };
 
   const fetchExercises = async () => {
-    try {
-      const res = await apiFetch('/api/exercises');
-      if (res.ok) {
-        const data = await res.json();
-        setExerciseList(data);
-        setExerciseCache(data, uid);
-      }
-    } catch {
-      const cached = await getExerciseCache(uid);
-      if (cached) setExerciseList(cached as typeof exerciseList);
-    }
+    await loadExerciseList(uid, data => setExerciseList(data as typeof exerciseList));
   };
 
   const fetchTemplates = async () => {
@@ -649,12 +671,19 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     setFocusedInput(null);
   };
 
-  const updateSetField = (exIndex: number, setIndex: number, field: EditableSetField, value: string) => {
-    const updated = [...exercises];
-    if (updated[exIndex].sets[setIndex].done) return;
-    updated[exIndex].sets[setIndex][field] = value;
-    setExercises(updated);
-  };
+  // Immutable, single-item replacement (not a full-array deep clone) so
+  // ExerciseBlock's React.memo can skip re-rendering every OTHER exercise
+  // when only one set field changes — sibling exercise objects keep their
+  // exact prior reference.
+  const updateSetField = useCallback((exIndex: number, setIndex: number, field: EditableSetField, value: string) => {
+    setExercises(prev => {
+      const ex = prev[exIndex];
+      if (!ex || ex.sets[setIndex]?.done) return prev;
+      const next = [...prev];
+      next[exIndex] = { ...ex, sets: ex.sets.map((s, j) => j === setIndex ? { ...s, [field]: value } : s) };
+      return next;
+    });
+  }, []);
 
   const adjustNumericField = (exIdx: number, setIdx: number, field: 'reps' | 'weight', delta: number) => {
     setExercises(prev => prev.map((ex, i) => {
@@ -672,17 +701,26 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     }));
   };
 
-  const cycleSetType = (exIndex: number, setIndex: number) => {
-    const updated = [...exercises];
-    const current = (updated[exIndex].sets[setIndex].set_type as SetType) ?? 'N';
-    const next = SET_TYPES[(SET_TYPES.indexOf(current) + 1) % SET_TYPES.length];
-    updated[exIndex].sets[setIndex].set_type = next;
-    setExercises(updated);
-  };
+  const cycleSetType = useCallback((exIndex: number, setIndex: number) => {
+    setExercises(prev => {
+      const ex = prev[exIndex];
+      const currentSet = ex?.sets[setIndex];
+      if (!ex || !currentSet) return prev;
+      const current = (currentSet.set_type as SetType) ?? 'N';
+      const nextType = SET_TYPES[(SET_TYPES.indexOf(current) + 1) % SET_TYPES.length];
+      const next = [...prev];
+      next[exIndex] = { ...ex, sets: ex.sets.map((s, j) => j === setIndex ? { ...s, set_type: nextType } : s) };
+      return next;
+    });
+  }, []);
 
-  const toggleSetDone = (exIndex: number, setIndex: number) => {
-    const ex = exercises[exIndex];
-    const set = ex.sets[setIndex];
+  const toggleSetDone = useCallback((exIndex: number, setIndex: number) => {
+    // Read via the ref (not `exercises` directly) so this callback doesn't
+    // need `exercises` in its dependency array — depending on it would
+    // recreate the callback (and defeat memoization) on every keystroke.
+    const ex = exercisesRef.current[exIndex];
+    const set = ex?.sets[setIndex];
+    if (!ex || !set) return;
     if (!set.done) {
       if (isDuration(ex)) {
         if (!set.cardio_duration?.trim()) return;
@@ -691,9 +729,13 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       }
     }
     const nowDone = !set.done;
-    const updated = [...exercises];
-    updated[exIndex].sets[setIndex].done = nowDone;
-    setExercises(updated);
+    setExercises(prev => {
+      const target = prev[exIndex];
+      if (!target) return prev;
+      const next = [...prev];
+      next[exIndex] = { ...target, sets: target.sets.map((s, j) => j === setIndex ? { ...s, done: nowDone } : s) };
+      return next;
+    });
     if (nowDone && autoStartRest && set.set_type !== 'W') startRest();
     if (nowDone && ex.currentPR && ex.exercise_type !== 'cardio' && !isDuration(ex)) {
       const w = parseFloat(set.weight);
@@ -749,28 +791,33 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         ));
       }
     }
-  };
+  }, [autoStartRest, startRest, showPRBanner]);
 
-  const addSetToExercise = (exIndex: number) => {
-    const updated = [...exercises];
-    const ex = updated[exIndex];
-    const last = ex.sets[ex.sets.length - 1];
-    if (repeatLastSet && last && ex.exercise_type !== 'cardio') {
-      // Repeat-last-set setting: new set starts pre-filled with the last set's values
-      updated[exIndex].sets.push(isDuration(ex)
-        ? { uid: makeUid(), reps: '', weight: '', set_type: 'N', cardio_duration: last.cardio_duration ?? '' }
-        : { uid: makeUid(), reps: last.reps, weight: last.weight, set_type: 'N', rpe: last.rpe });
-    } else {
-      updated[exIndex].sets.push(makeInitialSet(ex));
-    }
-    setExercises(updated);
-  };
+  const addSetToExercise = useCallback((exIndex: number) => {
+    setExercises(prev => {
+      const ex = prev[exIndex];
+      if (!ex) return prev;
+      const last = ex.sets[ex.sets.length - 1];
+      const newSet = repeatLastSet && last && ex.exercise_type !== 'cardio'
+        ? (isDuration(ex)
+            ? { uid: makeUid(), reps: '', weight: '', set_type: 'N' as SetType, cardio_duration: last.cardio_duration ?? '' }
+            : { uid: makeUid(), reps: last.reps, weight: last.weight, set_type: 'N' as SetType, rpe: last.rpe })
+        : makeInitialSet(ex);
+      const next = [...prev];
+      next[exIndex] = { ...ex, sets: [...ex.sets, newSet] };
+      return next;
+    });
+  }, [repeatLastSet]);
 
-  const deleteSet = (exIndex: number, setIndex: number) => {
-    const updated = [...exercises];
-    updated[exIndex].sets.splice(setIndex, 1);
-    setExercises(updated);
-  };
+  const deleteSet = useCallback((exIndex: number, setIndex: number) => {
+    setExercises(prev => {
+      const ex = prev[exIndex];
+      if (!ex) return prev;
+      const next = [...prev];
+      next[exIndex] = { ...ex, sets: ex.sets.filter((_, j) => j !== setIndex) };
+      return next;
+    });
+  }, []);
 
   const deleteEx = (exIndex: number) => {
     setOpenMenuIdx(null);
@@ -790,9 +837,113 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     setOpenMenuIdx(null);
   };
 
-  const toggleExMenu = (exIndex: number) => {
+  const toggleExMenu = useCallback((exIndex: number) => {
     setOpenMenuIdx(prev => (prev === exIndex ? null : exIndex));
-  };
+  }, []);
+
+  // The rest of these are stable (useCallback, no deps that change per-keystroke)
+  // specifically so ExerciseBlock can be React.memo'd — passing the same
+  // function reference to every exercise block on every render lets memo skip
+  // re-rendering the exercises the user isn't currently editing.
+  const updateExerciseNotes = useCallback((exIndex: number, val: string) => {
+    setExercises(prev => prev.map((ex, i) => i === exIndex ? { ...ex, notes: val } : ex));
+  }, []);
+
+  const updateCardioField = useCallback((exIndex: number, setIndex: number, field: string, value: string) => {
+    setExercises(prev => {
+      const ex = prev[exIndex];
+      if (!ex) return prev;
+      const next = [...prev];
+      next[exIndex] = { ...ex, sets: ex.sets.map((s, j) => j === setIndex ? { ...s, [field]: value } : s) };
+      return next;
+    });
+  }, []);
+
+  const onFocusSetInput = useCallback((exIndex: number, setIdx: number, field: 'reps' | 'weight') => {
+    inputFocusedRef.current = true;
+    setFocusedInput({ exIdx: exIndex, setIdx, field });
+    // Keyboard already open (input-to-input focus change) — no keyboard
+    // event will fire, so scroll from here
+    if (kbScreenYRef.current != null) {
+      const kbTop = kbScreenYRef.current;
+      setTimeout(() => scrollFocusedInputAboveKeyboard(kbTop), 60);
+    }
+  }, []);
+
+  const onBlurSetInput = useCallback(() => { inputFocusedRef.current = false; }, []);
+
+  const onOpenRpePicker = useCallback((exIndex: number, setIdx: number) => {
+    setRpePickerTarget({ exIdx: exIndex, setIdx });
+  }, []);
+
+  const onRegisterSetInput = useCallback((exIndex: number, setIdx: number, field: 'reps' | 'weight', ref: any) => {
+    inputRefs.current.set(`${exIndex}:${setIdx}:${field}`, ref);
+  }, []);
+
+  const onOpenExerciseMenu = useCallback((exIndex: number, e: any) => {
+    const { pageX, pageY } = e.nativeEvent;
+    const screenWidth = Dimensions.get('window').width;
+    setMenuPosition({ top: pageY + 12, right: screenWidth - pageX - 4 });
+    toggleExMenu(exIndex);
+  }, [toggleExMenu]);
+
+  // Every prop passed here is now a stable reference for a given
+  // showRpe/weightUnit/theme combo, so this itself stays stable across
+  // keystrokes — letting ExerciseBlock's React.memo actually skip
+  // re-rendering the exercises the user isn't currently editing.
+  const renderExercise = useCallback(({ item: exercise, index: exIndex }: { item: ExerciseEntry; index: number }) => (
+    <ExerciseBlock
+      exercise={exercise}
+      exIndex={exIndex}
+      collapsed={false}
+      showRpe={showRpe}
+      weightUnit={weightUnit}
+      setTypeColors={SET_TYPE_COLORS}
+      onUpdateNotes={updateExerciseNotes}
+      autoFocusNotes={autoFocusNoteIdx === exIndex}
+      onCycleSetType={cycleSetType}
+      onUpdateSetField={updateSetField}
+      onFocusInput={onFocusSetInput}
+      onBlurInput={onBlurSetInput}
+      onToggleSetDone={toggleSetDone}
+      onOpenRpePicker={onOpenRpePicker}
+      onDeleteSet={deleteSet}
+      onAddSet={addSetToExercise}
+      onRegisterInput={onRegisterSetInput}
+      onStartRest={startRest}
+      onOpenMenu={onOpenExerciseMenu}
+      onUpdateCardioField={updateCardioField}
+    />
+  ), [
+    showRpe, weightUnit, SET_TYPE_COLORS, updateExerciseNotes, autoFocusNoteIdx,
+    cycleSetType, updateSetField, onFocusSetInput, onBlurSetInput, toggleSetDone,
+    onOpenRpePicker, deleteSet, addSetToExercise, onRegisterSetInput, startRest,
+    onOpenExerciseMenu, updateCardioField,
+  ]);
+
+  // Stable so WorkoutHeader (React.memo'd) can skip re-rendering on
+  // unrelated state changes (e.g. typing a set) instead of just on toggling
+  // these specific settings.
+  const onAutoStartRestChange = useCallback((val: boolean) => {
+    setAutoStartRest(val);
+    AsyncStorage.setItem(autoRestKey, String(val));
+  }, [autoRestKey]);
+  const onVibrateChange = useCallback((val: boolean) => {
+    setVibrateOnComplete(val);
+    AsyncStorage.setItem(vibrateKey, String(val));
+  }, [vibrateKey]);
+  const onShowRpeChange = useCallback((val: boolean) => {
+    setShowRpe(val);
+    AsyncStorage.setItem(rpeKey, String(val));
+  }, [rpeKey]);
+  const onShowPlateCalcChange = useCallback((val: boolean) => {
+    setShowPlateCalc(val);
+    AsyncStorage.setItem(plateCalcKey, String(val));
+  }, [plateCalcKey]);
+  const onRepeatLastSetChange = useCallback((val: boolean) => {
+    setRepeatLastSet(val);
+    AsyncStorage.setItem(repeatLastSetKey, String(val));
+  }, [repeatLastSetKey]);
 
   const openAddNotes = (exIndex: number) => {
     setOpenMenuIdx(null);
@@ -973,7 +1124,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const buildPayload = (exercisesToSave: ExerciseEntry[]) => ({
     workoutName,
     notes,
-    date: `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`,
+    date: toLocalDateStr(selectedDate),
     duration: editMode ? undefined : Math.floor(elapsed / 60),
     exercises: exercisesToSave.map((ex, exIndex) => ({
       id: ex.id,
@@ -1209,10 +1360,15 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         keyExtractor={(item) => item.uid}
         style={{ flex: 1 }}
         contentContainerStyle={styles.container}
-        // iOS: the keyboard inset adds scrollable space below the content;
-        // scrollFocusedInputAboveKeyboard does the actual scrolling.
+        // iOS: automatically adjusts scroll space for the keyboard;
+        // scrollFocusedInputAboveKeyboard does the actual scrolling. A static
+        // contentInset used to add extra bottom clearance here too, but it
+        // fights automaticallyAdjustKeyboardInsets for control of the same
+        // native inset (both manage UIScrollView.contentInset) and could
+        // leave the scroll view stuck past the end of content until the
+        // screen remounted. styles.container's paddingBottom (spacing.xl*2 =
+        // 64pt) already covers the clearance that contentInset was adding.
         automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-        contentInset={Platform.OS === 'ios' ? { bottom: 56 } : undefined}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         onScroll={e => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
@@ -1232,31 +1388,18 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             onResetTimer={resetTimer}
             editMode={editMode}
             autoStartRest={autoStartRest}
-            onAutoStartRestChange={val => {
-              setAutoStartRest(val);
-              AsyncStorage.setItem(autoRestKey, String(val));
-            }}
+            onAutoStartRestChange={onAutoStartRestChange}
             vibrateOnComplete={vibrateOnComplete}
-            onVibrateChange={val => {
-              setVibrateOnComplete(val);
-              AsyncStorage.setItem(vibrateKey, String(val));
-            }}
+            onVibrateChange={onVibrateChange}
             showRpe={showRpe}
-            onShowRpeChange={val => {
-              setShowRpe(val);
-              AsyncStorage.setItem(rpeKey, String(val));
-            }}
+            onShowRpeChange={onShowRpeChange}
             showPlateCalc={showPlateCalc}
-            onShowPlateCalcChange={val => {
-              setShowPlateCalc(val);
-              AsyncStorage.setItem(plateCalcKey, String(val));
-            }}
+            onShowPlateCalcChange={onShowPlateCalcChange}
             repeatLastSet={repeatLastSet}
-            onRepeatLastSetChange={val => {
-              setRepeatLastSet(val);
-              AsyncStorage.setItem(repeatLastSetKey, String(val));
-            }}
-            exercises={exercises}
+            onRepeatLastSetChange={onRepeatLastSetChange}
+            exerciseCount={exercises.length}
+            totalSets={workoutTotals.totalSets}
+            totalVolume={workoutTotals.totalVolume}
             weightUnit={weightUnit}
             activeMuscles={activeMuscles}
           />
@@ -1307,52 +1450,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             </TouchableOpacity>
           </View>
         )}
-        renderItem={({ item: exercise, index: exIndex }) => (
-          <ExerciseBlock
-            exercise={exercise}
-            exIndex={exIndex}
-            collapsed={false}
-            showRpe={showRpe}
-            weightUnit={weightUnit}
-            setTypeColors={SET_TYPE_COLORS}
-            onUpdateNotes={val => setExercises(prev => prev.map((ex, i) =>
-              i === exIndex ? { ...ex, notes: val } : ex
-            ))}
-            autoFocusNotes={autoFocusNoteIdx === exIndex}
-            onCycleSetType={setIdx => cycleSetType(exIndex, setIdx)}
-            onUpdateSetField={(setIdx, field, val) => updateSetField(exIndex, setIdx, field, val)}
-            onFocusInput={(setIdx, field) => {
-              inputFocusedRef.current = true;
-              setFocusedInput({ exIdx: exIndex, setIdx, field });
-              // Keyboard already open (input-to-input focus change) — no
-              // keyboard event will fire, so scroll from here
-              if (kbScreenYRef.current != null) {
-                const kbTop = kbScreenYRef.current;
-                setTimeout(() => scrollFocusedInputAboveKeyboard(kbTop), 60);
-              }
-            }}
-            onBlurInput={() => { inputFocusedRef.current = false; }}
-            onToggleSetDone={setIdx => toggleSetDone(exIndex, setIdx)}
-            onOpenRpePicker={setIdx => setRpePickerTarget({ exIdx: exIndex, setIdx })}
-            onDeleteSet={setIdx => deleteSet(exIndex, setIdx)}
-            onAddSet={() => addSetToExercise(exIndex)}
-            onRegisterInput={(setIdx, field, ref) => {
-              inputRefs.current.set(`${exIndex}:${setIdx}:${field}`, ref);
-            }}
-            onStartRest={startRest}
-            onOpenMenu={(e) => {
-              const { pageX, pageY } = e.nativeEvent;
-              const screenWidth = Dimensions.get('window').width;
-              setMenuPosition({ top: pageY + 12, right: screenWidth - pageX - 4 });
-              toggleExMenu(exIndex);
-            }}
-            onUpdateCardioField={(setIdx, field, value) => {
-              const updated = [...exercises];
-              (updated[exIndex].sets[setIdx] as any)[field] = value;
-              setExercises(updated);
-            }}
-          />
-        )}
+        renderItem={renderExercise}
       />
 
       {/* Rest timer overlay */}
