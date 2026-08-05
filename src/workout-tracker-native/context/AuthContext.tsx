@@ -4,7 +4,9 @@ import * as Sentry from '@sentry/react-native';
 import { setTokens, clearTokens, registerUnauthCallback, apiFetch } from '../utils/api';
 import { appCache } from '../utils/appCache';
 import { registerPushToken, deregisterPushToken } from '../utils/notifications';
-import { useTheme } from './ThemeContext';
+import { useTheme, KEY_ACCENT } from './ThemeContext';
+import { SESSION_KEY } from './WorkoutSessionContext';
+import { GREEK_RANK_CACHED_KEY, COACH_INSIGHTS_KEY } from '../constants/storageKeys';
 
 type AuthContextType = {
     user: any;
@@ -26,7 +28,7 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
     const logout = async () => {
         // Save this user's accent preference before resetting
         if (user?.id) {
-            await AsyncStorage.setItem(`@theme_accent_${user.id}`, themeCtx.accentPreset.name);
+            await AsyncStorage.setItem(`${KEY_ACCENT}_${user.id}`, themeCtx.accentPreset.name);
         }
         themeCtx.resetAccent();
         await deregisterPushToken();
@@ -37,8 +39,8 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
         appCache.clear();
         await AsyncStorage.multiRemove([
             'token', 'refresh_token', 'user',
-            'greek_rank_cached', '@theme_accent',
-            'coach_insights_cache', 'minimized_workout_session',
+            GREEK_RANK_CACHED_KEY, KEY_ACCENT,
+            COACH_INSIGHTS_KEY, SESSION_KEY,
         ]);
     };
 
@@ -96,8 +98,8 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
         // Clear any previous user's cached data before setting up the new session
         appCache.clear();
         await AsyncStorage.multiRemove([
-            'greek_rank_cached', '@theme_accent',
-            'coach_insights_cache', 'minimized_workout_session',
+            GREEK_RANK_CACHED_KEY, KEY_ACCENT,
+            COACH_INSIGHTS_KEY, SESSION_KEY,
         ]);
         // Restore this user's saved accent (or default if they've never set one)
         await themeCtx.loadAccentForUser(userData.id);

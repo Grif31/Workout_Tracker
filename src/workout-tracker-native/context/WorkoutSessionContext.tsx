@@ -38,7 +38,7 @@ export type MinimizedSession = {
   workoutId?: number;
 };
 
-const SESSION_KEY = 'minimized_workout_session';
+export const SESSION_KEY = 'minimized_workout_session';
 
 type WorkoutSessionCtx = {
   session: MinimizedSession | null;
