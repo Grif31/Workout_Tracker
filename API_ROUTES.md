@@ -117,7 +117,7 @@ All routes are Flask endpoints under the backend (`src/routes/`). Unless noted o
 
 ---
 
-## `stats_routes.py` — Dashboards, progress, Strength Score, Weekly Summary
+## `stats_routes.py` — Dashboards, progress, exercise & muscle-volume stats
 
 | Method & Path | Auth | Description |
 |---|---|---|
@@ -128,9 +128,23 @@ All routes are Flask endpoints under the backend (`src/routes/`). Unless noted o
 | `GET /api/stats/profile` | 🔒 | Profile-tab stats: total workouts/volume, current & longest streaks (daily/weekly/monthly). |
 | `GET /api/stats/progress` | 🔒 | Bucketed volume/sets/workout-count history for the Progress tab chart (`?range=30d\|6m\|1y`). |
 | `GET /api/stats/recent-exercises` | 🔒 | The user's 10 most recently logged exercises, for quick-add pickers. |
+
+---
+
+## `strength_score_routes.py` — Strength Score & percentile ranks
+
+| Method & Path | Auth | Description |
+|---|---|---|
 | `GET /api/stats/strength-score` | 🔒 | Full Strength Score computation — overall percentile, Big 6 + supplemental lift breakdowns, muscle-group scores, Greek Rank composite. Requires gender + bodyweight to be set. |
 | `GET /api/stats/strength-score/exercise` | 🔒 | Lightweight single-lift percentile/rank lookup (`?exercise_template_id=`), for showing a Strength Score badge on one exercise without the cost of the full computation. |
 | `GET /api/stats/strength-score/history` | 🔒 | Strength Score snapshots over time, for the score-over-time chart. |
+
+---
+
+## `weekly_summary_routes.py` — Weekly Summary
+
+| Method & Path | Auth | Description |
+|---|---|---|
 | `GET /api/stats/weekly-summary` | 🔒 | Recap of the most recently completed (or a specified) week — workouts, volume, distance, PRs earned, bodyweight change, muscle balance, most-improved lift/cardio, calories. |
 | `GET /api/stats/weekly-summary/history` | 🔒 | Condensed list of past weeks (date range, workout count, volume) for the "Past Weeks" picker. |
 

@@ -17,6 +17,8 @@ from routes.exercise_routes import exercise_bp
 from routes.workout_template_routes import workout_template_bp
 from routes.routine_routes import routine_bp
 from routes.stats_routes import stats_bp
+from routes.strength_score_routes import strength_score_bp
+from routes.weekly_summary_routes import weekly_summary_bp
 from routes.bodyweight_routes import bodyweight_bp
 from routes.personal_record_routes import pr_bp
 from routes.ai_routes import ai_bp
@@ -110,6 +112,8 @@ def create_app(test_config=None):
     app.register_blueprint(workout_template_bp)
     app.register_blueprint(routine_bp)
     app.register_blueprint(stats_bp)
+    app.register_blueprint(strength_score_bp)
+    app.register_blueprint(weekly_summary_bp)
     app.register_blueprint(bodyweight_bp)
     app.register_blueprint(pr_bp)
     app.register_blueprint(ai_bp)
@@ -192,6 +196,56 @@ def create_app(test_config=None):
             click.echo(f'Done. {len(rows)} row(s) updated.')
         else:
             click.echo('\nRe-run with --apply to write these changes.')
+
+    @app.cli.command('backfill-workout-volume')
+    @click.option('--apply', 'do_apply', is_flag=True, default=False, help='Write changes to DB (omit for dry run)')
+    @click.option('--user-id', default=None, type=int, help='Limit to one user (omit for all users)')
+    def backfill_workout_volume(do_apply, user_id):
+        """Recompute Workout.volume now that Bodyweight/Weighted equipment sets
+        add the user's bodyweight-at-the-time (see utils/volume.py). Workouts
+        with no Bodyweight/Weighted sets are unaffected — compute_effective_weight()
+        is a no-op for every other equipment type."""
+        from models import Workout, User
+        from utils.volume import get_bodyweight_at
+
+        query = Workout.query
+        if user_id is not None:
+            query = query.filter_by(user_id=user_id)
+        workouts = query.order_by(Workout.id).all()
+        users_by_id = {u.id: u for u in User.query.all()}
+
+        changed = []
+        no_bodyweight_ever = 0
+        for w in workouts:
+            user = users_by_id.get(w.user_id)
+            if not user:
+                continue
+            old_volume = w.volume
+            bw = get_bodyweight_at(w.user_id, w.date)
+            if bw is None:
+                no_bodyweight_ever += 1
+            new_volume = round(w.calculate_volume(weight_unit=user.weight_unit or 'lbs', bodyweight=bw), 1)
+            if old_volume is None or abs(new_volume - old_volume) >= 0.1:
+                changed.append((w, old_volume, new_volume))
+
+        click.echo(f'{"[DRY RUN] " if not do_apply else ""}Scanned {len(workouts)} workout(s); '
+                   f'{len(changed)} would change.')
+        click.echo(f'  {no_bodyweight_ever} workout(s) belong to users who never logged a '
+                   f'bodyweight — their Bodyweight/Weighted sets are left as stored-weight-only.')
+        if changed:
+            total_delta = sum(new - (old or 0.0) for _, old, new in changed)
+            click.echo(f'  Total volume delta: +{round(total_delta):,} lbs across changed workouts.')
+            for w, old, new in changed[:20]:
+                click.echo(f'  workout {w.id} (user {w.user_id}, {w.date.date()}): {old} -> {new}')
+            if len(changed) > 20:
+                click.echo(f'  ... and {len(changed) - 20} more')
+
+        if do_apply:
+            db.session.commit()
+            click.echo(f'Done. {len(changed)} workout(s) updated.')
+        else:
+            db.session.rollback()  # calculate_volume() above mutated w.volume in memory -- discard it
+            click.echo('Re-run with --apply to write these changes.')
 
     return app
 

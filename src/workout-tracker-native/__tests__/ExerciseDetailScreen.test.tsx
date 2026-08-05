@@ -20,9 +20,17 @@ const route = createMockRoute('ExerciseDetail', {
 });
 
 const mockApiStats = {
-  personal_bests: { estimated_1rm: 280, max_weight: 245, most_reps: 10 },
+  // max_set_volume/history[].volume are deliberately NOT equal to
+  // reps*weight from the raw sets below (5*260=1300) -- if the screen ever
+  // regresses to re-deriving volume client-side instead of using these
+  // backend-computed fields (e.g. bodyweight-inclusive for Bodyweight/
+  // Weighted equipment), the displayed number would silently fall back to
+  // 1300 and this test would catch it.
+  personal_bests: { estimated_1rm: 280, max_weight: 245, most_reps: 10, max_set_volume: 1500 },
   totals: { total_sets: 30, total_reps: 120, workout_count: 10, max_volume: 1200 },
-  history: [],
+  history: [
+    { date: '2026-01-01', workout_name: 'Push Day', sets: [{ reps: 5, weight: 260 }], best_1rm: 280, best_set: { reps: 5, weight: 260 }, volume: 1500 },
+  ],
 };
 
 describe('ExerciseDetailScreen', () => {
@@ -52,5 +60,10 @@ describe('ExerciseDetailScreen', () => {
   it('shows stats on the default Overview tab', async () => {
     const { getByText } = render(<ExerciseDetailScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText(/280/)).toBeTruthy());
+  });
+
+  it('shows Max Vol / Set from the backend-computed max_set_volume, not a client recomputation', async () => {
+    const { getByText } = render(<ExerciseDetailScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText(/1,500|1500/)).toBeTruthy());
   });
 });

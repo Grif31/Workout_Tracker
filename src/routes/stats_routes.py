@@ -1,49 +1,11 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm import selectinload
-from models import db, Workout, Exercise, Set, User, ExerciseTemplate, PersonalRecord, StrengthScoreSnapshot, ExerciseMuscleMapping, BodyweightLog
+from models import db, Workout, Exercise, Set, User, ExerciseTemplate, ExerciseMuscleMapping
 from utils.strength_standards import epley_1rm
-from utils.lift_progress import compute_most_improved_lift
-from utils.cardio_progress import compute_most_improved_cardio
+from utils.volume import compute_effective_weight, get_bodyweight_at, BODYWEIGHT_VOLUME_EQUIPMENT
 
 stats_bp = Blueprint('stats_bp', __name__)
-
-# Deliberate Python port of workout-tracker-native/utils/cardioCalories.ts —
-# used by weekly_summary() to estimate calories burned from stored cardio Set
-# fields. Keep both in sync if the MET table or speed-scaling formulas change.
-_FLAT_MET = {
-    'running': 9.8, 'run': 9.8,
-    'cycling': 8.0, 'cycle': 8.0, 'bike': 8.0,
-    'rowing': 7.0, 'row': 7.0,
-    'swimming': 7.0, 'swim': 7.0,
-    'elliptical': 5.0,
-    'walking': 3.5, 'walk': 3.5,
-    'hiking': 6.0, 'hike': 6.0,
-}
-
-
-def _cardio_speed_kmh(duration_min, distance, distance_unit):
-    """Derive speed from stored distance/duration, in km/h — None if not derivable."""
-    if not distance or not duration_min:
-        return None
-    distance_km = distance * 1.60934 if (distance_unit or 'km') == 'mi' else distance
-    return distance_km / (duration_min / 60.0)
-
-
-def _estimate_calories(activity_name, duration_min, weight_kg, speed_kmh=None):
-    name = (activity_name or '').lower()
-    if speed_kmh and speed_kmh > 0:
-        if name in ('run', 'running'):
-            met = max(6.0, speed_kmh)
-        elif name in ('cycle', 'cycling', 'bike'):
-            met = max(4.0, speed_kmh * 0.45 + 2.0)
-        elif name in ('walk', 'walking'):
-            met = max(2.5, speed_kmh * 0.5 + 1.5)
-        else:
-            met = _FLAT_MET.get(name, 6.0)
-    else:
-        met = _FLAT_MET.get(name, 6.0)
-    return met * weight_kg * (duration_min / 60.0)
 
 
 @stats_bp.get('/api/stats/exercise')
@@ -89,36 +51,60 @@ def exercise_stats():
     if exercise_type == 'cardio':
         return _cardio_exercise_stats(name, rows, description)
 
+    templates_cache = {}
+
+    def _equipment_for(tid):
+        if tid is None:
+            return None
+        if tid not in templates_cache:
+            templates_cache[tid] = db.session.get(ExerciseTemplate, tid)
+        t = templates_cache[tid]
+        return t.equipment if t else None
+
     from collections import defaultdict
-    workout_map = defaultdict(lambda: {'workout': None, 'sets': [], 'notes': None})
+    # 'equipment' is a parallel list (same order/length as 'sets') used only
+    # internally to compute bodyweight-aware volume -- kept out of the 'sets'
+    # dicts themselves since those are returned as-is in the API response.
+    workout_map = defaultdict(lambda: {'workout': None, 'sets': [], 'equipment': [], 'notes': None})
     for exercise, workout in rows:
         key = workout.id
         workout_map[key]['workout'] = workout
         if exercise.notes and workout_map[key]['notes'] is None:
             workout_map[key]['notes'] = exercise.notes
+        equip = _equipment_for(exercise.exercise_template_id)
         for s in exercise.sets:
             workout_map[key]['sets'].append({'reps': s.reps, 'weight': s.weight, 'set_type': s.set_type or 'N'})
+            workout_map[key]['equipment'].append(equip)
 
     history = []
-    all_1rms, all_weights, all_reps = [], [], []
+    all_1rms, all_weights, all_reps, all_set_volumes = [], [], [], []
     total_sets = 0
     total_reps = 0
 
     for wid, data in sorted(workout_map.items(), key=lambda x: x[1]['workout'].date):
         workout = data['workout']
         sets = data['sets']
+        equipment_list = data['equipment']
         if not sets:
             continue
+
+        # Bodyweight-at-the-time is only looked up if this session actually
+        # has a Bodyweight/Weighted set — avoids a query for ordinary sessions.
+        bw_at_session = None
+        if any(e in BODYWEIGHT_VOLUME_EQUIPMENT for e in equipment_list):
+            bw_at_session = get_bodyweight_at(user_id, workout.date)
 
         session_1rms = []
         session_volume = 0
         best_set = None
 
-        for s in sets:
+        for s, equip in zip(sets, equipment_list):
             r, w = s['reps'], s['weight']
             # weight 0 = bodyweight set: counts for reps/sets, not weight stats
             if r and w is not None and s['set_type'] != 'W':
-                session_volume += r * w
+                effective_w = compute_effective_weight(w, equip, bw_at_session)
+                session_volume += r * effective_w
+                all_set_volumes.append(r * effective_w)
                 all_reps.append(r)
                 total_sets += 1
                 total_reps += r
@@ -147,6 +133,7 @@ def exercise_stats():
         'estimated_1rm': round(max(all_1rms), 1) if all_1rms else 0,
         'max_weight': round(max(all_weights), 1) if all_weights else 0,
         'most_reps': max(all_reps) if all_reps else 0,
+        'max_set_volume': round(max(all_set_volumes), 1) if all_set_volumes else 0,
     }
     totals = {
         'total_workouts': len(workout_map),
@@ -237,24 +224,15 @@ def profile_stats():
     from collections import defaultdict
     user_id = get_jwt_identity()
     user = db.session.get(User, int(user_id))
-    kg_to_lbs = 2.20462 if (user.weight_unit or 'lbs') == 'kg' else 1.0
     weekly_goal = max(1, request.args.get('weekly_goal', 1, type=int))
 
     total_workouts = Workout.query.filter_by(user_id=user_id).count()
 
-    vol_row = (
-        db.session.query(db.func.sum(Set.reps * Set.weight))
-        .join(Exercise, Set.exercise_id == Exercise.id)
-        .join(Workout, Exercise.workout_id == Workout.id)
-        .filter(
-            Workout.user_id == user_id,
-            Set.reps.isnot(None),
-            Set.weight.isnot(None),
-            Set.set_type != 'W',
-        )
+    total_volume = (
+        db.session.query(db.func.sum(Workout.volume))
+        .filter(Workout.user_id == user_id)
         .scalar()
-    )
-    total_volume = (vol_row or 0.0) * kg_to_lbs
+    ) or 0.0
 
     # Fetch only dates for streak calculations — no exercises or sets needed
     workout_dates = [
@@ -359,7 +337,6 @@ def dashboard_stats():
     from datetime import date, timedelta
     user_id = get_jwt_identity()
     user = db.session.get(User, int(user_id))
-    kg_to_lbs = 2.20462 if (user.weight_unit or 'lbs') == 'kg' else 1.0
 
     today = date.today()
     start_of_week = today - timedelta(days=today.weekday())  # Monday
@@ -369,6 +346,7 @@ def dashboard_stats():
         db.session.query(Workout)
         .filter(Workout.user_id == user_id)
         .filter(Workout.date >= eight_weeks_ago)
+        .options(selectinload(Workout.exercises).selectinload(Exercise.sets))
         .order_by(Workout.date.asc())
         .all()
     )
@@ -384,17 +362,14 @@ def dashboard_stats():
         for week in weeks:
             if week['start'] <= w_date <= week['end']:
                 week['count'] += 1
-                for ex in workout.exercises:
-                    for s in ex.sets:
-                        if s.reps and s.weight and s.set_type != 'W':
-                            week['volume'] += s.reps * s.weight * kg_to_lbs
+                week['volume'] += workout.volume or 0.0
                 break
 
     # Last 7 days summary (volume in lbs)
     seven_days_ago = today - timedelta(days=6)
     recent = [w for w in workouts
               if (w.date.date() if hasattr(w.date, 'date') else w.date) >= seven_days_ago]
-    week_volume = sum(s.reps * s.weight * kg_to_lbs for w in recent for ex in w.exercises for s in ex.sets if s.reps and s.weight)
+    week_volume = sum(w.volume or 0.0 for w in recent)
     week_sets = sum(1 for w in recent for ex in w.exercises for s in ex.sets if s.reps)
 
     # This week's workout dates (for calendar)
@@ -429,8 +404,6 @@ def progress_stats():
     import calendar as cal
     from datetime import date, timedelta
     user_id = get_jwt_identity()
-    user = db.session.get(User, int(user_id))
-    kg_to_lbs = 2.20462 if (user.weight_unit or 'lbs') == 'kg' else 1.0
     range_param = request.args.get('range', '30d')
     today = date.today()
 
@@ -448,7 +421,7 @@ def progress_stats():
         def assign(w, w_date):
             for b in buckets:
                 if b['start'] <= w_date <= b['end']:
-                    _add_workout(b, w, kg_to_lbs); break
+                    _add_workout(b, w); break
 
     elif range_param == '6m':
         MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -463,7 +436,7 @@ def progress_stats():
         def assign(w, w_date):
             for b in buckets:
                 if b['start'] <= w_date <= b['end']:
-                    _add_workout(b, w, kg_to_lbs); break
+                    _add_workout(b, w); break
 
     else:  # 1y
         MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -478,10 +451,12 @@ def progress_stats():
         def assign(w, w_date):
             for b in buckets:
                 if b['start'] <= w_date <= b['end']:
-                    _add_workout(b, w, kg_to_lbs); break
+                    _add_workout(b, w); break
 
     workouts = (Workout.query.filter_by(user_id=user_id)
-                .filter(Workout.date >= start).all())
+                .filter(Workout.date >= start)
+                .options(selectinload(Workout.exercises).selectinload(Exercise.sets))
+                .all())
     for w in workouts:
         w_date = w.date.date() if hasattr(w.date, 'date') else w.date
         assign(w, w_date)
@@ -492,14 +467,13 @@ def progress_stats():
     ]})
 
 
-def _add_workout(bucket, workout, kg_to_lbs):
+def _add_workout(bucket, workout):
     bucket['count'] += 1
+    bucket['volume'] += workout.volume or 0.0
     for ex in workout.exercises:
         for s in ex.sets:
             if s.reps:
                 bucket['sets'] += 1
-                if s.weight:
-                    bucket['volume'] += s.reps * s.weight * kg_to_lbs
 
 
 @stats_bp.get('/api/stats/recent-exercises')
@@ -534,398 +508,6 @@ def recent_exercises():
     )
     merged.sort(key=lambda r: r['last_date'], reverse=True)
     return jsonify({'recent': [{'name': r['name'], 'exercise_template_id': r['exercise_template_id']} for r in merged[:10]]})
-
-
-def _exercise_percentile_data(user_id, standards_key, template_ids, gender, unit_to_lbs, bw_lbs, age_factor):
-    """Best-1RM + percentile for one standards_key, shared by strength_score()
-    and the single-exercise lookup so both stay in sync. Returns None if the
-    user has no qualifying data for this lift (untracked, not an error)."""
-    from utils.strength_standards import compute_percentile
-
-    true_1rm_row = (
-        db.session.query(db.func.max(Set.weight))
-        .join(Exercise, Set.exercise_id == Exercise.id)
-        .join(Workout, Exercise.workout_id == Workout.id)
-        .filter(
-            Workout.user_id == user_id,
-            Exercise.exercise_template_id.in_(template_ids),
-            Set.reps == 1,
-            Set.weight.isnot(None),
-        )
-        .scalar()
-    )
-    true_1rm = float(true_1rm_row) * unit_to_lbs if true_1rm_row else 0.0
-
-    est_1rm_row = (
-        db.session.query(db.func.max(PersonalRecord.value))
-        .filter(
-            PersonalRecord.user_id == user_id,
-            PersonalRecord.exercise_template_id.in_(template_ids),
-            PersonalRecord.pr_type == 'estimated_1rm',
-        )
-        .scalar()
-    )
-    est_1rm = float(est_1rm_row) * unit_to_lbs if est_1rm_row else 0.0
-
-    best_1rm = max(true_1rm, est_1rm)
-
-    # Pull-up / Dip bodyweight fallback: standards (and logged weighted sets)
-    # are on the ADDED-weight scale, so estimate added 1RM as Epley total
-    # minus bodyweight: bw*(1 + r/30) - bw = bw*r/30.
-    if best_1rm == 0.0 and standards_key in ('Pull-up', 'Dips'):
-        max_reps_row = (
-            db.session.query(db.func.max(Set.reps))
-            .join(Exercise, Set.exercise_id == Exercise.id)
-            .join(Workout, Exercise.workout_id == Workout.id)
-            .filter(
-                Workout.user_id == user_id,
-                Exercise.exercise_template_id.in_(template_ids),
-                Set.weight == 0,
-                Set.reps.isnot(None),
-                Set.reps <= 15,
-            )
-            .scalar()
-        )
-        if max_reps_row and max_reps_row > 0:
-            best_1rm = bw_lbs * max_reps_row / 30
-
-    if best_1rm <= 0:
-        return None
-
-    bw_ratio = (best_1rm / bw_lbs) * age_factor
-    pct = compute_percentile(standards_key, gender, bw_ratio)
-    if pct is None:
-        return None
-
-    return {
-        'percentile': pct,
-        'best_1rm': round(best_1rm / unit_to_lbs, 1),
-        'true_1rm': round(true_1rm / unit_to_lbs, 1) if true_1rm > 0 else None,
-    }
-
-
-_TIER_BOUNDARIES = [
-    (10,  'Beginner'),
-    (30,  'Intermediate'),
-    (60,  'Advanced'),
-    (80,  'Elite'),
-    (95,  'Legend'),
-]
-
-
-def _compute_thresholds(standards_key, gender, bw_lbs, unit_to_lbs):
-    """Weight needed at each rank-tier boundary for one lift, in the user's
-    display unit — shared by strength_score()'s big6/supplemental lists and
-    the single-exercise lookup so both stay in sync."""
-    from utils.strength_standards import compute_weight_at_percentile
-    thresholds = []
-    for boundary_pct, rank_name in _TIER_BOUNDARIES:
-        w = compute_weight_at_percentile(standards_key, gender, bw_lbs, boundary_pct)
-        if w is not None:
-            thresholds.append({'percentile': boundary_pct, 'rank': rank_name, 'weight': round(w / unit_to_lbs, 1)})
-    return thresholds
-
-
-@stats_bp.get('/api/stats/strength-score')
-@jwt_required()
-def strength_score():
-    from datetime import datetime, timedelta
-    from statistics import mean as _mean
-    from utils.strength_standards import (
-        STANDARDS, BIG_6, COMPOUND_SECONDARY,
-        percentile_to_strength_rank, greek_rank_from_score,
-        compute_muscle_group_scores,
-        compute_consistency_score, compute_dedication_score,
-        compute_volume_score, compute_greek_score, age_scaling_factor,
-    )
-
-    user_id = get_jwt_identity()
-    user = db.session.get(User, int(user_id))
-
-    missing = []
-    if not user.gender:
-        missing.append('gender')
-    if not user.bodyweight:
-        missing.append('bodyweight')
-    if missing:
-        return jsonify({'missing': missing}), 422
-
-    kg_to_lbs = 2.20462
-    # Logged weights are stored in the user's unit — normalise to lbs so
-    # bodyweight ratios compare against the lbs-calibrated standards.
-    unit_to_lbs = kg_to_lbs if (user.weight_unit or 'lbs') == 'kg' else 1.0
-    bw_lbs = user.bodyweight * unit_to_lbs
-
-    # Most recent bodyweight log entry — surfaced so the UI can flag a stale
-    # bodyweight (the score uses the live User.bodyweight scalar, which can
-    # silently drift out of date if the user hasn't logged in a while).
-    last_bw_log_date = (
-        db.session.query(db.func.max(BodyweightLog.date))
-        .filter(BodyweightLog.user_id == user_id)
-        .scalar()
-    )
-
-    from datetime import date as _date
-    today = _date.today()
-    if user.birth_date:
-        user_age = today.year - user.birth_date.year - (
-            (today.month, today.day) < (user.birth_date.month, user.birth_date.day)
-        )
-    else:
-        user_age = None
-    age_factor = age_scaling_factor(user_age) if user_age else 1.0
-
-    # Build per-exercise percentiles using standards_key — one bulk query, no fuzzy matching
-    valid_keys = set(STANDARDS.get(user.gender, {}).keys())
-
-    # Fetch all templates that have a standards_key relevant to this gender's standards
-    keyed_templates = (
-        db.session.query(ExerciseTemplate.id, ExerciseTemplate.standards_key)
-        .filter(ExerciseTemplate.standards_key.in_(valid_keys))
-        .all()
-    )
-
-    # Group template IDs by standards_key
-    templates_by_key: dict[str, list[int]] = {}
-    for tmpl_id, sk in keyed_templates:
-        templates_by_key.setdefault(sk, []).append(tmpl_id)
-
-    exercise_percentiles: dict[str, float] = {}
-    exercise_1rms: dict[str, float] = {}
-    exercise_true_1rms: dict[str, float] = {}
-
-    for exercise_name, template_ids in templates_by_key.items():
-        result = _exercise_percentile_data(user_id, exercise_name, template_ids, user.gender, unit_to_lbs, bw_lbs, age_factor)
-        if result is not None:
-            exercise_percentiles[exercise_name] = result['percentile']
-            exercise_1rms[exercise_name] = result['best_1rm']
-            if result['true_1rm'] is not None:
-                exercise_true_1rms[exercise_name] = result['true_1rm']
-
-    if not exercise_percentiles:
-        return jsonify({'missing': 'data'}), 422
-
-    # Overall score — Big 6 (70%), compound secondary (20%), isolation (10%).
-    # Missing categories are dropped and weights renormalized automatically.
-    big6_scores     = [exercise_percentiles[e] for e in BIG_6 if e in exercise_percentiles]
-    compound_scores = [v for k, v in exercise_percentiles.items()
-                       if k not in BIG_6 and k in COMPOUND_SECONDARY]
-    isolation_scores = [v for k, v in exercise_percentiles.items()
-                        if k not in BIG_6 and k not in COMPOUND_SECONDARY]
-
-    big6_avg     = _mean(big6_scores)     if big6_scores     else None
-    compound_avg = _mean(compound_scores) if compound_scores else None
-    isolation_avg = _mean(isolation_scores) if isolation_scores else None
-
-    # Coverage — how many of the exercises this user's gender has standards
-    # for are actually tracked, per category. The formula above silently skips
-    # missing exercises rather than penalizing them, so this is a transparency
-    # addition only — it doesn't change `overall`.
-    compound_total  = sum(1 for k in valid_keys if k not in BIG_6 and k in COMPOUND_SECONDARY)
-    isolation_total = sum(1 for k in valid_keys if k not in BIG_6 and k not in COMPOUND_SECONDARY)
-    coverage = {
-        'big6':      {'tracked': len(big6_scores),      'total': len(BIG_6)},
-        'compound':  {'tracked': len(compound_scores),  'total': compound_total},
-        'isolation': {'tracked': len(isolation_scores), 'total': isolation_total},
-    }
-
-    parts = []
-    if big6_avg     is not None: parts.append((0.70, big6_avg))
-    if compound_avg is not None: parts.append((0.20, compound_avg))
-    if isolation_avg is not None: parts.append((0.10, isolation_avg))
-
-    total_weight = sum(w for w, _ in parts)
-    overall = sum(w * v for w, v in parts) / total_weight
-
-    # Muscle group scores
-    muscle_groups = compute_muscle_group_scores(exercise_percentiles)
-
-    # Greek rank composite
-    twelve_wks_ago  = datetime.now() - timedelta(weeks=12)
-    thirteen_wks_ago = datetime.now() - timedelta(weeks=13)
-    eight_wks_ago   = datetime.now() - timedelta(weeks=8)
-
-    workouts_12wk = Workout.query.filter(
-        Workout.user_id == user_id,
-        Workout.date >= twelve_wks_ago,
-    ).all()
-    workouts_13wk_count = Workout.query.filter(
-        Workout.user_id == user_id,
-        Workout.date >= thirteen_wks_ago,
-    ).count()
-    workouts_8wk_count = Workout.query.filter(
-        Workout.user_id == user_id,
-        Workout.date >= eight_wks_ago,
-    ).count()
-
-    consistency = compute_consistency_score(workouts_12wk)
-    dedication  = compute_dedication_score(workouts_13wk_count)
-    volume_sig  = compute_volume_score(workouts_8wk_count)
-    greek_score = compute_greek_score(consistency, overall, dedication, volume_sig)
-    greek_rank  = greek_rank_from_score(greek_score)
-
-    # Save snapshot once per 24h
-    last_snap = (
-        StrengthScoreSnapshot.query
-        .filter_by(user_id=user_id)
-        .order_by(StrengthScoreSnapshot.created_at.desc())
-        .first()
-    )
-    if not last_snap or (datetime.now() - last_snap.created_at).total_seconds() > 86400:
-        db.session.add(StrengthScoreSnapshot(user_id=user_id, score=overall))
-        db.session.commit()
-
-    # Build response
-    # TODO(post-launch): server-side premium — RevenueCat webhook sets
-    # user.is_premium and this reads it. Until then the API over-serves
-    # premium fields and gating is client-only (see TODO.md).
-    is_pro = True
-
-    def _ex_entry(name):
-        pct = exercise_percentiles.get(name)
-        thresholds = _compute_thresholds(name, user.gender, bw_lbs, unit_to_lbs)
-        return {
-            'exercise': name,
-            'percentile': round(pct, 1) if pct is not None else None,
-            'rank': percentile_to_strength_rank(pct) if pct is not None else None,
-            'estimated_1rm': exercise_1rms.get(name),
-            'thresholds': thresholds,
-            'has_data': pct is not None,
-        }
-
-    big6_list = sorted(
-        [_ex_entry(e) for e in BIG_6],
-        key=lambda x: (x['percentile'] is None, -(x['percentile'] or 0)),
-    )
-    def _supp_entry(name):
-        entry = _ex_entry(name)
-        entry['category'] = 'compound' if name in COMPOUND_SECONDARY else 'isolation'
-        return entry
-
-    supp_list = sorted(
-        [_supp_entry(e) for e in exercise_percentiles if e not in BIG_6],
-        key=lambda x: (x['category'] != 'compound', -(x['percentile'] or 0)),
-    )
-
-    # Full compound/isolation reference list (tracked AND not-yet-tracked) for
-    # the "More Lifts" info modal — deliberately separate from supp_list above,
-    # which only lists tracked lifts (what actually renders in the scrollable
-    # card) so that list doesn't balloon with dozens of untracked rows.
-    supp_coverage = sorted(
-        [
-            {
-                'exercise': name,
-                'category': 'compound' if name in COMPOUND_SECONDARY else 'isolation',
-                'has_data': name in exercise_percentiles,
-                'true_1rm': exercise_true_1rms.get(name),
-            }
-            for name in valid_keys if name not in BIG_6
-        ],
-        key=lambda x: (x['category'] != 'compound', not x['has_data'], x['exercise']),
-    )
-
-    resp: dict = {
-        'overall': round(overall, 1),
-        'overall_rank': percentile_to_strength_rank(overall),
-        'greek_rank': greek_rank,
-        'exercises_used': len(exercise_percentiles),
-        'muscle_groups_used': len(muscle_groups),
-        'age_adjusted': age_factor > 1.0,
-        'age': user_age,
-        'age_factor': round(age_factor, 3),
-        'bodyweight_updated_at': last_bw_log_date.isoformat() if last_bw_log_date else None,
-        'coverage': coverage,
-        'weight_unit': user.weight_unit or 'lbs',
-        'last_updated': datetime.now().isoformat(),
-    }
-
-    history_snaps = (
-        StrengthScoreSnapshot.query
-        .filter_by(user_id=user_id)
-        .order_by(StrengthScoreSnapshot.created_at.asc())
-        .all()
-    )
-    resp['history'] = [
-        {'date': s.created_at.isoformat(), 'score': s.score}
-        for s in history_snaps
-    ]
-
-    if is_pro:
-        resp['greek_score'] = round(greek_score, 1)
-        resp['greek_score_components'] = {
-            'consistency': round(consistency, 1),
-            'strength': round(overall, 1),
-            'dedication': round(dedication, 1),
-            'volume': round(volume_sig, 1),
-        }
-        resp['big6'] = big6_list
-        resp['supplemental'] = supp_list
-        resp['supplemental_coverage'] = supp_coverage
-        resp['muscle_groups'] = muscle_groups
-
-    return jsonify(resp), 200
-
-
-@stats_bp.get('/api/stats/strength-score/exercise')
-@jwt_required()
-def strength_score_for_exercise():
-    """Lightweight single-lift percentile/rank lookup — for surfacing a Strength
-    Score badge on ExerciseDetailScreen without paying for the full strength_score()
-    computation (overall score, Greek rank, muscle groups, snapshot writes) on
-    every exercise-detail visit."""
-    from datetime import date as _date
-    from utils.strength_standards import STANDARDS, percentile_to_strength_rank, age_scaling_factor
-
-    user_id = get_jwt_identity()
-    user = db.session.get(User, int(user_id))
-
-    template_id = request.args.get('exercise_template_id', type=int)
-    if not template_id:
-        return jsonify({'message': 'exercise_template_id required'}), 400
-
-    missing = []
-    if not user.gender:
-        missing.append('gender')
-    if not user.bodyweight:
-        missing.append('bodyweight')
-    if missing:
-        return jsonify({'missing': missing}), 422
-
-    tmpl = db.session.get(ExerciseTemplate, template_id)
-    standards_key = tmpl.standards_key if tmpl else None
-    if not standards_key or standards_key not in STANDARDS.get(user.gender, {}):
-        return jsonify({'has_data': False}), 200
-
-    kg_to_lbs = 2.20462
-    unit_to_lbs = kg_to_lbs if (user.weight_unit or 'lbs') == 'kg' else 1.0
-    bw_lbs = user.bodyweight * unit_to_lbs
-
-    today = _date.today()
-    user_age = None
-    if user.birth_date:
-        user_age = today.year - user.birth_date.year - (
-            (today.month, today.day) < (user.birth_date.month, user.birth_date.day)
-        )
-    age_factor = age_scaling_factor(user_age) if user_age else 1.0
-
-    # Other templates sharing this standards_key (name variants map to the same lift)
-    template_ids = [
-        tid for (tid,) in
-        db.session.query(ExerciseTemplate.id).filter(ExerciseTemplate.standards_key == standards_key).all()
-    ]
-
-    result = _exercise_percentile_data(user_id, standards_key, template_ids, user.gender, unit_to_lbs, bw_lbs, age_factor)
-    if result is None:
-        return jsonify({'has_data': False}), 200
-
-    return jsonify({
-        'has_data': True,
-        'exercise': tmpl.name,
-        'percentile': round(result['percentile'], 1),
-        'rank': percentile_to_strength_rank(result['percentile']),
-        'estimated_1rm': result['best_1rm'],
-        'thresholds': _compute_thresholds(standards_key, user.gender, bw_lbs, unit_to_lbs),
-    }), 200
 
 
 @stats_bp.get('/api/stats/muscle-volume')
@@ -1057,365 +639,6 @@ def muscle_volume():
         'last_trained': last_trained,
         'total_sets': sum(muscle_sets.values()),
         'last_week_total': last_week_total,
-    }), 200
-
-
-@stats_bp.get('/api/stats/weekly-summary')
-@jwt_required()
-def weekly_summary():
-    """Recap of a completed week: workouts, volume, reps, cardio distance,
-    PRs earned, bodyweight change, muscle-group breakdown, training days, and
-    total training time. Defaults to the most recently COMPLETED week (not
-    the current in-progress one) unless ?week=<date within a week> is given.
-    Fields are omitted entirely (not zeroed) when the user has no relevant
-    data that week, so the frontend can conditionally render sections.
-    """
-    from datetime import date, timedelta
-    user_id = get_jwt_identity()
-    user = db.session.get(User, int(user_id))
-    kg_to_lbs = 2.20462 if (user.weight_unit or 'lbs') == 'kg' else 1.0
-
-    local_date_str = request.args.get('local_date')
-    try:
-        today = date.fromisoformat(local_date_str) if local_date_str else date.today()
-    except ValueError:
-        today = date.today()
-    this_week_start = today - timedelta(days=today.weekday())
-
-    week_param = request.args.get('week')
-    if week_param:
-        try:
-            target = date.fromisoformat(week_param)
-            week_start = target - timedelta(days=target.weekday())
-        except ValueError:
-            week_start = this_week_start - timedelta(weeks=1)
-    else:
-        week_start = this_week_start - timedelta(weeks=1)
-    week_end = week_start + timedelta(weeks=1)
-
-    not_warmup = db.or_(Set.set_type.is_(None), Set.set_type != 'W')
-    not_cardio = db.func.lower(Exercise.exercise_type) != 'cardio'
-
-    workout_rows = (
-        db.session.query(Workout.id, Workout.date, Workout.duration)
-        .filter(Workout.user_id == user_id, Workout.date >= week_start, Workout.date < week_end)
-        .all()
-    )
-    training_days = sorted({w.date.date().isoformat() for w in workout_rows})
-
-    resp: dict = {
-        'week_start': week_start.isoformat(),
-        'week_end': week_end.isoformat(),
-        'workouts': len(workout_rows),
-        'training_days': training_days,
-        'total_duration_min': sum(w.duration or 0 for w in workout_rows),
-        'weight_unit': user.weight_unit or 'lbs',
-    }
-
-    # Volume + reps — same SQL-aggregate pattern as profile_stats, same
-    # canonical-lbs convention for total_volume (Set.weight is stored in the
-    # user's current unit, so this multiplies up to lbs like profile_stats
-    # and Workout.volume both do).
-    vol_reps_row = (
-        db.session.query(
-            db.func.sum(Set.reps * Set.weight).label('volume'),
-            db.func.sum(Set.reps).label('reps'),
-        )
-        .join(Exercise, Set.exercise_id == Exercise.id)
-        .join(Workout, Exercise.workout_id == Workout.id)
-        .filter(
-            Workout.user_id == user_id,
-            Workout.date >= week_start, Workout.date < week_end,
-            Set.reps.isnot(None), Set.weight.isnot(None), Set.set_type != 'W',
-        )
-        .first()
-    )
-    resp['total_volume'] = round((vol_reps_row.volume or 0) * kg_to_lbs)
-    resp['total_reps'] = int(vol_reps_row.reps or 0)
-
-    # Prior-week workouts/volume, for the ▲/▼ delta shown alongside this
-    # week's stats — same "always present, 0 if none" convention as
-    # muscle-volume's last_week_total (not the omit-if-absent convention used
-    # for the feature-specific fields below, since every week has a count).
-    prev_week_start = week_start - timedelta(weeks=1)
-    prev_workout_count = (
-        db.session.query(db.func.count(Workout.id))
-        .filter(Workout.user_id == user_id, Workout.date >= prev_week_start, Workout.date < week_start)
-        .scalar() or 0
-    )
-    prev_vol_row = (
-        db.session.query(db.func.sum(Set.reps * Set.weight).label('volume'))
-        .join(Exercise, Set.exercise_id == Exercise.id)
-        .join(Workout, Exercise.workout_id == Workout.id)
-        .filter(
-            Workout.user_id == user_id,
-            Workout.date >= prev_week_start, Workout.date < week_start,
-            Set.reps.isnot(None), Set.weight.isnot(None), Set.set_type != 'W',
-        )
-        .first()
-    )
-    resp['prev_week_workouts'] = prev_workout_count
-    resp['prev_week_volume'] = round((prev_vol_row.volume or 0) * kg_to_lbs)
-
-    # Rolling 4-week average (workouts, volume) — the 4 calendar weeks
-    # strictly before the displayed week, always divided by 4 (missing weeks
-    # count as 0) so a spike/dip reads against a stable baseline rather than
-    # just the single prior week. Always present, same convention as
-    # prev_week_* above.
-    rolling_start = week_start - timedelta(weeks=4)
-    rolling_workout_count = (
-        db.session.query(db.func.count(Workout.id))
-        .filter(Workout.user_id == user_id, Workout.date >= rolling_start, Workout.date < week_start)
-        .scalar() or 0
-    )
-    rolling_vol_row = (
-        db.session.query(db.func.sum(Set.reps * Set.weight).label('volume'))
-        .join(Exercise, Set.exercise_id == Exercise.id)
-        .join(Workout, Exercise.workout_id == Workout.id)
-        .filter(
-            Workout.user_id == user_id,
-            Workout.date >= rolling_start, Workout.date < week_start,
-            Set.reps.isnot(None), Set.weight.isnot(None), Set.set_type != 'W',
-        )
-        .first()
-    )
-    resp['rolling_avg_workouts'] = round(rolling_workout_count / 4.0, 1)
-    resp['rolling_avg_volume'] = round((rolling_vol_row.volume or 0) * kg_to_lbs / 4.0)
-
-    # Most-improved lift — shared helper so it can also feed the AI coach's
-    # insight context without duplicating the query logic.
-    most_improved = compute_most_improved_lift(user_id, week_start, week_end, prev_week_start, kg_to_lbs)
-    if most_improved:
-        resp['most_improved_lift'] = most_improved
-
-    # Most-improved cardio — independent from most_improved_lift (a week can
-    # surface both), since cardio PRs are milestone-based rather than a
-    # single per-exercise 1RM.
-    most_improved_cardio = compute_most_improved_cardio(user_id, week_start, week_end, prev_week_start)
-    if most_improved_cardio:
-        resp['most_improved_cardio'] = most_improved_cardio
-
-    # Avg RPE — omitted if nobody logged an RPE value this week.
-    avg_rpe = (
-        db.session.query(db.func.avg(Set.rpe))
-        .join(Exercise, Set.exercise_id == Exercise.id)
-        .join(Workout, Exercise.workout_id == Workout.id)
-        .filter(
-            Workout.user_id == user_id,
-            Workout.date >= week_start, Workout.date < week_end,
-            not_warmup, Set.rpe.isnot(None),
-        )
-        .scalar()
-    )
-    if avg_rpe is not None:
-        resp['avg_rpe'] = round(avg_rpe, 1)
-
-    # Calories burned (cardio only) — deliberate Python port of
-    # utils/cardioCalories.ts's MET-table formula; keep both in sync if the
-    # MET table ever changes. Omitted if no cardio logged, or if the user has
-    # never set a bodyweight (can't estimate calories without body mass).
-    if user.bodyweight:
-        weight_kg = user.bodyweight * (0.453592 if (user.weight_unit or 'lbs') == 'lbs' else 1.0)
-        cardio_set_rows = (
-            db.session.query(Exercise.name, Set.cardio_duration, Set.distance, Set.distance_unit)
-            .join(Exercise, Set.exercise_id == Exercise.id)
-            .join(Workout, Exercise.workout_id == Workout.id)
-            .filter(
-                Workout.user_id == user_id,
-                Workout.date >= week_start, Workout.date < week_end,
-                Exercise.exercise_type == 'cardio',
-                Set.cardio_duration.isnot(None),
-            )
-            .all()
-        )
-        if cardio_set_rows:
-            total_calories = sum(
-                _estimate_calories(name, duration, weight_kg,
-                                    _cardio_speed_kmh(duration, distance, distance_unit))
-                for name, duration, distance, distance_unit in cardio_set_rows
-            )
-            if total_calories > 0:
-                resp['calories_burned'] = round(total_calories)
-
-    # Cardio distance, normalized to km (same canonical-unit-then-convert-on-
-    # display idea as Workout.volume) — omitted if no cardio logged.
-    distance_rows = (
-        db.session.query(Set.distance, Set.distance_unit)
-        .join(Exercise, Set.exercise_id == Exercise.id)
-        .join(Workout, Exercise.workout_id == Workout.id)
-        .filter(
-            Workout.user_id == user_id,
-            Workout.date >= week_start, Workout.date < week_end,
-            Exercise.exercise_type == 'cardio',
-            Set.distance.isnot(None),
-        )
-        .all()
-    )
-    if distance_rows:
-        total_km = sum((d * 1.60934 if (unit or 'km') == 'mi' else d) for d, unit in distance_rows)
-        if total_km > 0:
-            resp['distance_km'] = round(total_km, 2)
-
-    # PRs earned this week — excludes estimated_1rm per the app-wide rule
-    # (never surface it as a PR label). achieved_at reflects when a PR was
-    # last set OR recomputed (editing a past workout can rebuild it), not
-    # strictly immutable history.
-    # Full ORM objects (not just specific columns) so `tmpl.muscle_group` — a
-    # Python @property assembled from muscle_mappings, not a mapped column —
-    # can be read directly; PR lists here are small and capped, so the N+1
-    # lazy-load this triggers per exercise is negligible.
-    pr_rows = (
-        db.session.query(PersonalRecord, ExerciseTemplate)
-        .join(ExerciseTemplate, PersonalRecord.exercise_template_id == ExerciseTemplate.id)
-        .filter(
-            PersonalRecord.user_id == user_id,
-            PersonalRecord.pr_type != 'estimated_1rm',
-            PersonalRecord.achieved_at >= week_start,
-            PersonalRecord.achieved_at < week_end,
-        )
-        .all()
-    )
-    resp['prs'] = [
-        {
-            'exercise_template_id': tmpl.id, 'exercise_name': tmpl.name, 'equipment': tmpl.equipment,
-            # ExerciseDetailScreen's isCardio check is a literal `muscleGroup === 'Cardio'`
-            # string comparison (matches ExercisesScreen.tsx's own navigation call) —
-            # the real muscle_mappings-derived string isn't meaningful for cardio.
-            'muscle_group': 'Cardio' if tmpl.exercise_type == 'cardio' else tmpl.muscle_group,
-            'image_url': tmpl.image_url, 'is_custom': tmpl.user_id is not None,
-            'pr_type': pr.pr_type, 'value': pr.value,
-            'weight_context': None if pr.weight_context is None or pr.weight_context < 0 else pr.weight_context,
-        }
-        for pr, tmpl in pr_rows
-    ]
-
-    # Bodyweight change — PR values/bodyweight logs are stored in the user's
-    # current unit already (no kg_to_lbs conversion, unlike total_volume
-    # above). Omitted entirely if no log entries fall in this week — never
-    # fall back to User.bodyweight or a wider range.
-    bw_rows = (
-        db.session.query(BodyweightLog.weight)
-        .filter(
-            BodyweightLog.user_id == user_id,
-            BodyweightLog.date >= week_start, BodyweightLog.date < week_end,
-        )
-        .order_by(BodyweightLog.date.asc())
-        .all()
-    )
-    if bw_rows:
-        resp['bodyweight_change'] = {'start': bw_rows[0].weight, 'end': bw_rows[-1].weight}
-
-    # Muscle-group breakdown — same single-pass join shape as ai_routes.py's
-    # _muscle_sets_range, adapted here since that one is a private closure.
-    # Secondary movers get half credit (a set still stimulates them, just less
-    # directly than the primary target), matching muscle_volume()'s weighting.
-    set_credit = db.case((ExerciseMuscleMapping.is_primary == True, 1.0), else_=0.5)
-    muscle_rows = (
-        db.session.query(ExerciseMuscleMapping.muscle_group, db.func.sum(set_credit).label('cnt'))
-        .join(Exercise, ExerciseMuscleMapping.exercise_template_id == Exercise.exercise_template_id)
-        .join(Set, Set.exercise_id == Exercise.id)
-        .join(Workout, Exercise.workout_id == Workout.id)
-        .filter(
-            Workout.user_id == user_id,
-            Workout.date >= week_start, Workout.date < week_end,
-            not_warmup, not_cardio,
-            Set.reps.isnot(None),
-        )
-        .group_by(ExerciseMuscleMapping.muscle_group)
-        .all()
-    )
-    resp['muscle_sets'] = {m: c for m, c in muscle_rows}
-
-    return jsonify(resp), 200
-
-
-@stats_bp.get('/api/stats/weekly-summary/history')
-@jwt_required()
-def weekly_summary_history():
-    """Condensed list of past completed weeks (date range, workout count,
-    volume) for a history/browse view — full per-week detail stays behind
-    GET /api/stats/weekly-summary?week=<date>. Bucketed in Python rather than
-    a SQL date_trunc grouping since the test suite runs on SQLite (production
-    is Postgres) and date_trunc isn't portable across both.
-    """
-    from datetime import date, timedelta
-    user_id = get_jwt_identity()
-    user = db.session.get(User, int(user_id))
-    kg_to_lbs = 2.20462 if (user.weight_unit or 'lbs') == 'kg' else 1.0
-
-    local_date_str = request.args.get('local_date')
-    try:
-        today = date.fromisoformat(local_date_str) if local_date_str else date.today()
-    except ValueError:
-        today = date.today()
-    this_week_start = today - timedelta(days=today.weekday())
-
-    weeks_back = min(request.args.get('weeks', default=12, type=int), 52)
-    history_start = this_week_start - timedelta(weeks=weeks_back)
-
-    # Step 1: every workout in range, bucketed by its Monday week-start —
-    # counted here (not via the joined query below) so a workout with zero
-    # sets logged still counts toward that week's workout count.
-    workout_rows = (
-        db.session.query(Workout.id, Workout.date)
-        .filter(Workout.user_id == user_id, Workout.date >= history_start, Workout.date < this_week_start)
-        .all()
-    )
-    workout_week: dict[int, date] = {}
-    workouts_per_week: dict[date, set] = {}
-    for wid, wdate in workout_rows:
-        wk = wdate.date() - timedelta(days=wdate.date().weekday())
-        workout_week[wid] = wk
-        workouts_per_week.setdefault(wk, set()).add(wid)
-
-    # Step 2: volume per workout, merged into the same week buckets via the
-    # workout->week map from step 1 (an inner join here would silently drop
-    # workouts with no sets from the count, hence doing it in two passes).
-    volume_per_week: dict[date, float] = {}
-    if workout_week:
-        set_rows = (
-            db.session.query(Exercise.workout_id, Set.reps, Set.weight)
-            .join(Exercise, Set.exercise_id == Exercise.id)
-            .filter(
-                Exercise.workout_id.in_(workout_week.keys()),
-                Set.reps.isnot(None), Set.weight.isnot(None), Set.set_type != 'W',
-            )
-            .all()
-        )
-        for wid, reps, weight in set_rows:
-            wk = workout_week.get(wid)
-            if wk is None:
-                continue
-            volume_per_week[wk] = volume_per_week.get(wk, 0.0) + reps * weight
-
-    history = [
-        {
-            'week_start': wk.isoformat(),
-            'week_end': (wk + timedelta(weeks=1)).isoformat(),
-            'workouts': len(ids),
-            'total_volume': round(volume_per_week.get(wk, 0.0) * kg_to_lbs),
-        }
-        for wk, ids in sorted(workouts_per_week.items(), reverse=True)
-    ]
-
-    return jsonify(history), 200
-
-
-@stats_bp.get('/api/stats/strength-score/history')
-@jwt_required()
-def strength_score_history():
-    user_id = get_jwt_identity()
-    snapshots = (
-        StrengthScoreSnapshot.query
-        .filter_by(user_id=user_id)
-        .order_by(StrengthScoreSnapshot.created_at.asc())
-        .all()
-    )
-    return jsonify({
-        'history': [
-            {'date': s.created_at.isoformat(), 'score': s.score}
-            for s in snapshots
-        ]
     }), 200
 
 

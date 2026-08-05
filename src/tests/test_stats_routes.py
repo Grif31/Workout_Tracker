@@ -1507,4 +1507,130 @@ class TestStrengthScoreForExercise:
         assert single['estimated_1rm'] == squat_entry['estimated_1rm']
         assert single['exercise'] == 'Squat'
         assert single['thresholds'] == squat_entry['thresholds']
-        assert len(single['thresholds']) > 0
+
+
+# ---------------------------------------------------------------------------
+# Bodyweight-aware volume: consolidated aggregates + exercise_stats()
+# ---------------------------------------------------------------------------
+
+def _create_bodyweight_template(client, token, name='Pull Up', equipment='Bodyweight'):
+    res = client.post(
+        '/api/exercises',
+        json={'name': name, 'muscle_group': 'Back', 'equipment': equipment},
+        headers=auth_headers(token),
+    )
+    assert res.status_code == 201
+    return res.get_json()['id']
+
+
+def _log_bodyweight(client, token, weight, date_str):
+    res = client.post('/api/bodyweight', json={'weight': weight, 'date': date_str}, headers=auth_headers(token))
+    assert res.status_code == 201
+
+
+def _create_bodyweight_workout(client, token, template_id, reps=10, name='Pull Day', date_str=None):
+    payload = {
+        'workoutName': name,
+        'exercises': [{
+            'name': 'Pull Up', 'exercise_template_id': template_id,
+            'sets': [{'reps': reps, 'weight': 0, 'set_type': 'N'}],
+        }],
+    }
+    if date_str:
+        payload['date'] = date_str
+    res = client.post('/api/workouts', json=payload, headers=auth_headers(token))
+    assert res.status_code == 201
+    return res.get_json()['id']
+
+
+class TestBodyweightVolumeAggregates:
+    """One representative test per consolidated whole-workout endpoint,
+    confirming each now sums the bodyweight-aware Workout.volume instead of
+    re-deriving reps*weight (which undercounts Bodyweight/Weighted sets)."""
+
+    def test_profile_stats_total_volume_includes_bodyweight(self, client, auth_token):
+        _log_bodyweight(client, auth_token, 180, '2026-01-01')
+        tid = _create_bodyweight_template(client, auth_token)
+        _create_bodyweight_workout(client, auth_token, tid, reps=10)
+        data = client.get('/api/stats/profile', headers=auth_headers(auth_token)).get_json()
+        assert data['total_volume'] == 1800
+
+    def test_dashboard_stats_volume_includes_bodyweight(self, client, auth_token):
+        _log_bodyweight(client, auth_token, 180, '2026-01-01')
+        tid = _create_bodyweight_template(client, auth_token)
+        _create_bodyweight_workout(client, auth_token, tid, reps=10)
+        data = client.get('/api/stats/dashboard', headers=auth_headers(auth_token)).get_json()
+        assert data['weekly'][-1]['volume'] == 1800
+        assert data['last_7_days']['volume'] == 1800
+
+    def test_progress_stats_volume_includes_bodyweight(self, client, auth_token):
+        _log_bodyweight(client, auth_token, 180, '2026-01-01')
+        tid = _create_bodyweight_template(client, auth_token)
+        _create_bodyweight_workout(client, auth_token, tid, reps=10)
+        data = client.get('/api/stats/progress?range=30d', headers=auth_headers(auth_token)).get_json()
+        assert sum(b['volume'] for b in data['buckets']) == 1800
+
+    def test_weekly_summary_volume_includes_bodyweight(self, client, auth_token, app):
+        two_weeks_ago_monday = _this_week_monday() - timedelta(weeks=2)
+        _log_bodyweight(client, auth_token, 180, '2026-01-01')
+        tid = _create_bodyweight_template(client, auth_token)
+        wid = _create_bodyweight_workout(client, auth_token, tid, reps=10)
+        _backdate(app, wid, two_weeks_ago_monday)
+
+        data = client.get('/api/stats/weekly-summary', headers=auth_headers(auth_token)).get_json()
+        assert data['prev_week_volume'] == 1800
+
+    def test_weekly_summary_history_volume_includes_bodyweight(self, client, auth_token, app):
+        week_a = _this_week_monday() - timedelta(weeks=2)
+        _log_bodyweight(client, auth_token, 180, '2026-01-01')
+        tid = _create_bodyweight_template(client, auth_token)
+        wid = _create_bodyweight_workout(client, auth_token, tid, reps=10)
+        _backdate(app, wid, week_a)
+
+        data = client.get('/api/stats/weekly-summary/history', headers=auth_headers(auth_token)).get_json()
+        entry = next(e for e in data if e['week_start'] == week_a.isoformat())
+        assert entry['total_volume'] == 1800
+
+    def test_regression_non_template_workout_volume_unaffected(self, client, auth_token):
+        # WORKOUT_PAYLOAD has no exercise_template_id, so equipment lookup is
+        # always None -- must keep matching EXPECTED_VOLUME exactly.
+        _log_bodyweight(client, auth_token, 180, '2026-01-01')
+        create_workout(client, auth_token)
+        data = client.get('/api/stats/profile', headers=auth_headers(auth_token)).get_json()
+        assert data['total_volume'] == EXPECTED_VOLUME
+
+
+class TestExerciseStatsBodyweightVolume:
+
+    def test_session_volume_and_max_set_volume_include_bodyweight(self, client, auth_token):
+        h = auth_headers(auth_token)
+        _log_bodyweight(client, auth_token, 180, '2026-01-01')
+        tid = _create_bodyweight_template(client, auth_token)
+        _create_bodyweight_workout(client, auth_token, tid, reps=10)
+
+        data = client.get(f'/api/stats/exercise?name=Pull Up&exercise_template_id={tid}', headers=h).get_json()
+        assert data['history'][0]['volume'] == 1800
+        assert data['personal_bests']['max_set_volume'] == 1800
+
+    def test_pr_adjacent_fields_stay_raw_weight_based(self, client, auth_token):
+        # max_weight/estimated_1rm/most_reps must NOT include bodyweight --
+        # they feed the same numbers the PR system reports.
+        h = auth_headers(auth_token)
+        _log_bodyweight(client, auth_token, 180, '2026-01-01')
+        tid = _create_bodyweight_template(client, auth_token)
+        _create_bodyweight_workout(client, auth_token, tid, reps=10)
+
+        data = client.get(f'/api/stats/exercise?name=Pull Up&exercise_template_id={tid}', headers=h).get_json()
+        assert data['personal_bests']['max_weight'] == 0
+        assert data['personal_bests']['estimated_1rm'] == 0
+        assert data['personal_bests']['most_reps'] == 10
+        assert data['history'][0]['best_set'] == {'reps': 10, 'weight': 0}
+
+    def test_no_bodyweight_logged_session_volume_is_zero(self, client, auth_token):
+        h = auth_headers(auth_token)
+        tid = _create_bodyweight_template(client, auth_token)
+        _create_bodyweight_workout(client, auth_token, tid, reps=10)
+
+        data = client.get(f'/api/stats/exercise?name=Pull Up&exercise_template_id={tid}', headers=h).get_json()
+        assert data['history'][0]['volume'] == 0
+        assert data['personal_bests']['max_set_volume'] == 0

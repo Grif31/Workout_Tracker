@@ -316,3 +316,132 @@ class TestUpdateWorkout:
         workout_id = get_workout_id(client, auth_token)
         res = client.patch(f'/api/workouts/{workout_id}', json={'name': 'No auth'})
         assert res.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Bodyweight-aware volume (Bodyweight / Weighted equipment)
+# ---------------------------------------------------------------------------
+
+def create_template(client, token, name, equipment):
+    res = client.post(
+        '/api/exercises',
+        json={'name': name, 'muscle_group': 'Back', 'equipment': equipment},
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    return res.get_json()['id']
+
+
+def log_bodyweight(client, token, weight, date_str):
+    return client.post(
+        '/api/bodyweight',
+        json={'weight': weight, 'date': date_str},
+        headers={'Authorization': f'Bearer {token}'},
+    )
+
+
+class TestBodyweightVolume:
+
+    def test_bodyweight_exercise_volume_includes_bodyweight(self, client, auth_token):
+        log_bodyweight(client, auth_token, 180, '2026-01-01')
+        tid = create_template(client, auth_token, 'Pull Up', 'Bodyweight')
+        res = create_workout(client, auth_token, {
+            'workoutName': 'Pull Day',
+            'exercises': [{
+                'name': 'Pull Up',
+                'exercise_template_id': tid,
+                'sets': [{'reps': 10, 'weight': 0}],
+            }],
+        })
+        assert res.status_code == 201
+        # 10 reps * 180 lbs bodyweight = 1800
+        assert res.get_json()['total_volume'] == 1800
+
+        workout_id = res.get_json()['id']
+        detail = client.get(f'/api/workouts/{workout_id}', headers={'Authorization': f'Bearer {auth_token}'})
+        assert detail.get_json()['volume'] == 1800.0
+
+        recent = client.get('/api/workouts/recent', headers={'Authorization': f'Bearer {auth_token}'})
+        assert recent.get_json()[0]['volume'] == 1800.0
+
+    def test_weighted_exercise_volume_includes_bodyweight_plus_added_weight(self, client, auth_token):
+        log_bodyweight(client, auth_token, 180, '2026-01-01')
+        tid = create_template(client, auth_token, 'Pull Up', 'Weighted')
+        res = create_workout(client, auth_token, {
+            'workoutName': 'Pull Day',
+            'exercises': [{
+                'name': 'Pull Up',
+                'exercise_template_id': tid,
+                'sets': [{'reps': 5, 'weight': 25}],
+            }],
+        })
+        # 5 reps * (25 added + 180 bodyweight) = 1025
+        assert res.get_json()['total_volume'] == 1025
+
+    def test_non_bodyweight_equipment_unaffected_by_bodyweight(self, client, auth_token):
+        log_bodyweight(client, auth_token, 180, '2026-01-01')
+        tid = create_template(client, auth_token, 'Bench Press', 'Barbell')
+        res = create_workout(client, auth_token, {
+            'workoutName': 'Push Day',
+            'exercises': [{
+                'name': 'Bench Press',
+                'exercise_template_id': tid,
+                'sets': [{'reps': 5, 'weight': 135}],
+            }],
+        })
+        # 5 * 135 = 675 -- bodyweight must not leak into ordinary equipment
+        assert res.get_json()['total_volume'] == 675
+
+    def test_no_bodyweight_ever_logged_is_graceful_noop(self, client, auth_token):
+        tid = create_template(client, auth_token, 'Pull Up', 'Bodyweight')
+        res = create_workout(client, auth_token, {
+            'workoutName': 'Pull Day',
+            'exercises': [{
+                'name': 'Pull Up',
+                'exercise_template_id': tid,
+                'sets': [{'reps': 10, 'weight': 0}],
+            }],
+        })
+        assert res.status_code == 201
+        # No bodyweight logged -- falls back to raw stored weight (0), no crash.
+        assert res.get_json()['total_volume'] == 0
+
+    def test_update_uses_bodyweight_at_workout_date_not_current(self, client, auth_token):
+        tid = create_template(client, auth_token, 'Pull Up', 'Bodyweight')
+        # Old bodyweight near the workout's date, newer/different "current" bodyweight logged after.
+        log_bodyweight(client, auth_token, 170, '2026-01-01')
+        create = create_workout(client, auth_token, {
+            'workoutName': 'Pull Day',
+            'date': '2026-01-02',
+            'exercises': [{
+                'name': 'Pull Up',
+                'exercise_template_id': tid,
+                'sets': [{'reps': 10, 'weight': 0}],
+            }],
+        })
+        workout_id = create.get_json()['id']
+        log_bodyweight(client, auth_token, 200, '2026-06-01')
+
+        # Edit the past workout (e.g. tweak notes) -- volume recompute should
+        # still use the bodyweight logged near 2026-01-02, not the newer 200.
+        res = client.patch(
+            f'/api/workouts/{workout_id}',
+            json={'notes': 'edited'},
+            headers={'Authorization': f'Bearer {auth_token}'},
+        )
+        assert res.status_code == 200
+        assert res.get_json()['volume'] == 1700.0  # 10 * 170, not 10 * 200
+
+    def test_export_csv_includes_bodyweight_in_volume_column(self, client, auth_token):
+        log_bodyweight(client, auth_token, 180, '2026-01-01')
+        tid = create_template(client, auth_token, 'Pull Up', 'Bodyweight')
+        create_workout(client, auth_token, {
+            'workoutName': 'Pull Day',
+            'exercises': [{
+                'name': 'Pull Up',
+                'exercise_template_id': tid,
+                'sets': [{'reps': 10, 'weight': 0}],
+            }],
+        })
+        res = client.get('/api/workouts/export', headers={'Authorization': f'Bearer {auth_token}'})
+        assert res.status_code == 200
+        assert '1800' in res.get_data(as_text=True)

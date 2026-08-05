@@ -1,7 +1,7 @@
 """
 Tests for utils/strength_standards.py:
   age_scaling_factor — piecewise-linear age adjustment applied to strength-score
-  bodyweight ratios (see routes/stats_routes.py strength_score()).
+  bodyweight ratios (see routes/strength_score_routes.py strength_score()).
 """
 import pytest
 from utils.strength_standards import age_scaling_factor, _AGE_FACTOR_ANCHORS

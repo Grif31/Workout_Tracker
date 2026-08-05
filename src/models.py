@@ -77,18 +77,29 @@ class Workout(db.Model):
             data["exercises"] = [ex.to_dict(include_sets=True) for ex in self.exercises]
         return data
 
-    def calculate_volume(self, weight_unit: str = 'lbs') -> float:
-        """Sum reps × weight across all strength sets. Always stored in lbs.
-        Pass the user's weight_unit so kg entries are normalised before storing."""
+    def calculate_volume(self, weight_unit: str = 'lbs', bodyweight: float = None) -> float:
+        """Sum reps × effective-weight across all strength sets. Always stored
+        in lbs. Pass the user's weight_unit so kg entries are normalised
+        before storing. `bodyweight` is the user's bodyweight AT THE TIME of
+        this workout (already in weight_unit's unit) -- used only to fill in
+        the true load for Bodyweight/Weighted equipment sets. Pass None
+        (e.g. user never logged a bodyweight) to leave those sets' stored
+        weight as-is."""
+        from utils.volume import compute_effective_weight  # deferred: utils/volume.py imports from models
+
         kg_to_lbs = 2.20462
         total = 0.0
         for ex in self.exercises:
             if (ex.exercise_type or 'strength').lower() == 'cardio':
                 continue
+            equipment = None
+            if ex.exercise_template_id:
+                tmpl = db.session.get(ExerciseTemplate, ex.exercise_template_id)
+                equipment = tmpl.equipment if tmpl else None
             for s in ex.sets:
                 if (s.set_type or 'N') == 'W':
                     continue
-                w = s.weight or 0.0
+                w = compute_effective_weight(s.weight, equipment, bodyweight)
                 if weight_unit == 'kg':
                     w *= kg_to_lbs
                 total += (s.reps or 0) * w

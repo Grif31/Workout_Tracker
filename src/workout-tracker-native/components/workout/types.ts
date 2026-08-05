@@ -64,6 +64,13 @@ export const makeUid = () => Date.now().toString(36) + Math.random().toString(36
 export const isBodyweight = (ex: { exercise_type?: string; equipment?: string }) =>
   ex.exercise_type !== 'cardio' && ex.equipment === 'Bodyweight';
 
+// Equipment where the true total load includes bodyweight — mirrors backend
+// utils/volume.py's BODYWEIGHT_VOLUME_EQUIPMENT. Used ONLY for live volume
+// display; PR/1RM logic must never use this (see isBodyweight above, which
+// drives input-field behavior and must not change).
+export const usesBodyweightForVolume = (ex: { equipment?: string }) =>
+  ex.equipment === 'Bodyweight' || ex.equipment === 'Weighted';
+
 // Timed holds (planks, wall sits, dead hangs) — sets are a duration in
 // seconds, no reps or weight. Stored in the set's cardio_duration column
 // as minutes, same unit cardio uses; the UI converts to/from seconds.

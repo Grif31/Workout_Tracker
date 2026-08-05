@@ -9,6 +9,7 @@ from flask_jwt_extended import  jwt_required, get_jwt_identity
 from schemas import WorkoutSchema, UpdateWorkoutSchema
 from utils.validation import validate_body
 from utils.strength_standards import epley_1rm
+from utils.volume import get_bodyweight_at
 
 workout_bp = Blueprint('workout_bp', __name__)
 
@@ -442,11 +443,13 @@ def get_workouts():
 @jwt_required()
 def get_recent_workouts():
     current_user_id = get_jwt_identity()
-    user = db.session.get(User, int(current_user_id))
-    # Sets are stored in the user's unit; volume is reported in canonical lbs
-    # everywhere (Workout.volume convention), so normalise before returning.
-    kg_to_lbs = 2.20462 if (user.weight_unit or 'lbs') == 'kg' else 1.0
-    workouts = Workout.query.filter_by(user_id=current_user_id).order_by(Workout.date.desc()).limit(5).all()
+    workouts = (
+        Workout.query.filter_by(user_id=current_user_id)
+        .options(selectinload(Workout.exercises).selectinload(Exercise.sets))
+        .order_by(Workout.date.desc())
+        .limit(5)
+        .all()
+    )
 
     template_ids = {
         ex.exercise_template_id
@@ -460,7 +463,6 @@ def get_recent_workouts():
     result = []
     for w in workouts:
         total_reps = 0
-        total_volume = 0.0
         muscles = []
         set_ids = []
 
@@ -476,8 +478,6 @@ def get_recent_workouts():
                 set_ids.append(s.id)
                 if s.reps:
                     total_reps += s.reps
-                if s.reps and s.weight:
-                    total_volume += s.reps * s.weight
 
         pr_count = PersonalRecord.query.filter(
             PersonalRecord.set_id.in_(set_ids)
@@ -485,7 +485,7 @@ def get_recent_workouts():
 
         data = w.to_dict()
         data['total_reps'] = total_reps
-        data['volume'] = round(total_volume * kg_to_lbs)
+        data['volume'] = round(w.volume or 0.0)
         data['num_exercises'] = len(w.exercises)
         data['muscles'] = muscles
         data['pr_count'] = pr_count
@@ -593,7 +593,8 @@ def add_workout():
             exercise_set_pairs.append((new_ex, new_sets))
 
         user = db.session.get(User, int(current_user_id))
-        new_workout.calculate_volume(weight_unit=user.weight_unit or 'lbs')
+        bodyweight_at_workout = get_bodyweight_at(current_user_id, workout_date)
+        new_workout.calculate_volume(weight_unit=user.weight_unit or 'lbs', bodyweight=bodyweight_at_workout)
         strength_pairs = [(ex, s) for ex, s in exercise_set_pairs if (ex.exercise_type or 'strength').lower() == 'strength']
         cardio_pairs   = [(ex, s) for ex, s in exercise_set_pairs if (ex.exercise_type or 'strength').lower() == 'cardio']
         duration_pairs = [(ex, s) for ex, s in exercise_set_pairs if (ex.exercise_type or 'strength').lower() == 'duration']
@@ -602,7 +603,6 @@ def add_workout():
         new_prs += _compute_and_upsert_duration_prs(current_user_id, duration_pairs, workout_date)
         db.session.commit()
 
-        total_volume = 0
         total_reps = 0
         total_sets = 0
         muscles_worked = []
@@ -618,8 +618,6 @@ def add_workout():
                 total_sets += 1
                 if s.reps:
                     total_reps += s.reps
-                    if s.weight:
-                        total_volume += s.reps * s.weight
 
         is_first = Workout.query.filter_by(user_id=current_user_id).count() == 1
 
@@ -627,7 +625,7 @@ def add_workout():
             'id': new_workout.id,
             'message': 'New Workout Added',
             'new_prs': new_prs,
-            'total_volume': round(total_volume),
+            'total_volume': round(new_workout.volume or 0.0),
             'total_reps': total_reps,
             'total_sets': total_sets,
             'muscles': muscles_worked,
@@ -779,7 +777,8 @@ def update_workout(workout_id):
     db.session.flush()
     db.session.expire(workout)
     user = db.session.get(User, int(current_user_id))
-    workout.calculate_volume(weight_unit=user.weight_unit or 'lbs')
+    bodyweight_at_workout = get_bodyweight_at(current_user_id, workout.date)
+    workout.calculate_volume(weight_unit=user.weight_unit or 'lbs', bodyweight=bodyweight_at_workout)
     db.session.commit()
 
     template_ids = [ex.exercise_template_id for ex in workout.exercises]
@@ -809,14 +808,31 @@ def export_workouts():
         'reps', 'weight', 'volume',
     ])
 
+    from utils.volume import compute_effective_weight
+
+    templates_cache = {}
+    bodyweight_cache = {}
+
+    def _equipment_for(tid):
+        if tid is None:
+            return None
+        if tid not in templates_cache:
+            templates_cache[tid] = db.session.get(ExerciseTemplate, tid)
+        t = templates_cache[tid]
+        return t.equipment if t else None
+
     for workout in workouts:
         date_str = workout.date.strftime('%Y-%m-%d') if workout.date else ''
         duration_min = round(workout.duration / 60, 1) if workout.duration else ''
+        if workout.id not in bodyweight_cache:
+            bodyweight_cache[workout.id] = get_bodyweight_at(current_user_id, workout.date)
+        bw = bodyweight_cache[workout.id]
         for exercise in workout.exercises:
+            equipment = _equipment_for(exercise.exercise_template_id)
             for i, s in enumerate(exercise.sets, start=1):
                 reps = s.reps if s.reps is not None else ''
                 weight = s.weight if s.weight is not None else ''
-                volume = round(s.reps * s.weight, 2) if s.reps and s.weight else ''
+                volume = round(s.reps * compute_effective_weight(s.weight, equipment, bw), 2) if s.reps and s.weight is not None else ''
                 writer.writerow([
                     date_str,
                     workout.name,
