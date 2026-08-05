@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.1.1 (2026-07-31)
+
+### Redesigned: Exercise Details
+- The inline Strength Score card is now colored by your rank and shows your percentile in a circle — tap it to see the same lift breakdown as the Strength Score screen, without leaving the page.
+- Swipe left/right between Overview, Charts, and History instead of only tapping the tabs.
+- Muscle Breakdown diagram is bigger and moved above the Primary/Secondary labels, with primary and secondary muscles shown in different shades and matching color swatches next to each label.
+- Stats are now split into Lifetime Stats (Workouts, Total Sets, Total Reps) and Personal Records, instead of one mixed grid.
+- 161 exercises — Bench Press, Squat, Deadlift, Pull Up, and more — now have real, hand-written "How to perform" instructions instead of generic muscle-group text.
+- Added Chin Up to the exercise library.
+
+### Improved: Progress Tab
+- Progress is now the tab you land on when opening the Training tab.
+- The "working sets" info icon now opens a full explanation of MEV/MAV/MRV volume zones with a per-muscle-group reference table, instead of a plain alert.
+- Fixed weekly set counts sometimes displaying with the decimal (".5") wrapped onto its own line.
+
+### New: Onboarding
+- Added a Welcome screen at the start of the tutorial with the Aretē logo, pronunciation guide, and tagline, plus Start Tutorial / Skip options.
+- New units and personal info steps during onboarding (height/weight units, optional age/gender/bodyweight).
+
+### Bug Fixes
+- Fixed Privacy Policy and Terms of Service pages returning a 404.
+- Default distance unit is now miles app-wide, with a full audit of distance-unit handling across GPS runs, calorie estimates, and history.
+- Fixed cardio calorie estimates using the wrong distance unit.
+- Fixed personal records sometimes showing duplicated entries.
+- Fixed "Running" not appearing when searching the exercise list.
+- Fixed cardio personal record taps leading to a 404.
+- Fixed a mismatch between live and saved GPS pace on runs.
+- Added a "View History" option to the 3-dot menu on run workout details.
+- Fixed Weekly Summary showing cardio personal records in the wrong distance unit.
+- Settings now shows the correct app version instead of a stale hardcoded one.
+
 ## 1.1.0 (2026-07-27)
 
 ### New: Weekly Summary

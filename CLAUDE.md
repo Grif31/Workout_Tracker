@@ -110,7 +110,9 @@ src/
 │   ├── auth_routes.py            # register, login, refresh, Apple/Google
 │   ├── workout_routes.py         # CRUD workouts + sets
 │   ├── exercise_routes.py        # exercise library
-│   ├── stats_routes.py           # progress stats, recent exercises
+│   ├── stats_routes.py           # exercise/profile/dashboard/progress stats, muscle volume, recent exercises
+│   ├── strength_score_routes.py  # strength score, percentile ranks, score history
+│   ├── weekly_summary_routes.py  # weekly summary + weekly summary history
 │   ├── personal_record_routes.py # PR lookup
 │   ├── user_routes.py            # profile, device token, bodyweight
 │   ├── bodyweight_routes.py
@@ -226,7 +228,7 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 | `coach_insights_cache` | — | Cached AI coaching insights JSON + fetchedAt timestamp |
 | `coach_settings` | — | Legacy key — migrated to `coach_profile` on first CoachProfileModal open |
 
-**On logout and login**, these account-specific keys are cleared via `AsyncStorage.multiRemove` in `AuthContext.tsx`: `coach_insights_cache`, `coach_profile`, `coach_settings`, `workout_weekly_goal`, `minimized_workout_session`, `@pr_pins`.
+**On logout**, `AuthContext.tsx` clears via `AsyncStorage.multiRemove`: `token`, `refresh_token`, `user`, `greek_rank_cached`, `@theme_accent`, `coach_insights_cache`, `minimized_workout_session`. **On login**, the same four cache keys (`greek_rank_cached`, `@theme_accent`, `coach_insights_cache`, `minimized_workout_session`) are cleared before the new session starts, so a freshly logged-in user never sees the previous account's cached data. Per-user-suffixed keys (`coach_profile_${uid}`, `workout_weekly_goal_${uid}`, `@pr_pins_${uid}`, etc.) don't need clearing — each account already has its own slot.
 
 ---
 

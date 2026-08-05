@@ -87,6 +87,7 @@ jest.mock('./context/ThemeContext', () => ({
   }),
   ThemeProvider: ({ children }: any) => children,
   ACCENT_PRESETS: [{ name: 'Green', value: '#30D158', text: '#000' }],
+  KEY_ACCENT: '@theme_accent',
 }));
 
 jest.mock('./context/WorkoutSessionContext', () => ({
@@ -98,6 +99,7 @@ jest.mock('./context/WorkoutSessionContext', () => ({
     setWorkoutOpen: jest.fn(),
   }),
   WorkoutSessionProvider: ({ children }: any) => children,
+  SESSION_KEY: 'minimized_workout_session',
 }));
 
 jest.mock('react-native-svg', () => {
