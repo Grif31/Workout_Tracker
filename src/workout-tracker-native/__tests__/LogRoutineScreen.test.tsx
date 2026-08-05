@@ -1,7 +1,7 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
 import { createMockNavigation, createMockRoute } from './testUtils';
-import LogRoutineScreen from '../screens/ExercisesTab/LogRoutineScreen';
+import LogRoutineScreen from '../screens/TrainingTab/LogRoutineScreen';
 
 jest.mock('../components/WorkoutLog', () => {
   const { View, Text } = require('react-native');

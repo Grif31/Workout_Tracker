@@ -22,6 +22,7 @@ import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { estimateCalories } from '../utils/cardioCalories';
+import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toKm } from '../utils/units';
 import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../constants/prColors';
 import { captureAndShare } from '../utils/shareCapture';
 import MuscleDiagram from './MuscleDiagram';
@@ -106,7 +107,7 @@ export default function WorkoutDetailsScreen({
 
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.getItem(`gps_distance_unit_${user.id}`).then(v => {
+    AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user.id}`).then(v => {
       setDistanceUnit(v === 'km' ? 'km' : 'mi');
     });
   }, [user?.id]);
@@ -510,7 +511,7 @@ export default function WorkoutDetailsScreen({
           const totalDur = exercise.sets.reduce((s, b) => s + (Number(b.cardio_duration) || 0), 0);
           const totalDistKm = exercise.sets.reduce((s, b) => {
             const d = Number(b.distance) || 0;
-            return s + ((b.distance_unit === 'mi' ? d * 1.60934 : d));
+            return s + toKm(d, b.distance_unit === 'mi' ? 'mi' : 'km');
           }, 0);
           const speedKmH = totalDur > 0 && totalDistKm > 0 ? totalDistKm / (totalDur / 60) : undefined;
           const kcal = estimateCalories(exercise.name, totalDur, bodyKg, speedKmH);
@@ -578,7 +579,7 @@ export default function WorkoutDetailsScreen({
 
               <View style={styles.cardioSummaryBar}>
                 <Text style={styles.cardioSummaryText}>
-                  🔥 ~{kcal} kcal  ·  {totalDur.toFixed(0)} min  ·  {(distanceUnit === 'mi' ? totalDistKm * 0.621371 : totalDistKm).toFixed(2)} {distanceUnit}
+                  🔥 ~{kcal} kcal  ·  {totalDur.toFixed(0)} min  ·  {toDisplayDistance(totalDistKm, distanceUnit).toFixed(2)} {distanceUnit}
                 </Text>
               </View>
             </View>

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert,
-  ScrollView, FlatList, Modal, Dimensions, Animated, ActivityIndicator, PanResponder,
+  ScrollView, Dimensions, Animated, ActivityIndicator, PanResponder,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -11,9 +11,11 @@ import { BarChart } from 'react-native-gifted-charts';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { usePurchase } from '../../context/PurchaseContext';
-import { spacing, radius } from '../../theme/spacing';
+import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { WeightUnit } from '../../utils/units';
+import { WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
+import { toLocalDateStr } from '../../utils/date';
+import { COACH_INSIGHTS_KEY } from '../../constants/storageKeys';
 import { apiFetch } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import { TrainingStackParamsList } from '../../navigation/types';
@@ -21,6 +23,11 @@ import { muscleGroups } from '../../constants/muscleGroups';
 import { SCORE_RANK_COLORS } from '../../constants/strengthRanks';
 import CoachProfileModal, { CoachProfile, COACH_PROFILE_KEY } from './CoachProfileModal';
 import { GREEK_RANK_COLORS } from '../../constants/greekRanks';
+import WeeklyGoalModal from '../../components/coach/WeeklyGoalModal';
+import WorkingSetsInfoModal from '../../components/coach/WorkingSetsInfoModal';
+import RangePickerModal from '../../components/coach/RangePickerModal';
+import RoutinePickerModal from '../../components/coach/RoutinePickerModal';
+import MusclePickerModal from '../../components/coach/MusclePickerModal';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'TrainingHome'>;
 
@@ -51,8 +58,6 @@ type Routine = { id: number; name: string; description?: string; day_count: numb
 type ActiveRoutine = { id: number; name: string; days: RoutineDay[] };
 type Insight = { type: string; title: string; body: string; priority: 'high' | 'medium' | 'low' };
 type InsightsCache = { insights: Insight[]; fetchedAt: string };
-
-const COACH_INSIGHTS_KEY = 'coach_insights_cache';
 
 const MUSCLE_STANDARDS: Record<string, { mev: number; mav: number; mrv: number }> = {
   Chest:      { mev: 8,  mav: 16, mrv: 20 },
@@ -115,7 +120,7 @@ export default function CoachScreen({ navigation }: Props) {
 
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.getItem(`gps_distance_unit_${user.id}`).then(v => {
+    AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user.id}`).then(v => {
       setDistanceUnit(v === 'km' ? 'km' : 'mi');
     });
   }, [user?.id]);
@@ -342,7 +347,7 @@ export default function CoachScreen({ navigation }: Props) {
   const fetchMuscleGroupData = async () => {
     try {
       const now = new Date();
-      const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const localDate = toLocalDateStr(now);
       const res = await apiFetch(`/api/stats/muscle-volume?local_date=${localDate}`);
       if (res.ok) {
         const data = await res.json();
@@ -587,7 +592,7 @@ export default function CoachScreen({ navigation }: Props) {
     const workoutsStr = `${p.workouts} workout${p.workouts !== 1 ? 's' : ''}`;
     if (p.total_volume > 0) return `${dateRange} · ${workoutsStr} · ${p.total_volume.toLocaleString()} ${p.weight_unit}`;
     if (p.distance_km != null) {
-      const dist = distanceUnit === 'mi' ? p.distance_km * 0.621371 : p.distance_km;
+      const dist = toDisplayDistance(p.distance_km, distanceUnit);
       return `${dateRange} · ${workoutsStr} · ${dist.toFixed(2)}${distanceUnit}`;
     }
     return `${dateRange} · ${workoutsStr}`;
@@ -1214,191 +1219,61 @@ export default function CoachScreen({ navigation }: Props) {
 
       {/* ── Modals ──────────────────────────────────────────────────────────── */}
 
-      {/* Weekly Goal Modal */}
-      <Modal visible={goalModalVisible} transparent animationType="slide">
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setGoalModalVisible(false)}>
-          <View style={styles.goalModalBox}>
-            <Text style={styles.goalModalTitle}>Weekly Workout Goal</Text>
-            <Text style={styles.goalModalDesc}>
-              Set how many workouts you want to complete each week.
-            </Text>
-            <View style={styles.goalModalControls}>
-              <TouchableOpacity style={styles.goalModalBtn} onPress={() => updateWeeklyGoal(-1)}>
-                <Text style={styles.goalModalBtnText}>−</Text>
-              </TouchableOpacity>
-              <Text style={styles.goalModalValue}>{weeklyGoal}</Text>
-              <TouchableOpacity style={styles.goalModalBtn} onPress={() => updateWeeklyGoal(1)}>
-                <Text style={styles.goalModalBtnText}>+</Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity style={styles.goalModalDone} onPress={() => setGoalModalVisible(false)}>
-              <Text style={styles.goalModalDoneText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      <WeeklyGoalModal
+        visible={goalModalVisible}
+        weeklyGoal={weeklyGoal}
+        onChangeGoal={updateWeeklyGoal}
+        onClose={() => setGoalModalVisible(false)}
+      />
 
-      {/* Working Sets / Volume Zones Info Modal */}
-      <Modal visible={workingSetsInfoVisible} transparent animationType="slide" onRequestClose={() => setWorkingSetsInfoVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => setWorkingSetsInfoVisible(false)}
-          />
-          <View style={[styles.goalModalBox, { maxHeight: Dimensions.get('window').height * 0.8, overflow: 'hidden' }]}>
-            <Text style={styles.goalModalTitle}>Working Sets & Volume Zones</Text>
-            <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
-              <Text style={styles.mevInfoBody}>
-                A "working set" is a set taken close to failure — warmups don't count. Your weekly working sets per muscle are compared against three volume landmarks from exercise science:
-              </Text>
-              <Text style={styles.mevInfoBody}>
-                <Text style={styles.mevInfoBold}>MEV</Text> (Minimum Effective Volume) — the least volume that still grows the muscle.{'\n'}
-                <Text style={styles.mevInfoBold}>MAV</Text> (Maximum Adaptive Volume) — the sweet spot for the most growth per set.{'\n'}
-                <Text style={styles.mevInfoBold}>MRV</Text> (Maximum Recoverable Volume) — the ceiling before fatigue outpaces recovery.
-              </Text>
+      <WorkingSetsInfoModal
+        visible={workingSetsInfoVisible}
+        onClose={() => setWorkingSetsInfoVisible(false)}
+        muscleStandards={MUSCLE_STANDARDS}
+      />
 
-              <Text style={styles.mevTableTitle}>Weekly Set Guidelines</Text>
-              <View style={styles.mevTable}>
-                <View style={styles.mevTableRow}>
-                  <Text style={[styles.mevTableCell, styles.mevTableMuscleCell, styles.mevTableHeaderText]}>Muscle</Text>
-                  <Text style={[styles.mevTableCell, styles.mevTableHeaderText]}>MEV</Text>
-                  <Text style={[styles.mevTableCell, styles.mevTableHeaderText]}>MAV</Text>
-                  <Text style={[styles.mevTableCell, styles.mevTableHeaderText]}>MRV</Text>
-                </View>
-                {Object.entries(MUSCLE_STANDARDS).map(([muscle, std]) => (
-                  <View key={muscle} style={[styles.mevTableRow, styles.mevTableRowDivider]}>
-                    <Text style={[styles.mevTableCell, styles.mevTableMuscleCell]}>{muscle}</Text>
-                    <Text style={styles.mevTableCell}>{std.mev}</Text>
-                    <Text style={styles.mevTableCell}>{std.mav}</Text>
-                    <Text style={styles.mevTableCell}>{std.mrv}</Text>
-                  </View>
-                ))}
-              </View>
+      <RangePickerModal
+        visible={rangePickerVisible}
+        chartRange={chartRange}
+        onSelect={handleRangeChange}
+        onClose={() => setRangePickerVisible(false)}
+      />
 
-              <Text style={[styles.mevInfoBody, { marginBottom: spacing.md }]}>
-                These are general starting points, not a personal prescription — your real numbers shift with training experience, sleep, nutrition, stress, and genetics. A beginner may grow well below MEV; a more advanced lifter may need to push toward MRV to keep progressing.
-              </Text>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Range Picker Modal */}
-      <Modal visible={rangePickerVisible} transparent animationType="fade">
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setRangePickerVisible(false)}>
-          <View style={styles.rangePickerBox}>
-            {(['30d', '6m', '1y'] as ChartRange[]).map(r => (
-              <TouchableOpacity
-                key={r}
-                style={[styles.rangePickerItem, chartRange === r && styles.rangePickerItemActive]}
-                onPress={() => { handleRangeChange(r); setRangePickerVisible(false); }}
-              >
-                <Text style={[styles.rangePickerItemText, chartRange === r && styles.rangePickerItemTextActive]}>
-                  {r === '30d' ? 'Last 30 Days' : r === '6m' ? 'Last 6 Months' : 'Last Year'}
-                </Text>
-                {chartRange === r && <Ionicons name="checkmark" size={16} color={colors.accent} />}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Routine Picker Modal */}
-      <Modal visible={selectModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Select Active Routine</Text>
-            <FlatList
-              data={routines}
-              keyExtractor={item => item.id.toString()}
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.modalItem} onPress={() => activateRoutine(item.id)}>
-                  <Text style={styles.modalItemName}>{item.name}</Text>
-                  <Text style={styles.modalItemSub}>{item.day_count} {item.day_count === 1 ? 'day' : 'days'}</Text>
-                </TouchableOpacity>
-              )}
-            />
-            <TouchableOpacity style={styles.modalCancel} onPress={() => setSelectModalVisible(false)}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <RoutinePickerModal
+        visible={selectModalVisible}
+        routines={routines}
+        onSelect={activateRoutine}
+        onClose={() => setSelectModalVisible(false)}
+      />
 
       {/* Muscle Picker for blank template creation */}
-      <Modal visible={musclePickerVisible} transparent animationType="slide">
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMusclePickerVisible(false)}>
-          <View style={[styles.musclePickerSheet, { backgroundColor: colors.surface }]}>
-            <View style={[styles.musclePickerHandle, { backgroundColor: colors.border }]} />
-            <Text style={[styles.musclePickerTitle, { color: colors.textPrimary }]}>
-              What muscles are you training?
-            </Text>
-            <Text style={[styles.musclePickerSub, { color: colors.textSecondary }]}>
-              Select any that apply — we'll pre-filter your exercise list.
-            </Text>
-            <View style={styles.muscleChips}>
-              {muscleGroups.map(mg => {
-                const on = selectedMuscles.includes(mg);
-                return (
-                  <TouchableOpacity
-                    key={mg}
-                    style={[styles.muscleChip, { borderColor: on ? colors.accent : colors.border, backgroundColor: on ? colors.accent + '22' : colors.background }]}
-                    onPress={() => setSelectedMuscles(prev => on ? prev.filter(m => m !== mg) : [...prev, mg])}
-                  >
-                    <Text style={[styles.muscleChipText, { color: on ? colors.accent : colors.textSecondary }]}>{mg}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <TouchableOpacity style={[styles.musclePickerBtn, { backgroundColor: colors.save }]} onPress={handleCreateTemplateWithMuscles}>
-              <Text style={styles.musclePickerBtnText}>
-                {selectedMuscles.length > 0 ? 'Create Template' : 'Create Template (Skip)'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      <MusclePickerModal
+        visible={musclePickerVisible}
+        onClose={() => setMusclePickerVisible(false)}
+        title="What muscles are you training?"
+        subtitle="Select any that apply — we'll pre-filter your exercise list."
+        muscles={muscleGroups}
+        selected={selectedMuscles}
+        onToggle={mg => setSelectedMuscles(prev => prev.includes(mg) ? prev.filter(m => m !== mg) : [...prev, mg])}
+        buttonLabel={selectedMuscles.length > 0 ? 'Create Template' : 'Create Template (Skip)'}
+        onSubmit={handleCreateTemplateWithMuscles}
+      />
 
       {/* AI Muscle Picker for Coach tab generate */}
-      <Modal visible={aiMusclePickerVisible} transparent animationType="slide">
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAiMusclePickerVisible(false)}>
-          <View style={[styles.musclePickerSheet, { backgroundColor: colors.surface }]}>
-            <View style={[styles.musclePickerHandle, { backgroundColor: colors.border }]} />
-            <Text style={[styles.musclePickerTitle, { color: colors.textPrimary }]}>
-              Target muscles for this template?
-            </Text>
-            <Text style={[styles.musclePickerSub, { color: colors.textSecondary }]}>
-              Pick the muscles you want to train — your AI coach will build around them.
-            </Text>
-            <View style={styles.muscleChips}>
-              {muscleGroups.filter(mg => mg !== 'Other').map(mg => {
-                const on = aiSelectedMuscles.includes(mg);
-                return (
-                  <TouchableOpacity
-                    key={mg}
-                    style={[styles.muscleChip, { borderColor: on ? colors.accent : colors.border, backgroundColor: on ? colors.accent + '22' : colors.background }]}
-                    onPress={() => setAiSelectedMuscles(prev => on ? prev.filter(m => m !== mg) : [...prev, mg])}
-                  >
-                    <Text style={[styles.muscleChipText, { color: on ? colors.accent : colors.textSecondary }]}>{mg}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <TouchableOpacity
-              style={[styles.musclePickerBtn, { backgroundColor: colors.save, opacity: aiGenerating ? 0.6 : 1 }]}
-              onPress={handleGenerateTemplate}
-              disabled={aiGenerating}
-            >
-              <Text style={styles.musclePickerBtnText}>
-                {aiSelectedMuscles.length > 0
-                  ? `Generate Template (${aiSelectedMuscles.length} muscle${aiSelectedMuscles.length > 1 ? 's' : ''})`
-                  : 'Generate Template'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      <MusclePickerModal
+        visible={aiMusclePickerVisible}
+        onClose={() => setAiMusclePickerVisible(false)}
+        title="Target muscles for this template?"
+        subtitle="Pick the muscles you want to train — your AI coach will build around them."
+        muscles={muscleGroups.filter(mg => mg !== 'Other')}
+        selected={aiSelectedMuscles}
+        onToggle={mg => setAiSelectedMuscles(prev => prev.includes(mg) ? prev.filter(m => m !== mg) : [...prev, mg])}
+        buttonLabel={aiSelectedMuscles.length > 0
+          ? `Generate Template (${aiSelectedMuscles.length} muscle${aiSelectedMuscles.length > 1 ? 's' : ''})`
+          : 'Generate Template'}
+        onSubmit={handleGenerateTemplate}
+        submitDisabled={aiGenerating}
+      />
 
       {/* Coach Profile Modal */}
       <CoachProfileModal
@@ -1463,11 +1338,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   chartTitle: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
   rangeDropdown: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: colors.border },
   rangeDropdownText: { fontSize: typography.fontSize.xs, fontWeight: '600', color: colors.textSecondary },
-  rangePickerBox: { position: 'absolute', top: 120, right: 16, backgroundColor: colors.surface, borderRadius: spacing.sm, borderWidth: 1, borderColor: colors.border, minWidth: 160, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, elevation: 8 },
-  rangePickerItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingVertical: 12 },
-  rangePickerItemActive: { backgroundColor: colors.accent + '18' },
-  rangePickerItemText: { fontSize: typography.fontSize.sm, color: colors.textPrimary },
-  rangePickerItemTextActive: { color: colors.accent, fontWeight: '600' },
   chartEmpty: { height: 150, justifyContent: 'center', alignItems: 'center' },
   metricBar: {
     flexDirection: 'row', marginTop: spacing.md,
@@ -1479,24 +1349,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   metricText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
   metricSlider: { position: 'absolute', bottom: 0, height: 2, backgroundColor: colors.accent, borderRadius: 1 },
   scoreCardTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, marginBottom: 3 },
-  goalModalBox: { backgroundColor: colors.surface, borderTopLeftRadius: spacing.lg, borderTopRightRadius: spacing.lg, padding: spacing.lg, paddingBottom: spacing.xl },
-  goalModalTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 },
-  goalModalDesc: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.xl },
-  goalModalControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.lg, marginBottom: spacing.xl },
-  goalModalBtn: { width: 44, height: 44, borderRadius: 22, borderWidth: 1.5, borderColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  goalModalBtnText: { fontSize: 24, color: colors.accent, fontWeight: '600', lineHeight: 28 },
-  goalModalValue: { fontSize: 48, fontWeight: '700', color: colors.textPrimary, minWidth: 60, textAlign: 'center' },
-  goalModalDone: { backgroundColor: colors.accent, borderRadius: spacing.sm, padding: spacing.md, alignItems: 'center' },
-  goalModalDoneText: { color: colors.accentText, fontSize: typography.fontSize.md, fontWeight: '700' },
-  mevInfoBody: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.md },
-  mevInfoBold: { fontWeight: '700', color: colors.textPrimary },
-  mevTableTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs },
-  mevTable: { borderWidth: 1, borderColor: colors.border, borderRadius: spacing.sm, overflow: 'hidden', marginBottom: spacing.md },
-  mevTableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: spacing.sm },
-  mevTableRowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  mevTableCell: { flex: 1, fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center' },
-  mevTableMuscleCell: { flex: 1.4, textAlign: 'left', color: colors.textPrimary, fontWeight: '600' },
-  mevTableHeaderText: { fontWeight: '700', color: colors.textPrimary, fontSize: 11, textTransform: 'uppercase' },
   axisLabel: { fontSize: 9, color: colors.textSecondary },
 
   // Muscle volume card
@@ -1619,23 +1471,4 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   upgradeBannerSub: { fontSize: typography.fontSize.xs, color: colors.textSecondary, lineHeight: 16 },
   upgradeBannerCTA: { backgroundColor: colors.accent, borderRadius: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   upgradeBannerCTAText: { color: colors.accentText, fontSize: typography.fontSize.sm, fontWeight: '700' },
-
-  // ── Shared modals ───────────────────────────────────────────────────────────
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  modalBox: { backgroundColor: colors.surface, borderTopLeftRadius: spacing.md, borderTopRightRadius: spacing.md, padding: spacing.lg, maxHeight: '60%' },
-  modalTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.md, textAlign: 'center' },
-  modalItem: { paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  modalItemName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
-  modalItemSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
-  modalCancel: { marginTop: spacing.md, padding: spacing.md, alignItems: 'center' },
-  modalCancelText: { fontSize: typography.fontSize.md, color: colors.danger, fontWeight: '600' },
-  musclePickerSheet: { position: 'absolute', bottom: 0, left: 0, right: 0, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.lg, paddingBottom: spacing.xl },
-  musclePickerHandle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: spacing.md },
-  musclePickerTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', marginBottom: spacing.xs },
-  musclePickerSub: { fontSize: typography.fontSize.sm, marginBottom: spacing.md, lineHeight: 20 },
-  muscleChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.lg },
-  muscleChip: { paddingHorizontal: spacing.sm, paddingVertical: 7, borderRadius: radius.full, borderWidth: 1 },
-  muscleChipText: { fontSize: typography.fontSize.sm, fontWeight: '600' },
-  musclePickerBtn: { borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
-  musclePickerBtnText: { color: colors.accentText, fontWeight: '700', fontSize: typography.fontSize.md },
 });

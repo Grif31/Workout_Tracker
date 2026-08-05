@@ -4,13 +4,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
 import { appCache } from '../utils/appCache';
+import { toLocalDateStr } from '../utils/date';
 import SplashView from '../components/SplashView';
 
 type Props = { onComplete: () => void };
 
 function buildCalls() {
   const now = new Date();
-  const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const localDate = toLocalDateStr(now);
   return [
     { key: 'me',               url: '/api/me' },
     { key: 'recent_workouts',  url: '/api/workouts/recent' },

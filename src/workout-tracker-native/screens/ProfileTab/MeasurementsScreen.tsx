@@ -25,12 +25,9 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { roundTenth } from '../../utils/units';
+import { toLocalDateStr } from '../../utils/date';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'Measurements'>;
-
-function localDateStr(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 type BWLog      = { id: number; weight: number; date: string };
 type Measurement = { id: number; date: string; waist: number|null; chest: number|null; right_arm: number|null; left_arm: number|null; right_leg: number|null; left_leg: number|null };
@@ -109,7 +106,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
       const res = await apiFetch('/api/bodyweight', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ weight, date: localDateStr(new Date()) }),
+        body: JSON.stringify({ weight, date: toLocalDateStr(new Date()) }),
       });
       if (res.ok) {
         const entry = await res.json();
@@ -167,7 +164,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
       const res = await apiFetch('/api/measurements', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ waist, chest, right_arm, left_arm, right_leg, left_leg, date: localDateStr(new Date()) }),
+        body: JSON.stringify({ waist, chest, right_arm, left_arm, right_leg, left_leg, date: toLocalDateStr(new Date()) }),
       });
       if (res.ok) {
         const entry = await res.json();

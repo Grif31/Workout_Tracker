@@ -16,10 +16,9 @@ import { apiFetch } from '../../utils/api';
 import { ProfileStackParamsList } from '../../navigation/types';
 import { GREEK_RANK_COLORS, GREEK_RANKS } from '../../constants/greekRanks';
 import ProfileAvatarFrame from '../../components/ProfileAvatarFrame';
+import { GREEK_RANK_CACHED_KEY } from '../../constants/storageKeys';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'GreekRank'>;
-
-const GREEK_RANK_CACHED_KEY = 'greek_rank_cached';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CIRCLE_SIZE = 88;

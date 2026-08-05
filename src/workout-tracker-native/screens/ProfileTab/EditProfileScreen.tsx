@@ -23,6 +23,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
 import { apiFetch, resolveMediaUrl } from '../../utils/api';
+import { toLocalDateStr } from '../../utils/date';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'EditProfile'>;
 
@@ -88,9 +89,7 @@ export default function EditProfileScreen({ navigation }: Props) {
         ? parseInt(heightFt || '0') * 12 + parseFloat(heightIn || '0')
         : null;
 
-    const birthDateIso = birthDate
-      ? `${birthDate.getFullYear()}-${String(birthDate.getMonth() + 1).padStart(2, '0')}-${String(birthDate.getDate()).padStart(2, '0')}`
-      : null;
+    const birthDateIso = birthDate ? toLocalDateStr(birthDate) : null;
 
     setSaving(true);
     try {

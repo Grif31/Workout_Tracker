@@ -21,7 +21,7 @@ import { ExerciseDetailParams } from '../../navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { toDisplayWeight, toDisplayVolume, convertWeight, WeightUnit } from 'utils/units';
+import { toDisplayWeight, toDisplayVolume, convertWeight, WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayPace } from 'utils/units';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import { SCORE_RANK_COLORS } from '../../constants/strengthRanks';
 import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModal';
@@ -62,6 +62,7 @@ type HistorySession = {
   sets: { reps: number; weight: number }[];
   best1rm: number;
   bestWeight: number;
+  volume: number;
   notes?: string;
 };
 
@@ -269,21 +270,15 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
       }
 
       setExerciseType('strength');
-      let maxVolume = 0;
-      const sessions: HistorySession[] = (data.history ?? []).map((item: any) => {
-        (item.sets ?? []).forEach((s: { reps: number; weight: number }) => {
-          const vol = (s.reps || 0) * (s.weight || 0);
-          if (vol > maxVolume) maxVolume = vol;
-        });
-        return {
-          date: item.date,
-          workoutName: item.workout_name || 'Workout',
-          sets: item.sets ?? [],
-          best1rm: item.best_1rm ?? 0,
-          bestWeight: item.best_set?.weight ?? 0,
-          notes: item.notes || undefined,
-        };
-      });
+      const sessions: HistorySession[] = (data.history ?? []).map((item: any) => ({
+        date: item.date,
+        workoutName: item.workout_name || 'Workout',
+        sets: item.sets ?? [],
+        best1rm: item.best_1rm ?? 0,
+        bestWeight: item.best_set?.weight ?? 0,
+        volume: item.volume ?? 0,
+        notes: item.notes || undefined,
+      }));
 
       setHistorySessions(sessions);
       setStats({
@@ -293,7 +288,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         totalSets: data.totals?.total_sets ?? 0,
         totalReps: data.totals?.total_reps ?? 0,
         workoutCount: data.totals?.total_workouts ?? 0,
-        maxVolume,
+        maxVolume: data.personal_bests?.max_set_volume ?? 0,
       });
     } catch {
     } finally {
@@ -311,8 +306,6 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     })();
     const chrono = [...historySessions].reverse();
     const inRange = chrono.filter(s => !cutoff || new Date(s.date) >= cutoff);
-    const sessionVolume = (s: HistorySession) =>
-      s.sets.reduce((sum, st) => sum + (st.reps || 0) * (st.weight || 0), 0);
 
     const buildPoints = (items: HistorySession[], getter: (s: HistorySession) => number): ChartPoint[] => {
       const pts = items
@@ -338,11 +331,11 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     setHasChartData({
       oneRm: chrono.filter(s => s.best1rm > 0).length >= 2,
       maxW: chrono.filter(s => s.bestWeight > 0).length >= 2,
-      vol: chrono.filter(s => sessionVolume(s) > 0).length >= 2,
+      vol: chrono.filter(s => s.volume > 0).length >= 2,
     });
     setChart1RM(buildPoints(inRange, s => s.best1rm));
     setChartMaxWeight(buildPoints(inRange, s => s.bestWeight));
-    setChartVolume(buildPoints(inRange, sessionVolume));
+    setChartVolume(buildPoints(inRange, s => s.volume));
   }, [historySessions, chartRange, weightUnit]);
 
   useEffect(() => {
@@ -370,7 +363,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.getItem(`gps_distance_unit_${user.id}`).then(v => {
+    AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user.id}`).then(v => {
       setDistanceUnit(v === 'km' ? 'km' : 'mi');
     });
   }, [user?.id]);
@@ -558,8 +551,8 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     // cardioStats comes from the backend always normalized to km/min-per-km —
     // convert to the user's preferred unit before display.
     const { total_distance, total_duration, session_count, avg_pace } = cardioStats;
-    const distDisplay = distanceUnit === 'mi' ? total_distance * 0.621371 : total_distance;
-    const paceDisplay = avg_pace != null ? (distanceUnit === 'mi' ? avg_pace * 1.60934 : avg_pace) : null;
+    const distDisplay = toDisplayDistance(total_distance, distanceUnit);
+    const paceDisplay = avg_pace != null ? toDisplayPace(avg_pace, distanceUnit) : null;
     return (
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>

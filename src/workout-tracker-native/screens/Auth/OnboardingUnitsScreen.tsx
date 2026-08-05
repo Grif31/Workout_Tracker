@@ -10,6 +10,7 @@ import { AUTH } from '../../theme/authColors';
 import { apiFetch } from '../../utils/api';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
+import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
 
 type Props = NativeStackScreenProps<OnboardingStackParamsList, 'OnboardingUnits'>;
 
@@ -21,7 +22,7 @@ export default function OnboardingUnitsScreen({ navigation }: Props) {
 
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.getItem(`gps_distance_unit_${user.id}`).then(v => {
+    AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user.id}`).then(v => {
       if (v === 'km') setDistanceIsMi(false);
     });
   }, [user?.id]);
@@ -37,7 +38,7 @@ export default function OnboardingUnitsScreen({ navigation }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ weight_unit: weightUnit }),
       });
-      if (user?.id) await AsyncStorage.setItem(`gps_distance_unit_${user.id}`, distanceUnit);
+      if (user?.id) await AsyncStorage.setItem(`${GPS_DISTANCE_UNIT_KEY}_${user.id}`, distanceUnit);
     } catch {
       // best-effort — the app-wide defaults still work fine if this fails
     } finally {

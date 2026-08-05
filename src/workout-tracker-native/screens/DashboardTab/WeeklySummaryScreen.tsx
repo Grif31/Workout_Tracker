@@ -19,6 +19,8 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
 import { fmtHold, RPE_KEY } from '../../components/workout/types';
+import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
+import { toLocalDateStr } from '../../utils/date';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import WeeklySummaryShareCard from '../../components/WeeklySummaryShareCard';
 
@@ -75,14 +77,10 @@ function parseLocalDate(iso: string): Date {
   return new Date(y, m - 1, d);
 }
 
-function toIsoDateStr(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 function addDaysStr(iso: string, days: number): string {
   const d = parseLocalDate(iso);
   d.setDate(d.getDate() + days);
-  return toIsoDateStr(d);
+  return toLocalDateStr(d);
 }
 
 function fmtDateRange(startIso: string, endIsoExclusive: string): string {
@@ -117,7 +115,7 @@ function formatPrValue(
   const ctx = pr.weight_context != null && pr.weight_context >= 0 ? pr.weight_context : null;
   // best_time/best_distance store their distance-flavored fields in km — convert
   // to the user's preferred unit, matching the rest of Weekly Summary's distance display.
-  const toDist = (km: number) => (distanceUnit === 'mi' ? km * 0.621371 : km);
+  const toDist = (km: number) => toDisplayDistance(km, distanceUnit);
   switch (pr.pr_type) {
     case 'max_weight':
       return `${pr.value} ${weightUnit}`;
@@ -181,7 +179,7 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.multiGet([`workout_weekly_goal_${user.id}`, `${RPE_KEY}_${user.id}`, `gps_distance_unit_${user.id}`]).then(pairs => {
+    AsyncStorage.multiGet([`workout_weekly_goal_${user.id}`, `${RPE_KEY}_${user.id}`, `${GPS_DISTANCE_UNIT_KEY}_${user.id}`]).then(pairs => {
       const [goalRaw, rpeRaw, distUnitRaw] = pairs.map(p => p[1]);
       const goal = goalRaw ? parseInt(goalRaw, 10) : 3;
       setWeeklyGoal(Number.isFinite(goal) && goal > 0 ? goal : 3);
@@ -471,7 +469,7 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
                   {data.distance_km != null && (
                     <View style={[styles.statBox, styles.statBoxWrap]}>
                       <Text style={styles.statValue}>
-                        {(distanceUnit === 'mi' ? data.distance_km * 0.621371 : data.distance_km).toFixed(2)}
+                        {toDisplayDistance(data.distance_km, distanceUnit).toFixed(2)}
                       </Text>
                       <Text style={styles.statLabel}>{distanceUnit}</Text>
                     </View>
@@ -607,13 +605,13 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
                         <Text style={styles.milText}>
                           {data.most_improved_cardio.pr_type === 'best_time'
                             ? `${data.most_improved_cardio.milestone_label} time down to ${fmtTime(data.most_improved_cardio.this_best)}`
-                            : `${data.most_improved_cardio.milestone_label} distance up to ${(distanceUnit === 'mi' ? data.most_improved_cardio.this_best * 0.621371 : data.most_improved_cardio.this_best).toFixed(2)}${distanceUnit}`}
+                            : `${data.most_improved_cardio.milestone_label} distance up to ${toDisplayDistance(data.most_improved_cardio.this_best, distanceUnit).toFixed(2)}${distanceUnit}`}
                         </Text>
                         <View style={styles.milGainBadge}>
                           <Text style={styles.milGainText}>
                             {data.most_improved_cardio.pr_type === 'best_time'
                               ? `-${fmtTime(data.most_improved_cardio.gain)}`
-                              : `+${(distanceUnit === 'mi' ? data.most_improved_cardio.gain * 0.621371 : data.most_improved_cardio.gain).toFixed(2)}${distanceUnit}`}
+                              : `+${toDisplayDistance(data.most_improved_cardio.gain, distanceUnit).toFixed(2)}${distanceUnit}`}
                           </Text>
                         </View>
                       </View>
@@ -663,7 +661,7 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
           maximumDate={new Date()}
           onChange={(_event: any, date?: Date) => {
             setPickerVisible(false);
-            if (date) goToWeek(toIsoDateStr(date));
+            if (date) goToWeek(toLocalDateStr(date));
           }}
         />
       )}
@@ -686,7 +684,7 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
               textColor={colors.textPrimary}
               accentColor={colors.accent}
               onChange={(_event: any, date?: Date) => {
-                if (date) { goToWeek(toIsoDateStr(date)); setPickerVisible(false); }
+                if (date) { goToWeek(toLocalDateStr(date)); setPickerVisible(false); }
               }}
             />
           </Pressable>

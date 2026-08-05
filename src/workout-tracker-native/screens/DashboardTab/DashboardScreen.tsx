@@ -12,6 +12,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { toDisplayVolume, WeightUnit } from 'utils/units';
+import { toLocalDateStr } from 'utils/date';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from '../../utils/api';
@@ -38,10 +39,6 @@ const GREETINGS = [
   'Crush it today', 'Train hard today', 'Make today count',
   'Stronger every day', 'Time to sweat', 'Bring your best',
 ];
-
-function toLocalDateStr(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 function getDailyGreeting() {
   const key = toLocalDateStr(new Date());

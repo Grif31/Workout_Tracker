@@ -35,6 +35,8 @@ import { DashboardStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { estimateCalories } from '../../utils/cardioCalories';
+import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
+import { toLocalDateStr } from '../../utils/date';
 
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'GPSCardio'>;
@@ -161,7 +163,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
   const baseElapsedRef = useRef(0);
   const segmentStartRef = useRef<Date | null>(null);
 
-  const displayDistance = distanceUnit === 'mi' ? distanceKm * 0.621371 : distanceKm;
+  const displayDistance = toDisplayDistance(distanceKm, distanceUnit);
   const pace = displayDistance > 0 ? elapsedSec / 60 / displayDistance : 0;
 
   const computeElapsed = () =>
@@ -259,7 +261,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
     // then offer to restore the checkpointed run
     cleanupOrphanedTracking();
     offerCheckpointRestore();
-    AsyncStorage.getItem(`gps_distance_unit_${user?.id}`).then(v => {
+    AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user?.id}`).then(v => {
       setDistanceUnit(v === 'km' ? 'km' : 'mi');
     });
     (async () => {
@@ -406,7 +408,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
     const avgPace = displayDistance > 0 ? durationMin / displayDistance : null;
 
     const now = new Date();
-    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const dateStr = toLocalDateStr(now);
     const exerciseTemplateId = await resolveCardioTemplateId(activity, user?.id);
 
     const body = {

@@ -1,7 +1,7 @@
 ﻿import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { mockFetchSequence, createMockNavigation, createMockRoute } from './testUtils';
-import TemplateDetailScreen from '../screens/ExercisesTab/TemplateDetailScreen';
+import TemplateDetailScreen from '../screens/TrainingTab/TemplateDetailScreen';
 
 jest.mock('navigation/types', () => ({}), { virtual: true });
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));

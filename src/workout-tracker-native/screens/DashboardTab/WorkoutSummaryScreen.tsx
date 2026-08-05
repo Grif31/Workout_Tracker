@@ -22,6 +22,7 @@ import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
 import { DashboardStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
+import { GREEK_RANK_CACHED_KEY } from '../../constants/storageKeys';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WorkoutSummary'>;
 
@@ -74,7 +75,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   }, [filteredPrs]);
 
   useEffect(() => {
-    AsyncStorage.multiGet(['greek_rank_cached', `profile_frame_rank_${user?.id}`]).then(pairs => {
+    AsyncStorage.multiGet([GREEK_RANK_CACHED_KEY, `profile_frame_rank_${user?.id}`]).then(pairs => {
       const [rankRaw, frameRaw] = pairs.map(p => p[1]);
       if (rankRaw) setGreekRank(rankRaw);
       if (frameRaw) setSelectedFrame(frameRaw);

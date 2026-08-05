@@ -16,6 +16,7 @@ import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
 import { apiFetch } from '../../utils/api';
 import { fmtHold } from '../../components/workout/types';
+import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'PersonalRecords'>;
 
@@ -73,7 +74,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
 
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.getItem(`gps_distance_unit_${user.id}`).then(v => {
+    AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user.id}`).then(v => {
       setDistanceUnit(v === 'km' ? 'km' : 'mi');
     });
   }, [user?.id]);
@@ -231,7 +232,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
 
   // distance_km is always true km — convert to the user's preferred unit for display.
   const fmtDistance = (km: number) => {
-    const val = distanceUnit === 'mi' ? km * 0.621371 : km;
+    const val = toDisplayDistance(km, distanceUnit);
     return `${val.toFixed(2)} ${distanceUnit}`;
   };
 

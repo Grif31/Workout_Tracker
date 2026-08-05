@@ -13,12 +13,10 @@ import { AUTH } from '../../theme/authColors';
 import { apiFetch } from '../../utils/api';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
+import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
+import { toLocalDateStr } from '../../utils/date';
 
 type Props = NativeStackScreenProps<OnboardingStackParamsList, 'OnboardingPersonalInfo'>;
-
-function localDateStr(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 export default function OnboardingPersonalInfoScreen({ navigation }: Props) {
   const { user, updateUser } = useAuth();
@@ -37,7 +35,7 @@ export default function OnboardingPersonalInfoScreen({ navigation }: Props) {
 
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.getItem(`gps_distance_unit_${user.id}`).then(v => {
+    AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user.id}`).then(v => {
       setUseMetricHeight(v === 'km');
     });
   }, [user?.id]);
@@ -49,7 +47,7 @@ export default function OnboardingPersonalInfoScreen({ navigation }: Props) {
     try {
       const updates: Record<string, unknown> = {};
       if (name.trim()) updates.name = name.trim();
-      if (birthDate) updates.birth_date = localDateStr(birthDate);
+      if (birthDate) updates.birth_date = toLocalDateStr(birthDate);
       if (useMetricHeight && heightCm) {
         updates.height = parseFloat(heightCm) / 2.54;
       } else if (!useMetricHeight && (heightFt || heightIn)) {
@@ -70,7 +68,7 @@ export default function OnboardingPersonalInfoScreen({ navigation }: Props) {
         const res = await apiFetch('/api/bodyweight', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ weight: parsedWeight, date: localDateStr(new Date()) }),
+          body: JSON.stringify({ weight: parsedWeight, date: toLocalDateStr(new Date()) }),
         });
         if (res.ok) await updateUser({ bodyweight: parsedWeight });
       }

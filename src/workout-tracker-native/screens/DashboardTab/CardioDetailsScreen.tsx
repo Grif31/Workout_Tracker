@@ -15,6 +15,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { apiFetch } from '../../utils/api';
 import { estimateCalories } from '../../utils/cardioCalories';
 import { fmtDuration, fmtPace } from '../../utils/cardioFormat';
+import { GPS_DISTANCE_UNIT_KEY, toKm } from '../../utils/units';
 import { captureAndShare } from '../../utils/shareCapture';
 import CardioShareCard from '../../components/share/CardioShareCard';
 import { spacing, radius } from '../../theme/spacing';
@@ -71,7 +72,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
   const [renameText, setRenameText] = useState('');
 
   useEffect(() => {
-    AsyncStorage.getItem(`gps_distance_unit_${user?.id}`).then(v => {
+    AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user?.id}`).then(v => {
       setDistanceUnit(v === 'km' ? 'km' : 'mi');
     });
   }, []);
@@ -102,7 +103,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
     // set.distance is stored in whatever unit was active when logged (distance_unit) —
     // must convert to true km before deriving speed, or a miles-preference user's speed
     // (and therefore the MET-based calorie estimate) comes out too low.
-    const distKm = set?.distance_unit === 'mi' ? dist * 1.60934 : dist;
+    const distKm = toKm(dist, set?.distance_unit === 'mi' ? 'mi' : 'km');
     const speedKmH = dur > 0 && distKm > 0 ? distKm / (dur / 60) : 0;
     const kcal = estimateCalories(ex?.name ?? '', dur, weightKg, speedKmH);
 

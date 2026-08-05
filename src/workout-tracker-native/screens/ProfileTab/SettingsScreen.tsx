@@ -33,11 +33,11 @@ import {
 import { HEALTH_SYNC_KEY, requestHealthKitPermission } from '../../utils/healthKit';
 import { REST_TIMER_KEY } from '../../components/workout/types';
 import { requestHealthConnectPermission } from '../../utils/healthConnect';
+import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
 
 // Reads the live app.config.js version so this never drifts out of sync again.
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 const REST_TIMER_PRESETS = [30, 45, 60, 90, 120, 150, 180, 240, 300];
-const GPS_DISTANCE_KEY = 'gps_distance_unit';
 const REMINDERS_KEY = 'workout_reminders_enabled';
 const REST_ALERTS_KEY = 'rest_timer_alerts_enabled';
 const LIVE_NOTIF_KEY = 'live_workout_notif_enabled';
@@ -53,7 +53,7 @@ export default function SettingsScreen({ navigation }: Props) {
   const uid = user?.id;
   const perUserRestTimerKey    = `${REST_TIMER_KEY}_${uid}`;
   const perUserHealthSyncKey   = `${HEALTH_SYNC_KEY}_${uid}`;
-  const perUserGpsKey          = `gps_distance_unit_${uid}`;
+  const perUserGpsKey          = `${GPS_DISTANCE_UNIT_KEY}_${uid}`;
   const perUserRemindersKey    = `workout_reminders_enabled_${uid}`;
   const perUserReminderHourKey = `workout_reminder_hour_${uid}`;
   const perUserReminderMinKey  = `workout_reminder_minute_${uid}`;
