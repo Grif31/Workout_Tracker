@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.2 (2026-08-05)
+
+### New: Share Your Strength Score
+- Share your current Strength Score and rank as an image, right from the Strength Score screen.
+- Ranking up now comes with its own shareable "Rank Up!" card.
+
+### Improved: Performance
+- Workout logging feels smoother — typing in a set no longer redraws every other exercise in the workout.
+- Dashboard, Exercises, and related screens load faster by showing your cached data instantly while refreshing in the background.
+
+### Bug Fixes
+- Fixed workout volume being undercounted for bodyweight and weighted-bodyweight exercises (Pull-ups, Dips, etc.) — past workouts have been recalculated.
+- Fixed a potential error when scheduling rest-timer or workout reminders with notifications disabled.
+
 ## 1.1.1 (2026-07-31)
 
 ### Redesigned: Exercise Details
