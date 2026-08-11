@@ -9,7 +9,6 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Platform,
-  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +19,7 @@ import SocialAuthButtons from '../../components/SocialAuthButtons';
 import { useSocialAuth } from '../../hooks/useSocialAuth';
 import { AUTH } from '../../theme/authColors';
 import { apiFetch } from '../../utils/api';
+import { openExternalLink } from '../../utils/links';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 
@@ -184,11 +184,11 @@ export default function SignupScreen({ navigation }: Props) {
           {/* Disclaimer */}
           <Text style={styles.disclaimer}>
             By creating an account, you agree to our{' '}
-            <Text style={styles.disclaimerLink} onPress={() => Linking.openURL(`${process.env.EXPO_PUBLIC_API_URL}/terms`)}>
+            <Text style={styles.disclaimerLink} onPress={() => openExternalLink('https://aretefitnessapp.com/terms')}>
               Terms of Service
             </Text>
             {' '}and{' '}
-            <Text style={styles.disclaimerLink} onPress={() => Linking.openURL(`${process.env.EXPO_PUBLIC_API_URL}/privacy`)}>
+            <Text style={styles.disclaimerLink} onPress={() => openExternalLink('https://aretefitnessapp.com/privacy')}>
               Privacy Policy
             </Text>
           </Text>

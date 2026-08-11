@@ -8,7 +8,6 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
-  Linking,
   Modal,
   Platform,
 } from 'react-native';
@@ -34,6 +33,7 @@ import { HEALTH_SYNC_KEY, requestHealthKitPermission } from '../../utils/healthK
 import { REST_TIMER_KEY } from '../../components/workout/types';
 import { requestHealthConnectPermission } from '../../utils/healthConnect';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
+import { openExternalLink } from '../../utils/links';
 
 // Reads the live app.config.js version so this never drifts out of sync again.
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
@@ -446,7 +446,7 @@ export default function SettingsScreen({ navigation }: Props) {
 
         <TouchableOpacity
           style={styles.row}
-          onPress={() => Linking.openURL('https://aretefitnessapp.com/terms')}
+          onPress={() => openExternalLink('https://aretefitnessapp.com/terms')}
         >
           <View style={styles.rowLeft}>
             <Ionicons name="document-text-outline" size={20} color={colors.textSecondary} />
@@ -459,7 +459,7 @@ export default function SettingsScreen({ navigation }: Props) {
 
         <TouchableOpacity
           style={styles.row}
-          onPress={() => Linking.openURL('https://aretefitnessapp.com/privacy')}
+          onPress={() => openExternalLink('https://aretefitnessapp.com/privacy')}
         >
           <View style={styles.rowLeft}>
             <Ionicons name="shield-checkmark-outline" size={20} color={colors.textSecondary} />
@@ -472,7 +472,7 @@ export default function SettingsScreen({ navigation }: Props) {
 
         <TouchableOpacity
           style={styles.row}
-          onPress={() => Linking.openURL('mailto:support@aretefitnessapp.com')}
+          onPress={() => openExternalLink('mailto:support@aretefitnessapp.com')}
         >
           <View style={styles.rowLeft}>
             <Ionicons name="mail-outline" size={20} color={colors.textSecondary} />
