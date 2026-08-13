@@ -104,7 +104,12 @@ jest.mock('./context/WorkoutSessionContext', () => ({
 
 jest.mock('react-native-svg', () => {
   const { View } = require('react-native');
-  return { __esModule: true, default: View, Svg: View, Path: View, Circle: View };
+  return {
+    __esModule: true,
+    default: View, Svg: View, Path: View, Circle: View, G: View,
+    Rect: View, Line: View, Ellipse: View, Polygon: View, Polyline: View,
+    Defs: View, LinearGradient: View, Stop: View, Text: View, TSpan: View,
+  };
 });
 
 jest.mock('react-native-body-highlighter', () => ({

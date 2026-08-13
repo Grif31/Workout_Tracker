@@ -118,6 +118,8 @@ export type ProfileStackParamsList = {
     EditWorkout: {prefill?: PrefillWorkoutData, workoutId?:number, editMode?: boolean}
     Measurements: undefined;
     PersonalRecords: undefined;
+    PRDashboard: undefined;
+    PRProgression: { exerciseTemplateId: number; exerciseName: string };
     GreekRank: undefined;
 };
 

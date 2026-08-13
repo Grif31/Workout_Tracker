@@ -7,7 +7,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LaurelBranch } from '../../components/LaurelWreath';
-import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
+import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
@@ -307,6 +307,17 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
         <View style={{ width: 40 }} />
       </View>
 
+      {/* PR Dashboard entry */}
+      <TouchableOpacity
+        style={styles.dashboardBanner}
+        onPress={() => navigation.navigate('PRDashboard')}
+        activeOpacity={0.8}
+      >
+        <LaurelBranch height={16} color={PR_GOLD_TEXT} />
+        <Text style={styles.dashboardBannerText}>PR Dashboard — recent PRs, streaks & records</Text>
+        <Ionicons name="chevron-forward" size={16} color={PR_GOLD_TEXT} />
+      </TouchableOpacity>
+
       {/* Tab bar */}
       <View style={[styles.tabBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         {TABS.map(tab => {
@@ -548,6 +559,24 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   backBtn: { width: 40, alignItems: 'flex-start' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary },
+  dashboardBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: PR_GOLD_BG,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: 10,
+  },
+  dashboardBannerText: {
+    flex: 1,
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+    color: PR_GOLD_TEXT,
+  },
   tabBar: {
     flexDirection: 'row',
     borderBottomWidth: 1,

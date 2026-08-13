@@ -11,6 +11,8 @@ import WorkoutDetails from '../screens/ProfileTab/WorkoutDetails';
 import CardioDetailsScreen from '../screens/DashboardTab/CardioDetailsScreen';
 import MeasurementsScreen from '../screens/ProfileTab/MeasurementsScreen';
 import PersonalRecordsScreen from '../screens/ProfileTab/PersonalRecordsScreen';
+import PRDashboardScreen from '../screens/ProfileTab/PRDashboardScreen';
+import PRProgressionScreen from '../screens/ProfileTab/PRProgressionScreen';
 import GreekRankScreen from '../screens/ProfileTab/GreekRankScreen';
 import { useAuth } from 'context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -34,6 +36,8 @@ export function ProfileStack() {
       <Stack.Screen name="EditWorkout" component={EditWorkoutScreen} />
       <Stack.Screen name="Measurements" component={MeasurementsScreen} />
       <Stack.Screen name="PersonalRecords" component={PersonalRecordsScreen} />
+      <Stack.Screen name="PRDashboard" component={PRDashboardScreen} />
+      <Stack.Screen name="PRProgression" component={PRProgressionScreen} />
       <Stack.Screen name="GreekRank" component={GreekRankScreen} />
     </Stack.Navigator>
   );
