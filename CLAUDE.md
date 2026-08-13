@@ -218,6 +218,8 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 | `workout_repeat_last_set_${uid}` | false | Add Set pre-fills the new set with the last set's values |
 | `profile_frame_rank_${uid}` | 'Neophyte' | Selected avatar frame rank name |
 | `@pr_pins_${uid}` | — | JSON array of 3 pinned PR slots on Profile (Pin\|null)[] |
+| `pr_dashboard_layout_${uid}` | all visible, default order | PR Dashboard section order + visibility (JSON {key, visible}[]; keys: hero/records/stalled/progression) |
+| `pr_dashboard_pins_${uid}` | — | Exercises pinned to PR Dashboard's Pinned Progression section (JSON {id, name}[], max 6; toggled from PRProgressionScreen) |
 | `coach_profile_${uid}` | — | Coach personalization JSON (goal/equipment/schedule/injuries) |
 | `strength_score_last_tier_${uid}` | — | Last celebrated overall Strength Score tier index (`STRENGTH_TIERS` ordinal), used to detect rank-up moments across app opens |
 | `weekly_summary_last_shown_${uid}` | — | Monday date-string of the last week the Weekly Summary auto-popup was checked/shown for, so it only appears once per week |
@@ -260,6 +262,7 @@ return jsonify({ 'message': 'error reason' }), 400   # client error
 - **Set types:** `'N'` (normal), `'W'` (warm-up), `'D'` (drop set), `'F'` (failure)
 - **PR types (strength):** `max_weight`, `estimated_1rm`, `max_reps` (per weight, `weight_context` = the weight) — never surface `estimated_1rm` as a PR label to users
 - **PR types (cardio):** `best_time` (`weight_context` = distance milestone in km) and `best_distance` (`weight_context` = duration milestone in minutes)
+- **PR history:** `PersonalRecord` rows are upserted in place (current bests only). `PREvent` is the append-only history — one row per PR moment with `previous_value` and `workout_id`; written by every upsert branch in `workout_routes.py` and rebuilt by `_recompute_prs_for_templates`'s chronological replay on workout edit/delete. `improved_by` is sign-normalized (positive = better; `best_time` improves downward). Backfill for pre-existing data: `flask backfill-pr-events --apply`.
 - **Cardio sets** have: `cardio_duration` (minutes), `distance`, `distance_unit` ('km'|'mi'), `intensity`
 - **GPS cardio exercises** also store: `route_polyline` (encoded Google polyline string), decoded with `@mapbox/polyline`
 - **`workout_type`** — computed field in `Workout.to_dict()`, derived from `exercise_type` on exercises; no DB column. Cardio workouts also get `cardio_duration`, `distance`, `distance_unit` in the dict.

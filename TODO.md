@@ -673,27 +673,30 @@ Check off items as you complete them.
 ## 🏆 12. PR Dashboard
 > A dedicated screen for viewing personal records — recent PRs across all exercises plus workout-level records (best single-workout volume, best single-workout rep count) that aren't tracked as per-exercise PRs today.
 
-- [ ] **Backend — workout-level records**
-  - [ ] Add a query/endpoint (e.g. `GET /api/personal-records/workout-bests`) returning the user's highest `Workout.volume` and highest total-reps-in-a-workout (sum of `reps` across all sets in one workout), each with the workout id/name/date
-  - [ ] Decide whether these are stored (a `workout_id` + type row, similar to `PersonalRecord`) or computed on read — computed is simpler and avoids a migration if query cost is acceptable
+- [x] **Backend — PR history foundation** (built 2026-08-11; design differs from the original sketch below because `PersonalRecord` rows are upserted in place — beaten PRs were never kept, so a history table was required)
+  - [x] `PREvent` append-only table (`models.py` + migration `j8k9l0m1n2o3`): one row per PR moment with `previous_value` (beaten value, null on first PR) and a direct `workout_id` FK (the `set_id → Set → Exercise → Workout` chain breaks on set deletion — `SET NULL`)
+  - [x] Every PR upsert branch in `workout_routes.py` (strength / cardio / duration) also appends a `PREvent`
+  - [x] `_recompute_prs_for_templates` rewritten as a chronological replay through the same upsert helpers, so edit/delete rebuilds both current PRs and the event chain consistently
+  - [x] `flask backfill-pr-events` CLI command (app.py) — replays all workouts for existing users (dry-run by default, `--apply` to write, `--force` to rebuild); **must be run against prod after deploy** or existing users see an empty dashboard
 
-- [ ] **Backend — recent PRs feed**
-  - [ ] Extend or reuse `GET /api/personal-records` to support "recent" ordering (already has a `created_at`/date on each record — confirm and sort by it) so the dashboard can show a chronological feed, not just current bests per exercise
-  - [ ] Include the source workout on each PR — `PersonalRecord.set_id` → `Set` → `Exercise` → `Workout` already links back; join it so each PR row carries `workout_id`, workout name, and date without an extra round trip
-  - [ ] Add a "days since last PR" value per exercise (`achieved_at` on the most recent `PersonalRecord` row for that `exercise_template_id`) — surfaces lifts that have stalled
-  - [ ] Add a PR streak stat — consecutive workouts (or weeks) with at least one PR logged, distinct from the existing workout-attendance streak; compute from `PersonalRecord.achieved_at` grouped by workout/week
+- [x] **Backend — dashboard + history endpoints** (`personal_record_routes.py`)
+  - [x] `GET /api/personal-records/dashboard` — one round trip: paginated `recent_events` feed (with `improved_by` sign-normalized so cardio best_time deltas read positive; `estimated_1rm` excluded per the never-surface-as-PR rule; `?type=weight|reps|time|distance` filter), `workout_bests` (best single-workout volume + total reps, computed on read — no migration), and `stats` (PRs this month, PR streak = consecutive weeks with ≥1 PR, per-exercise days-since-last-PR for the 10 most-trained lifts)
+  - [x] `GET /api/personal-records/history?exercise_template_id=&pr_type=` — ascending progression rows for the over-time tables/sparklines; `estimated_1rm` allowed here (as an "Est. 1RM trend" metric, never labeled a PR)
 
-- [ ] **`PRDashboardScreen`** (new screen, likely `screens/ProfileTab/` alongside `PersonalRecordsScreen.tsx`, or a tab within it)
-  - [ ] "Recent PRs" list — chronological feed of PR events (exercise name, PR type, value, date), reusing `PR_TYPE_LABELS` conventions from `WorkoutSummaryScreen.tsx`
-  - [ ] Each PR card taps through to the workout it happened in (`WorkoutDetails`) using the joined `workout_id`
-  - [ ] "Workout Records" section — best single-workout volume, best single-workout rep count (card each, tap to view that workout in `WorkoutDetails`)
-  - [ ] Entry point from `ProfileScreen` (near or merged with existing Personal Records section)
-  - [ ] Momentum context instead of a flat list — e.g. "3 PRs this month" count and/or a small trend line per exercise, so the screen shows progress, not just a log
-  - [ ] PR streak badge and per-exercise "X days since last PR" shown alongside the recent feed
-  - [ ] Filter "Recent PRs" by type via chips (Weight / Reps / Time / Distance), mirroring the muscle-group chip pattern in `ExerciseList.tsx`
-  - [ ] "Share PR" button on a PR card — reuse the `react-native-view-shot` + `expo-sharing` capture flow already built for `WorkoutShareCard`
+- [x] **`PRDashboardScreen`** (`screens/ProfileTab/PRDashboardScreen.tsx`, built 2026-08-12)
+  - [x] "Recent PRs" feed of `PREvent` rows — exercise name, PR label, value **with delta** ("245 lbs ▲ +20 lbs"; cardio deltas render via the backend's sign-normalized `improved_by`), paginated with infinite scroll
+  - [x] Each PR card taps through to `WorkoutDetails` (ProfileStack has its own copy — no cross-tab hop needed)
+  - [x] "Workout Records" section — best single-workout volume + best rep count cards, tap to view the workout
+  - [x] Entry point: gold banner at the top of `PersonalRecordsScreen` (kept as the "all current bests" reference view)
+  - [x] Hero stat row: PRs this month · weekly PR streak (laurels) · total PRs
+  - [x] "Time Since Last PR" section — days-since-last-PR rows for the 10 most-trained lifts, tap → progression view
+  - [x] Filter chips (All / Weight / Reps / Time / Distance)
+  - [x] "Share PR" icon per card → `PRShareCard` (`components/PRShareCard.tsx`, modeled on `WorkoutShareCard`) captured off-screen via the existing `captureAndShare` helper
+  - [x] **`PRProgressionScreen`** (`screens/ProfileTab/PRProgressionScreen.tsx`) — per-exercise PR-over-time **table** (Date | Value | Δ | Workout, newest first, rows tap → workout) + sparkline (react-native-gifted-charts), metric chips (Max Weight / Est. 1RM / Rep Record / Best Time / Best Distance / Longest Hold) and per-weight / per-milestone context chips; shared value/delta formatting in `utils/prFormat.ts`
+  - [x] **Customizable dashboard** — gear icon → customize modal: drag-to-reorder sections (`DraggableList`, RN Animated — Reanimated worklets crash in this app) + eye toggles; persisted per user as `pr_dashboard_layout_${uid}`
+  - [x] **Pinned Progression section** — pin/unpin exercises from `PRProgressionScreen`'s header (max 6, `pr_dashboard_pins_${uid}`, helper in `utils/prPins.ts`); pinned lifts render as tap-through rows on the dashboard
 
-- [ ] **Near-PR hint during logging** (`WorkoutLog.tsx` / `SetRow.tsx`) — while a set is focused, if the entered weight/reps is within ~5% of that exercise's current PR, show a small inline hint (e.g. "5 lbs from your PR"). Reuses the existing `prevSet` ghost-text plumbing in `SetRow.tsx`; surfaces the PR moment while it's still actionable instead of only after saving
+- [x] **Near-PR hint during logging** (built 2026-08-12) — `WorkoutLog` prefetches current max-weight PRs once on open (`GET /api/personal-records`); while a strength set is focused (not warm-up/done/bodyweight), a gold hint renders under the row via `nearPrHint` in `utils/prFormat.ts`: within 5% below PR → "5 lbs from your 250 lbs PR", tie → "Ties your … PR", above → "Beats your … PR!". Threaded `WorkoutLog → ExerciseBlock → SetRow` as a focused-set-only prop so ExerciseBlock's `React.memo` still skips untouched exercises
 
 ---
 
