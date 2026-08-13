@@ -37,6 +37,8 @@ type Props = {
   onOpenMenu: (exIndex: number, e: any) => void;
   onUpdateCardioField: (exIndex: number, setIdx: number, field: string, value: string) => void;
   onRegisterInput?: (exIndex: number, setIdx: number, field: 'reps' | 'weight', ref: any) => void;
+  /** Near-PR hint for the currently focused set in this exercise, if any */
+  prHint?: { setIdx: number; text: string } | null;
 };
 
 function ExerciseBlock({
@@ -60,6 +62,7 @@ function ExerciseBlock({
   onOpenMenu,
   onUpdateCardioField,
   onRegisterInput,
+  prHint,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -195,6 +198,7 @@ function ExerciseBlock({
                       onOpenRpePicker={() => onOpenRpePicker(exIndex, setIndex)}
                       onDelete={() => onDeleteSet(exIndex, setIndex)}
                       registerInputRef={(field, ref) => onRegisterInput?.(exIndex, setIndex, field, ref)}
+                      prHint={prHint?.setIdx === setIndex ? prHint.text : null}
                     />
                   );
                 })}

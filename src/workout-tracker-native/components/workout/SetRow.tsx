@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
+import { PR_GOLD_TEXT } from '../../constants/prColors';
 import { type WorkoutSet, type PreviousSet, type SetType, colStyles } from './types';
 
 type Props = {
@@ -26,6 +27,8 @@ type Props = {
   onDelete: () => void;
   /** Lets the keyboard toolbar's Next button focus specific inputs */
   registerInputRef?: (field: 'reps' | 'weight', ref: TextInput | null) => void;
+  /** Near-PR hint shown under the row while this set is focused */
+  prHint?: string | null;
 };
 
 function SetRow({
@@ -46,6 +49,7 @@ function SetRow({
   onOpenRpePicker,
   onDelete,
   registerInputRef,
+  prHint,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -72,6 +76,7 @@ function SetRow({
         );
       }}
     >
+      <View>
       <View style={[styles.setRow, isDone && styles.setRowDone]}>
         <TouchableOpacity
           style={[styles.setTypeBadge, colStyles.setType, { borderColor: typeColor }]}
@@ -135,6 +140,13 @@ function SetRow({
           />
         </TouchableOpacity>
       </View>
+      {!!prHint && (
+        <View style={styles.prHintRow}>
+          <Ionicons name="trophy-outline" size={12} color={PR_GOLD_TEXT} />
+          <Text style={styles.prHintText}>{prHint}</Text>
+        </View>
+      )}
+      </View>
     </Swipeable>
   );
 }
@@ -192,6 +204,20 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.md,
     fontWeight: '600',
     color: colors.textPrimary,
+  },
+
+  prHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: -spacing.xs,
+    marginBottom: spacing.sm,
+    paddingHorizontal: 2,
+  },
+  prHintText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '600',
+    color: PR_GOLD_TEXT,
   },
 
   swipeDelete: {

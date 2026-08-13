@@ -54,6 +54,50 @@ describe('WorkoutLog', () => {
     expect(getByText(/cancel|discard/i)).toBeTruthy();
   });
 
+  it('shows a near-PR hint while a set near the max-weight PR is focused', async () => {
+    jest.useRealTimers();
+    (global.fetch as jest.Mock) = jest.fn((url: any) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(
+          String(url).includes('/api/personal-records')
+            ? [{ id: 1, pr_type: 'max_weight', exercise_template_id: 7, value: 250, weight_context: null, achieved_at: '2026-08-01T00:00:00' }]
+            : [],
+        ),
+      }),
+    );
+    const { getAllByPlaceholderText, getByText, queryByText } = render(
+      <WorkoutLog
+        prefill={{
+          name: 'Push Day',
+          notes: '',
+          exercises: [{
+            name: 'Bench Press',
+            exercise_template_id: 7,
+            sets: [{ reps: '5', weight: '', set_type: 'N' }],
+          }],
+        }}
+        onSubmit={jest.fn()}
+        onCancel={jest.fn()}
+      />,
+    );
+    await waitFor(() => expect(getAllByPlaceholderText('—').length).toBeGreaterThanOrEqual(2));
+
+    // [0] = reps input, [1] = weight input for the single set
+    const weightInput = getAllByPlaceholderText('—')[1];
+    fireEvent(weightInput, 'focus');
+    fireEvent.changeText(weightInput, '245');
+    await waitFor(() => expect(getByText('5 lbs from your 250 lbs PR')).toBeTruthy());
+
+    fireEvent.changeText(weightInput, '255');
+    await waitFor(() => expect(getByText('Beats your 250 lbs PR!')).toBeTruthy());
+
+    // Far from the PR — hint disappears
+    fireEvent.changeText(weightInput, '200');
+    await waitFor(() => expect(queryByText(/from your|Beats your|Ties your/)).toBeNull());
+  });
+
   it('keeps the original workout date when editing', () => {
     const { getByText } = render(
       <WorkoutLog

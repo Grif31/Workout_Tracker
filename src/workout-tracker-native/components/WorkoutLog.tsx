@@ -30,6 +30,7 @@ import { PrefillWorkoutData } from './WorkoutDetails';
 import { muscleGroups } from 'constants/muscleGroups';
 import { useWorkoutSession } from '../context/WorkoutSessionContext';
 import { PR_GOLD } from '../constants/prColors';
+import { nearPrHint } from '../utils/prFormat';
 
 import {
   REST_TIMER_KEY,
@@ -166,6 +167,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   vibrateRef.current = vibrateOnComplete;
   const timerPausedRef = useRef(false);
   timerPausedRef.current = timerPaused;
+
+  // Current max-weight PR per exercise template, fetched once on open —
+  // powers the near-PR hint under the focused set row
+  const [maxWeightPrs, setMaxWeightPrs] = useState<Record<number, number>>({});
 
   const [prBanner, setPrBanner] = useState<{ name: string; type: string } | null>(null);
   const prAnim = useRef(new Animated.Value(0)).current;
@@ -887,6 +892,36 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     toggleExMenu(exIndex);
   }, [toggleExMenu]);
 
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await apiFetch('/api/personal-records');
+        if (!res.ok || !alive) return;
+        const rows: { pr_type: string; exercise_template_id?: number; value: number }[] = await res.json();
+        const map: Record<number, number> = {};
+        for (const r of rows) {
+          if (r.pr_type === 'max_weight' && r.exercise_template_id) map[r.exercise_template_id] = r.value;
+        }
+        if (alive) setMaxWeightPrs(map);
+      } catch {}
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  // Hint for the focused set only — warm-ups and completed sets never earn
+  // PRs, and bodyweight/cardio/duration exercises have no max_weight PR
+  const prHint = useMemo(() => {
+    if (!focusedInput) return null;
+    const ex = exercises[focusedInput.exIdx];
+    if (!ex?.exercise_template_id) return null;
+    if (ex.exercise_type === 'cardio' || isDuration(ex) || isBodyweight(ex)) return null;
+    const set = ex.sets[focusedInput.setIdx];
+    if (!set || set.done || set.set_type === 'W') return null;
+    const text = nearPrHint(set.weight, maxWeightPrs[ex.exercise_template_id], weightUnit);
+    return text ? { setIdx: focusedInput.setIdx, exIdx: focusedInput.exIdx, text } : null;
+  }, [focusedInput, exercises, maxWeightPrs, weightUnit]);
+
   // Every prop passed here is now a stable reference for a given
   // showRpe/weightUnit/theme combo, so this itself stays stable across
   // keystrokes — letting ExerciseBlock's React.memo actually skip
@@ -913,12 +948,13 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       onStartRest={startRest}
       onOpenMenu={onOpenExerciseMenu}
       onUpdateCardioField={updateCardioField}
+      prHint={prHint && prHint.exIdx === exIndex ? prHint : null}
     />
   ), [
     showRpe, weightUnit, SET_TYPE_COLORS, updateExerciseNotes, autoFocusNoteIdx,
     cycleSetType, updateSetField, onFocusSetInput, onBlurSetInput, toggleSetDone,
     onOpenRpePicker, deleteSet, addSetToExercise, onRegisterSetInput, startRest,
-    onOpenExerciseMenu, updateCardioField,
+    onOpenExerciseMenu, updateCardioField, prHint,
   ]);
 
   // Stable so WorkoutHeader (React.memo'd) can skip re-rendering on
