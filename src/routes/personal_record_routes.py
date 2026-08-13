@@ -1,6 +1,9 @@
-from flask import Blueprint, jsonify
+from datetime import datetime, timedelta
+
+from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, PersonalRecord, ExerciseTemplate, Set
+from sqlalchemy import func
+from models import db, PersonalRecord, PREvent, ExerciseTemplate, Exercise, Set, Workout
 
 pr_bp = Blueprint('pr_bp', __name__)
 
@@ -38,6 +41,24 @@ def _cardio_pr_label(pr):
         dur_label = DURATION_LABELS.get(pr.weight_context, f'{pr.weight_context:.0f} min')
         return f'{dur_label} Best Distance'
     return pr.pr_type
+
+
+def _pr_label(pr):
+    if pr.pr_type in ('best_time', 'best_distance'):
+        return _cardio_pr_label(pr)
+    return PR_LABELS.get(pr.pr_type, pr.pr_type)
+
+
+# Filter-chip categories → PREvent pr_types. estimated_1rm is deliberately
+# absent: it is never surfaced as a PR to users (progression tables get it via
+# /api/personal-records/history instead).
+FEED_TYPE_FILTERS = {
+    'weight':   ['max_weight'],
+    'reps':     ['max_reps'],
+    'time':     ['best_time', 'max_duration'],
+    'distance': ['best_distance'],
+}
+FEED_PR_TYPES = [t for types in FEED_TYPE_FILTERS.values() for t in types]
 
 
 @pr_bp.get('/api/personal-records')
@@ -78,6 +99,186 @@ def get_personal_records():
             d['reps'] = set_row.reps
         result.append(d)
     return jsonify(result)
+
+
+@pr_bp.get('/api/personal-records/dashboard')
+@jwt_required()
+def get_pr_dashboard():
+    """Aggregate payload for the PR Dashboard screen: recent PR events feed,
+    workout-level bests, and momentum stats — one round trip."""
+    user_id = get_jwt_identity()
+    now = datetime.now()
+
+    # ── Recent PRs feed ────────────────────────────────────────────────────
+    page = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 20, type=int), 100)
+    type_filter = request.args.get('type')
+    if type_filter is not None and type_filter not in FEED_TYPE_FILTERS:
+        return jsonify({'message': f'Invalid type, use one of: {", ".join(FEED_TYPE_FILTERS)}'}), 400
+    feed_types = FEED_TYPE_FILTERS[type_filter] if type_filter else FEED_PR_TYPES
+
+    feed_query = (
+        db.session.query(PREvent, ExerciseTemplate.name, Workout.name, Workout.date)
+        .join(ExerciseTemplate, PREvent.exercise_template_id == ExerciseTemplate.id)
+        .join(Workout, PREvent.workout_id == Workout.id)
+        .filter(PREvent.user_id == user_id, PREvent.pr_type.in_(feed_types))
+        .order_by(PREvent.achieved_at.desc(), PREvent.id.desc())
+    )
+    pagination = feed_query.paginate(page=page, per_page=per_page, error_out=False)
+    recent_events = []
+    for event, exercise_name, workout_name, workout_date in pagination.items:
+        recent_events.append({
+            **event.to_dict(),
+            'exercise_name': exercise_name,
+            'pr_label': _pr_label(event),
+            'workout_name': workout_name,
+            'workout_date': workout_date.isoformat() if workout_date else None,
+        })
+
+    # ── Workout-level bests (computed on read — no stored rows) ────────────
+    best_volume_workout = (
+        Workout.query
+        .filter(Workout.user_id == user_id, Workout.volume.isnot(None), Workout.volume > 0)
+        .order_by(Workout.volume.desc())
+        .first()
+    )
+    best_reps_row = (
+        db.session.query(Workout.id, Workout.name, Workout.date, func.sum(Set.reps).label('total_reps'))
+        .join(Exercise, Exercise.workout_id == Workout.id)
+        .join(Set, Set.exercise_id == Exercise.id)
+        .filter(Workout.user_id == user_id, Set.reps.isnot(None))
+        .group_by(Workout.id, Workout.name, Workout.date)
+        .order_by(func.sum(Set.reps).desc())
+        .first()
+    )
+    workout_bests = {
+        'best_volume': {
+            'workout_id': best_volume_workout.id,
+            'workout_name': best_volume_workout.name,
+            'date': best_volume_workout.date.isoformat(),
+            'value': round(best_volume_workout.volume),
+        } if best_volume_workout else None,
+        'best_total_reps': {
+            'workout_id': best_reps_row.id,
+            'workout_name': best_reps_row.name,
+            'date': best_reps_row.date.isoformat(),
+            'value': int(best_reps_row.total_reps),
+        } if best_reps_row else None,
+    }
+
+    # ── Momentum stats ─────────────────────────────────────────────────────
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    prs_this_month = (
+        db.session.query(func.count(PREvent.id))
+        .filter(
+            PREvent.user_id == user_id,
+            PREvent.pr_type.in_(FEED_PR_TYPES),
+            PREvent.achieved_at >= month_start,
+        )
+        .scalar()
+    )
+
+    # PR streak: consecutive weeks (Mon-start) with >=1 PR event, counted back
+    # from this week. A PR-less current week doesn't break the streak mid-week.
+    event_dates = [
+        d for (d,) in db.session.query(PREvent.achieved_at)
+        .filter(PREvent.user_id == user_id, PREvent.pr_type.in_(FEED_PR_TYPES))
+        .all()
+    ]
+    pr_weeks = {d.date() - timedelta(days=d.weekday()) for d in event_dates}
+    this_week = now.date() - timedelta(days=now.weekday())
+    streak = 0
+    cursor = this_week if this_week in pr_weeks else this_week - timedelta(weeks=1)
+    while cursor in pr_weeks:
+        streak += 1
+        cursor -= timedelta(weeks=1)
+
+    # Days since last PR per exercise, for the user's 10 most-trained exercises
+    most_trained = (
+        db.session.query(
+            Exercise.exercise_template_id,
+            ExerciseTemplate.name,
+            func.count(func.distinct(Exercise.workout_id)).label('workout_count'),
+        )
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .join(ExerciseTemplate, Exercise.exercise_template_id == ExerciseTemplate.id)
+        .filter(Workout.user_id == user_id, Exercise.exercise_template_id.isnot(None))
+        .group_by(Exercise.exercise_template_id, ExerciseTemplate.name)
+        .order_by(func.count(func.distinct(Exercise.workout_id)).desc())
+        .limit(10)
+        .all()
+    )
+    last_event_by_template = dict(
+        db.session.query(PREvent.exercise_template_id, func.max(PREvent.achieved_at))
+        .filter(
+            PREvent.user_id == user_id,
+            PREvent.pr_type.in_(FEED_PR_TYPES),
+            PREvent.exercise_template_id.in_([t for t, _, _ in most_trained] or [-1]),
+        )
+        .group_by(PREvent.exercise_template_id)
+        .all()
+    )
+    days_since_last_pr = [
+        {
+            'exercise_template_id': template_id,
+            'exercise_name': name,
+            'workout_count': workout_count,
+            'days_since_last_pr': (now - last_event_by_template[template_id]).days,
+            'last_pr_at': last_event_by_template[template_id].isoformat(),
+        }
+        for template_id, name, workout_count in most_trained
+        if template_id in last_event_by_template
+    ]
+    days_since_last_pr.sort(key=lambda r: r['days_since_last_pr'], reverse=True)
+
+    return jsonify({
+        'recent_events': recent_events,
+        'page': page,
+        'per_page': per_page,
+        'total': pagination.total,
+        'has_more': pagination.has_next,
+        'workout_bests': workout_bests,
+        'stats': {
+            'prs_this_month': prs_this_month,
+            'pr_streak_weeks': streak,
+            'total_prs': len(event_dates),
+            'days_since_last_pr': days_since_last_pr,
+        },
+    })
+
+
+@pr_bp.get('/api/personal-records/history')
+@jwt_required()
+def get_pr_history():
+    """PR progression for one exercise, oldest first — feeds the dashboard's
+    over-time tables and sparklines. Unlike the feed, estimated_1rm is allowed
+    here (surfaced as an "Est. 1RM trend" metric, never as a PR)."""
+    user_id = get_jwt_identity()
+    template_id = request.args.get('exercise_template_id', type=int)
+    if not template_id:
+        return jsonify({'message': 'exercise_template_id is required'}), 400
+    pr_type = request.args.get('pr_type')
+    weight_context = request.args.get('weight_context', type=float)
+
+    query = (
+        db.session.query(PREvent, Workout.name)
+        .join(Workout, PREvent.workout_id == Workout.id)
+        .filter(PREvent.user_id == user_id, PREvent.exercise_template_id == template_id)
+    )
+    if pr_type:
+        query = query.filter(PREvent.pr_type == pr_type)
+    if weight_context is not None:
+        query = query.filter(PREvent.weight_context == weight_context)
+
+    rows = query.order_by(PREvent.achieved_at, PREvent.id).all()
+    return jsonify([
+        {
+            **event.to_dict(),
+            'pr_label': _pr_label(event),
+            'workout_name': workout_name,
+        }
+        for event, workout_name in rows
+    ])
 
 
 @pr_bp.get('/api/personal-records/<int:exercise_template_id>')

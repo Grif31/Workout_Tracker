@@ -247,6 +247,55 @@ def create_app(test_config=None):
             db.session.rollback()  # calculate_volume() above mutated w.volume in memory -- discard it
             click.echo('Re-run with --apply to write these changes.')
 
+    @app.cli.command('backfill-pr-events')
+    @click.option('--apply', 'do_apply', is_flag=True, default=False, help='Write changes to DB (omit for dry run)')
+    @click.option('--user-id', default=None, type=int, help='Limit to one user (omit for all users)')
+    @click.option('--force', is_flag=True, default=False, help='Rebuild even for users who already have PR events')
+    def backfill_pr_events(do_apply, user_id, force):
+        """Populate the pr_events history table for existing users by replaying
+        every workout chronologically. Also rebuilds PersonalRecord rows via the
+        same replay, so both stay consistent. Users who already have events are
+        skipped unless --force."""
+        from models import User, Exercise, Workout, PREvent
+        from routes.workout_routes import _recompute_prs_for_templates
+
+        user_query = User.query.order_by(User.id)
+        if user_id is not None:
+            user_query = user_query.filter_by(id=user_id)
+        users = user_query.all()
+
+        processed = skipped = total_events = 0
+        for user in users:
+            if not force and db.session.query(PREvent.id).filter_by(user_id=user.id).first():
+                skipped += 1
+                continue
+            template_ids = [
+                t for (t,) in (
+                    db.session.query(Exercise.exercise_template_id)
+                    .join(Workout, Exercise.workout_id == Workout.id)
+                    .filter(Workout.user_id == user.id, Exercise.exercise_template_id.isnot(None))
+                    .distinct()
+                    .all()
+                )
+            ]
+            if not template_ids:
+                continue
+            _recompute_prs_for_templates(user.id, template_ids)
+            db.session.flush()
+            count = db.session.query(db.func.count(PREvent.id)).filter_by(user_id=user.id).scalar()
+            total_events += count
+            processed += 1
+            click.echo(f'  user {user.id} ({user.username}): {count} event(s) across {len(template_ids)} exercise(s)')
+
+        click.echo(f'{"[DRY RUN] " if not do_apply else ""}{processed} user(s) processed, '
+                   f'{skipped} skipped (already have events), {total_events} event(s) generated.')
+        if do_apply:
+            db.session.commit()
+            click.echo('Done.')
+        else:
+            db.session.rollback()
+            click.echo('Re-run with --apply to write these changes.')
+
     return app
 
 

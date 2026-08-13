@@ -445,6 +445,48 @@ class PersonalRecord(db.Model):
         }
 
 
+# ── PREvent ───────────────────────────────────────────────────
+# Append-only PR history. PersonalRecord rows are upserted in place, so this
+# table is the only record of beaten PRs. One row per PR moment; previous_value
+# is the beaten value (null on a first-ever PR).
+class PREvent(db.Model):
+    __tablename__ = 'pr_events'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
+    exercise_template_id = db.Column(db.Integer, db.ForeignKey('exerciseTemplates.id', ondelete='CASCADE'), nullable=False)
+    workout_id = db.Column(db.Integer, db.ForeignKey('workouts.id', ondelete='CASCADE'), nullable=False)
+    pr_type = db.Column(db.String(20), nullable=False)
+    value = db.Column(db.Float, nullable=False)
+    weight_context = db.Column(db.Float, nullable=False, default=-1.0)
+    previous_value = db.Column(db.Float, nullable=True)
+    achieved_at = db.Column(db.DateTime, nullable=False)
+
+    __table_args__ = (
+        db.Index('ix_pr_events_user_achieved', 'user_id', 'achieved_at'),
+        db.Index('ix_pr_events_user_template', 'user_id', 'exercise_template_id'),
+    )
+
+    def improved_by(self):
+        """Sign-normalized improvement (positive = better). best_time PRs improve downward."""
+        if self.previous_value is None:
+            return None
+        delta = self.value - self.previous_value
+        return -delta if self.pr_type == 'best_time' else delta
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'exercise_template_id': self.exercise_template_id,
+            'workout_id': self.workout_id,
+            'pr_type': self.pr_type,
+            'value': self.value,
+            'weight_context': None if self.weight_context < 0 else self.weight_context,
+            'previous_value': self.previous_value,
+            'improved_by': self.improved_by(),
+            'achieved_at': self.achieved_at.isoformat() if self.achieved_at else None,
+        }
+
+
 # ── StrengthScoreSnapshot ─────────────────────────────────────
 # Records the user's overall strength percentile score once per day.
 class StrengthScoreSnapshot(db.Model):
