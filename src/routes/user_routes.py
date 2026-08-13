@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request, current_app, g
 from werkzeug.utils import secure_filename
 from datetime import datetime
 from models import (
-    db, User, Workout, Exercise, Set, DeviceToken, PersonalRecord,
+    db, User, Workout, Exercise, Set, DeviceToken, PersonalRecord, PREvent,
     StrengthScoreSnapshot, BodyweightLog, BodyMeasurement, ProgressPhoto,
     Routine, RoutineDay, WorkoutTemplate, WorkoutTemplateExercise,
     ExerciseTemplate, ExerciseMuscleMapping,
@@ -79,6 +79,23 @@ def _convert_stored_weights(user_id: int, new_unit: str) -> None:
         PersonalRecord.pr_type == 'max_reps',
         PersonalRecord.weight_context > 0,
     ).update({PersonalRecord.weight_context: _converted(PersonalRecord.weight_context)}, synchronize_session=False)
+
+    # PR history mirrors personal_records: weight-typed values (and the beaten
+    # previous_value) convert; rep counts, times, and km milestones don't.
+    # _converted(NULL) stays NULL, so first-ever PRs are unaffected.
+    PREvent.query.filter(
+        PREvent.user_id == user_id,
+        PREvent.pr_type.in_(('max_weight', 'estimated_1rm')),
+    ).update({
+        PREvent.value: _converted(PREvent.value),
+        PREvent.previous_value: _converted(PREvent.previous_value),
+    }, synchronize_session=False)
+
+    PREvent.query.filter(
+        PREvent.user_id == user_id,
+        PREvent.pr_type == 'max_reps',
+        PREvent.weight_context > 0,
+    ).update({PREvent.weight_context: _converted(PREvent.weight_context)}, synchronize_session=False)
 
     BodyweightLog.query.filter_by(user_id=user_id).update(
         {BodyweightLog.weight: _converted(BodyweightLog.weight)}, synchronize_session=False)

@@ -8,7 +8,7 @@ Tests for PR history events (PREvent):
 """
 from datetime import date, timedelta
 
-from models import db, PREvent
+from models import db, PersonalRecord, PREvent
 
 
 def auth_headers(token):
@@ -338,6 +338,59 @@ class TestHistoryEndpoint:
             headers=auth_headers(auth_token),
         ).get_json()
         assert len(rows) == 1
+
+
+# ---------------------------------------------------------------------------
+# Unit switch converts PR history alongside current PRs
+# ---------------------------------------------------------------------------
+
+class TestUnitSwitchConvertsEvents:
+
+    def _switch_unit(self, client, token, unit):
+        res = client.patch('/api/me', json={'weight_unit': unit}, headers=auth_headers(token))
+        assert res.status_code == 200
+
+    def test_weight_events_convert_with_personal_records(self, client, auth_token, registered_user):
+        user_id = registered_user['user']['id']
+        tid = create_template(client, auth_token)
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 225}],
+                              date_str=iso(date.today() - timedelta(days=7)))
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 245}])
+
+        self._switch_unit(client, auth_token, 'kg')
+
+        # Events must land on exactly the same converted value as the current-PR table
+        current_pr = PersonalRecord.query.filter_by(
+            user_id=user_id, exercise_template_id=tid, pr_type='max_weight',
+        ).first()
+        evs = events_for(user_id, 'max_weight')
+        assert evs[1].value == current_pr.value  # 245 lbs -> kg, identical rounding
+        assert evs[0].value == 102.0             # 225 lbs -> 102 kg
+        # The previous_value chain stays linked after conversion
+        assert evs[1].previous_value == evs[0].value
+        assert evs[0].previous_value is None
+
+    def test_max_reps_context_converts_but_value_does_not(self, client, auth_token, registered_user):
+        user_id = registered_user['user']['id']
+        tid = create_template(client, auth_token)
+        post_strength_workout(client, auth_token, tid, [{'reps': 8, 'weight': 225}])
+
+        self._switch_unit(client, auth_token, 'kg')
+
+        evs = events_for(user_id, 'max_reps')
+        assert evs[0].weight_context == 102.0  # the weight converts
+        assert evs[0].value == 8               # the rep count doesn't
+
+    def test_cardio_events_unaffected_by_unit_switch(self, client, auth_token, registered_user):
+        user_id = registered_user['user']['id']
+        tid = create_template(client, auth_token, name='Running', muscle_group='Core')
+        post_cardio_workout(client, auth_token, tid, duration_min=30, distance_km=5)
+
+        self._switch_unit(client, auth_token, 'kg')
+
+        evs = [e for e in events_for(user_id, 'best_time') if e.weight_context == 5.0]
+        assert len(evs) == 1        # km milestone context untouched
+        assert evs[0].value == 30   # minutes untouched
 
 
 # ---------------------------------------------------------------------------

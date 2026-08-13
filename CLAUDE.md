@@ -266,7 +266,8 @@ return jsonify({ 'message': 'error reason' }), 400   # client error
 - **Cardio sets** have: `cardio_duration` (minutes), `distance`, `distance_unit` ('km'|'mi'), `intensity`
 - **GPS cardio exercises** also store: `route_polyline` (encoded Google polyline string), decoded with `@mapbox/polyline`
 - **`workout_type`** — computed field in `Workout.to_dict()`, derived from `exercise_type` on exercises; no DB column. Cardio workouts also get `cardio_duration`, `distance`, `distance_unit` in the dict.
-- **Weight units:** per user — `user.weight_unit` is `'kg'` or `'lbs'`; delta: kg=2.5, lbs=5. Stored set weights, PR values, and bodyweight logs are always in the user's *current* unit — switching units bulk-converts them (`_convert_stored_weights` in `user_routes.py`). Exception: `Workout.volume` is always lbs.
+- **Weight units:** per user — `user.weight_unit` is `'kg'` or `'lbs'`; delta: kg=2.5, lbs=5. Stored set weights, PR values (both `personal_records` and `pr_events`, incl. `previous_value`), and bodyweight logs are always in the user's *current* unit — switching units bulk-converts them (`_convert_stored_weights` in `user_routes.py`). Exception: `Workout.volume` is always lbs.
+- **Adding a column that stores a weight (or weight-derived value):** it MUST be wired into `_convert_stored_weights` AND classified in `tests/test_unit_conversion_registry.py` (CONVERTED or EXEMPT-with-reason). That test name-scans all models for weight/value/volume columns and fails on unclassified ones — `pr_events` was originally missed this way and drifted out of unit after a kg↔lbs switch.
 - **Custom exercises:** `ExerciseTemplate.user_id` — NULL = global library exercise, set = that user's private custom exercise
 - **RPE:** 1–10 scale, optional per set, only shown when user enables it in workout settings
 - **User gender:** `user.gender` is `'male'` | `'female'` | `None` — used for strength score percentile calculations
