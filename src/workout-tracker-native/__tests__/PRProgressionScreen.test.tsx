@@ -58,25 +58,28 @@ describe('PRProgressionScreen', () => {
   });
 
   it('shows table rows newest first with values and deltas', async () => {
-    const { getByText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => expect(getByText('245 lbs')).toBeTruthy());
+    const { getByText, getAllByText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
+    // "245 lbs" appears twice: the hero's "current best" and the table's top row
+    await waitFor(() => expect(getAllByText('245 lbs').length).toBe(2));
     expect(getByText('225 lbs')).toBeTruthy();
     expect(getByText('+20 lbs')).toBeTruthy();
     expect(getByText('Push B')).toBeTruthy();
   });
 
   it('switches to the Est. 1RM series when its chip is tapped', async () => {
-    const { getByText, queryByText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
+    const { getByText, getAllByText, queryAllByText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Est. 1RM')).toBeTruthy());
     fireEvent.press(getByText('Est. 1RM'));
-    await waitFor(() => expect(getByText('262.5 lbs')).toBeTruthy());
-    expect(queryByText('245 lbs')).toBeNull();
+    await waitFor(() => expect(getAllByText('262.5 lbs').length).toBe(2));
+    expect(queryAllByText('245 lbs').length).toBe(0);
   });
 
   it('navigates to WorkoutDetails when a table row is tapped', async () => {
-    const { getByText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => expect(getByText('245 lbs')).toBeTruthy());
-    fireEvent.press(getByText('245 lbs'));
+    const { getAllByText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getAllByText('245 lbs').length).toBe(2));
+    // Index 0 is the hero card (not tappable) — the table row is the last match
+    const matches = getAllByText('245 lbs');
+    fireEvent.press(matches[matches.length - 1]);
     expect(nav.navigate).toHaveBeenCalledWith('WorkoutDetails', { workoutId: 42 });
   });
 
@@ -100,6 +103,11 @@ describe('PRProgressionScreen', () => {
       const saved = await AsyncStorage.getItem('pr_dashboard_pins_1');
       expect(JSON.parse(saved!)).toEqual([]);
     });
+  });
+
+  it('shows total improvement since the first recorded PR in the hero card', async () => {
+    const { getByText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText(/\+20 lbs since/)).toBeTruthy());
   });
 
   it('shows an empty state when there is no history', async () => {

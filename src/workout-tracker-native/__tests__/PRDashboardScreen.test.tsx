@@ -52,9 +52,10 @@ describe('PRDashboardScreen', () => {
 
   it('shows hero stats', async () => {
     const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => expect(getByText('PRs this month')).toBeTruthy());
+    await waitFor(() => expect(getByText('this month')).toBeTruthy());
     expect(getByText('3')).toBeTruthy();
     expect(getByText('week PR streak')).toBeTruthy();
+    expect(getByText('total PRs')).toBeTruthy();
     expect(getByText('15')).toBeTruthy();
   });
 
@@ -62,7 +63,7 @@ describe('PRDashboardScreen', () => {
     const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
     expect(getByText('245 lbs')).toBeTruthy();
-    expect(getByText('▲ +20 lbs')).toBeTruthy();
+    expect(getByText('+20 lbs')).toBeTruthy();
   });
 
   it('shows workout records', async () => {
@@ -96,6 +97,21 @@ describe('PRDashboardScreen', () => {
     });
   });
 
+  it('keeps the header mounted while switching filters instead of a full-page reload', async () => {
+    const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Weight')).toBeTruthy());
+    expect(getByText('Most Volume')).toBeTruthy();
+    fireEvent.press(getByText('Weight'));
+    // Header content (hero/records/etc.) stays mounted immediately after the
+    // tap — if a filter switch ever re-triggers the full-screen loading
+    // state, this throws because the whole list (and its header) unmounts.
+    expect(getByText('Most Volume')).toBeTruthy();
+    await waitFor(() => {
+      const calls = (global.fetch as jest.Mock).mock.calls.map(c => String(c[0]));
+      expect(calls.some(u => u.includes('type=weight'))).toBe(true);
+    });
+  });
+
   it('hides a section when its eye toggle is tapped in customize mode', async () => {
     const { getByText, getByLabelText, queryByText } = render(
       <PRDashboardScreen navigation={nav as any} route={route as any} />,
@@ -123,7 +139,7 @@ describe('PRDashboardScreen', () => {
       <PRDashboardScreen navigation={nav as any} route={route as any} />,
     );
     await waitFor(() => expect(getByText('Most Volume')).toBeTruthy());
-    expect(queryByText('PRs this month')).toBeNull();
+    expect(queryByText('this month')).toBeNull();
   });
 
   it('shows pinned exercises and navigates to their progression', async () => {
@@ -137,6 +153,28 @@ describe('PRDashboardScreen', () => {
   it('shows a pin hint when nothing is pinned', async () => {
     const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText(/Pin lifts from their progression view/)).toBeTruthy());
+  });
+
+  it('shows a progression chart card for a pinned exercise with history', async () => {
+    await AsyncStorage.setItem('pr_dashboard_pins_1', JSON.stringify([{ id: 12, name: 'Deadlift' }]));
+    (global.fetch as jest.Mock) = jest.fn((url: any) => {
+      if (String(url).includes('/api/personal-records/history')) {
+        return Promise.resolve({
+          ok: true, status: 200,
+          json: () => Promise.resolve([
+            { id: 101, exercise_template_id: 12, workout_id: 1, pr_type: 'max_weight', value: 385, weight_context: null, previous_value: 365, improved_by: 20, achieved_at: '2026-08-01T00:00:00' },
+            { id: 102, exercise_template_id: 12, workout_id: 2, pr_type: 'max_weight', value: 405, weight_context: null, previous_value: 385, improved_by: 15, achieved_at: '2026-08-08T00:00:00' },
+          ]),
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(dashboardPayload) });
+    });
+    const { getByText, queryByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Deadlift')).toBeTruthy());
+    // Current value + delta from the picked default series (max_weight, latest context)
+    await waitFor(() => expect(getByText('405 lbs')).toBeTruthy());
+    expect(getByText('+15 lbs')).toBeTruthy();
+    expect(queryByText('No PR history yet')).toBeNull();
   });
 
   it('shows the empty state when there are no events', async () => {

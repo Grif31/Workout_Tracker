@@ -1,16 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Modal,
+  View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, Dimensions,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
+import { LineChart } from 'react-native-gifted-charts';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import DraggableList from '../../components/DraggableList';
 import PRShareCard from '../../components/PRShareCard';
 import { loadPrPins, type PRPin } from '../../utils/prPins';
-import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
+import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { ProfileStackParamsList } from '../../navigation/types';
@@ -19,7 +20,10 @@ import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { captureAndShare } from '../../utils/shareCapture';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
-import { fmtPrValue, fmtPrContext, fmtPrDelta, type PREventItem } from '../../utils/prFormat';
+import {
+  fmtPrValue, fmtPrContext, fmtPrDelta, fmtRelativeDate, prTypeIcon,
+  stalledUrgency, pickDefaultPrSeries, type PREventItem,
+} from '../../utils/prFormat';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'PRDashboard'>;
 
@@ -52,6 +56,10 @@ const FILTERS = [
 
 const STALLED_SHOWN = 5;
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// list padding (md*2) + pin card padding (md*2) + a little breathing room
+const PIN_CHART_W = SCREEN_WIDTH - spacing.md * 5;
+
 type SectionKey = 'hero' | 'records' | 'stalled' | 'progression';
 type SectionConfig = { key: SectionKey; visible: boolean };
 
@@ -81,12 +89,15 @@ export default function PRDashboardScreen({ navigation }: Props) {
   const [events, setEvents]         = useState<PREventItem[]>([]);
   const [loading, setLoading]       = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [chipLoading, setChipLoading] = useState(false);
   const [filter, setFilter]         = useState<typeof FILTERS[number]['key']>(null);
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
   const [shareEvent, setShareEvent] = useState<PREventItem | null>(null);
   const [layout, setLayout]         = useState<SectionConfig[]>(DEFAULT_LAYOUT);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [pins, setPins]             = useState<PRPin[]>([]);
+  const [pinSeries, setPinSeries]         = useState<Record<number, PREventItem[]>>({});
+  const [pinSeriesLoading, setPinSeriesLoading] = useState(false);
   const shareRef = useRef<View>(null);
 
   useEffect(() => {
@@ -128,6 +139,9 @@ export default function PRDashboardScreen({ navigation }: Props) {
   const filterRef = useRef(filter);
   filterRef.current = filter;
 
+  // Fetches and stores a filter's first page. Deliberately doesn't touch any
+  // loading flag itself — callers decide which indicator (full-screen on
+  // first mount, small inline one on a filter switch) applies.
   const loadFirstPage = useCallback(async (type: typeof filter, isAlive: () => boolean) => {
     try {
       const d = await fetchPage(1, type);
@@ -136,22 +150,57 @@ export default function PRDashboardScreen({ navigation }: Props) {
         setEvents(d.recent_events);
       }
     } catch {}
-    if (isAlive()) setLoading(false);
   }, [fetchPage]);
+
+  // Fetches a mini progression series per pinned exercise, for the dashboard's
+  // sparkline cards. Cheap — pins are capped at MAX_PR_PINS.
+  const loadPinSeries = useCallback(async (pinList: PRPin[], isAlive: () => boolean) => {
+    if (pinList.length === 0) {
+      if (isAlive()) setPinSeries({});
+      return;
+    }
+    setPinSeriesLoading(true);
+    try {
+      const results = await Promise.all(pinList.map(async p => {
+        try {
+          const res = await apiFetch(`/api/personal-records/history?exercise_template_id=${p.id}`);
+          if (!res.ok) return [p.id, []] as const;
+          const rows: PREventItem[] = await res.json();
+          return [p.id, pickDefaultPrSeries(rows)] as const;
+        } catch {
+          return [p.id, []] as const;
+        }
+      }));
+      if (isAlive()) setPinSeries(Object.fromEntries(results));
+    } finally {
+      if (isAlive()) setPinSeriesLoading(false);
+    }
+  }, []);
 
   // Refresh on focus with whatever filter is active (PRs can change after
   // editing/deleting a workout reached from this screen)
   useFocusEffect(useCallback(() => {
     let alive = true;
-    loadFirstPage(filterRef.current, () => alive);
-    // Pins are toggled on PRProgressionScreen — refresh them on the way back
+    (async () => {
+      await loadFirstPage(filterRef.current, () => alive);
+      if (alive) setLoading(false);
+    })();
+    // Pins are toggled on PRProgressionScreen — refresh them, and their
+    // charts, on the way back
     if (user?.id) {
-      loadPrPins(user.id).then(p => { if (alive) setPins(p); });
+      loadPrPins(user.id).then(p => {
+        if (!alive) return;
+        setPins(p);
+        loadPinSeries(p, () => alive);
+      });
     }
     return () => { alive = false; };
-  }, [loadFirstPage, user?.id]));
+  }, [loadFirstPage, loadPinSeries, user?.id]));
 
-  // Refetch on filter change; skip the first run — the focus effect covers mount
+  // Switching filters re-filters the feed in place — the header (hero/records/
+  // stalled/pins) and the list itself stay mounted; only a small inline
+  // spinner near the chips shows while the new page loads. Skip the first
+  // run — the focus effect above already covers the initial mount.
   const mountedRef = useRef(false);
   useEffect(() => {
     if (!mountedRef.current) {
@@ -159,8 +208,11 @@ export default function PRDashboardScreen({ navigation }: Props) {
       return;
     }
     let alive = true;
-    setLoading(true);
-    loadFirstPage(filter, () => alive);
+    setChipLoading(true);
+    (async () => {
+      await loadFirstPage(filter, () => alive);
+      if (alive) setChipLoading(false);
+    })();
     return () => { alive = false; };
   }, [filter, loadFirstPage]);
 
@@ -203,32 +255,45 @@ export default function PRDashboardScreen({ navigation }: Props) {
   const bests = data?.workout_bests;
   const stalled = stats?.days_since_last_pr.slice(0, STALLED_SHOWN) ?? [];
 
+  const SectionHeader = ({ icon, title }: { icon: keyof typeof Ionicons.glyphMap; title: string }) => (
+    <View style={styles.sectionHeaderRow}>
+      <Ionicons name={icon} size={14} color={PR_GOLD_TEXT} />
+      <Text style={styles.sectionTitle}>{title}</Text>
+    </View>
+  );
+
   const renderSection = (key: SectionKey) => {
     switch (key) {
       case 'hero': return stats ? (
-        <View style={styles.heroRow}>
-          <View style={[styles.heroBox, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.heroValue, { color: PR_GOLD_TEXT }]}>{stats.prs_this_month}</Text>
-            <Text style={styles.heroLabel}>PRs this month</Text>
-          </View>
-          <View style={[styles.heroBox, { backgroundColor: colors.surface }]}>
-            <View style={styles.heroLaurelRow}>
-              <LaurelBranch height={16} color={PR_GOLD} />
-              <Text style={[styles.heroValue, { color: PR_GOLD_TEXT }]}>{stats.pr_streak_weeks}</Text>
-              <LaurelBranch side="right" height={16} color={PR_GOLD} />
+        <View style={[styles.heroCard, { backgroundColor: colors.surface, borderColor: PR_GOLD }]}>
+          <View style={styles.heroStreakRow}>
+            <LaurelBranch height={30} color={PR_GOLD} />
+            <View style={styles.heroStreakCenter}>
+              <Text style={[styles.heroStreakValue, { color: PR_GOLD_TEXT }]}>{stats.pr_streak_weeks}</Text>
+              <Text style={styles.heroStreakLabel}>week PR streak</Text>
             </View>
-            <Text style={styles.heroLabel}>week PR streak</Text>
+            <LaurelBranch side="right" height={30} color={PR_GOLD} />
           </View>
-          <View style={[styles.heroBox, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.heroValue, { color: PR_GOLD_TEXT }]}>{stats.total_prs}</Text>
-            <Text style={styles.heroLabel}>total PRs</Text>
+          <View style={[styles.heroDivider, { backgroundColor: colors.border }]} />
+          <View style={styles.heroStatsRow}>
+            <View style={styles.heroStatCol}>
+              <Ionicons name="calendar-outline" size={16} color={colors.textSecondary} />
+              <Text style={[styles.heroStatValue, { color: colors.textPrimary }]}>{stats.prs_this_month}</Text>
+              <Text style={styles.heroStatLabel}>this month</Text>
+            </View>
+            <View style={[styles.heroStatDivider, { backgroundColor: colors.border }]} />
+            <View style={styles.heroStatCol}>
+              <Ionicons name="trophy-outline" size={16} color={colors.textSecondary} />
+              <Text style={[styles.heroStatValue, { color: colors.textPrimary }]}>{stats.total_prs}</Text>
+              <Text style={styles.heroStatLabel}>total PRs</Text>
+            </View>
           </View>
         </View>
       ) : null;
 
       case 'records': return bests && (bests.best_volume || bests.best_total_reps) ? (
         <View>
-          <Text style={styles.sectionTitle}>Workout Records</Text>
+          <SectionHeader icon="ribbon-outline" title="Workout Records" />
           <View style={styles.bestsRow}>
             {bests.best_volume && (
               <TouchableOpacity
@@ -236,12 +301,15 @@ export default function PRDashboardScreen({ navigation }: Props) {
                 onPress={() => openWorkout(bests.best_volume!.workout_id)}
                 activeOpacity={0.7}
               >
+                <View style={[styles.bestIconBadge, { backgroundColor: PR_GOLD_BG }]}>
+                  <Ionicons name="barbell-outline" size={16} color={PR_GOLD_TEXT} />
+                </View>
                 <Text style={styles.bestLabel}>Most Volume</Text>
                 <Text style={[styles.bestValue, { color: colors.textPrimary }]}>
                   {bests.best_volume.value.toLocaleString()} lbs
                 </Text>
                 <Text style={styles.bestMeta} numberOfLines={1}>
-                  {bests.best_volume.workout_name} · {fmtDate(bests.best_volume.date)}
+                  {bests.best_volume.workout_name} · {fmtRelativeDate(bests.best_volume.date)}
                 </Text>
               </TouchableOpacity>
             )}
@@ -251,12 +319,15 @@ export default function PRDashboardScreen({ navigation }: Props) {
                 onPress={() => openWorkout(bests.best_total_reps!.workout_id)}
                 activeOpacity={0.7}
               >
+                <View style={[styles.bestIconBadge, { backgroundColor: PR_GOLD_BG }]}>
+                  <Ionicons name="repeat-outline" size={16} color={PR_GOLD_TEXT} />
+                </View>
                 <Text style={styles.bestLabel}>Most Reps</Text>
                 <Text style={[styles.bestValue, { color: colors.textPrimary }]}>
                   {bests.best_total_reps.value.toLocaleString()} reps
                 </Text>
                 <Text style={styles.bestMeta} numberOfLines={1}>
-                  {bests.best_total_reps.workout_name} · {fmtDate(bests.best_total_reps.date)}
+                  {bests.best_total_reps.workout_name} · {fmtRelativeDate(bests.best_total_reps.date)}
                 </Text>
               </TouchableOpacity>
             )}
@@ -266,51 +337,112 @@ export default function PRDashboardScreen({ navigation }: Props) {
 
       case 'stalled': return stalled.length > 0 ? (
         <View>
-          <Text style={styles.sectionTitle}>Time Since Last PR</Text>
-          <View style={[styles.stalledCard, { backgroundColor: colors.surface }]}>
-            {stalled.map((row, i) => (
-              <TouchableOpacity
-                key={row.exercise_template_id}
-                style={[styles.stalledRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
-                onPress={() => openProgression(row)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.stalledName, { color: colors.textPrimary }]} numberOfLines={1}>
-                  {row.exercise_name}
-                </Text>
-                <Text style={styles.stalledDays}>
-                  {row.days_since_last_pr === 0 ? 'Today' : `${row.days_since_last_pr}d ago`}
-                </Text>
-                <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
-              </TouchableOpacity>
-            ))}
+          <SectionHeader icon="hourglass-outline" title="Time Since Last PR" />
+          <View style={[styles.trophyCard, { backgroundColor: colors.surface }]}>
+            {stalled.map((row, i) => {
+              const urgency = stalledUrgency(row.days_since_last_pr);
+              return (
+                <TouchableOpacity
+                  key={row.exercise_template_id}
+                  style={[styles.trophyRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
+                  onPress={() => openProgression(row)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={urgency === 'stale' ? 'alert-circle-outline' : 'time-outline'}
+                    size={16}
+                    color={urgency === 'stale' ? colors.warmup : colors.textSecondary}
+                  />
+                  <Text style={[styles.trophyRowName, { color: colors.textPrimary }]} numberOfLines={1}>
+                    {row.exercise_name}
+                  </Text>
+                  <Text style={[styles.trophyRowMeta, urgency === 'stale' && { color: colors.warmup, fontWeight: '700' }]}>
+                    {row.days_since_last_pr === 0 ? 'Today' : `${row.days_since_last_pr}d ago`}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       ) : null;
 
       case 'progression': return (
         <View>
-          <Text style={styles.sectionTitle}>Pinned Progression</Text>
+          <SectionHeader icon="pin-outline" title="Pinned Progression" />
           {pins.length === 0 ? (
             <Text style={styles.pinsHint}>
               Pin lifts from their progression view to keep them here.
             </Text>
           ) : (
-            <View style={[styles.stalledCard, { backgroundColor: colors.surface }]}>
-              {pins.map((p, i) => (
-                <TouchableOpacity
-                  key={p.id}
-                  style={[styles.stalledRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
-                  onPress={() => navigation.navigate('PRProgression', { exerciseTemplateId: p.id, exerciseName: p.name })}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="pin" size={14} color={colors.accent} />
-                  <Text style={[styles.stalledName, { color: colors.textPrimary }]} numberOfLines={1}>
-                    {p.name}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
-                </TouchableOpacity>
-              ))}
+            <View style={styles.pinList}>
+              {pins.map(p => {
+                const series = pinSeries[p.id] ?? [];
+                const canChart = series.length >= 2;
+                const last = series[series.length - 1];
+                const delta = last ? fmtPrDelta(last, unit, distanceUnit) : null;
+                let chartMin = 0, chartMax = 0, chartPad = 1;
+                if (canChart) {
+                  chartMin = Math.min(...series.map(e => e.value));
+                  chartMax = Math.max(...series.map(e => e.value));
+                  chartPad = Math.max((chartMax - chartMin) * 0.15, 1);
+                }
+                return (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={[styles.pinCard, { backgroundColor: colors.surface }]}
+                    onPress={() => navigation.navigate('PRProgression', { exerciseTemplateId: p.id, exerciseName: p.name })}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.pinCardHeader}>
+                      <Ionicons name="pin" size={14} color={colors.accent} />
+                      <Text style={[styles.pinCardName, { color: colors.textPrimary }]} numberOfLines={1}>{p.name}</Text>
+                      {last && (
+                        <Text style={[styles.pinCardValue, { color: colors.textPrimary }]}>
+                          {fmtPrValue(last, unit, distanceUnit)}
+                        </Text>
+                      )}
+                      <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
+                    </View>
+                    {canChart ? (
+                      <LineChart
+                        data={series.map(e => ({ value: e.value }))}
+                        width={PIN_CHART_W}
+                        height={44}
+                        spacing={Math.max(16, Math.floor(PIN_CHART_W / Math.max(series.length - 1, 1)))}
+                        color={colors.accent}
+                        thickness={2}
+                        hideDataPoints
+                        areaChart
+                        curved
+                        hideRules
+                        hideYAxisText
+                        yAxisThickness={0}
+                        xAxisThickness={0}
+                        startFillColor={colors.accent}
+                        endFillColor={colors.surface}
+                        startOpacity={0.14}
+                        endOpacity={0}
+                        maxValue={chartMax - chartMin + chartPad * 2}
+                        yAxisOffset={chartMin - chartPad}
+                        initialSpacing={4}
+                        endSpacing={4}
+                        disableScroll
+                      />
+                    ) : (
+                      <Text style={styles.pinCardEmpty}>
+                        {pinSeriesLoading ? 'Loading…' : series.length === 1 ? 'Log another PR to see a trend' : 'No PR history yet'}
+                      </Text>
+                    )}
+                    {delta && (
+                      <View style={[styles.deltaPill, styles.pinDeltaPill, { backgroundColor: PR_GOLD_BG }]}>
+                        <Ionicons name="trending-up" size={10} color={PR_GOLD_TEXT} />
+                        <Text style={[styles.deltaPillText, { color: PR_GOLD_TEXT }]}>{delta}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
         </View>
@@ -325,7 +457,10 @@ export default function PRDashboardScreen({ navigation }: Props) {
       ))}
 
       {/* Feed title + filter chips */}
-      <Text style={styles.sectionTitle}>Recent PRs</Text>
+      <View style={styles.feedTitleRow}>
+        <Text style={styles.sectionTitle}>Recent PRs</Text>
+        {chipLoading && <ActivityIndicator size="small" color={colors.textSecondary} />}
+      </View>
       <View style={styles.chipRow}>
         {FILTERS.map(f => {
           const active = filter === f.key;
@@ -354,19 +489,27 @@ export default function PRDashboardScreen({ navigation }: Props) {
         onPress={() => openWorkout(item.workout_id)}
         activeOpacity={0.7}
       >
+        <View style={[styles.eventIconBadge, { backgroundColor: PR_GOLD_BG }]}>
+          <Ionicons name={prTypeIcon(item.pr_type) as keyof typeof Ionicons.glyphMap} size={18} color={PR_GOLD_TEXT} />
+        </View>
         <View style={styles.eventInfo}>
           <Text style={[styles.eventName, { color: colors.textPrimary }]} numberOfLines={1}>
             {item.exercise_name}
           </Text>
           <Text style={styles.eventMeta} numberOfLines={1}>
-            {item.pr_label}{context ? ` ${context}` : ''} · {fmtDate(item.achieved_at)}
+            {item.pr_label}{context ? ` ${context}` : ''} · {fmtRelativeDate(item.achieved_at)}
           </Text>
         </View>
         <View style={styles.eventRight}>
           <Text style={[styles.eventValue, { color: colors.textPrimary }]}>
             {fmtPrValue(item, unit, distanceUnit)}
           </Text>
-          {delta && <Text style={[styles.eventDelta, { color: colors.save }]}>▲ {delta}</Text>}
+          {delta && (
+            <View style={[styles.deltaPill, { backgroundColor: PR_GOLD_BG }]}>
+              <Ionicons name="trending-up" size={10} color={PR_GOLD_TEXT} />
+              <Text style={[styles.deltaPillText, { color: PR_GOLD_TEXT }]}>{delta}</Text>
+            </View>
+          )}
         </View>
         <View style={styles.eventActions}>
           <TouchableOpacity onPress={() => openProgression(item)} hitSlop={8}>
@@ -406,9 +549,13 @@ export default function PRDashboardScreen({ navigation }: Props) {
           contentContainerStyle={styles.list}
           ListHeaderComponent={renderHeader}
           ListEmptyComponent={
-            <Text style={styles.empty}>
-              {filter ? 'No PRs of this type yet.' : 'No PRs yet.\nLog some workouts to start your history.'}
-            </Text>
+            <View style={styles.emptyState}>
+              <Ionicons name="trophy-outline" size={40} color={colors.border} />
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
+                {filter ? 'No PRs of this type yet' : 'No PRs yet'}
+              </Text>
+              {!filter && <Text style={styles.emptySubtitle}>Log some workouts to start your history.</Text>}
+            </View>
           }
           ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.md }} /> : null}
           renderItem={renderEvent}
@@ -507,31 +654,48 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   gearBtn: { width: 40, alignItems: 'flex-end' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary },
   list: { padding: spacing.md, gap: spacing.sm },
-  empty: {
-    textAlign: 'center',
-    color: colors.textSecondary,
-    marginTop: spacing.lg,
-    lineHeight: 22,
-  },
 
-  heroRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
-  heroBox: {
-    flex: 1,
+  emptyState: { alignItems: 'center', marginTop: spacing.xl, gap: spacing.xs },
+  emptyTitle: { fontSize: typography.fontSize.md, fontWeight: '700' },
+  emptySubtitle: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+
+  // Hero — the trophy-case centerpiece
+  heroCard: {
+    borderWidth: 1.5,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
+  },
+  heroStreakRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  heroStreakCenter: { alignItems: 'center', minWidth: 64 },
+  heroStreakValue: { fontSize: 42, fontWeight: '800', letterSpacing: -0.5, lineHeight: 46 },
+  heroStreakLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
+  heroDivider: { height: StyleSheet.hairlineWidth, marginVertical: spacing.md },
+  heroStatsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.lg },
+  heroStatCol: { alignItems: 'center', gap: 2 },
+  heroStatValue: { fontSize: typography.fontSize.lg, fontWeight: '800' },
+  heroStatLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
+  heroStatDivider: { width: StyleSheet.hairlineWidth, height: 28 },
+
+  sectionHeaderRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xs,
+    gap: spacing.xs,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
   },
-  heroLaurelRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  heroValue: { fontSize: typography.fontSize.xl, fontWeight: '800' },
-  heroLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2, textAlign: 'center' },
-
   sectionTitle: {
     fontSize: typography.fontSize.sm,
     fontWeight: '700',
     color: colors.textPrimary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  feedTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
@@ -542,20 +706,45 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.md,
   },
+  bestIconBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
   bestLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
   bestValue: { fontSize: typography.fontSize.lg, fontWeight: '800', marginTop: 4 },
   bestMeta: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 4 },
 
-  stalledCard: { borderRadius: radius.md, overflow: 'hidden' },
-  stalledRow: {
+  trophyCard: { borderRadius: radius.md, overflow: 'hidden' },
+  trophyRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     gap: spacing.sm,
   },
-  stalledName: { flex: 1, fontSize: typography.fontSize.md, fontWeight: '600' },
-  stalledDays: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+  trophyRowName: { flex: 1, fontSize: typography.fontSize.md, fontWeight: '600' },
+  trophyRowMeta: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+
+  pinsHint: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  pinList: { gap: spacing.sm },
+  pinCard: {
+    borderRadius: radius.md,
+    padding: spacing.md,
+    overflow: 'hidden',
+  },
+  pinCardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
+  pinCardName: { flex: 1, fontSize: typography.fontSize.md, fontWeight: '600' },
+  pinCardValue: { fontSize: typography.fontSize.sm, fontWeight: '700' },
+  pinCardEmpty: { fontSize: typography.fontSize.xs, color: colors.textSecondary, paddingVertical: spacing.sm },
+  pinDeltaPill: { alignSelf: 'flex-start', marginTop: spacing.xs },
 
   chipRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xs, flexWrap: 'wrap' },
   chip: {
@@ -573,21 +762,32 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
   },
+  eventIconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   eventInfo: { flex: 1 },
-  eventName: { fontSize: typography.fontSize.md, fontWeight: '600', marginBottom: 2 },
+  eventName: { fontSize: typography.fontSize.md, fontWeight: '700', marginBottom: 2 },
   eventMeta: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
   eventRight: { alignItems: 'flex-end' },
   eventValue: { fontSize: typography.fontSize.md, fontWeight: '700' },
-  eventDelta: { fontSize: typography.fontSize.xs, fontWeight: '700', marginTop: 2 },
   eventActions: { gap: spacing.sm, alignItems: 'center' },
 
-  offscreen: { position: 'absolute', left: -9999, top: -9999 },
-
-  pinsHint: {
-    fontSize: typography.fontSize.sm,
-    color: colors.textSecondary,
-    lineHeight: 20,
+  deltaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: spacing.xs + 2,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+    marginTop: 4,
   },
+  deltaPillText: { fontSize: typography.fontSize.xs, fontWeight: '700' },
+
+  offscreen: { position: 'absolute', left: -9999, top: -9999 },
 
   modalBackdrop: {
     flex: 1,

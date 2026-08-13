@@ -18,6 +18,70 @@ export type PREventItem = {
   workout_date?: string;
 };
 
+// Display order + labels for PR metric chips (PRProgressionScreen) and
+// default-series selection (pinned progression cards on the dashboard).
+// estimated_1rm is a trend metric here, never labeled a PR (project rule).
+export const PR_METRIC_OPTIONS: { key: PREventItem['pr_type']; label: string }[] = [
+  { key: 'max_weight',    label: 'Max Weight'    },
+  { key: 'estimated_1rm', label: 'Est. 1RM'      },
+  { key: 'max_reps',      label: 'Rep Record'    },
+  { key: 'best_time',     label: 'Best Time'     },
+  { key: 'best_distance', label: 'Best Distance' },
+  { key: 'max_duration',  label: 'Longest Hold'  },
+];
+
+/**
+ * Picks a sensible default series to chart for an exercise's full event
+ * history: the highest-priority metric type that has any events, and — for
+ * types with multiple weight/milestone contexts (rep records, cardio bests)
+ * — the context of the most recently achieved event, so the chart reflects
+ * current progression rather than a possibly-abandoned old weight.
+ */
+export function pickDefaultPrSeries(events: PREventItem[]): PREventItem[] {
+  for (const { key } of PR_METRIC_OPTIONS) {
+    const matches = events.filter(e => e.pr_type === key);
+    if (matches.length === 0) continue;
+    if (key !== 'max_reps' && key !== 'best_time' && key !== 'best_distance') {
+      return matches; // single series — weight_context is the -1 sentinel
+    }
+    const latestContext = matches[matches.length - 1].weight_context;
+    return matches.filter(e => e.weight_context === latestContext);
+  }
+  return [];
+}
+
+export function prTypeIcon(prType: PREventItem['pr_type']): string {
+  switch (prType) {
+    case 'max_weight':
+    case 'estimated_1rm': return 'barbell-outline';
+    case 'max_reps':      return 'repeat-outline';
+    case 'best_time':     return 'stopwatch-outline';
+    case 'best_distance': return 'navigate-outline';
+    case 'max_duration':  return 'hourglass-outline';
+  }
+}
+
+/** "Today" / "Yesterday" / "Aug 10" — used in feed cards where recency reads better than a full date. */
+export function fmtRelativeDate(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  return d.toLocaleDateString(undefined, {
+    month: 'short', day: 'numeric',
+    year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+  });
+}
+
+/** Flags a stalled lift for the dashboard's urgency icon/color. */
+export function stalledUrgency(daysSinceLastPr: number): 'ok' | 'watch' | 'stale' {
+  if (daysSinceLastPr >= 30) return 'stale';
+  if (daysSinceLastPr >= 14) return 'watch';
+  return 'ok';
+}
+
 export function fmtMinSec(mins: number): string {
   const m = Math.floor(mins);
   const s = Math.round((mins - m) * 60);

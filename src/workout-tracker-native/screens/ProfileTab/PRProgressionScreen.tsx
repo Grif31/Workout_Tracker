@@ -6,6 +6,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LineChart } from 'react-native-gifted-charts';
+import { LaurelBranch } from '../../components/LaurelWreath';
+import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { ProfileStackParamsList } from '../../navigation/types';
@@ -13,7 +15,7 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
-import { fmtPrValue, fmtPrDelta, type PREventItem } from '../../utils/prFormat';
+import { fmtPrValue, fmtPrDelta, PR_METRIC_OPTIONS, type PREventItem } from '../../utils/prFormat';
 import { loadPrPins, togglePrPin, MAX_PR_PINS } from '../../utils/prPins';
 import { showToast } from '../../utils/toast';
 
@@ -21,17 +23,6 @@ type Props = NativeStackScreenProps<ProfileStackParamsList, 'PRProgression'>;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_W = SCREEN_WIDTH - spacing.md * 4;
-
-// Display order + labels for the metric chips. estimated_1rm is a trend
-// metric here, never labeled a PR (project rule).
-const METRICS: { key: PREventItem['pr_type']; label: string }[] = [
-  { key: 'max_weight',    label: 'Max Weight'    },
-  { key: 'estimated_1rm', label: 'Est. 1RM'      },
-  { key: 'max_reps',      label: 'Rep Record'    },
-  { key: 'best_time',     label: 'Best Time'     },
-  { key: 'best_distance', label: 'Best Distance' },
-  { key: 'max_duration',  label: 'Longest Hold'  },
-];
 
 export default function PRProgressionScreen({ navigation, route }: Props) {
   const { exerciseTemplateId, exerciseName } = route.params;
@@ -79,7 +70,7 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
         if (res.ok && alive) {
           const rows: PREventItem[] = await res.json();
           setEvents(rows);
-          const firstMetric = METRICS.find(m => rows.some(e => e.pr_type === m.key));
+          const firstMetric = PR_METRIC_OPTIONS.find(m => rows.some(e => e.pr_type === m.key));
           if (firstMetric) setMetric(firstMetric.key);
         }
       } catch {}
@@ -89,7 +80,7 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
   }, [exerciseTemplateId]);
 
   const availableMetrics = useMemo(
-    () => METRICS.filter(m => events.some(e => e.pr_type === m.key)),
+    () => PR_METRIC_OPTIONS.filter(m => events.some(e => e.pr_type === m.key)),
     [events],
   );
 
@@ -139,6 +130,18 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
   // Pad the y-range so a flat-ish series doesn't hug the chart edges
   const chartPad = Math.max((chartMax - chartMin) * 0.15, 1);
 
+  // Total improvement across the whole visible series, formatted by piggybacking
+  // on fmtPrDelta's unit-aware formatting (which already handles the best_time
+  // "lower is better" inversion via improved_by's sign convention).
+  const totalDelta = useMemo(() => {
+    if (series.length < 2) return null;
+    const first = series[0];
+    const last = series[series.length - 1];
+    const diff = metric === 'best_time' ? first.value - last.value : last.value - first.value;
+    if (diff <= 0) return null;
+    return fmtPrDelta({ ...last, previous_value: first.value, improved_by: diff }, unit, distanceUnit);
+  }, [series, metric, unit, distanceUnit]);
+
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
 
@@ -166,9 +169,34 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
       {loading ? (
         <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: spacing.xl }} />
       ) : events.length === 0 ? (
-        <Text style={styles.empty}>No PR history for this exercise yet.</Text>
+        <View style={styles.emptyState}>
+          <Ionicons name="trophy-outline" size={40} color={colors.border} />
+          <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No PR history yet</Text>
+          <Text style={styles.emptySubtitle}>Log a PR for this exercise to start tracking it.</Text>
+        </View>
       ) : (
         <ScrollView contentContainerStyle={styles.body}>
+          {/* Hero — current best, laurel-flanked, with total improvement */}
+          {series.length > 0 && (
+            <View style={[styles.heroCard, { backgroundColor: colors.surface, borderColor: PR_GOLD }]}>
+              <View style={styles.heroRow}>
+                <LaurelBranch height={24} color={PR_GOLD} />
+                <View style={styles.heroCenter}>
+                  <Text style={[styles.heroValue, { color: PR_GOLD_TEXT }]}>
+                    {fmtPrValue(series[series.length - 1], unit, distanceUnit)}
+                  </Text>
+                  <Text style={styles.heroCaption}>current best</Text>
+                </View>
+                <LaurelBranch side="right" height={24} color={PR_GOLD} />
+              </View>
+              {totalDelta && (
+                <Text style={styles.heroImprovement}>
+                  {totalDelta} since {fmtDate(series[0].achieved_at)}
+                </Text>
+              )}
+            </View>
+          )}
+
           {/* Metric selector */}
           <View style={styles.chipRow}>
             {availableMetrics.map(m => {
@@ -248,6 +276,7 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
             </View>
             {[...series].reverse().map((e, i) => {
               const delta = fmtPrDelta(e, unit, distanceUnit);
+              const isCurrent = i === 0;
               return (
                 <TouchableOpacity
                   key={e.id}
@@ -255,7 +284,10 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
                   onPress={() => navigation.navigate('WorkoutDetails', { workoutId: e.workout_id })}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.thDate, styles.td, { color: colors.textSecondary }]}>{fmtDate(e.achieved_at)}</Text>
+                  <View style={[styles.thDate, styles.dateCell]}>
+                    {isCurrent && <Ionicons name="trophy" size={11} color={PR_GOLD_TEXT} />}
+                    <Text style={[styles.td, { color: colors.textSecondary }]}>{fmtDate(e.achieved_at)}</Text>
+                  </View>
                   <Text style={[styles.thValue, styles.td, styles.tdValue, { color: colors.textPrimary }]}>
                     {fmtPrValue(e, unit, distanceUnit)}
                   </Text>
@@ -296,13 +328,23 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     textAlign: 'center',
   },
   body: { padding: spacing.md, gap: spacing.sm },
-  empty: {
-    textAlign: 'center',
-    color: colors.textSecondary,
-    marginTop: spacing.xl,
-    lineHeight: 22,
-    paddingHorizontal: spacing.lg,
+
+  emptyState: { alignItems: 'center', marginTop: spacing.xl, gap: spacing.xs, paddingHorizontal: spacing.lg },
+  emptyTitle: { fontSize: typography.fontSize.md, fontWeight: '700' },
+  emptySubtitle: { fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center' },
+
+  heroCard: {
+    borderWidth: 1.5,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
   },
+  heroRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  heroCenter: { alignItems: 'center', minWidth: 100 },
+  heroValue: { fontSize: typography.fontSize.xxl, fontWeight: '800', letterSpacing: -0.5 },
+  heroCaption: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
+  heroImprovement: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: spacing.sm },
 
   chipRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
   chip: {
@@ -343,6 +385,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   td: { fontSize: typography.fontSize.sm },
   tdValue: { fontWeight: '700' },
+  dateCell: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   thDate: { width: 76 },
   thValue: { width: 84 },
   thDelta: { width: 74 },

@@ -1,4 +1,8 @@
-import { fmtPrValue, fmtPrDelta, fmtPrContext, fmtMinSec, nearPrHint, type PREventItem } from '../utils/prFormat';
+import {
+  fmtPrValue, fmtPrDelta, fmtPrContext, fmtMinSec, nearPrHint,
+  fmtRelativeDate, prTypeIcon, stalledUrgency, pickDefaultPrSeries,
+  type PREventItem,
+} from '../utils/prFormat';
 
 const base: Omit<PREventItem, 'pr_type' | 'value' | 'improved_by'> = {
   id: 1,
@@ -111,5 +115,79 @@ describe('nearPrHint', () => {
 
   it('recognizes beating the PR', () => {
     expect(nearPrHint('255', 250, 'lbs')).toBe('Beats your 250 lbs PR!');
+  });
+});
+
+describe('fmtRelativeDate', () => {
+  const RealDate = Date;
+  function mockNow(iso: string) {
+    // @ts-expect-error partial Date mock
+    global.Date = class extends RealDate {
+      constructor(...args: any[]) {
+        // @ts-expect-error spread into Date constructor
+        return args.length ? new RealDate(...args) : new RealDate(iso);
+      }
+    };
+  }
+  afterEach(() => { global.Date = RealDate; });
+
+  it('labels today and yesterday', () => {
+    mockNow('2026-08-10T18:00:00');
+    expect(fmtRelativeDate('2026-08-10T09:00:00')).toBe('Today');
+    expect(fmtRelativeDate('2026-08-09T09:00:00')).toBe('Yesterday');
+  });
+
+  it('falls back to a short date further back', () => {
+    mockNow('2026-08-10T18:00:00');
+    expect(fmtRelativeDate('2026-08-01T09:00:00')).toBe('Aug 1');
+  });
+});
+
+describe('prTypeIcon', () => {
+  it('maps every pr_type to an icon name', () => {
+    expect(prTypeIcon('max_weight')).toBe('barbell-outline');
+    expect(prTypeIcon('estimated_1rm')).toBe('barbell-outline');
+    expect(prTypeIcon('max_reps')).toBe('repeat-outline');
+    expect(prTypeIcon('best_time')).toBe('stopwatch-outline');
+    expect(prTypeIcon('best_distance')).toBe('navigate-outline');
+    expect(prTypeIcon('max_duration')).toBe('hourglass-outline');
+  });
+});
+
+describe('stalledUrgency', () => {
+  it('classifies by days since last PR', () => {
+    expect(stalledUrgency(0)).toBe('ok');
+    expect(stalledUrgency(13)).toBe('ok');
+    expect(stalledUrgency(14)).toBe('watch');
+    expect(stalledUrgency(29)).toBe('watch');
+    expect(stalledUrgency(30)).toBe('stale');
+    expect(stalledUrgency(90)).toBe('stale');
+  });
+});
+
+describe('pickDefaultPrSeries', () => {
+  it('returns empty for no events', () => {
+    expect(pickDefaultPrSeries([])).toEqual([]);
+  });
+
+  it('prefers max_weight over other types', () => {
+    const events = [
+      ev('max_reps', 10, null, 185),
+      ev('max_weight', 225),
+      ev('estimated_1rm', 250),
+    ];
+    expect(pickDefaultPrSeries(events)).toEqual([events[1]]);
+  });
+
+  it('falls back down the priority list when max_weight is absent', () => {
+    const events = [ev('max_reps', 10, null, 185)];
+    expect(pickDefaultPrSeries(events)).toEqual(events);
+  });
+
+  it('picks the most recently PRd weight context for max_reps', () => {
+    const older = { ...ev('max_reps', 8, null, 185), achieved_at: '2026-07-01T00:00:00' };
+    const newer = { ...ev('max_reps', 5, null, 205), achieved_at: '2026-08-01T00:00:00' };
+    // events are chronological (oldest first), as the history endpoint returns them
+    expect(pickDefaultPrSeries([older, newer])).toEqual([newer]);
   });
 });
