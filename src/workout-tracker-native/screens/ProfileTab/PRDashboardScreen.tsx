@@ -31,6 +31,10 @@ type WorkoutBest = { workout_id: number; workout_name: string; date: string; val
 
 type DashboardData = {
   recent_events: PREventItem[];
+  // 'week' = feed is scoped to the last 7 days (the normal case). 'all_time'
+  // = the week was empty, so the backend fell back to the most recent PRs
+  // regardless of age — the UI must not label those as "this week".
+  recent_events_scope: 'week' | 'all_time';
   page: number;
   has_more: boolean;
   workout_bests: { best_volume: WorkoutBest; best_total_reps: WorkoutBest };
@@ -93,6 +97,8 @@ export default function PRDashboardScreen({ navigation }: Props) {
   const [filter, setFilter]         = useState<typeof FILTERS[number]['key']>(null);
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
   const [shareEvent, setShareEvent] = useState<PREventItem | null>(null);
+  const [menuEvent, setMenuEvent]   = useState<PREventItem | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const [layout, setLayout]         = useState<SectionConfig[]>(DEFAULT_LAYOUT);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [pins, setPins]             = useState<PRPin[]>([]);
@@ -227,6 +233,13 @@ export default function PRDashboardScreen({ navigation }: Props) {
       }
     } catch {}
     setLoadingMore(false);
+  };
+
+  const openEventMenu = (event: PREventItem, e: any) => {
+    const { pageX, pageY } = e.nativeEvent;
+    const screenWidth = Dimensions.get('window').width;
+    setMenuPosition({ top: pageY + 8, right: screenWidth - pageX - 4 });
+    setMenuEvent(event);
   };
 
   const sharePr = (event: PREventItem) => {
@@ -450,6 +463,8 @@ export default function PRDashboardScreen({ navigation }: Props) {
     }
   };
 
+  const feedScope = data?.recent_events_scope ?? 'week';
+
   const renderHeader = () => (
     <View>
       {layout.filter(s => s.visible).map(s => (
@@ -458,9 +473,12 @@ export default function PRDashboardScreen({ navigation }: Props) {
 
       {/* Feed title + filter chips */}
       <View style={styles.feedTitleRow}>
-        <Text style={styles.sectionTitle}>Recent PRs</Text>
+        <Text style={styles.sectionTitle}>{feedScope === 'all_time' ? 'Recent PRs' : "This Week's PRs"}</Text>
         {chipLoading && <ActivityIndicator size="small" color={colors.textSecondary} />}
       </View>
+      {feedScope === 'all_time' && events.length > 0 && (
+        <Text style={styles.feedScopeNote}>No new PRs this week — here's your most recent</Text>
+      )}
       <View style={styles.chipRow}>
         {FILTERS.map(f => {
           const active = filter === f.key;
@@ -511,14 +529,13 @@ export default function PRDashboardScreen({ navigation }: Props) {
             </View>
           )}
         </View>
-        <View style={styles.eventActions}>
-          <TouchableOpacity onPress={() => openProgression(item)} hitSlop={8}>
-            <Ionicons name="stats-chart-outline" size={18} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => sharePr(item)} hitSlop={8}>
-            <Ionicons name="share-outline" size={18} color={colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          onPress={e => openEventMenu(item, e)}
+          hitSlop={8}
+          accessibilityLabel="PR actions"
+        >
+          <Ionicons name="ellipsis-vertical" size={18} color={colors.textSecondary} />
+        </TouchableOpacity>
       </TouchableOpacity>
     );
   };
@@ -549,12 +566,19 @@ export default function PRDashboardScreen({ navigation }: Props) {
           contentContainerStyle={styles.list}
           ListHeaderComponent={renderHeader}
           ListEmptyComponent={
+            // The backend already falls back to all-time history when the
+            // week is empty, so an empty list here means zero PRs of this
+            // (filtered) type have ever been recorded — not just none recently.
             <View style={styles.emptyState}>
               <Ionicons name="trophy-outline" size={40} color={colors.border} />
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
                 {filter ? 'No PRs of this type yet' : 'No PRs yet'}
               </Text>
-              {!filter && <Text style={styles.emptySubtitle}>Log some workouts to start your history.</Text>}
+              <Text style={styles.emptySubtitle}>
+                {stats && stats.total_prs > 0
+                  ? "You haven't set one of these yet — keep training!"
+                  : 'Log some workouts to start your history.'}
+              </Text>
             </View>
           }
           ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.md }} /> : null}
@@ -620,6 +644,47 @@ export default function PRDashboardScreen({ navigation }: Props) {
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
+      </Modal>
+
+      {/* PR card 3-dot menu — View Chart / Share */}
+      <Modal
+        visible={menuEvent !== null}
+        transparent
+        animationType="none"
+        onRequestClose={() => setMenuEvent(null)}
+      >
+        <TouchableOpacity
+          style={StyleSheet.absoluteFillObject}
+          activeOpacity={1}
+          onPress={() => setMenuEvent(null)}
+        />
+        {menuEvent && (
+          <View style={[styles.eventMenu, { top: menuPosition.top, right: menuPosition.right, backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <TouchableOpacity
+              style={styles.eventMenuItem}
+              onPress={() => {
+                const event = menuEvent;
+                setMenuEvent(null);
+                openProgression(event);
+              }}
+            >
+              <Ionicons name="stats-chart-outline" size={16} color={colors.textPrimary} />
+              <Text style={[styles.eventMenuText, { color: colors.textPrimary }]}>View Chart</Text>
+            </TouchableOpacity>
+            <View style={[styles.eventMenuDivider, { backgroundColor: colors.border }]} />
+            <TouchableOpacity
+              style={styles.eventMenuItem}
+              onPress={() => {
+                const event = menuEvent;
+                setMenuEvent(null);
+                sharePr(event);
+              }}
+            >
+              <Ionicons name="share-outline" size={16} color={colors.textPrimary} />
+              <Text style={[styles.eventMenuText, { color: colors.textPrimary }]}>Share PR</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </Modal>
 
       {/* Off-screen share card */}
@@ -699,6 +764,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
+  feedScopeNote: {
+    fontSize: typography.fontSize.xs,
+    color: colors.textSecondary,
+    marginTop: -spacing.xs,
+    marginBottom: spacing.sm,
+  },
 
   bestsRow: { flexDirection: 'row', gap: spacing.sm },
   bestCard: {
@@ -774,7 +845,26 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   eventMeta: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
   eventRight: { alignItems: 'flex-end' },
   eventValue: { fontSize: typography.fontSize.md, fontWeight: '700' },
-  eventActions: { gap: spacing.sm, alignItems: 'center' },
+  eventMenu: {
+    position: 'absolute',
+    width: 170,
+    borderRadius: 10,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 8,
+  },
+  eventMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  eventMenuText: { fontSize: typography.fontSize.sm, fontWeight: '500' },
+  eventMenuDivider: { height: 1 },
 
   deltaPill: {
     flexDirection: 'row',

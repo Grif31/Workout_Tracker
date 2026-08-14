@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, waitFor, fireEvent } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { captureRef } from 'react-native-view-shot';
 import { mockFetch, createMockNavigation, createMockRoute } from './testUtils';
 import PRDashboardScreen from '../screens/ProfileTab/PRDashboardScreen';
 
@@ -11,6 +12,7 @@ const nav = createMockNavigation();
 const route = createMockRoute('PRDashboard');
 
 const dashboardPayload = {
+  recent_events_scope: 'week' as const,
   recent_events: [
     {
       id: 1, exercise_template_id: 7, workout_id: 42,
@@ -78,6 +80,32 @@ describe('PRDashboardScreen', () => {
     await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
     fireEvent.press(getByText('Bench Press'));
     expect(nav.navigate).toHaveBeenCalledWith('WorkoutDetails', { workoutId: 42 });
+  });
+
+  it('opens a 3-dot menu with View Chart and Share PR actions', async () => {
+    const { getByText, getByLabelText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
+    fireEvent.press(getByLabelText('PR actions'), { nativeEvent: { pageX: 100, pageY: 200 } });
+    await waitFor(() => expect(getByText('View Chart')).toBeTruthy());
+    expect(getByText('Share PR')).toBeTruthy();
+  });
+
+  it('navigates to the progression chart from the 3-dot menu', async () => {
+    const { getByText, getByLabelText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
+    fireEvent.press(getByLabelText('PR actions'), { nativeEvent: { pageX: 100, pageY: 200 } });
+    await waitFor(() => expect(getByText('View Chart')).toBeTruthy());
+    fireEvent.press(getByText('View Chart'));
+    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 7, exerciseName: 'Bench Press' });
+  });
+
+  it('captures and shares from the 3-dot menu', async () => {
+    const { getByText, getByLabelText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
+    fireEvent.press(getByLabelText('PR actions'), { nativeEvent: { pageX: 100, pageY: 200 } });
+    await waitFor(() => expect(getByText('Share PR')).toBeTruthy());
+    fireEvent.press(getByText('Share PR'));
+    await waitFor(() => expect(captureRef).toHaveBeenCalled());
   });
 
   it('navigates to PRProgression from a stalled lift row', async () => {
@@ -177,14 +205,49 @@ describe('PRDashboardScreen', () => {
     expect(queryByText('No PR history yet')).toBeNull();
   });
 
-  it('shows the empty state when there are no events', async () => {
+  it('shows the weekly title and no fallback note under the normal week scope', async () => {
+    const { getByText, queryByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText("This Week's PRs")).toBeTruthy());
+    expect(queryByText(/No new PRs this week/)).toBeNull();
+  });
+
+  it('retitles the feed and shows a note when the week is empty but older PRs are shown', async () => {
+    mockFetch({ ...dashboardPayload, recent_events_scope: 'all_time' });
+    const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Recent PRs')).toBeTruthy());
+    expect(getByText(/No new PRs this week/)).toBeTruthy();
+    // The fallback item itself still renders normally
+    expect(getByText('Bench Press')).toBeTruthy();
+  });
+
+  it('shows a first-time empty state when the user has no PRs at all', async () => {
+    // The backend already exhausts all-time history via its own fallback
+    // before returning an empty list, so an empty feed here always means
+    // zero PRs of this (filtered) type have ever been recorded.
     mockFetch({
       ...dashboardPayload,
       recent_events: [],
+      recent_events_scope: 'all_time',
       workout_bests: { best_volume: null, best_total_reps: null },
       stats: { prs_this_month: 0, pr_streak_weeks: 0, total_prs: 0, days_since_last_pr: [] },
     });
     const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => expect(getByText(/No PRs yet/)).toBeTruthy());
+    await waitFor(() => expect(getByText('No PRs yet')).toBeTruthy());
+    expect(getByText('Log some workouts to start your history.')).toBeTruthy();
+  });
+
+  it('shows an encouraging empty state for a type filter the user has never PRd', async () => {
+    mockFetch({
+      ...dashboardPayload,
+      recent_events: [],
+      recent_events_scope: 'all_time',
+      workout_bests: { best_volume: null, best_total_reps: null },
+      stats: { prs_this_month: 0, pr_streak_weeks: 0, total_prs: 15, days_since_last_pr: [] },
+    });
+    const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Distance')).toBeTruthy());
+    fireEvent.press(getByText('Distance'));
+    await waitFor(() => expect(getByText('No PRs of this type yet')).toBeTruthy());
+    expect(getByText(/keep training/i)).toBeTruthy();
   });
 });

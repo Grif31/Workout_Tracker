@@ -60,6 +60,13 @@ FEED_TYPE_FILTERS = {
 }
 FEED_PR_TYPES = [t for types in FEED_TYPE_FILTERS.values() for t in types]
 
+# The dashboard's "recent PRs" feed defaults to the last week, falling back to
+# the user's most recent PRs (any age) when that window is empty — see
+# recent_events_scope in get_pr_dashboard. Momentum stats (streak, this-month
+# count, days-since-last-PR) are unaffected — they're computed from the full
+# PREvent history, not this window.
+RECENT_FEED_WINDOW_DAYS = 7
+
 
 @pr_bp.get('/api/personal-records')
 @jwt_required()
@@ -117,13 +124,23 @@ def get_pr_dashboard():
         return jsonify({'message': f'Invalid type, use one of: {", ".join(FEED_TYPE_FILTERS)}'}), 400
     feed_types = FEED_TYPE_FILTERS[type_filter] if type_filter else FEED_PR_TYPES
 
-    feed_query = (
+    feed_window_start = now - timedelta(days=RECENT_FEED_WINDOW_DAYS)
+    feed_base_query = (
         db.session.query(PREvent, ExerciseTemplate.name, Workout.name, Workout.date)
         .join(ExerciseTemplate, PREvent.exercise_template_id == ExerciseTemplate.id)
         .join(Workout, PREvent.workout_id == Workout.id)
         .filter(PREvent.user_id == user_id, PREvent.pr_type.in_(feed_types))
-        .order_by(PREvent.achieved_at.desc(), PREvent.id.desc())
     )
+    feed_windowed_query = feed_base_query.filter(PREvent.achieved_at >= feed_window_start)
+
+    # A quiet week shouldn't leave the dashboard looking dead — fall back to
+    # the user's most recent PRs (any age) when the week's window is empty,
+    # scoped to whichever type filter is active. recent_events_scope tells the
+    # frontend which framing applies, so older PRs never get mislabeled as
+    # "this week".
+    using_fallback = feed_windowed_query.count() == 0
+    feed_query = (feed_base_query if using_fallback else feed_windowed_query) \
+        .order_by(PREvent.achieved_at.desc(), PREvent.id.desc())
     pagination = feed_query.paginate(page=page, per_page=per_page, error_out=False)
     recent_events = []
     for event, exercise_name, workout_name, workout_date in pagination.items:
@@ -233,6 +250,7 @@ def get_pr_dashboard():
 
     return jsonify({
         'recent_events': recent_events,
+        'recent_events_scope': 'all_time' if using_fallback else 'week',
         'page': page,
         'per_page': per_page,
         'total': pagination.total,

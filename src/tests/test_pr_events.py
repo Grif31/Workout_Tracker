@@ -304,6 +304,59 @@ class TestDashboardEndpoint:
         assert data['recent_events'] == []
         assert data['stats']['prs_this_month'] == 0
 
+    def test_feed_includes_events_within_the_past_week(self, client, auth_token):
+        tid = create_template(client, auth_token)
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 225}],
+                              date_str=iso(date.today() - timedelta(days=6)))
+        data = client.get('/api/personal-records/dashboard', headers=auth_headers(auth_token)).get_json()
+        assert len(data['recent_events']) > 0
+        assert data['recent_events_scope'] == 'week'
+
+    def test_feed_excludes_older_events_when_the_week_has_a_pr(self, client, auth_token):
+        # A within-week PR fills the window, so an older PR on a different
+        # exercise must not leak into the feed alongside it.
+        old_tid = create_template(client, auth_token, name='Squat', muscle_group='Quads')
+        post_strength_workout(client, auth_token, old_tid, [{'reps': 5, 'weight': 315}],
+                              date_str=iso(date.today() - timedelta(days=8)), name='Old Squat Day')
+        new_tid = create_template(client, auth_token, name='Bench Press')
+        post_strength_workout(client, auth_token, new_tid, [{'reps': 5, 'weight': 225}], name='New Bench Day')
+
+        data = client.get('/api/personal-records/dashboard', headers=auth_headers(auth_token)).get_json()
+        assert data['recent_events_scope'] == 'week'
+        assert all(e['exercise_name'] != 'Squat' for e in data['recent_events'])
+        assert any(e['exercise_name'] == 'Bench Press' for e in data['recent_events'])
+
+    def test_feed_falls_back_to_recent_history_when_the_week_is_empty(self, client, auth_token):
+        # A quiet week shouldn't leave the dashboard looking dead — fall back
+        # to the most recent PR(s) regardless of age.
+        tid = create_template(client, auth_token)
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 225}],
+                              date_str=iso(date.today() - timedelta(days=8)))
+        data = client.get('/api/personal-records/dashboard', headers=auth_headers(auth_token)).get_json()
+        assert len(data['recent_events']) > 0
+        assert data['recent_events_scope'] == 'all_time'
+
+    def test_feed_fallback_is_scoped_to_the_active_type_filter(self, client, auth_token):
+        # Reps PR this week, but no weight PR this week — filtering to
+        # "weight" should fall back to the old weight PR, not the reps one.
+        tid = create_template(client, auth_token)
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 225}],
+                              date_str=iso(date.today() - timedelta(days=8)))
+        post_strength_workout(client, auth_token, tid, [{'reps': 10, 'weight': 100}])  # today, different weight -> reps PR
+
+        data = client.get('/api/personal-records/dashboard?type=weight', headers=auth_headers(auth_token)).get_json()
+        assert data['recent_events_scope'] == 'all_time'
+        assert all(e['pr_type'] == 'max_weight' for e in data['recent_events'])
+
+    def test_feed_window_does_not_affect_momentum_stats(self, client, auth_token):
+        # Momentum stats (streak/total) always read the full history,
+        # independent of whichever scope the feed itself is showing.
+        tid = create_template(client, auth_token)
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 225}],
+                              date_str=iso(date.today() - timedelta(days=10)))
+        data = client.get('/api/personal-records/dashboard', headers=auth_headers(auth_token)).get_json()
+        assert data['stats']['total_prs'] > 0
+
 
 # ---------------------------------------------------------------------------
 # GET /api/personal-records/history
