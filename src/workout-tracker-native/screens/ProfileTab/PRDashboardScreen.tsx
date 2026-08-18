@@ -557,6 +557,15 @@ export default function PRDashboardScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
+      <TouchableOpacity
+        style={styles.viewAllRow}
+        onPress={() => navigation.navigate('PersonalRecords')}
+        hitSlop={8}
+      >
+        <Text style={styles.viewAllText}>View All</Text>
+        <Ionicons name="chevron-forward" size={14} color={colors.accent} />
+      </TouchableOpacity>
+
       {loading ? (
         <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: spacing.xl }} />
       ) : (
@@ -718,6 +727,19 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   backBtn: { width: 40, alignItems: 'flex-start' },
   gearBtn: { width: 40, alignItems: 'flex-end' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary },
+  viewAllRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: 2,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  viewAllText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.accent,
+  },
   list: { padding: spacing.md, gap: spacing.sm },
 
   emptyState: { alignItems: 'center', marginTop: spacing.xl, gap: spacing.xs },

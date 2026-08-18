@@ -52,6 +52,13 @@ describe('PRDashboardScreen', () => {
     render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
   });
 
+  it('navigates to PersonalRecords when View All is tapped', async () => {
+    const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('View All')).toBeTruthy());
+    fireEvent.press(getByText('View All'));
+    expect(nav.navigate).toHaveBeenCalledWith('PersonalRecords');
+  });
+
   it('shows hero stats', async () => {
     const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('this month')).toBeTruthy());

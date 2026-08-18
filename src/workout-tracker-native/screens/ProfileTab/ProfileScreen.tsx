@@ -29,7 +29,7 @@ import { apiFetch, resolveMediaUrl } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
 import { LaurelBranch } from '../../components/LaurelWreath';
-import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
+import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
 import { fmtHold } from '../../components/workout/types';
 import CalendarModal from '../../components/CalendarModal';
 
@@ -325,17 +325,22 @@ export default function ProfileScreen({ navigation }: Props) {
     setPrMuscle(null);
   };
 
+  // The whole box is the entry point into the PR Dashboard — the swap button
+  // on each card is a nested Touchable, so tapping it claims the gesture
+  // responder and doesn't also fire this outer navigation (standard RN
+  // touch-responder behavior, not DOM bubbling).
   const renderPRBar = () => {
     if (prs.length === 0) return null;
     return (
-      <View style={styles.prSection}>
+      <TouchableOpacity
+        style={styles.prSectionBox}
+        activeOpacity={0.85}
+        onPress={() => navigation.navigate('PRDashboard')}
+      >
         <View style={styles.prSectionHeader}>
-          <View style={{ flex: 1 }}>
-            <SectionRule label="Personal Records" />
-          </View>
-          <TouchableOpacity onPress={() => navigation.navigate('PersonalRecords')} style={{ marginLeft: spacing.sm }}>
-            <Text style={[styles.seeAll, { color: colors.accent }]}>See All</Text>
-          </TouchableOpacity>
+          <LaurelBranch height={16} color={PR_GOLD_TEXT} />
+          <Text style={styles.prSectionTitle}>Personal Records</Text>
+          <Ionicons name="chevron-forward" size={16} color={PR_GOLD_TEXT} />
         </View>
 
         <View style={styles.prCards}>
@@ -343,7 +348,7 @@ export default function ProfileScreen({ navigation }: Props) {
             const pr = getPinnedPR(pin);
             return (
               <View key={slot} style={{ flex: 1 }}>
-                <View style={[styles.prCard, { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: PR_GOLD + '60' }]}>
+                <View style={[styles.prCard, { backgroundColor: colors.surface }]}>
                   <Ionicons name="trophy" size={22} color={PR_GOLD} style={styles.trophyIcon} />
                   {pr ? (
                     <>
@@ -376,6 +381,7 @@ export default function ProfileScreen({ navigation }: Props) {
                     style={[styles.swapBtn, { backgroundColor: colors.background }]}
                     onPress={() => setSwapSlot(slot)}
                     hitSlop={6}
+                    accessibilityLabel="Change pinned PR"
                   >
                     <Ionicons name="swap-horizontal" size={13} color={colors.textSecondary} />
                   </TouchableOpacity>
@@ -384,7 +390,7 @@ export default function ProfileScreen({ navigation }: Props) {
             );
           })}
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -835,19 +841,31 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     textAlign: 'center',
   },
 
-  // PR section
-  prSection: { marginBottom: spacing.sm },
+  // PR section — the whole box is tappable, entry point into the PR Dashboard
+  prSectionBox: {
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.md,
+    backgroundColor: PR_GOLD_BG,
+    borderRadius: 14,
+    padding: spacing.sm,
+  },
   prSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.xs,
     paddingBottom: spacing.sm,
   },
-  seeAll: { fontSize: typography.fontSize.sm, fontWeight: '600' },
+  prSectionTitle: {
+    flex: 1,
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+    color: PR_GOLD_TEXT,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   prCards: {
     flexDirection: 'row',
-    paddingHorizontal: spacing.md,
     gap: spacing.sm,
   },
   prCard: {
