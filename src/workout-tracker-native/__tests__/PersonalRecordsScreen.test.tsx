@@ -45,4 +45,45 @@ describe('PersonalRecordsScreen', () => {
     fireEvent.press(getByText('Time'));
     await waitFor(() => expect(getByText('Running')).toBeTruthy());
   });
+
+  it('navigates to Progression when a Max Weight (default sort) row is tapped', async () => {
+    const { getByText } = render(<PersonalRecordsScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
+    fireEvent.press(getByText('Bench Press'));
+    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 7, exerciseName: 'Bench Press' });
+  });
+
+  it('navigates to Progression when a Max Weight (by muscle) row is tapped', async () => {
+    const { getByText } = render(<PersonalRecordsScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
+    fireEvent.press(getByText('By Muscle'));
+    await waitFor(() => expect(getByText('Chest')).toBeTruthy());
+    fireEvent.press(getByText('Bench Press'));
+    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 7, exerciseName: 'Bench Press' });
+  });
+
+  it('navigates to Progression when a Time-tab row is tapped', async () => {
+    const { getByText } = render(<PersonalRecordsScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
+    fireEvent.press(getByText('Time'));
+    await waitFor(() => expect(getByText('Running')).toBeTruthy());
+    fireEvent.press(getByText('5K')); // the data row itself; "Running" is just the section header
+    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 9, exerciseName: 'Running' });
+  });
+
+  it('navigates to Progression when an expanded Max Reps entry is tapped', async () => {
+    mockFetch([...prsPayload, {
+      id: 3, exercise_template_id: 12, exercise_name: 'Squat', equipment: null,
+      pr_type: 'max_reps', pr_label: 'Max Reps', value: 10, weight_context: 225,
+      achieved_at: '2026-07-15T00:00:00', muscle_group: 'Legs',
+    }]);
+    const { getByText } = render(<PersonalRecordsScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
+    fireEvent.press(getByText('Max Reps'));
+    await waitFor(() => expect(getByText('Squat')).toBeTruthy());
+    fireEvent.press(getByText('Squat')); // expands the accordion — does not navigate
+    await waitFor(() => expect(getByText('225 lbs')).toBeTruthy());
+    fireEvent.press(getByText('225 lbs'));
+    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 12, exerciseName: 'Squat' });
+  });
 });

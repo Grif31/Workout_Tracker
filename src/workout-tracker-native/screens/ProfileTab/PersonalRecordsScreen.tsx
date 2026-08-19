@@ -240,6 +240,9 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
+  const openProgression = (exerciseTemplateId: number, exerciseName: string) =>
+    navigation.navigate('PRProgression', { exerciseTemplateId, exerciseName });
+
   const renderAccordionExercise = (section: RepsSection) => {
     const isExpanded = expandedIds.has(section.exercise_template_id);
     const best = section.data[0];
@@ -270,7 +273,12 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
         {isExpanded && section.data.map((item, index) => {
           const isTop = index === 0;
           return (
-            <View key={`${item.weight}-${index}`} style={[styles.repsRow, { borderTopColor: colors.border }]}>
+            <TouchableOpacity
+              key={`${item.weight}-${index}`}
+              style={[styles.repsRow, { borderTopColor: colors.border }]}
+              onPress={() => openProgression(section.exercise_template_id, section.title)}
+              activeOpacity={0.7}
+            >
               <View style={styles.rowInfo}>
                 <Text style={[styles.repsWeight, { color: colors.textSecondary }]}>
                   {item.weight === 0 ? 'Bodyweight' : `${item.weight} ${unit}`}
@@ -288,7 +296,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                   <Text style={styles.rowValue}>{item.reps} reps</Text>
                 )}
               </View>
-            </View>
+            </TouchableOpacity>
           );
         })}
       </View>
@@ -397,7 +405,11 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
               <GoldSectionRule icon="body-outline" label={section.title} style={[styles.sectionHeaderRow, { backgroundColor: colors.background }]} />
             )}
             renderItem={({ item, index }) => (
-              <View style={[styles.row, { backgroundColor: colors.surface }]}>
+              <TouchableOpacity
+                style={[styles.row, { backgroundColor: colors.surface }]}
+                onPress={() => openProgression(item.exercise_template_id, item.exercise_name)}
+                activeOpacity={0.7}
+              >
                 <View style={styles.rowInfo}>
                   <Text style={[styles.rowName, { color: colors.textPrimary }]}>
                     {item.exercise_name}
@@ -423,7 +435,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                     <Text style={styles.rowValue}>{item.value} {unit}</Text>
                   )}
                 </View>
-              </View>
+              </TouchableOpacity>
             )}
           />
         ) : (
@@ -434,7 +446,11 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             contentContainerStyle={styles.list}
             ListEmptyComponent={<Text style={styles.empty}>No max-weight records yet.</Text>}
             renderItem={({ item, index }) => (
-              <View style={[styles.row, { backgroundColor: colors.surface }]}>
+              <TouchableOpacity
+                style={[styles.row, { backgroundColor: colors.surface }]}
+                onPress={() => openProgression(item.exercise_template_id, item.exercise_name)}
+                activeOpacity={0.7}
+              >
                 <Text style={[styles.rank, index < 3 && { color: colors.accent }]}>#{index + 1}</Text>
                 <View style={styles.rowInfo}>
                   <Text style={[styles.rowName, { color: colors.textPrimary }]}>
@@ -461,7 +477,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                     <Text style={styles.rowValue}>{item.value} {unit}</Text>
                   )}
                 </View>
-              </View>
+              </TouchableOpacity>
             )}
           />
         )
@@ -497,11 +513,15 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             const isTop = index === 0;
             const isLast = index === section.data.length - 1;
             return (
-              <View style={[
-                styles.repsRow,
-                { backgroundColor: colors.surface, borderTopColor: colors.border },
-                isLast && styles.repsRowLast,
-              ]}>
+              <TouchableOpacity
+                style={[
+                  styles.repsRow,
+                  { backgroundColor: colors.surface, borderTopColor: colors.border },
+                  isLast && styles.repsRowLast,
+                ]}
+                onPress={() => openProgression(section.exercise_template_id, section.title)}
+                activeOpacity={0.7}
+              >
                 <View style={styles.rowInfo}>
                   <Text style={[styles.repsWeight, { color: colors.textSecondary }]}>{item.label}</Text>
                   <Text style={styles.rowDate}>{fmtDate(item.achieved_at)}</Text>
@@ -521,7 +541,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                     </Text>
                   )}
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           }}
         />
