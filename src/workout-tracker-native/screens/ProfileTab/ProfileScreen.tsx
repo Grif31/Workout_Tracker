@@ -32,19 +32,7 @@ import { LaurelBranch } from '../../components/LaurelWreath';
 import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
 import { fmtHold } from '../../components/workout/types';
 import CalendarModal from '../../components/CalendarModal';
-
-function SectionRule({ label, style }: { label: string; style?: object }) {
-  const { colors } = useTheme();
-  return (
-    <View style={[{ flexDirection: 'row', alignItems: 'center' }, style]}>
-      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
-      <Text style={{ fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginHorizontal: spacing.sm }}>
-        {label}
-      </Text>
-      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
-    </View>
-  );
-}
+import SectionRule from '../../components/SectionRule';
 
 const PR_PINS_BASE = '@pr_pins';
 const DEFAULT_PIN_COUNT = 3;
@@ -340,7 +328,7 @@ export default function ProfileScreen({ navigation }: Props) {
         <View style={styles.prSectionHeader}>
           <LaurelBranch height={16} color={PR_GOLD_TEXT} />
           <Text style={styles.prSectionTitle}>Personal Records</Text>
-          <Ionicons name="chevron-forward" size={16} color={PR_GOLD_TEXT} />
+          <LaurelBranch side="right" height={16} color={PR_GOLD_TEXT} />
         </View>
 
         <View style={styles.prCards}>
@@ -404,9 +392,9 @@ export default function ProfileScreen({ navigation }: Props) {
           {greekRank ? (
             <TouchableOpacity
               onPress={() => navigation.navigate('GreekRank')}
-              style={[styles.rankBadgePill, { backgroundColor: (GREEK_RANK_COLORS[greekRank] ?? '#888888') + '22', borderColor: GREEK_RANK_COLORS[greekRank] ?? '#888888' }]}
+              style={[styles.rankBadgePill, { backgroundColor: (GREEK_RANK_COLORS[greekRank] ?? GREEK_RANK_COLORS.Neophyte) + '22', borderColor: GREEK_RANK_COLORS[greekRank] ?? GREEK_RANK_COLORS.Neophyte }]}
             >
-              <Text style={[styles.rankBadgeText, { color: GREEK_RANK_COLORS[greekRank] ?? '#888888' }]}>
+              <Text style={[styles.rankBadgeText, { color: GREEK_RANK_COLORS[greekRank] ?? GREEK_RANK_COLORS.Neophyte }]}>
                 {greekRank}
               </Text>
             </TouchableOpacity>
@@ -441,7 +429,7 @@ export default function ProfileScreen({ navigation }: Props) {
       </TouchableOpacity>
 
       {/* Stats boxes */}
-      <View style={[styles.statsRow, { borderTopColor: GREEK_RANK_COLORS[greekRank ?? 'Neophyte'] ?? '#888888' }]}>
+      <View style={[styles.statsRow, { borderTopColor: GREEK_RANK_COLORS[greekRank ?? 'Neophyte'] ?? GREEK_RANK_COLORS.Neophyte }]}>
         <View style={styles.statBox}>
           <Text style={styles.statLabel}>Workouts</Text>
           <Text style={styles.statValue}>{stats?.total_workouts ?? '—'}</Text>
@@ -860,6 +848,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   prSectionTitle: {
     flex: 1,
+    textAlign: 'center',
     fontSize: typography.fontSize.sm,
     fontWeight: '700',
     color: PR_GOLD_TEXT,
