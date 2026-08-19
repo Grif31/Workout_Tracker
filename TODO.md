@@ -690,7 +690,7 @@ Check off items as you complete them.
   - [x] "Workout Records" section — best single-workout volume + best rep count cards, icon badge each, tap to view the workout
   - [x] **Entry point: the whole Personal Records box on `ProfileScreen`** (`renderPRBar`) — the 3 switchable pinned-PR cards (unchanged swap-to-change-exercise behavior) now sit inside one tappable gold-**bordered** box (`colors.surface` fill, `PR_GOLD` border — not a filled gold background); tapping anywhere on it opens the PR Dashboard (nested swap-button `TouchableOpacity`s claim the touch responder first, so they don't also trigger navigation — standard RN behavior, not DOM bubbling). Dashboard header's right slot is a "View All" link (replacing the removed customize gear — see below) → `PersonalRecordsScreen`, the "all current bests" reference view, which also keeps its own gold banner back into the Dashboard
   - [x] Hero card — laurel-flanked weekly PR streak as the focal number, gold-bordered card, with PRs-this-month / total-PRs as a secondary row below a divider
-  - [x] "Time Since Last PR" section — days-since-last-PR rows for the 10 most-trained lifts, urgency icon/color at 14d (watch) and 30d (stale, `colors.warmup`), tap → progression view
+  - [x] "Time Since Last PR" section — days-since-last-PR rows for the 10 most-trained lifts, urgency icon/color at 14d (watch) and 30d (stale, `colors.warmup`), tap → progression view. Own All/Weight/Reps/Time/Distance filter chips (independent of the feed's own chips above), switching client-side with no extra fetch — the dashboard endpoint already returns each exercise's `by_type` breakdown (per-category last-PR date, grouped server-side by `(exercise_template_id, pr_type)`, `null` when that exercise has never earned a PR of that type — those exercises drop out of a type-filtered view rather than showing a misleading "stalled since forever")
   - [x] **3-dot menu per feed card** ("View Chart" / "Share PR") replacing the two separate inline icons — same floating-`Modal` + tap-position pattern as `WorkoutLog.tsx`'s exercise menu; "Share PR" still renders `PRShareCard` (`components/PRShareCard.tsx`, modeled on `WorkoutShareCard`) off-screen via the existing `captureAndShare` helper
   - [x] **`PRProgressionScreen`** (`screens/ProfileTab/PRProgressionScreen.tsx`) — laurel-flanked "current best" hero card (with total improvement since the first recorded PR) atop a per-exercise PR-over-time **table** (Date | Value | Δ | Workout, newest first, current-best row marked with a trophy icon, rows tap → workout) + sparkline (react-native-gifted-charts), metric chips (Max Weight / Est. 1RM / Rep Record / Best Time / Best Distance / Longest Hold, shared list in `PR_METRIC_OPTIONS`) and per-weight / per-milestone context chips; shared value/delta formatting in `utils/prFormat.ts`
   - [x] ~~Customizable dashboard~~ — **removed 2026-08-18**: the gear icon → drag-to-reorder/hide-sections modal (`pr_dashboard_layout_${uid}`) was replaced by the "View All" link in that same header slot; sections now always render in a fixed order (hero, records, stalled, pinned progression)
@@ -806,41 +806,41 @@ Check off items as you complete them.
 ## ✍️ 17. Copy Polish — Remove Em Dashes from User-Facing Text
 > Em dashes (—) are all over UI copy, toasts, empty states, onboarding text, and the legal pages — they read as AI-generated. Swap for a period, comma, or colon depending on the sentence. Code comments are fine as-is (not user-facing); this is about strings a user actually sees. Full audit below, grouped by file.
 
-- [ ] **Onboarding & auth**
-  - [ ] `OnboardingPersonalInfoScreen.tsx:95` — "Totally optional — you can add..." → period
-  - [ ] `OnboardingTutorialScreen.tsx:53,87,92` — carousel copy ("AI Coach — personalised...", "training — when to push...", "your goals — no fluff.") → colon / period
-  - [ ] `OnboardingScreen.tsx:89,98,99,261` — AI-onboarding chat bot lines ("Got it —", "Perfect —", "right now —", "your program —") → period / comma
-  - [ ] `ResetPasswordScreen.tsx:233` — "Sent — check your email" → period
+- [x] **Onboarding & auth**
+  - [x] `OnboardingPersonalInfoScreen.tsx:95` — "Totally optional — you can add..." → period
+  - [x] `OnboardingTutorialScreen.tsx:53,87,92` — carousel copy ("AI Coach — personalised...", "training — when to push...", "your goals — no fluff.") → colon / period
+  - [x] `OnboardingScreen.tsx:89,98,99,261` — AI-onboarding chat bot lines ("Got it —", "Perfect —", "right now —", "your program —") → comma / period
+  - [x] `ResetPasswordScreen.tsx:233` — "Sent — check your email" → period
 
-- [ ] **Toasts & empty states**
-  - [ ] `PRProgressionScreen.tsx:52` — "...up to N exercises — unpin one first." → period
-  - [ ] `PRDashboardScreen.tsx:480,588` — "No new PRs this week — here's..." / "...yet — keep training!" → period
-  - [ ] `MeasurementsScreen.tsx:316,364,401` — "No entries/measurements/photos yet — tap..." (×3) → period
-  - [ ] `CreateRoutineScreen.tsx:331` — "No templates yet — create one first" → period
-  - [ ] `CoachScreen.tsx:788,1183` — "No routines/active routine/data — ..." → period
-  - [ ] `TemplateDetailScreen.tsx:295` — "No exercises yet — tap Add..." → period
-  - [ ] `GPSCardioScreen.tsx:333,443,517` — "Screen will stay on —", "Saved offline —", "GPS tracking still works —" → period
-  - [ ] `WorkoutLog.tsx:1237` — "Saved offline — will sync when connected" → period
+- [x] **Toasts & empty states**
+  - [x] `PRProgressionScreen.tsx:52` — "...up to N exercises — unpin one first." → period
+  - [x] `PRDashboardScreen.tsx:480,588` — "No new PRs this week — here's..." / "...yet — keep training!" → period
+  - [x] `MeasurementsScreen.tsx:316,364,401` — "No entries/measurements/photos yet — tap..." (×3) → period
+  - [x] `CreateRoutineScreen.tsx:331` — "No templates yet — create one first" → period
+  - [x] `CoachScreen.tsx:788,1183` — "No routines/active routine/data — ..." → period
+  - [x] `TemplateDetailScreen.tsx:295` — "No exercises yet — tap Add..." → period
+  - [x] `GPSCardioScreen.tsx:333,443,517` — "Screen will stay on —", "Saved offline —", "GPS tracking still works —" → period
+  - [x] `WorkoutLog.tsx:1237` — "Saved offline — will sync when connected" → period
 
-- [ ] **Coach / Strength Score copy**
-  - [ ] `CoachScreen.tsx:914,1258,1271` — "Hey {name} —...", subtitle lines → comma / period
-  - [ ] `WorkingSetsInfoModal.tsx:27,30,31,32,54` — MEV/MAV/MRV definitions → colon per definition, period for the closing caveat
-  - [ ] `StrengthScoreScreen.tsx:304,309,449,765,786` — bodyweight captions + info modal copy → period / colon; the Epley formula line (786) has two em dashes bracketing a parenthetical, use actual parens instead
+- [x] **Coach / Strength Score copy**
+  - [x] `CoachScreen.tsx:914,1258,1271` — "Hey {name} —...", subtitle lines → comma / period
+  - [x] `WorkingSetsInfoModal.tsx:27,30,31,32,54` — MEV/MAV/MRV definitions → colon per definition, period for the closing caveat
+  - [x] `StrengthScoreScreen.tsx:304,309,449,765,786` — bodyweight captions + info modal copy → period / colon; the Epley formula line (786) had two em dashes bracketing a parenthetical, swapped for actual parens
 
-- [ ] **PR labels & summaries**
-  - [ ] `WorkoutSummaryScreen.tsx:192,203,226` — "Your first workout — incredible!", "{exercise} — new {type} PR!" (×2) → period / colon
-  - [ ] `WorkoutDetails.tsx:460,481` — "{exercise} — {PR label}" (×2) → colon
-  - [ ] `PersonalRecordsScreen.tsx:317` — "PR Dashboard — recent PRs, streaks & records" → colon
-  - [ ] `GreekRankIntroScreen.tsx:61` — "...to Aretē — the pinnacle of human achievement." → comma
-  - [ ] `PaywallScreen.tsx:29` — "AI Coach — generate routines & templates" → colon
+- [x] **PR labels & summaries**
+  - [x] `WorkoutSummaryScreen.tsx:192,203,226` — "Your first workout — incredible!", "{exercise} — new {type} PR!" (×2) → period / colon
+  - [x] `WorkoutDetails.tsx:460,481` — "{exercise} — {PR label}" (×2) → colon
+  - [x] `PersonalRecordsScreen.tsx:317` — "PR Dashboard — recent PRs, streaks & records" → colon
+  - [x] `GreekRankIntroScreen.tsx:61` — "...to Aretē — the pinnacle of human achievement." → comma
+  - [x] `PaywallScreen.tsx:29` — "AI Coach — generate routines & templates" → colon
 
 - [x] **Legal / public pages (`routes/legal_routes.py`)** — highest visibility, worth doing first
   - [x] Homepage `<title>` and Greek Rank blurb (~line 12, 242)
   - [x] Privacy Policy `<title>` + body (~336, 353, 394–411) — the "Fitness data:" line and every third-party bullet (Anthropic/RevenueCat/Sentry/Resend/Expo/Apple-Google/Railway) use "— description", converted each to a colon after the `<strong>` tag
   - [x] Terms of Service `<title>` + body (~457, 508–509, 515, 538)
 
-- [ ] **Backend error messages (lower priority, dev-facing but user-visible on failure)**
-  - [ ] `ai_routes.py:580,617` — "AI service not configured — add..." / "anthropic package not installed — run..." → period
+- [x] **Backend error messages (lower priority, dev-facing but user-visible on failure)**
+  - [x] `ai_routes.py:580,617` — "AI service not configured — add..." / "anthropic package not installed — run..." → period
 
-- [ ] **Admin page (internal only, lowest priority)**
-  - [ ] `admin_routes.py:63` — "Exercise Images — Aretē Admin" → colon
+- [x] **Admin page (internal only, lowest priority)**
+  - [x] `admin_routes.py:63` — "Exercise Images — Aretē Admin" → pipe

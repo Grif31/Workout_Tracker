@@ -225,16 +225,38 @@ def get_pr_dashboard():
         .limit(10)
         .all()
     )
-    last_event_by_template = dict(
-        db.session.query(PREvent.exercise_template_id, func.max(PREvent.achieved_at))
+    # Grouped by (exercise, pr_type) rather than just exercise, so the frontend
+    # can let users switch "Time Since Last PR" between Weight/Reps/Time/
+    # Distance without a second round trip — see by_type below.
+    last_event_rows = (
+        db.session.query(PREvent.exercise_template_id, PREvent.pr_type, func.max(PREvent.achieved_at))
         .filter(
             PREvent.user_id == user_id,
             PREvent.pr_type.in_(FEED_PR_TYPES),
             PREvent.exercise_template_id.in_([t for t, _, _ in most_trained] or [-1]),
         )
-        .group_by(PREvent.exercise_template_id)
+        .group_by(PREvent.exercise_template_id, PREvent.pr_type)
         .all()
     )
+    last_by_template_and_type = {}
+    for template_id, pr_type, achieved_at in last_event_rows:
+        last_by_template_and_type.setdefault(template_id, {})[pr_type] = achieved_at
+
+    def _category_last(template_id, category):
+        by_type = last_by_template_and_type.get(template_id, {})
+        dates = [by_type[t] for t in FEED_TYPE_FILTERS[category] if t in by_type]
+        return max(dates) if dates else None
+
+    def _category_summary(template_id, category):
+        last_dt = _category_last(template_id, category)
+        if not last_dt:
+            return None
+        return {'days_since_last_pr': (now - last_dt).days, 'last_pr_at': last_dt.isoformat()}
+
+    last_event_by_template = {
+        template_id: max(by_type.values())
+        for template_id, by_type in last_by_template_and_type.items()
+    }
     days_since_last_pr = [
         {
             'exercise_template_id': template_id,
@@ -242,6 +264,10 @@ def get_pr_dashboard():
             'workout_count': workout_count,
             'days_since_last_pr': (now - last_event_by_template[template_id]).days,
             'last_pr_at': last_event_by_template[template_id].isoformat(),
+            'by_type': {
+                category: _category_summary(template_id, category)
+                for category in FEED_TYPE_FILTERS
+            },
         }
         for template_id, name, workout_count in most_trained
         if template_id in last_event_by_template

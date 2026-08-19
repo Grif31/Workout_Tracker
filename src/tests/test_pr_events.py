@@ -297,6 +297,35 @@ class TestDashboardEndpoint:
         assert rows[0]['exercise_name'] == 'Bench Press'
         assert rows[0]['days_since_last_pr'] == 10
 
+    def test_days_since_last_pr_by_type_breakdown(self, client, auth_token):
+        # max_weight 10 days ago, max_reps (different weight) 3 days ago —
+        # the aggregate should track the more recent one, but each type's
+        # own entry in by_type should track its own date independently.
+        tid = create_template(client, auth_token)
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 225}],
+                              date_str=iso(date.today() - timedelta(days=10)))
+        post_strength_workout(client, auth_token, tid, [{'reps': 8, 'weight': 185}],
+                              date_str=iso(date.today() - timedelta(days=3)))
+        data = client.get('/api/personal-records/dashboard', headers=auth_headers(auth_token)).get_json()
+        row = data['stats']['days_since_last_pr'][0]
+
+        assert row['days_since_last_pr'] == 3  # aggregate = most recent of any type
+        assert row['by_type']['weight']['days_since_last_pr'] == 10
+        assert row['by_type']['reps']['days_since_last_pr'] == 3
+        assert row['by_type']['time'] is None       # never PR'd — no entry, not a stale zero
+        assert row['by_type']['distance'] is None
+
+    def test_days_since_last_pr_by_type_time_spans_best_time_and_max_duration(self, client, auth_token):
+        # The "time" category covers two pr_types (best_time, max_duration) —
+        # the breakdown should max across both, matching the feed's own
+        # FEED_TYPE_FILTERS grouping.
+        tid = create_template(client, auth_token, name='Running', muscle_group='Core')
+        post_cardio_workout(client, auth_token, tid, duration_min=30, distance_km=5,
+                            date_str=iso(date.today() - timedelta(days=5)))
+        data = client.get('/api/personal-records/dashboard', headers=auth_headers(auth_token)).get_json()
+        row = next(r for r in data['stats']['days_since_last_pr'] if r['exercise_name'] == 'Running')
+        assert row['by_type']['time']['days_since_last_pr'] == 5
+
     def test_other_users_events_not_visible(self, client, auth_token, auth_token2):
         tid = create_template(client, auth_token, name='Squat', muscle_group='Quads')
         post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 315}])

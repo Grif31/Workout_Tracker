@@ -36,7 +36,16 @@ const dashboardPayload = {
     pr_streak_weeks: 2,
     total_prs: 15,
     days_since_last_pr: [
-      { exercise_template_id: 9, exercise_name: 'Squat', workout_count: 12, days_since_last_pr: 32, last_pr_at: '2026-07-09T00:00:00' },
+      {
+        exercise_template_id: 9, exercise_name: 'Squat', workout_count: 12,
+        days_since_last_pr: 32, last_pr_at: '2026-07-09T00:00:00',
+        by_type: {
+          weight: { days_since_last_pr: 32, last_pr_at: '2026-07-09T00:00:00' },
+          reps: { days_since_last_pr: 5, last_pr_at: '2026-08-06T00:00:00' },
+          time: null,
+          distance: null,
+        },
+      },
     ],
   },
 };
@@ -122,10 +131,36 @@ describe('PRDashboardScreen', () => {
     expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 9, exerciseName: 'Squat' });
   });
 
+  it('switches the stalled section to a per-type day count without refetching', async () => {
+    const { getByText, getAllByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('32d ago')).toBeTruthy());
+    const fetchCallsBefore = (global.fetch as jest.Mock).mock.calls.length;
+
+    // Index 0 is the stalled section's own "Reps" chip (index 1 is the feed's)
+    fireEvent.press(getAllByText('Reps')[0]);
+
+    await waitFor(() => expect(getByText('5d ago')).toBeTruthy());
+    expect(getByText('Squat')).toBeTruthy();
+    // Purely client-side — reuses by_type from the already-fetched payload
+    expect((global.fetch as jest.Mock).mock.calls.length).toBe(fetchCallsBefore);
+  });
+
+  it('drops exercises with no PR of the selected type and shows an empty message', async () => {
+    const { getByText, getAllByText, queryByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Squat')).toBeTruthy());
+
+    fireEvent.press(getAllByText('Time')[0]);
+
+    await waitFor(() => expect(getByText('No PRs of this type yet for your most-trained exercises.')).toBeTruthy());
+    expect(queryByText('Squat')).toBeNull();
+  });
+
   it('refetches with a type param when a filter chip is tapped', async () => {
-    const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => expect(getByText('Weight')).toBeTruthy());
-    fireEvent.press(getByText('Weight'));
+    // "Weight" now appears in two independent chip rows — the stalled
+    // section's (index 0) and the feed's (index 1, the one under test).
+    const { getByText, getAllByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getAllByText('Weight').length).toBe(2));
+    fireEvent.press(getAllByText('Weight')[1]);
     await waitFor(() => {
       const calls = (global.fetch as jest.Mock).mock.calls.map(c => String(c[0]));
       expect(calls.some(u => u.includes('type=weight'))).toBe(true);
@@ -133,10 +168,10 @@ describe('PRDashboardScreen', () => {
   });
 
   it('keeps the header mounted while switching filters instead of a full-page reload', async () => {
-    const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => expect(getByText('Weight')).toBeTruthy());
+    const { getByText, getAllByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getAllByText('Weight').length).toBe(2));
     expect(getByText('Most Volume')).toBeTruthy();
-    fireEvent.press(getByText('Weight'));
+    fireEvent.press(getAllByText('Weight')[1]);
     // Header content (hero/records/etc.) stays mounted immediately after the
     // tap — if a filter switch ever re-triggers the full-screen loading
     // state, this throws because the whole list (and its header) unmounts.

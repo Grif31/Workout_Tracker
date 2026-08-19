@@ -45,9 +45,15 @@ type DashboardData = {
       exercise_template_id: number;
       exercise_name: string;
       days_since_last_pr: number;
+      last_pr_at: string;
+      // Per-category breakdown (same categories as the feed's filter chips),
+      // null when the exercise has never earned a PR of that type.
+      by_type: Record<StalledCategory, { days_since_last_pr: number; last_pr_at: string } | null>;
     }[];
   };
 };
+
+type StalledCategory = 'weight' | 'reps' | 'time' | 'distance';
 
 const FILTERS = [
   { key: null,       label: 'All'      },
@@ -75,6 +81,10 @@ export default function PRDashboardScreen({ navigation }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [chipLoading, setChipLoading] = useState(false);
   const [filter, setFilter]         = useState<typeof FILTERS[number]['key']>(null);
+  // Independent of the feed's `filter` above — switches which PR type
+  // "Time Since Last PR" is scoped to, using the by_type breakdown already
+  // in the response (no extra fetch needed).
+  const [stalledFilter, setStalledFilter] = useState<StalledCategory | null>(null);
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
   const [shareEvent, setShareEvent] = useState<PREventItem | null>(null);
   const [menuEvent, setMenuEvent]   = useState<PREventItem | null>(null);
@@ -223,7 +233,18 @@ export default function PRDashboardScreen({ navigation }: Props) {
 
   const stats = data?.stats;
   const bests = data?.workout_bests;
-  const stalled = stats?.days_since_last_pr.slice(0, STALLED_SHOWN) ?? [];
+  const stalled = useMemo(() => {
+    const rows = stats?.days_since_last_pr ?? [];
+    if (!stalledFilter) return rows.slice(0, STALLED_SHOWN);
+    // Re-derive from each row's own by_type entry — exercises that have
+    // never earned a PR of this type drop out rather than showing a
+    // misleading "stalled since forever".
+    return rows
+      .filter(r => r.by_type[stalledFilter] != null)
+      .map(r => ({ ...r, ...r.by_type[stalledFilter]! }))
+      .sort((a, b) => b.days_since_last_pr - a.days_since_last_pr)
+      .slice(0, STALLED_SHOWN);
+  }, [stats, stalledFilter]);
 
   const SectionHeader = ({ icon, title }: { icon: keyof typeof Ionicons.glyphMap; title: string }) => (
     <View style={styles.sectionHeaderRow}>
@@ -305,36 +326,62 @@ export default function PRDashboardScreen({ navigation }: Props) {
         </View>
     ) : null;
 
+  // Gate the whole section on whether there's any stalled data at all — a
+  // type filter that happens to match nothing still keeps the section (and
+  // its chips) visible, just with an inline empty message, so switching
+  // back to another type stays reachable.
+  const hasStalledData = (stats?.days_since_last_pr.length ?? 0) > 0;
+
   const renderStalled = () =>
-    stalled.length > 0 ? (
+    hasStalledData ? (
         <View>
           <SectionHeader icon="hourglass-outline" title="Time Since Last PR" />
-          <View style={[styles.trophyCard, { backgroundColor: colors.surface }]}>
-            {stalled.map((row, i) => {
-              const urgency = stalledUrgency(row.days_since_last_pr);
+          <View style={styles.chipRow}>
+            {FILTERS.map(f => {
+              const active = stalledFilter === f.key;
               return (
                 <TouchableOpacity
-                  key={row.exercise_template_id}
-                  style={[styles.trophyRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
-                  onPress={() => openProgression(row)}
-                  activeOpacity={0.7}
+                  key={f.label}
+                  style={[styles.chip, { borderColor: colors.border }, active && { backgroundColor: colors.accent + '20', borderColor: colors.accent }]}
+                  onPress={() => setStalledFilter(f.key)}
                 >
-                  <Ionicons
-                    name={urgency === 'stale' ? 'alert-circle-outline' : 'time-outline'}
-                    size={16}
-                    color={urgency === 'stale' ? colors.warmup : colors.textSecondary}
-                  />
-                  <Text style={[styles.trophyRowName, { color: colors.textPrimary }]} numberOfLines={1}>
-                    {row.exercise_name}
+                  <Text style={[styles.chipText, { color: active ? colors.accent : colors.textSecondary }]}>
+                    {f.label}
                   </Text>
-                  <Text style={[styles.trophyRowMeta, urgency === 'stale' && { color: colors.warmup, fontWeight: '700' }]}>
-                    {row.days_since_last_pr === 0 ? 'Today' : `${row.days_since_last_pr}d ago`}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
                 </TouchableOpacity>
               );
             })}
           </View>
+          {stalled.length > 0 ? (
+            <View style={[styles.trophyCard, { backgroundColor: colors.surface }]}>
+              {stalled.map((row, i) => {
+                const urgency = stalledUrgency(row.days_since_last_pr);
+                return (
+                  <TouchableOpacity
+                    key={row.exercise_template_id}
+                    style={[styles.trophyRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
+                    onPress={() => openProgression(row)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={urgency === 'stale' ? 'alert-circle-outline' : 'time-outline'}
+                      size={16}
+                      color={urgency === 'stale' ? colors.warmup : colors.textSecondary}
+                    />
+                    <Text style={[styles.trophyRowName, { color: colors.textPrimary }]} numberOfLines={1}>
+                      {row.exercise_name}
+                    </Text>
+                    <Text style={[styles.trophyRowMeta, urgency === 'stale' && { color: colors.warmup, fontWeight: '700' }]}>
+                      {row.days_since_last_pr === 0 ? 'Today' : `${row.days_since_last_pr}d ago`}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : (
+            <Text style={styles.pinsHint}>No PRs of this type yet for your most-trained exercises.</Text>
+          )}
         </View>
     ) : null;
 
@@ -434,7 +481,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
         {chipLoading && <ActivityIndicator size="small" color={colors.textSecondary} />}
       </View>
       {feedScope === 'all_time' && events.length > 0 && (
-        <Text style={styles.feedScopeNote}>No new PRs this week — here's your most recent</Text>
+        <Text style={styles.feedScopeNote}>No new PRs this week. Here's your most recent</Text>
       )}
       <View style={styles.chipRow}>
         {FILTERS.map(f => {
@@ -533,7 +580,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
               </Text>
               <Text style={styles.emptySubtitle}>
                 {stats && stats.total_prs > 0
-                  ? "You haven't set one of these yet — keep training!"
+                  ? "You haven't set one of these yet. Keep training!"
                   : 'Log some workouts to start your history.'}
               </Text>
             </View>
