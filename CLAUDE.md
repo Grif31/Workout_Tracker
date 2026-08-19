@@ -218,7 +218,6 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 | `workout_repeat_last_set_${uid}` | false | Add Set pre-fills the new set with the last set's values |
 | `profile_frame_rank_${uid}` | 'Neophyte' | Selected avatar frame rank name |
 | `@pr_pins_${uid}` | — | JSON array of 3 pinned PR slots on Profile (Pin\|null)[] |
-| `pr_dashboard_layout_${uid}` | all visible, default order | PR Dashboard section order + visibility (JSON {key, visible}[]; keys: hero/records/stalled/progression) |
 | `pr_dashboard_pins_${uid}` | — | Exercises pinned to PR Dashboard's Pinned Progression section (JSON {id, name}[], max 6; toggled from PRProgressionScreen) |
 | `coach_profile_${uid}` | — | Coach personalization JSON (goal/equipment/schedule/injuries) |
 | `strength_score_last_tier_${uid}` | — | Last celebrated overall Strength Score tier index (`STRENGTH_TIERS` ordinal), used to detect rank-up moments across app opens |

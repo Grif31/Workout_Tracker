@@ -845,7 +845,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   prSectionBox: {
     marginHorizontal: spacing.md,
     marginBottom: spacing.md,
-    backgroundColor: PR_GOLD_BG,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: PR_GOLD,
     borderRadius: 14,
     padding: spacing.sm,
   },

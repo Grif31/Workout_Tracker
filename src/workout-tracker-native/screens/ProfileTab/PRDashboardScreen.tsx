@@ -8,7 +8,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { LineChart } from 'react-native-gifted-charts';
 import { LaurelBranch } from '../../components/LaurelWreath';
-import DraggableList from '../../components/DraggableList';
 import PRShareCard from '../../components/PRShareCard';
 import { loadPrPins, type PRPin } from '../../utils/prPins';
 import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
@@ -64,25 +63,6 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // list padding (md*2) + pin card padding (md*2) + a little breathing room
 const PIN_CHART_W = SCREEN_WIDTH - spacing.md * 5;
 
-type SectionKey = 'hero' | 'records' | 'stalled' | 'progression';
-type SectionConfig = { key: SectionKey; visible: boolean };
-
-export const PR_DASHBOARD_LAYOUT_KEY = 'pr_dashboard_layout';
-
-const DEFAULT_LAYOUT: SectionConfig[] = [
-  { key: 'hero',        visible: true },
-  { key: 'records',     visible: true },
-  { key: 'stalled',     visible: true },
-  { key: 'progression', visible: true },
-];
-
-const SECTION_LABELS: Record<SectionKey, string> = {
-  hero:        'Stats',
-  records:     'Workout Records',
-  stalled:     'Time Since Last PR',
-  progression: 'Pinned Progression',
-};
-
 export default function PRDashboardScreen({ navigation }: Props) {
   const { user } = useAuth();
   const { colors } = useTheme();
@@ -99,33 +79,10 @@ export default function PRDashboardScreen({ navigation }: Props) {
   const [shareEvent, setShareEvent] = useState<PREventItem | null>(null);
   const [menuEvent, setMenuEvent]   = useState<PREventItem | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
-  const [layout, setLayout]         = useState<SectionConfig[]>(DEFAULT_LAYOUT);
-  const [customizeOpen, setCustomizeOpen] = useState(false);
   const [pins, setPins]             = useState<PRPin[]>([]);
   const [pinSeries, setPinSeries]         = useState<Record<number, PREventItem[]>>({});
   const [pinSeriesLoading, setPinSeriesLoading] = useState(false);
   const shareRef = useRef<View>(null);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    AsyncStorage.getItem(`${PR_DASHBOARD_LAYOUT_KEY}_${user.id}`).then(raw => {
-      if (!raw) return;
-      try {
-        const stored: SectionConfig[] = JSON.parse(raw);
-        // Keep only known sections, append any new defaults added since save
-        const known = stored.filter(s => DEFAULT_LAYOUT.some(d => d.key === s.key));
-        const missing = DEFAULT_LAYOUT.filter(d => !known.some(s => s.key === d.key));
-        setLayout([...known, ...missing]);
-      } catch {}
-    });
-  }, [user?.id]);
-
-  const persistLayout = (next: SectionConfig[]) => {
-    setLayout(next);
-    if (user?.id) {
-      AsyncStorage.setItem(`${PR_DASHBOARD_LAYOUT_KEY}_${user.id}`, JSON.stringify(next)).catch(() => {});
-    }
-  };
 
   useEffect(() => {
     if (!user?.id) return;
@@ -275,9 +232,8 @@ export default function PRDashboardScreen({ navigation }: Props) {
     </View>
   );
 
-  const renderSection = (key: SectionKey) => {
-    switch (key) {
-      case 'hero': return stats ? (
+  const renderHero = () =>
+    stats ? (
         <View style={[styles.heroCard, { backgroundColor: colors.surface, borderColor: PR_GOLD }]}>
           <View style={styles.heroStreakRow}>
             <LaurelBranch height={30} color={PR_GOLD} />
@@ -302,9 +258,10 @@ export default function PRDashboardScreen({ navigation }: Props) {
             </View>
           </View>
         </View>
-      ) : null;
+    ) : null;
 
-      case 'records': return bests && (bests.best_volume || bests.best_total_reps) ? (
+  const renderRecords = () =>
+    bests && (bests.best_volume || bests.best_total_reps) ? (
         <View>
           <SectionHeader icon="ribbon-outline" title="Workout Records" />
           <View style={styles.bestsRow}>
@@ -346,9 +303,10 @@ export default function PRDashboardScreen({ navigation }: Props) {
             )}
           </View>
         </View>
-      ) : null;
+    ) : null;
 
-      case 'stalled': return stalled.length > 0 ? (
+  const renderStalled = () =>
+    stalled.length > 0 ? (
         <View>
           <SectionHeader icon="hourglass-outline" title="Time Since Last PR" />
           <View style={[styles.trophyCard, { backgroundColor: colors.surface }]}>
@@ -378,9 +336,9 @@ export default function PRDashboardScreen({ navigation }: Props) {
             })}
           </View>
         </View>
-      ) : null;
+    ) : null;
 
-      case 'progression': return (
+  const renderProgression = () => (
         <View>
           <SectionHeader icon="pin-outline" title="Pinned Progression" />
           {pins.length === 0 ? (
@@ -459,17 +417,16 @@ export default function PRDashboardScreen({ navigation }: Props) {
             </View>
           )}
         </View>
-      );
-    }
-  };
+  );
 
   const feedScope = data?.recent_events_scope ?? 'week';
 
   const renderHeader = () => (
     <View>
-      {layout.filter(s => s.visible).map(s => (
-        <View key={s.key}>{renderSection(s.key)}</View>
-      ))}
+      {renderHero()}
+      {renderRecords()}
+      {renderStalled()}
+      {renderProgression()}
 
       {/* Feed title + filter chips */}
       <View style={styles.feedTitleRow}>
@@ -548,23 +505,14 @@ export default function PRDashboardScreen({ navigation }: Props) {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>PR Dashboard</Text>
         <TouchableOpacity
-          onPress={() => setCustomizeOpen(true)}
-          style={styles.gearBtn}
+          onPress={() => navigation.navigate('PersonalRecords')}
+          style={styles.viewAllBtn}
           hitSlop={8}
-          accessibilityLabel="Customize dashboard"
         >
-          <Ionicons name="options-outline" size={22} color={colors.textPrimary} />
+          <Text style={styles.viewAllText}>View All</Text>
+          <Ionicons name="chevron-forward" size={14} color={colors.accent} />
         </TouchableOpacity>
       </View>
-
-      <TouchableOpacity
-        style={styles.viewAllRow}
-        onPress={() => navigation.navigate('PersonalRecords')}
-        hitSlop={8}
-      >
-        <Text style={styles.viewAllText}>View All</Text>
-        <Ionicons name="chevron-forward" size={14} color={colors.accent} />
-      </TouchableOpacity>
 
       {loading ? (
         <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: spacing.xl }} />
@@ -596,64 +544,6 @@ export default function PRDashboardScreen({ navigation }: Props) {
           onEndReachedThreshold={0.4}
         />
       )}
-
-      {/* Customize sections modal */}
-      <Modal
-        visible={customizeOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCustomizeOpen(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalBackdrop}
-          activeOpacity={1}
-          onPress={() => setCustomizeOpen(false)}
-        >
-          <TouchableOpacity activeOpacity={1} style={[styles.modalCard, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Customize Dashboard</Text>
-            <Text style={styles.modalHint}>
-              Long-press and drag to reorder. Tap the eye to show or hide a section.
-            </Text>
-            <DraggableList
-              data={layout}
-              keyExtractor={s => s.key}
-              rowHeight={48}
-              gap={spacing.sm}
-              onReorder={(from, to) => {
-                const next = [...layout];
-                const [moved] = next.splice(from, 1);
-                next.splice(to, 0, moved);
-                persistLayout(next);
-              }}
-              renderItem={item => (
-                <View style={[styles.customizeRow, { backgroundColor: colors.background }]}>
-                  <Ionicons name="reorder-three-outline" size={20} color={colors.textSecondary} />
-                  <Text style={[styles.customizeLabel, { color: item.visible ? colors.textPrimary : colors.textSecondary }]}>
-                    {SECTION_LABELS[item.key]}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => persistLayout(layout.map(s => s.key === item.key ? { ...s, visible: !s.visible } : s))}
-                    hitSlop={8}
-                    accessibilityLabel={`${item.visible ? 'Hide' : 'Show'} ${SECTION_LABELS[item.key]}`}
-                  >
-                    <Ionicons
-                      name={item.visible ? 'eye-outline' : 'eye-off-outline'}
-                      size={20}
-                      color={item.visible ? colors.accent : colors.textSecondary}
-                    />
-                  </TouchableOpacity>
-                </View>
-              )}
-            />
-            <TouchableOpacity
-              style={[styles.modalDone, { backgroundColor: colors.accent }]}
-              onPress={() => setCustomizeOpen(false)}
-            >
-              <Text style={[styles.modalDoneText, { color: colors.accentText }]}>Done</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
 
       {/* PR card 3-dot menu — View Chart / Share */}
       <Modal
@@ -725,15 +615,13 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderBottomColor: colors.border,
   },
   backBtn: { width: 40, alignItems: 'flex-start' },
-  gearBtn: { width: 40, alignItems: 'flex-end' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary },
-  viewAllRow: {
+  headerTitle: { flex: 1, fontSize: 18, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
+  viewAllBtn: {
+    minWidth: 40,
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-end',
+    justifyContent: 'flex-end',
     gap: 2,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.xs,
   },
   viewAllText: {
     fontSize: typography.fontSize.sm,
@@ -900,49 +788,4 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   deltaPillText: { fontSize: typography.fontSize.xs, fontWeight: '700' },
 
   offscreen: { position: 'absolute', left: -9999, top: -9999 },
-
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    padding: spacing.lg,
-  },
-  modalCard: {
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-  },
-  modalTitle: {
-    fontSize: typography.fontSize.lg,
-    fontWeight: '700',
-    marginBottom: spacing.xs,
-  },
-  modalHint: {
-    fontSize: typography.fontSize.xs,
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
-    lineHeight: 18,
-  },
-  customizeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    height: 48,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-  },
-  customizeLabel: {
-    flex: 1,
-    fontSize: typography.fontSize.md,
-    fontWeight: '600',
-  },
-  modalDone: {
-    marginTop: spacing.md,
-    borderRadius: radius.md,
-    paddingVertical: spacing.sm + 2,
-    alignItems: 'center',
-  },
-  modalDoneText: {
-    fontSize: typography.fontSize.md,
-    fontWeight: '700',
-  },
 });

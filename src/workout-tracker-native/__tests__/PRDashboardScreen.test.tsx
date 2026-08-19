@@ -147,34 +147,12 @@ describe('PRDashboardScreen', () => {
     });
   });
 
-  it('hides a section when its eye toggle is tapped in customize mode', async () => {
-    const { getByText, getByLabelText, queryByText } = render(
-      <PRDashboardScreen navigation={nav as any} route={route as any} />,
-    );
-    await waitFor(() => expect(getByText('Most Volume')).toBeTruthy());
-
-    fireEvent.press(getByLabelText('Customize dashboard'));
-    await waitFor(() => expect(getByText('Customize Dashboard')).toBeTruthy());
-    fireEvent.press(getByLabelText('Hide Workout Records'));
-    fireEvent.press(getByText('Done'));
-
-    await waitFor(() => expect(queryByText('Most Volume')).toBeNull());
-    const saved = await AsyncStorage.getItem('pr_dashboard_layout_1');
-    expect(JSON.parse(saved!).find((s: any) => s.key === 'records').visible).toBe(false);
-  });
-
-  it('restores a saved layout with hidden sections', async () => {
-    await AsyncStorage.setItem('pr_dashboard_layout_1', JSON.stringify([
-      { key: 'hero', visible: false },
-      { key: 'records', visible: true },
-      { key: 'stalled', visible: true },
-      { key: 'progression', visible: true },
-    ]));
-    const { getByText, queryByText } = render(
-      <PRDashboardScreen navigation={nav as any} route={route as any} />,
-    );
-    await waitFor(() => expect(getByText('Most Volume')).toBeTruthy());
-    expect(queryByText('this month')).toBeNull();
+  it('always shows all four sections in a fixed order (no customize feature)', async () => {
+    const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('this month')).toBeTruthy());
+    expect(getByText('Most Volume')).toBeTruthy();
+    expect(getByText('Squat')).toBeTruthy(); // stalled lift
+    expect(getByText('Pinned Progression')).toBeTruthy();
   });
 
   it('shows pinned exercises and navigates to their progression', async () => {
