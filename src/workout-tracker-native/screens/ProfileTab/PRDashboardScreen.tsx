@@ -238,9 +238,11 @@ export default function PRDashboardScreen({ navigation }: Props) {
     if (!stalledFilter) return rows.slice(0, STALLED_SHOWN);
     // Re-derive from each row's own by_type entry — exercises that have
     // never earned a PR of this type drop out rather than showing a
-    // misleading "stalled since forever".
+    // misleading "stalled since forever". `by_type` may be absent if the API
+    // hasn't deployed this field yet — treat that the same as "no match"
+    // rather than throwing.
     return rows
-      .filter(r => r.by_type[stalledFilter] != null)
+      .filter(r => r.by_type?.[stalledFilter] != null)
       .map(r => ({ ...r, ...r.by_type[stalledFilter]! }))
       .sort((a, b) => b.days_since_last_pr - a.days_since_last_pr)
       .slice(0, STALLED_SHOWN);

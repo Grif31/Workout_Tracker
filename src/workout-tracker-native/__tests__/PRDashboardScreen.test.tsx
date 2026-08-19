@@ -145,6 +145,28 @@ describe('PRDashboardScreen', () => {
     expect((global.fetch as jest.Mock).mock.calls.length).toBe(fetchCallsBefore);
   });
 
+  it('does not crash switching type when the API response predates by_type', async () => {
+    // Guards against a frontend/backend version mismatch (e.g. mid-deploy,
+    // or dev pointed at a not-yet-deployed API) — an older response shape
+    // without by_type must degrade to "no match" instead of throwing.
+    const { exercise_template_id, exercise_name, workout_count, days_since_last_pr, last_pr_at } =
+      dashboardPayload.stats.days_since_last_pr[0];
+    mockFetch({
+      ...dashboardPayload,
+      stats: {
+        ...dashboardPayload.stats,
+        days_since_last_pr: [{ exercise_template_id, exercise_name, workout_count, days_since_last_pr, last_pr_at }],
+      },
+    });
+    const { getByText, getAllByText, queryByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Squat')).toBeTruthy());
+
+    fireEvent.press(getAllByText('Reps')[0]);
+
+    await waitFor(() => expect(getByText('No PRs of this type yet for your most-trained exercises.')).toBeTruthy());
+    expect(queryByText('Squat')).toBeNull();
+  });
+
   it('drops exercises with no PR of the selected type and shows an empty message', async () => {
     const { getByText, getAllByText, queryByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Squat')).toBeTruthy());
