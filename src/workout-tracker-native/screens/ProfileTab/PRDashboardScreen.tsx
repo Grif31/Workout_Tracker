@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { LineChart } from 'react-native-gifted-charts';
 import { LaurelBranch } from '../../components/LaurelWreath';
+import GoldSectionRule from '../../components/GoldSectionRule';
 import PRShareCard from '../../components/PRShareCard';
 import { loadPrPins, type PRPin } from '../../utils/prPins';
 import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
@@ -248,13 +249,6 @@ export default function PRDashboardScreen({ navigation }: Props) {
       .slice(0, STALLED_SHOWN);
   }, [stats, stalledFilter]);
 
-  const SectionHeader = ({ icon, title }: { icon: keyof typeof Ionicons.glyphMap; title: string }) => (
-    <View style={styles.sectionHeaderRow}>
-      <Ionicons name={icon} size={14} color={PR_GOLD_TEXT} />
-      <Text style={styles.sectionTitle}>{title}</Text>
-    </View>
-  );
-
   const renderHero = () =>
     stats ? (
         <View style={[styles.heroCard, { backgroundColor: colors.surface, borderColor: PR_GOLD }]}>
@@ -286,7 +280,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
   const renderRecords = () =>
     bests && (bests.best_volume || bests.best_total_reps) ? (
         <View>
-          <SectionHeader icon="ribbon-outline" title="Workout Records" />
+          <GoldSectionRule icon="ribbon-outline" label="Workout Records" style={styles.sectionHeaderRow} />
           <View style={styles.bestsRow}>
             {bests.best_volume && (
               <TouchableOpacity
@@ -337,7 +331,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
   const renderStalled = () =>
     hasStalledData ? (
         <View>
-          <SectionHeader icon="hourglass-outline" title="Time Since Last PR" />
+          <GoldSectionRule icon="hourglass-outline" label="Time Since Last PR" style={styles.sectionHeaderRow} />
           <View style={styles.chipRow}>
             {FILTERS.map(f => {
               const active = stalledFilter === f.key;
@@ -389,7 +383,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
 
   const renderProgression = () => (
         <View>
-          <SectionHeader icon="pin-outline" title="Pinned Progression" />
+          <GoldSectionRule icon="pin-outline" label="Pinned Progression" style={styles.sectionHeaderRow} />
           {pins.length === 0 ? (
             <Text style={styles.pinsHint}>
               Pin lifts from their progression view to keep them here.
@@ -478,10 +472,12 @@ export default function PRDashboardScreen({ navigation }: Props) {
       {renderProgression()}
 
       {/* Feed title + filter chips */}
-      <View style={styles.feedTitleRow}>
-        <Text style={styles.sectionTitle}>{feedScope === 'all_time' ? 'Recent PRs' : "This Week's PRs"}</Text>
-        {chipLoading && <ActivityIndicator size="small" color={colors.textSecondary} />}
-      </View>
+      <GoldSectionRule
+        icon="trophy-outline"
+        label={feedScope === 'all_time' ? 'Recent PRs' : "This Week's PRs"}
+        right={chipLoading ? <ActivityIndicator size="small" color={colors.textSecondary} /> : undefined}
+        style={styles.feedTitleRow}
+      />
       {feedScope === 'all_time' && events.length > 0 && (
         <Text style={styles.feedScopeNote}>No new PRs this week. Here's your most recent</Text>
       )}
@@ -702,27 +698,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   heroStatLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
   heroStatDivider: { width: StyleSheet.hairlineWidth, height: 28 },
 
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  sectionTitle: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  feedTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-  },
+  // Margins only — row layout, gap, icon, and label styling all live in the
+  // shared GoldSectionRule component now.
+  sectionHeaderRow: { marginTop: spacing.md, marginBottom: spacing.sm },
+  feedTitleRow: { marginTop: spacing.md, marginBottom: spacing.sm },
   feedScopeNote: {
     fontSize: typography.fontSize.xs,
     color: colors.textSecondary,

@@ -7,6 +7,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LaurelBranch } from '../../components/LaurelWreath';
+import GoldSectionRule from '../../components/GoldSectionRule';
 import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
@@ -393,9 +394,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             contentContainerStyle={styles.list}
             ListEmptyComponent={<Text style={styles.empty}>No max-weight records yet.</Text>}
             renderSectionHeader={({ section }) => (
-              <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
-                <Text style={[styles.sectionHeaderText, { color: colors.textPrimary }]}>{section.title}</Text>
-              </View>
+              <GoldSectionRule icon="body-outline" label={section.title} style={[styles.sectionHeaderRow, { backgroundColor: colors.background }]} />
             )}
             renderItem={({ item, index }) => (
               <View style={[styles.row, { backgroundColor: colors.surface }]}>
@@ -475,9 +474,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
           {sortBy === 'muscle'
             ? filteredRepsByMuscle.map(({ muscle, sections }) => (
                 <View key={muscle}>
-                  <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
-                    <Text style={[styles.sectionHeaderText, { color: colors.textPrimary }]}>{muscle}</Text>
-                  </View>
+                  <GoldSectionRule icon="body-outline" label={muscle} style={[styles.sectionHeaderRow, { backgroundColor: colors.background }]} />
                   {sections.map(renderAccordionExercise)}
                 </View>
               ))
@@ -494,9 +491,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             <Text style={styles.empty}>No time records yet.{'\n'}Log a run, ride, or timed hold to see your bests.</Text>
           }
           renderSectionHeader={({ section }) => (
-            <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
-              <Text style={[styles.sectionHeaderText, { color: colors.textPrimary }]}>{section.title}</Text>
-            </View>
+            <GoldSectionRule icon="stopwatch-outline" label={section.title} style={[styles.sectionHeaderRow, { backgroundColor: colors.background }]} />
           )}
           renderItem={({ item, index, section }) => {
             const isTop = index === 0;
@@ -646,11 +641,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   repsWeight: { fontSize: typography.fontSize.sm, fontWeight: '600', marginBottom: 2 },
 
-  // Section headers (muscle groups + cardio exercises)
-  sectionHeader: {
+  // Section headers (muscle groups + cardio exercises) — icon/label styling
+  // lives in the shared GoldSectionRule component now.
+  sectionHeaderRow: {
     paddingHorizontal: spacing.sm,
     paddingTop: spacing.md,
     paddingBottom: spacing.xs,
   },
-  sectionHeaderText: { fontSize: typography.fontSize.sm, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
 });

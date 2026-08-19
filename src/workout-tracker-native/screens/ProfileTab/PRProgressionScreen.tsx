@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LineChart } from 'react-native-gifted-charts';
 import { LaurelBranch } from '../../components/LaurelWreath';
+import GoldSectionRule from '../../components/GoldSectionRule';
 import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
@@ -242,6 +243,8 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
             </View>
           )}
 
+          <GoldSectionRule icon="stats-chart-outline" label="Progression" style={styles.sectionHeaderRow} />
+
           {/* Sparkline — shape at a glance; the table below carries exact numbers */}
           {series.length >= 2 && (
             <View style={[styles.chartCard, { backgroundColor: colors.surface }]}>
@@ -354,6 +357,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   heroImprovement: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: spacing.sm },
 
   chipRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  sectionHeaderRow: { marginTop: spacing.sm },
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
