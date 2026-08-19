@@ -49,7 +49,7 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
     if (!user?.id) return;
     const next = await togglePrPin(user.id, { id: exerciseTemplateId, name: exerciseName });
     if (next === null) {
-      showToast(`You can pin up to ${MAX_PR_PINS} exercises — unpin one first.`);
+      showToast(`You can pin up to ${MAX_PR_PINS} exercises. Unpin one first.`);
       return;
     }
     setPinned(next.some(p => p.id === exerciseTemplateId));
@@ -144,6 +144,13 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
 
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
+
+  const fmtTableDate = (iso: string) => {
+    const d = new Date(iso);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    return `${dd}/${mm}/${d.getFullYear()}`;
+  };
 
   return (
     <View style={styles.container}>
@@ -286,7 +293,7 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
                 >
                   <View style={[styles.thDate, styles.dateCell]}>
                     {isCurrent && <Ionicons name="trophy" size={11} color={PR_GOLD_TEXT} />}
-                    <Text style={[styles.td, { color: colors.textSecondary }]}>{fmtDate(e.achieved_at)}</Text>
+                    <Text style={[styles.td, { color: colors.textSecondary }]}>{fmtTableDate(e.achieved_at)}</Text>
                   </View>
                   <Text style={[styles.thValue, styles.td, styles.tdValue, { color: colors.textPrimary }]}>
                     {fmtPrValue(e, unit, distanceUnit)}
@@ -386,7 +393,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   td: { fontSize: typography.fontSize.sm },
   tdValue: { fontWeight: '700' },
   dateCell: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  thDate: { width: 76 },
+  thDate: { width: 88 },
   thValue: { width: 84 },
   thDelta: { width: 74 },
   thWorkout: { flex: 1 },
