@@ -16,7 +16,7 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
-import { fmtPrValue, fmtPrDelta, fmtChartDate, PR_METRIC_OPTIONS, type PREventItem } from '../../utils/prFormat';
+import { fmtPrValue, fmtPrDelta, fmtChartDate, formatChartYLabel, PR_METRIC_OPTIONS, type PREventItem } from '../../utils/prFormat';
 import { loadPrPins, togglePrPin, MAX_PR_PINS } from '../../utils/prPins';
 import { showToast } from '../../utils/toast';
 
@@ -284,6 +284,7 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
                 maxValue={chartMax - chartMin + chartPad * 2}
                 yAxisOffset={chartMin - chartPad}
                 roundToDigits={0}
+                formatYLabel={formatChartYLabel}
                 initialSpacing={24}
                 endSpacing={24}
               />

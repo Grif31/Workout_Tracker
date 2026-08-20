@@ -21,8 +21,8 @@ import { apiFetch } from '../../utils/api';
 import { captureAndShare } from '../../utils/shareCapture';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
 import {
-  fmtPrValue, fmtPrContext, fmtPrDelta, fmtRelativeDate, fmtChartDate, prTypeIcon,
-  stalledUrgency, pickDefaultPrSeries, type PREventItem,
+  fmtPrValue, fmtPrContext, fmtPrDelta, fmtRelativeDate, fmtChartDate, formatChartYLabel,
+  prTypeIcon, stalledUrgency, pickDefaultPrSeries, type PREventItem,
 } from '../../utils/prFormat';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'PRDashboard'>;
@@ -449,6 +449,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
                         maxValue={chartMax - chartMin + chartPad * 2}
                         yAxisOffset={chartMin - chartPad}
                         roundToDigits={0}
+                        formatYLabel={formatChartYLabel}
                         initialSpacing={12}
                         endSpacing={12}
                       />

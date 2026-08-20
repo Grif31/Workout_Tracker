@@ -81,6 +81,15 @@ export function fmtChartDate(iso: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+/**
+ * Forces whole-number y-axis tick labels on PR progression charts —
+ * `roundToDigits={0}` alone can still leave a fractional label on the axis
+ * (e.g. the offset-derived bottom tick), so this is the guaranteed backstop.
+ */
+export function formatChartYLabel(label: string): string {
+  return String(Math.round(Number(label)));
+}
+
 /** Flags a stalled lift for the dashboard's urgency icon/color. */
 export function stalledUrgency(daysSinceLastPr: number): 'ok' | 'watch' | 'stale' {
   if (daysSinceLastPr >= 30) return 'stale';

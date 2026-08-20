@@ -1,6 +1,6 @@
 import {
   fmtPrValue, fmtPrDelta, fmtPrContext, fmtMinSec, nearPrHint,
-  fmtRelativeDate, fmtChartDate, prTypeIcon, stalledUrgency, pickDefaultPrSeries,
+  fmtRelativeDate, fmtChartDate, formatChartYLabel, prTypeIcon, stalledUrgency, pickDefaultPrSeries,
   type PREventItem,
 } from '../utils/prFormat';
 
@@ -148,6 +148,23 @@ describe('fmtChartDate', () => {
     expect(fmtChartDate('2026-08-01T00:00:00')).toBe('8/1');
     expect(fmtChartDate('2026-01-10T00:00:00')).toBe('1/10');
     expect(fmtChartDate('2026-12-25T00:00:00')).toBe('12/25');
+  });
+});
+
+describe('formatChartYLabel', () => {
+  it('rounds fractional labels to the nearest whole number', () => {
+    expect(formatChartYLabel('245.3')).toBe('245');
+    expect(formatChartYLabel('245.5')).toBe('246');
+    expect(formatChartYLabel('245.7')).toBe('246');
+  });
+
+  it('leaves whole numbers unchanged', () => {
+    expect(formatChartYLabel('245')).toBe('245');
+    expect(formatChartYLabel('0')).toBe('0');
+  });
+
+  it('rounds negative labels correctly', () => {
+    expect(formatChartYLabel('-2.6')).toBe('-3');
   });
 });
 
