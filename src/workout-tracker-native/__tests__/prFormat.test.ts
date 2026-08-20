@@ -1,6 +1,7 @@
 import {
   fmtPrValue, fmtPrDelta, fmtPrContext, fmtMinSec, nearPrHint,
-  fmtRelativeDate, fmtChartDate, formatChartYLabel, prTypeIcon, stalledUrgency, pickDefaultPrSeries,
+  fmtRelativeDate, fmtChartDate, formatChartYLabel, prTypeIcon, stalledUrgency,
+  stalledCategoryToPrType, pickDefaultPrSeries,
   type PREventItem,
 } from '../utils/prFormat';
 
@@ -187,6 +188,22 @@ describe('stalledUrgency', () => {
     expect(stalledUrgency(29)).toBe('watch');
     expect(stalledUrgency(30)).toBe('stale');
     expect(stalledUrgency(90)).toBe('stale');
+  });
+});
+
+describe('stalledCategoryToPrType', () => {
+  it('maps unambiguous categories to their single pr_type', () => {
+    expect(stalledCategoryToPrType('weight')).toBe('max_weight');
+    expect(stalledCategoryToPrType('reps')).toBe('max_reps');
+    expect(stalledCategoryToPrType('distance')).toBe('best_distance');
+  });
+
+  it('returns undefined for the ambiguous "time" category (best_time + max_duration)', () => {
+    expect(stalledCategoryToPrType('time')).toBeUndefined();
+  });
+
+  it('returns undefined for "All" (null)', () => {
+    expect(stalledCategoryToPrType(null)).toBeUndefined();
   });
 });
 

@@ -225,38 +225,55 @@ def get_pr_dashboard():
         .limit(10)
         .all()
     )
-    # Grouped by (exercise, pr_type) rather than just exercise, so the frontend
-    # can let users switch "Time Since Last PR" between Weight/Reps/Time/
-    # Distance without a second round trip — see by_type below.
+    # Grouped by (exercise, pr_type, weight_context) rather than just exercise,
+    # so the frontend can let users switch "Time Since Last PR" between
+    # Weight/Reps/Time/Distance without a second round trip — see by_type
+    # below. weight_context is included in the grouping (not just pr_type) so
+    # the summary can report which specific weight a max_reps PR was set at —
+    # collapsing it out here would lose that.
     last_event_rows = (
-        db.session.query(PREvent.exercise_template_id, PREvent.pr_type, func.max(PREvent.achieved_at))
+        db.session.query(
+            PREvent.exercise_template_id, PREvent.pr_type, PREvent.weight_context,
+            func.max(PREvent.achieved_at),
+        )
         .filter(
             PREvent.user_id == user_id,
             PREvent.pr_type.in_(FEED_PR_TYPES),
             PREvent.exercise_template_id.in_([t for t, _, _ in most_trained] or [-1]),
         )
-        .group_by(PREvent.exercise_template_id, PREvent.pr_type)
+        .group_by(PREvent.exercise_template_id, PREvent.pr_type, PREvent.weight_context)
         .all()
     )
     last_by_template_and_type = {}
-    for template_id, pr_type, achieved_at in last_event_rows:
-        last_by_template_and_type.setdefault(template_id, {})[pr_type] = achieved_at
+    for template_id, pr_type, weight_context, achieved_at in last_event_rows:
+        last_by_template_and_type.setdefault(template_id, {}).setdefault(pr_type, []).append(
+            (weight_context, achieved_at)
+        )
 
-    def _category_last(template_id, category):
+    def _category_latest(template_id, category):
+        """(weight_context, achieved_at) of the single most recent event in this
+        category — maxing across the category's pr_types and, for a type with
+        multiple weight contexts (max_reps), across those too."""
         by_type = last_by_template_and_type.get(template_id, {})
-        dates = [by_type[t] for t in FEED_TYPE_FILTERS[category] if t in by_type]
-        return max(dates) if dates else None
+        candidates = [c for t in FEED_TYPE_FILTERS[category] for c in by_type.get(t, [])]
+        return max(candidates, key=lambda c: c[1]) if candidates else None
 
     def _category_summary(template_id, category):
-        last_dt = _category_last(template_id, category)
-        if not last_dt:
+        latest = _category_latest(template_id, category)
+        if not latest:
             return None
-        return {'days_since_last_pr': (now - last_dt).days, 'last_pr_at': last_dt.isoformat()}
+        weight_context, last_dt = latest
+        return {
+            'days_since_last_pr': (now - last_dt).days,
+            'last_pr_at': last_dt.isoformat(),
+            'weight_context': None if weight_context < 0 else weight_context,
+        }
 
-    last_event_by_template = {
-        template_id: max(by_type.values())
-        for template_id, by_type in last_by_template_and_type.items()
-    }
+    last_event_by_template = {}
+    for template_id, by_type in last_by_template_and_type.items():
+        all_dates = [dt for entries in by_type.values() for _, dt in entries]
+        if all_dates:
+            last_event_by_template[template_id] = max(all_dates)
     days_since_last_pr = [
         {
             'exercise_template_id': template_id,

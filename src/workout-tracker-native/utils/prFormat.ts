@@ -90,6 +90,24 @@ export function formatChartYLabel(label: string): string {
   return String(Math.round(Number(label)));
 }
 
+export type StalledCategory = 'weight' | 'reps' | 'time' | 'distance';
+
+/**
+ * Maps a stalled-section filter category to the one pr_type it unambiguously
+ * represents, for pre-selecting the right metric when navigating to
+ * Progression. 'time' folds two pr_types (best_time, max_duration) so it has
+ * no single answer — returns undefined and lets Progression fall back to its
+ * own auto-pick.
+ */
+export function stalledCategoryToPrType(category: StalledCategory | null): PREventItem['pr_type'] | undefined {
+  switch (category) {
+    case 'weight':   return 'max_weight';
+    case 'reps':     return 'max_reps';
+    case 'distance': return 'best_distance';
+    default:         return undefined;
+  }
+}
+
 /** Flags a stalled lift for the dashboard's urgency icon/color. */
 export function stalledUrgency(daysSinceLastPr: number): 'ok' | 'watch' | 'stale' {
   if (daysSinceLastPr >= 30) return 'stale';

@@ -50,7 +50,7 @@ describe('PersonalRecordsScreen', () => {
     const { getByText } = render(<PersonalRecordsScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
     fireEvent.press(getByText('Bench Press'));
-    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 7, exerciseName: 'Bench Press' });
+    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 7, exerciseName: 'Bench Press', prType: 'max_weight', weightContext: null });
   });
 
   it('navigates to Progression when a Max Weight (by muscle) row is tapped', async () => {
@@ -59,7 +59,7 @@ describe('PersonalRecordsScreen', () => {
     fireEvent.press(getByText('By Muscle'));
     await waitFor(() => expect(getByText('Chest')).toBeTruthy());
     fireEvent.press(getByText('Bench Press'));
-    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 7, exerciseName: 'Bench Press' });
+    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 7, exerciseName: 'Bench Press', prType: 'max_weight', weightContext: null });
   });
 
   it('navigates to Progression when a Time-tab row is tapped', async () => {
@@ -68,7 +68,7 @@ describe('PersonalRecordsScreen', () => {
     fireEvent.press(getByText('Time'));
     await waitFor(() => expect(getByText('Running')).toBeTruthy());
     fireEvent.press(getByText('5K')); // the data row itself; "Running" is just the section header
-    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 9, exerciseName: 'Running' });
+    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 9, exerciseName: 'Running', prType: 'best_time', weightContext: 5 });
   });
 
   it('navigates to Progression when an expanded Max Reps entry is tapped', async () => {
@@ -84,6 +84,6 @@ describe('PersonalRecordsScreen', () => {
     fireEvent.press(getByText('Squat')); // expands the accordion — does not navigate
     await waitFor(() => expect(getByText('225 lbs')).toBeTruthy());
     fireEvent.press(getByText('225 lbs'));
-    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 12, exerciseName: 'Squat' });
+    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 12, exerciseName: 'Squat', prType: 'max_reps', weightContext: 225 });
   });
 });

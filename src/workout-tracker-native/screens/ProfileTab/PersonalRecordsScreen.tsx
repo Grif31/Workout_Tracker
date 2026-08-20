@@ -51,9 +51,9 @@ type RepsSection = {
 };
 
 type CardioEntry =
-  | { kind: 'time'; label: string; time_min: number; achieved_at: string }
-  | { kind: 'distance'; label: string; distance_km: number; achieved_at: string }
-  | { kind: 'hold'; label: string; time_min: number; achieved_at: string };
+  | { kind: 'time'; label: string; time_min: number; achieved_at: string; weight_context: number | null }
+  | { kind: 'distance'; label: string; distance_km: number; achieved_at: string; weight_context: number | null }
+  | { kind: 'hold'; label: string; time_min: number; achieved_at: string; weight_context: number | null };
 type CardioSection = { title: string; exercise_template_id: number; data: CardioEntry[] };
 
 
@@ -181,11 +181,11 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
         const key = p.exercise_template_id;
         if (!map.has(key)) map.set(key, { title: p.exercise_name, exercise_template_id: key, data: [] });
         if (p.pr_type === 'best_time') {
-          map.get(key)!.data.push({ kind: 'time', label: p.pr_label.replace(' Best Time', ''), time_min: p.value, achieved_at: p.achieved_at });
+          map.get(key)!.data.push({ kind: 'time', label: p.pr_label.replace(' Best Time', ''), time_min: p.value, achieved_at: p.achieved_at, weight_context: p.weight_context });
         } else if (p.pr_type === 'best_distance') {
-          map.get(key)!.data.push({ kind: 'distance', label: p.pr_label.replace(' Best Distance', ''), distance_km: p.value, achieved_at: p.achieved_at });
+          map.get(key)!.data.push({ kind: 'distance', label: p.pr_label.replace(' Best Distance', ''), distance_km: p.value, achieved_at: p.achieved_at, weight_context: p.weight_context });
         } else {
-          map.get(key)!.data.push({ kind: 'hold', label: 'Longest Hold', time_min: p.value, achieved_at: p.achieved_at });
+          map.get(key)!.data.push({ kind: 'hold', label: 'Longest Hold', time_min: p.value, achieved_at: p.achieved_at, weight_context: p.weight_context });
         }
       });
     return [...map.values()].sort((a, b) => a.title.localeCompare(b.title));
@@ -240,8 +240,12 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
-  const openProgression = (exerciseTemplateId: number, exerciseName: string) =>
-    navigation.navigate('PRProgression', { exerciseTemplateId, exerciseName });
+  const openProgression = (
+    exerciseTemplateId: number,
+    exerciseName: string,
+    prType?: PR['pr_type'],
+    weightContext?: number | null,
+  ) => navigation.navigate('PRProgression', { exerciseTemplateId, exerciseName, prType, weightContext });
 
   const renderAccordionExercise = (section: RepsSection) => {
     const isExpanded = expandedIds.has(section.exercise_template_id);
@@ -276,7 +280,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             <TouchableOpacity
               key={`${item.weight}-${index}`}
               style={[styles.repsRow, { borderTopColor: colors.border }]}
-              onPress={() => openProgression(section.exercise_template_id, section.title)}
+              onPress={() => openProgression(section.exercise_template_id, section.title, 'max_reps', item.weight)}
               activeOpacity={0.7}
             >
               <View style={styles.rowInfo}>
@@ -350,7 +354,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
               style={[styles.sortBtn, sortBy === 'muscle' && { backgroundColor: colors.accent + '20' }]}
               onPress={() => setSortBy('muscle')}
             >
-              <Ionicons name="body-outline" size={14} color={sortBy === 'muscle' ? colors.accent : colors.textSecondary} style={{ marginRight: 4 }} />
+              <Ionicons name="body-outline" size={14} color={sortBy === 'muscle' ? colors.accent : colors.textSecondary} style={{ marginRight: spacing.xs }} />
               <Text style={[styles.sortBtnText, { color: sortBy === 'muscle' ? colors.accent : colors.textSecondary }]}>
                 By Muscle
               </Text>
@@ -407,7 +411,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             renderItem={({ item, index }) => (
               <TouchableOpacity
                 style={[styles.row, { backgroundColor: colors.surface }]}
-                onPress={() => openProgression(item.exercise_template_id, item.exercise_name)}
+                onPress={() => openProgression(item.exercise_template_id, item.exercise_name, item.pr_type, item.weight_context)}
                 activeOpacity={0.7}
               >
                 <View style={styles.rowInfo}>
@@ -448,7 +452,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             renderItem={({ item, index }) => (
               <TouchableOpacity
                 style={[styles.row, { backgroundColor: colors.surface }]}
-                onPress={() => openProgression(item.exercise_template_id, item.exercise_name)}
+                onPress={() => openProgression(item.exercise_template_id, item.exercise_name, item.pr_type, item.weight_context)}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.rank, index < 3 && { color: colors.accent }]}>#{index + 1}</Text>
@@ -519,7 +523,12 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                   { backgroundColor: colors.surface, borderTopColor: colors.border },
                   isLast && styles.repsRowLast,
                 ]}
-                onPress={() => openProgression(section.exercise_template_id, section.title)}
+                onPress={() => openProgression(
+                  section.exercise_template_id,
+                  section.title,
+                  item.kind === 'time' ? 'best_time' : item.kind === 'distance' ? 'best_distance' : 'max_duration',
+                  item.weight_context,
+                )}
                 activeOpacity={0.7}
               >
                 <View style={styles.rowInfo}>
@@ -633,7 +642,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   est1rm: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   rowRight: { alignItems: 'flex-end' },
   rowValue: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
-  topValueRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  topValueRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
 
   // Accordion (max reps)
   accordionCard: {

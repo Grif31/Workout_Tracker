@@ -121,4 +121,53 @@ describe('PRProgressionScreen', () => {
     const { getByText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText(/No PR history/)).toBeTruthy());
   });
+
+  it('pre-selects the metric passed via route params instead of the top-priority one', async () => {
+    const seededRoute = createMockRoute('PRProgression', {
+      exerciseTemplateId: 7, exerciseName: 'Bench Press', prType: 'estimated_1rm',
+    });
+    const { getAllByText, queryAllByText } = render(<PRProgressionScreen navigation={nav as any} route={seededRoute as any} />);
+    // Est. 1RM (262.5) shows immediately — no chip tap needed — while
+    // Max Weight (245, the default top-priority metric) never renders.
+    await waitFor(() => expect(getAllByText('262.5 lbs').length).toBe(2));
+    expect(queryAllByText('245 lbs').length).toBe(0);
+  });
+
+  it('falls back to auto-pick when the seeded prType has no history for this exercise', async () => {
+    const seededRoute = createMockRoute('PRProgression', {
+      exerciseTemplateId: 7, exerciseName: 'Bench Press', prType: 'best_time',
+    });
+    const { getAllByText } = render(<PRProgressionScreen navigation={nav as any} route={seededRoute as any} />);
+    // best_time doesn't exist in this exercise's history, so it falls back to
+    // the top-priority metric that does — Max Weight.
+    await waitFor(() => expect(getAllByText('245 lbs').length).toBe(2));
+  });
+
+  it('pre-selects the weight context passed via route params, not just the most recent one', async () => {
+    mockFetch([
+      {
+        id: 10, exercise_template_id: 7, workout_id: 50,
+        pr_type: 'max_reps', value: 8, weight_context: 135,
+        previous_value: null, improved_by: null,
+        achieved_at: '2026-06-01T00:00:00',
+        pr_label: 'Max Reps', workout_name: 'Push A',
+      },
+      {
+        id: 11, exercise_template_id: 7, workout_id: 51,
+        pr_type: 'max_reps', value: 5, weight_context: 185,
+        previous_value: null, improved_by: null,
+        achieved_at: '2026-08-01T00:00:00',
+        pr_label: 'Max Reps', workout_name: 'Push B',
+      },
+    ]);
+    const seededRoute = createMockRoute('PRProgression', {
+      exerciseTemplateId: 7, exerciseName: 'Bench Press', prType: 'max_reps', weightContext: 135,
+    });
+    const { getAllByText, queryAllByText } = render(<PRProgressionScreen navigation={nav as any} route={seededRoute as any} />);
+    // The 135 lbs series (older, but the one actually tapped) shows — not
+    // the 185 lbs series that pickDefaultPrSeries-style logic would default to.
+    // "8 reps" appears twice: the hero's current best and the table row.
+    await waitFor(() => expect(getAllByText('8 reps').length).toBe(2));
+    expect(queryAllByText('5 reps').length).toBe(0);
+  });
 });

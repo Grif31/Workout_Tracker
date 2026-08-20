@@ -40,8 +40,8 @@ const dashboardPayload = {
         exercise_template_id: 9, exercise_name: 'Squat', workout_count: 12,
         days_since_last_pr: 32, last_pr_at: '2026-07-09T00:00:00',
         by_type: {
-          weight: { days_since_last_pr: 32, last_pr_at: '2026-07-09T00:00:00' },
-          reps: { days_since_last_pr: 5, last_pr_at: '2026-08-06T00:00:00' },
+          weight: { days_since_last_pr: 32, last_pr_at: '2026-07-09T00:00:00', weight_context: null },
+          reps: { days_since_last_pr: 5, last_pr_at: '2026-08-06T00:00:00', weight_context: 185 },
           time: null,
           distance: null,
         },
@@ -112,7 +112,7 @@ describe('PRDashboardScreen', () => {
     fireEvent.press(getByLabelText('PR actions'), { nativeEvent: { pageX: 100, pageY: 200 } });
     await waitFor(() => expect(getByText('View Chart')).toBeTruthy());
     fireEvent.press(getByText('View Chart'));
-    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 7, exerciseName: 'Bench Press' });
+    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 7, exerciseName: 'Bench Press', prType: 'max_weight', weightContext: null });
   });
 
   it('captures and shares from the 3-dot menu', async () => {
@@ -124,11 +124,28 @@ describe('PRDashboardScreen', () => {
     await waitFor(() => expect(captureRef).toHaveBeenCalled());
   });
 
-  it('navigates to PRProgression from a stalled lift row', async () => {
+  it('navigates to PRProgression from a stalled lift row, pre-selecting the category that produced the shown date', async () => {
+    // In "All" mode the row's 32d-ago aggregate is actually stale weight
+    // data, but Reps (5d ago) is the most recent category — that's the one
+    // that should get pre-selected, along with its weight context.
     const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Squat')).toBeTruthy());
     fireEvent.press(getByText('Squat'));
-    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 9, exerciseName: 'Squat' });
+    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 9, exerciseName: 'Squat', prType: 'max_reps', weightContext: 185 });
+  });
+
+  it('shows which category a stalled row\'s date refers to in "All" mode, plus the reps weight context', async () => {
+    const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Squat')).toBeTruthy());
+    expect(getByText('Reps · @ 185 lbs')).toBeTruthy();
+  });
+
+  it('shows only the reps weight context (no repeated category label) once the Reps chip is active', async () => {
+    const { getByText, getAllByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Squat')).toBeTruthy());
+    fireEvent.press(getAllByText('Reps')[0]); // the stalled section's own chip
+    await waitFor(() => expect(getByText('5d ago')).toBeTruthy());
+    expect(getByText('@ 185 lbs')).toBeTruthy();
   });
 
   it('switches the stalled section to a per-type day count without refetching', async () => {
@@ -245,6 +262,9 @@ describe('PRDashboardScreen', () => {
     await waitFor(() => expect(getByText('405 lbs')).toBeTruthy());
     expect(getByText('+15 lbs')).toBeTruthy();
     expect(queryByText('No PR history yet')).toBeNull();
+    // Tapping the card pre-selects the metric/context of its most recent event
+    fireEvent.press(getByText('Deadlift'));
+    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 12, exerciseName: 'Deadlift', prType: 'max_weight', weightContext: null });
   });
 
   it('shows the weekly title and no fallback note under the normal week scope', async () => {

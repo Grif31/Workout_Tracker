@@ -315,6 +315,22 @@ class TestDashboardEndpoint:
         assert row['by_type']['time'] is None       # never PR'd — no entry, not a stale zero
         assert row['by_type']['distance'] is None
 
+    def test_days_since_last_pr_by_type_includes_weight_context_for_reps(self, client, auth_token):
+        # Two different weights get max_reps PRs — the reps category should
+        # report the weight of the MOST RECENT one, not just any of them.
+        tid = create_template(client, auth_token)
+        post_strength_workout(client, auth_token, tid, [{'reps': 8, 'weight': 185}],
+                              date_str=iso(date.today() - timedelta(days=10)))
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 225}],
+                              date_str=iso(date.today() - timedelta(days=2)))
+        data = client.get('/api/personal-records/dashboard', headers=auth_headers(auth_token)).get_json()
+        row = data['stats']['days_since_last_pr'][0]
+        assert row['by_type']['reps']['weight_context'] == 225
+        assert row['by_type']['reps']['days_since_last_pr'] == 2
+        # max_weight has no meaningful weight_context (stored as the -1
+        # sentinel) — normalized to None like elsewhere in the API.
+        assert row['by_type']['weight']['weight_context'] is None
+
     def test_days_since_last_pr_by_type_time_spans_best_time_and_max_duration(self, client, auth_token):
         # The "time" category covers two pr_types (best_time, max_duration) —
         # the breakdown should max across both, matching the feed's own

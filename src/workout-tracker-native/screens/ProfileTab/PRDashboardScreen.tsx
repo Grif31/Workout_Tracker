@@ -22,7 +22,8 @@ import { captureAndShare } from '../../utils/shareCapture';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
 import {
   fmtPrValue, fmtPrContext, fmtPrDelta, fmtRelativeDate, fmtChartDate, formatChartYLabel,
-  prTypeIcon, stalledUrgency, pickDefaultPrSeries, type PREventItem,
+  prTypeIcon, stalledUrgency, stalledCategoryToPrType, pickDefaultPrSeries,
+  type PREventItem, type StalledCategory,
 } from '../../utils/prFormat';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'PRDashboard'>;
@@ -49,12 +50,10 @@ type DashboardData = {
       last_pr_at: string;
       // Per-category breakdown (same categories as the feed's filter chips),
       // null when the exercise has never earned a PR of that type.
-      by_type: Record<StalledCategory, { days_since_last_pr: number; last_pr_at: string } | null>;
+      by_type: Record<StalledCategory, { days_since_last_pr: number; last_pr_at: string; weight_context: number | null } | null>;
     }[];
   };
 };
-
-type StalledCategory = 'weight' | 'reps' | 'time' | 'distance';
 
 const FILTERS = [
   { key: null,       label: 'All'      },
@@ -65,6 +64,41 @@ const FILTERS = [
 ] as const;
 
 const STALLED_SHOWN = 5;
+
+const STALLED_CATEGORY_LABELS: Record<StalledCategory, string> = {
+  weight: 'Weight', reps: 'Reps', time: 'Time', distance: 'Distance',
+};
+
+/**
+ * Determines which category actually produced a stalled row's displayed
+ * "days ago" (needed in "All" mode, since the aggregate days_since_last_pr
+ * doesn't itself say which type it came from), plus the rep record's weight
+ * context when relevant. Drives both the row's subtitle text and which
+ * pr_type/weight_context gets pre-selected when the row is tapped through to
+ * Progression.
+ */
+function stalledRowCategory(
+  row: { by_type?: Record<StalledCategory, { days_since_last_pr: number; last_pr_at: string; weight_context: number | null } | null> },
+  filter: StalledCategory | null,
+): { category: StalledCategory | null; categoryLabel: string | null; weightContext: number | null } {
+  if (filter) {
+    // The active chip already says which category this is — don't repeat it,
+    // but still surface the weight a rep record was set at.
+    const entry = row.by_type?.[filter];
+    return { category: filter, categoryLabel: null, weightContext: filter === 'reps' ? (entry?.weight_context ?? null) : null };
+  }
+  const present = (Object.entries(row.by_type ?? {}) as [StalledCategory, { days_since_last_pr: number; weight_context: number | null } | null][])
+    .filter((e): e is [StalledCategory, { days_since_last_pr: number; weight_context: number | null }] => e[1] != null);
+  if (present.length === 0) return { category: null, categoryLabel: null, weightContext: null };
+  const [winningCategory, winningEntry] = present.reduce((best, cur) =>
+    cur[1].days_since_last_pr < best[1].days_since_last_pr ? cur : best
+  );
+  return {
+    category: winningCategory,
+    categoryLabel: STALLED_CATEGORY_LABELS[winningCategory],
+    weightContext: winningCategory === 'reps' ? (winningEntry.weight_context ?? null) : null,
+  };
+}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // list padding (md*2) + pin card padding (md*2) + a little breathing room
@@ -226,10 +260,17 @@ export default function PRDashboardScreen({ navigation }: Props) {
 
   const openWorkout = (workoutId: number) => navigation.navigate('WorkoutDetails', { workoutId });
 
-  const openProgression = (event: { exercise_template_id: number; exercise_name?: string }) =>
+  const openProgression = (event: {
+    exercise_template_id: number;
+    exercise_name?: string;
+    pr_type?: PREventItem['pr_type'];
+    weight_context?: number | null;
+  }) =>
     navigation.navigate('PRProgression', {
       exerciseTemplateId: event.exercise_template_id,
       exerciseName: event.exercise_name ?? '',
+      prType: event.pr_type,
+      weightContext: event.weight_context,
     });
 
   const stats = data?.stats;
@@ -352,11 +393,16 @@ export default function PRDashboardScreen({ navigation }: Props) {
             <View style={[styles.trophyCard, { backgroundColor: colors.surface }]}>
               {stalled.map((row, i) => {
                 const urgency = stalledUrgency(row.days_since_last_pr);
+                const { category, categoryLabel, weightContext } = stalledRowCategory(row, stalledFilter);
+                const subtitleParts: string[] = [];
+                if (categoryLabel) subtitleParts.push(categoryLabel);
+                if (weightContext != null) subtitleParts.push(weightContext === 0 ? 'Bodyweight' : `@ ${weightContext} ${unit}`);
+                const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' · ') : null;
                 return (
                   <TouchableOpacity
                     key={row.exercise_template_id}
                     style={[styles.trophyRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
-                    onPress={() => openProgression(row)}
+                    onPress={() => openProgression({ ...row, pr_type: stalledCategoryToPrType(category), weight_context: weightContext })}
                     activeOpacity={0.7}
                   >
                     <Ionicons
@@ -364,9 +410,14 @@ export default function PRDashboardScreen({ navigation }: Props) {
                       size={16}
                       color={urgency === 'stale' ? colors.warmup : colors.textSecondary}
                     />
-                    <Text style={[styles.trophyRowName, { color: colors.textPrimary }]} numberOfLines={1}>
-                      {row.exercise_name}
-                    </Text>
+                    <View style={styles.trophyRowInfo}>
+                      <Text style={[styles.trophyRowName, { color: colors.textPrimary }]} numberOfLines={1}>
+                        {row.exercise_name}
+                      </Text>
+                      {subtitle && (
+                        <Text style={styles.trophyRowSub} numberOfLines={1}>{subtitle}</Text>
+                      )}
+                    </View>
                     <Text style={[styles.trophyRowMeta, urgency === 'stale' && { color: colors.warmup, fontWeight: '700' }]}>
                       {row.days_since_last_pr === 0 ? 'Today' : `${row.days_since_last_pr}d ago`}
                     </Text>
@@ -405,7 +456,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
                   <TouchableOpacity
                     key={p.id}
                     style={[styles.pinCard, { backgroundColor: colors.surface }]}
-                    onPress={() => navigation.navigate('PRProgression', { exerciseTemplateId: p.id, exerciseName: p.name })}
+                    onPress={() => openProgression({ exercise_template_id: p.id, exercise_name: p.name, pr_type: last?.pr_type, weight_context: last?.weight_context })}
                     activeOpacity={0.7}
                   >
                     <View style={styles.pinCardHeader}>
@@ -745,7 +796,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     gap: spacing.sm,
   },
-  trophyRowName: { flex: 1, fontSize: typography.fontSize.md, fontWeight: '600' },
+  trophyRowInfo: { flex: 1 },
+  trophyRowName: { fontSize: typography.fontSize.md, fontWeight: '600' },
+  trophyRowSub: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 1 },
   trophyRowMeta: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
 
   pinsHint: {

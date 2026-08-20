@@ -105,6 +105,7 @@ export type TrainingStackParamsList = {
         coachEquipment: string;
         coachSessionLength: string;
         coachAvoid: string;
+        coachNotes: string;
     };
 };
 export type ProfileStackParamsList = {
@@ -119,7 +120,16 @@ export type ProfileStackParamsList = {
     Measurements: undefined;
     PersonalRecords: undefined;
     PRDashboard: undefined;
-    PRProgression: { exerciseTemplateId: number; exerciseName: string };
+    PRProgression: {
+        exerciseTemplateId: number;
+        exerciseName: string;
+        // Pre-selects the metric/context that was actually tapped (a feed card,
+        // a table row, a pin) instead of always defaulting to the top-priority
+        // metric. Omitted when the caller can't know a specific one (e.g. the
+        // stalled section's "All" view spans every type).
+        prType?: 'max_weight' | 'max_reps' | 'estimated_1rm' | 'best_time' | 'best_distance' | 'max_duration';
+        weightContext?: number | null;
+    };
     GreekRank: undefined;
 };
 

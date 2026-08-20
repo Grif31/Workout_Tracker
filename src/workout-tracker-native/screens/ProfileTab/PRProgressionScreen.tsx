@@ -27,7 +27,7 @@ const CHART_W = SCREEN_WIDTH - spacing.md * 4;
 const CHART_Y_SECTIONS = 4;
 
 export default function PRProgressionScreen({ navigation, route }: Props) {
-  const { exerciseTemplateId, exerciseName } = route.params;
+  const { exerciseTemplateId, exerciseName, prType, weightContext } = route.params;
   const { user } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -35,8 +35,12 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
 
   const [events, setEvents]   = useState<PREventItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [metric, setMetric]   = useState<PREventItem['pr_type'] | null>(null);
-  const [context, setContext] = useState<number | null>(null);
+  // Pre-seeded from the row/card that was actually tapped (e.g. a Max Reps
+  // entry opens on Max Reps, not whatever metric has top priority) — the
+  // fetch effect below only overrides these if they turn out invalid for
+  // this exercise's actual history.
+  const [metric, setMetric]   = useState<PREventItem['pr_type'] | null>(prType ?? null);
+  const [context, setContext] = useState<number | null>(weightContext ?? null);
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
   const [pinned, setPinned]   = useState(false);
 
@@ -72,8 +76,11 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
         if (res.ok && alive) {
           const rows: PREventItem[] = await res.json();
           setEvents(rows);
-          const firstMetric = PR_METRIC_OPTIONS.find(m => rows.some(e => e.pr_type === m.key));
-          if (firstMetric) setMetric(firstMetric.key);
+          setMetric(prev => {
+            if (prev && rows.some(e => e.pr_type === prev)) return prev; // honor the tapped type
+            const firstMetric = PR_METRIC_OPTIONS.find(m => rows.some(e => e.pr_type === m.key));
+            return firstMetric ? firstMetric.key : null;
+          });
         }
       } catch {}
       if (alive) setLoading(false);
