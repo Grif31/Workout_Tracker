@@ -1,6 +1,6 @@
 import {
   fmtPrValue, fmtPrDelta, fmtPrContext, fmtMinSec, nearPrHint,
-  fmtRelativeDate, prTypeIcon, stalledUrgency, pickDefaultPrSeries,
+  fmtRelativeDate, fmtChartDate, prTypeIcon, stalledUrgency, pickDefaultPrSeries,
   type PREventItem,
 } from '../utils/prFormat';
 
@@ -140,6 +140,14 @@ describe('fmtRelativeDate', () => {
   it('falls back to a short date further back', () => {
     mockNow('2026-08-10T18:00:00');
     expect(fmtRelativeDate('2026-08-01T09:00:00')).toBe('Aug 1');
+  });
+});
+
+describe('fmtChartDate', () => {
+  it('formats as M/D with no leading zeros or year', () => {
+    expect(fmtChartDate('2026-08-01T00:00:00')).toBe('8/1');
+    expect(fmtChartDate('2026-01-10T00:00:00')).toBe('1/10');
+    expect(fmtChartDate('2026-12-25T00:00:00')).toBe('12/25');
   });
 });
 

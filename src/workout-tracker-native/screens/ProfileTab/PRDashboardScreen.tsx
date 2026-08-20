@@ -21,7 +21,7 @@ import { apiFetch } from '../../utils/api';
 import { captureAndShare } from '../../utils/shareCapture';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
 import {
-  fmtPrValue, fmtPrContext, fmtPrDelta, fmtRelativeDate, prTypeIcon,
+  fmtPrValue, fmtPrContext, fmtPrDelta, fmtRelativeDate, fmtChartDate, prTypeIcon,
   stalledUrgency, pickDefaultPrSeries, type PREventItem,
 } from '../../utils/prFormat';
 
@@ -420,28 +420,37 @@ export default function PRDashboardScreen({ navigation }: Props) {
                     </View>
                     {canChart ? (
                       <LineChart
-                        data={series.map(e => ({ value: e.value }))}
+                        data={series.map(e => ({ value: e.value, label: fmtChartDate(e.achieved_at) }))}
                         width={PIN_CHART_W}
-                        height={44}
-                        spacing={Math.max(16, Math.floor(PIN_CHART_W / Math.max(series.length - 1, 1)))}
+                        height={70}
+                        spacing={Math.max(28, Math.floor(PIN_CHART_W / Math.max(series.length - 1, 1)))}
                         color={colors.accent}
                         thickness={2}
                         hideDataPoints
                         areaChart
                         curved
-                        hideRules
-                        hideYAxisText
-                        yAxisThickness={0}
-                        xAxisThickness={0}
+                        isAnimated
+                        rulesType="dashed"
+                        rulesColor={colors.border}
+                        rulesThickness={1}
+                        yAxisTextStyle={styles.chartAxisLabel}
+                        yAxisLabelWidth={28}
+                        yAxisThickness={1}
+                        yAxisColor={colors.border}
+                        xAxisLabelTextStyle={styles.chartAxisLabel}
+                        xAxisTextNumberOfLines={1}
+                        xAxisThickness={1}
+                        xAxisColor={colors.border}
+                        noOfSections={2}
                         startFillColor={colors.accent}
                         endFillColor={colors.surface}
                         startOpacity={0.14}
                         endOpacity={0}
                         maxValue={chartMax - chartMin + chartPad * 2}
                         yAxisOffset={chartMin - chartPad}
-                        initialSpacing={4}
-                        endSpacing={4}
-                        disableScroll
+                        roundToDigits={0}
+                        initialSpacing={12}
+                        endSpacing={12}
                       />
                     ) : (
                       <Text style={styles.pinCardEmpty}>
@@ -724,8 +733,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.xs,
   },
   bestLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
-  bestValue: { fontSize: typography.fontSize.lg, fontWeight: '800', marginTop: 4 },
-  bestMeta: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 4 },
+  bestValue: { fontSize: typography.fontSize.lg, fontWeight: '800', marginTop: spacing.xs },
+  bestMeta: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: spacing.xs },
 
   trophyCard: { borderRadius: radius.md, overflow: 'hidden' },
   trophyRow: {
@@ -754,6 +763,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   pinCardValue: { fontSize: typography.fontSize.sm, fontWeight: '700' },
   pinCardEmpty: { fontSize: typography.fontSize.xs, color: colors.textSecondary, paddingVertical: spacing.sm },
   pinDeltaPill: { alignSelf: 'flex-start', marginTop: spacing.xs },
+  chartAxisLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
 
   chipRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xs, flexWrap: 'wrap' },
   chip: {
@@ -811,7 +821,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingHorizontal: spacing.xs + 2,
     paddingVertical: 2,
     borderRadius: radius.full,
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   deltaPillText: { fontSize: typography.fontSize.xs, fontWeight: '700' },
 

@@ -75,6 +75,12 @@ export function fmtRelativeDate(iso: string): string {
   });
 }
 
+/** Compact "M/D" x-axis label for PR progression charts. */
+export function fmtChartDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
 /** Flags a stalled lift for the dashboard's urgency icon/color. */
 export function stalledUrgency(daysSinceLastPr: number): 'ok' | 'watch' | 'stale' {
   if (daysSinceLastPr >= 30) return 'stale';

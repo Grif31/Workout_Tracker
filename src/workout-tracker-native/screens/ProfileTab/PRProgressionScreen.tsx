@@ -16,7 +16,7 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
-import { fmtPrValue, fmtPrDelta, PR_METRIC_OPTIONS, type PREventItem } from '../../utils/prFormat';
+import { fmtPrValue, fmtPrDelta, fmtChartDate, PR_METRIC_OPTIONS, type PREventItem } from '../../utils/prFormat';
 import { loadPrPins, togglePrPin, MAX_PR_PINS } from '../../utils/prPins';
 import { showToast } from '../../utils/toast';
 
@@ -24,6 +24,7 @@ type Props = NativeStackScreenProps<ProfileStackParamsList, 'PRProgression'>;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_W = SCREEN_WIDTH - spacing.md * 4;
+const CHART_Y_SECTIONS = 4;
 
 export default function PRProgressionScreen({ navigation, route }: Props) {
   const { exerciseTemplateId, exerciseName } = route.params;
@@ -123,7 +124,7 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
   );
 
   const chartData = useMemo(
-    () => series.map(e => ({ value: e.value })),
+    () => series.map(e => ({ value: e.value, label: fmtChartDate(e.achieved_at) })),
     [series],
   );
   const chartMin = Math.min(...series.map(e => e.value));
@@ -245,14 +246,18 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
 
           <GoldSectionRule icon="stats-chart-outline" label="Progression" style={styles.sectionHeaderRow} />
 
-          {/* Sparkline — shape at a glance; the table below carries exact numbers */}
+          {/* Chart — shape at a glance, with real axes now; the table below still carries exact numbers */}
           {series.length >= 2 && (
             <View style={[styles.chartCard, { backgroundColor: colors.surface }]}>
               <LineChart
                 data={chartData}
                 width={CHART_W}
-                height={100}
-                spacing={Math.max(24, Math.floor(CHART_W / Math.max(chartData.length - 1, 1)))}
+                height={140}
+                // Floor of 40 (not just enough to fit the points) so an "M/D" x-axis
+                // label always has room — LineChart scrolls horizontally on its own
+                // once content exceeds CHART_W, so a long history just becomes
+                // swipeable instead of squeezing labels until they collide.
+                spacing={Math.max(40, Math.floor(CHART_W / Math.max(chartData.length - 1, 1)))}
                 color={colors.accent}
                 thickness={2}
                 dataPointsColor={colors.accent}
@@ -263,15 +268,24 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
                 endOpacity={0}
                 areaChart
                 curved
-                hideRules
-                hideYAxisText
-                yAxisThickness={0}
-                xAxisThickness={0}
+                isAnimated
+                rulesType="dashed"
+                rulesColor={colors.border}
+                rulesThickness={1}
+                yAxisTextStyle={styles.chartAxisLabel}
+                yAxisLabelWidth={36}
+                yAxisThickness={1}
+                yAxisColor={colors.border}
+                xAxisLabelTextStyle={styles.chartAxisLabel}
+                xAxisTextNumberOfLines={1}
+                xAxisThickness={1}
+                xAxisColor={colors.border}
+                noOfSections={CHART_Y_SECTIONS}
                 maxValue={chartMax - chartMin + chartPad * 2}
                 yAxisOffset={chartMin - chartPad}
-                initialSpacing={12}
-                endSpacing={12}
-                disableScroll
+                roundToDigits={0}
+                initialSpacing={24}
+                endSpacing={24}
               />
             </View>
           )}
@@ -377,6 +391,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingHorizontal: spacing.sm,
     overflow: 'hidden',
   },
+  chartAxisLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
 
   table: { borderRadius: radius.md, overflow: 'hidden' },
   tableRow: {
