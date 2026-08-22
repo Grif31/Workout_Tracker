@@ -245,4 +245,36 @@ describe('PRProgressionScreen weight-context picker', () => {
     await waitFor(() => expect(getAllByText('5 reps').length).toBe(2));
     expect(queryAllByText('8 reps').length).toBe(0);
   });
+
+  it('lists weight contexts smallest to largest, regardless of which was PR\'d first', async () => {
+    // PR'd out of numeric order (185 first, then 135, then 225) — the picker
+    // should still list them 135 / 185 / 225.
+    mockFetch([
+      {
+        id: 20, exercise_template_id: 7, workout_id: 60,
+        pr_type: 'max_reps', value: 5, weight_context: 185,
+        previous_value: null, improved_by: null,
+        achieved_at: '2026-06-01T00:00:00',
+        pr_label: 'Max Reps', workout_name: 'Push A',
+      },
+      {
+        id: 21, exercise_template_id: 7, workout_id: 61,
+        pr_type: 'max_reps', value: 10, weight_context: 135,
+        previous_value: null, improved_by: null,
+        achieved_at: '2026-07-01T00:00:00',
+        pr_label: 'Max Reps', workout_name: 'Push B',
+      },
+      {
+        id: 22, exercise_template_id: 7, workout_id: 62,
+        pr_type: 'max_reps', value: 3, weight_context: 225,
+        previous_value: null, improved_by: null,
+        achieved_at: '2026-08-01T00:00:00',
+        pr_label: 'Max Reps', workout_name: 'Push C',
+      },
+    ]);
+    const { getAllByText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getAllByText(/^\d+ lbs$/).length).toBe(3));
+    const labels = getAllByText(/^\d+ lbs$/).map(el => el.children[0]);
+    expect(labels).toEqual(['135 lbs', '185 lbs', '225 lbs']);
+  });
 });

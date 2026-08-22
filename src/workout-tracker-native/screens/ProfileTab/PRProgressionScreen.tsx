@@ -121,17 +121,29 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
           seen.set(e.weight_context!, label);
         }
       });
-    return [...seen.entries()].map(([value, label]) => ({ value, label }));
+    return [...seen.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.value - b.value); // smallest to largest, independent of default-selection below
   }, [events, metric, unit]);
 
-  // Reset context when the metric changes; default to the most recent series
+  // The context to fall back to when the current one becomes invalid (metric
+  // switch, or nothing seeded) — the first one ever recorded for this
+  // metric, chronologically. Computed separately from `contexts` above so
+  // sorting that list for display doesn't change which value defaults in.
+  const firstSeenContext = useMemo(() => {
+    if (!metric) return null;
+    const first = events.find(e => e.pr_type === metric && e.weight_context != null);
+    return first ? first.weight_context! : null;
+  }, [events, metric]);
+
+  // Reset context when the metric changes; default to the first-ever context
   useEffect(() => {
     if (contexts.length > 0) {
-      setContext(prev => (prev != null && contexts.some(c => c.value === prev) ? prev : contexts[0].value));
+      setContext(prev => (prev != null && contexts.some(c => c.value === prev) ? prev : (firstSeenContext ?? contexts[0].value)));
     } else {
       setContext(null);
     }
-  }, [contexts]);
+  }, [contexts, firstSeenContext]);
 
   // Keeps the horizontal context list positioned on the selected item when
   // it changes for a reason other than the user's own scroll (metric switch,
