@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Dimensions,
+  NativeSyntheticEvent, NativeScrollEvent,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LineChart } from 'react-native-gifted-charts';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import GoldSectionRule from '../../components/GoldSectionRule';
+import SegmentedControl from '../../components/SegmentedControl';
 import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
@@ -17,7 +19,7 @@ import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
 import { fmtPrValue, fmtPrDelta, fmtChartDate, formatChartYLabel, PR_METRIC_OPTIONS, type PREventItem } from '../../utils/prFormat';
-import { loadPrPins, togglePrPin, MAX_PR_PINS } from '../../utils/prPins';
+import { loadPrPins, togglePrPin, pinMatches, MAX_PR_PINS } from '../../utils/prPins';
 import { showToast } from '../../utils/toast';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'PRProgression'>;
@@ -25,6 +27,10 @@ type Props = NativeStackScreenProps<ProfileStackParamsList, 'PRProgression'>;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_W = SCREEN_WIDTH - spacing.md * 4;
 const CHART_Y_SECTIONS = 4;
+// Weight/milestone context picker — a horizontal snapping list with the
+// selected item centered, rather than a wrapping row of chips.
+const CONTEXT_ITEM_W = 88;
+const CONTEXT_LIST_W = SCREEN_WIDTH - spacing.md * 2;
 
 export default function PRProgressionScreen({ navigation, route }: Props) {
   const { exerciseTemplateId, exerciseName, prType, weightContext } = route.params;
@@ -43,22 +49,26 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
   const [context, setContext] = useState<number | null>(weightContext ?? null);
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
   const [pinned, setPinned]   = useState(false);
+  const contextListRef = useRef<ScrollView>(null);
 
+  // Pinning is per (exercise, PR type, context) now — any metric shown on
+  // this screen can be pinned independently, not just whichever the
+  // exercise's single pin used to default to.
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || !metric) { setPinned(false); return; }
     loadPrPins(user.id).then(pins => {
-      setPinned(pins.some(p => p.id === exerciseTemplateId));
+      setPinned(pins.some(p => pinMatches(p, { id: exerciseTemplateId, prType: metric, weightContext: context })));
     });
-  }, [user?.id, exerciseTemplateId]);
+  }, [user?.id, exerciseTemplateId, metric, context]);
 
   const onTogglePin = async () => {
-    if (!user?.id) return;
-    const next = await togglePrPin(user.id, { id: exerciseTemplateId, name: exerciseName });
+    if (!user?.id || !metric) return;
+    const next = await togglePrPin(user.id, { id: exerciseTemplateId, name: exerciseName, prType: metric, weightContext: context });
     if (next === null) {
-      showToast(`You can pin up to ${MAX_PR_PINS} exercises. Unpin one first.`);
+      showToast(`You can pin up to ${MAX_PR_PINS} PRs. Unpin one first.`);
       return;
     }
-    setPinned(next.some(p => p.id === exerciseTemplateId));
+    setPinned(next.some(p => pinMatches(p, { id: exerciseTemplateId, prType: metric, weightContext: context })));
   };
 
   useEffect(() => {
@@ -123,6 +133,23 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
     }
   }, [contexts]);
 
+  // Keeps the horizontal context list positioned on the selected item when
+  // it changes for a reason other than the user's own scroll (metric switch,
+  // or the initial route-seeded weight). A no-op when the user's own scroll
+  // already left it there.
+  useEffect(() => {
+    if (context == null) return;
+    const idx = contexts.findIndex(c => c.value === context);
+    if (idx < 0) return;
+    contextListRef.current?.scrollTo({ x: idx * CONTEXT_ITEM_W, animated: false });
+  }, [contexts, context]);
+
+  const handleContextScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / CONTEXT_ITEM_W);
+    const picked = contexts[Math.max(0, Math.min(contexts.length - 1, idx))];
+    if (picked) setContext(picked.value);
+  };
+
   const series = useMemo(
     () => events.filter(e =>
       e.pr_type === metric && (context == null || e.weight_context === context)
@@ -172,6 +199,7 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
           onPress={onTogglePin}
           style={styles.pinBtn}
           hitSlop={8}
+          disabled={!metric}
           accessibilityLabel={pinned ? 'Unpin from PR Dashboard' : 'Pin to PR Dashboard'}
         >
           <Ionicons
@@ -214,40 +242,48 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
           )}
 
           {/* Metric selector */}
-          <View style={styles.chipRow}>
-            {availableMetrics.map(m => {
-              const active = metric === m.key;
-              return (
-                <TouchableOpacity
-                  key={m.key}
-                  style={[styles.chip, { borderColor: colors.border }, active && { backgroundColor: colors.accent + '20', borderColor: colors.accent }]}
-                  onPress={() => setMetric(m.key)}
-                >
-                  <Text style={[styles.chipText, { color: active ? colors.accent : colors.textSecondary }]}>
-                    {m.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <SegmentedControl options={availableMetrics} value={metric} onChange={setMetric} style={styles.metricSegmented} />
 
-          {/* Context selector (rep weights / cardio milestones) */}
+          {/* Context selector (rep weights / cardio milestones) — a horizontal
+              snapping list with the selected value centered under the marker,
+              instead of a wrapping row of chips. */}
           {contexts.length > 1 && (
-            <View style={styles.chipRow}>
-              {contexts.map(c => {
-                const active = context === c.value;
-                return (
-                  <TouchableOpacity
-                    key={c.value}
-                    style={[styles.contextChip, active && { backgroundColor: colors.accent + '20' }]}
-                    onPress={() => setContext(c.value)}
-                  >
-                    <Text style={[styles.chipText, { color: active ? colors.accent : colors.textSecondary }]}>
-                      {c.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+            <View style={styles.contextPickerWrap}>
+              <ScrollView
+                ref={contextListRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={CONTEXT_ITEM_W}
+                decelerationRate="fast"
+                contentContainerStyle={{ paddingHorizontal: (CONTEXT_LIST_W - CONTEXT_ITEM_W) / 2 }}
+                onMomentumScrollEnd={handleContextScrollEnd}
+              >
+                {contexts.map((c, idx) => {
+                  const active = context === c.value;
+                  return (
+                    <TouchableOpacity
+                      key={c.value}
+                      style={[styles.contextItem, { width: CONTEXT_ITEM_W }]}
+                      onPress={() => {
+                        setContext(c.value);
+                        contextListRef.current?.scrollTo({ x: idx * CONTEXT_ITEM_W, animated: true });
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.contextItemText,
+                          { color: active ? colors.textPrimary : colors.textSecondary },
+                          active && styles.contextItemTextActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {c.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              <View pointerEvents="none" style={[styles.contextCenterMarker, { borderColor: colors.accent }]} />
             </View>
           )}
 
@@ -304,7 +340,7 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
               <Text style={[styles.thDate, styles.th]}>Date</Text>
               <Text style={[styles.thValue, styles.th]}>Value</Text>
               <Text style={[styles.thDelta, styles.th]}>Δ</Text>
-              <Text style={[styles.thWorkout, styles.th]}>Workout</Text>
+              <Text style={[styles.thWorkout, styles.th]} numberOfLines={1}>Workout</Text>
             </View>
             {[...series].reverse().map((e, i) => {
               const delta = fmtPrDelta(e, unit, distanceUnit);
@@ -378,20 +414,23 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   heroCaption: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
   heroImprovement: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: spacing.sm },
 
-  chipRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
   sectionHeaderRow: { marginTop: spacing.sm },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
-    borderRadius: 20,
-    borderWidth: 1,
+  metricSegmented: { marginTop: spacing.xs },
+
+  contextPickerWrap: { height: 52, justifyContent: 'center' },
+  contextItem: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.sm },
+  contextItemText: { fontSize: typography.fontSize.sm, fontWeight: '600' },
+  contextItemTextActive: { fontSize: typography.fontSize.md, fontWeight: '800' },
+  contextCenterMarker: {
+    position: 'absolute',
+    top: 2,
+    bottom: 2,
+    left: '50%',
+    width: CONTEXT_ITEM_W,
+    marginLeft: -CONTEXT_ITEM_W / 2,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
   },
-  contextChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
-    borderRadius: 20,
-  },
-  chipText: { fontSize: typography.fontSize.sm, fontWeight: '600' },
 
   chartCard: {
     borderRadius: radius.md,

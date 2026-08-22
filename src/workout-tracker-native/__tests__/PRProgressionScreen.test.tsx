@@ -89,18 +89,50 @@ describe('PRProgressionScreen', () => {
     expect(nav.navigate).toHaveBeenCalledWith('WorkoutDetails', { workoutId: 42 });
   });
 
-  it('pins the exercise to the PR Dashboard', async () => {
+  it('pins the currently selected metric (not just the exercise) to the PR Dashboard', async () => {
     const { getByLabelText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByLabelText('Pin to PR Dashboard')).toBeTruthy());
     fireEvent.press(getByLabelText('Pin to PR Dashboard'));
     await waitFor(async () => {
       const saved = await AsyncStorage.getItem('pr_dashboard_pins_1');
-      expect(JSON.parse(saved!)).toEqual([{ id: 7, name: 'Bench Press' }]);
+      expect(JSON.parse(saved!)).toEqual([{ id: 7, name: 'Bench Press', prType: 'max_weight', weightContext: null }]);
     });
     expect(getByLabelText('Unpin from PR Dashboard')).toBeTruthy();
   });
 
-  it('unpins a pinned exercise', async () => {
+  it('pins a second metric on the same exercise as an independent pin', async () => {
+    const { getByText, getByLabelText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByLabelText('Pin to PR Dashboard')).toBeTruthy());
+    fireEvent.press(getByLabelText('Pin to PR Dashboard')); // pins Max Weight
+    await waitFor(async () => expect(await AsyncStorage.getItem('pr_dashboard_pins_1')).toBeTruthy());
+
+    fireEvent.press(getByText('Est. 1RM')); // switch metric — pin button flips back to unpinned
+    await waitFor(() => expect(getByLabelText('Pin to PR Dashboard')).toBeTruthy());
+    fireEvent.press(getByLabelText('Pin to PR Dashboard')); // pins Est. 1RM too
+
+    await waitFor(async () => {
+      const saved = await AsyncStorage.getItem('pr_dashboard_pins_1');
+      expect(JSON.parse(saved!)).toEqual([
+        { id: 7, name: 'Bench Press', prType: 'max_weight', weightContext: null },
+        { id: 7, name: 'Bench Press', prType: 'estimated_1rm', weightContext: null },
+      ]);
+    });
+  });
+
+  it('unpins a pinned metric', async () => {
+    await AsyncStorage.setItem('pr_dashboard_pins_1', JSON.stringify([
+      { id: 7, name: 'Bench Press', prType: 'max_weight', weightContext: null },
+    ]));
+    const { getByLabelText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByLabelText('Unpin from PR Dashboard')).toBeTruthy());
+    fireEvent.press(getByLabelText('Unpin from PR Dashboard'));
+    await waitFor(async () => {
+      const saved = await AsyncStorage.getItem('pr_dashboard_pins_1');
+      expect(JSON.parse(saved!)).toEqual([]);
+    });
+  });
+
+  it('treats a legacy pin (no prType) as pinned for whichever metric is shown, and unpins it', async () => {
     await AsyncStorage.setItem('pr_dashboard_pins_1', JSON.stringify([{ id: 7, name: 'Bench Press' }]));
     const { getByLabelText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByLabelText('Unpin from PR Dashboard')).toBeTruthy());
@@ -169,5 +201,48 @@ describe('PRProgressionScreen', () => {
     // "8 reps" appears twice: the hero's current best and the table row.
     await waitFor(() => expect(getAllByText('8 reps').length).toBe(2));
     expect(queryAllByText('5 reps').length).toBe(0);
+  });
+});
+
+describe('PRProgressionScreen weight-context picker', () => {
+  const repsPayload = [
+    {
+      id: 10, exercise_template_id: 7, workout_id: 50,
+      pr_type: 'max_reps', value: 8, weight_context: 135,
+      previous_value: null, improved_by: null,
+      achieved_at: '2026-06-01T00:00:00',
+      pr_label: 'Max Reps', workout_name: 'Push A',
+    },
+    {
+      id: 11, exercise_template_id: 7, workout_id: 51,
+      pr_type: 'max_reps', value: 5, weight_context: 185,
+      previous_value: null, improved_by: null,
+      achieved_at: '2026-08-01T00:00:00',
+      pr_label: 'Max Reps', workout_name: 'Push B',
+    },
+  ];
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    await AsyncStorage.clear();
+    mockFetch(repsPayload);
+  });
+
+  it('shows both weights in the picker with one series selected by default', async () => {
+    const { getByText, getAllByText, queryAllByText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('135 lbs')).toBeTruthy());
+    expect(getByText('185 lbs')).toBeTruthy();
+    // Exactly one of the two series is showing (hero + table row = 2 matches).
+    const shown = getAllByText('8 reps').length === 2 ? '8 reps' : '5 reps';
+    const other = shown === '8 reps' ? '5 reps' : '8 reps';
+    expect(queryAllByText(other).length).toBe(0);
+  });
+
+  it('switches the series when a different weight is tapped in the picker', async () => {
+    const { getByText, getAllByText, queryAllByText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('135 lbs')).toBeTruthy());
+    fireEvent.press(getByText('185 lbs'));
+    await waitFor(() => expect(getAllByText('5 reps').length).toBe(2));
+    expect(queryAllByText('8 reps').length).toBe(0);
   });
 });

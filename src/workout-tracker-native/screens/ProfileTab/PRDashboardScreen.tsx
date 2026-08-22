@@ -10,7 +10,8 @@ import { LineChart } from 'react-native-gifted-charts';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import GoldSectionRule from '../../components/GoldSectionRule';
 import PRShareCard from '../../components/PRShareCard';
-import { loadPrPins, type PRPin } from '../../utils/prPins';
+import SegmentedControl from '../../components/SegmentedControl';
+import { loadPrPins, pinSlotKey, type PRPin } from '../../utils/prPins';
 import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
@@ -22,7 +23,7 @@ import { captureAndShare } from '../../utils/shareCapture';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
 import {
   fmtPrValue, fmtPrContext, fmtPrDelta, fmtRelativeDate, fmtChartDate, formatChartYLabel,
-  prTypeIcon, stalledUrgency, stalledCategoryToPrType, pickDefaultPrSeries,
+  prTypeIcon, stalledUrgency, stalledCategoryToPrType, pickDefaultPrSeries, PR_METRIC_OPTIONS,
   type PREventItem, type StalledCategory,
 } from '../../utils/prFormat';
 
@@ -104,6 +105,131 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // list padding (md*2) + pin card padding (md*2) + a little breathing room
 const PIN_CHART_W = SCREEN_WIDTH - spacing.md * 5;
 
+type PinnedProgressionSectionProps = {
+  pins: PRPin[];
+  pinSeries: Record<string, PREventItem[]>;
+  pinSeriesLoading: boolean;
+  unit: string;
+  distanceUnit: 'km' | 'mi';
+  colors: Colors;
+  styles: ReturnType<typeof createStyles>;
+  onOpen: (pin: PRPin, last?: PREventItem) => void;
+  // False after the charts' first paint (tracked in the parent, so it
+  // survives even if FlatList's ListHeaderComponent remounts this section on
+  // an unrelated state change) — stops the chart from replaying its entrance
+  // animation on every dashboard re-render, e.g. the feed's filter switching.
+  animate: boolean;
+};
+
+/**
+ * Its own memoized component (not an inline render function) so it only
+ * re-renders when its own props actually change — not on every unrelated
+ * dashboard state change (e.g. the feed's filter switching).
+ */
+const PinnedProgressionSection = React.memo(function PinnedProgressionSection({
+  pins, pinSeries, pinSeriesLoading, unit, distanceUnit, colors, styles, onOpen, animate,
+}: PinnedProgressionSectionProps) {
+  return (
+    <View>
+      <GoldSectionRule icon="pin-outline" label="Pinned Progression" style={styles.sectionHeaderRow} />
+      {pins.length === 0 ? (
+        <Text style={styles.pinsHint}>
+          Pin lifts from their progression view to keep them here.
+        </Text>
+      ) : (
+        <View style={styles.pinList}>
+          {pins.map(p => {
+            const series = pinSeries[pinSlotKey(p)] ?? [];
+            const canChart = series.length >= 2;
+            const last = series[series.length - 1];
+            const delta = last ? fmtPrDelta(last, unit, distanceUnit) : null;
+            const metricLabel = p.prType ? PR_METRIC_OPTIONS.find(m => m.key === p.prType)?.label : null;
+            const contextLabel = p.prType === 'max_reps' && p.weightContext != null
+              ? ` @ ${p.weightContext === 0 ? 'Bodyweight' : `${p.weightContext} ${unit}`}`
+              : '';
+            let chartMin = 0, chartMax = 0, chartPad = 1;
+            if (canChart) {
+              chartMin = Math.min(...series.map(e => e.value));
+              chartMax = Math.max(...series.map(e => e.value));
+              chartPad = Math.max((chartMax - chartMin) * 0.15, 1);
+            }
+            return (
+              <TouchableOpacity
+                key={pinSlotKey(p)}
+                style={[styles.pinCard, { backgroundColor: colors.surface }]}
+                onPress={() => onOpen(p, last)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.pinCardHeader}>
+                  <Ionicons name="pin" size={14} color={colors.accent} />
+                  <View style={styles.pinCardTitleCol}>
+                    <Text style={[styles.pinCardName, { color: colors.textPrimary }]} numberOfLines={1}>{p.name}</Text>
+                    {metricLabel && (
+                      <Text style={styles.pinCardSub} numberOfLines={1}>{metricLabel}{contextLabel}</Text>
+                    )}
+                  </View>
+                  {last && (
+                    <Text style={[styles.pinCardValue, { color: colors.textPrimary }]}>
+                      {fmtPrValue(last, unit, distanceUnit)}
+                    </Text>
+                  )}
+                  <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
+                </View>
+                {canChart ? (
+                  <LineChart
+                    data={series.map(e => ({ value: e.value, label: fmtChartDate(e.achieved_at) }))}
+                    width={PIN_CHART_W}
+                    height={70}
+                    spacing={Math.max(28, Math.floor(PIN_CHART_W / Math.max(series.length - 1, 1)))}
+                    color={colors.accent}
+                    thickness={2}
+                    hideDataPoints
+                    areaChart
+                    curved
+                    isAnimated={animate}
+                    rulesType="dashed"
+                    rulesColor={colors.border}
+                    rulesThickness={1}
+                    yAxisTextStyle={styles.chartAxisLabel}
+                    yAxisLabelWidth={28}
+                    yAxisThickness={1}
+                    yAxisColor={colors.border}
+                    xAxisLabelTextStyle={styles.chartAxisLabel}
+                    xAxisTextNumberOfLines={1}
+                    xAxisThickness={1}
+                    xAxisColor={colors.border}
+                    noOfSections={2}
+                    startFillColor={colors.accent}
+                    endFillColor={colors.surface}
+                    startOpacity={0.14}
+                    endOpacity={0}
+                    maxValue={chartMax - chartMin + chartPad * 2}
+                    yAxisOffset={chartMin - chartPad}
+                    roundToDigits={0}
+                    formatYLabel={formatChartYLabel}
+                    initialSpacing={12}
+                    endSpacing={12}
+                  />
+                ) : (
+                  <Text style={styles.pinCardEmpty}>
+                    {pinSeriesLoading ? 'Loading…' : series.length === 1 ? 'Log another PR to see a trend' : 'No PR history yet'}
+                  </Text>
+                )}
+                {delta && (
+                  <View style={[styles.deltaPill, styles.pinDeltaPill, { backgroundColor: PR_GOLD_BG }]}>
+                    <Ionicons name="trending-up" size={10} color={PR_GOLD_TEXT} />
+                    <Text style={[styles.deltaPillText, { color: PR_GOLD_TEXT }]}>{delta}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+});
+
 export default function PRDashboardScreen({ navigation }: Props) {
   const { user } = useAuth();
   const { colors } = useTheme();
@@ -125,9 +251,15 @@ export default function PRDashboardScreen({ navigation }: Props) {
   const [menuEvent, setMenuEvent]   = useState<PREventItem | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const [pins, setPins]             = useState<PRPin[]>([]);
-  const [pinSeries, setPinSeries]         = useState<Record<number, PREventItem[]>>({});
+  const [pinSeries, setPinSeries]         = useState<Record<string, PREventItem[]>>({});
   const [pinSeriesLoading, setPinSeriesLoading] = useState(false);
   const shareRef = useRef<View>(null);
+  // Flips true after the pinned charts' first paint with real data — read
+  // during render (not state) so flipping it doesn't itself trigger a
+  // re-render; it just makes every render *after* the first one pass
+  // isAnimated={false} to the charts, whether or not FlatList's
+  // ListHeaderComponent happens to remount that section along the way.
+  const pinsAnimatedRef = useRef(false);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -172,11 +304,17 @@ export default function PRDashboardScreen({ navigation }: Props) {
       const results = await Promise.all(pinList.map(async p => {
         try {
           const res = await apiFetch(`/api/personal-records/history?exercise_template_id=${p.id}`);
-          if (!res.ok) return [p.id, []] as const;
+          if (!res.ok) return [pinSlotKey(p), []] as const;
           const rows: PREventItem[] = await res.json();
-          return [p.id, pickDefaultPrSeries(rows)] as const;
+          // A pin created before per-type pinning shipped has no prType — keep
+          // its old auto-pick behavior. A type-specific pin shows exactly the
+          // series it was pinned for.
+          const series = p.prType
+            ? rows.filter(e => e.pr_type === p.prType && (p.weightContext == null || e.weight_context === p.weightContext))
+            : pickDefaultPrSeries(rows);
+          return [pinSlotKey(p), series] as const;
         } catch {
-          return [p.id, []] as const;
+          return [pinSlotKey(p), []] as const;
         }
       }));
       if (isAlive()) setPinSeries(Object.fromEntries(results));
@@ -204,6 +342,14 @@ export default function PRDashboardScreen({ navigation }: Props) {
     }
     return () => { alive = false; };
   }, [loadFirstPage, loadPinSeries, user?.id]));
+
+  // Marks the pinned charts as having already appeared once real data has
+  // loaded — every render from here on passes isAnimated={false} to them.
+  useEffect(() => {
+    if (Object.keys(pinSeries).length > 0) {
+      pinsAnimatedRef.current = true;
+    }
+  }, [pinSeries]);
 
   // Switching filters re-filters the feed in place — the header (hero/records/
   // stalled/pins) and the list itself stay mounted; only a small inline
@@ -260,35 +406,9 @@ export default function PRDashboardScreen({ navigation }: Props) {
 
   const openWorkout = (workoutId: number) => navigation.navigate('WorkoutDetails', { workoutId });
 
-  // Shared by both PR-type pickers (stalled section + feed) — one connected
-  // segmented bar instead of two separate pill-chip rows.
-  const renderFilterSegmented = (
-    value: typeof FILTERS[number]['key'],
-    onChange: (key: typeof FILTERS[number]['key']) => void,
-  ) => (
-    <View style={[styles.segmented, { borderColor: colors.border }]}>
-      {FILTERS.map((f, i) => {
-        const active = value === f.key;
-        return (
-          <TouchableOpacity
-            key={f.label}
-            style={[
-              styles.segment,
-              i > 0 && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.border },
-              active && { backgroundColor: colors.accent + '20' },
-            ]}
-            onPress={() => onChange(f.key)}
-          >
-            <Text style={[styles.segmentText, { color: active ? colors.accent : colors.textSecondary }]} numberOfLines={1}>
-              {f.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
-
-  const openProgression = (event: {
+  // useCallback (stable across re-renders) so it can be passed to the
+  // memoized PinnedProgressionSection without invalidating its memo.
+  const openProgression = useCallback((event: {
     exercise_template_id: number;
     exercise_name?: string;
     pr_type?: PREventItem['pr_type'];
@@ -299,7 +419,18 @@ export default function PRDashboardScreen({ navigation }: Props) {
       exerciseName: event.exercise_name ?? '',
       prType: event.pr_type,
       weightContext: event.weight_context,
+    }), [navigation]);
+
+  // A pin already knows its own exact type/context; `last` (its most recent
+  // event) is only a fallback for legacy pins that don't.
+  const openPinnedProgression = useCallback((pin: PRPin, last?: PREventItem) => {
+    openProgression({
+      exercise_template_id: pin.id,
+      exercise_name: pin.name,
+      pr_type: pin.prType ?? last?.pr_type,
+      weight_context: pin.weightContext ?? last?.weight_context,
     });
+  }, [openProgression]);
 
   const stats = data?.stats;
   const bests = data?.workout_bests;
@@ -401,7 +532,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
     hasStalledData ? (
         <View>
           <GoldSectionRule icon="hourglass-outline" label="Time Since Last PR" style={styles.sectionHeaderRow} />
-          {renderFilterSegmented(stalledFilter, setStalledFilter)}
+          <SegmentedControl options={FILTERS} value={stalledFilter} onChange={setStalledFilter} style={styles.segmentedSpacing} />
           {stalled.length > 0 ? (
             <View style={[styles.trophyCard, { backgroundColor: colors.surface }]}>
               {stalled.map((row, i) => {
@@ -445,104 +576,23 @@ export default function PRDashboardScreen({ navigation }: Props) {
         </View>
     ) : null;
 
-  const renderProgression = () => (
-        <View>
-          <GoldSectionRule icon="pin-outline" label="Pinned Progression" style={styles.sectionHeaderRow} />
-          {pins.length === 0 ? (
-            <Text style={styles.pinsHint}>
-              Pin lifts from their progression view to keep them here.
-            </Text>
-          ) : (
-            <View style={styles.pinList}>
-              {pins.map(p => {
-                const series = pinSeries[p.id] ?? [];
-                const canChart = series.length >= 2;
-                const last = series[series.length - 1];
-                const delta = last ? fmtPrDelta(last, unit, distanceUnit) : null;
-                let chartMin = 0, chartMax = 0, chartPad = 1;
-                if (canChart) {
-                  chartMin = Math.min(...series.map(e => e.value));
-                  chartMax = Math.max(...series.map(e => e.value));
-                  chartPad = Math.max((chartMax - chartMin) * 0.15, 1);
-                }
-                return (
-                  <TouchableOpacity
-                    key={p.id}
-                    style={[styles.pinCard, { backgroundColor: colors.surface }]}
-                    onPress={() => openProgression({ exercise_template_id: p.id, exercise_name: p.name, pr_type: last?.pr_type, weight_context: last?.weight_context })}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.pinCardHeader}>
-                      <Ionicons name="pin" size={14} color={colors.accent} />
-                      <Text style={[styles.pinCardName, { color: colors.textPrimary }]} numberOfLines={1}>{p.name}</Text>
-                      {last && (
-                        <Text style={[styles.pinCardValue, { color: colors.textPrimary }]}>
-                          {fmtPrValue(last, unit, distanceUnit)}
-                        </Text>
-                      )}
-                      <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
-                    </View>
-                    {canChart ? (
-                      <LineChart
-                        data={series.map(e => ({ value: e.value, label: fmtChartDate(e.achieved_at) }))}
-                        width={PIN_CHART_W}
-                        height={70}
-                        spacing={Math.max(28, Math.floor(PIN_CHART_W / Math.max(series.length - 1, 1)))}
-                        color={colors.accent}
-                        thickness={2}
-                        hideDataPoints
-                        areaChart
-                        curved
-                        isAnimated
-                        rulesType="dashed"
-                        rulesColor={colors.border}
-                        rulesThickness={1}
-                        yAxisTextStyle={styles.chartAxisLabel}
-                        yAxisLabelWidth={28}
-                        yAxisThickness={1}
-                        yAxisColor={colors.border}
-                        xAxisLabelTextStyle={styles.chartAxisLabel}
-                        xAxisTextNumberOfLines={1}
-                        xAxisThickness={1}
-                        xAxisColor={colors.border}
-                        noOfSections={2}
-                        startFillColor={colors.accent}
-                        endFillColor={colors.surface}
-                        startOpacity={0.14}
-                        endOpacity={0}
-                        maxValue={chartMax - chartMin + chartPad * 2}
-                        yAxisOffset={chartMin - chartPad}
-                        roundToDigits={0}
-                        formatYLabel={formatChartYLabel}
-                        initialSpacing={12}
-                        endSpacing={12}
-                      />
-                    ) : (
-                      <Text style={styles.pinCardEmpty}>
-                        {pinSeriesLoading ? 'Loading…' : series.length === 1 ? 'Log another PR to see a trend' : 'No PR history yet'}
-                      </Text>
-                    )}
-                    {delta && (
-                      <View style={[styles.deltaPill, styles.pinDeltaPill, { backgroundColor: PR_GOLD_BG }]}>
-                        <Ionicons name="trending-up" size={10} color={PR_GOLD_TEXT} />
-                        <Text style={[styles.deltaPillText, { color: PR_GOLD_TEXT }]}>{delta}</Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
-        </View>
-  );
-
   const feedScope = data?.recent_events_scope ?? 'week';
 
   const renderHeader = () => (
     <View>
       {renderHero()}
       {renderRecords()}
-      {renderProgression()}
+      <PinnedProgressionSection
+        pins={pins}
+        pinSeries={pinSeries}
+        pinSeriesLoading={pinSeriesLoading}
+        unit={unit}
+        distanceUnit={distanceUnit}
+        colors={colors}
+        styles={styles}
+        onOpen={openPinnedProgression}
+        animate={!pinsAnimatedRef.current}
+      />
       {renderStalled()}
 
       {/* Feed title + filter picker */}
@@ -555,7 +605,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
       {feedScope === 'all_time' && events.length > 0 && (
         <Text style={styles.feedScopeNote}>No new PRs this week. Here's your most recent</Text>
       )}
-      {renderFilterSegmented(filter, setFilter)}
+      <SegmentedControl options={FILTERS} value={filter} onChange={setFilter} style={styles.segmentedSpacing} />
     </View>
   );
 
@@ -625,7 +675,13 @@ export default function PRDashboardScreen({ navigation }: Props) {
           data={events}
           keyExtractor={item => item.id.toString()}
           contentContainerStyle={styles.list}
-          ListHeaderComponent={renderHeader}
+          // Pass an already-built element, not the bare `renderHeader`
+          // function — a fresh function reference every render makes
+          // FlatList treat it as a new component type and remount the whole
+          // header subtree (discarding PinnedProgressionSection's memo and
+          // replaying its chart's entrance animation) instead of just
+          // re-rendering it in place.
+          ListHeaderComponent={renderHeader()}
           ListEmptyComponent={
             // The backend already falls back to all-time history when the
             // week is empty, so an empty list here means zero PRs of this
@@ -811,27 +867,15 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     overflow: 'hidden',
   },
   pinCardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
-  pinCardName: { flex: 1, fontSize: typography.fontSize.md, fontWeight: '600' },
+  pinCardTitleCol: { flex: 1 },
+  pinCardName: { fontSize: typography.fontSize.md, fontWeight: '600' },
+  pinCardSub: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 1 },
   pinCardValue: { fontSize: typography.fontSize.sm, fontWeight: '700' },
   pinCardEmpty: { fontSize: typography.fontSize.xs, color: colors.textSecondary, paddingVertical: spacing.sm },
   pinDeltaPill: { alignSelf: 'flex-start', marginTop: spacing.xs },
   chartAxisLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
 
-  segmented: {
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderRadius: radius.md,
-    overflow: 'hidden',
-    marginBottom: spacing.xs,
-  },
-  segment: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.xs + 2,
-    paddingHorizontal: spacing.xs,
-  },
-  segmentText: { fontSize: typography.fontSize.xs, fontWeight: '600' },
+  segmentedSpacing: { marginBottom: spacing.xs },
 
   eventCard: {
     flexDirection: 'row',

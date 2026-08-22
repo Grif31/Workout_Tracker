@@ -8,6 +8,15 @@ import PRDashboardScreen from '../screens/ProfileTab/PRDashboardScreen';
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 
+// Overrides jest.setup.ts's plain `() => null` mock with a spy, so tests can
+// verify the pinned progression chart doesn't re-render (and replay its
+// entrance animation) on unrelated dashboard state changes.
+const mockLineChartRender = jest.fn(() => null);
+jest.mock('react-native-gifted-charts', () => ({
+  BarChart: () => null,
+  LineChart: (props: any) => mockLineChartRender(props),
+}));
+
 const nav = createMockNavigation();
 const route = createMockRoute('PRDashboard');
 
@@ -271,6 +280,63 @@ describe('PRDashboardScreen', () => {
     // Tapping the card pre-selects the metric/context of its most recent event
     fireEvent.press(getByText('Deadlift'));
     expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 12, exerciseName: 'Deadlift', prType: 'max_weight', weightContext: null });
+  });
+
+  it('shows two pinned PR types on the same exercise as independent cards with metric subtitles', async () => {
+    await AsyncStorage.setItem('pr_dashboard_pins_1', JSON.stringify([
+      { id: 12, name: 'Deadlift', prType: 'max_weight', weightContext: null },
+      { id: 12, name: 'Deadlift', prType: 'max_reps', weightContext: 315 },
+    ]));
+    (global.fetch as jest.Mock) = jest.fn((url: any) => {
+      if (String(url).includes('/api/personal-records/history')) {
+        return Promise.resolve({
+          ok: true, status: 200,
+          json: () => Promise.resolve([
+            { id: 101, exercise_template_id: 12, workout_id: 1, pr_type: 'max_weight', value: 405, weight_context: null, previous_value: 385, improved_by: 20, achieved_at: '2026-08-01T00:00:00' },
+            { id: 102, exercise_template_id: 12, workout_id: 2, pr_type: 'max_reps', value: 6, weight_context: 315, previous_value: null, improved_by: null, achieved_at: '2026-08-05T00:00:00' },
+          ]),
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(dashboardPayload) });
+    });
+    const { getAllByText, getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    // Two cards, both named "Deadlift" — one for each pinned type
+    await waitFor(() => expect(getAllByText('Deadlift').length).toBe(2));
+    expect(getByText('Max Weight')).toBeTruthy();
+    expect(getByText('Rep Record @ 315 lbs')).toBeTruthy();
+  });
+
+  it('only animates the pinned progression chart on first paint, not on a later filter switch', async () => {
+    await AsyncStorage.setItem('pr_dashboard_pins_1', JSON.stringify([{ id: 12, name: 'Deadlift', prType: 'max_weight', weightContext: null }]));
+    (global.fetch as jest.Mock) = jest.fn((url: any) => {
+      if (String(url).includes('/api/personal-records/history')) {
+        return Promise.resolve({
+          ok: true, status: 200,
+          json: () => Promise.resolve([
+            { id: 101, exercise_template_id: 12, workout_id: 1, pr_type: 'max_weight', value: 385, weight_context: null, previous_value: 365, improved_by: 20, achieved_at: '2026-08-01T00:00:00' },
+            { id: 102, exercise_template_id: 12, workout_id: 2, pr_type: 'max_weight', value: 405, weight_context: null, previous_value: 385, improved_by: 15, achieved_at: '2026-08-08T00:00:00' },
+          ]),
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(dashboardPayload) });
+    });
+    const { getByText, getAllByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('405 lbs')).toBeTruthy());
+    // The chart's first paint (with real data) is animated.
+    const callsAfterMount = [...mockLineChartRender.mock.calls];
+    expect(callsAfterMount.some(([props]) => props.isAnimated === true)).toBe(true);
+
+    fireEvent.press(getAllByText('Weight')[1]); // the feed's own filter segment
+    await waitFor(() => {
+      const calls = (global.fetch as jest.Mock).mock.calls.map(c => String(c[0]));
+      expect(calls.some(u => u.includes('type=weight'))).toBe(true);
+    });
+
+    // Whatever renders happen afterward (the filter switch touches unrelated
+    // state), none of them re-animate the chart.
+    const callsAfterFilterSwitch = mockLineChartRender.mock.calls.slice(callsAfterMount.length);
+    expect(callsAfterFilterSwitch.length).toBeGreaterThan(0);
+    expect(callsAfterFilterSwitch.every(([props]) => props.isAnimated === false)).toBe(true);
   });
 
   it('shows the weekly title and no fallback note under the normal week scope', async () => {
