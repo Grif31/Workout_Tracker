@@ -104,6 +104,12 @@ function stalledRowCategory(
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // list padding (md*2) + pin card padding (md*2) + a little breathing room
 const PIN_CHART_W = SCREEN_WIDTH - spacing.md * 5;
+// gifted-charts renders yAxisLabelWidth *in addition to* the `width` prop
+// (it's the reserved column for y-axis labels, drawn to the left of the
+// plot area) — so the plot area itself must be narrower than PIN_CHART_W by
+// that amount, or the chart's total footprint overflows the card.
+const PIN_CHART_Y_LABEL_W = 28;
+const PIN_CHART_PLOT_W = PIN_CHART_W - PIN_CHART_Y_LABEL_W;
 
 type PinnedProgressionSectionProps = {
   pins: PRPin[];
@@ -178,9 +184,9 @@ const PinnedProgressionSection = React.memo(function PinnedProgressionSection({
                 {canChart ? (
                   <LineChart
                     data={series.map(e => ({ value: e.value, label: fmtChartDate(e.achieved_at) }))}
-                    width={PIN_CHART_W}
+                    width={PIN_CHART_PLOT_W}
                     height={70}
-                    spacing={Math.max(28, Math.floor(PIN_CHART_W / Math.max(series.length - 1, 1)))}
+                    spacing={Math.max(24, Math.floor(PIN_CHART_PLOT_W / Math.max(series.length - 1, 1)))}
                     color={colors.accent}
                     thickness={2}
                     hideDataPoints
@@ -191,7 +197,7 @@ const PinnedProgressionSection = React.memo(function PinnedProgressionSection({
                     rulesColor={colors.border}
                     rulesThickness={1}
                     yAxisTextStyle={styles.chartAxisLabel}
-                    yAxisLabelWidth={28}
+                    yAxisLabelWidth={PIN_CHART_Y_LABEL_W}
                     yAxisThickness={1}
                     yAxisColor={colors.border}
                     xAxisLabelTextStyle={styles.chartAxisLabel}

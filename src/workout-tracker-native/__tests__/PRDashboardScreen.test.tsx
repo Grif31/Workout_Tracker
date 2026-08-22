@@ -1,4 +1,5 @@
 import React from 'react';
+import { Dimensions } from 'react-native';
 import { render, waitFor, fireEvent } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { captureRef } from 'react-native-view-shot';
@@ -337,6 +338,32 @@ describe('PRDashboardScreen', () => {
     const callsAfterFilterSwitch = mockLineChartRender.mock.calls.slice(callsAfterMount.length);
     expect(callsAfterFilterSwitch.length).toBeGreaterThan(0);
     expect(callsAfterFilterSwitch.every(([props]) => props.isAnimated === false)).toBe(true);
+  });
+
+  it('sizes the pinned chart to fit within the card, including the y-axis label column', async () => {
+    await AsyncStorage.setItem('pr_dashboard_pins_1', JSON.stringify([{ id: 12, name: 'Deadlift', prType: 'max_weight', weightContext: null }]));
+    (global.fetch as jest.Mock) = jest.fn((url: any) => {
+      if (String(url).includes('/api/personal-records/history')) {
+        return Promise.resolve({
+          ok: true, status: 200,
+          json: () => Promise.resolve([
+            { id: 101, exercise_template_id: 12, workout_id: 1, pr_type: 'max_weight', value: 385, weight_context: null, previous_value: 365, improved_by: 20, achieved_at: '2026-08-01T00:00:00' },
+            { id: 102, exercise_template_id: 12, workout_id: 2, pr_type: 'max_weight', value: 405, weight_context: null, previous_value: 385, improved_by: 15, achieved_at: '2026-08-08T00:00:00' },
+          ]),
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(dashboardPayload) });
+    });
+    render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(mockLineChartRender.mock.calls.length).toBeGreaterThan(0));
+    const [props] = mockLineChartRender.mock.calls[0];
+    // gifted-charts renders yAxisLabelWidth *in addition to* `width` — their
+    // sum is the chart's real footprint, which must not exceed the card's
+    // available interior (list padding + card padding + one unit of
+    // intentional breathing room, mirroring PIN_CHART_W in the component).
+    const screenWidth = Dimensions.get('window').width;
+    const cardAvailableWidth = screenWidth - 16 * 5; // spacing.md is mocked to 16 above
+    expect(props.width + props.yAxisLabelWidth).toBe(cardAvailableWidth);
   });
 
   it('shows the weekly title and no fallback note under the normal week scope', async () => {
