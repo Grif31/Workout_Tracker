@@ -49,6 +49,9 @@ const dashboardPayload = {
       {
         exercise_template_id: 9, exercise_name: 'Squat', workout_count: 12,
         days_since_last_pr: 32, last_pr_at: '2026-07-09T00:00:00',
+        // Weight is the stalest category (32d, vs. Reps' 5d) — that's what
+        // the row's own days_since_last_pr/last_pr_at above reflect.
+        stalest_category: 'weight' as const,
         by_type: {
           weight: { days_since_last_pr: 32, last_pr_at: '2026-07-09T00:00:00', weight_context: null },
           reps: { days_since_last_pr: 5, last_pr_at: '2026-08-06T00:00:00', weight_context: 185 },
@@ -134,20 +137,22 @@ describe('PRDashboardScreen', () => {
     await waitFor(() => expect(captureRef).toHaveBeenCalled());
   });
 
-  it('navigates to PRProgression from a stalled lift row, pre-selecting the category that produced the shown date', async () => {
-    // In "All" mode the row's 32d-ago aggregate is actually stale weight
-    // data, but Reps (5d ago) is the most recent category — that's the one
-    // that should get pre-selected, along with its weight context.
+  it('navigates to PRProgression from a stalled lift row, pre-selecting the stalest category (not the most recent one)', async () => {
+    // In "All" mode the row's 32d-ago aggregate is the STALEST category
+    // (Weight) — even though Reps (5d ago) is more recent — since the point
+    // of this section is to surface what's been neglected the longest.
     const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Squat')).toBeTruthy());
     fireEvent.press(getByText('Squat'));
-    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 9, exerciseName: 'Squat', prType: 'max_reps', weightContext: 185 });
+    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 9, exerciseName: 'Squat', prType: 'max_weight', weightContext: null });
   });
 
-  it('shows which category a stalled row\'s date refers to in "All" mode, plus the reps weight context', async () => {
-    const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+  it('shows which category a stalled row\'s date refers to in "All" mode (the stalest one, not the most recent)', async () => {
+    const { getByText, getAllByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Squat')).toBeTruthy());
-    expect(getByText('Reps · @ 185 lbs')).toBeTruthy();
+    // "Weight" appears 3 times once the subtitle renders: the stalled
+    // picker's own option, this row's subtitle, and the feed picker's option.
+    expect(getAllByText('Weight').length).toBe(3);
   });
 
   it('shows only the reps weight context (no repeated category label) once the Reps segment is active', async () => {
@@ -205,11 +210,12 @@ describe('PRDashboardScreen', () => {
   });
 
   it('refetches with a type param when a filter segment is tapped', async () => {
-    // "Weight" now appears in two independent segmented pickers — the stalled
-    // section's (index 0) and the feed's (index 1, the one under test).
+    // "Weight" now appears three times — the stalled section's own picker
+    // (index 0), the Squat row's stalest-category subtitle (index 1, plain
+    // text, not tappable), and the feed's own picker (index 2, under test).
     const { getByText, getAllByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => expect(getAllByText('Weight').length).toBe(2));
-    fireEvent.press(getAllByText('Weight')[1]);
+    await waitFor(() => expect(getAllByText('Weight').length).toBe(3));
+    fireEvent.press(getAllByText('Weight')[2]);
     await waitFor(() => {
       const calls = (global.fetch as jest.Mock).mock.calls.map(c => String(c[0]));
       expect(calls.some(u => u.includes('type=weight'))).toBe(true);
@@ -218,9 +224,9 @@ describe('PRDashboardScreen', () => {
 
   it('keeps the header mounted while switching filters instead of a full-page reload', async () => {
     const { getByText, getAllByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => expect(getAllByText('Weight').length).toBe(2));
+    await waitFor(() => expect(getAllByText('Weight').length).toBe(3));
     expect(getByText('Most Volume')).toBeTruthy();
-    fireEvent.press(getAllByText('Weight')[1]);
+    fireEvent.press(getAllByText('Weight')[2]); // the feed's own picker
     // Header content (hero/records/etc.) stays mounted immediately after the
     // tap — if a filter switch ever re-triggers the full-screen loading
     // state, this throws because the whole list (and its header) unmounts.
@@ -327,7 +333,7 @@ describe('PRDashboardScreen', () => {
     const callsAfterMount = [...mockLineChartRender.mock.calls];
     expect(callsAfterMount.some(([props]) => props.isAnimated === true)).toBe(true);
 
-    fireEvent.press(getAllByText('Weight')[1]); // the feed's own filter segment
+    fireEvent.press(getAllByText('Weight')[2]); // the feed's own filter segment
     await waitFor(() => {
       const calls = (global.fetch as jest.Mock).mock.calls.map(c => String(c[0]));
       expect(calls.some(u => u.includes('type=weight'))).toBe(true);

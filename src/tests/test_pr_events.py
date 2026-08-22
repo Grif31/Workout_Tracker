@@ -296,11 +296,14 @@ class TestDashboardEndpoint:
         assert len(rows) == 1
         assert rows[0]['exercise_name'] == 'Bench Press'
         assert rows[0]['days_since_last_pr'] == 10
+        assert rows[0]['stalest_category'] == 'weight'
 
     def test_days_since_last_pr_by_type_breakdown(self, client, auth_token):
         # max_weight 10 days ago, max_reps (different weight) 3 days ago —
-        # the aggregate should track the more recent one, but each type's
-        # own entry in by_type should track its own date independently.
+        # the aggregate should track the STALEST type (weight, the one that's
+        # gone the longest without a PR), not whichever was hit most
+        # recently; each type's own entry in by_type still tracks its own
+        # date independently.
         tid = create_template(client, auth_token)
         post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 225}],
                               date_str=iso(date.today() - timedelta(days=10)))
@@ -309,7 +312,8 @@ class TestDashboardEndpoint:
         data = client.get('/api/personal-records/dashboard', headers=auth_headers(auth_token)).get_json()
         row = data['stats']['days_since_last_pr'][0]
 
-        assert row['days_since_last_pr'] == 3  # aggregate = most recent of any type
+        assert row['days_since_last_pr'] == 10  # aggregate = the stalest type (weight)
+        assert row['stalest_category'] == 'weight'
         assert row['by_type']['weight']['days_since_last_pr'] == 10
         assert row['by_type']['reps']['days_since_last_pr'] == 3
         assert row['by_type']['time'] is None       # never PR'd — no entry, not a stale zero

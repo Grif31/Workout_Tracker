@@ -269,26 +269,30 @@ def get_pr_dashboard():
             'weight_context': None if weight_context < 0 else weight_context,
         }
 
-    last_event_by_template = {}
-    for template_id, by_type in last_by_template_and_type.items():
-        all_dates = [dt for entries in by_type.values() for _, dt in entries]
-        if all_dates:
-            last_event_by_template[template_id] = max(all_dates)
-    days_since_last_pr = [
-        {
+    days_since_last_pr = []
+    for template_id, name, workout_count in most_trained:
+        by_type = {
+            category: _category_summary(template_id, category)
+            for category in FEED_TYPE_FILTERS
+        }
+        present = [(category, summary) for category, summary in by_type.items() if summary]
+        if not present:
+            continue
+        # The exercise's headline "days since last PR" is driven by whichever
+        # category has gone the LONGEST without a PR — not whichever was hit
+        # most recently. Rep PRs are earned far more easily/often than weight
+        # PRs, so "most recent of any type" would trivially always be Reps,
+        # masking genuinely stalled categories like Weight.
+        stalest_category, stalest_summary = max(present, key=lambda cs: cs[1]['days_since_last_pr'])
+        days_since_last_pr.append({
             'exercise_template_id': template_id,
             'exercise_name': name,
             'workout_count': workout_count,
-            'days_since_last_pr': (now - last_event_by_template[template_id]).days,
-            'last_pr_at': last_event_by_template[template_id].isoformat(),
-            'by_type': {
-                category: _category_summary(template_id, category)
-                for category in FEED_TYPE_FILTERS
-            },
-        }
-        for template_id, name, workout_count in most_trained
-        if template_id in last_event_by_template
-    ]
+            'days_since_last_pr': stalest_summary['days_since_last_pr'],
+            'last_pr_at': stalest_summary['last_pr_at'],
+            'stalest_category': stalest_category,
+            'by_type': by_type,
+        })
     days_since_last_pr.sort(key=lambda r: r['days_since_last_pr'], reverse=True)
 
     return jsonify({

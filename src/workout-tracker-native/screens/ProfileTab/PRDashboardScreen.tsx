@@ -49,6 +49,11 @@ type DashboardData = {
       exercise_name: string;
       days_since_last_pr: number;
       last_pr_at: string;
+      // Which category (of the ones present) days_since_last_pr/last_pr_at
+      // above actually came from — the one that's gone the LONGEST without a
+      // PR, not whichever was hit most recently (optional: absent on an
+      // older, not-yet-deployed API response).
+      stalest_category?: StalledCategory;
       // Per-category breakdown (same categories as the feed's filter chips),
       // null when the exercise has never earned a PR of that type.
       by_type: Record<StalledCategory, { days_since_last_pr: number; last_pr_at: string; weight_context: number | null } | null>;
@@ -72,32 +77,31 @@ const STALLED_CATEGORY_LABELS: Record<StalledCategory, string> = {
 
 /**
  * Determines which category actually produced a stalled row's displayed
- * "days ago" (needed in "All" mode, since the aggregate days_since_last_pr
- * doesn't itself say which type it came from), plus the rep record's weight
- * context when relevant. Drives both the row's subtitle text and which
- * pr_type/weight_context gets pre-selected when the row is tapped through to
- * Progression.
+ * "days ago" — in "All" mode that's the backend's stalest_category (the
+ * category that's gone the LONGEST without a PR; the backend already picked
+ * it, since it also drives the row's own days_since_last_pr/last_pr_at) —
+ * plus the rep record's weight context when relevant. Drives both the row's
+ * subtitle text and which pr_type/weight_context gets pre-selected when the
+ * row is tapped through to Progression.
  */
 function stalledRowCategory(
-  row: { by_type?: Record<StalledCategory, { days_since_last_pr: number; last_pr_at: string; weight_context: number | null } | null> },
+  row: {
+    stalest_category?: StalledCategory;
+    by_type?: Record<StalledCategory, { days_since_last_pr: number; last_pr_at: string; weight_context: number | null } | null>;
+  },
   filter: StalledCategory | null,
 ): { category: StalledCategory | null; categoryLabel: string | null; weightContext: number | null } {
-  if (filter) {
-    // The active chip already says which category this is — don't repeat it,
-    // but still surface the weight a rep record was set at.
-    const entry = row.by_type?.[filter];
-    return { category: filter, categoryLabel: null, weightContext: filter === 'reps' ? (entry?.weight_context ?? null) : null };
-  }
-  const present = (Object.entries(row.by_type ?? {}) as [StalledCategory, { days_since_last_pr: number; weight_context: number | null } | null][])
-    .filter((e): e is [StalledCategory, { days_since_last_pr: number; weight_context: number | null }] => e[1] != null);
-  if (present.length === 0) return { category: null, categoryLabel: null, weightContext: null };
-  const [winningCategory, winningEntry] = present.reduce((best, cur) =>
-    cur[1].days_since_last_pr < best[1].days_since_last_pr ? cur : best
-  );
+  // The active chip already says which category this is — don't repeat it
+  // as a subtitle, but still surface the weight a rep record was set at.
+  // Falls back to the row's own stalest_category in "All" mode; absent
+  // entirely on an older, not-yet-deployed API response.
+  const category = filter ?? row.stalest_category ?? null;
+  if (!category) return { category: null, categoryLabel: null, weightContext: null };
+  const entry = row.by_type?.[category];
   return {
-    category: winningCategory,
-    categoryLabel: STALLED_CATEGORY_LABELS[winningCategory],
-    weightContext: winningCategory === 'reps' ? (winningEntry.weight_context ?? null) : null,
+    category,
+    categoryLabel: filter ? null : STALLED_CATEGORY_LABELS[category],
+    weightContext: category === 'reps' ? (entry?.weight_context ?? null) : null,
   };
 }
 
