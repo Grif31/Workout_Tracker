@@ -1,6 +1,6 @@
 import {
   fmtPrValue, fmtPrDelta, fmtPrContext, fmtMinSec, nearPrHint,
-  fmtRelativeDate, fmtChartDate, formatChartYLabel, prTypeIcon, stalledUrgency,
+  fmtRelativeDate, fmtChartDate, formatChartYLabel, computeChartYAxisRange, prTypeIcon, stalledUrgency,
   stalledCategoryToPrType, pickDefaultPrSeries,
   type PREventItem,
 } from '../utils/prFormat';
@@ -166,6 +166,54 @@ describe('formatChartYLabel', () => {
 
   it('rounds negative labels correctly', () => {
     expect(formatChartYLabel('-2.6')).toBe('-3');
+  });
+});
+
+describe('computeChartYAxisRange', () => {
+  // Mirrors how gifted-charts derives each section's tick value from
+  // maxValue/yAxisOffset/noOfSections, then rounds it for display.
+  function tickLabels(maxValue: number, yAxisOffset: number, sections: number): number[] {
+    return Array.from({ length: sections + 1 }, (_, i) => Math.round(yAxisOffset + (maxValue / sections) * i));
+  }
+
+  it('produces no duplicate rounded tick labels for a narrow range (e.g. a 1-rep Rep Record spread)', () => {
+    // This is the exact shape of the reported bug: a Rep Record series
+    // spanning just 1 rep used to produce ticks like 7, 7.75, 8.5, 9.25, 10
+    // — which round to 7, 8, 9, 9, 10, showing "9" twice.
+    const { maxValue, yAxisOffset } = computeChartYAxisRange([7, 8], 4);
+    const labels = tickLabels(maxValue, yAxisOffset, 4);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('produces no duplicate rounded tick labels for a flat (single-value) series', () => {
+    const { maxValue, yAxisOffset } = computeChartYAxisRange([10, 10, 10], 4);
+    const labels = tickLabels(maxValue, yAxisOffset, 4);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('keeps every data point within the computed axis range', () => {
+    const values = [6, 9, 7, 8];
+    const { maxValue, yAxisOffset } = computeChartYAxisRange(values, 4);
+    for (const v of values) {
+      expect(v).toBeGreaterThanOrEqual(yAxisOffset);
+      expect(v).toBeLessThanOrEqual(yAxisOffset + maxValue);
+    }
+  });
+
+  it('returns a whole-number offset and a span evenly divisible by the section count', () => {
+    const { maxValue, yAxisOffset } = computeChartYAxisRange([7, 8], 4);
+    expect(Number.isInteger(maxValue)).toBe(true);
+    expect(Number.isInteger(yAxisOffset)).toBe(true);
+    expect(maxValue % 4).toBe(0);
+  });
+
+  it('never offsets below zero', () => {
+    const { yAxisOffset } = computeChartYAxisRange([0, 1], 4);
+    expect(yAxisOffset).toBeGreaterThanOrEqual(0);
+  });
+
+  it('handles an empty series without dividing by zero', () => {
+    expect(computeChartYAxisRange([], 4)).toEqual({ maxValue: 4, yAxisOffset: 0 });
   });
 });
 

@@ -90,6 +90,30 @@ export function formatChartYLabel(label: string): string {
   return String(Math.round(Number(label)));
 }
 
+/**
+ * Snaps a value range to whole-number, evenly-divisible y-axis steps for a
+ * gifted-charts LineChart (`maxValue`/`yAxisOffset`), rather than padding the
+ * raw min/max by a percentage and letting each tick's *label* round
+ * independently. That independent rounding is what let two adjacent ticks
+ * display the same number — e.g. a Rep Record series spanning only 1-2 reps
+ * could produce ticks like 7, 7.75, 8.5, 9.25, 10, which round to 7, 8, 9, 9,
+ * 10 — and it also let the labels and the data points' plotted positions
+ * drift out of sync with each other. Snapping the whole range up front (the
+ * same technique `StrengthScoreScreen`'s score-history chart already uses)
+ * keeps both derived from the exact same numbers.
+ */
+export function computeChartYAxisRange(values: number[], sections: number): { maxValue: number; yAxisOffset: number } {
+  if (values.length === 0) return { maxValue: sections, yAxisOffset: 0 };
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const pad = Math.max((max - min) * 0.15, 1);
+  const rawMin = Math.max(0, min - pad);
+  const rawMax = max + pad;
+  const step = Math.max(1, Math.ceil((rawMax - rawMin) / sections));
+  const yAxisOffset = Math.floor(rawMin / step) * step;
+  return { maxValue: step * sections, yAxisOffset };
+}
+
 export type StalledCategory = 'weight' | 'reps' | 'time' | 'distance';
 
 /**

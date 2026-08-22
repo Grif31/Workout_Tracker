@@ -18,7 +18,7 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
-import { fmtPrValue, fmtPrDelta, fmtChartDate, formatChartYLabel, PR_METRIC_OPTIONS, type PREventItem } from '../../utils/prFormat';
+import { fmtPrValue, fmtPrDelta, fmtChartDate, formatChartYLabel, computeChartYAxisRange, PR_METRIC_OPTIONS, type PREventItem } from '../../utils/prFormat';
 import { loadPrPins, togglePrPin, pinMatches, MAX_PR_PINS } from '../../utils/prPins';
 import { showToast } from '../../utils/toast';
 
@@ -173,10 +173,10 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
     () => series.map(e => ({ value: e.value, label: fmtChartDate(e.achieved_at) })),
     [series],
   );
-  const chartMin = Math.min(...series.map(e => e.value));
-  const chartMax = Math.max(...series.map(e => e.value));
-  // Pad the y-range so a flat-ish series doesn't hug the chart edges
-  const chartPad = Math.max((chartMax - chartMin) * 0.15, 1);
+  const { maxValue: chartMaxValue, yAxisOffset: chartYAxisOffset } = useMemo(
+    () => computeChartYAxisRange(series.map(e => e.value), CHART_Y_SECTIONS),
+    [series],
+  );
 
   // Total improvement across the whole visible series, formatted by piggybacking
   // on fmtPrDelta's unit-aware formatting (which already handles the best_time
@@ -336,8 +336,8 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
                 xAxisThickness={1}
                 xAxisColor={colors.border}
                 noOfSections={CHART_Y_SECTIONS}
-                maxValue={chartMax - chartMin + chartPad * 2}
-                yAxisOffset={chartMin - chartPad}
+                maxValue={chartMaxValue}
+                yAxisOffset={chartYAxisOffset}
                 roundToDigits={0}
                 formatYLabel={formatChartYLabel}
                 initialSpacing={24}

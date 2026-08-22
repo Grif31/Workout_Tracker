@@ -22,7 +22,7 @@ import { apiFetch } from '../../utils/api';
 import { captureAndShare } from '../../utils/shareCapture';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
 import {
-  fmtPrValue, fmtPrContext, fmtPrDelta, fmtRelativeDate, fmtChartDate, formatChartYLabel,
+  fmtPrValue, fmtPrContext, fmtPrDelta, fmtRelativeDate, fmtChartDate, formatChartYLabel, computeChartYAxisRange,
   prTypeIcon, stalledUrgency, stalledCategoryToPrType, pickDefaultPrSeries, PR_METRIC_OPTIONS,
   type PREventItem, type StalledCategory,
 } from '../../utils/prFormat';
@@ -114,6 +114,7 @@ const PIN_CHART_W = SCREEN_WIDTH - spacing.md * 5;
 // that amount, or the chart's total footprint overflows the card.
 const PIN_CHART_Y_LABEL_W = 28;
 const PIN_CHART_PLOT_W = PIN_CHART_W - PIN_CHART_Y_LABEL_W;
+const PIN_CHART_Y_SECTIONS = 2;
 
 type PinnedProgressionSectionProps = {
   pins: PRPin[];
@@ -153,16 +154,16 @@ const PinnedProgressionSection = React.memo(function PinnedProgressionSection({
             const canChart = series.length >= 2;
             const last = series[series.length - 1];
             const delta = last ? fmtPrDelta(last, unit, distanceUnit) : null;
-            const metricLabel = p.prType ? PR_METRIC_OPTIONS.find(m => m.key === p.prType)?.label : null;
+            // "Max Reps" here (not PR_METRIC_OPTIONS' "Rep Record", used by
+            // Progression's own metric picker) — matches the label this PR
+            // type gets everywhere else it's shown to users.
+            const metricLabel = p.prType === 'max_reps' ? 'Max Reps' : p.prType ? PR_METRIC_OPTIONS.find(m => m.key === p.prType)?.label : null;
             const contextLabel = p.prType === 'max_reps' && p.weightContext != null
               ? ` @ ${p.weightContext === 0 ? 'Bodyweight' : `${p.weightContext} ${unit}`}`
               : '';
-            let chartMin = 0, chartMax = 0, chartPad = 1;
-            if (canChart) {
-              chartMin = Math.min(...series.map(e => e.value));
-              chartMax = Math.max(...series.map(e => e.value));
-              chartPad = Math.max((chartMax - chartMin) * 0.15, 1);
-            }
+            const { maxValue: pinChartMaxValue, yAxisOffset: pinChartYAxisOffset } = canChart
+              ? computeChartYAxisRange(series.map(e => e.value), PIN_CHART_Y_SECTIONS)
+              : { maxValue: PIN_CHART_Y_SECTIONS, yAxisOffset: 0 };
             return (
               <TouchableOpacity
                 key={pinSlotKey(p)}
@@ -208,13 +209,13 @@ const PinnedProgressionSection = React.memo(function PinnedProgressionSection({
                     xAxisTextNumberOfLines={1}
                     xAxisThickness={1}
                     xAxisColor={colors.border}
-                    noOfSections={2}
+                    noOfSections={PIN_CHART_Y_SECTIONS}
                     startFillColor={colors.accent}
                     endFillColor={colors.surface}
                     startOpacity={0.14}
                     endOpacity={0}
-                    maxValue={chartMax - chartMin + chartPad * 2}
-                    yAxisOffset={chartMin - chartPad}
+                    maxValue={pinChartMaxValue}
+                    yAxisOffset={pinChartYAxisOffset}
                     roundToDigits={0}
                     formatYLabel={formatChartYLabel}
                     initialSpacing={12}

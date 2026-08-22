@@ -310,7 +310,7 @@ describe('PRDashboardScreen', () => {
     // Two cards, both named "Deadlift" — one for each pinned type
     await waitFor(() => expect(getAllByText('Deadlift').length).toBe(2));
     expect(getByText('Max Weight')).toBeTruthy();
-    expect(getByText('Rep Record @ 315 lbs')).toBeTruthy();
+    expect(getByText('Max Reps @ 315 lbs')).toBeTruthy();
   });
 
   it('only animates the pinned progression chart on first paint, not on a later filter switch', async () => {
