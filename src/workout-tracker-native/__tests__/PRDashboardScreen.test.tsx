@@ -140,10 +140,10 @@ describe('PRDashboardScreen', () => {
     expect(getByText('Reps · @ 185 lbs')).toBeTruthy();
   });
 
-  it('shows only the reps weight context (no repeated category label) once the Reps chip is active', async () => {
+  it('shows only the reps weight context (no repeated category label) once the Reps segment is active', async () => {
     const { getByText, getAllByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Squat')).toBeTruthy());
-    fireEvent.press(getAllByText('Reps')[0]); // the stalled section's own chip
+    fireEvent.press(getAllByText('Reps')[0]); // the stalled section's own picker
     await waitFor(() => expect(getByText('5d ago')).toBeTruthy());
     expect(getByText('@ 185 lbs')).toBeTruthy();
   });
@@ -153,7 +153,7 @@ describe('PRDashboardScreen', () => {
     await waitFor(() => expect(getByText('32d ago')).toBeTruthy());
     const fetchCallsBefore = (global.fetch as jest.Mock).mock.calls.length;
 
-    // Index 0 is the stalled section's own "Reps" chip (index 1 is the feed's)
+    // Index 0 is the stalled section's own "Reps" segment (index 1 is the feed's)
     fireEvent.press(getAllByText('Reps')[0]);
 
     await waitFor(() => expect(getByText('5d ago')).toBeTruthy());
@@ -194,8 +194,8 @@ describe('PRDashboardScreen', () => {
     expect(queryByText('Squat')).toBeNull();
   });
 
-  it('refetches with a type param when a filter chip is tapped', async () => {
-    // "Weight" now appears in two independent chip rows — the stalled
+  it('refetches with a type param when a filter segment is tapped', async () => {
+    // "Weight" now appears in two independent segmented pickers — the stalled
     // section's (index 0) and the feed's (index 1, the one under test).
     const { getByText, getAllByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getAllByText('Weight').length).toBe(2));
@@ -221,12 +221,18 @@ describe('PRDashboardScreen', () => {
     });
   });
 
-  it('always shows all four sections in a fixed order (no customize feature)', async () => {
-    const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+  it('always shows all four sections in a fixed order, Pinned Progression above Time Since Last PR (no customize feature)', async () => {
+    const { getByText, getAllByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('this month')).toBeTruthy());
     expect(getByText('Most Volume')).toBeTruthy();
     expect(getByText('Squat')).toBeTruthy(); // stalled lift
     expect(getByText('Pinned Progression')).toBeTruthy();
+
+    // getAllByText returns matches in document order, so a regex spanning
+    // both unique section labels doubles as an order check.
+    const [first, second] = getAllByText(/^Pinned Progression$|^Time Since Last PR$/);
+    expect(first.children[0]).toBe('Pinned Progression');
+    expect(second.children[0]).toBe('Time Since Last PR');
   });
 
   it('shows pinned exercises and navigates to their progression', async () => {

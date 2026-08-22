@@ -260,6 +260,34 @@ export default function PRDashboardScreen({ navigation }: Props) {
 
   const openWorkout = (workoutId: number) => navigation.navigate('WorkoutDetails', { workoutId });
 
+  // Shared by both PR-type pickers (stalled section + feed) — one connected
+  // segmented bar instead of two separate pill-chip rows.
+  const renderFilterSegmented = (
+    value: typeof FILTERS[number]['key'],
+    onChange: (key: typeof FILTERS[number]['key']) => void,
+  ) => (
+    <View style={[styles.segmented, { borderColor: colors.border }]}>
+      {FILTERS.map((f, i) => {
+        const active = value === f.key;
+        return (
+          <TouchableOpacity
+            key={f.label}
+            style={[
+              styles.segment,
+              i > 0 && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.border },
+              active && { backgroundColor: colors.accent + '20' },
+            ]}
+            onPress={() => onChange(f.key)}
+          >
+            <Text style={[styles.segmentText, { color: active ? colors.accent : colors.textSecondary }]} numberOfLines={1}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+
   const openProgression = (event: {
     exercise_template_id: number;
     exercise_name?: string;
@@ -373,22 +401,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
     hasStalledData ? (
         <View>
           <GoldSectionRule icon="hourglass-outline" label="Time Since Last PR" style={styles.sectionHeaderRow} />
-          <View style={styles.chipRow}>
-            {FILTERS.map(f => {
-              const active = stalledFilter === f.key;
-              return (
-                <TouchableOpacity
-                  key={f.label}
-                  style={[styles.chip, { borderColor: colors.border }, active && { backgroundColor: colors.accent + '20', borderColor: colors.accent }]}
-                  onPress={() => setStalledFilter(f.key)}
-                >
-                  <Text style={[styles.chipText, { color: active ? colors.accent : colors.textSecondary }]}>
-                    {f.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          {renderFilterSegmented(stalledFilter, setStalledFilter)}
           {stalled.length > 0 ? (
             <View style={[styles.trophyCard, { backgroundColor: colors.surface }]}>
               {stalled.map((row, i) => {
@@ -529,10 +542,10 @@ export default function PRDashboardScreen({ navigation }: Props) {
     <View>
       {renderHero()}
       {renderRecords()}
-      {renderStalled()}
       {renderProgression()}
+      {renderStalled()}
 
-      {/* Feed title + filter chips */}
+      {/* Feed title + filter picker */}
       <GoldSectionRule
         icon="trophy-outline"
         label={feedScope === 'all_time' ? 'Recent PRs' : "This Week's PRs"}
@@ -542,22 +555,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
       {feedScope === 'all_time' && events.length > 0 && (
         <Text style={styles.feedScopeNote}>No new PRs this week. Here's your most recent</Text>
       )}
-      <View style={styles.chipRow}>
-        {FILTERS.map(f => {
-          const active = filter === f.key;
-          return (
-            <TouchableOpacity
-              key={f.label}
-              style={[styles.chip, { borderColor: colors.border }, active && { backgroundColor: colors.accent + '20', borderColor: colors.accent }]}
-              onPress={() => setFilter(f.key)}
-            >
-              <Text style={[styles.chipText, { color: active ? colors.accent : colors.textSecondary }]}>
-                {f.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      {renderFilterSegmented(filter, setFilter)}
     </View>
   );
 
@@ -819,14 +817,21 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   pinDeltaPill: { alignSelf: 'flex-start', marginTop: spacing.xs },
   chartAxisLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
 
-  chipRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xs, flexWrap: 'wrap' },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
-    borderRadius: 20,
+  segmented: {
+    flexDirection: 'row',
     borderWidth: 1,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    marginBottom: spacing.xs,
   },
-  chipText: { fontSize: typography.fontSize.sm, fontWeight: '600' },
+  segment: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.xs,
+  },
+  segmentText: { fontSize: typography.fontSize.xs, fontWeight: '600' },
 
   eventCard: {
     flexDirection: 'row',
