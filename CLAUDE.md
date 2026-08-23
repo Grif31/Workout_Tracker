@@ -62,6 +62,8 @@ src/
 │   ├── components/               # shared UI components
 │   │   ├── WorkoutLog.tsx        # live workout logging form (large)
 │   │   ├── ExerciseList.tsx      # exercise picker modal (multi-select)
+│   │   ├── GoldSectionRule.tsx   # gold icon + uppercase label section header — PR screens
+│   │   ├── SegmentedControl.tsx  # generic segmented picker (options/value/onChange) — PR filters + metric selectors
 │   │   └── ...
 │   ├── screens/
 │   │   ├── DashboardTab/         # home, workout log entry, details, summary
@@ -74,6 +76,9 @@ src/
 │   │   │   ├── StrengthScoreScreen.tsx   # percentile ranks — uses SCORE_RANK_COLORS, NOT Greek colors
 │   │   │   └── CoachProfileModal.tsx     # coach personalization (goal/equipment/schedule/injuries)
 │   │   ├── ProfileTab/           # profile, settings, bodyweight, measurements
+│   │   │   ├── PRDashboardScreen.tsx     # PR dashboard — recent PRs, streaks, stalled lifts, pinned progression
+│   │   │   ├── PRProgressionScreen.tsx   # per-exercise PR history chart + table, metric/context pickers, pin toggle
+│   │   │   └── PersonalRecordsScreen.tsx # all-time PR reference view (by muscle / by value / time)
 │   │   └── PaywallScreen.tsx     # RevenueCat subscription paywall
 │   ├── navigation/
 │   │   ├── AppTabs.tsx           # bottom tabs + MiniWorkoutBar
@@ -95,7 +100,9 @@ src/
 │   │   ├── exerciseCache.ts      # exercise list cache
 │   │   ├── toast.ts              # lightweight toast helper
 │   │   ├── units.ts              # weight unit conversion
-│   │   └── cardioCalories.ts     # cardio calorie estimation
+│   │   ├── cardioCalories.ts     # cardio calorie estimation
+│   │   ├── prFormat.ts           # PR value/delta/date formatting, chart y-axis snapping (computeChartYAxisRange), metric priority
+│   │   └── prPins.ts             # PR Dashboard pin storage — keyed by exercise + PR type + context, not just exercise id
 │   ├── theme/
 │   │   ├── spacing.ts            # xs/sm/md/lg/xl
 │   │   └── typography.ts         # fontSize.sm/md/lg
@@ -113,7 +120,7 @@ src/
 │   ├── stats_routes.py           # exercise/profile/dashboard/progress stats, muscle volume, recent exercises
 │   ├── strength_score_routes.py  # strength score, percentile ranks, score history
 │   ├── weekly_summary_routes.py  # weekly summary + weekly summary history
-│   ├── personal_record_routes.py # PR lookup
+│   ├── personal_record_routes.py # PR lookup, PR Dashboard aggregate (feed/stats/stalled), per-exercise history
 │   ├── user_routes.py            # profile, device token, bodyweight
 │   ├── bodyweight_routes.py
 │   ├── measurement_routes.py
@@ -176,6 +183,9 @@ const MY_KEY = 'my_feature_key';
 ```
 Shared keys that cross file boundaries live in `constants/` or are exported from the file that owns them (e.g. `COACH_PROFILE_KEY` exported from `CoachProfileModal.tsx`, `REST_TIMER_KEY` exported from `components/workout/types.ts`). Never use the same key string as a bare literal in two different files.
 
+### Charts (`react-native-gifted-charts` `LineChart`)
+Don't derive `maxValue`/`yAxisOffset` from raw `min`/`max` + a percentage pad — on a narrow-range series (e.g. a Rep Record spanning 1-2 reps) each tick's *label* rounds independently and adjacent ticks can round to the same displayed number, and the labels can drift out of sync with where points actually plot. Use `computeChartYAxisRange(values, sections)` from `utils/prFormat.ts` (also mirrored inline in `StrengthScoreScreen.tsx`), which snaps the whole range to whole-number, evenly-divisible steps up front.
+
 ### Navigation — new screens
 1. Create file in `screens/<Tab>/`
 2. Add to the matching stack in `navigation/<Tab>Stack.tsx`
@@ -216,9 +226,10 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 | `workout_show_rpe_${uid}` | false | Show RPE input per set |
 | `workout_show_plate_calc_${uid}` | true | Show plate calculator in workout |
 | `workout_repeat_last_set_${uid}` | false | Add Set pre-fills the new set with the last set's values |
+| `workout_prefill_previous_sets_${uid}` | true | Adding an exercise pre-fills its sets with last session's reps/weight for that exercise |
 | `profile_frame_rank_${uid}` | 'Neophyte' | Selected avatar frame rank name |
 | `@pr_pins_${uid}` | — | JSON array of 3 pinned PR slots on Profile (Pin\|null)[] |
-| `pr_dashboard_pins_${uid}` | — | Exercises pinned to PR Dashboard's Pinned Progression section (JSON {id, name}[], max 6; toggled from PRProgressionScreen) |
+| `pr_dashboard_pins_${uid}` | — | Exercises (optionally a specific PR type + context) pinned to PR Dashboard's Pinned Progression section — JSON `{id, name, prType?, weightContext?}[]`, max 6 slots total; an exercise can have more than one pin for different PR types (keyed by exercise+type+context, not exercise id alone). Toggled from PRProgressionScreen. Legacy pins with no `prType` loosely match any type on that exercise |
 | `coach_profile_${uid}` | — | Coach personalization JSON (goal/equipment/schedule/injuries) |
 | `strength_score_last_tier_${uid}` | — | Last celebrated overall Strength Score tier index (`STRENGTH_TIERS` ordinal), used to detect rank-up moments across app opens |
 | `weekly_summary_last_shown_${uid}` | — | Monday date-string of the last week the Weekly Summary auto-popup was checked/shown for, so it only appears once per week |
@@ -293,6 +304,7 @@ return jsonify({ 'message': 'error reason' }), 400   # client error
 - Don't add error handling for scenarios that can't happen
 - Don't write comments that explain WHAT code does — only WHY (non-obvious constraints)
 - Schema changes without a migration will break production
+- **Never pass a bare function to `FlatList`'s `ListHeaderComponent`** (`ListHeaderComponent={renderHeader}`) when the header contains stateful or expensive children (charts, forms) — a fresh function identity every render makes FlatList treat it as a new component type and remount the whole subtree instead of re-rendering it, discarding child state/memoization and replaying entrance animations. Call it and pass the built element instead: `ListHeaderComponent={renderHeader()}`.
 - **Never use `date.toISOString()` to build a date string for the backend** — it outputs UTC and shifts the date in US timezones. Always use local methods: `` `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` ``
 
 ---
@@ -303,7 +315,7 @@ return jsonify({ 'message': 'error reason' }), 400   # client error
 - **Live URL:** `https://workouttracker-production-601f.up.railway.app` (also `aretefitnessapp.com`)
 - **DB migrations on deploy:** `flask db upgrade` runs automatically via `railway.json` `startCommand`
 - **Frontend:** EAS Build — `eas build --profile production --platform ios` for App Store
-- **Liveness probe:** `GET /health` — public, returns 200 + DB ping status
+- **Liveness probe:** `GET /health` — public, returns 200 + DB ping status. Check from PowerShell with `curl.exe` (not bare `curl`, which PowerShell aliases to `Invoke-WebRequest`): `curl.exe https://workouttracker-production-601f.up.railway.app/health` (local dev: `curl.exe http://localhost:5000/health`)
 - **Railway CLI:** installed and linked to project "Arete Fitness APp" (services: `Postgres`, `Workout_Tracker`); run from `src/`
 - **`railway run` gotcha:** it executes locally with prod env vars, but the injected `DATABASE_URL` host (`postgres.railway.internal`) is unreachable from this machine — to hit the prod DB, fetch `DATABASE_PUBLIC_URL` from `railway variables --service Postgres` and set it as `DATABASE_URL` before running the command
 - **Backend env vars (Railway):** `DATABASE_URL`, `JWT_SECRET_KEY`, `APPLE_BUNDLE_ID`, `ADMIN_PASSWORD` (admin pages), `RAPIDAPI_KEY` (ExerciseDB image suggest), mail/SMTP creds
