@@ -103,7 +103,10 @@ module.exports = {
           // AndroidManifest.xml ("API key not found" on Android). iOS has no
           // key here since it isn't forced onto the Google provider — it just
           // uses Apple Maps by default.
-          androidGoogleMapsApiKey: 'AIzaSyAWZjy9jsiXMtlNtEmIY6byH9jVyj_GwlI',
+          // Read from env (GOOGLE_MAPS_API_KEY_ANDROID), not hardcoded — set
+          // it in .env locally (gitignored) and as an EAS secret for cloud
+          // builds so the key value itself never lands in git history.
+          androidGoogleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY_ANDROID,
         },
       ],
       [
