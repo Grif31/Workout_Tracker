@@ -45,6 +45,10 @@ const dashboardPayload = {
     prs_this_month: 3,
     pr_streak_weeks: 2,
     total_prs: 15,
+    // Deliberately distinct from the feed event's own +20 lbs delta below,
+    // so assertions on one can't accidentally pass against the other.
+    weekly_weight_increased: 35,
+    weekly_reps_added: 8,
     days_since_last_pr: [
       {
         exercise_template_id: 9, exercise_name: 'Squat', workout_count: 12,
@@ -95,6 +99,35 @@ describe('PRDashboardScreen', () => {
     await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
     expect(getByText('245 lbs')).toBeTruthy();
     expect(getByText('+20 lbs')).toBeTruthy();
+  });
+
+  it('shows the weekly weight-increased and reps-added totals next to the feed title', async () => {
+    const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('+35 lbs · +8 reps')).toBeTruthy());
+  });
+
+  it('shows only the weight total when there are no reps this week', async () => {
+    mockFetch({ ...dashboardPayload, stats: { ...dashboardPayload.stats, weekly_weight_increased: 35, weekly_reps_added: 0 } });
+    const { getByText, queryByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    // Exact match — "+35 lbs" alone, not combined with a reps clause
+    await waitFor(() => expect(getByText('+35 lbs')).toBeTruthy());
+    expect(queryByText(/^\+\d+ reps?$/)).toBeNull();
+    expect(queryByText(/^\+35 lbs ·/)).toBeNull();
+  });
+
+  it('shows only the reps total when there is no weight increase this week', async () => {
+    mockFetch({ ...dashboardPayload, stats: { ...dashboardPayload.stats, weekly_weight_increased: 0, weekly_reps_added: 1 } });
+    const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    // Singular "rep", not "reps", for exactly 1
+    await waitFor(() => expect(getByText('+1 rep')).toBeTruthy());
+  });
+
+  it('hides the weekly totals when both are zero (or the field is missing, e.g. an older API response)', async () => {
+    mockFetch({ ...dashboardPayload, stats: { ...dashboardPayload.stats, weekly_weight_increased: 0, weekly_reps_added: 0 } });
+    const { getByText, queryByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
+    expect(queryByText(/lbs ·/)).toBeNull();
+    expect(queryByText(/^\+\d+ reps?$/)).toBeNull();
   });
 
   it('shows workout records', async () => {

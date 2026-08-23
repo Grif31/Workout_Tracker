@@ -212,6 +212,8 @@ class TestDashboardEndpoint:
         assert data['workout_bests']['best_total_reps'] is None
         assert data['stats']['prs_this_month'] == 0
         assert data['stats']['pr_streak_weeks'] == 0
+        assert data['stats']['weekly_weight_increased'] == 0
+        assert data['stats']['weekly_reps_added'] == 0
 
     def test_feed_excludes_estimated_1rm(self, client, auth_token):
         tid = create_template(client, auth_token)
@@ -260,6 +262,39 @@ class TestDashboardEndpoint:
         assert data['workout_bests']['best_volume']['value'] == 4000
         assert data['workout_bests']['best_total_reps']['workout_id'] == big['id']
         assert data['workout_bests']['best_total_reps']['value'] == 20
+
+    def test_weekly_weight_and_reps_totals_sum_improvements_in_the_window(self, client, auth_token):
+        tid = create_template(client, auth_token)
+        today = date.today()
+        # Outside the 7-day window — real deltas, but shouldn't count
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 225}], date_str=iso(today - timedelta(days=10)))
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 185}], date_str=iso(today - timedelta(days=8)))
+        # Inside the window
+        post_strength_workout(client, auth_token, tid, [{'reps': 3, 'weight': 245}], date_str=iso(today - timedelta(days=3)))  # weight PR 225->245, +20
+        post_strength_workout(client, auth_token, tid, [{'reps': 8, 'weight': 185}], date_str=iso(today - timedelta(days=2)))  # reps PR @185: 5->8, +3
+
+        data = client.get('/api/personal-records/dashboard', headers=auth_headers(auth_token)).get_json()
+        assert data['stats']['weekly_weight_increased'] == 20
+        assert data['stats']['weekly_reps_added'] == 3
+
+    def test_weekly_totals_exclude_first_ever_prs(self, client, auth_token):
+        # A first-ever PR has no previous value to compare — improved_by is
+        # None, so it shouldn't contribute a delta (matches every other
+        # improved_by-driven display in the app).
+        tid = create_template(client, auth_token)
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 225}])
+        data = client.get('/api/personal-records/dashboard', headers=auth_headers(auth_token)).get_json()
+        assert data['stats']['weekly_weight_increased'] == 0
+        assert data['stats']['weekly_reps_added'] == 0
+
+    def test_weekly_totals_unaffected_by_the_feed_type_filter(self, client, auth_token):
+        tid = create_template(client, auth_token)
+        today = date.today()
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 225}], date_str=iso(today - timedelta(days=5)))
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 245}], date_str=iso(today - timedelta(days=1)))  # weight PR +20
+
+        data = client.get('/api/personal-records/dashboard?type=reps', headers=auth_headers(auth_token)).get_json()
+        assert data['stats']['weekly_weight_increased'] == 20
 
     def test_pr_streak_consecutive_weeks(self, client, auth_token):
         tid = create_template(client, auth_token)

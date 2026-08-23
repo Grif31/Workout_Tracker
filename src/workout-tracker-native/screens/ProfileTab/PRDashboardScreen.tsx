@@ -44,6 +44,11 @@ type DashboardData = {
     prs_this_month: number;
     pr_streak_weeks: number;
     total_prs: number;
+    // Total weight increased / reps added across all PRs in the last 7
+    // days — independent of the feed's own type filter (a stable momentum
+    // stat, optional: absent on an older, not-yet-deployed API response).
+    weekly_weight_increased?: number;
+    weekly_reps_added?: number;
     days_since_last_pr: {
       exercise_template_id: number;
       exercise_name: string;
@@ -589,6 +594,19 @@ export default function PRDashboardScreen({ navigation }: Props) {
 
   const feedScope = data?.recent_events_scope ?? 'week';
 
+  // Weekly weight/reps momentum, shown next to the feed title — independent
+  // of feedScope (which only reflects the active filter's own window being
+  // empty) and of the feed's type filter, so it stays put while switching
+  // chips rather than flickering.
+  const weeklyTotalsText = useMemo(() => {
+    const weight = stats?.weekly_weight_increased ?? 0;
+    const reps = stats?.weekly_reps_added ?? 0;
+    const parts: string[] = [];
+    if (weight > 0) parts.push(`+${Number.isInteger(weight) ? weight : weight.toFixed(1)} ${unit}`);
+    if (reps > 0) parts.push(`+${reps} ${reps === 1 ? 'rep' : 'reps'}`);
+    return parts.length > 0 ? parts.join(' · ') : null;
+  }, [stats?.weekly_weight_increased, stats?.weekly_reps_added, unit]);
+
   const renderHeader = () => (
     <View>
       {renderHero()}
@@ -610,7 +628,13 @@ export default function PRDashboardScreen({ navigation }: Props) {
       <GoldSectionRule
         icon="trophy-outline"
         label={feedScope === 'all_time' ? 'Recent PRs' : "This Week's PRs"}
-        right={chipLoading ? <ActivityIndicator size="small" color={colors.textSecondary} /> : undefined}
+        right={
+          chipLoading ? (
+            <ActivityIndicator size="small" color={colors.textSecondary} />
+          ) : weeklyTotalsText ? (
+            <Text style={styles.weeklyTotalsText} numberOfLines={1}>{weeklyTotalsText}</Text>
+          ) : undefined
+        }
         style={styles.feedTitleRow}
       />
       {feedScope === 'all_time' && events.length > 0 && (
@@ -833,6 +857,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textSecondary,
     marginTop: -spacing.xs,
     marginBottom: spacing.sm,
+  },
+  weeklyTotalsText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '700',
+    color: PR_GOLD_TEXT,
   },
 
   bestsRow: { flexDirection: 'row', gap: spacing.sm },

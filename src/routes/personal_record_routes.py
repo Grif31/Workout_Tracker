@@ -210,6 +210,33 @@ def get_pr_dashboard():
         streak += 1
         cursor -= timedelta(weeks=1)
 
+    # Total weight increased + reps added from PRs in the last
+    # RECENT_FEED_WINDOW_DAYS — independent of the feed's own `type_filter`
+    # (a stable "momentum" stat, not something that changes as the user taps
+    # through the feed's chips). previous_value is null on a first-ever PR
+    # (no prior value to compare), so those don't contribute a delta here,
+    # same as everywhere else PREvent.improved_by() drives a displayed delta
+    # — improved_by() itself is a plain Python method, not a DB column, so it
+    # can't be summed in SQL; neither max_weight nor max_reps improve
+    # downward (that's best_time-only), so value - previous_value is safe
+    # without reimplementing improved_by()'s sign-flip here.
+    weekly_pr_rows = (
+        db.session.query(PREvent.pr_type, PREvent.value, PREvent.previous_value)
+        .filter(
+            PREvent.user_id == user_id,
+            PREvent.pr_type.in_(['max_weight', 'max_reps']),
+            PREvent.previous_value.isnot(None),
+            PREvent.achieved_at >= feed_window_start,
+        )
+        .all()
+    )
+    weekly_weight_increased = round(
+        sum(value - previous_value for pr_type, value, previous_value in weekly_pr_rows if pr_type == 'max_weight'), 1
+    )
+    weekly_reps_added = int(
+        sum(value - previous_value for pr_type, value, previous_value in weekly_pr_rows if pr_type == 'max_reps')
+    )
+
     # Days since last PR per exercise, for the user's 10 most-trained exercises
     most_trained = (
         db.session.query(
@@ -307,6 +334,8 @@ def get_pr_dashboard():
             'prs_this_month': prs_this_month,
             'pr_streak_weeks': streak,
             'total_prs': len(event_dates),
+            'weekly_weight_increased': weekly_weight_increased,
+            'weekly_reps_added': weekly_reps_added,
             'days_since_last_pr': days_since_last_pr,
         },
     })
