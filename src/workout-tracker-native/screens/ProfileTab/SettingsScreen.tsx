@@ -225,7 +225,7 @@ export default function SettingsScreen({ navigation }: Props) {
               </View>
               {isPremium
                 ? <Text style={[styles.rowLabel, { color: colors.textSecondary, fontSize: 13 }]}>Coming soon</Text>
-                : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                : <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
                     <Ionicons name="lock-closed-outline" size={14} color={colors.accent} />
                     <Text style={{ fontSize: 12, color: colors.accent, fontWeight: '600' }}>Premium</Text>
                   </View>
@@ -742,7 +742,7 @@ const createStyles = (colors: Colors) =>
       backgroundColor: colors.accent,
       borderRadius: 6,
       paddingHorizontal: spacing.sm,
-      paddingVertical: 4,
+      paddingVertical: spacing.xs,
     },
     saveBtnText: {
       color: colors.accentText,

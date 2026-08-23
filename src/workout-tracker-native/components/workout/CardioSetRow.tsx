@@ -163,7 +163,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   cardioTimerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: spacing.xs,
     borderWidth: 1,
     borderRadius: spacing.xs,
     paddingHorizontal: spacing.sm,

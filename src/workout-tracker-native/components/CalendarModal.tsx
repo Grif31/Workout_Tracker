@@ -277,7 +277,7 @@ export default function CalendarModal({ visible, onClose, onSelectWorkout }: Pro
                     const daysInYear = isLeapYear(year) ? 366 : 365;
                     return (
                       <View key={year} style={{ marginBottom: spacing.lg }}>
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary, marginBottom: 8 }}>{year}</Text>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.sm }}>{year}</Text>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                           <View style={{ flexDirection: 'row', gap: GAP }}>
                             {Array.from({ length: NUM_WEEKS }, (_, wi) => (
@@ -363,7 +363,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   calWeekRow: {
     flexDirection: 'row',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   calCell: {
     flex: 1,

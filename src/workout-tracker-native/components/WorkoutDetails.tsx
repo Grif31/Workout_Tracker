@@ -457,7 +457,7 @@ export default function WorkoutDetailsScreen({
                 <View style={styles.prHeader}>
                   <LaurelBranch height={20} color={PR_GOLD_TEXT} />
                   <Text style={styles.prHeaderText}>
-                    {workoutPrs[0].exercise_name} — {PR_LABELS[workoutPrs[0].pr_type] ?? 'PR'}
+                    {workoutPrs[0].exercise_name}: {PR_LABELS[workoutPrs[0].pr_type] ?? 'PR'}
                     {workoutPrs[0].count > 1 ? ` ×${workoutPrs[0].count}` : ''}
                   </Text>
                   <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
@@ -478,7 +478,7 @@ export default function WorkoutDetailsScreen({
                     <View key={i} style={styles.prRow}>
                       <LaurelBranch height={18} color={PR_GOLD_TEXT} />
                       <Text style={styles.prRowText}>
-                        {pr.exercise_name} — {PR_LABELS[pr.pr_type] ?? 'PR'}
+                        {pr.exercise_name}: {PR_LABELS[pr.pr_type] ?? 'PR'}
                         {pr.count > 1 ? ` ×${pr.count}` : ''}
                       </Text>
                       <LaurelBranch side="right" height={18} color={PR_GOLD_TEXT} />
@@ -962,10 +962,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     textAlign: 'center',
   },
   prSection: { paddingHorizontal: spacing.md, marginBottom: spacing.md },
-  prHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: PR_GOLD, borderRadius: 10, padding: 12, marginBottom: 4 },
+  prHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: PR_GOLD, borderRadius: 10, padding: 12, marginBottom: spacing.xs },
   prHeaderText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: PR_GOLD_TEXT, flex: 1 },
   prChevron: { fontSize: 12, color: PR_GOLD_TEXT },
-  prRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: PR_GOLD_BG, borderRadius: 10, padding: 12, marginTop: 4 },
+  prRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: PR_GOLD_BG, borderRadius: 10, padding: 12, marginTop: spacing.xs },
   prRowText: { fontSize: typography.fontSize.sm, fontWeight: '500', color: PR_GOLD_TEXT, flex: 1 },
   exercisesLabel: {
     fontSize: typography.fontSize.sm,

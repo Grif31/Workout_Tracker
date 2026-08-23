@@ -9,7 +9,7 @@ HOMEPAGE = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Aretē Fitness — Pursue Excellence</title>
+  <title>Aretē Fitness: Pursue Excellence</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -239,7 +239,7 @@ HOMEPAGE = """<!DOCTYPE html>
           </span>
         </summary>
         <div class="faq-body">
-          Your Greek Rank is a score from 0–100 that reflects your overall training excellence across consistency, strength, volume, and dedication. Ranks progress from Neophyte through Athlete, Hero, Demigod, Olympian, Titan, and finally Aretē — the pinnacle of training achievement.
+          Your Greek Rank is a score from 0–100 that reflects your overall training excellence across consistency, strength, volume, and dedication. Ranks progress from Neophyte through Athlete, Hero, Demigod, Olympian, Titan, and finally Aretē, the pinnacle of training achievement.
         </div>
       </details>
 
@@ -333,7 +333,7 @@ PRIVACY = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Privacy Policy — Aretē Fitness</title>
+  <title>Privacy Policy | Aretē Fitness</title>
   <style>{{ style }}</style>
 </head>
 <body>
@@ -350,7 +350,7 @@ PRIVACY = """<!DOCTYPE html>
   and, optionally, your name and email from those providers. You may optionally provide your gender,
   which is used solely to calculate strength percentile scores against the appropriate standards.</p>
 
-  <p><strong>Fitness data:</strong> We store the workout data you log — exercises, sets, reps, weight,
+  <p><strong>Fitness data:</strong> We store the workout data you log: exercises, sets, reps, weight,
   RPE, cardio duration, distance, and workout dates. We also store bodyweight entries, body
   measurements, and personal records you accumulate over time.</p>
 
@@ -391,24 +391,24 @@ PRIVACY = """<!DOCTYPE html>
 
   <h2>3. Third-Party Services</h2>
   <ul>
-    <li><strong>Anthropic</strong> — the AI Coach feature sends your training preferences (goal,
+    <li><strong>Anthropic:</strong> the AI Coach feature sends your training preferences (goal,
         experience level, equipment, schedule) and aggregated training statistics to Anthropic's
         Claude API to generate personalised workout suggestions and insights. No personal
         identifying information (name, email, or account ID) is included in these requests.
         See <a href="https://www.anthropic.com/privacy">anthropic.com/privacy</a>.</li>
-    <li><strong>RevenueCat</strong> — manages in-app subscriptions and purchase verification.
+    <li><strong>RevenueCat:</strong> manages in-app subscriptions and purchase verification.
         RevenueCat may receive your App Store account identifier and purchase history.
         See <a href="https://www.revenuecat.com/privacy">revenuecat.com/privacy</a>.</li>
-    <li><strong>Sentry</strong> — collects crash reports so we can find and fix bugs. Reports
+    <li><strong>Sentry:</strong> collects crash reports so we can find and fix bugs. Reports
         include device and error details but are configured to exclude personal identifying
         information. See <a href="https://sentry.io/privacy/">sentry.io/privacy</a>.</li>
-    <li><strong>Resend</strong> — delivers essential account emails such as password reset codes.
+    <li><strong>Resend:</strong> delivers essential account emails such as password reset codes.
         Resend processes your email address to deliver these messages.
         See <a href="https://resend.com/legal/privacy-policy">resend.com/legal/privacy-policy</a>.</li>
-    <li><strong>Expo / Expo Push Service</strong> — delivers push notifications to your device.</li>
-    <li><strong>Apple Sign In / Google Sign In</strong> — optional sign-in methods. The respective
+    <li><strong>Expo / Expo Push Service:</strong> delivers push notifications to your device.</li>
+    <li><strong>Apple Sign In / Google Sign In:</strong> optional sign-in methods. The respective
         privacy policies of Apple and Google apply.</li>
-    <li><strong>Railway</strong> — our backend infrastructure and database hosting provider.
+    <li><strong>Railway:</strong> our backend infrastructure and database hosting provider.
         Data is stored on Railway's servers. See <a href="https://railway.app/legal/privacy">railway.app/legal/privacy</a>.</li>
   </ul>
 
@@ -454,7 +454,7 @@ TERMS = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Terms of Service — Aretē Fitness</title>
+  <title>Terms of Service | Aretē Fitness</title>
   <style>{{ style }}</style>
 </head>
 <body>
@@ -505,14 +505,14 @@ TERMS = """<!DOCTYPE html>
   </ul>
 
   <h2>5. Health and Fitness Disclaimer</h2>
-  <p><strong>Aretē is not a medical service.</strong> The information and features provided —
-  including workout suggestions, AI-generated routines, strength scores, and progress tracking —
+  <p><strong>Aretē is not a medical service.</strong> The information and features provided
+  (including workout suggestions, AI-generated routines, strength scores, and progress tracking)
   are for general fitness and informational purposes only. They are not a substitute for
   professional medical advice, diagnosis, or treatment. AI-generated content is produced by
   Anthropic's Claude model and may not always reflect current exercise science best practices;
   use it as a starting point, not a prescription. Consult a qualified healthcare provider
   before starting any new exercise programme, especially if you have a medical condition or injury.
-  If you use GPS cardio tracking, remain aware of your surroundings — do not interact with the app
+  If you use GPS cardio tracking, remain aware of your surroundings. Do not interact with the app
   while moving in traffic or hazardous environments. You use the Service at your own risk.</p>
 
   <h2>6. Intellectual Property</h2>
@@ -535,7 +535,7 @@ TERMS = """<!DOCTYPE html>
   <h2>9. Beta and Pre-Release Versions</h2>
   <p>From time to time we may offer pre-release versions of Aretē (for example, through Apple's
   TestFlight programme). Beta versions are provided for testing purposes, may contain bugs, and
-  may include features that change or are removed before public release — including features
+  may include features that change or are removed before public release, including features
   offered free during testing that later require a paid subscription. We may need to reset or
   migrate data collected during a beta period, although we make reasonable efforts to preserve it.
   Your use of a beta version is also subject to the platform's own beta terms (e.g. TestFlight).</p>

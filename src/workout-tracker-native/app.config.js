@@ -67,6 +67,18 @@ module.exports = {
       'expo-asset',
       'expo-web-browser',
       [
+        // react-native-health-connect's androidx.health.connect:connect-client
+        // dependency requires API 26+ — Expo's default minSdk (24) fails the
+        // manifest merge otherwise ("uses-sdk:minSdkVersion 24 cannot be
+        // smaller than version 26 declared in library [...connect-client]").
+        'expo-build-properties',
+        {
+          android: {
+            minSdkVersion: 26,
+          },
+        },
+      ],
+      [
         'expo-location',
         {
           locationWhenInUsePermission: 'Aretē uses your location to track GPS cardio workouts.',
@@ -85,7 +97,13 @@ module.exports = {
       [
         'react-native-maps',
         {
-          googleMapsApiKey: 'YOUR_GOOGLE_MAPS_API_KEY_HERE',
+          // The plugin's config keys are androidGoogleMapsApiKey/iosGoogleMapsApiKey,
+          // NOT a flat googleMapsApiKey — that got silently ignored on both
+          // platforms, leaving no com.google.android.geo.API_KEY meta-data in
+          // AndroidManifest.xml ("API key not found" on Android). iOS has no
+          // key here since it isn't forced onto the Google provider — it just
+          // uses Apple Maps by default.
+          androidGoogleMapsApiKey: 'AIzaSyAWZjy9jsiXMtlNtEmIY6byH9jVyj_GwlI',
         },
       ],
       [

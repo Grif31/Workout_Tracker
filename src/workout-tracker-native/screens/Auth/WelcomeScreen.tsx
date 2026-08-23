@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
   logo: {
     width: 220,
     height: 72,
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   tagline: {
     fontSize: typography.fontSize.md,
@@ -142,6 +142,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: AUTH.placeholder,
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
 });

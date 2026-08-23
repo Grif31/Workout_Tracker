@@ -954,7 +954,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   tabDivider: {
     width: 1,
     backgroundColor: colors.border,
-    marginVertical: 8,
+    marginVertical: spacing.sm,
   },
   tabText: {
     fontSize: typography.fontSize.sm,
@@ -1106,11 +1106,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   statLabel: {
     color: colors.textSecondary,
-    fontSize: 11,
+    fontSize: typography.fontSize.xs,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.4,
-    marginBottom: 4,
+    marginBottom: spacing.xs,
     textAlign: 'center',
   },
   statValue: {
@@ -1166,7 +1166,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  historySetBadgeText: { fontSize: 11, fontWeight: '700', color: colors.textSecondary },
+  historySetBadgeText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary },
   historySetReps: { flex: 1, fontSize: typography.fontSize.sm, color: colors.textPrimary, fontWeight: '500' },
   historySetWeight: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
   progressHeaderRow: {
@@ -1177,7 +1177,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.sm,
   },
   progressLabel: {
-    fontSize: 11,
+    fontSize: typography.fontSize.xs,
     fontWeight: '700',
     color: colors.textSecondary,
     textTransform: 'uppercase',
@@ -1192,7 +1192,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     padding: 2,
   },
   rangeBtn: {
-    paddingVertical: 4,
+    paddingVertical: spacing.xs,
     paddingHorizontal: 12,
     borderRadius: radius.sm,
     alignItems: 'center',
@@ -1235,7 +1235,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     gap: 3,
   },
   deltaText: {
-    fontSize: 11,
+    fontSize: typography.fontSize.xs,
     fontWeight: '700',
   },
   tooltipBubble: {

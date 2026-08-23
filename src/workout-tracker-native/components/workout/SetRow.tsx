@@ -178,7 +178,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.xs,
     color: colors.textSecondary,
     textAlign: 'center',
-    marginHorizontal: 4,
+    marginHorizontal: spacing.xs,
   },
 
   setInput: {

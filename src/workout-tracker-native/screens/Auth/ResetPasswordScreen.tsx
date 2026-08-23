@@ -230,7 +230,7 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
               <TouchableOpacity style={styles.resendRow} onPress={handleResend} disabled={resending}>
                 <Text style={styles.resendText}>Didn't receive a code? </Text>
                 <Text style={[styles.resendText, { color: AUTH.accent }]}>
-                  {resending ? 'Sending…' : resent ? 'Sent — check your email' : 'Resend'}
+                  {resending ? 'Sending…' : resent ? 'Sent. Check your email' : 'Resend'}
                 </Text>
               </TouchableOpacity>
             </>
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   inner:        { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 40 },
   successInner: { flex: 1, paddingHorizontal: spacing.lg, justifyContent: 'center', alignItems: 'center' },
 
-  backBtn: { alignSelf: 'flex-start', padding: 4, marginBottom: spacing.xl },
+  backBtn: { alignSelf: 'flex-start', padding: spacing.xs, marginBottom: spacing.xl },
 
   iconCircle: {
     width: 72, height: 72, borderRadius: 36,
@@ -306,9 +306,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg, alignSelf: 'center',
   },
 
-  title:     { fontSize: typography.fontSize.xxl, fontWeight: '700', color: AUTH.text, marginBottom: 8, textAlign: 'center' },
+  title:     { fontSize: typography.fontSize.xxl, fontWeight: '700', color: AUTH.text, marginBottom: spacing.sm, textAlign: 'center' },
   subtitle:  { fontSize: 15, color: AUTH.subtext, textAlign: 'center', lineHeight: 22, marginBottom: 36 },
-  errorText: { color: AUTH.danger, fontSize: typography.fontSize.sm, marginBottom: 16, textAlign: 'center' },
+  errorText: { color: AUTH.danger, fontSize: typography.fontSize.sm, marginBottom: spacing.md, textAlign: 'center' },
 
   inputWrapper: {
     flexDirection: 'row', alignItems: 'center',
@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
   },
   inputIcon: { marginRight: 10 },
   input:     { flex: 1, color: AUTH.text, fontSize: 15 },
-  eyeBtn:    { padding: 4 },
+  eyeBtn:    { padding: spacing.xs },
 
   primaryBtn:         { backgroundColor: AUTH.accent, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   successBtn:         { alignSelf: 'stretch', marginTop: spacing.lg },

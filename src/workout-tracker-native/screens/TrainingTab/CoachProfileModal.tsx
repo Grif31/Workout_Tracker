@@ -266,7 +266,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: colors.accent,
     alignItems: 'center', justifyContent: 'center',
   },
-  stepperBtnText: { fontSize: 22, color: colors.accent, fontWeight: '600', lineHeight: 26 },
+  stepperBtnText: { fontSize: typography.fontSize.xl, color: colors.accent, fontWeight: '600', lineHeight: 26 },
   stepperValue: { fontSize: 32, fontWeight: '700', color: colors.textPrimary, minWidth: 36, textAlign: 'center' },
   notesInput: {
     backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,

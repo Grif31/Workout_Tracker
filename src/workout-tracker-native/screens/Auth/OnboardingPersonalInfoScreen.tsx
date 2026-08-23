@@ -92,7 +92,7 @@ export default function OnboardingPersonalInfoScreen({ navigation }: Props) {
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Tell Us About Yourself</Text>
-        <Text style={styles.subtitle}>Totally optional — you can add or edit this anytime from your profile.</Text>
+        <Text style={styles.subtitle}>Totally optional. You can add or edit this anytime from your profile.</Text>
 
         <Text style={styles.label}>Name</Text>
         <TextInput
@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     minHeight: 44,
   },
-  skipBtn: { paddingHorizontal: 8, paddingVertical: 6 },
+  skipBtn: { paddingHorizontal: spacing.sm, paddingVertical: 6 },
   skipText: { fontSize: 15, color: AUTH.subtext, fontWeight: '500' },
 
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
@@ -239,9 +239,9 @@ const styles = StyleSheet.create({
   halfInputWrapper: { flex: 1 },
 
   pickerModal: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
-  pickerCard: { backgroundColor: AUTH.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: 32 },
+  pickerCard: { backgroundColor: AUTH.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: spacing.xl },
   pickerDone: { alignItems: 'flex-end', padding: spacing.md },
-  pickerDoneText: { color: AUTH.accent, fontWeight: '600', fontSize: 16 },
+  pickerDoneText: { color: AUTH.accent, fontWeight: '600', fontSize: typography.fontSize.md },
 
   footer: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md, paddingTop: spacing.sm },
   continueBtn: {

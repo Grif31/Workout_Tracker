@@ -213,7 +213,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textPrimary,
     paddingVertical: spacing.md,
   },
-  eyeBtn: { padding: 4 },
+  eyeBtn: { padding: spacing.xs },
 
   divider: {
     height: 1,
@@ -235,7 +235,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: spacing.sm,
     marginHorizontal: spacing.md,
     marginTop: spacing.lg,
-    paddingVertical: 16,
+    paddingVertical: spacing.md,
     alignItems: 'center',
   },
   saveBtnDisabled: { opacity: 0.6 },

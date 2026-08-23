@@ -1,7 +1,10 @@
 import React, { forwardRef } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { LaurelBranch } from './LaurelWreath';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
 import { PR_GOLD, PR_GOLD_TEXT } from '../constants/prColors';
+import { SHARE_BG, SHARE_TEXT, SHARE_TEXT_MUTED, SHARE_TEXT_FOOTER } from '../constants/shareCardTheme';
 
 type PRShareCardProps = {
   exerciseName: string;
@@ -56,7 +59,7 @@ export default PRShareCard;
 const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
-    backgroundColor: '#0D0D0D',
+    backgroundColor: SHARE_BG,
     borderRadius: 20,
     overflow: 'hidden',
   },
@@ -64,7 +67,7 @@ const styles = StyleSheet.create({
     height: 5,
   },
   content: {
-    padding: 24,
+    padding: spacing.lg,
     paddingTop: 20,
   },
   header: {
@@ -79,17 +82,17 @@ const styles = StyleSheet.create({
   },
   date: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: SHARE_TEXT_MUTED,
   },
   banner: {
     backgroundColor: PR_GOLD,
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 16,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   bannerText: {
     fontSize: 13,
@@ -101,7 +104,7 @@ const styles = StyleSheet.create({
   exerciseName: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: SHARE_TEXT,
     lineHeight: 30,
     marginBottom: 10,
   },
@@ -118,11 +121,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: PR_GOLD,
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   footer: {
-    fontSize: 11,
-    color: '#636366',
+    fontSize: typography.fontSize.xs,
+    color: SHARE_TEXT_FOOTER,
     textAlign: 'center',
   },
 });

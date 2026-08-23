@@ -740,7 +740,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   rankBadgeText: { fontSize: typography.fontSize.sm, fontWeight: '700', letterSpacing: 0.5 },
   userInfo: { flex: 1 },
-  value: { fontSize: typography.fontSize.md, fontWeight: '600', marginBottom: 4 },
+  value: { fontSize: typography.fontSize.md, fontWeight: '600', marginBottom: spacing.xs },
   workoutCount: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
   emptyText: {
     textAlign: 'center',
@@ -758,7 +758,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
   workoutName: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, flex: 1 },
-  prRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: spacing.sm },
+  prRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginLeft: spacing.sm },
   prText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: PR_GOLD_TEXT },
   workoutDate: { fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
@@ -933,7 +933,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
   },
-  prSearchInput: { flex: 1, fontSize: typography.fontSize.sm, paddingVertical: 4 },
+  prSearchInput: { flex: 1, fontSize: typography.fontSize.sm, paddingVertical: spacing.xs },
   prChipRow: {
     flexDirection: 'row',
     gap: spacing.xs,

@@ -114,9 +114,9 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: AUTH.bg },
-  inner:     { flex: 1, paddingHorizontal: spacing.lg, paddingTop: 8 },
+  inner:     { flex: 1, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
 
-  backBtn: { alignSelf: 'flex-start', padding: 4, marginBottom: spacing.xl },
+  backBtn: { alignSelf: 'flex-start', padding: spacing.xs, marginBottom: spacing.xl },
 
   iconCircle: {
     width: 72,
@@ -131,13 +131,13 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
 
-  title:    { fontSize: typography.fontSize.xxl, fontWeight: '700', color: AUTH.text, marginBottom: 8, textAlign: 'center' },
+  title:    { fontSize: typography.fontSize.xxl, fontWeight: '700', color: AUTH.text, marginBottom: spacing.sm, textAlign: 'center' },
   subtitle: { fontSize: 15, color: AUTH.subtext, textAlign: 'center', lineHeight: 22, marginBottom: 36 },
 
   errorText: {
     color: AUTH.danger,
     fontSize: typography.fontSize.sm,
-    marginBottom: 16,
+    marginBottom: spacing.md,
     textAlign: 'center',
   },
 

@@ -171,8 +171,13 @@ def strength_score():
             if result['true_1rm'] is not None:
                 exercise_true_1rms[exercise_name] = result['true_1rm']
 
-    if not exercise_percentiles:
-        return jsonify({'missing': 'data'}), 422
+    # No hard gate on missing exercise_percentiles here — a user with zero
+    # tracked strength lifts (e.g. cardio-only) still has a valid Greek rank
+    # from consistency/dedication/volume alone (strength contributes 0 to the
+    # 45% weight below, it doesn't block the other 55%). StrengthScoreScreen
+    # detects this case itself via `exercises_used === 0` in the response
+    # rather than relying on an error status, so its own empty state is
+    # unaffected — see fetchScore() there.
 
     # Overall score — Big 6 (70%), compound secondary (20%), isolation (10%).
     # Missing categories are dropped and weights renormalized automatically.
@@ -204,7 +209,7 @@ def strength_score():
     if isolation_avg is not None: parts.append((0.10, isolation_avg))
 
     total_weight = sum(w for w, _ in parts)
-    overall = sum(w * v for w, v in parts) / total_weight
+    overall = (sum(w * v for w, v in parts) / total_weight) if total_weight > 0 else 0.0
 
     # Muscle group scores
     muscle_groups = compute_muscle_group_scores(exercise_percentiles)

@@ -32,6 +32,8 @@ type Props = {
   onShowPlateCalcChange: (val: boolean) => void;
   repeatLastSet: boolean;
   onRepeatLastSetChange: (val: boolean) => void;
+  prefillPreviousSets: boolean;
+  onPrefillPreviousSetsChange: (val: boolean) => void;
   exerciseCount: number;
   totalSets: number;
   totalVolume: number;
@@ -61,6 +63,8 @@ function WorkoutHeader({
   onShowPlateCalcChange,
   repeatLastSet,
   onRepeatLastSetChange,
+  prefillPreviousSets,
+  onPrefillPreviousSetsChange,
   exerciseCount,
   totalSets,
   totalVolume,
@@ -162,7 +166,7 @@ function WorkoutHeader({
             activeOpacity={0.8}
           >
             <Text style={styles.diagramThumbLabel}>Muscles</Text>
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-start', marginTop: -8 }}>
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-start', marginTop: -spacing.sm }}>
               <MuscleDiagram muscles={activeMuscles} scale={0.18} />
             </View>
           </TouchableOpacity>
@@ -251,6 +255,19 @@ function WorkoutHeader({
               <Switch
                 value={repeatLastSet}
                 onValueChange={onRepeatLastSetChange}
+                trackColor={{ false: colors.border, true: colors.save }}
+                thumbColor="#fff"
+              />
+            </View>
+            <View style={styles.settingsDivider} />
+            <View style={styles.settingsItem}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingsLabel}>Prefill previous sets</Text>
+                <Text style={styles.settingsHint}>Pre-fill a new exercise's sets with your last session's reps and weight</Text>
+              </View>
+              <Switch
+                value={prefillPreviousSets}
+                onValueChange={onPrefillPreviousSetsChange}
                 trackColor={{ false: colors.border, true: colors.save }}
                 thumbColor="#fff"
               />
@@ -344,7 +361,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   timerValue: { fontSize: 32, fontWeight: '700', color: colors.textPrimary },
   timerLabel: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary, marginBottom: spacing.xs },
-  timerResetBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'center' },
+  timerResetBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, alignSelf: 'center' },
   playTriangle: {
     width: 0,
     height: 0,

@@ -78,6 +78,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const rpeKey             = `${RPE_KEY}_${uid}`;
   const plateCalcKey       = `workout_show_plate_calc_${uid}`;
   const repeatLastSetKey   = `workout_repeat_last_set_${uid}`;
+  const prefillPreviousKey = `workout_prefill_previous_sets_${uid}`;
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const SET_TYPE_COLORS = useMemo<Record<SetType, string>>(() => ({
@@ -151,6 +152,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const [showRpe, setShowRpe] = useState(false);
   const [showPlateCalc, setShowPlateCalc] = useState(true);
   const [repeatLastSet, setRepeatLastSet] = useState(false);
+  const [prefillPreviousSets, setPrefillPreviousSets] = useState(true);
   const [focusedInput, setFocusedInput] = useState<{ exIdx: number; setIdx: number; field: 'reps' | 'weight' } | null>(null);
   // Live TextInput refs keyed `${exIdx}:${setIdx}:${field}` — lets the
   // keyboard toolbar's Next button move focus between set inputs
@@ -165,6 +167,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   // Keep refs in sync with state so AppState/setInterval closures always read current values.
   const vibrateRef = useRef(true);
   vibrateRef.current = vibrateOnComplete;
+  // Read inside async IIFEs below (last-session enrichment) instead of the
+  // state directly — those closures are created before the AsyncStorage
+  // settings load resolves, so the state value they'd otherwise capture can
+  // be stale by the time the awaited fetch actually applies it.
+  const prefillPreviousRef = useRef(true);
+  prefillPreviousRef.current = prefillPreviousSets;
   const timerPausedRef = useRef(false);
   timerPausedRef.current = timerPaused;
 
@@ -233,7 +241,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       AsyncStorage.getItem(rpeKey),
       AsyncStorage.getItem(plateCalcKey),
       AsyncStorage.getItem(repeatLastSetKey),
-    ]).then(([timerVal, autoRestVal, vibrateVal, rpeVal, plateCalcVal, repeatVal]) => {
+      AsyncStorage.getItem(prefillPreviousKey),
+    ]).then(([timerVal, autoRestVal, vibrateVal, rpeVal, plateCalcVal, repeatVal, prefillPrevVal]) => {
       const n = timerVal ? parseInt(timerVal, 10) : NaN;
       if (!isNaN(n)) { setDefaultRest(n); setRestRemaining(n); setRestTotal(n); }
       if (autoRestVal !== null) setAutoStartRest(autoRestVal === 'true');
@@ -241,6 +250,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       if (rpeVal !== null) setShowRpe(rpeVal === 'true');
       if (plateCalcVal !== null) setShowPlateCalc(plateCalcVal !== 'false');
       if (repeatVal !== null) setRepeatLastSet(repeatVal === 'true');
+      if (prefillPrevVal !== null) setPrefillPreviousSets(prefillPrevVal !== 'false');
     });
   }, []);
 
@@ -585,7 +595,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                   if (data.sets?.length > 0) {
                     enriched[idx] = {
                       ...enriched[idx],
-                      sets: prevSetsToEditable(ex, data.sets),
+                      ...(prefillPreviousRef.current ? { sets: prevSetsToEditable(ex, data.sets) } : {}),
                       previousSets: data.sets,
                       currentPR: prData,
                     };
@@ -763,10 +773,15 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             ? 'Most Reps at Weight'
             : 'New Strength Record';
         showPRBanner(ex.name, prType);
-        // Advance currentPR so subsequent sets in the same session don't re-trigger
-        setExercises(prev => prev.map((e, i) => {
-          if (i !== exIndex) return e;
-          const updatedPR = { ...e.currentPR! };
+        // Advance currentPR so subsequent sets in the same session don't re-trigger.
+        // Match by exercise_template_id, not exIndex — the same exercise can appear
+        // in more than one block (superset, repeated template entry, added twice),
+        // and each block fetched its own currentPR snapshot on add. Without this,
+        // a sibling block still holds the pre-PR snapshot and re-fires the banner
+        // for a PR this workout already achieved a few sets earlier.
+        setExercises(prev => prev.map(e => {
+          if (e.exercise_template_id == null || e.exercise_template_id !== ex.exercise_template_id || !e.currentPR) return e;
+          const updatedPR = { ...e.currentPR };
           if (!isNaN(w) && (updatedPR.max_weight == null || w > updatedPR.max_weight)) {
             updatedPR.max_weight = w;
           }
@@ -790,9 +805,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       const pr = ex.currentPR;
       if (!isNaN(secs) && secs > 0 && pr.max_duration != null && mins > pr.max_duration) {
         showPRBanner(ex.name, 'Longest Hold');
-        // Advance currentPR so subsequent sets in the same session don't re-trigger
-        setExercises(prev => prev.map((e, i) =>
-          i === exIndex ? { ...e, currentPR: { ...e.currentPR!, max_duration: mins } } : e
+        // Advance currentPR so subsequent sets in the same session don't re-trigger (see above).
+        setExercises(prev => prev.map(e =>
+          (e.exercise_template_id != null && e.exercise_template_id === ex.exercise_template_id && e.currentPR)
+            ? { ...e, currentPR: { ...e.currentPR, max_duration: mins } }
+            : e
         ));
       }
     }
@@ -980,6 +997,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     setRepeatLastSet(val);
     AsyncStorage.setItem(repeatLastSetKey, String(val));
   }, [repeatLastSetKey]);
+  const onPrefillPreviousSetsChange = useCallback((val: boolean) => {
+    setPrefillPreviousSets(val);
+    AsyncStorage.setItem(prefillPreviousKey, String(val));
+  }, [prefillPreviousKey]);
 
   const openAddNotes = (exIndex: number) => {
     setOpenMenuIdx(null);
@@ -1005,6 +1026,36 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             : '',
         }
       : { uid: makeUid(), reps: String(s.reps ?? ''), weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''), set_type: s.set_type ?? 'N' });
+
+  // Merge a freshly-fetched PR snapshot with any more-advanced currentPR a
+  // sibling block for the same exercise already holds. PRs achieved earlier
+  // in this session aren't saved to the backend until Save, so fetching PR
+  // data for a newly-added block always returns pre-PR data when the same
+  // exercise was already logged once this workout — without this merge, that
+  // new block would re-fire the "New PR!" banner for a PR already achieved.
+  const mergeWithSessionPR = (
+    templateId: number | undefined,
+    fetched: ExerciseEntry['currentPR'],
+    siblings: ExerciseEntry[],
+  ): ExerciseEntry['currentPR'] => {
+    if (templateId == null) return fetched;
+    const sibling = siblings.find(e => e.exercise_template_id === templateId && e.currentPR);
+    if (!sibling?.currentPR) return fetched;
+    const s = sibling.currentPR;
+    const merged: NonNullable<ExerciseEntry['currentPR']> = { ...fetched };
+    if (s.max_weight != null && (merged.max_weight == null || s.max_weight > merged.max_weight)) merged.max_weight = s.max_weight;
+    if (s.estimated_1rm != null && (merged.estimated_1rm == null || s.estimated_1rm > merged.estimated_1rm)) merged.estimated_1rm = s.estimated_1rm;
+    if (s.max_duration != null && (merged.max_duration == null || s.max_duration > merged.max_duration)) merged.max_duration = s.max_duration;
+    if (s.per_weight_reps) {
+      const byWeight = new Map((merged.per_weight_reps ?? []).map(e => [e.weight, e]));
+      for (const e of s.per_weight_reps) {
+        const existing = byWeight.get(e.weight);
+        if (!existing || e.max_reps > existing.max_reps) byWeight.set(e.weight, e);
+      }
+      merged.per_weight_reps = [...byWeight.values()];
+    }
+    return merged;
+  };
 
   const addExToWorkout = async (exercise: { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string }) => {
     const initialSet: WorkoutSet = makeInitialSet(exercise);
@@ -1037,18 +1088,21 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         }
         if (lastRes.ok) {
           const data = await lastRes.json();
-          setExercises(prev => prev.map((ex, i) => {
-            if (i !== targetIdx || ex.name !== exercise.name) return ex;
-            if (data.sets?.length > 0) {
-              return {
-                ...ex,
-                sets: prevSetsToEditable(exercise, data.sets),
-                previousSets: data.sets,
-                currentPR: prData,
-              };
-            }
-            return prData ? { ...ex, currentPR: prData } : ex;
-          }));
+          setExercises(prev => {
+            const merged = mergeWithSessionPR(exercise.id, prData, prev);
+            return prev.map((ex, i) => {
+              if (i !== targetIdx || ex.name !== exercise.name) return ex;
+              if (data.sets?.length > 0) {
+                return {
+                  ...ex,
+                  ...(prefillPreviousRef.current ? { sets: prevSetsToEditable(exercise, data.sets) } : {}),
+                  previousSets: data.sets,
+                  currentPR: merged,
+                };
+              }
+              return merged ? { ...ex, currentPR: merged } : ex;
+            });
+          });
         }
       } catch {}
       return;
@@ -1087,9 +1141,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             const updated = [...prev];
             updated[idx] = {
               ...updated[idx],
-              sets: prevSetsToEditable(exercise, data.sets),
+              ...(prefillPreviousRef.current ? { sets: prevSetsToEditable(exercise, data.sets) } : {}),
               previousSets: data.sets,
-              currentPR: prData,
+              currentPR: mergeWithSessionPR(exercise.id, prData, prev),
             };
             return updated;
           });
@@ -1098,7 +1152,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             const idx = prev.findIndex(ex => ex.uid === newUid);
             if (idx === -1) return prev;
             const updated = [...prev];
-            updated[idx] = { ...updated[idx], currentPR: prData };
+            updated[idx] = { ...updated[idx], currentPR: mergeWithSessionPR(exercise.id, prData, prev) };
             return updated;
           });
         }
@@ -1143,7 +1197,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             if (data.sets?.length > 0) {
               enriched[idx] = {
                 ...enriched[idx],
-                sets: data.sets.map((s: any) => ({ uid: makeUid(), reps: String(s.reps ?? ''), weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''), set_type: s.set_type ?? 'N' })),
+                ...(prefillPreviousRef.current ? { sets: prevSetsToEditable(ex, data.sets) } : {}),
                 previousSets: data.sets,
                 currentPR: prData,
               };
@@ -1234,7 +1288,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         clearSession();
         AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
         AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
-        showToast('Saved offline — will sync when connected');
+        showToast('Saved offline. Will sync when connected');
         onCancel?.();
         return;
       }
@@ -1352,7 +1406,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     >
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <View style={{ flexDirection: 'row', gap: 4 }}>
+        <View style={{ flexDirection: 'row', gap: spacing.xs }}>
           {onCancel && !editMode ? (
             <TouchableOpacity onPress={minimizeWorkout} style={styles.headerBtn}>
               <Ionicons name="chevron-down" size={24} color={colors.textPrimary} />
@@ -1433,6 +1487,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             onShowPlateCalcChange={onShowPlateCalcChange}
             repeatLastSet={repeatLastSet}
             onRepeatLastSetChange={onRepeatLastSetChange}
+            prefillPreviousSets={prefillPreviousSets}
+            onPrefillPreviousSetsChange={onPrefillPreviousSetsChange}
             exerciseCount={exercises.length}
             totalSets={workoutTotals.totalSets}
             totalVolume={workoutTotals.totalVolume}
@@ -1800,7 +1856,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: spacing.xs,
     minHeight: 44,
     paddingVertical: spacing.sm,
     borderRadius: spacing.sm,

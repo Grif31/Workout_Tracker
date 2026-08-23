@@ -20,19 +20,7 @@ import { appCache } from '../../utils/appCache';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { PR_GOLD_TEXT } from '../../constants/prColors';
 import { WEEKLY_SUMMARY_LAST_SHOWN_KEY } from './WeeklySummaryScreen';
-
-function SectionRule({ label, style }: { label: string; style?: object }) {
-  const { colors } = useTheme();
-  return (
-    <View style={[{ flexDirection: 'row', alignItems: 'center' }, style]}>
-      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
-      <Text style={{ fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginHorizontal: spacing.sm }}>
-        {label}
-      </Text>
-      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
-    </View>
-  );
-}
+import SectionRule from '../../components/SectionRule';
 
 const GREETINGS = [
   'Ready to workout', 'Welcome', 'Ready to Train', "Let's Workout",
@@ -423,7 +411,7 @@ export default function DashboardScreen({ navigation }: Props) {
             style={styles.trackButton}
             onPress={() => navigation.navigate('GPSCardio')}
           >
-            <Ionicons name="location-outline" size={16} color={colors.accent} style={{ marginRight: 4 }} />
+            <Ionicons name="location-outline" size={16} color={colors.accent} style={{ marginRight: spacing.xs }} />
             <Text style={styles.trackButtonText}>Track Activity</Text>
           </TouchableOpacity>
 
@@ -511,7 +499,7 @@ export default function DashboardScreen({ navigation }: Props) {
                     name={item.workout_type === 'cardio' ? 'location-outline' : 'barbell-outline'}
                     size={14}
                     color={colors.textSecondary}
-                    style={{ marginRight: 4, marginTop: 1 }}
+                    style={{ marginRight: spacing.xs, marginTop: 1 }}
                   />
                   <Text style={styles.workoutName}>{item.name || 'Workout'}</Text>
                   {!!item.pr_count && (
@@ -700,7 +688,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
   workoutName: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, flex: 1 },
-  prRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: spacing.sm },
+  prRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginLeft: spacing.sm },
   prText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: PR_GOLD_TEXT },
   workoutDate: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginBottom: spacing.sm },
   statPills: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xs },

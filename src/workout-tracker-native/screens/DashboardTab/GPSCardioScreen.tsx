@@ -330,7 +330,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
     } else {
       locationSub.current = await Location.watchPositionAsync(WATCH_OPTS, onLocationUpdate);
       activateKeepAwakeAsync();
-      showToast('Screen will stay on — allow "Always" location to track with it off');
+      showToast('Screen will stay on. Allow "Always" location to track with it off');
     }
   };
 
@@ -440,7 +440,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
       await enqueueWorkout(body);
       clearCheckpoint();
       setConfirmVisible(false);
-      showToast('Saved offline — will sync when connected');
+      showToast('Saved offline. Will sync when connected');
       navigation.goBack();
     };
 
@@ -493,12 +493,12 @@ export default function GPSCardioScreen({ navigation }: Props) {
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', gap: spacing.md }]}>
         <Ionicons name="map-outline" size={48} color={colors.textSecondary} />
         <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700' }}>GPS Tracking Unavailable</Text>
-        <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center', paddingHorizontal: 32 }}>
+        <Text style={{ color: colors.textSecondary, fontSize: typography.fontSize.sm, textAlign: 'center', paddingHorizontal: spacing.xl }}>
           GPS tracking requires a development build.{'\n'}Run with{' '}
           <Text style={{ fontWeight: '600' }}>npx expo run:ios</Text> or{' '}
           <Text style={{ fontWeight: '600' }}>npx expo run:android</Text> to enable it.
         </Text>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 8 }}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: spacing.sm }}>
           <Text style={{ color: colors.accent, fontWeight: '600' }}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -514,7 +514,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
             <Ionicons name="map-outline" size={40} color={colors.textSecondary} />
             <Text style={[styles.mapFallbackTitle, { color: colors.textPrimary }]}>Map unavailable</Text>
             <Text style={[styles.mapFallbackSub, { color: colors.textSecondary }]}>
-              GPS tracking still works — a Google Maps API key is required to show the map on Android.
+              GPS tracking still works. A Google Maps API key is required to show the map on Android.
             </Text>
           </View>
         }
@@ -659,7 +659,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
               </View>
             </View>
 
-            <ScrollView style={{ maxHeight: 120 }} contentContainerStyle={{ paddingBottom: 4 }}>
+            <ScrollView style={{ maxHeight: 120 }} contentContainerStyle={{ paddingBottom: spacing.xs }}>
               {coords.length >= 2 && (
                 <MapView
                   style={styles.modalMap}

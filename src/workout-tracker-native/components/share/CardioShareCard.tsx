@@ -1,7 +1,10 @@
 import React, { forwardRef } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import RouteTrace, { type LatLng } from './RouteTrace';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { fmtDuration, fmtPace } from '../../utils/cardioFormat';
+import { SHARE_BG, SHARE_SURFACE, SHARE_DIVIDER, SHARE_TEXT, SHARE_TEXT_MUTED, SHARE_TEXT_FOOTER } from '../../constants/shareCardTheme';
 
 type CardioShareCardProps = {
   activityName: string;
@@ -97,7 +100,7 @@ export default CardioShareCard;
 const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
-    backgroundColor: '#0D0D0D',
+    backgroundColor: SHARE_BG,
     borderRadius: 20,
     overflow: 'hidden',
   },
@@ -105,7 +108,7 @@ const styles = StyleSheet.create({
     height: 5,
   },
   content: {
-    padding: 24,
+    padding: spacing.lg,
     paddingTop: 20,
   },
 
@@ -121,20 +124,20 @@ const styles = StyleSheet.create({
   },
   date: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: SHARE_TEXT_MUTED,
   },
 
   activityName: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: SHARE_TEXT,
     marginBottom: 12,
   },
 
   traceBox: {
-    backgroundColor: '#1C1C1E',
+    backgroundColor: SHARE_SURFACE,
     borderRadius: 14,
-    marginBottom: 16,
+    marginBottom: spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -149,12 +152,12 @@ const styles = StyleSheet.create({
     lineHeight: 48,
   },
   heroUnit: {
-    fontSize: 22,
+    fontSize: typography.fontSize.xl,
     fontWeight: '700',
   },
   heroLabel: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: SHARE_TEXT_MUTED,
     marginTop: 2,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -162,10 +165,10 @@ const styles = StyleSheet.create({
 
   statsRow: {
     flexDirection: 'row',
-    backgroundColor: '#1C1C1E',
+    backgroundColor: SHARE_SURFACE,
     borderRadius: 12,
     paddingVertical: 12,
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
   statBox: {
     flex: 1,
@@ -174,22 +177,22 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: SHARE_TEXT,
   },
   statLabel: {
     fontSize: 10,
-    color: '#8E8E93',
+    color: SHARE_TEXT_MUTED,
     marginTop: 2,
   },
   statDivider: {
     width: 1,
-    backgroundColor: '#2C2C2E',
+    backgroundColor: SHARE_DIVIDER,
     marginVertical: 2,
   },
 
   footer: {
-    fontSize: 11,
-    color: '#636366',
+    fontSize: typography.fontSize.xs,
+    color: SHARE_TEXT_FOOTER,
     textAlign: 'center',
   },
 });

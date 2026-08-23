@@ -292,7 +292,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         <Text style={styles.sectionLabel}>Exercises ({exercises.length})</Text>
 
         {exercises.length === 0 ? (
-          <Text style={styles.emptyText}>No exercises yet — tap Add to get started</Text>
+          <Text style={styles.emptyText}>No exercises yet. Tap Add to get started</Text>
         ) : (
           <DraggableList
             data={exercises}
@@ -397,7 +397,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   muscleBannerText: { fontSize: typography.fontSize.sm, fontWeight: '600', flex: 1 },
   nameInput: {
-    fontSize: 22,
+    fontSize: typography.fontSize.xl,
     fontWeight: '700',
     color: colors.textPrimary,
     borderBottomWidth: 2,
@@ -413,7 +413,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   logBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: spacing.xs,
     backgroundColor: colors.accent,
     borderRadius: spacing.sm,
     paddingHorizontal: spacing.md,
@@ -441,7 +441,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: spacing.xs,
     borderWidth: 1,
     borderColor: colors.save,
     borderRadius: spacing.sm,

@@ -27,7 +27,7 @@ interface Props {
 
 export default function ProfileAvatarFrame({ rankName, size, avatarSize }: Props) {
   const frame = RANK_FRAMES[rankName] ?? RANK_FRAMES['Neophyte'];
-  const color = GREEK_RANK_COLORS[rankName] ?? '#888888';
+  const color = GREEK_RANK_COLORS[rankName] ?? GREEK_RANK_COLORS.Neophyte;
 
   const animRef = useRef(new Animated.Value(0)).current;
 
@@ -62,9 +62,9 @@ export default function ProfileAvatarFrame({ rankName, size, avatarSize }: Props
       {rankName === 'Aretē' && (
         <Defs>
           <LinearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor="#FFD700" />
+            <Stop offset="0" stopColor={GREEK_RANK_COLORS['Aretē']} />
             <Stop offset="0.5" stopColor="#FFF3C4" />
-            <Stop offset="1" stopColor="#FFD700" />
+            <Stop offset="1" stopColor={GREEK_RANK_COLORS['Aretē']} />
           </LinearGradient>
         </Defs>
       )}

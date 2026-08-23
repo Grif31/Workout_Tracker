@@ -403,7 +403,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   statItem: { flex: 1, alignItems: 'center', paddingHorizontal: spacing.xs },
   statValue: { fontSize: typography.fontSize.xxl, fontWeight: '700', color: colors.textPrimary },
-  statLabel: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 4 },
+  statLabel: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: spacing.xs },
   statDivider: { width: 1, height: 36, backgroundColor: colors.border },
 
   elevationRow: {

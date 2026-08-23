@@ -328,7 +328,7 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Select Template</Text>
             {templates.length === 0 ? (
-              <Text style={styles.modalEmpty}>No templates yet — create one first</Text>
+              <Text style={styles.modalEmpty}>No templates yet. Create one first</Text>
             ) : (
               <FlatList
                 data={templates}

@@ -22,22 +22,11 @@ import { typography } from 'theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { equipmentTypes } from '../../constants/equipmentTypes';
 import NewExerciseForm from '../../components/NewExerciseForm';
+import SectionRule from '../../components/SectionRule';
 import { apiFetch, resolveMediaUrl } from '../../utils/api';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
 
-function SectionRule({ label }: { label: string }) {
-  const { colors } = useTheme();
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm, marginTop: spacing.xs }}>
-      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
-      <Text style={{ fontSize: 10, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginHorizontal: spacing.sm }}>
-        {label}
-      </Text>
-      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
-    </View>
-  );
-}
 
 type Props = NativeStackScreenProps<ExercisesStackParamsList, 'ExercisesHome'>;
 
@@ -118,17 +107,31 @@ export default function ExercisesScreen({ navigation }: Props) {
     }
   };
 
-  const filteredExercises = useMemo(() => exerciseList.filter(ex => {
-    const matchSearch = ex.name.toLowerCase().includes(search.toLowerCase());
-    if (selectedMuscle === 'Cardio') return matchSearch && ex.exercise_type === 'cardio';
-    // Cardio has no muscle group, so it only makes sense to exclude it when a
-    // specific muscle filter is active — leave it in under the default "All"
-    // filter so a name search (e.g. "Running") can still find it.
-    if (selectedMuscle !== 'All' && ex.exercise_type === 'cardio') return false;
-    const matchMuscle = selectedMuscle === 'All' || ex.muscle_group?.split(',').map(m => m.trim()).includes(selectedMuscle);
-    const matchEquipment = selectedEquipment === 'All' || ex.equipment === selectedEquipment;
-    return matchSearch && matchMuscle && matchEquipment;
-  }), [exerciseList, search, selectedMuscle, selectedEquipment]);
+  const filteredExercises = useMemo(() => {
+    const filtered = exerciseList.filter(ex => {
+      const matchSearch = ex.name.toLowerCase().includes(search.toLowerCase());
+      if (selectedMuscle === 'Cardio') return matchSearch && ex.exercise_type === 'cardio';
+      // Cardio has no muscle group, so it only makes sense to exclude it when a
+      // specific muscle filter is active — leave it in under the default "All"
+      // filter so a name search (e.g. "Running") can still find it.
+      if (selectedMuscle !== 'All' && ex.exercise_type === 'cardio') return false;
+      const matchMuscle = selectedMuscle === 'All' || ex.muscle_group?.split(',').map(m => m.trim()).includes(selectedMuscle);
+      const matchEquipment = selectedEquipment === 'All' || ex.equipment === selectedEquipment;
+      return matchSearch && matchMuscle && matchEquipment;
+    });
+
+    // Specific muscle filter: exercises where it's the primary mover list
+    // before ones where it's only a secondary mover, each group A-Z (matches
+    // the ordering ExerciseList.tsx's picker modal already uses).
+    if (selectedMuscle !== 'All' && selectedMuscle !== 'Cardio') {
+      const isPrimary = (ex: Exercise) => ex.muscle_group?.split(',')[0]?.trim() === selectedMuscle;
+      return [...filtered].sort((a, b) => {
+        const primaryDiff = Number(isPrimary(b)) - Number(isPrimary(a));
+        return primaryDiff !== 0 ? primaryDiff : a.name.localeCompare(b.name);
+      });
+    }
+    return [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+  }, [exerciseList, search, selectedMuscle, selectedEquipment]);
 
   const recentFiltered = useMemo(() => {
     if (search) return [];
@@ -312,7 +315,7 @@ export default function ExercisesScreen({ navigation }: Props) {
           keyExtractor={item => item.id.toString()}
           renderItem={({ item }) => renderExerciseCard({ item })}
           renderSectionHeader={({ section }) => (
-            <SectionRule label={section.title} />
+            <SectionRule label={section.title} style={{ marginBottom: spacing.sm, marginTop: spacing.xs }} />
           )}
           ListEmptyComponent={<Text style={styles.emptyText}>No exercises found</Text>}
         />
@@ -343,11 +346,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
     borderRadius: spacing.sm, height: 36, paddingHorizontal: spacing.sm,
   },
-  searchIcon: { marginRight: 4 },
+  searchIcon: { marginRight: spacing.xs },
   searchInput: { flex: 1, fontSize: typography.fontSize.sm, color: colors.textPrimary, height: 36, padding: 0 },
   clearBtn: { padding: 2 },
   pickerRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
-  pickerGroup: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  pickerGroup: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   pickerClear: { padding: 2 },
   dropdownBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -355,7 +358,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: spacing.sm, paddingHorizontal: spacing.sm, height: 36,
   },
   dropdownBtnText: { fontSize: typography.fontSize.sm, color: colors.textPrimary, flex: 1 },
-  dropdownArrow: { fontSize: 12, color: colors.textSecondary, marginLeft: 4 },
+  dropdownArrow: { fontSize: 12, color: colors.textSecondary, marginLeft: spacing.xs },
   dropdownOverlay: { flex: 1 },
   dropdownList: {
     position: 'absolute',
@@ -394,8 +397,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
-  musclePillText: { fontSize: 11, fontWeight: '600', color: colors.accent },
+  musclePillText: { fontSize: typography.fontSize.xs, fontWeight: '600', color: colors.accent },
   emptyText: { textAlign: 'center', color: colors.textSecondary, marginVertical: spacing.sm, fontSize: typography.fontSize.sm },
 });

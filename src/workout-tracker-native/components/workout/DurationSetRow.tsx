@@ -100,7 +100,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   secondsWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: spacing.xs,
   },
   setInput: {
     flex: 1,

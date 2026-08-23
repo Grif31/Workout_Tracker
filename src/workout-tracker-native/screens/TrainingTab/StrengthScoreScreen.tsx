@@ -27,19 +27,7 @@ import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModa
 import StrengthScoreShareCard from '../../components/StrengthScoreShareCard';
 import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
 import { toLocalDateStr } from '../../utils/date';
-
-function SectionRule({ label, style }: { label: string; style?: object }) {
-  const { colors } = useTheme();
-  return (
-    <View style={[{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm }, style]}>
-      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
-      <Text style={{ fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginHorizontal: spacing.sm }}>
-        {label}
-      </Text>
-      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
-    </View>
-  );
-}
+import SectionRule from '../../components/SectionRule';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'StrengthScore'>;
 
@@ -175,11 +163,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
       const res = await apiFetch('/api/stats/strength-score');
       if (res.status === 422) {
         const body = await res.json();
-        if (body.missing === 'data') {
-          setNoData(true);
-        } else {
-          setMissingFields(Array.isArray(body.missing) ? body.missing : [body.missing]);
-        }
+        setMissingFields(Array.isArray(body.missing) ? body.missing : [body.missing]);
         return;
       }
       if (!res.ok) {
@@ -188,6 +172,16 @@ export default function StrengthScoreScreen({ navigation }: Props) {
         return;
       }
       const data: ScoreData = await res.json();
+      // No strength lifts tracked (e.g. cardio-only user) — the endpoint still
+      // returns 200 with a real Greek rank (consistency/dedication/volume don't
+      // need strength data), but this screen is specifically about lifts, so it
+      // shows its own empty state rather than a card full of zeroed-out rows.
+      if (data.exercises_used === 0) {
+        setNoData(true);
+        setMissingFields([]);
+        setError(false);
+        return;
+      }
       setScoreData(data);
       if (data.history) setHistory(data.history);
       setMissingFields([]);
@@ -301,12 +295,12 @@ export default function StrengthScoreScreen({ navigation }: Props) {
   let bwFreshnessCaption: string | null = null;
   if (scoreData) {
     if (!scoreData.bodyweight_updated_at) {
-      bwFreshnessCaption = 'No bodyweight logged — update it';
+      bwFreshnessCaption = 'No bodyweight logged. Update it';
     } else {
       const daysSince = (Date.now() - new Date(scoreData.bodyweight_updated_at).getTime()) / 86400000;
       if (daysSince > 30) {
         const dateStr = new Date(scoreData.bodyweight_updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        bwFreshnessCaption = `Bodyweight as of ${dateStr} — update it`;
+        bwFreshnessCaption = `Bodyweight as of ${dateStr}. Update it`;
       }
     }
   }
@@ -446,7 +440,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               {heroExpanded && (
                 <>
                   <Text style={styles.insightText}>
-                    "Stronger than" compares your bodyweight-adjusted lifts to reference strength standards for your gender — not literally every lifter in the app.
+                    "Stronger than" compares your bodyweight-adjusted lifts to reference strength standards for your gender, not literally every lifter in the app.
                   </Text>
                   {scoreData.age_adjusted && scoreData.age != null && (
                     <View style={styles.ageBadge}>
@@ -499,7 +493,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
           {/* Muscle Group Scores */}
           {scoreData.muscle_groups && scoreData.muscle_groups.length > 0 && (
             <Reanimated.View entering={FadeInDown.delay(100).duration(400)}>
-              <SectionRule label="Muscle Group Ranks" />
+              <SectionRule label="Muscle Group Ranks" style={{ marginBottom: spacing.sm }} fontSize={typography.fontSize.sm} />
               <MuscleDiagram
                 muscles={scoreData.muscle_groups.map(mg => mg.name)}
                 muscleColors={Object.fromEntries(
@@ -545,7 +539,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
           {/* Big 6 Lifts */}
           {scoreData.big6 && (
             <Reanimated.View entering={FadeInDown.delay(200).duration(400)}>
-              <SectionRule label="Big 6 Lifts" />
+              <SectionRule label="Big 6 Lifts" style={{ marginBottom: spacing.sm }} fontSize={typography.fontSize.sm} />
               <View style={styles.card}>
                 {scoreData.big6.map((ex, i) => {
                   const exColor = ex.rank ? (SCORE_RANK_COLORS[ex.rank.label] ?? colors.accent) : colors.border;
@@ -596,7 +590,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
           {scoreData.supplemental && scoreData.supplemental.length > 0 && (
             <Reanimated.View entering={FadeInDown.delay(300).duration(400)}>
               <View style={styles.moreLiftsTitleRow}>
-                <SectionRule label="More Lifts" style={{ flex: 1, marginBottom: 0 }} />
+                <SectionRule label="More Lifts" style={{ flex: 1, marginBottom: 0 }} fontSize={typography.fontSize.sm} />
                 <TouchableOpacity onPress={() => setCoverageModalVisible(true)} hitSlop={8}>
                   <Ionicons name="information-circle-outline" size={22} color={colors.textSecondary} />
                 </TouchableOpacity>
@@ -662,7 +656,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
             return (
               <Reanimated.View entering={FadeInDown.delay(400).duration(400)}>
                 <View style={styles.moreLiftsTitleRow}>
-                  <SectionRule label="Score Over Time" style={{ flex: 1, marginBottom: 0 }} />
+                  <SectionRule label="Score Over Time" style={{ flex: 1, marginBottom: 0 }} fontSize={typography.fontSize.sm} />
                   <View style={styles.rangeToggle}>
                     {(['1M', '3M', '6M', 'All'] as const).map(r => (
                       <TouchableOpacity
@@ -762,7 +756,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
             <View style={styles.infoSection}>
               <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>Strength Percentile</Text>
               <Text style={[styles.infoBody, { color: colors.textSecondary }]}>
-                Your estimated 1RM for each exercise is compared against population standards adjusted for your gender and bodyweight. The result is a percentile — how you stack up against all lifters. Ranks go from Noobie → Beginner → Intermediate → Advanced → Elite → Legend.
+                Your estimated 1RM for each exercise is compared against population standards adjusted for your gender and bodyweight. The result is a percentile: how you stack up against all lifters. Ranks go from Noobie → Beginner → Intermediate → Advanced → Elite → Legend.
               </Text>
             </View>
 
@@ -783,7 +777,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
             <View style={styles.infoSection}>
               <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>Estimated 1RM</Text>
               <Text style={[styles.infoBody, { color: colors.textSecondary }]}>
-                If you haven't logged a true 1-rep max, we use the Epley formula — weight × (1 + reps ÷ 30) — applied to your best logged set for each exercise.
+                If you haven't logged a true 1-rep max, we use the Epley formula (weight × (1 + reps ÷ 30)) applied to your best logged set for each exercise.
               </Text>
             </View>
           </View>
@@ -880,13 +874,13 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                 <>
                   {compound.length > 0 && (
                     <>
-                      <SectionRule label="Compound" />
+                      <SectionRule label="Compound" style={{ marginBottom: spacing.sm }} fontSize={typography.fontSize.sm} />
                       {renderGrid(compound)}
                     </>
                   )}
                   {isolation.length > 0 && (
                     <>
-                      <SectionRule label="Isolation" style={{ marginTop: spacing.md }} />
+                      <SectionRule label="Isolation" style={{ marginTop: spacing.md, marginBottom: spacing.sm }} fontSize={typography.fontSize.sm} />
                       {renderGrid(isolation)}
                     </>
                   )}
@@ -1017,7 +1011,7 @@ const createStyles = (colors: Colors) =>
     heroTextCol: { flex: 1, gap: spacing.xs },
     rankBadge: {
       alignSelf: 'flex-start', borderRadius: radius.sm, borderWidth: 1,
-      paddingHorizontal: spacing.sm, paddingVertical: 4,
+      paddingHorizontal: spacing.sm, paddingVertical: spacing.xs,
     },
     rankLabel: { fontSize: typography.fontSize.md, fontWeight: '700' },
     percentileText: { fontSize: typography.fontSize.lg, fontWeight: '800', color: colors.textPrimary },
@@ -1031,9 +1025,9 @@ const createStyles = (colors: Colors) =>
       textTransform: 'uppercase', letterSpacing: 0.5,
     },
     strongestWeakestValue: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary, marginTop: 2 },
-    greekTeaserText: { fontSize: typography.fontSize.sm, color: colors.accent, fontWeight: '600', marginTop: 4 },
+    greekTeaserText: { fontSize: typography.fontSize.sm, color: colors.accent, fontWeight: '600', marginTop: spacing.xs },
     heroExpandToggle: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
       marginTop: spacing.sm, paddingVertical: spacing.xs,
     },
     heroExpandText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
@@ -1041,7 +1035,7 @@ const createStyles = (colors: Colors) =>
       flexDirection: 'row', backgroundColor: colors.surface,
       borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm + 2, padding: 2,
     },
-    rangeBtn: { paddingVertical: 4, paddingHorizontal: 12, borderRadius: radius.sm, alignItems: 'center' },
+    rangeBtn: { paddingVertical: spacing.xs, paddingHorizontal: 12, borderRadius: radius.sm, alignItems: 'center' },
     rangeBtnText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
     rankUpBanner: {
       flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
@@ -1098,7 +1092,7 @@ const createStyles = (colors: Colors) =>
     tierLabel: { fontSize: typography.fontSize.sm, marginLeft: spacing.xs },
     groupScore: { fontSize: typography.fontSize.sm, textAlign: 'center' },
 
-    infoSection: { gap: 4 },
+    infoSection: { gap: spacing.xs },
     infoHeading: { fontSize: typography.fontSize.md, fontWeight: '700' },
     infoBody: { fontSize: typography.fontSize.sm, lineHeight: 20 },
     moreLiftsTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm, marginBottom: spacing.sm },
@@ -1115,5 +1109,5 @@ const createStyles = (colors: Colors) =>
     legendRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.xs },
     legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
     legendDot: { width: 8, height: 8, borderRadius: 4 },
-    legendLabel: { fontSize: 11 },
+    legendLabel: { fontSize: typography.fontSize.xs },
   });

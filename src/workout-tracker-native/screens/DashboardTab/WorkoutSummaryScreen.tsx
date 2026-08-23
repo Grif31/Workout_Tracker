@@ -189,7 +189,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
         <Animated.View entering={FadeInDown.duration(400)} style={s.hero}>
           <Text style={s.trophy}>🏆</Text>
           <Text style={s.headline}>
-            {isFirstWorkout ? 'Your first workout — incredible!' : 'Great workout!'}
+            {isFirstWorkout ? 'Your first workout. Incredible!' : 'Great workout!'}
           </Text>
           <Text style={s.subline}>"{workoutName}"</Text>
         </Animated.View>
@@ -200,7 +200,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
               <View style={s.prDropdownHeader}>
                 <LaurelBranch height={20} color={PR_GOLD_TEXT} />
                 <Text style={s.prText}>
-                  {groupedPrs[0].exercise_name} — new {PR_TYPE_LABELS[groupedPrs[0].pr_type] ?? groupedPrs[0].pr_type.replace(/_/g, ' ')} PR!
+                  {groupedPrs[0].exercise_name}: new {PR_TYPE_LABELS[groupedPrs[0].pr_type] ?? groupedPrs[0].pr_type.replace(/_/g, ' ')} PR!
                   {groupedPrs[0].count > 1 ? ` ×${groupedPrs[0].count}` : ''}
                 </Text>
                 <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
@@ -223,7 +223,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
                   <View key={i} style={s.prBanner}>
                     <LaurelBranch height={20} color={PR_GOLD_TEXT} />
                     <Text style={s.prText}>
-                      {pr.exercise_name} — new {PR_TYPE_LABELS[pr.pr_type] ?? pr.pr_type.replace(/_/g, ' ')} PR!
+                      {pr.exercise_name}: new {PR_TYPE_LABELS[pr.pr_type] ?? pr.pr_type.replace(/_/g, ' ')} PR!
                       {pr.count > 1 ? ` ×${pr.count}` : ''}
                     </Text>
                     <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
@@ -235,7 +235,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
         )}
 
         {greekRank && !isFirstWorkout && (() => {
-          const rankColor = GREEK_RANK_COLORS[greekRank] ?? '#888888';
+          const rankColor = GREEK_RANK_COLORS[greekRank] ?? GREEK_RANK_COLORS.Neophyte;
           const rankIdx = GREEK_RANKS.findIndex(r => r.name === greekRank);
           const nextRank = GREEK_RANKS[rankIdx + 1];
           return (
@@ -334,18 +334,18 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
 
 const createStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20, paddingTop: 56, paddingBottom: 8 },
+  header: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20, paddingTop: 56, paddingBottom: spacing.sm },
   closeBtn: { padding: spacing.sm },
   closeText: { fontSize: typography.fontSize.xl, color: colors.textSecondary },
   hero: { alignItems: 'center', paddingHorizontal: spacing.lg, paddingBottom: 20 },
-  trophy: { fontSize: 48, marginBottom: 8 },
+  trophy: { fontSize: 48, marginBottom: spacing.sm },
   headline: { fontSize: typography.fontSize.xl, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
-  subline: { fontSize: 15, color: colors.textSecondary, marginTop: 4, textAlign: 'center' },
+  subline: { fontSize: 15, color: colors.textSecondary, marginTop: spacing.xs, textAlign: 'center' },
   section: { paddingHorizontal: 20, marginBottom: 20 },
-  prDropdownHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: PR_GOLD, borderRadius: 10, padding: 12, marginBottom: 8 },
-  prBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: PR_GOLD_BG, borderRadius: 10, padding: 12, marginBottom: 8 },
+  prDropdownHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: PR_GOLD, borderRadius: 10, padding: 12, marginBottom: spacing.sm },
+  prBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: PR_GOLD_BG, borderRadius: 10, padding: 12, marginBottom: spacing.sm },
   prText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: PR_GOLD_TEXT, flex: 1 },
-  prChevron: { fontSize: 13, color: PR_GOLD_TEXT, marginLeft: 4 },
+  prChevron: { fontSize: 13, color: PR_GOLD_TEXT, marginLeft: spacing.xs },
   statsRow: { flexDirection: 'row', gap: 10 },
   statBox: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: 14, alignItems: 'center' },
   statValue: { fontSize: typography.fontSize.xl, fontWeight: '700', color: colors.textPrimary },
@@ -353,7 +353,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   diagramCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
   diagramTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 12 },
   exCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: 14, marginBottom: 10 },
-  exName: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
+  exName: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: spacing.sm },
   setBadge: { backgroundColor: colors.background, borderRadius: 6, paddingHorizontal: spacing.sm, paddingVertical: 3 },
   setBadgeText: { fontSize: 12, color: colors.textSecondary },
   rankBadgeCard: { borderRadius: radius.md, padding: 14, borderWidth: 1 },

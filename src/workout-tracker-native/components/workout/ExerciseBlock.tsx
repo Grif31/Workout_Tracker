@@ -264,7 +264,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   setHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
     paddingHorizontal: 2,
   },
   setHeaderCell: {
@@ -280,7 +280,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: spacing.xs,
     marginTop: spacing.sm,
     paddingVertical: spacing.sm,
     borderTopWidth: 1,

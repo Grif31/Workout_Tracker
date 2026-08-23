@@ -31,7 +31,7 @@ type RemovedState = { scope: Scope; index: number; exercise: PreviewExercise } |
 const BOTTOM_BAR_HEIGHT = 76;
 
 export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
-  const { generateType, description: initDesc, coachDays, coachGoal, coachExp, coachEquipment, coachSessionLength, coachAvoid } = route.params;
+  const { generateType, description: initDesc, coachDays, coachGoal, coachExp, coachEquipment, coachSessionLength, coachAvoid, coachNotes } = route.params;
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
@@ -76,6 +76,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
           session_length_min: parseInt(coachSessionLength, 10),
           avoid: coachAvoid,
           generate_type: generateType,
+          notes: coachNotes,
         }),
       });
       const data = await res.json();

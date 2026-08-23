@@ -1174,6 +1174,58 @@ class TestStrengthScoreUnits:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/stats/strength-score — cardio-only users (no tracked strength
+# lifts). Must return 200 with a real Greek rank, not 422 — strength is only
+# 45% of the Greek score, so consistency/dedication/volume alone are enough
+# to produce a rank even with zero strength data.
+# ---------------------------------------------------------------------------
+
+class TestStrengthScoreCardioOnlyUser:
+
+    def test_no_strength_lifts_returns_200_not_422(self, client, auth_token):
+        h = auth_headers(auth_token)
+        res = client.patch('/api/me', json={'gender': 'male', 'bodyweight': 180}, headers=h)
+        assert res.status_code == 200
+
+        tid = _create_template(client, auth_token, 'Running', 'Core')
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Run',
+            'exercises': [{
+                'name': 'Running', 'exercise_template_id': tid, 'exercise_type': 'cardio',
+                'sets': [{'cardio_duration': 30, 'distance': 5, 'distance_unit': 'km'}],
+            }],
+        }, headers=h)
+        assert res.status_code == 201
+
+        res = client.get('/api/stats/strength-score', headers=h)
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data['exercises_used'] == 0
+        assert data['overall'] == 0
+        assert data['muscle_groups_used'] == 0
+        # Every Big 6 lift is reported as untracked rather than the list being omitted
+        assert all(not e['has_data'] for e in data['big6'])
+        # Greek rank/score must still be computed (consistency/dedication/volume
+        # only — strength contributes 0 to its 45% weight, it doesn't block the rest)
+        assert data['greek_rank'] is not None
+        assert data['greek_score'] > 0
+        assert data['greek_score_components']['strength'] == 0
+
+    def test_zero_workouts_still_returns_200(self, client, auth_token):
+        # Brand-new user, no workouts logged at all yet — still not an error.
+        h = auth_headers(auth_token)
+        res = client.patch('/api/me', json={'gender': 'male', 'bodyweight': 180}, headers=h)
+        assert res.status_code == 200
+
+        res = client.get('/api/stats/strength-score', headers=h)
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data['exercises_used'] == 0
+        assert data['greek_score'] == 0
+        assert data['greek_rank'] == 'Neophyte'
+
+
+# ---------------------------------------------------------------------------
 # GET /api/stats/strength-score — additive response fields (age_factor,
 # bodyweight_updated_at, coverage). Purely additive — must not change any of
 # the existing fields asserted above.

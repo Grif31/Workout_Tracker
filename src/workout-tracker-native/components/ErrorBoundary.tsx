@@ -42,6 +42,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 }
 
+// Hardcoded colors — this is a class component sitting above ThemeContext,
+// and must still render correctly if the crash it's catching came from theme/context itself.
 const styles = StyleSheet.create({
   container: {
     flex: 1,

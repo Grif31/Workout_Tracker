@@ -22,6 +22,7 @@ import { TrainingStackParamsList } from '../../navigation/types';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { SCORE_RANK_COLORS } from '../../constants/strengthRanks';
 import CoachProfileModal, { CoachProfile, COACH_PROFILE_KEY } from './CoachProfileModal';
+import SectionRule from '../../components/SectionRule';
 import { GREEK_RANK_COLORS } from '../../constants/greekRanks';
 import WeeklyGoalModal from '../../components/coach/WeeklyGoalModal';
 import WorkingSetsInfoModal from '../../components/coach/WorkingSetsInfoModal';
@@ -388,7 +389,15 @@ export default function CoachScreen({ navigation }: Props) {
   const fetchInsights = async () => {
     setInsightsLoading(true);
     try {
-      const res = await apiFetch('/api/ai/insights', { method: 'POST' });
+      const res = await apiFetch('/api/ai/insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          experience: coachProfile.experience,
+          goal: coachProfile.goal,
+          avoid: coachProfile.avoid[0] ?? 'none',
+        }),
+      });
       const data = await res.json();
       if (!res.ok) { Alert.alert('Error', data.message || 'Could not load insights'); return; }
       setInsights(data.insights ?? []);
@@ -420,6 +429,7 @@ export default function CoachScreen({ navigation }: Props) {
           avoid: coachProfile.avoid[0] ?? 'none',
           generate_type: 'template',
           muscles,
+          notes: coachProfile.notes,
         }),
       });
       const data = await res.json();
@@ -436,6 +446,7 @@ export default function CoachScreen({ navigation }: Props) {
         coachEquipment: coachProfile.equipment,
         coachSessionLength: String(coachProfile.session_length_min),
         coachAvoid: coachProfile.avoid[0] ?? 'none',
+        coachNotes: coachProfile.notes,
       });
     } catch {
       Alert.alert('Error', 'Could not reach AI service');
@@ -459,6 +470,7 @@ export default function CoachScreen({ navigation }: Props) {
           session_length_min: coachProfile.session_length_min,
           avoid: coachProfile.avoid[0] ?? 'none',
           generate_type: 'routine',
+          notes: coachProfile.notes,
         }),
       });
       const data = await res.json();
@@ -475,6 +487,7 @@ export default function CoachScreen({ navigation }: Props) {
         coachEquipment: coachProfile.equipment,
         coachSessionLength: String(coachProfile.session_length_min),
         coachAvoid: coachProfile.avoid[0] ?? 'none',
+        coachNotes: coachProfile.notes,
       });
     } catch {
       Alert.alert('Error', 'Could not reach AI service');
@@ -538,17 +551,9 @@ export default function CoachScreen({ navigation }: Props) {
   // ── Render helpers ──────────────────────────────────────────────────────────
   const rankColor = GREEK_RANK_COLORS[greekRank] ?? colors.accent;
 
-  const SectionRule = ({ label, style }: { label: string; style?: object }) => (
-    <View style={[styles.sectionRuleRow, style]}>
-      <View style={styles.sectionRuleLine} />
-      <Text style={styles.sectionRuleLabel}>{label}</Text>
-      <View style={styles.sectionRuleLine} />
-    </View>
-  );
-
   const renderInsightCard = (ins: Insight, idx: number) => {
     const icon = INSIGHT_ICONS[ins.type] ?? 'bulb-outline';
-    const priorityColor = ins.priority === 'high' ? colors.danger : ins.priority === 'medium' ? colors.warmup : colors.accent;
+    const priorityColor = ins.type === 'achievement' ? colors.save : ins.priority === 'high' ? colors.danger : ins.priority === 'medium' ? colors.warmup : colors.accent;
     const anim = insightAnimsRef.current[idx] ?? new Animated.Value(1);
     return (
       <Animated.View
@@ -579,7 +584,7 @@ export default function CoachScreen({ navigation }: Props) {
       <View style={{ flex: 1 }}>
         <View style={[styles.insightPlaceholderLine, { width: '60%' }]} />
         <View style={[styles.insightPlaceholderLine, { width: '90%', marginTop: 6 }]} />
-        <View style={[styles.insightPlaceholderLine, { width: '75%', marginTop: 4 }]} />
+        <View style={[styles.insightPlaceholderLine, { width: '75%', marginTop: spacing.xs }]} />
       </View>
     </View>
   );
@@ -781,7 +786,7 @@ export default function CoachScreen({ navigation }: Props) {
               </>
             ) : (
               <Text style={styles.noRoutineText}>
-                {routines.length === 0 ? 'No routines yet — tap to create one' : 'No active routine — tap to select one'}
+                {routines.length === 0 ? 'No routines yet. Tap to create one' : 'No active routine. Tap to select one'}
               </Text>
             )}
           </TouchableOpacity>
@@ -907,7 +912,7 @@ export default function CoachScreen({ navigation }: Props) {
             <View style={styles.coachHeroInfo}>
               <Text style={[styles.coachRankBadge, { color: rankColor }]}>{greekRank}</Text>
               <Text style={styles.coachGreeting}>
-                Hey {user?.name || user?.username || 'Athlete'} — your AI coach is here.
+                Hey {user?.name || user?.username || 'Athlete'}, your AI coach is here.
               </Text>
               <TouchableOpacity
                 style={styles.profileBtn}
@@ -1176,7 +1181,7 @@ export default function CoachScreen({ navigation }: Props) {
                     />
                   ) : (
                     <View style={styles.chartEmpty}>
-                      <Text style={styles.emptyText}>No data — log some workouts first</Text>
+                      <Text style={styles.emptyText}>No data yet. Log some workouts first</Text>
                     </View>
                   )}
 
@@ -1251,7 +1256,7 @@ export default function CoachScreen({ navigation }: Props) {
         visible={musclePickerVisible}
         onClose={() => setMusclePickerVisible(false)}
         title="What muscles are you training?"
-        subtitle="Select any that apply — we'll pre-filter your exercise list."
+        subtitle="Select any that apply. We'll pre-filter your exercise list."
         muscles={muscleGroups}
         selected={selectedMuscles}
         onToggle={mg => setSelectedMuscles(prev => prev.includes(mg) ? prev.filter(m => m !== mg) : [...prev, mg])}
@@ -1264,7 +1269,7 @@ export default function CoachScreen({ navigation }: Props) {
         visible={aiMusclePickerVisible}
         onClose={() => setAiMusclePickerVisible(false)}
         title="Target muscles for this template?"
-        subtitle="Pick the muscles you want to train — your AI coach will build around them."
+        subtitle="Pick the muscles you want to train. Your AI coach will build around them."
         muscles={muscleGroups.filter(mg => mg !== 'Other')}
         selected={aiSelectedMuscles}
         onToggle={mg => setAiSelectedMuscles(prev => prev.includes(mg) ? prev.filter(m => m !== mg) : [...prev, mg])}
@@ -1311,7 +1316,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     width: 100, height: 100, borderRadius: 50, borderWidth: 4,
     backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
   },
-  scoreNum: { fontSize: 28, fontWeight: '800', lineHeight: 32 },
+  scoreNum: { fontSize: typography.fontSize.xxl, fontWeight: '800', lineHeight: 32 },
   scoreCircleLabel: { fontSize: 9, fontWeight: '700', color: colors.textSecondary, letterSpacing: 1, textTransform: 'uppercase' },
   scoreRankLabel: { fontSize: typography.fontSize.xs, fontWeight: '700', letterSpacing: 0.3 },
   goalSide: {
@@ -1336,7 +1341,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   chartHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   chartTitle: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
-  rangeDropdown: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: colors.border },
+  rangeDropdown: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: 6, borderWidth: 1, borderColor: colors.border },
   rangeDropdownText: { fontSize: typography.fontSize.xs, fontWeight: '600', color: colors.textSecondary },
   chartEmpty: { height: 150, justifyContent: 'center', alignItems: 'center' },
   metricBar: {
@@ -1345,7 +1350,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     overflow: 'hidden', position: 'relative',
   },
   metricItem: { flex: 1, paddingVertical: 9, alignItems: 'center', justifyContent: 'center' },
-  metricDivider: { width: 1, backgroundColor: colors.border, marginVertical: 8 },
+  metricDivider: { width: 1, backgroundColor: colors.border, marginVertical: spacing.sm },
   metricText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
   metricSlider: { position: 'absolute', bottom: 0, height: 2, backgroundColor: colors.accent, borderRadius: 1 },
   scoreCardTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, marginBottom: 3 },
@@ -1356,7 +1361,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   mvHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: spacing.sm },
   mvWeekRange: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 1 },
   mvTotalText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontWeight: '500' },
-  mvColLabels: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  mvColLabels: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.xs },
   mvColLabel: { fontSize: 9, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
   mvRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, gap: spacing.xs },
   mvMuscle: { width: 80, fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
@@ -1384,16 +1389,13 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   toggleDaysBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600' },
   dayRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.xs, borderTopWidth: 1, borderTopColor: colors.border },
   dayLabel: { fontSize: typography.fontSize.md, color: colors.textPrimary },
-  dayExCount: { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
+  dayExCount: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 1 },
   logDayBtn: { backgroundColor: colors.save, borderRadius: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   logDayBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
   noRoutineText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontStyle: 'italic' },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   newTemplateBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   newTemplateBtnText: { color: colors.save, fontWeight: '600', fontSize: typography.fontSize.sm },
-  sectionRuleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  sectionRuleLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-  sectionRuleLabel: { fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1.2 },
   card: { backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md, marginBottom: spacing.sm },
   cardRow: { flexDirection: 'row', alignItems: 'center' },
   cardName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
@@ -1412,13 +1414,13 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: spacing.xs,
     paddingVertical: spacing.sm,
   },
   showAllBtnText: { fontWeight: '600', fontSize: typography.fontSize.sm },
-  muscleChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 5 },
+  muscleChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: 5 },
   templateMuscleChip: { backgroundColor: colors.accent + '20', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
-  templateMuscleChipText: { fontSize: 11, color: colors.accent, fontWeight: '600' },
+  templateMuscleChipText: { fontSize: typography.fontSize.xs, color: colors.accent, fontWeight: '600' },
 
   // ── Coach tab ───────────────────────────────────────────────────────────────
   coachContent: { padding: spacing.md, paddingBottom: spacing.xl * 2 },
@@ -1431,7 +1433,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   coachHeroInfo: { flex: 1, gap: spacing.xs },
   coachRankBadge: { fontSize: typography.fontSize.lg, fontWeight: '800', letterSpacing: 0.5 },
   coachGreeting: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 20 },
-  profileBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  profileBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: 2 },
   profileBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.accent },
   aiCoachCard: { marginBottom: spacing.md, gap: spacing.sm },
   generateBtnRow: { flexDirection: 'row', gap: spacing.sm },
@@ -1450,7 +1452,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   insightCardLocked: { opacity: 0.45 },
   insightIconWrap: { width: 32, alignItems: 'center', paddingTop: 2 },
-  insightTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 },
+  insightTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs },
   insightBody: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 18 },
   insightPlaceholderLine: { height: 10, backgroundColor: colors.border, borderRadius: 5 },
   insightsEmpty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },

@@ -366,7 +366,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    gap: 4,
+    gap: spacing.xs,
   },
   plateChipDot: {
     width: 8,

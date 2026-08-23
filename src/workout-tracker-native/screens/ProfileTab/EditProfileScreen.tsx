@@ -199,7 +199,7 @@ export default function EditProfileScreen({ navigation }: Props) {
           <View style={styles.pickerModal}>
             <View style={styles.pickerCard}>
               <TouchableOpacity style={styles.pickerDone} onPress={() => setShowDatePicker(false)}>
-                <Text style={{ color: colors.accent, fontWeight: '600', fontSize: 16 }}>Done</Text>
+                <Text style={{ color: colors.accent, fontWeight: '600', fontSize: typography.fontSize.md }}>Done</Text>
               </TouchableOpacity>
               <DateTimePicker
                 value={birthDate ?? new Date(1990, 0, 1)}
@@ -350,7 +350,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    paddingBottom: 32,
+    paddingBottom: spacing.xl,
   },
   pickerDone: {
     alignItems: 'flex-end',

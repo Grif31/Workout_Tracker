@@ -58,7 +58,7 @@ export default function GreekRankIntroScreen({ navigation }: Props) {
           <Text style={s.sectionTitle}>What is Greek Rank?</Text>
           <Text style={s.bodyText}>
             Greek Rank measures your overall progress as an athlete across four training pillars.
-            Complete more workouts, lift heavier, and stay consistent to climb from Neophyte all the way to Aretē — the pinnacle of human achievement.
+            Complete more workouts, lift heavier, and stay consistent to climb from Neophyte all the way to Aretē, the pinnacle of human achievement.
           </Text>
         </Animated.View>
 
@@ -177,7 +177,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   rankCircle: {
     width: 52, height: 52, borderRadius: 26,
     borderWidth: 2, alignItems: 'center', justifyContent: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   rankCircleIcon: { fontSize: typography.fontSize.lg, fontWeight: '800' },
   rankItemName: { fontSize: 10, fontWeight: '600', textAlign: 'center', marginBottom: 2 },
@@ -186,7 +186,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   // Pillars
   pillarRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: spacing.sm, gap: spacing.sm },
   pillarDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  pillarEmoji: { fontSize: 22, width: 30, textAlign: 'center' },
+  pillarEmoji: { fontSize: typography.fontSize.xl, width: 30, textAlign: 'center' },
   pillarText: { flex: 1 },
   pillarLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: 2 },
   pillarLabel: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },

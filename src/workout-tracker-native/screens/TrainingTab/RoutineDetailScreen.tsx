@@ -282,7 +282,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   seeMoreText: { fontSize: typography.fontSize.xs, fontWeight: '600', color: colors.accent },
   dayCount: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: spacing.sm },

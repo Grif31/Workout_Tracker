@@ -26,7 +26,7 @@ const PW_BORDER   = '#2A1F08';
 
 const FEATURES: { icon: string; label: string }[] = [
   { icon: 'trophy-outline', label: 'Strength Score & lifter ranking' },
-  { icon: 'sparkles',       label: 'AI Coach — generate routines & templates' },
+  { icon: 'sparkles',       label: 'AI Coach: generate routines & templates' },
   { icon: 'list-outline',   label: 'Unlimited templates & routines' },
   ...(APP_ICONS_ENABLED ? [{ icon: 'apps-outline', label: 'Custom app icons' }] : []),
 ];

@@ -46,7 +46,7 @@ describe('PaywallScreen', () => {
   it('shows the feature list', () => {
     const { getByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
     expect(getByText('Strength Score & lifter ranking')).toBeTruthy();
-    expect(getByText('AI Coach — generate routines & templates')).toBeTruthy();
+    expect(getByText('AI Coach: generate routines & templates')).toBeTruthy();
     expect(getByText('Unlimited templates & routines')).toBeTruthy();
   });
 

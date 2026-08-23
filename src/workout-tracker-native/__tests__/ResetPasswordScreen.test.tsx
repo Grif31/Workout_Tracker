@@ -88,7 +88,7 @@ describe('ResetPasswordScreen', () => {
       mockFetch({ message: 'ok' }, true);
       const { getByText } = render(<ResetPasswordScreen navigation={nav as any} route={route as any} />);
       fireEvent.press(getByText("Didn't receive a code? "));
-      await waitFor(() => expect(getByText('Sent — check your email')).toBeTruthy());
+      await waitFor(() => expect(getByText('Sent. Check your email')).toBeTruthy());
       const [url] = (global.fetch as jest.Mock).mock.calls[0];
       expect(url).toContain('/api/forgot-password');
     });

@@ -50,7 +50,7 @@ type PremiumSlide = {
 type Slide = ScreenshotSlide | PremiumSlide;
 
 const PREMIUM_FEATURES = [
-  'AI Coach — personalised programs in seconds',
+  'AI Coach: personalised programs in seconds',
   'Strength Score',
   'Unlimited templates & routines',
   ...(APP_ICONS_ENABLED ? ['Custom app icons'] : []),
@@ -84,12 +84,12 @@ const SLIDES: Slide[] = [
     type: 'screenshot',
     source: require('../../assets/screenshots/slide-ai.jpg'),
     title: 'Your AI Coach',
-    body: 'Build personalised programs in seconds, and get insights from your training — when to push, when to deload, and what needs work.',
+    body: 'Build personalised programs in seconds, and get insights from your training: when to push, when to deload, and what needs work.',
   },
   ...(BETA_PREMIUM ? [] : [{
     type: 'premium',
     title: 'Reach Your Peak',
-    body: 'Everything you need to train smarter and hit your goals — no fluff.',
+    body: 'Everything you need to train smarter and hit your goals. No fluff.',
   } as PremiumSlide]),
 ];
 

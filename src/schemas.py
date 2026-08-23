@@ -116,3 +116,9 @@ class AiGenerateSchema(_Base):
     session_length_min = fields.Int(load_default=60)
     avoid              = fields.Str(load_default='none')
     muscles            = fields.List(fields.Str(), load_default=[])
+    notes              = fields.Str(load_default=None)
+
+class AiInsightsSchema(_Base):
+    experience = fields.Str(load_default=None)
+    goal       = fields.Str(load_default=None)
+    avoid      = fields.Str(load_default=None)

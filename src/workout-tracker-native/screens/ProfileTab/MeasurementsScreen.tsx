@@ -313,7 +313,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
           </View>
         }
         ListEmptyComponent={
-          <Text style={styles.emptyText}>No entries yet — tap + to log your weight.</Text>
+          <Text style={styles.emptyText}>No entries yet. Tap + to log your weight.</Text>
         }
         renderItem={({ item }) => (
           <View style={styles.logRow}>
@@ -361,7 +361,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
           </View>
         }
         ListEmptyComponent={
-          <Text style={styles.emptyText}>No measurements yet — tap + to log.</Text>
+          <Text style={styles.emptyText}>No measurements yet. Tap + to log.</Text>
         }
         renderItem={({ item }) => {
           const LABELS: Record<keyof Measurement, string> = {
@@ -398,7 +398,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
       <View style={{ flex: 1 }}>
         {photos.length === 0 ? (
           <Text style={[styles.emptyText, { margin: spacing.xl }]}>
-            No progress photos yet — tap + to upload.
+            No progress photos yet. Tap + to upload.
           </Text>
         ) : (
           <FlatList
@@ -640,7 +640,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 1,
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   currentValue: {
     fontSize: 36,
@@ -675,7 +675,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   statBoxValue: {
     fontSize: typography.fontSize.xl,
@@ -710,7 +710,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.xs,
     color: colors.textSecondary,
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   fab: {
     position: 'absolute',

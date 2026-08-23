@@ -1,7 +1,10 @@
 import React, { forwardRef } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { LaurelBranch } from './LaurelWreath';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
 import { PR_GOLD, PR_GOLD_TEXT } from '../constants/prColors';
+import { SHARE_BG, SHARE_SURFACE, SHARE_DIVIDER, SHARE_TEXT, SHARE_TEXT_MUTED, SHARE_TEXT_FOOTER } from '../constants/shareCardTheme';
 
 type WeeklySummaryShareCardProps = {
   dateRange: string;
@@ -115,7 +118,7 @@ export default WeeklySummaryShareCard;
 const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
-    backgroundColor: '#0D0D0D',
+    backgroundColor: SHARE_BG,
     borderRadius: 20,
     overflow: 'hidden',
   },
@@ -123,7 +126,7 @@ const styles = StyleSheet.create({
     height: 5,
   },
   content: {
-    padding: 24,
+    padding: spacing.lg,
     paddingTop: 20,
   },
 
@@ -139,19 +142,19 @@ const styles = StyleSheet.create({
   },
   date: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: SHARE_TEXT_MUTED,
   },
 
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: SHARE_TEXT,
     lineHeight: 30,
     marginBottom: 14,
   },
 
   hero: {
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
   heroValue: {
     fontSize: 42,
@@ -161,7 +164,7 @@ const styles = StyleSheet.create({
   },
   heroLabel: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: SHARE_TEXT_MUTED,
     marginTop: 2,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -169,7 +172,7 @@ const styles = StyleSheet.create({
 
   statsRow: {
     flexDirection: 'row',
-    backgroundColor: '#1C1C1E',
+    backgroundColor: SHARE_SURFACE,
     borderRadius: 12,
     paddingVertical: 12,
     marginBottom: 14,
@@ -181,16 +184,16 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: SHARE_TEXT,
   },
   statLabel: {
     fontSize: 10,
-    color: '#8E8E93',
+    color: SHARE_TEXT_MUTED,
     marginTop: 2,
   },
   statDivider: {
     width: 1,
-    backgroundColor: '#2C2C2E',
+    backgroundColor: SHARE_DIVIDER,
     marginVertical: 2,
   },
 
@@ -198,11 +201,11 @@ const styles = StyleSheet.create({
     backgroundColor: PR_GOLD,
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
     marginBottom: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   prText: {
     fontSize: 13,
@@ -217,13 +220,13 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   highlightText: {
-    fontSize: 14,
-    color: '#FFFFFF',
+    fontSize: typography.fontSize.sm,
+    color: SHARE_TEXT,
   },
 
   footer: {
-    fontSize: 11,
-    color: '#636366',
+    fontSize: typography.fontSize.xs,
+    color: SHARE_TEXT_FOOTER,
     textAlign: 'center',
   },
 });

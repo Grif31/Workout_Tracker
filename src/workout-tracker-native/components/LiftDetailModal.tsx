@@ -4,6 +4,7 @@ import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { STRENGTH_TIERS, SCORE_RANK_COLORS } from '../constants/strengthRanks';
+import SectionRule from './SectionRule';
 
 export type LiftEntry = {
   exercise: string;
@@ -13,19 +14,6 @@ export type LiftEntry = {
   thresholds?: { percentile: number; rank: string; weight: number }[];
   has_data: boolean;
 };
-
-function SectionRule({ label, style }: { label: string; style?: object }) {
-  const { colors } = useTheme();
-  return (
-    <View style={[{ flexDirection: 'row', alignItems: 'center' }, style]}>
-      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
-      <Text style={{ fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginHorizontal: spacing.sm }}>
-        {label}
-      </Text>
-      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
-    </View>
-  );
-}
 
 type Props = {
   visible: boolean;
@@ -65,7 +53,7 @@ export default function LiftDetailModal({ visible, onClose, lift, weightUnit }: 
                     <Text style={styles.liftPercentileSub}>of all lifters</Text>
                   )}
                   {lift.rank && (
-                    <View style={[styles.miniRankBadge, { backgroundColor: liftColor + '22', borderColor: liftColor, alignSelf: 'center', marginTop: 4 }]}>
+                    <View style={[styles.miniRankBadge, { backgroundColor: liftColor + '22', borderColor: liftColor, alignSelf: 'center', marginTop: spacing.xs }]}>
                       <Text style={[styles.miniRankText, { color: liftColor }]}>{lift.rank.display}</Text>
                     </View>
                   )}
@@ -145,10 +133,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   tierRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   tierDot: { width: 12, height: 12, borderRadius: 6 },
   tierLabel: { fontSize: typography.fontSize.sm, marginLeft: spacing.xs },
-  liftHero: { alignItems: 'center', gap: 4, paddingVertical: spacing.sm },
+  liftHero: { alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.sm },
   liftPercentileText: { fontSize: 36, fontWeight: '800' },
   liftPercentileSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
-  liftOneRM: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 4 },
+  liftOneRM: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: spacing.xs },
   markerTriangle: {
     position: 'absolute',
     width: 0,

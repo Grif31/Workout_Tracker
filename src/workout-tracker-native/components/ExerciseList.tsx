@@ -325,7 +325,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  closeBtn: { padding: 4, width: 60 },
+  closeBtn: { padding: spacing.xs, width: 60 },
   headerTitle: {
     fontSize: typography.fontSize.lg,
     fontWeight: '700',

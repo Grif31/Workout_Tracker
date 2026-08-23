@@ -2,6 +2,7 @@
 import { View, StyleSheet } from 'react-native';
 import Body, { ExtendedBodyPart, Slug } from 'react-native-body-highlighter';
 import { useTheme } from '../context/ThemeContext';
+import { spacing } from '../theme/spacing';
 
 type Props = {
   muscles?: string[];
@@ -79,6 +80,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'flex-start',
-    gap: 8,
+    gap: spacing.sm,
   },
 });

@@ -159,15 +159,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: AUTH.bg },
   scroll:    { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 40 },
 
-  backBtn: { marginBottom: 28, alignSelf: 'flex-start', padding: 4 },
+  backBtn: { marginBottom: 28, alignSelf: 'flex-start', padding: spacing.xs },
 
   title:    { fontSize: 30, fontWeight: '700', color: AUTH.text, marginBottom: 6 },
-  subtitle: { fontSize: 15, color: AUTH.subtext, marginBottom: 32 },
+  subtitle: { fontSize: 15, color: AUTH.subtext, marginBottom: spacing.xl },
 
   errorText: {
     color: AUTH.danger,
     fontSize: typography.fontSize.sm,
-    marginBottom: 16,
+    marginBottom: spacing.md,
     textAlign: 'center',
   },
 
@@ -188,9 +188,9 @@ const styles = StyleSheet.create({
     color: AUTH.text,
     fontSize: 15,
   },
-  eyeBtn: { padding: 4 },
+  eyeBtn: { padding: spacing.xs },
 
-  forgotRow: { alignItems: 'flex-end', marginBottom: 24 },
+  forgotRow: { alignItems: 'flex-end', marginBottom: spacing.lg },
   forgotText: { color: AUTH.accent, fontSize: typography.fontSize.sm, fontWeight: '500' },
 
   primaryBtn: {

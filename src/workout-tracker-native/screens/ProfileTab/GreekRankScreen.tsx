@@ -334,7 +334,7 @@ const createStyles = (colors: Colors) =>
     headerTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     scroll: { paddingTop: spacing.lg, gap: spacing.md },
-    heroSection: { alignItems: 'center', gap: 4 },
+    heroSection: { alignItems: 'center', gap: spacing.xs },
     rankNameLarge: { fontSize: 36, fontWeight: '900', letterSpacing: 1 },
     scoreSubtitle: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
     card: {
