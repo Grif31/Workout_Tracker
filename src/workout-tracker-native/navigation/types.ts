@@ -105,7 +105,10 @@ export type TrainingStackParamsList = {
         coachEquipment: string;
         coachSessionLength: string;
         coachAvoid: string;
-        coachNotes: string;
+        // Optional: not every navigate() call site supplies it yet, and
+        // AIWorkoutPreviewScreen doesn't consume it yet either — an
+        // in-progress "notes to coach" pass-through.
+        coachNotes?: string;
     };
 };
 export type ProfileStackParamsList = {
