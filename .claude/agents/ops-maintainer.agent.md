@@ -98,9 +98,11 @@ git revert <bad-sha> && git push
 ### Ship a new app build
 1. Confirm working tree is clean and tests pass: `npx jest --maxWorkers=2` and `npx tsc --noEmit` in `src/workout-tracker-native/` (default jest parallelism causes false timeout failures on this machine — always use `--maxWorkers=2`)
 2. **Bump `version` in `app.config.js`** (e.g. `1.1.2` → `1.1.3` for a normal update; use a minor bump instead if the release is feature-heavy). `appVersionSource: "remote"` + `autoIncrement: true` in `eas.json` already auto-increments the internal iOS `buildNumber`/Android `versionCode` on every build, but that's a separate counter from this user-facing marketing version string — it does NOT bump on its own. Commit this change before building.
-3. `eas build --profile production --platform ios`
-4. Builds are queued on Expo's servers — poll with `eas build:list --limit 1`
-5. `eas submit --platform ios` once the build finishes
+3. **Add a `CHANGELOG.md` entry** for the new version (root of the repo — `## X.Y.Z (YYYY-MM-DD)` heading, then `### New:` / `### Improved:` / `### Redesigned:` / `### Bug Fixes` sections, newest version at the top). User-facing language only — summarize what shipped since the last version bump, not internal refactors/cleanup. Commit alongside the version bump.
+4. **Write a short "what's new" blurb** for testers (2-4 sentences, punchy, not the full changelog) and pass it via `eas submit --what-to-test "<blurb>"` — this fills TestFlight's "What to Test" field directly so it doesn't need to be set manually in App Store Connect afterward.
+5. `eas build --profile production --platform ios`
+6. Builds are queued on Expo's servers — poll with `eas build:list --limit 1`
+7. `eas submit --platform ios --what-to-test "<blurb from step 4>"` once the build finishes
 
 ## Safety rules
 

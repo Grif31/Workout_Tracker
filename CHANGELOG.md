@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.1.3 (2026-08-24)
+
+### New: PR Dashboard
+- A dedicated Personal Records dashboard — tap the gold Personal Records box on your Profile to open it.
+- See your recent PRs from the past week, a streak counter, PRs this month, and how much weight/reps you've added this week at a glance.
+- "Time Since Last PR" surfaces exercises you haven't set a record in for a while, broken out by Weight, Reps, Time, and Distance.
+- Pin your favorite lifts to see a live progress chart right on the dashboard — pin as many PR types per exercise as you like (e.g. both Max Weight and Rep Record for the same lift).
+- Tap any PR to see its full history — a chart and table of every time you've beaten it, with a picker to switch between weights and metrics.
+- Filter everything by Weight, Reps, Time, or Distance.
+- Share any PR as an image.
+
+### New: Prefill Previous Sets toggle
+- New workout setting — when you add an exercise, it can pre-fill the sets with your reps/weight from last time. Toggle it off if you'd rather start blank.
+
+### Improved: AI Coach
+- Add notes for the AI Coach to consider when generating a routine or template.
+- Insights now factor in your experience level and goals.
+
+### Improved: Strength Score
+- Cardio-only users (no tracked strength lifts yet) now get a valid Strength Score based on consistency and volume, instead of an error.
+
+### Bug Fixes
+- Fixed "New PR!" banners re-appearing for the same exercise when it's logged in more than one block of a workout (supersets).
+- Fixed the map failing to load on Android during GPS cardio tracking.
+
 ## 1.1.2 (2026-08-05)
 
 ### New: Share Your Strength Score
