@@ -97,9 +97,10 @@ git revert <bad-sha> && git push
 
 ### Ship a new app build
 1. Confirm working tree is clean and tests pass: `npx jest --maxWorkers=2` and `npx tsc --noEmit` in `src/workout-tracker-native/` (default jest parallelism causes false timeout failures on this machine — always use `--maxWorkers=2`)
-2. `eas build --profile production --platform ios`
-3. Builds are queued on Expo's servers — poll with `eas build:list --limit 1`
-4. `eas submit --platform ios` once the build finishes
+2. **Bump `version` in `app.config.js`** (e.g. `1.1.2` → `1.1.3` for a normal update; use a minor bump instead if the release is feature-heavy). `appVersionSource: "remote"` + `autoIncrement: true` in `eas.json` already auto-increments the internal iOS `buildNumber`/Android `versionCode` on every build, but that's a separate counter from this user-facing marketing version string — it does NOT bump on its own. Commit this change before building.
+3. `eas build --profile production --platform ios`
+4. Builds are queued on Expo's servers — poll with `eas build:list --limit 1`
+5. `eas submit --platform ios` once the build finishes
 
 ## Safety rules
 
