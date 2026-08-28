@@ -32,7 +32,7 @@ type SetData = { id: number; reps?: number; weight?: number; set_type: string; c
 type ExerciseData = { id: number; name: string; sets: SetData[] };
 
 export default function WorkoutSummaryScreen({ route, navigation }: Props) {
-  const { workoutId, workoutName, prs, totalVolume, totalReps, totalSets, muscles, isFirstWorkout } = route.params;
+  const { workoutId, workoutName, prs, totalVolume, totalReps, totalSets, muscles, isFirstWorkout, isBestVolume, isBestReps } = route.params;
   const { colors } = useTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
@@ -46,6 +46,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const [prExpanded, setPrExpanded] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [greekRank, setGreekRank] = useState<string | null>(null);
+  const [greekScore, setGreekScore] = useState<number | null>(null);
   const [selectedFrame, setSelectedFrame] = useState('Neophyte');
 
   const PR_TYPE_ORDER: Record<string, number> = { max_weight: 0, max_reps: 1, max_duration: 2, best_distance: 3, best_time: 4 };
@@ -80,6 +81,16 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
       if (rankRaw) setGreekRank(rankRaw);
       if (frameRaw) setSelectedFrame(frameRaw);
     });
+    // Live score (for the rank-up progress bar) — the cached rank name above
+    // is enough for the badge and renders instantly, but the numeric score
+    // needed to compute progress isn't cached, so fetch it separately.
+    apiFetch('/api/stats/strength-score')
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data?.greek_score != null) setGreekScore(data.greek_score);
+        if (data?.greek_rank) setGreekRank(data.greek_rank);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -189,7 +200,15 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
         <Animated.View entering={FadeInDown.duration(400)} style={s.hero}>
           <Text style={s.trophy}>🏆</Text>
           <Text style={s.headline}>
-            {isFirstWorkout ? 'Your first workout. Incredible!' : 'Great workout!'}
+            {isFirstWorkout
+              ? 'Your first workout. Incredible!'
+              : isBestVolume && isBestReps
+              ? 'Biggest workout yet!'
+              : isBestVolume
+              ? 'Highest volume workout yet!'
+              : isBestReps
+              ? 'Most reps in a workout yet!'
+              : 'Great workout!'}
           </Text>
           <Text style={s.subline}>"{workoutName}"</Text>
         </Animated.View>
@@ -237,7 +256,14 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
         {greekRank && !isFirstWorkout && (() => {
           const rankColor = GREEK_RANK_COLORS[greekRank] ?? GREEK_RANK_COLORS.Neophyte;
           const rankIdx = GREEK_RANKS.findIndex(r => r.name === greekRank);
+          const currentRank = rankIdx >= 0 ? GREEK_RANKS[rankIdx] : GREEK_RANKS[0];
           const nextRank = GREEK_RANKS[rankIdx + 1];
+          const progress = greekScore != null && nextRank
+            ? Math.min(1, Math.max(0, (greekScore - currentRank.low) / (currentRank.high - currentRank.low)))
+            : null;
+          const ptsToNext = greekScore != null && nextRank
+            ? Math.max(0, Math.ceil(nextRank.low - greekScore))
+            : null;
           return (
             <Animated.View entering={FadeInDown.delay(150).duration(400)} style={s.section}>
               <View style={[s.rankBadgeCard, { backgroundColor: rankColor + '15', borderColor: rankColor + '44' }]}>
@@ -254,6 +280,16 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
                     </Text>
                   </View>
                 </View>
+                {progress != null && nextRank && (
+                  <View style={s.rankProgressWrap}>
+                    <View style={s.progressTrack}>
+                      <View style={[s.progressFill, { width: `${Math.round(progress * 100)}%`, backgroundColor: rankColor }]} />
+                    </View>
+                    <Text style={s.progressLabel}>
+                      {ptsToNext} point{ptsToNext !== 1 ? 's' : ''} to {nextRank.name}
+                    </Text>
+                  </View>
+                )}
               </View>
             </Animated.View>
           );
@@ -361,6 +397,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   rankAvatarWrap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.surface },
   rankBadgeName: { fontSize: typography.fontSize.md, fontWeight: '800', letterSpacing: 0.5 },
   rankBadgeSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  rankProgressWrap: { marginTop: spacing.sm },
+  progressTrack: { height: 8, backgroundColor: colors.border, borderRadius: 4, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 4 },
+  progressLabel: { fontSize: 12, color: colors.textSecondary, marginTop: spacing.xs },
   detailsBtn: { backgroundColor: colors.accent, borderRadius: radius.md, margin: 20, marginTop: spacing.xs, padding: spacing.md, alignItems: 'center' },
   detailsBtnText: { color: colors.accentText, fontSize: typography.fontSize.md, fontWeight: '600' },
   shareBtn: {

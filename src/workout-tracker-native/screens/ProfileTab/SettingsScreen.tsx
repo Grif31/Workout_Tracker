@@ -23,7 +23,7 @@ import { ProfileStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
-import { APP_ICONS_ENABLED } from '../../constants/featureFlags';
+import { APP_ICONS_ENABLED, HEALTH_SYNC_ENABLED } from '../../constants/featureFlags';
 import {
   requestNotificationPermission,
   scheduleWorkoutReminder,
@@ -398,38 +398,42 @@ export default function SettingsScreen({ navigation }: Props) {
       </View>
 
       {/* ── Health Sync ── */}
-      <Text style={styles.sectionLabel}>Health</Text>
-      <View style={styles.group}>
-        <View style={styles.row}>
-          <View style={styles.rowLeft}>
-            <Ionicons name="heart-outline" size={20} color={colors.textSecondary} />
-            <Text style={styles.rowLabel}>
-              {Platform.OS === 'ios' ? 'Sync to Apple Health' : 'Sync to Health Connect'}
-            </Text>
+      {HEALTH_SYNC_ENABLED && (
+        <>
+          <Text style={styles.sectionLabel}>Health</Text>
+          <View style={styles.group}>
+            <View style={styles.row}>
+              <View style={styles.rowLeft}>
+                <Ionicons name="heart-outline" size={20} color={colors.textSecondary} />
+                <Text style={styles.rowLabel}>
+                  {Platform.OS === 'ios' ? 'Sync to Apple Health' : 'Sync to Health Connect'}
+                </Text>
+              </View>
+              <Switch
+                value={healthSyncOn}
+                onValueChange={async (v) => {
+                  if (v) {
+                    const granted = Platform.OS === 'ios'
+                      ? await requestHealthKitPermission()
+                      : await requestHealthConnectPermission();
+                    if (!granted) {
+                      Alert.alert(
+                        'Permission Required',
+                        `Allow ${Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect'} access in your device settings to enable this feature.`,
+                      );
+                      return;
+                    }
+                  }
+                  setHealthSyncOn(v);
+                  await AsyncStorage.setItem(perUserHealthSyncKey, String(v));
+                }}
+                trackColor={{ false: colors.border, true: colors.accent }}
+                thumbColor="#fff"
+              />
+            </View>
           </View>
-          <Switch
-            value={healthSyncOn}
-            onValueChange={async (v) => {
-              if (v) {
-                const granted = Platform.OS === 'ios'
-                  ? await requestHealthKitPermission()
-                  : await requestHealthConnectPermission();
-                if (!granted) {
-                  Alert.alert(
-                    'Permission Required',
-                    `Allow ${Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect'} access in your device settings to enable this feature.`,
-                  );
-                  return;
-                }
-              }
-              setHealthSyncOn(v);
-              await AsyncStorage.setItem(perUserHealthSyncKey, String(v));
-            }}
-            trackColor={{ false: colors.border, true: colors.accent }}
-            thumbColor="#fff"
-          />
-        </View>
-      </View>
+        </>
+      )}
 
       {/* ── App Info ── */}
       <Text style={styles.sectionLabel}>App</Text>

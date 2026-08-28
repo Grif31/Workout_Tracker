@@ -260,6 +260,33 @@ class TestProfileStats:
         data = client.get('/api/stats/profile', headers=auth_headers(auth_token)).get_json()
         assert data['longest_daily_streak'] == 3
 
+    def test_monthly_streak_counts_completed_months_even_when_current_month_is_incomplete(self, client, auth_token, app):
+        # An in-progress current month that hasn't hit the goal yet must not
+        # zero out a streak built from fully-completed prior months.
+        user_id = get_user_id(client, auth_token)
+        today = date.today()
+
+        def months_ago(n):
+            y, m = today.year, today.month - n
+            while m <= 0:
+                m += 12
+                y -= 1
+            return y, m
+
+        with app.app_context():
+            # Two full months (2 and 1 months ago), each meeting the default
+            # weekly_goal=1 -> monthly_goal=4 threshold.
+            for n in (2, 1):
+                y, m = months_ago(n)
+                for day in (5, 10, 15, 20):
+                    db.session.add(Workout(user_id=user_id, name=f'{y}-{m}-{day}', date=datetime(y, m, day, 12, 0, 0)))
+            # Current (in-progress) month: only 1 workout, below the goal.
+            db.session.add(Workout(user_id=user_id, name='current', date=datetime(today.year, today.month, 1, 12, 0, 0)))
+            db.session.commit()
+
+        data = client.get('/api/stats/profile', headers=auth_headers(auth_token)).get_json()
+        assert data['current_monthly_streak'] == 2
+
     def test_does_not_include_other_users(self, client, auth_token, auth_token2):
         create_workout(client, auth_token)
         data = client.get('/api/stats/profile', headers=auth_headers(auth_token2)).get_json()

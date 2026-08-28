@@ -22,6 +22,8 @@ export default function WorkoutLogScreen({ route, navigation }: Props) {
             totalSets: summary.totalSets,
             muscles: summary.muscles,
             isFirstWorkout: summary.isFirstWorkout,
+            isBestVolume: summary.isBestVolume,
+            isBestReps: summary.isBestReps,
           });
         } else {
           navigation.goBack();

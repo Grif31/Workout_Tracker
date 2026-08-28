@@ -66,7 +66,7 @@ type Props = {
   prefill?: PrefillWorkoutData;
   editMode?: boolean;
   workoutId?: number;
-  onSubmit?: (workoutId?: number, summary?: { workoutName: string; prs: any[]; totalVolume: number; totalReps: number; totalSets: number; muscles: string[]; isFirstWorkout: boolean }) => void;
+  onSubmit?: (workoutId?: number, summary?: { workoutName: string; prs: any[]; totalVolume: number; totalReps: number; totalSets: number; muscles: string[]; isFirstWorkout: boolean; isBestVolume: boolean; isBestReps: boolean }) => void;
   onCancel?: () => void;
   onViewExerciseHistory?: (exerciseName: string, exerciseTemplateId?: number) => void;
 };
@@ -1391,6 +1391,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           totalSets: data.total_sets ?? 0,
           muscles: data.muscles ?? [],
           isFirstWorkout: data.is_first_workout ?? false,
+          isBestVolume: data.is_best_volume ?? false,
+          isBestReps: data.is_best_reps ?? false,
         }
       );
     } catch { Alert.alert('Error', 'Something went wrong'); }

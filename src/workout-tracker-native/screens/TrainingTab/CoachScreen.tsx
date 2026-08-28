@@ -23,6 +23,8 @@ import { muscleGroups } from '../../constants/muscleGroups';
 import { SCORE_RANK_COLORS } from '../../constants/strengthRanks';
 import CoachProfileModal, { CoachProfile, COACH_PROFILE_KEY } from './CoachProfileModal';
 import SectionRule from '../../components/SectionRule';
+import PressableScale from '../../components/PressableScale';
+import { animateNextLayout } from '../../utils/layoutAnimation';
 import { GREEK_RANK_COLORS } from '../../constants/greekRanks';
 import WeeklyGoalModal from '../../components/coach/WeeklyGoalModal';
 import WorkingSetsInfoModal from '../../components/coach/WorkingSetsInfoModal';
@@ -215,6 +217,7 @@ export default function CoachScreen({ navigation }: Props) {
   const [activeRoutine, setActiveRoutine] = useState<ActiveRoutine | null>(null);
   const [selectModalVisible, setSelectModalVisible] = useState(false);
   const [daysVisible, setDaysVisible] = useState(false);
+  const toggleDaysVisible = () => { animateNextLayout(); setDaysVisible(v => !v); };
   // Muscle picker for creating blank templates (existing feature)
   const [musclePickerVisible, setMusclePickerVisible] = useState(false);
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
@@ -738,17 +741,18 @@ export default function CoachScreen({ navigation }: Props) {
       {activeTab === 'training' && (
         <ScrollView style={styles.trainingScroll} contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.xl }}>
           {/* Active Routine */}
-          <TouchableOpacity
+          <PressableScale
             style={styles.activeBlock}
-            onPress={!activeRoutine ? handleActiveBlockPress : undefined}
-            activeOpacity={activeRoutine ? 1 : 0.7}
+            onPress={activeRoutine
+              ? toggleDaysVisible
+              : handleActiveBlockPress}
           >
             <SectionRule label="Active Routine" style={{ marginBottom: spacing.sm }} />
             {activeRoutine ? (
               <>
                 <View style={styles.activeRoutineNameRow}>
                   <Text style={styles.activeRoutineName}>{activeRoutine.name}</Text>
-                  <TouchableOpacity style={styles.toggleDaysBtn} onPress={() => setDaysVisible(v => !v)}>
+                  <TouchableOpacity style={styles.toggleDaysBtn} onPress={toggleDaysVisible}>
                     <Text style={[styles.toggleDaysBtnText, { color: colors.accent }]}>
                       {daysVisible ? 'Hide' : 'Show'}
                     </Text>
@@ -793,7 +797,7 @@ export default function CoachScreen({ navigation }: Props) {
                 {routines.length === 0 ? 'No routines yet. Tap to create one' : 'No active routine. Tap to select one'}
               </Text>
             )}
-          </TouchableOpacity>
+          </PressableScale>
 
           {/* Templates */}
           <View style={styles.sectionHeaderRow}>
@@ -1057,6 +1061,12 @@ export default function CoachScreen({ navigation }: Props) {
               return String(val);
             };
 
+            // gifted-charts sizes the top-label container to exactly barWidth,
+            // which on the 6m/1y ranges (many narrow bars) is far too narrow
+            // for e.g. "12.3K" and forces it to wrap onto a second line —
+            // widen the container and recenter it over the bar so it always
+            // fits on one line.
+            const TOP_LABEL_WIDTH = 50;
             const barData = progressData.map((b, i) => ({
               value: getValue(b),
               label: b.label,
@@ -1064,11 +1074,15 @@ export default function CoachScreen({ navigation }: Props) {
               onPress: () => setSelectedBarIndex(prev => prev === i ? null : i),
               topLabelComponent: i === selectedBarIndex
                 ? () => (
-                    <Text style={{ fontSize: 10, fontWeight: '700', color: colors.textPrimary, marginBottom: 2 }}>
+                    <Text
+                      numberOfLines={1}
+                      style={{ fontSize: 10, fontWeight: '700', color: colors.textPrimary, marginBottom: 2, width: TOP_LABEL_WIDTH, textAlign: 'center' }}
+                    >
                       {formatTopLabel(getValue(b))}
                     </Text>
                   )
                 : undefined,
+              topLabelContainerStyle: { width: TOP_LABEL_WIDTH, left: -(TOP_LABEL_WIDTH - barWidth) / 2 },
             }));
 
             const isMonthlyRange = chartRange === '6m' || chartRange === '1y';

@@ -309,14 +309,22 @@ def profile_stats():
         else:
             run_m = 0
 
+    # Current streak: same "don't let an incomplete current period break the
+    # streak" shape as the weekly streak above -- the in-progress month only
+    # counts if it already hit the goal, but a below-goal in-progress month
+    # must still fall through to check prior, fully-completed months rather
+    # than zeroing the streak out.
+    def _prev_ym(y, m):
+        return (y, m - 1) if m > 1 else (y - 1, 12)
+
     monthly_current = 0
     y_c, m_c = today.year, today.month
+    if month_counts.get((y_c, m_c), 0) >= monthly_goal:
+        monthly_current += 1
+    y_c, m_c = _prev_ym(y_c, m_c)
     while month_counts.get((y_c, m_c), 0) >= monthly_goal:
         monthly_current += 1
-        m_c -= 1
-        if m_c == 0:
-            m_c = 12
-            y_c -= 1
+        y_c, m_c = _prev_ym(y_c, m_c)
 
     return jsonify({
         'total_workouts': total_workouts,

@@ -21,6 +21,8 @@ import { LaurelBranch } from '../../components/LaurelWreath';
 import { PR_GOLD_TEXT } from '../../constants/prColors';
 import { WEEKLY_SUMMARY_LAST_SHOWN_KEY } from './WeeklySummaryScreen';
 import SectionRule from '../../components/SectionRule';
+import PressableScale from '../../components/PressableScale';
+import { animateNextLayout } from '../../utils/layoutAnimation';
 
 const GREETINGS = [
   'Ready to workout', 'Welcome', 'Ready to Train', "Let's Workout",
@@ -205,8 +207,13 @@ export default function DashboardScreen({ navigation }: Props) {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [user, setUser] = useState<User>();
   const weightUnit: WeightUnit = (user as any)?.weight_unit === 'kg' ? 'kg' : 'lbs';
+  // Non-breaking spaces inside the name mean a wrap can only happen between
+  // the greeting and the name -- never mid-name -- so a long name moves to
+  // the second line as a whole instead of splitting across both lines.
+  const displayName = (user?.name || user?.username || '').replace(/ /g, ' ');
   const [activeRoutine, setActiveRoutine] = useState<ActiveRoutine | null>(null);
   const [daysVisible, setDaysVisible] = useState(false);
+  const toggleDaysVisible = () => { animateNextLayout(); setDaysVisible(v => !v); };
   const [loading, setLoading] = useState(true);
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null);
   const [dateWorkouts, setDateWorkouts] = useState<Workout[]>([]);
@@ -387,7 +394,10 @@ export default function DashboardScreen({ navigation }: Props) {
               : { value: dailyStreak, unit: 'd', label: 'Day Streak' };
             return (
               <View style={styles.topbar}>
-                <Text style={styles.title}>{getDailyGreeting()}, {user?.name || user?.username}</Text>
+                <View style={styles.greetingBlock}>
+                  <Text style={styles.greetingText}>{getDailyGreeting()},</Text>
+                  <Text style={styles.greetingName}>{displayName}</Text>
+                </View>
                 <TouchableOpacity onPress={() => setStreakModalVisible(true)} style={styles.streakBadge}>
                   <Text style={styles.streakEmoji}>🔥</Text>
                   <View style={styles.streakText}>
@@ -417,13 +427,16 @@ export default function DashboardScreen({ navigation }: Props) {
 
           {/* Active Routine */}
           {activeRoutine && (
-            <View style={styles.activeBlock}>
-              <Text style={styles.sectionLabel}>Active Routine</Text>
+            <PressableScale
+              style={styles.activeBlock}
+              onPress={toggleDaysVisible}
+            >
+              <SectionRule label="Active Routine" style={{ marginBottom: spacing.sm }} />
               <View style={styles.activeRoutineNameRow}>
                 <Text style={styles.activeRoutineName}>{activeRoutine.name}</Text>
                 <TouchableOpacity
                   style={styles.toggleDaysBtn}
-                  onPress={() => setDaysVisible(v => !v)}
+                  onPress={toggleDaysVisible}
                 >
                   <Text style={[styles.toggleDaysBtnText, { color: colors.accent }]}>
                     {daysVisible ? 'Hide' : 'Show'}
@@ -437,7 +450,12 @@ export default function DashboardScreen({ navigation }: Props) {
               </View>
               {daysVisible && activeRoutine.days.map(day => (
                 <View key={day.id} style={styles.dayRow}>
-                  <Text style={styles.dayLabel}>{day.label}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.dayLabel}>{day.label}</Text>
+                    <Text style={styles.dayExCount}>
+                      {day.workout_template.exercises.length} exercise{day.workout_template.exercises.length !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
                   <TouchableOpacity
                     style={styles.logDayBtn}
                     onPress={() => navigation.navigate('WorkoutLog', {
@@ -459,7 +477,7 @@ export default function DashboardScreen({ navigation }: Props) {
                   </TouchableOpacity>
                 </View>
               ))}
-            </View>
+            </PressableScale>
           )}
 
           {/* Week Calendar */}
@@ -595,7 +613,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
 
   content: { padding: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xl },
   topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
-  title: { fontSize: typography.fontSize.lg, fontWeight: 'bold', color: colors.textPrimary, flex: 1 },
+  greetingBlock: { flex: 1, marginRight: spacing.sm },
+  greetingText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
+  greetingName: { fontSize: typography.fontSize.xl, fontWeight: '800', color: colors.textPrimary, marginTop: 1 },
 
   logButton: {
     backgroundColor: colors.save,
@@ -639,14 +659,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderBottomColor: colors.border,
     borderLeftColor: colors.accent,
   },
-  sectionLabel: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: spacing.sm,
-  },
   activeRoutineNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -671,6 +683,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingVertical: spacing.xs, borderTopWidth: 1, borderTopColor: colors.border,
   },
   dayLabel: { fontSize: typography.fontSize.md, color: colors.textPrimary },
+  dayExCount: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 1 },
   logDayBtn: {
     backgroundColor: colors.save, borderRadius: spacing.xs,
     paddingHorizontal: spacing.md, paddingVertical: spacing.xs,

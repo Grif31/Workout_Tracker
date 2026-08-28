@@ -600,6 +600,27 @@ def add_workout():
 
         is_first = Workout.query.filter_by(user_id=current_user_id).count() == 1
 
+        # Whole-workout PRs (distinct from the per-exercise PRs in new_prs
+        # above) — is this the highest-volume or most-total-reps workout
+        # this user has ever logged, excluding itself.
+        prev_max_volume = (
+            db.session.query(func.max(Workout.volume))
+            .filter(Workout.user_id == current_user_id, Workout.id != new_workout.id)
+            .scalar()
+        ) or 0.0
+        is_best_volume = (new_workout.volume or 0.0) > 0 and (new_workout.volume or 0.0) > prev_max_volume
+
+        reps_subq = (
+            db.session.query(func.sum(Set.reps).label('reps_sum'))
+            .join(Exercise, Set.exercise_id == Exercise.id)
+            .join(Workout, Exercise.workout_id == Workout.id)
+            .filter(Workout.user_id == current_user_id, Workout.id != new_workout.id)
+            .group_by(Workout.id)
+            .subquery()
+        )
+        prev_max_reps = db.session.query(func.max(reps_subq.c.reps_sum)).scalar() or 0
+        is_best_reps = total_reps > 0 and total_reps > prev_max_reps
+
         return jsonify({
             'id': new_workout.id,
             'message': 'New Workout Added',
@@ -609,6 +630,8 @@ def add_workout():
             'total_sets': total_sets,
             'muscles': muscles_worked,
             'is_first_workout': is_first,
+            'is_best_volume': is_best_volume,
+            'is_best_reps': is_best_reps,
         }), 201
     except Exception:
         db.session.rollback()

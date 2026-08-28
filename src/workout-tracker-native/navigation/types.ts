@@ -21,6 +21,8 @@ export type WorkoutSummaryParams = {
   totalSets: number;
   muscles: string[];
   isFirstWorkout: boolean;
+  isBestVolume: boolean;
+  isBestReps: boolean;
 };
 
 export type WeeklySummaryData = {

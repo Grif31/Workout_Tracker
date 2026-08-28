@@ -196,6 +196,52 @@ class TestCreateWorkout:
 
 
 # ---------------------------------------------------------------------------
+# POST /api/workouts -- whole-workout PRs (is_best_volume / is_best_reps)
+# ---------------------------------------------------------------------------
+
+class TestWorkoutRecords:
+
+    def test_first_workout_sets_both_records(self, client, auth_token):
+        # Nothing to beat yet -- any first workout is trivially a record.
+        res = create_workout(client, auth_token)
+        data = res.get_json()
+        assert data['is_best_volume'] is True
+        assert data['is_best_reps'] is True
+
+    def test_smaller_second_workout_is_not_a_record(self, client, auth_token):
+        create_workout(client, auth_token)  # volume 4100, reps 20
+        smaller = {
+            'workoutName': 'Light Day',
+            'exercises': [{'name': 'Curl', 'sets': [{'reps': 8, 'weight': 20}]}],
+        }
+        res = create_workout(client, auth_token, smaller)
+        data = res.get_json()
+        assert data['is_best_volume'] is False
+        assert data['is_best_reps'] is False
+
+    def test_records_are_independent_per_metric(self, client, auth_token):
+        create_workout(client, auth_token)  # volume 4100, reps 20
+        # Two heavy singles: volume 6000 (beats 4100) but only 2 reps (doesn't beat 20).
+        heavy_low_reps = {
+            'workoutName': 'Heavy Day',
+            'exercises': [{'name': 'Deadlift', 'sets': [
+                {'reps': 1, 'weight': 3000},
+                {'reps': 1, 'weight': 3000},
+            ]}],
+        }
+        res = create_workout(client, auth_token, heavy_low_reps)
+        data = res.get_json()
+        assert data['is_best_volume'] is True
+        assert data['is_best_reps'] is False
+
+    def test_zero_volume_or_reps_never_counts_as_a_record(self, client, auth_token):
+        res = create_workout(client, auth_token, {'workoutName': 'Rest Day', 'exercises': []})
+        data = res.get_json()
+        assert data['is_best_volume'] is False
+        assert data['is_best_reps'] is False
+
+
+# ---------------------------------------------------------------------------
 # DELETE /api/workouts/<id>
 # ---------------------------------------------------------------------------
 
