@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Modal,
-  Alert, ActivityIndicator, ScrollView,
+  Alert, ActivityIndicator, ScrollView, InteractionManager,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -150,6 +150,11 @@ export default function GPSCardioScreen({ navigation }: Props) {
   const [initialRegion, setInitialRegion] = useState<{
     latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number;
   } | undefined>(undefined);
+  // Mounting MapView and firing off location-permission/GPS native calls
+  // immediately competes with the tab bar's slide-out animation for native
+  // rendering resources, cutting it short instead of letting it glide — wait
+  // until the screen-transition interaction queue clears first.
+  const [ready, setReady] = useState(false);
 
   const locationSub = useRef<Location.LocationSubscription | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -257,26 +262,32 @@ export default function GPSCardioScreen({ navigation }: Props) {
   };
 
   useEffect(() => {
-    // The app may have been killed mid-run — stop any OS task left running,
-    // then offer to restore the checkpointed run
-    cleanupOrphanedTracking();
-    offerCheckpointRestore();
-    AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user?.id}`).then(v => {
-      setDistanceUnit(v === 'km' ? 'km' : 'mi');
+    // Deferred until the screen-transition interaction queue clears — see
+    // the `ready` declaration above for why.
+    const task = InteractionManager.runAfterInteractions(() => {
+      // The app may have been killed mid-run — stop any OS task left running,
+      // then offer to restore the checkpointed run
+      cleanupOrphanedTracking();
+      offerCheckpointRestore();
+      AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user?.id}`).then(v => {
+        setDistanceUnit(v === 'km' ? 'km' : 'mi');
+      });
+      (async () => {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          setInitialRegion(prev => prev ?? {
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          });
+        }
+      })();
+      setReady(true);
     });
-    (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        setInitialRegion(prev => prev ?? {
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        });
-      }
-    })();
     return () => {
+      task.cancel();
       clearTimer();
       gpsUnsubRef.current?.();
       stopBackgroundTracking();
@@ -488,6 +499,22 @@ export default function GPSCardioScreen({ navigation }: Props) {
   const speedKmH = elapsedSec > 0 ? distanceKm / (elapsedSec / 3600) : 0;
   const estimatedKcal = Math.round(estimateCalories(activity, elapsedSec / 60, weightKg, speedKmH));
 
+  // Map rendering only needs a bounded number of vertices — a long run can
+  // accumulate thousands of raw GPS points, and react-native-maps rebuilds
+  // the entire native Polyline overlay on every coordinate change, so an
+  // ever-growing array here is a real (and growing) memory cost over the
+  // course of a tracked activity. `coords` itself stays full-resolution for
+  // distance/elevation math, checkpointing, and the saved route_polyline.
+  const MAX_POLYLINE_POINTS = 500;
+  const displayCoords = useMemo(() => {
+    if (coords.length <= MAX_POLYLINE_POINTS) return coords;
+    const step = Math.ceil(coords.length / MAX_POLYLINE_POINTS);
+    const thinned = coords.filter((_, i) => i % step === 0);
+    const last = coords[coords.length - 1];
+    if (thinned[thinned.length - 1] !== last) thinned.push(last);
+    return thinned;
+  }, [coords]);
+
   if (!MAPS_AVAILABLE) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', gap: spacing.md }]}>
@@ -507,30 +534,36 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {/* Map */}
-      <MapErrorBoundary
-        fallback={
-          <View style={[styles.map, styles.mapFallback]}>
-            <Ionicons name="map-outline" size={40} color={colors.textSecondary} />
-            <Text style={[styles.mapFallbackTitle, { color: colors.textPrimary }]}>Map unavailable</Text>
-            <Text style={[styles.mapFallbackSub, { color: colors.textSecondary }]}>
-              GPS tracking still works. A Google Maps API key is required to show the map on Android.
-            </Text>
-          </View>
-        }
-      >
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          initialRegion={initialRegion}
-          showsUserLocation
-          followsUserLocation={trackingState === 'running'}
+      {/* Map — deferred until `ready` (see the mount effect) so mounting the
+          native map surface doesn't compete with the tab bar's slide-out
+          transition and cut it short. */}
+      {ready ? (
+        <MapErrorBoundary
+          fallback={
+            <View style={[styles.map, styles.mapFallback]}>
+              <Ionicons name="map-outline" size={40} color={colors.textSecondary} />
+              <Text style={[styles.mapFallbackTitle, { color: colors.textPrimary }]}>Map unavailable</Text>
+              <Text style={[styles.mapFallbackSub, { color: colors.textSecondary }]}>
+                GPS tracking still works. A Google Maps API key is required to show the map on Android.
+              </Text>
+            </View>
+          }
         >
-          {coords.length >= 2 && (
-            <Polyline coordinates={coords} strokeColor={colors.accent} strokeWidth={4} />
-          )}
-        </MapView>
-      </MapErrorBoundary>
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            initialRegion={initialRegion}
+            showsUserLocation
+            followsUserLocation={trackingState === 'running'}
+          >
+            {coords.length >= 2 && (
+              <Polyline coordinates={displayCoords} strokeColor={colors.accent} strokeWidth={4} />
+            )}
+          </MapView>
+        </MapErrorBoundary>
+      ) : (
+        <View style={styles.map} />
+      )}
 
       {/* Back button */}
       <TouchableOpacity
@@ -672,7 +705,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
                     longitudeDelta: 0.01,
                   }}
                 >
-                  <Polyline coordinates={coords} strokeColor={colors.accent} strokeWidth={3} />
+                  <Polyline coordinates={displayCoords} strokeColor={colors.accent} strokeWidth={3} />
                 </MapView>
               )}
             </ScrollView>

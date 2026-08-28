@@ -138,13 +138,19 @@ def _compute_and_upsert_prs(user_id, exercise_set_pairs, workout_date):
     max_weight / estimated_1rm: one record per exercise (weight_context = -1).
     max_reps: one record per exercise PER WEIGHT (weight_context = the weight used).
     Weight-0 sets (bodyweight exercises) only produce max_reps records.
+
+    Every set_type counts, including warm-ups ('W') — a weight/rep beaten on
+    a warm-up set is still a genuine PR, and the frontend's "New PR!" banner
+    (WorkoutLog.tsx toggleSetDone) already fires regardless of set_type, so
+    excluding warm-ups here only produced a banner for a PR that then never
+    actually got saved.
     """
     new_prs = []
     for exercise, sets in exercise_set_pairs:
         if not exercise.exercise_template_id:
             continue
         valid = [(s.reps, s.weight, s.id) for s in sets
-                 if s.reps and s.weight is not None and s.set_type != 'W']
+                 if s.reps and s.weight is not None]
         if not valid:
             continue
 
@@ -248,13 +254,15 @@ def _compute_and_upsert_duration_prs(user_id, exercise_set_pairs, workout_date):
 
     max_duration: one record per exercise (weight_context = -1). Value is the
     hold length in minutes — the same unit sets store in cardio_duration.
+
+    Every set_type counts, including warm-ups — see _compute_and_upsert_prs.
     """
     new_prs = []
     for exercise, sets in exercise_set_pairs:
         if not exercise.exercise_template_id:
             continue
         valid = [(s.cardio_duration, s.id) for s in sets
-                 if s.cardio_duration and s.cardio_duration > 0 and s.set_type != 'W']
+                 if s.cardio_duration and s.cardio_duration > 0]
         if not valid:
             continue
 

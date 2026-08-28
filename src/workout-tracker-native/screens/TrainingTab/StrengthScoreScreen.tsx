@@ -21,11 +21,9 @@ import { appCache } from '../../utils/appCache';
 import { captureAndShare } from '../../utils/shareCapture';
 import { TrainingStackParamsList } from '../../navigation/types';
 import MuscleDiagram from '../../components/MuscleDiagram';
-import { STRENGTH_TIERS, SCORE_RANK_COLORS } from '../../constants/strengthRanks';
-import LaurelBranch from '../../components/LaurelWreath';
+import { STRENGTH_TIERS, SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
 import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModal';
 import StrengthScoreShareCard from '../../components/StrengthScoreShareCard';
-import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
 import { toLocalDateStr } from '../../utils/date';
 import SectionRule from '../../components/SectionRule';
 
@@ -370,22 +368,26 @@ export default function StrengthScoreScreen({ navigation }: Props) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} />}
         >
 
-          {/* Rank-up celebration */}
+          {/* Rank-up celebration — uses the achieved tier's own color/icon
+              (not the PR/Aretē gold laurel) so it matches the same tier
+              badge everywhere else on this screen instead of always reading
+              gold regardless of which tier was actually reached. */}
           {rankUpVisible && (
             <Animated.View
               style={[
                 styles.rankUpBanner,
                 {
+                  backgroundColor: rankColor + '22',
+                  borderColor: rankColor,
                   opacity: rankUpAnim,
                   transform: [{ scale: rankUpAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }],
                 },
               ]}
             >
-              <LaurelBranch height={20} color={PR_GOLD_TEXT} />
-              <Text style={styles.rankUpText}>Rank Up! {scoreData.overall_rank.display}</Text>
-              <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
+              <Ionicons name={SCORE_RANK_ICONS[scoreData.overall_rank.label] ?? 'star'} size={18} color={rankColor} />
+              <Text style={[styles.rankUpText, { color: rankColor }]}>Rank Up! {scoreData.overall_rank.display}</Text>
               <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={8} style={styles.rankUpShareBtn}>
-                <Ionicons name="share-outline" size={16} color={PR_GOLD_TEXT} />
+                <Ionicons name="share-outline" size={16} color={rankColor} />
               </TouchableOpacity>
             </Animated.View>
           )}
@@ -426,6 +428,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                 </View>
                 <View style={styles.heroTextCol}>
                   <View style={[styles.rankBadge, { backgroundColor: rankColor + '22', borderColor: rankColor }]}>
+                    <Ionicons name={SCORE_RANK_ICONS[scoreData.overall_rank.label] ?? 'ellipse-outline'} size={13} color={rankColor} />
                     <Text style={[styles.rankLabel, { color: rankColor }]}>{scoreData.overall_rank.display}</Text>
                   </View>
                   <Text style={styles.percentileText}>
@@ -524,6 +527,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                         </View>
                         <View style={{ alignItems: 'flex-end', gap: 2 }}>
                           <View style={[styles.miniRankBadge, { backgroundColor: mgColor + '22', borderColor: mgColor }]}>
+                            <Ionicons name={SCORE_RANK_ICONS[mg.rank.label] ?? 'ellipse-outline'} size={10} color={mgColor} />
                             <Text style={[styles.miniRankText, { color: mgColor }]}>{mg.rank.display}</Text>
                           </View>
                           <Text style={styles.mgScore}>{mg.score}</Text>
@@ -573,6 +577,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                         {ex.rank ? (
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
                             <View style={[styles.miniRankBadge, { backgroundColor: exColor + '22', borderColor: exColor }]}>
+                              <Ionicons name={SCORE_RANK_ICONS[ex.rank.label] ?? 'ellipse-outline'} size={10} color={exColor} />
                               <Text style={[styles.miniRankText, { color: exColor }]}>{ex.rank.display}</Text>
                             </View>
                             <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
@@ -628,6 +633,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                         {ex.rank ? (
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
                             <View style={[styles.miniRankBadge, { backgroundColor: exColor + '22', borderColor: exColor }]}>
+                              <Ionicons name={SCORE_RANK_ICONS[ex.rank.label] ?? 'ellipse-outline'} size={10} color={exColor} />
                               <Text style={[styles.miniRankText, { color: exColor }]}>{ex.rank.display}</Text>
                             </View>
                             <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
@@ -795,6 +801,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                   <View style={styles.modalHandle} />
                   <Text style={[styles.modalTitle, { color: mgColor }]}>{(selectedGroup as any).name}</Text>
                   <View style={[styles.miniRankBadge, { backgroundColor: mgColor + '22', borderColor: mgColor, alignSelf: 'center', marginBottom: spacing.md }]}>
+                    <Ionicons name={SCORE_RANK_ICONS[(selectedGroup as any).rank?.label] ?? 'ellipse-outline'} size={11} color={mgColor} />
                     <Text style={[styles.miniRankText, { color: mgColor }]}>{(selectedGroup as any).rank?.display}</Text>
                   </View>
                   <View style={styles.tierRow}>
@@ -1012,6 +1019,7 @@ const createStyles = (colors: Colors) =>
     rankBadge: {
       alignSelf: 'flex-start', borderRadius: radius.sm, borderWidth: 1,
       paddingHorizontal: spacing.sm, paddingVertical: spacing.xs,
+      flexDirection: 'row', alignItems: 'center', gap: 4,
     },
     rankLabel: { fontSize: typography.fontSize.md, fontWeight: '700' },
     percentileText: { fontSize: typography.fontSize.lg, fontWeight: '800', color: colors.textPrimary },
@@ -1039,10 +1047,10 @@ const createStyles = (colors: Colors) =>
     rangeBtnText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
     rankUpBanner: {
       flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
-      backgroundColor: PR_GOLD, borderRadius: 10, padding: spacing.sm,
+      borderRadius: 10, borderWidth: 1, padding: spacing.sm,
       justifyContent: 'center', marginBottom: spacing.xs,
     },
-    rankUpText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: PR_GOLD_TEXT },
+    rankUpText: { fontSize: typography.fontSize.sm, fontWeight: '700' },
     rankUpShareBtn: { marginLeft: spacing.xs },
     tooltipBubble: {
       backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
@@ -1068,7 +1076,10 @@ const createStyles = (colors: Colors) =>
     mgLeft: { flex: 1, gap: 6 },
     mgName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
     mgScore: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
-    miniRankBadge: { borderRadius: 6, borderWidth: 1, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+    miniRankBadge: {
+      borderRadius: 6, borderWidth: 1, paddingHorizontal: spacing.sm, paddingVertical: 2,
+      flexDirection: 'row', alignItems: 'center', gap: 3,
+    },
     miniRankText: { fontSize: typography.fontSize.sm, fontWeight: '700' },
     exRow: {
       flexDirection: 'row', alignItems: 'center', gap: spacing.sm,

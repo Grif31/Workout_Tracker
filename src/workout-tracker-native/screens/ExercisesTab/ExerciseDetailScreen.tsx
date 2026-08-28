@@ -23,7 +23,7 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { toDisplayWeight, toDisplayVolume, convertWeight, WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayPace } from 'utils/units';
 import MuscleDiagram from '../../components/MuscleDiagram';
-import { SCORE_RANK_COLORS } from '../../constants/strengthRanks';
+import { SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
 import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModal';
 
 const SCREEN_WIDTH  = Dimensions.get('window').width;
@@ -729,7 +729,10 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
             </View>
             <View style={styles.scoreCardTextCol}>
               <Text style={[styles.scoreCardLabel, { color: textColor }]}>Strength Score</Text>
-              <Text style={[styles.scoreCardRank, { color: textColor }]}>{scoreEntry.rank.display}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name={SCORE_RANK_ICONS[scoreEntry.rank.label] ?? 'ellipse-outline'} size={13} color={textColor} />
+                <Text style={[styles.scoreCardRank, { color: textColor }]}>{scoreEntry.rank.display}</Text>
+              </View>
             </View>
             <Ionicons name="chevron-forward" size={16} color={textColor} />
           </TouchableOpacity>

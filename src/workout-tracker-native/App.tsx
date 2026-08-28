@@ -30,12 +30,22 @@ Sentry.init({
 Purchases.setLogLevel(LOG_LEVEL.DEBUG);
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification) => {
+    // The rest timer already has its own in-app banner + vibration
+    // (WorkoutLog's rest interval) while the app is foregrounded — the OS
+    // notification is crash/background insurance only, scheduled up front
+    // since JS timers freeze once backgrounded. Showing its system banner
+    // too while the app is already open is a jarring duplicate, so suppress
+    // it here; backgrounded delivery is unaffected since this handler only
+    // runs while the app is active.
+    const isRestTimer = (notification.request.content.data as any)?.type === 'rest_timer';
+    return {
+      shouldShowBanner: !isRestTimer,
+      shouldShowList: true,
+      shouldPlaySound: !isRestTimer,
+      shouldSetBadge: false,
+    };
+  },
 });
 
 function App(): JSX.Element {

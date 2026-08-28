@@ -53,6 +53,8 @@ import {
 } from './workout/types';
 import WorkoutHeader from './workout/WorkoutHeader';
 import ExerciseBlock from './workout/ExerciseBlock';
+import DraggableList from './DraggableList';
+import ExerciseReorderRow, { EXERCISE_REORDER_ROW_HEIGHT } from './workout/ExerciseReorderRow';
 import RestTimer from './workout/RestTimer';
 import PlateCalculatorModal from './PlateCalculatorModal';
 import { syncWorkoutToHealthKit } from '../utils/healthKit';
@@ -215,9 +217,34 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
 
-  // Which exercise's 3-dot menu is open
+  // Which exercise's 3-dot menu is open. menuRendered lags openMenuIdx by
+  // one animation — the Modal has to stay mounted a beat longer than
+  // "closed" so the close animation has something to play against.
   const [openMenuIdx, setOpenMenuIdx] = useState<number | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+  const [menuRendered, setMenuRendered] = useState(false);
+  // Which exercise the menu belongs to, for rendering — mirrors openMenuIdx
+  // but holds its last value through the close animation, since openMenuIdx
+  // itself goes null immediately (before the fade-out has played).
+  const [renderedMenuIdx, setRenderedMenuIdx] = useState<number | null>(null);
+  const exMenuAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (openMenuIdx !== null) {
+      setRenderedMenuIdx(openMenuIdx);
+      setMenuRendered(true);
+      Animated.spring(exMenuAnim, { toValue: 1, useNativeDriver: true, tension: 200, friction: 16 }).start();
+    } else {
+      Animated.timing(exMenuAnim, { toValue: 0, duration: 120, useNativeDriver: true }).start(({ finished }) => {
+        if (finished) setMenuRendered(false);
+      });
+    }
+  }, [openMenuIdx, exMenuAnim]);
+  // Reorder Mode — a compact drag-to-reorder view swapped in for the normal
+  // set-editing list, since ExerciseBlock rows are variable-height (set
+  // count, notes, RPE) and DraggableList needs a uniform row height to do
+  // its drag-slot math.
+  const [reorderMode, setReorderMode] = useState(false);
+  const [reorderDragging, setReorderDragging] = useState(false);
 
   useEffect(() => {
     setWorkoutOpen(true);
@@ -384,6 +411,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           setRestActive(false);
           setRestPaused(false);
           if (vibrateRef.current) Vibration.vibrate([0, 300, 100, 300]);
+          // This branch only runs while the JS interval is alive, i.e. the app
+          // is foregrounded — the scheduled OS notification (crash/background
+          // insurance) is suppressed in that case, so show an in-app banner instead.
+          showToast('Rest over. Time to lift! 💪');
           return 0;
         }
         return prev - 1;
@@ -843,9 +874,20 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   const deleteEx = (exIndex: number) => {
     setOpenMenuIdx(null);
-    const updated = [...exercises];
-    updated.splice(exIndex, 1);
-    setExercises(updated);
+    const ex = exercises[exIndex];
+    const hasLoggedData = !!ex && ex.sets.some(s => s.done || s.reps || s.weight || s.cardio_duration || s.distance);
+    Alert.alert(
+      'Remove Exercise',
+      `Remove ${ex?.name ?? 'this exercise'} and all its sets from this workout?${hasLoggedData ? ' Any sets you\'ve logged for it will be lost.' : ''}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => setExercises(prev => prev.filter((_, i) => i !== exIndex)),
+        },
+      ]
+    );
   };
 
   const moveExercise = (exIndex: number, direction: 'up' | 'down') => {
@@ -858,6 +900,28 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     });
     setOpenMenuIdx(null);
   };
+
+  // Stable references for DraggableList (React.memo'd) — an inline function
+  // here would give it a "new" prop on every WorkoutLog render, including the
+  // once-a-second elapsed-timer tick, defeating the memo and recreating every
+  // row's PanResponder mid-drag.
+  const reorderKeyExtractor = useCallback((item: ExerciseEntry) => item.uid, []);
+  const handleReorderExercises = useCallback((from: number, to: number) => {
+    setExercises(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }, []);
+  const renderReorderRow = useCallback((item: ExerciseEntry) => (
+    <ExerciseReorderRow
+      name={item.name}
+      muscleGroup={item.muscle_group}
+      setCount={item.sets.length}
+      exerciseType={item.exercise_type}
+    />
+  ), []);
 
   const toggleExMenu = useCallback((exIndex: number) => {
     setOpenMenuIdx(prev => (prev === exIndex ? null : exIndex));
@@ -1389,6 +1453,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       editMode,
       workoutId,
     });
+    // The minimized session (SESSION_KEY) is now the single source of truth for
+    // this in-progress workout — clear the crash-recovery backup so a stale,
+    // pre-minimize snapshot can't outlive it. Every other exit path (submit,
+    // offline save, discard, resume) already does this; minimize was the one
+    // gap.
+    AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
     onCancel?.();
   };
 
@@ -1444,6 +1514,35 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         muscleGroups={muscleGroups}
       />
 
+      {/* Reorder Mode — compact drag-to-reorder view, swapped in for the
+          normal set-editing list. See ExerciseReorderRow for why.
+          Rendered as a plain absolutely-positioned overlay rather than a
+          <Modal> — RN's Modal mounts its content in a separate native root,
+          which broke DraggableList's PanResponder-based long-press-to-drag
+          (it works fine as a normal in-tree view, e.g. TemplateDetailScreen). */}
+      {reorderMode && (
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: colors.background, zIndex: 50 }]}>
+          <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+            <View style={styles.headerBtn} />
+            <Text style={styles.headerTitle}>Reorder Exercises</Text>
+            <TouchableOpacity onPress={() => setReorderMode(false)} style={styles.headerBtn}>
+              <Text style={styles.saveText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={styles.reorderContent} scrollEnabled={!reorderDragging}>
+            <DraggableList
+              data={exercises}
+              keyExtractor={reorderKeyExtractor}
+              rowHeight={EXERCISE_REORDER_ROW_HEIGHT}
+              gap={spacing.sm}
+              onDragActiveChange={setReorderDragging}
+              onReorder={handleReorderExercises}
+              renderItem={renderReorderRow}
+            />
+          </ScrollView>
+        </View>
+      )}
+
       <FlatList
         ref={listRef}
         data={exercises}
@@ -1489,6 +1588,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             onRepeatLastSetChange={onRepeatLastSetChange}
             prefillPreviousSets={prefillPreviousSets}
             onPrefillPreviousSetsChange={onPrefillPreviousSetsChange}
+            onReorderPress={() => setReorderMode(true)}
             exerciseCount={exercises.length}
             totalSets={workoutTotals.totalSets}
             totalVolume={workoutTotals.totalVolume}
@@ -1558,9 +1658,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         />
       )}
 
-      {/* Exercise 3-dot menu — rendered as Modal so it floats above DraggableFlatList */}
+      {/* Exercise 3-dot menu — rendered as Modal so it floats above the list.
+          Scales/fades in from the tapped button's corner and reverses on close;
+          menuRendered keeps the Modal mounted through the close animation
+          (openMenuIdx itself goes null immediately). */}
       <Modal
-        visible={openMenuIdx !== null}
+        visible={menuRendered}
         transparent
         animationType="none"
         onRequestClose={() => setOpenMenuIdx(null)}
@@ -1570,15 +1673,28 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           activeOpacity={1}
           onPress={() => setOpenMenuIdx(null)}
         />
-        {openMenuIdx !== null && (
-          <View style={[styles.exMenu, { top: menuPosition.top, right: menuPosition.right, backgroundColor: colors.background, borderColor: colors.border }]}>
-            <TouchableOpacity style={styles.exMenuItem} onPress={() => openAddNotes(openMenuIdx!)}>
+        {renderedMenuIdx !== null && (
+          <Animated.View
+            style={[
+              styles.exMenu,
+              {
+                top: menuPosition.top,
+                right: menuPosition.right,
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+                opacity: exMenuAnim,
+                transform: [{ scale: exMenuAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }],
+                transformOrigin: 'top right',
+              },
+            ]}
+          >
+            <TouchableOpacity style={styles.exMenuItem} onPress={() => openAddNotes(renderedMenuIdx!)}>
               <Ionicons name="create-outline" size={15} color={colors.textPrimary} />
               <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>Add Notes</Text>
             </TouchableOpacity>
             <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
             <TouchableOpacity style={styles.exMenuItem} onPress={() => {
-              const idx = openMenuIdx;
+              const idx = renderedMenuIdx;
               setOpenMenuIdx(null);
               onViewExerciseHistory?.(exercises[idx].name, exercises[idx].exercise_template_id);
             }}>
@@ -1586,38 +1702,32 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
               <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>View History</Text>
             </TouchableOpacity>
             <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
-            <TouchableOpacity style={styles.exMenuItem} onPress={() => startReplaceExercise(openMenuIdx!)}>
+            <TouchableOpacity style={styles.exMenuItem} onPress={() => startReplaceExercise(renderedMenuIdx!)}>
               <Ionicons name="swap-horizontal-outline" size={15} color={colors.textPrimary} />
               <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>Replace Exercise</Text>
             </TouchableOpacity>
             <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
             <TouchableOpacity
-              style={[styles.exMenuItem, openMenuIdx === 0 && { opacity: 0.35 }]}
-              onPress={() => openMenuIdx! > 0 && moveExercise(openMenuIdx!, 'up')}
+              style={[styles.exMenuItem, renderedMenuIdx === 0 && { opacity: 0.35 }]}
+              onPress={() => renderedMenuIdx! > 0 && moveExercise(renderedMenuIdx!, 'up')}
             >
               <Ionicons name="arrow-up-outline" size={15} color={colors.textPrimary} />
               <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>Move Up</Text>
             </TouchableOpacity>
             <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
             <TouchableOpacity
-              style={[styles.exMenuItem, openMenuIdx === exercises.length - 1 && { opacity: 0.35 }]}
-              onPress={() => openMenuIdx! < exercises.length - 1 && moveExercise(openMenuIdx!, 'down')}
+              style={[styles.exMenuItem, renderedMenuIdx === exercises.length - 1 && { opacity: 0.35 }]}
+              onPress={() => renderedMenuIdx! < exercises.length - 1 && moveExercise(renderedMenuIdx!, 'down')}
             >
               <Ionicons name="arrow-down-outline" size={15} color={colors.textPrimary} />
               <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>Move Down</Text>
             </TouchableOpacity>
             <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
-            <View style={[styles.exMenuItem, { opacity: 0.4 }]}>
-              <Ionicons name="git-branch-outline" size={15} color={colors.textPrimary} />
-              <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>Superset</Text>
-              <Text style={[styles.exMenuSoon, { color: colors.accent }]}>Soon</Text>
-            </View>
-            <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
-            <TouchableOpacity style={styles.exMenuItem} onPress={() => deleteEx(openMenuIdx!)}>
+            <TouchableOpacity style={styles.exMenuItem} onPress={() => deleteEx(renderedMenuIdx!)}>
               <Ionicons name="trash-outline" size={15} color={colors.danger} />
               <Text style={[styles.exMenuText, { color: colors.danger }]}>Remove</Text>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         )}
       </Modal>
 
@@ -1775,6 +1885,7 @@ import { type Colors } from '../context/ThemeContext';
 const createStyles = (colors: Colors) => StyleSheet.create({
   container: { paddingBottom: spacing.xl * 2 },
   formSection: { paddingHorizontal: spacing.md },
+  reorderContent: { padding: spacing.md, paddingBottom: spacing.xl * 2 },
 
   header: {
     flexDirection: 'row',
@@ -1828,7 +1939,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingVertical: 11,
   },
   exMenuText: { fontSize: typography.fontSize.sm, fontWeight: '500', flex: 1 },
-  exMenuSoon: { fontSize: 10, fontWeight: '700', letterSpacing: 0.4 },
   exMenuDivider: { height: 1, marginHorizontal: 0 },
 
   keyboardAccessory: {

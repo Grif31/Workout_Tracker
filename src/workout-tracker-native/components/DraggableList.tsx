@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Animated, PanResponder, StyleSheet, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
@@ -9,9 +9,17 @@ import * as Haptics from 'expo-haptics';
 // died the same way). Rows must all be `rowHeight` tall. No autoscroll —
 // intended for lists that fit on screen.
 //
-// Each item owns one Animated.Value for its whole life (keyed by item, not
-// index) so a view's native transform binding never changes across reorders —
-// re-binding natively-driven values across views leaves stale transforms.
+// Only the actively-dragged row is ever transformed — it floats above the
+// list (elevated shadow/zIndex) and follows the finger; every other row
+// stays put in normal flex flow the whole time and simply appears in its
+// new spot once the array reorders on drop. An earlier version animated
+// every row's position live during the drag (a continuous "neighbors slide
+// out of the way" preview) via a persistent Animated.Value per item, reset
+// through a layout effect once the reorder committed — that reset proved
+// unreliable in practice (rows could end up visually stuck mid-transform,
+// overlapping a neighbor). This design has nothing to reset: at most one
+// row ever has a transform applied, and it's torn down the instant the drag
+// ends, in the same state update that clears "active".
 
 type Props<T> = {
   data: T[];
@@ -27,33 +35,25 @@ type Props<T> = {
 const LONG_PRESS_MS = 300;
 const MOVE_CANCEL_THRESHOLD = 8;
 
-export default function DraggableList<T>({
+function DraggableList<T>({
   data, keyExtractor, renderItem, onReorder, rowHeight, gap = 0, onDragActiveChange,
 }: Props<T>) {
   const step = rowHeight + gap;
   const count = data.length;
   const keys = data.map(keyExtractor);
 
-  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const activeIndexRef = useRef(-1);
-  const slotRef = useRef(-1);
   const draggingRef = useRef(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStart = useRef({ x: 0, y: 0 });
 
-  // One Animated.Value per item, stable for the item's lifetime
-  const valuesByKey = useRef(new Map<string, Animated.Value>());
-  const getValue = (key: string): Animated.Value => {
-    let v = valuesByKey.current.get(key);
-    if (!v) {
-      v = new Animated.Value(0);
-      valuesByKey.current.set(key, v);
-    }
-    return v;
-  };
-  // Keep a live snapshot of the current key order for handlers
-  const keysRef = useRef<string[]>(keys);
-  keysRef.current = keys;
+  // Single shared value, reused for whichever row is currently active — only
+  // one row is ever transformed at a time, so there's no per-item lifecycle
+  // to manage. dragYRef mirrors it synchronously for endDrag's slot math
+  // (Animated.Value has no synchronous getter).
+  const dragY = useRef(new Animated.Value(0)).current;
+  const dragYRef = useRef(0);
 
   const clearTimer = () => {
     if (longPressTimer.current) {
@@ -62,72 +62,29 @@ export default function DraggableList<T>({
     }
   };
 
-  const resetAllValues = () => {
-    valuesByKey.current.forEach(v => {
-      v.stopAnimation();
-      v.setValue(0);
-    });
-  };
-
-  // After a reorder commits, zero the transforms in the same frame the new
-  // layout lands — zeroing before the commit paints one frame of the old
-  // layout (rows flash back to their pre-drag spots)
-  const pendingResetRef = useRef(false);
-  useLayoutEffect(() => {
-    if (pendingResetRef.current) {
-      pendingResetRef.current = false;
-      resetAllValues();
-    }
-  }, [data]);
-
   const startDrag = (index: number) => {
     draggingRef.current = true;
     activeIndexRef.current = index;
-    slotRef.current = index;
-    resetAllValues();
-    setActiveKey(keysRef.current[index]);
+    dragYRef.current = 0;
+    dragY.setValue(0);
+    setActiveIndex(index);
     onDragActiveChange?.(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  const updateSlot = (dy: number) => {
-    const active = activeIndexRef.current;
-    const raw = Math.round((active * step + dy) / step);
-    const slot = Math.max(0, Math.min(count - 1, raw));
-    if (slot === slotRef.current) return;
-    slotRef.current = slot;
-    keysRef.current.forEach((key, i) => {
-      if (i === active) return;
-      let target = 0;
-      if (i > active && i <= slot) target = -step;
-      else if (i < active && i >= slot) target = step;
-      Animated.timing(getValue(key), { toValue: target, duration: 150, useNativeDriver: true }).start();
-    });
-  };
-
   const endDrag = () => {
     if (!draggingRef.current) return;
-    const from = activeIndexRef.current;
-    const to = slotRef.current;
     draggingRef.current = false;
+    const from = activeIndexRef.current;
+    const delta = Math.round(dragYRef.current / step);
+    const to = Math.max(0, Math.min(count - 1, from + delta));
     activeIndexRef.current = -1;
-    slotRef.current = -1;
-    setActiveKey(null);
+    dragY.stopAnimation();
+    dragY.setValue(0);
+    dragYRef.current = 0;
+    setActiveIndex(-1);
     onDragActiveChange?.(false);
-
-    if (from === to || from < 0 || to < 0) {
-      // No reorder — glide everything back to resting positions
-      valuesByKey.current.forEach(v => {
-        v.stopAnimation();
-        Animated.timing(v, { toValue: 0, duration: 120, useNativeDriver: true }).start();
-      });
-      return;
-    }
-
-    // Keep current transforms; the layout effect zeroes them in the same
-    // frame the reordered layout commits, so nothing flashes
-    pendingResetRef.current = true;
-    onReorder(from, to);
+    if (from >= 0 && from !== to) onReorder(from, to);
   };
 
   const makeResponder = (index: number) => PanResponder.create({
@@ -138,8 +95,9 @@ export default function DraggableList<T>({
       const active = activeIndexRef.current;
       const maxUp = -active * step;
       const maxDown = (count - 1 - active) * step;
-      getValue(keysRef.current[active]).setValue(Math.max(maxUp, Math.min(maxDown, g.dy)));
-      updateSlot(g.dy);
+      const clamped = Math.max(maxUp, Math.min(maxDown, g.dy));
+      dragYRef.current = clamped;
+      dragY.setValue(clamped);
     },
     onPanResponderRelease: endDrag,
     onPanResponderTerminate: endDrag,
@@ -150,7 +108,7 @@ export default function DraggableList<T>({
     <View>
       {data.map((item, index) => {
         const key = keys[index];
-        const isActive = key === activeKey;
+        const isActive = index === activeIndex;
         const responder = makeResponder(index);
         return (
           <Animated.View
@@ -174,7 +132,7 @@ export default function DraggableList<T>({
               styles.rowWrap,
               { height: rowHeight, marginBottom: index < count - 1 ? gap : 0 },
               isActive && styles.rowActive,
-              { transform: [{ translateY: getValue(key) }, { scale: isActive ? 1.02 : 1 }] },
+              isActive && { transform: [{ translateY: dragY }, { scale: 1.02 }] },
             ]}
           >
             {renderItem(item, index)}
@@ -184,6 +142,14 @@ export default function DraggableList<T>({
     </View>
   );
 }
+
+// A parent re-rendering for unrelated reasons (e.g. a live ticking timer)
+// must not tear down and recreate every row's PanResponder mid-drag — that
+// corrupts whichever gesture is in flight. Memoized so DraggableList only
+// re-renders when its own props actually change; callers must pass stable
+// (useCallback'd) keyExtractor/renderItem/onReorder for this to help — see
+// WorkoutLog.tsx for why that mattered.
+export default React.memo(DraggableList) as <T>(props: Props<T>) => React.ReactElement | null;
 
 const styles = StyleSheet.create({
   rowWrap: {

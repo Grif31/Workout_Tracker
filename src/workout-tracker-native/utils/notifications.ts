@@ -50,10 +50,11 @@ export async function scheduleRestTimerAlert(seconds: number): Promise<void> {
   try {
     restTimerNotifId = await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'Rest over — time to lift! 💪',
+        title: 'Rest over. Time to lift! 💪',
         body: 'Your rest period has ended.',
         sound: true,
         interruptionLevel: 'timeSensitive',
+        data: { type: 'rest_timer' },
       } as any,
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,

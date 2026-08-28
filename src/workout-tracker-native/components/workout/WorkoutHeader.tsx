@@ -34,6 +34,7 @@ type Props = {
   onRepeatLastSetChange: (val: boolean) => void;
   prefillPreviousSets: boolean;
   onPrefillPreviousSetsChange: (val: boolean) => void;
+  onReorderPress: () => void;
   exerciseCount: number;
   totalSets: number;
   totalVolume: number;
@@ -65,6 +66,7 @@ function WorkoutHeader({
   onRepeatLastSetChange,
   prefillPreviousSets,
   onPrefillPreviousSetsChange,
+  onReorderPress,
   exerciseCount,
   totalSets,
   totalVolume,
@@ -296,7 +298,17 @@ function WorkoutHeader({
         </View>
       )}
 
-      {exerciseCount > 0 && <Text style={styles.sectionLabel}>Exercises</Text>}
+      {exerciseCount > 0 && (
+        <View style={styles.exercisesSectionRow}>
+          <Text style={styles.sectionLabel}>Exercises</Text>
+          {exerciseCount > 1 && (
+            <TouchableOpacity onPress={onReorderPress} style={styles.reorderBtn} hitSlop={8}>
+              <Ionicons name="reorder-three-outline" size={16} color={colors.accent} />
+              <Text style={[styles.reorderBtnText, { color: colors.accent }]}>Reorder</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -416,14 +428,21 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   summaryLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
   summaryDivider: { width: 1, backgroundColor: colors.border, marginVertical: spacing.xs },
 
+  exercisesSectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
   sectionLabel: {
     fontSize: typography.fontSize.sm,
     fontWeight: '700',
     color: colors.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    marginBottom: spacing.sm,
   },
+  reorderBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  reorderBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600' },
 
   timerDiagramRow: {
     flexDirection: 'row',

@@ -765,17 +765,21 @@ export default function CoachScreen({ navigation }: Props) {
                     </View>
                     <TouchableOpacity
                       style={styles.logDayBtn}
-                      onPress={() => navigation.navigate('LogRoutine', {
-                        prefill: {
-                          name: day.label, notes: '',
-                          exercises: day.workout_template.exercises.map(ex => ({
-                            name: ex.name,
-                            exercise_template_id: ex.id,
-                            exercise_type: ex.exercise_type ?? 'strength',
-                            muscle_group: ex.muscle_group,
-                            equipment: ex.equipment,
-                            sets: [{ reps: '', weight: '' }],
-                          })),
+                      onPress={() => (navigation as any).navigate('DashboardTab', {
+                        screen: 'WorkoutLog',
+                        initial: false,
+                        params: {
+                          prefill: {
+                            name: day.label, notes: '',
+                            exercises: day.workout_template.exercises.map(ex => ({
+                              name: ex.name,
+                              exercise_template_id: ex.id,
+                              exercise_type: ex.exercise_type ?? 'strength',
+                              muscle_group: ex.muscle_group,
+                              equipment: ex.equipment,
+                              sets: [{ reps: '', weight: '' }],
+                            })),
+                          },
                         },
                       })}
                     >
@@ -835,17 +839,21 @@ export default function CoachScreen({ navigation }: Props) {
                   </View>
                   <TouchableOpacity
                     style={styles.logInlineBtn}
-                    onPress={() => navigation.navigate('LogRoutine', {
-                      prefill: {
-                        name: t.name, notes: '',
-                        exercises: t.exercises.map(ex => ({
-                          name: ex.name,
-                          exercise_template_id: ex.id,
-                          exercise_type: ex.exercise_type ?? 'strength',
-                          muscle_group: ex.muscle_group,
-                          equipment: ex.equipment,
-                          sets: [{ reps: '', weight: '' }],
-                        })),
+                    onPress={() => (navigation as any).navigate('DashboardTab', {
+                      screen: 'WorkoutLog',
+                      initial: false,
+                      params: {
+                        prefill: {
+                          name: t.name, notes: '',
+                          exercises: t.exercises.map(ex => ({
+                            name: ex.name,
+                            exercise_template_id: ex.id,
+                            exercise_type: ex.exercise_type ?? 'strength',
+                            muscle_group: ex.muscle_group,
+                            equipment: ex.equipment,
+                            sets: [{ reps: '', weight: '' }],
+                          })),
+                        },
                       },
                     })}
                   >

@@ -75,6 +75,7 @@ export type PreviewExercise = {
   id: number;
   name: string;
   muscle_group: string;
+  equipment?: string;
   exercise_type?: string;
   prescribed_sets?: number;
   prescribed_reps?: string;
@@ -87,7 +88,6 @@ export type TrainingStackParamsList = {
     CreateRoutine: { routineId?: number; routineName?: string } | undefined;
     RoutineDetail: { routineId: number; routineName: string };
     TemplateDetail: { templateId: number; muscleGroups?: string[] };
-    LogRoutine: { prefill?: PrefillWorkoutData; workoutId?: number; editMode?: boolean };
     WorkoutDetails: { workoutId: number };
     WorkoutSummary: WorkoutSummaryParams;
     ExerciseDetail: ExerciseDetailParams;

@@ -14,6 +14,7 @@ export const EXERCISE_ROW_HEIGHT = 56;
 type Props = {
   name: string;
   muscleGroup?: string;
+  equipment?: string;
   programming?: RowProgramming | null;
   onDelete: () => void;
   onSwitch: () => void;
@@ -27,7 +28,7 @@ type Props = {
 const ACTION_WIDTH = 64;
 
 export default function ExerciseEditRow({
-  name, muscleGroup, programming, onDelete, onSwitch, onEdit, rowColor, swipeEnabled = true,
+  name, muscleGroup, equipment, programming, onDelete, onSwitch, onEdit, rowColor, swipeEnabled = true,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -41,7 +42,7 @@ export default function ExerciseEditRow({
   const prescription = programming?.sets
     ? `${programming.sets} × ${programming.reps || '?'}${programming.rpe != null ? `  @ RPE ${programming.rpe}` : ''}`
     : null;
-  const subtitle = [muscleGroup, prescription].filter(Boolean).join('  ·  ');
+  const subtitle = [muscleGroup, equipment, prescription].filter(Boolean).join('  ·  ');
 
   return (
     <Swipeable

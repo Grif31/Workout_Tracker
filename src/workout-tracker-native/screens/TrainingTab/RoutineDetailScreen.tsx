@@ -193,27 +193,31 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
                       for (const p of parsed) progMap.set(p.exercise_template_id, p);
                     } catch { }
                   }
-                  navigation.navigate('LogRoutine', {
-                    prefill: {
-                      name: item.label,
-                      notes: '',
-                      exercises: item.workout_template.exercises.map(ex => {
-                        const prog = progMap.get(ex.id);
-                        return {
-                          name: ex.name,
-                          exercise_template_id: ex.id,
-                          exercise_type: ex.exercise_type ?? 'strength',
-                          muscle_group: ex.muscle_group,
-                          equipment: ex.equipment,
-                          sets: prog
-                            ? Array(prog.sets).fill(null).map(() => ({
-                                reps: parseRepsMin(prog.reps),
-                                weight: '',
-                                rpe: prog.rpe != null ? String(prog.rpe) : undefined,
-                              }))
-                            : [{ reps: '', weight: '' }],
-                        };
-                      }),
+                  (navigation as any).navigate('DashboardTab', {
+                    screen: 'WorkoutLog',
+                    initial: false,
+                    params: {
+                      prefill: {
+                        name: item.label,
+                        notes: '',
+                        exercises: item.workout_template.exercises.map(ex => {
+                          const prog = progMap.get(ex.id);
+                          return {
+                            name: ex.name,
+                            exercise_template_id: ex.id,
+                            exercise_type: ex.exercise_type ?? 'strength',
+                            muscle_group: ex.muscle_group,
+                            equipment: ex.equipment,
+                            sets: prog
+                              ? Array(prog.sets).fill(null).map(() => ({
+                                  reps: parseRepsMin(prog.reps),
+                                  weight: '',
+                                  rpe: prog.rpe != null ? String(prog.rpe) : undefined,
+                                }))
+                              : [{ reps: '', weight: '' }],
+                          };
+                        }),
+                      },
                     },
                   });
                 }}

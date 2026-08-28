@@ -66,10 +66,10 @@ describe('PRProgressionScreen', () => {
     expect(getByText('Push B')).toBeTruthy();
   });
 
-  it('formats the table\'s Date column as dd/mm/yyyy', async () => {
+  it('formats the table\'s Date column as mm/dd/yyyy', async () => {
     const { getByText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => expect(getByText('10/08/2026')).toBeTruthy());
-    expect(getByText('01/07/2026')).toBeTruthy();
+    await waitFor(() => expect(getByText('08/10/2026')).toBeTruthy());
+    expect(getByText('07/01/2026')).toBeTruthy();
   });
 
   it('switches to the Est. 1RM series when its chip is tapped', async () => {

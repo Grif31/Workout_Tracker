@@ -296,6 +296,155 @@ def create_app(test_config=None):
             db.session.rollback()
             click.echo('Re-run with --apply to write these changes.')
 
+    @app.cli.command('backfill-strength-score-snapshots')
+    @click.option('--apply', 'do_apply', is_flag=True, default=False, help='Write changes to DB (omit for dry run)')
+    @click.option('--user-id', default=None, type=int, help='Limit to one user (omit for all users)')
+    def backfill_strength_score_snapshots(do_apply, user_id):
+        """Reconstruct historical StrengthScoreSnapshot rows from PREvent
+        history, so the Score Over Time chart isn't empty/sparse for a user
+        who logged PRs long before ever opening the Strength Score screen —
+        snapshots are otherwise only written reactively (once per 24h, only
+        when the live endpoint is called).
+
+        Replays each user's estimated_1rm PREvent rows chronologically —
+        Epley of a true single equals the weight itself, so this history
+        already captures true 1RMs too, not just multi-rep estimates. At
+        most one snapshot per calendar day; dates that already have a
+        (real, reactive) snapshot are never touched or duplicated."""
+        from models import User, ExerciseTemplate, PREvent, BodyweightLog, StrengthScoreSnapshot
+        from utils.strength_standards import STANDARDS, compute_percentile, compute_overall_score, age_scaling_factor
+
+        kg_to_lbs = 2.20462
+
+        user_query = User.query.order_by(User.id)
+        if user_id is not None:
+            user_query = user_query.filter_by(id=user_id)
+        users = user_query.all()
+
+        processed = skipped = total_snapshots = 0
+        for user in users:
+            if not user.gender or not user.bodyweight:
+                skipped += 1
+                continue
+
+            unit_to_lbs = kg_to_lbs if (user.weight_unit or 'lbs') == 'kg' else 1.0
+            valid_keys = set(STANDARDS.get(user.gender, {}).keys())
+
+            template_to_key = {
+                tid: sk for tid, sk in
+                db.session.query(ExerciseTemplate.id, ExerciseTemplate.standards_key)
+                .filter(ExerciseTemplate.standards_key.in_(valid_keys))
+                .all()
+            }
+            if not template_to_key:
+                continue
+
+            events = (
+                PREvent.query
+                .filter(
+                    PREvent.user_id == user.id,
+                    PREvent.pr_type == 'estimated_1rm',
+                    PREvent.exercise_template_id.in_(template_to_key.keys()),
+                )
+                .order_by(PREvent.achieved_at.asc())
+                .all()
+            )
+            if not events:
+                continue
+
+            bw_logs = (
+                BodyweightLog.query
+                .filter_by(user_id=user.id)
+                .order_by(BodyweightLog.date.asc())
+                .all()
+            )
+            existing_dates = {
+                s.created_at.date() for s in
+                StrengthScoreSnapshot.query.filter_by(user_id=user.id).all()
+            }
+
+            def _bw_lbs_at(dt):
+                # Closest bodyweight log at/before dt; else the earliest log
+                # ever known; else the user's current bodyweight (best
+                # available guess for a date before any log existed).
+                candidate = None
+                for log in bw_logs:
+                    if log.date <= dt:
+                        candidate = log
+                    else:
+                        break
+                bw = (candidate or (bw_logs[0] if bw_logs else None))
+                return (bw.weight if bw else user.bodyweight) * unit_to_lbs
+
+            def _age_factor_at(dt):
+                if not user.birth_date:
+                    return 1.0
+                age = dt.year - user.birth_date.year - (
+                    (dt.month, dt.day) < (user.birth_date.month, user.birth_date.day)
+                )
+                return age_scaling_factor(age)
+
+            # standards_key -> best 1RM (lbs) known as of the event being
+            # processed. PREvent.value is per-exercise-template monotonically
+            # increasing (rows only exist when a value beats that template's
+            # own prior best), but several templates can share one
+            # standards_key (e.g. barbell vs. smith-machine bench) — a later
+            # event from a *different* template sharing the key isn't
+            # guaranteed to exceed another template's already-tracked best,
+            # so this only advances the key's value, mirroring the live
+            # endpoint's max() across all templates for a key.
+            best_1rm_lbs: dict[str, float] = {}
+            by_day: dict = {}
+            for ev in events:
+                key = template_to_key.get(ev.exercise_template_id)
+                if not key:
+                    continue
+                new_val = ev.value * unit_to_lbs
+                if new_val <= best_1rm_lbs.get(key, 0.0):
+                    continue
+                best_1rm_lbs[key] = new_val
+
+                bw_lbs = _bw_lbs_at(ev.achieved_at)
+                if bw_lbs <= 0:
+                    continue
+                age_factor = _age_factor_at(ev.achieved_at)
+
+                exercise_percentiles = {}
+                for k, best in best_1rm_lbs.items():
+                    pct = compute_percentile(k, user.gender, (best / bw_lbs) * age_factor)
+                    if pct is not None:
+                        exercise_percentiles[k] = pct
+
+                score = compute_overall_score(exercise_percentiles)
+                if score is None:
+                    continue
+                by_day[ev.achieved_at.date()] = score
+
+            new_count = 0
+            for day, score in sorted(by_day.items()):
+                if day in existing_dates:
+                    continue
+                db.session.add(StrengthScoreSnapshot(
+                    user_id=user.id,
+                    score=round(score, 1),
+                    created_at=datetime.combine(day, datetime.min.time()),
+                ))
+                new_count += 1
+
+            if new_count:
+                click.echo(f'  user {user.id} ({user.username}): {new_count} snapshot(s) from {len(events)} PR event(s)')
+            total_snapshots += new_count
+            processed += 1
+
+        click.echo(f'{"[DRY RUN] " if not do_apply else ""}{processed} user(s) processed, '
+                   f'{skipped} skipped (missing gender/bodyweight), {total_snapshots} snapshot(s) generated.')
+        if do_apply:
+            db.session.commit()
+            click.echo('Done.')
+        else:
+            db.session.rollback()
+            click.echo('Re-run with --apply to write these changes.')
+
     return app
 
 

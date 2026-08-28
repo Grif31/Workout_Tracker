@@ -118,7 +118,7 @@ def _routine_rotation_context(user_id: int, routine_id: int) -> dict | None:
 def _match_exercises(exercise_items: list) -> list[dict]:
     """Match AI exercise names to DB records.
     Accepts strings or {"exercise": str, "sets": int, "reps": str, "rpe": int|None}.
-    Returns [{id, name, muscle_group, prescribed_sets, prescribed_reps, prescribed_rpe}].
+    Returns [{id, name, muscle_group, equipment, prescribed_sets, prescribed_reps, prescribed_rpe}].
     """
     all_templates = ExerciseTemplate.query.all()
     name_map = {t.name.lower(): t for t in all_templates}
@@ -145,6 +145,7 @@ def _match_exercises(exercise_items: list) -> list[dict]:
                 'id': tmpl.id,
                 'name': tmpl.name,
                 'muscle_group': tmpl.muscle_group or '',
+                'equipment': tmpl.equipment or '',
                 'exercise_type': (tmpl.exercise_type or 'strength').lower(),
                 'prescribed_sets': p_sets,
                 'prescribed_reps': p_reps,

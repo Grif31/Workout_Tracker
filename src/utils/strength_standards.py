@@ -386,19 +386,53 @@ def compute_weight_at_percentile(exercise: str, gender: str, bodyweight_lbs: flo
     return round(bodyweight_lbs * ratio, 1)
 
 
+def compute_overall_score(exercise_percentiles: dict[str, float]) -> float | None:
+    """Weighted score from a map of standards_key -> percentile: Big 6 (70%),
+    compound secondary (20%), isolation (10%). Missing tiers are dropped and
+    the remaining weights renormalize automatically. Shared by the live
+    strength-score endpoint (overall score), compute_muscle_group_scores
+    (each muscle group's own score, scoped to just its exercises), and the
+    snapshot-history backfill — all three need this identical weighting, not
+    three copies that can drift out of sync. Returns None if nothing scores.
+    """
+    big6_scores      = [exercise_percentiles[e] for e in BIG_6 if e in exercise_percentiles]
+    compound_scores  = [v for k, v in exercise_percentiles.items() if k not in BIG_6 and k in COMPOUND_SECONDARY]
+    isolation_scores = [v for k, v in exercise_percentiles.items() if k not in BIG_6 and k not in COMPOUND_SECONDARY]
+
+    big6_avg      = mean(big6_scores)      if big6_scores      else None
+    compound_avg  = mean(compound_scores)  if compound_scores  else None
+    isolation_avg = mean(isolation_scores) if isolation_scores else None
+
+    parts = []
+    if big6_avg      is not None: parts.append((0.70, big6_avg))
+    if compound_avg  is not None: parts.append((0.20, compound_avg))
+    if isolation_avg is not None: parts.append((0.10, isolation_avg))
+
+    total_weight = sum(w for w, _ in parts)
+    return (sum(w * v for w, v in parts) / total_weight) if total_weight > 0 else None
+
+
 def compute_muscle_group_scores(
     exercise_percentiles: dict[str, float]
 ) -> list[dict]:
+    # Same Big6/compound/isolation weighting as the overall score, scoped to
+    # each muscle group's own exercises — a flat average previously let a
+    # muscle's score be diluted by isolation work at the same weight as a
+    # Big 6 lift, which didn't match how the overall score treats them.
     results = []
     for group, exercises in MUSCLE_GROUP_MAP.items():
-        scores = [exercise_percentiles[e] for e in exercises if e in exercise_percentiles]
-        if scores:
-            score = round(mean(scores))
-            results.append({
-                'name': group,
-                'score': score,
-                'rank': percentile_to_strength_rank(score),
-            })
+        group_percentiles = {e: exercise_percentiles[e] for e in exercises if e in exercise_percentiles}
+        if not group_percentiles:
+            continue
+        score_f = compute_overall_score(group_percentiles)
+        if score_f is None:
+            continue
+        score = round(score_f)
+        results.append({
+            'name': group,
+            'score': score,
+            'rank': percentile_to_strength_rank(score),
+        })
     results.sort(key=lambda x: x['score'], reverse=True)
     return results
 

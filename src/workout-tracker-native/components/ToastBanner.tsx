@@ -49,10 +49,15 @@ export function ToastBanner() {
     <Animated.View
       style={[
         styles.banner,
-        { top: insets.top + spacing.sm, backgroundColor: colors.danger, transform: [{ translateY }] },
+        {
+          top: insets.top + spacing.sm,
+          backgroundColor: colors.surface,
+          borderColor: colors.accent,
+          transform: [{ translateY }],
+        },
       ]}
     >
-      <Text style={styles.text}>{message}</Text>
+      <Text style={[styles.text, { color: colors.textPrimary }]}>{message}</Text>
     </Animated.View>
   );
 }
@@ -64,6 +69,7 @@ const styles = StyleSheet.create({
     right: spacing.md,
     zIndex: 9999,
     borderRadius: spacing.sm,
+    borderWidth: 1.5,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     elevation: 8,
@@ -73,7 +79,6 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
   },
   text: {
-    color: '#fff',
     fontSize: typography.fontSize.sm,
     fontWeight: '600',
     textAlign: 'center',

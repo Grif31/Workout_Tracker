@@ -133,6 +133,23 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
     return { exercise: ex, coords: decodedCoords, mapRegion: region, durationMin: dur, distanceKm: dist, elevationGainM: elev, calories: kcal };
   }, [workout, weightKg]);
 
+  // This screen renders the route twice at once — the static map below, and
+  // the off-screen CardioShareCard/RouteTrace kept mounted for instant Share
+  // capture — and nothing caps route_polyline's size before it's saved, so a
+  // long run can still decode to thousands of points here. The map is a
+  // fixed-size, non-interactive thumbnail (scrollEnabled/zoomEnabled false),
+  // so thinning it costs nothing visually. Mirrors GPSCardioScreen's live-map
+  // thinning.
+  const MAX_POLYLINE_POINTS = 500;
+  const displayCoords = useMemo(() => {
+    if (coords.length <= MAX_POLYLINE_POINTS) return coords;
+    const step = Math.ceil(coords.length / MAX_POLYLINE_POINTS);
+    const thinned = coords.filter((_, i) => i % step === 0);
+    const last = coords[coords.length - 1];
+    if (thinned[thinned.length - 1] !== last) thinned.push(last);
+    return thinned;
+  }, [coords]);
+
   const handleRename = async () => {
     const name = renameText.trim();
     if (!name) return;
@@ -224,7 +241,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
           distanceUnit={distanceUnit}
           durationMin={durationMin}
           elevationM={elevationGainM}
-          coords={coords}
+          coords={displayCoords}
           accentColor={colors.accent}
         />
       </View>
@@ -234,7 +251,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
         {MapView && mapRegion ? (
           <MapView style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} initialRegion={mapRegion} scrollEnabled={false} zoomEnabled={false}>
             {coords.length >= 2 && Polyline && (
-              <Polyline coordinates={coords} strokeColor={colors.accent} strokeWidth={4} />
+              <Polyline coordinates={displayCoords} strokeColor={colors.accent} strokeWidth={4} />
             )}
           </MapView>
         ) : (

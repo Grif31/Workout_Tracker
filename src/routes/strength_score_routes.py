@@ -36,7 +36,12 @@ def _exercise_percentile_data(user_id, standards_key, template_ids, gender, unit
     )
     est_1rm = float(est_1rm_row) * unit_to_lbs if est_1rm_row else 0.0
 
-    best_1rm = max(true_1rm, est_1rm)
+    # A logged true 1RM (an actual single-rep set) is more trustworthy than
+    # an Epley estimate from a different, submaximal set — the formula can
+    # overshoot at higher rep ranges and claim a user is stronger than their
+    # real, achieved single. Prefer the true 1RM whenever one exists; only
+    # fall back to the estimate when no true 1RM has been logged at all.
+    best_1rm = true_1rm if true_1rm > 0 else est_1rm
 
     # Pull-up / Dip bodyweight fallback: standards (and logged weighted sets)
     # are on the ADDED-weight scale, so estimate added 1RM as Epley total
@@ -99,11 +104,10 @@ def _compute_thresholds(standards_key, gender, bw_lbs, unit_to_lbs):
 @jwt_required()
 def strength_score():
     from datetime import datetime, timedelta
-    from statistics import mean as _mean
     from utils.strength_standards import (
         STANDARDS, BIG_6, COMPOUND_SECONDARY,
         percentile_to_strength_rank, greek_rank_from_score,
-        compute_muscle_group_scores,
+        compute_muscle_group_scores, compute_overall_score,
         compute_consistency_score, compute_dedication_score,
         compute_volume_score, compute_greek_score, age_scaling_factor,
     )
@@ -181,15 +185,13 @@ def strength_score():
 
     # Overall score — Big 6 (70%), compound secondary (20%), isolation (10%).
     # Missing categories are dropped and weights renormalized automatically.
+    # compute_overall_score is shared with compute_muscle_group_scores and the
+    # snapshot-history backfill so all three weight identically.
     big6_scores     = [exercise_percentiles[e] for e in BIG_6 if e in exercise_percentiles]
     compound_scores = [v for k, v in exercise_percentiles.items()
                        if k not in BIG_6 and k in COMPOUND_SECONDARY]
     isolation_scores = [v for k, v in exercise_percentiles.items()
                         if k not in BIG_6 and k not in COMPOUND_SECONDARY]
-
-    big6_avg     = _mean(big6_scores)     if big6_scores     else None
-    compound_avg = _mean(compound_scores) if compound_scores else None
-    isolation_avg = _mean(isolation_scores) if isolation_scores else None
 
     # Coverage — how many of the exercises this user's gender has standards
     # for are actually tracked, per category. The formula above silently skips
@@ -203,13 +205,7 @@ def strength_score():
         'isolation': {'tracked': len(isolation_scores), 'total': isolation_total},
     }
 
-    parts = []
-    if big6_avg     is not None: parts.append((0.70, big6_avg))
-    if compound_avg is not None: parts.append((0.20, compound_avg))
-    if isolation_avg is not None: parts.append((0.10, isolation_avg))
-
-    total_weight = sum(w for w, _ in parts)
-    overall = (sum(w * v for w, v in parts) / total_weight) if total_weight > 0 else 0.0
+    overall = compute_overall_score(exercise_percentiles) or 0.0
 
     # Muscle group scores
     muscle_groups = compute_muscle_group_scores(exercise_percentiles)

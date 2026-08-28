@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, Dimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
-import { STRENGTH_TIERS, SCORE_RANK_COLORS } from '../constants/strengthRanks';
+import { STRENGTH_TIERS, SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../constants/strengthRanks';
 import SectionRule from './SectionRule';
 
 export type LiftEntry = {
@@ -39,6 +40,15 @@ export default function LiftDetailModal({ visible, onClose, lift, weightUnit }: 
             // modalSheet has paddingHorizontal: spacing.lg on each side
             const BAR_W = Dimensions.get('window').width - spacing.lg * 2;
 
+            // Most motivating number in this whole screen: the exact weight
+            // away from the next tier, not just "here's the full tier chart,
+            // go figure it out yourself." thresholds is sorted by percentile
+            // (see _compute_thresholds in strength_score_routes.py).
+            const nextThreshold = lift.thresholds?.find(t => t.percentile > pct) ?? null;
+            const lbsToNext = nextThreshold && lift.estimated_1rm != null
+              ? Math.round((nextThreshold.weight - lift.estimated_1rm) * 10) / 10
+              : null;
+
             return (
               <>
                 <View style={styles.modalHandle} />
@@ -54,11 +64,17 @@ export default function LiftDetailModal({ visible, onClose, lift, weightUnit }: 
                   )}
                   {lift.rank && (
                     <View style={[styles.miniRankBadge, { backgroundColor: liftColor + '22', borderColor: liftColor, alignSelf: 'center', marginTop: spacing.xs }]}>
+                      <Ionicons name={SCORE_RANK_ICONS[lift.rank.label] ?? 'ellipse-outline'} size={11} color={liftColor} />
                       <Text style={[styles.miniRankText, { color: liftColor }]}>{lift.rank.display}</Text>
                     </View>
                   )}
                   {lift.estimated_1rm != null && (
                     <Text style={styles.liftOneRM}>Est. 1RM: {lift.estimated_1rm} {weightUnit}</Text>
+                  )}
+                  {nextThreshold && lbsToNext != null && lbsToNext > 0 && (
+                    <Text style={[styles.nextRankText, { color: colors.textPrimary }]}>
+                      <Text style={{ fontWeight: '800' }}>{lbsToNext} {weightUnit}</Text> to {nextThreshold.rank}
+                    </Text>
                   )}
                 </View>
 
@@ -137,6 +153,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   liftPercentileText: { fontSize: 36, fontWeight: '800' },
   liftPercentileSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
   liftOneRM: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: spacing.xs },
+  nextRankText: { fontSize: typography.fontSize.sm, marginTop: 2 },
   markerTriangle: {
     position: 'absolute',
     width: 0,
@@ -151,6 +168,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   tierBarLabel: { fontSize: 8, fontWeight: '600', textAlign: 'center' },
   tierBarWeight: { fontSize: 7, textAlign: 'center', marginTop: 1 },
-  miniRankBadge: { borderRadius: 6, borderWidth: 1, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  miniRankBadge: {
+    borderRadius: 6, borderWidth: 1, paddingHorizontal: spacing.sm, paddingVertical: 2,
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+  },
   miniRankText: { fontSize: typography.fontSize.sm, fontWeight: '700' },
 });

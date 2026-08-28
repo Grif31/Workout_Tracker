@@ -209,31 +209,35 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
   };
 
   const handleLog = () => {
-    navigation.navigate('LogRoutine', {
-      prefill: {
-        name,
-        notes: '',
-        exercises: exercises.map(ex => {
-          const prog = progMap[ex.id];
-          return {
-            name: ex.name,
-            exercise_template_id: ex.id,
-            exercise_type: ex.exercise_type ?? 'strength',
-            muscle_group: ex.muscle_group,
-            equipment: ex.equipment,
-            sets: prog
-              ? Array(prog.sets).fill(null).map(() => (
-                  ex.exercise_type === 'duration'
-                    ? { reps: '', weight: '', cardio_duration: parseHoldMinutes(prog.reps) }
-                    : {
-                        reps: parseRepsMin(prog.reps),
-                        weight: '',
-                        rpe: prog.rpe != null ? String(prog.rpe) : undefined,
-                      }
-                ))
-              : [{ reps: '', weight: '' }],
-          };
-        }),
+    (navigation as any).navigate('DashboardTab', {
+      screen: 'WorkoutLog',
+      initial: false,
+      params: {
+        prefill: {
+          name,
+          notes: '',
+          exercises: exercises.map(ex => {
+            const prog = progMap[ex.id];
+            return {
+              name: ex.name,
+              exercise_template_id: ex.id,
+              exercise_type: ex.exercise_type ?? 'strength',
+              muscle_group: ex.muscle_group,
+              equipment: ex.equipment,
+              sets: prog
+                ? Array(prog.sets).fill(null).map(() => (
+                    ex.exercise_type === 'duration'
+                      ? { reps: '', weight: '', cardio_duration: parseHoldMinutes(prog.reps) }
+                      : {
+                          reps: parseRepsMin(prog.reps),
+                          weight: '',
+                          rpe: prog.rpe != null ? String(prog.rpe) : undefined,
+                        }
+                  ))
+                : [{ reps: '', weight: '' }],
+            };
+          }),
+        },
       },
     });
   };
@@ -312,6 +316,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
               <ExerciseEditRow
                 name={item.name}
                 muscleGroup={item.muscle_group}
+                equipment={item.equipment}
                 programming={progMap[item.id] ?? null}
                 swipeEnabled={!listDragging}
                 onDelete={() => removeExercise(item.id)}
