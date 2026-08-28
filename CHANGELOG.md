@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.2.0 (2026-08-28)
+
+### New: Drag-to-Reorder Exercises
+- Reorder exercises in a workout by dragging them into place — open Reorder Mode from the Exercises section header instead of tapping Move Up/Down repeatedly.
+
+### New: Workout Summary Highlights
+- Beat your all-time workout volume or rep total? The summary screen calls it out at the top instead of the generic "Great workout!"
+- See a progress bar toward your next Greek Rank right on the workout summary.
+
+### Improved: Strength Score
+- Uses your actual logged one-rep max when you have one, instead of always defaulting to the formula-estimated value — a real, achieved single now takes priority over an estimate that can overshoot it.
+- Tier colors and icons are now distinct from Greek Rank, so it's clear at a glance which ranking system a badge belongs to.
+- Rank-up celebrations now match the color of the rank you just reached.
+- Muscle group scores use the same weighting as your overall score.
+- New "lbs to next rank" stat shows exactly how close you are to ranking up.
+- Score history now backfills from your past PRs, so your progress chart isn't empty on day one.
+
+### Redesigned: Dashboard & Active Routine
+- The Active Routine card now looks the same on the Dashboard and Training tab, and expands with a smooth animation.
+- Cleaner greeting header — a long name now moves to its own line instead of splitting awkwardly across two.
+
+### Bug Fixes
+- Fixed a crash during long GPS-tracked activities.
+- Fixed the bottom tab bar flashing when opening GPS Track Activity.
+- Fixed a duplicate workout being created when minimizing in the Training tab, then resuming and saving from the Dashboard.
+- Warm-up sets now count toward Personal Records, matching the "New PR!" banner that already fired for them.
+- Fixed the monthly streak showing 0 even when past months already met your goal.
+- Fixed a chart value label wrapping onto two lines when tapping a bar on the Progress tab's 6-month/1-year view.
+- Added a confirmation before deleting an exercise from a workout.
+- Fixed the PR Progression date format and a truncated "Workout" column header.
+
 ## 1.1.3 (2026-08-24)
 
 ### New: PR Dashboard
