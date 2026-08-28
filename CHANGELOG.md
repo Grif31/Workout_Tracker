@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.0 (2026-08-28)
+## 1.1.4 (2026-08-28)
 
 ### New: Drag-to-Reorder Exercises
 - Reorder exercises in a workout by dragging them into place — open Reorder Mode from the Exercises section header instead of tapping Move Up/Down repeatedly.
