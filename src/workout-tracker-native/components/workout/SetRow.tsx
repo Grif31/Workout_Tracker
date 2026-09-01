@@ -16,7 +16,7 @@ type Props = {
   bodyweight?: boolean;
   typeColor: string;
   setType: SetType;
-  onCycleType: () => void;
+  onOpenTypePicker: () => void;
   onChangeReps: (val: string) => void;
   onChangeWeight: (val: string) => void;
   onFocusReps: () => void;
@@ -39,7 +39,7 @@ function SetRow({
   bodyweight,
   typeColor,
   setType,
-  onCycleType,
+  onOpenTypePicker,
   onChangeReps,
   onChangeWeight,
   onFocusReps,
@@ -80,7 +80,7 @@ function SetRow({
       <View style={[styles.setRow, isDone && styles.setRowDone]}>
         <TouchableOpacity
           style={[styles.setTypeBadge, colStyles.setType, { borderColor: typeColor }]}
-          onPress={() => !isDone && onCycleType()}
+          onPress={() => !isDone && onOpenTypePicker()}
         >
           <Text style={[styles.setTypeBadgeNum, { color: typeColor }]}>{setIndex + 1}</Text>
           {setType !== 'N' && <Text style={[styles.setTypeBadgeLabel, { color: typeColor }]}>{setType}</Text>}

@@ -25,7 +25,7 @@ type Props = {
   // editing.
   onUpdateNotes: (exIndex: number, val: string) => void;
   autoFocusNotes?: boolean;
-  onCycleSetType: (exIndex: number, setIdx: number) => void;
+  onOpenSetTypePicker: (exIndex: number, setIdx: number) => void;
   onUpdateSetField: (exIndex: number, setIdx: number, field: 'reps' | 'weight', val: string) => void;
   onFocusInput: (exIndex: number, setIdx: number, field: 'reps' | 'weight') => void;
   onBlurInput: () => void;
@@ -50,7 +50,7 @@ function ExerciseBlock({
   setTypeColors,
   onUpdateNotes,
   autoFocusNotes,
-  onCycleSetType,
+  onOpenSetTypePicker,
   onUpdateSetField,
   onFocusInput,
   onBlurInput,
@@ -188,7 +188,7 @@ function ExerciseBlock({
                       bodyweight={bodyweight}
                       typeColor={tc}
                       setType={type}
-                      onCycleType={() => onCycleSetType(exIndex, setIndex)}
+                      onOpenTypePicker={() => onOpenSetTypePicker(exIndex, setIndex)}
                       onChangeReps={val => onUpdateSetField(exIndex, setIndex, 'reps', val)}
                       onChangeWeight={val => onUpdateSetField(exIndex, setIndex, 'weight', val)}
                       onFocusReps={() => onFocusInput(exIndex, setIndex, 'reps')}

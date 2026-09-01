@@ -62,6 +62,8 @@ import { syncWorkoutToHealthConnect } from '../utils/healthConnect';
 
 type EditableSetField = 'reps' | 'weight';
 
+const SET_TYPE_LABELS: Record<SetType, string> = { N: 'Normal', W: 'Warm-up', D: 'Drop Set', F: 'Failure' };
+
 type Props = {
   prefill?: PrefillWorkoutData;
   editMode?: boolean;
@@ -165,6 +167,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const rootViewRef = useRef<View>(null);
   const rootBottomRef = useRef(0);
   const [rpePickerTarget, setRpePickerTarget]     = useState<{ exIdx: number; setIdx: number } | null>(null);
+  const [setTypePickerTarget, setSetTypePickerTarget] = useState<{ exIdx: number; setIdx: number } | null>(null);
   const [plateCalcTarget, setPlateCalcTarget]     = useState<{ exIdx: number; setIdx: number } | null>(null);
   // Keep refs in sync with state so AppState/setInterval closures always read current values.
   const vibrateRef = useRef(true);
@@ -747,15 +750,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     }));
   };
 
-  const cycleSetType = useCallback((exIndex: number, setIndex: number) => {
+  const applySetType = useCallback((exIndex: number, setIndex: number, type: SetType) => {
     setExercises(prev => {
       const ex = prev[exIndex];
-      const currentSet = ex?.sets[setIndex];
-      if (!ex || !currentSet) return prev;
-      const current = (currentSet.set_type as SetType) ?? 'N';
-      const nextType = SET_TYPES[(SET_TYPES.indexOf(current) + 1) % SET_TYPES.length];
+      if (!ex || !ex.sets[setIndex]) return prev;
       const next = [...prev];
-      next[exIndex] = { ...ex, sets: ex.sets.map((s, j) => j === setIndex ? { ...s, set_type: nextType } : s) };
+      next[exIndex] = { ...ex, sets: ex.sets.map((s, j) => j === setIndex ? { ...s, set_type: type } : s) };
       return next;
     });
   }, []);
@@ -962,6 +962,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     setRpePickerTarget({ exIdx: exIndex, setIdx });
   }, []);
 
+  const onOpenSetTypePicker = useCallback((exIndex: number, setIdx: number) => {
+    setSetTypePickerTarget({ exIdx: exIndex, setIdx });
+  }, []);
+
   const onRegisterSetInput = useCallback((exIndex: number, setIdx: number, field: 'reps' | 'weight', ref: any) => {
     inputRefs.current.set(`${exIndex}:${setIdx}:${field}`, ref);
   }, []);
@@ -1017,7 +1021,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       setTypeColors={SET_TYPE_COLORS}
       onUpdateNotes={updateExerciseNotes}
       autoFocusNotes={autoFocusNoteIdx === exIndex}
-      onCycleSetType={cycleSetType}
+      onOpenSetTypePicker={onOpenSetTypePicker}
       onUpdateSetField={updateSetField}
       onFocusInput={onFocusSetInput}
       onBlurInput={onBlurSetInput}
@@ -1033,7 +1037,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     />
   ), [
     showRpe, weightUnit, SET_TYPE_COLORS, updateExerciseNotes, autoFocusNoteIdx,
-    cycleSetType, updateSetField, onFocusSetInput, onBlurSetInput, toggleSetDone,
+    onOpenSetTypePicker, updateSetField, onFocusSetInput, onBlurSetInput, toggleSetDone,
     onOpenRpePicker, deleteSet, addSetToExercise, onRegisterSetInput, startRest,
     onOpenExerciseMenu, updateCardioField, prHint,
   ]);
@@ -1857,6 +1861,59 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         </View>
       </Modal>
 
+      {/* Set Type Picker Modal */}
+      <Modal
+        visible={setTypePickerTarget !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSetTypePickerTarget(null)}
+      >
+        <TouchableOpacity
+          style={StyleSheet.absoluteFillObject}
+          activeOpacity={1}
+          onPress={() => setSetTypePickerTarget(null)}
+        />
+        <View style={[styles.rpeModal, { backgroundColor: colors.surface }]}>
+          <View style={[styles.rpeModalHandle, { backgroundColor: colors.border }]} />
+          <View style={styles.rpeModalHeader}>
+            <Text style={[styles.rpeModalTitle, { color: colors.textPrimary }]}>Set Type</Text>
+            <TouchableOpacity onPress={() => setSetTypePickerTarget(null)} hitSlop={8}>
+              <Ionicons name="close" size={22} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.setTypeList}>
+            {SET_TYPES.map(t => {
+              const current = setTypePickerTarget
+                ? ((exercises[setTypePickerTarget.exIdx]?.sets[setTypePickerTarget.setIdx]?.set_type as SetType) ?? 'N')
+                : 'N';
+              const selected = current === t;
+              const tc = SET_TYPE_COLORS[t];
+              return (
+                <TouchableOpacity
+                  key={t}
+                  style={styles.setTypeRow}
+                  activeOpacity={0.75}
+                  onPress={() => {
+                    if (setTypePickerTarget) {
+                      applySetType(setTypePickerTarget.exIdx, setTypePickerTarget.setIdx, t);
+                    }
+                    setSetTypePickerTarget(null);
+                  }}
+                >
+                  <View style={[styles.setTypeBadge, { borderColor: tc }]}>
+                    <Text style={[styles.setTypeBadgeText, { color: tc }]}>{t}</Text>
+                  </View>
+                  <Text style={[styles.setTypeLabel, { color: colors.textPrimary }]}>{SET_TYPE_LABELS[t]}</Text>
+                  {selected && (
+                    <Ionicons name="checkmark" size={20} color={colors.accent} style={{ marginLeft: 'auto' }} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </Modal>
+
       {/* PR banner — slides down from top, auto-dismisses */}
       {prBanner && (
         <Animated.View
@@ -2046,6 +2103,33 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.xs,
     textAlign: 'center',
     lineHeight: 14,
+  },
+
+  setTypeList: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  setTypeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  setTypeBadge: {
+    borderWidth: 1,
+    borderRadius: 4,
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  setTypeBadgeText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+  },
+  setTypeLabel: {
+    fontSize: typography.fontSize.md,
+    fontWeight: '600',
   },
 
   prBanner: {
