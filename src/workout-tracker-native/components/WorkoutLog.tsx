@@ -237,9 +237,13 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       setMenuRendered(true);
       Animated.spring(exMenuAnim, { toValue: 1, useNativeDriver: true, tension: 200, friction: 16 }).start();
     } else {
-      Animated.timing(exMenuAnim, { toValue: 0, duration: 120, useNativeDriver: true }).start(({ finished }) => {
-        if (finished) setMenuRendered(false);
-      });
+      Animated.timing(exMenuAnim, { toValue: 0, duration: 120, useNativeDriver: true }).start();
+      // Unmount on a timer, not the animation's completion callback — a
+      // native-driver animation interrupted by a background/foreground can
+      // resolve with finished:false, which would leave this Modal (and its
+      // full-screen backdrop) mounted forever and swallow every tap.
+      const t = setTimeout(() => { setMenuRendered(false); setRenderedMenuIdx(null); }, 160);
+      return () => clearTimeout(t);
     }
   }, [openMenuIdx, exMenuAnim]);
   // Reorder Mode — a compact drag-to-reorder view swapped in for the normal
@@ -1081,7 +1085,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const startReplaceExercise = (exIndex: number) => {
     setOpenMenuIdx(null);
     setReplacingExIndex(exIndex);
-    setExerciseModalVisible(true);
+    // Let the menu Modal fully unmount before presenting the picker — iOS
+    // only shows one Modal at a time, and mounting the second while the
+    // first animates out can leave the picker stuck behind it.
+    setTimeout(() => setExerciseModalVisible(true), 180);
   };
 
   // Turn last-session sets into editable set state for this exercise's logging mode
@@ -1674,11 +1681,16 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         animationType="none"
         onRequestClose={() => setOpenMenuIdx(null)}
       >
-        <TouchableOpacity
-          style={StyleSheet.absoluteFillObject}
-          activeOpacity={1}
-          onPress={() => setOpenMenuIdx(null)}
-        />
+        {/* Gated on openMenuIdx, not menuRendered — a Modal lingering through
+            its close animation (or stuck) must never keep a full-screen
+            touch-catcher over the screen. */}
+        {openMenuIdx !== null && (
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={() => setOpenMenuIdx(null)}
+          />
+        )}
         {renderedMenuIdx !== null && (
           <Animated.View
             style={[
