@@ -93,13 +93,16 @@ class Workout(db.Model):
             if (ex.exercise_type or 'strength').lower() == 'cardio':
                 continue
             equipment = None
+            load_factor = None
             if ex.exercise_template_id:
                 tmpl = db.session.get(ExerciseTemplate, ex.exercise_template_id)
-                equipment = tmpl.equipment if tmpl else None
+                if tmpl:
+                    equipment = tmpl.equipment
+                    load_factor = tmpl.bodyweight_load_factor
             for s in ex.sets:
                 if (s.set_type or 'N') == 'W':
                     continue
-                w = compute_effective_weight(s.weight, equipment, bodyweight)
+                w = compute_effective_weight(s.weight, equipment, bodyweight, load_factor)
                 if weight_unit == 'kg':
                     w *= kg_to_lbs
                 total += (s.reps or 0) * w
@@ -131,6 +134,7 @@ class Exercise(db.Model):
             "notes": self.notes,
             "equipment": tmpl.equipment if tmpl else None,
             "muscle_group": tmpl.muscle_group if tmpl else None,
+            "bodyweight_load_factor": tmpl.bodyweight_load_factor if tmpl else None,
         }
         if include_sets:
             data["sets"] = [s.to_dict() for s in self.sets]
@@ -171,6 +175,7 @@ class WorkoutTemplate(db.Model):
                     "equipment": e.equipment,
                     "exercise_type": e.exercise_type,
                     "image_url": e.image_url,
+                    "bodyweight_load_factor": e.bodyweight_load_factor,
                 }
                 for e in ordered
             ]
@@ -242,6 +247,9 @@ class ExerciseTemplate(db.Model):
     exercise_type = db.Column(db.String(10), nullable=False, server_default='strength')
     standards_key = db.Column(db.String(100), nullable=True, index=True)
     description = db.Column(db.Text, nullable=True)
+    # Fraction of bodyweight this movement shifts, for Bodyweight/Weighted
+    # volume math (push-up ~0.6, sit-up ~0.35, pull-up ~1.0). NULL -> 1.0.
+    bodyweight_load_factor = db.Column(db.Float, nullable=True)
     # NULL = global library exercise visible to all users
     # Set = custom exercise created by that user, only visible to them
     user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=True, index=True)

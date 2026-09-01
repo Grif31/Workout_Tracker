@@ -4,6 +4,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm import subqueryload
 from schemas import ExerciseSchema
 from utils.validation import validate_body
+from utils.volume import derive_bodyweight_load_factor
 
 exercise_bp = Blueprint('exercise_bp', __name__)
 
@@ -19,6 +20,7 @@ def exercise_to_dict(exercise):
         'image_url': exercise.image_url,
         'exercise_type': (exercise.exercise_type or 'strength').lower(),
         'is_custom': exercise.user_id is not None,
+        'bodyweight_load_factor': exercise.bodyweight_load_factor,
     }
 
 
@@ -69,7 +71,10 @@ def add_exercise():
     if duplicate:
         return jsonify({'message': 'Exercise Already Exists'}), 400
 
-    new_exercise = ExerciseTemplate(name=name, equipment=equipment, exercise_type=exercise_type, user_id=user_id)
+    new_exercise = ExerciseTemplate(
+        name=name, equipment=equipment, exercise_type=exercise_type, user_id=user_id,
+        bodyweight_load_factor=derive_bodyweight_load_factor(name, equipment),
+    )
     db.session.add(new_exercise)
     db.session.flush()  # populate new_exercise.id before adding mappings
 

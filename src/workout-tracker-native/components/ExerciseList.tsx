@@ -27,9 +27,10 @@ type Exercise = {
   image_url?: string;
   exercise_type?: string;
   is_custom?: boolean;
+  bodyweight_load_factor?: number | null;
 };
 
-type SelectedExercise = { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string };
+type SelectedExercise = { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string; bodyweight_load_factor?: number | null };
 
 type RecentExercise = { name: string; exercise_template_id: number | null };
 
@@ -163,7 +164,7 @@ export default function ExerciseListModal({
       });
       return;
     }
-    onSelect({ id: ex.id, name: ex.name, muscle_group: ex.muscle_group, equipment: ex.equipment, image_url: ex.image_url, exercise_type: ex.exercise_type });
+    onSelect({ id: ex.id, name: ex.name, muscle_group: ex.muscle_group, equipment: ex.equipment, image_url: ex.image_url, exercise_type: ex.exercise_type, bodyweight_load_factor: ex.bodyweight_load_factor });
     setSearch('');
     setSelectedMuscle('All');
   };
@@ -173,7 +174,7 @@ export default function ExerciseListModal({
       .map(id => exercises.find(ex => ex.id === id))
       .filter((ex): ex is Exercise => ex !== undefined);
     toAdd.forEach(ex =>
-      onSelect({ id: ex.id, name: ex.name, muscle_group: ex.muscle_group, equipment: ex.equipment, image_url: ex.image_url, exercise_type: ex.exercise_type })
+      onSelect({ id: ex.id, name: ex.name, muscle_group: ex.muscle_group, equipment: ex.equipment, image_url: ex.image_url, exercise_type: ex.exercise_type, bodyweight_load_factor: ex.bodyweight_load_factor })
     );
     setPendingIds(new Set());
     setSearch('');

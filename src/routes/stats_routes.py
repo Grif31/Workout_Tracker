@@ -53,28 +53,31 @@ def exercise_stats():
 
     templates_cache = {}
 
-    def _equipment_for(tid):
+    def _template_for(tid):
         if tid is None:
             return None
         if tid not in templates_cache:
             templates_cache[tid] = db.session.get(ExerciseTemplate, tid)
-        t = templates_cache[tid]
-        return t.equipment if t else None
+        return templates_cache[tid]
 
     from collections import defaultdict
-    # 'equipment' is a parallel list (same order/length as 'sets') used only
-    # internally to compute bodyweight-aware volume -- kept out of the 'sets'
-    # dicts themselves since those are returned as-is in the API response.
-    workout_map = defaultdict(lambda: {'workout': None, 'sets': [], 'equipment': [], 'notes': None})
+    # 'equipment' / 'load_factor' are parallel lists (same order/length as
+    # 'sets') used only internally to compute bodyweight-aware volume -- kept
+    # out of the 'sets' dicts themselves since those are returned as-is in the
+    # API response.
+    workout_map = defaultdict(lambda: {'workout': None, 'sets': [], 'equipment': [], 'load_factor': [], 'notes': None})
     for exercise, workout in rows:
         key = workout.id
         workout_map[key]['workout'] = workout
         if exercise.notes and workout_map[key]['notes'] is None:
             workout_map[key]['notes'] = exercise.notes
-        equip = _equipment_for(exercise.exercise_template_id)
+        tmpl = _template_for(exercise.exercise_template_id)
+        equip = tmpl.equipment if tmpl else None
+        lf = tmpl.bodyweight_load_factor if tmpl else None
         for s in exercise.sets:
             workout_map[key]['sets'].append({'reps': s.reps, 'weight': s.weight, 'set_type': s.set_type or 'N'})
             workout_map[key]['equipment'].append(equip)
+            workout_map[key]['load_factor'].append(lf)
 
     history = []
     all_1rms, all_weights, all_reps, all_set_volumes = [], [], [], []
@@ -85,6 +88,7 @@ def exercise_stats():
         workout = data['workout']
         sets = data['sets']
         equipment_list = data['equipment']
+        load_factor_list = data['load_factor']
         if not sets:
             continue
 
@@ -98,11 +102,11 @@ def exercise_stats():
         session_volume = 0
         best_set = None
 
-        for s, equip in zip(sets, equipment_list):
+        for s, equip, lf in zip(sets, equipment_list, load_factor_list):
             r, w = s['reps'], s['weight']
             # weight 0 = bodyweight set: counts for reps/sets, not weight stats
             if r and w is not None and s['set_type'] != 'W':
-                effective_w = compute_effective_weight(w, equip, bw_at_session)
+                effective_w = compute_effective_weight(w, equip, bw_at_session, lf)
                 session_volume += r * effective_w
                 all_set_volumes.append(r * effective_w)
                 all_reps.append(r)

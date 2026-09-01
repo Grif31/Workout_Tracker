@@ -201,10 +201,13 @@ def create_app(test_config=None):
     @click.option('--apply', 'do_apply', is_flag=True, default=False, help='Write changes to DB (omit for dry run)')
     @click.option('--user-id', default=None, type=int, help='Limit to one user (omit for all users)')
     def backfill_workout_volume(do_apply, user_id):
-        """Recompute Workout.volume now that Bodyweight/Weighted equipment sets
-        add the user's bodyweight-at-the-time (see utils/volume.py). Workouts
-        with no Bodyweight/Weighted sets are unaffected — compute_effective_weight()
-        is a no-op for every other equipment type."""
+        """Recompute Workout.volume. Bodyweight/Weighted equipment sets add the
+        user's bodyweight-at-the-time, scaled by the exercise's
+        bodyweight_load_factor (push-up ~0.6, sit-up ~0.35, pull-up ~1.0 — see
+        utils/volume.py). Re-run this after adding the factor column or
+        retuning any factor. Workouts with no Bodyweight/Weighted sets are
+        unaffected — compute_effective_weight() is a no-op for every other
+        equipment type."""
         from models import Workout, User
         from utils.volume import get_bodyweight_at
 

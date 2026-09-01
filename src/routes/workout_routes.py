@@ -815,13 +815,12 @@ def export_workouts():
     templates_cache = {}
     bodyweight_cache = {}
 
-    def _equipment_for(tid):
+    def _template_for(tid):
         if tid is None:
             return None
         if tid not in templates_cache:
             templates_cache[tid] = db.session.get(ExerciseTemplate, tid)
-        t = templates_cache[tid]
-        return t.equipment if t else None
+        return templates_cache[tid]
 
     for workout in workouts:
         date_str = workout.date.strftime('%Y-%m-%d') if workout.date else ''
@@ -830,11 +829,13 @@ def export_workouts():
             bodyweight_cache[workout.id] = get_bodyweight_at(current_user_id, workout.date)
         bw = bodyweight_cache[workout.id]
         for exercise in workout.exercises:
-            equipment = _equipment_for(exercise.exercise_template_id)
+            tmpl = _template_for(exercise.exercise_template_id)
+            equipment = tmpl.equipment if tmpl else None
+            load_factor = tmpl.bodyweight_load_factor if tmpl else None
             for i, s in enumerate(exercise.sets, start=1):
                 reps = s.reps if s.reps is not None else ''
                 weight = s.weight if s.weight is not None else ''
-                volume = round(s.reps * compute_effective_weight(s.weight, equipment, bw), 2) if s.reps and s.weight is not None else ''
+                volume = round(s.reps * compute_effective_weight(s.weight, equipment, bw, load_factor), 2) if s.reps and s.weight is not None else ''
                 writer.writerow([
                     date_str,
                     workout.name,

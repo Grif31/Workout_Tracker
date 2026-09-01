@@ -32,6 +32,7 @@ CONVERTED = {
 EXEMPT = {
     ('user', 'weight_unit'): 'the unit label itself, not a weight',
     ('workouts', 'volume'):  'canonical lbs by convention (see CLAUDE.md)',
+    ('exerciseTemplates', 'bodyweight_load_factor'): 'a dimensionless bodyweight fraction (0..1), not a stored weight',
 }
 
 # Column-name fragments that suggest a weight or weight-derived value.

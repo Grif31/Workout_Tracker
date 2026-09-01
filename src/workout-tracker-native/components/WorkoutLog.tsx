@@ -50,6 +50,7 @@ import {
   isDuration,
   makeInitialSet,
   usesBodyweightForVolume,
+  bodyweightLoadFactor,
 } from './workout/types';
 import WorkoutHeader from './workout/WorkoutHeader';
 import ExerciseBlock from './workout/ExerciseBlock';
@@ -124,12 +125,13 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     let sets = 0;
     for (const ex of exercises) {
       const addsBodyweight = usesBodyweightForVolume(ex) && bw != null;
+      const bwContribution = addsBodyweight ? bw! * bodyweightLoadFactor(ex) : 0;
       sets += ex.sets.length;
       for (const set of ex.sets) {
         const r = parseFloat(set.reps);
         const w = parseFloat(set.weight);
         if (isNaN(r) || isNaN(w)) continue;
-        volume += r * (addsBodyweight ? w + bw! : w);
+        volume += r * (w + bwContribution);
       }
     }
     return { totalVolume: volume, totalSets: sets };
@@ -212,7 +214,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   const [exerciseList, setExerciseList] = useState<{ id: number; name: string; muscle_group: string; equipment?: string; image_url?: string; exercise_type?: string; is_custom?: boolean }[]>([]);
   const [recentExercises, setRecentExercises] = useState<{ name: string; exercise_template_id: number | null }[]>([]);
-  const [templates, setTemplates] = useState<{ id: number; name: string; exercises: { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string }[] }[]>([]);
+  const [templates, setTemplates] = useState<{ id: number; name: string; exercises: { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string; bodyweight_load_factor?: number | null }[] }[]>([]);
   const [exerciseModalVisible, setExerciseModalVisible] = useState(false);
   const [newExerciseFormVisible, setNewExerciseFormVisible] = useState(false);
   const [replacingExIndex, setReplacingExIndex] = useState<number | null>(null);
@@ -591,6 +593,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         name: ex.name,
         muscle_group: ex.muscle_group,
         equipment: ex.equipment,
+        bodyweight_load_factor: ex.bodyweight_load_factor,
         notes: ex.notes ?? undefined,
         sets: ex.sets.map((s: any) => ({
           uid: makeUid(),
@@ -1132,14 +1135,14 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     return merged;
   };
 
-  const addExToWorkout = async (exercise: { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string }) => {
+  const addExToWorkout = async (exercise: { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string; bodyweight_load_factor?: number | null }) => {
     const initialSet: WorkoutSet = makeInitialSet(exercise);
 
     if (replacingExIndex !== null) {
       const targetIdx = replacingExIndex;
       setExercises(prev => prev.map((ex, i) =>
         i === targetIdx
-          ? { uid: ex.uid, name: exercise.name, exercise_template_id: exercise.id, exercise_type: exercise.exercise_type as ExerciseEntry['exercise_type'], muscle_group: exercise.muscle_group, equipment: exercise.equipment, image_url: exercise.image_url, sets: [initialSet] }
+          ? { uid: ex.uid, name: exercise.name, exercise_template_id: exercise.id, exercise_type: exercise.exercise_type as ExerciseEntry['exercise_type'], muscle_group: exercise.muscle_group, equipment: exercise.equipment, image_url: exercise.image_url, bodyweight_load_factor: exercise.bodyweight_load_factor, sets: [initialSet] }
           : ex
       ));
       setReplacingExIndex(null);
@@ -1186,7 +1189,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     const newUid = makeUid();
     setExercises(prev => [
       ...prev,
-      { uid: newUid, name: exercise.name, exercise_template_id: exercise.id, exercise_type: exercise.exercise_type as ExerciseEntry['exercise_type'], muscle_group: exercise.muscle_group, equipment: exercise.equipment, image_url: exercise.image_url, sets: [initialSet] },
+      { uid: newUid, name: exercise.name, exercise_template_id: exercise.id, exercise_type: exercise.exercise_type as ExerciseEntry['exercise_type'], muscle_group: exercise.muscle_group, equipment: exercise.equipment, image_url: exercise.image_url, bodyweight_load_factor: exercise.bodyweight_load_factor, sets: [initialSet] },
     ]);
     setExerciseModalVisible(false);
 
@@ -1247,6 +1250,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         muscle_group: ex.muscle_group,
         equipment: ex.equipment,
         image_url: ex.image_url,
+        bodyweight_load_factor: ex.bodyweight_load_factor,
         sets: [initialSet],
       };
     });

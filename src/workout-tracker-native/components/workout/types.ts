@@ -46,6 +46,8 @@ export type ExerciseEntry = {
   muscle_group?: string;
   equipment?: string;
   image_url?: string;
+  /** Fraction of bodyweight this movement shifts (Bodyweight/Weighted only). null/undefined -> 1. */
+  bodyweight_load_factor?: number | null;
   sets: WorkoutSet[];
   previousSets?: PreviousSet[];
   currentPR?: {
@@ -70,6 +72,12 @@ export const isBodyweight = (ex: { exercise_type?: string; equipment?: string })
 // drives input-field behavior and must not change).
 export const usesBodyweightForVolume = (ex: { equipment?: string }) =>
   ex.equipment === 'Bodyweight' || ex.equipment === 'Weighted';
+
+// Fraction of bodyweight a Bodyweight/Weighted movement actually shifts for
+// volume math (push-up ~0.6, sit-up ~0.35, pull-up ~1.0). Mirrors the
+// backend's ExerciseTemplate.bodyweight_load_factor; missing -> full (1).
+export const bodyweightLoadFactor = (ex: { bodyweight_load_factor?: number | null }) =>
+  ex.bodyweight_load_factor ?? 1;
 
 // Timed holds (planks, wall sits, dead hangs) — sets are a duration in
 // seconds, no reps or weight. Stored in the set's cardio_duration column

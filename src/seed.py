@@ -25,6 +25,7 @@ from app import create_app
 from models import db, ExerciseTemplate, ExerciseMuscleMapping
 from utils.strength_standards import SEEDER_STANDARDS_MAP
 from utils.exercise_descriptions import EXERCISE_DESCRIPTIONS
+from utils.volume import derive_bodyweight_load_factor
 
 EXERCISEDB_BASE      = 'https://exercisedb.p.rapidapi.com'
 EXERCISEDB_CACHE     = os.path.join(os.path.dirname(__file__), 'exercisedb_cache.json')
@@ -506,6 +507,7 @@ def main():
                 exercise_type='strength',
                 standards_key=sk,
                 description=EXERCISE_DESCRIPTIONS.get(name),
+                bodyweight_load_factor=derive_bodyweight_load_factor(name, equipment),
             )
             db.session.add(new_ex)
             db.session.flush()
