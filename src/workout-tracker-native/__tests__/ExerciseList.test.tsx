@@ -3,7 +3,7 @@ import { render, fireEvent } from '@testing-library/react-native';
 import ExerciseListModal from '../components/ExerciseList';
 
 jest.mock('../components/NewExerciseForm', () => () => null);
-jest.mock('../theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 } }));
+jest.mock('../theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 jest.mock('../theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));
 
 const mockExercises = [
