@@ -159,8 +159,8 @@ import { typography } from '../theme/typography'; // fontSize xs=11 sm=14 md=16 
 **Never hardcode PR gold.** Use the constants from `constants/prColors.ts`:
 ```typescript
 import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../constants/prColors';
-// PR_GOLD      = '#FFE066'  — PR indicators (trophies, laurel borders, PR banners)
-// PR_GOLD_TEXT = '#7A5800'  — dark text on gold/cream backgrounds
+// PR_GOLD      = '#f9de73'  — PR indicators (trophies, laurel borders, PR banners)
+// PR_GOLD_TEXT = '#ad9206'  — dark text on gold/cream backgrounds
 // PR_GOLD_BG   = '#FFF3C4'  — cream background for PR banners
 ```
 Note: `#FFD700` (bright gold) still appears in `greekRanks.ts` and `CoachCharacter.tsx` as the **Aretē rank color** — that is intentional and separate from PR gold.
