@@ -25,7 +25,7 @@ import CoachProfileModal, { CoachProfile, COACH_PROFILE_KEY } from './CoachProfi
 import SectionRule from '../../components/SectionRule';
 import PressableScale from '../../components/PressableScale';
 import { animateNextLayout } from '../../utils/layoutAnimation';
-import { GREEK_RANK_COLORS } from '../../constants/greekRanks';
+import { GREEK_RANK_COLORS, GREEK_RANKS } from '../../constants/greekRanks';
 import WeeklyGoalModal from '../../components/coach/WeeklyGoalModal';
 import WorkingSetsInfoModal from '../../components/coach/WorkingSetsInfoModal';
 import RangePickerModal from '../../components/coach/RangePickerModal';
@@ -100,6 +100,14 @@ const EQUIPMENT_LABELS: Record<string, string> = {
 const AVOID_LABELS: Record<string, string> = {
   lower_back: 'Lower Back', knees: 'Knees', shoulders: 'Shoulders',
 };
+
+// Black or white text for a solid hex fill — keeps the rank badge letter
+// readable on the light rank colors (Athlete blue, Aretē gold).
+function onColor(hex: string): string {
+  const c = hex.replace('#', '');
+  const r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#1a1a1a' : '#fff';
+}
 
 function daysAgoStr(iso: string | undefined): string {
   if (!iso) return 'Never';
@@ -574,6 +582,7 @@ export default function CoachScreen({ navigation }: Props) {
 
   // ── Render helpers ──────────────────────────────────────────────────────────
   const rankColor = GREEK_RANK_COLORS[greekRank] ?? colors.accent;
+  const rankIcon = GREEK_RANKS.find(r => r.name === greekRank)?.icon ?? greekRank.charAt(0);
 
   const renderInsightCard = (ins: Insight, idx: number) => {
     const icon = INSIGHT_ICONS[ins.type] ?? 'bulb-outline';
@@ -940,37 +949,48 @@ export default function CoachScreen({ navigation }: Props) {
       {/* ── COACH TAB ── */}
       {activeTab === 'coach' && (
         <ScrollView contentContainerStyle={styles.coachContent}>
-          {/* Rank + coach-profile summary header */}
-          <View style={[styles.coachHero, { backgroundColor: rankColor + '18', borderColor: rankColor + '40' }]}>
-            <View style={styles.coachHeroInfo}>
-              <View style={styles.coachHeroTopRow}>
-                <Text style={[styles.coachRankBadge, { color: rankColor }]}>{greekRank}</Text>
-                <TouchableOpacity
-                  style={styles.profileBtn}
-                  onPress={() => setProfileModalVisible(true)}
-                >
-                  <Ionicons name="settings-outline" size={14} color={colors.accent} />
-                  <Text style={styles.profileBtnText}>Edit Profile</Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.coachGreeting}>
-                Hey {user?.name || user?.username || 'Athlete'}, your AI coach is here.
-              </Text>
+          {/* Coach-profile summary — the whole card opens the profile modal */}
+          <PressableScale
+            style={[styles.coachHero, { backgroundColor: rankColor + '18', borderColor: rankColor + '40' }]}
+            onPress={() => setProfileModalVisible(true)}
+          >
+            <View style={styles.coachHeroTopRow}>
+              <TouchableOpacity
+                style={[styles.rankPill, { borderColor: rankColor + '55' }]}
+                onPress={() => navigation.navigate('StrengthScore')}
+              >
+                <View style={[styles.rankPillIcon, { backgroundColor: rankColor }]}>
+                  <Text style={[styles.rankPillIconText, { color: onColor(rankColor) }]}>{rankIcon}</Text>
+                </View>
+                <Text style={[styles.rankPillText, { color: rankColor }]}>{greekRank}</Text>
+              </TouchableOpacity>
+              <Ionicons name="create-outline" size={16} color={colors.accent} />
+            </View>
 
-              <Text style={styles.coachProfileSummary} numberOfLines={2}>
-                {[
-                  GOAL_LABELS[coachProfile.goal] ?? coachProfile.goal,
-                  EXPERIENCE_LABELS[coachProfile.experience] ?? coachProfile.experience,
-                  EQUIPMENT_LABELS[coachProfile.equipment] ?? coachProfile.equipment,
-                  `${coachProfile.days_per_week}x/wk`,
-                  `${coachProfile.session_length_min} min`,
-                  ...(coachProfile.avoid.length
-                    ? [`Avoid: ${coachProfile.avoid.map(a => AVOID_LABELS[a] ?? a).join(', ')}`]
-                    : []),
-                ].join('  ·  ')}
+            <View style={styles.coachSummaryRow}>
+              <Text style={styles.coachSummaryLabel}>Goal</Text>
+              <Text style={styles.coachSummaryValue} numberOfLines={1}>
+                {GOAL_LABELS[coachProfile.goal] ?? coachProfile.goal}
+                {'  ·  '}{EXPERIENCE_LABELS[coachProfile.experience] ?? coachProfile.experience}
               </Text>
             </View>
-          </View>
+            <View style={styles.coachSummaryRow}>
+              <Text style={styles.coachSummaryLabel}>Setup</Text>
+              <Text style={styles.coachSummaryValue} numberOfLines={1}>
+                {EQUIPMENT_LABELS[coachProfile.equipment] ?? coachProfile.equipment}
+                {'  ·  '}{coachProfile.days_per_week} days/wk
+                {'  ·  '}{coachProfile.session_length_min} min
+              </Text>
+            </View>
+            {coachProfile.avoid.length > 0 && (
+              <View style={styles.coachSummaryRow}>
+                <Ionicons name="alert-circle-outline" size={13} color={colors.danger} style={styles.coachAvoidIcon} />
+                <Text style={[styles.coachSummaryValue, { color: colors.danger }]} numberOfLines={1}>
+                  Avoid {coachProfile.avoid.map(a => AVOID_LABELS[a] ?? a).join(', ')}
+                </Text>
+              </View>
+            )}
+          </PressableScale>
 
           {/* AI Coach card — Generate + Insights unified */}
           <View style={styles.aiCoachCard}>
@@ -1483,21 +1503,35 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   // ── Coach tab ───────────────────────────────────────────────────────────────
   coachContent: { padding: spacing.md, paddingBottom: spacing.xl * 2 },
   coachHero: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     backgroundColor: colors.surface, borderRadius: spacing.md,
     padding: spacing.md, marginBottom: spacing.md,
     borderWidth: 1, borderColor: colors.border,
+    gap: spacing.xs,
   },
-  coachHeroInfo: { flex: 1, gap: spacing.xs },
-  coachHeroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  coachRankBadge: { fontSize: typography.fontSize.lg, fontWeight: '800', letterSpacing: 0.5 },
-  coachGreeting: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 20 },
-  profileBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  profileBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.accent },
-  coachProfileSummary: {
-    fontSize: typography.fontSize.xs, color: colors.textSecondary,
-    fontWeight: '600', lineHeight: 17, marginTop: 1,
+  coachHeroTopRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: spacing.xs,
   },
+  rankPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1, borderRadius: 999,
+    paddingLeft: 3, paddingRight: spacing.sm, paddingVertical: 3,
+  },
+  rankPillIcon: {
+    width: 22, height: 22, borderRadius: 11,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  rankPillIconText: { fontSize: typography.fontSize.xs, fontWeight: '800', color: '#fff' },
+  rankPillText: { fontSize: typography.fontSize.sm, fontWeight: '800', letterSpacing: 0.3 },
+  coachSummaryRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  coachSummaryLabel: {
+    width: 44, fontSize: 10, fontWeight: '700', letterSpacing: 0.6,
+    color: colors.textSecondary, textTransform: 'uppercase',
+  },
+  coachSummaryValue: {
+    flex: 1, fontSize: typography.fontSize.xs, fontWeight: '600', color: colors.textPrimary,
+  },
+  coachAvoidIcon: { width: 44, textAlign: 'center' },
   aiCoachCard: { marginBottom: spacing.md, gap: spacing.sm },
   generateBtnRow: { flexDirection: 'row', gap: spacing.sm },
   generateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.save, borderRadius: spacing.sm, paddingVertical: 12 },
