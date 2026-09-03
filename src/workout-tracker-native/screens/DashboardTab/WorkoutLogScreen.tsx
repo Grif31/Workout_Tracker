@@ -30,10 +30,13 @@ export default function WorkoutLogScreen({ route, navigation }: Props) {
         }
       }}
       onCancel={() => navigation.goBack()}
-      onViewExerciseHistory={(exerciseName, exerciseTemplateId) => {
+      onViewExerciseHistory={(exerciseName, exerciseTemplateId, meta) => {
         navigation.navigate('ExerciseDetail', {
           exerciseId: exerciseTemplateId ?? 0,
           exerciseName,
+          muscleGroup: meta?.muscleGroup,
+          equipment: meta?.equipment,
+          imageUrl: meta?.imageUrl,
         });
       }}
     />

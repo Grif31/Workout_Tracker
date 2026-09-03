@@ -71,7 +71,11 @@ type Props = {
   workoutId?: number;
   onSubmit?: (workoutId?: number, summary?: { workoutName: string; prs: any[]; totalVolume: number; totalReps: number; totalSets: number; muscles: string[]; isFirstWorkout: boolean; isBestVolume: boolean; isBestReps: boolean }) => void;
   onCancel?: () => void;
-  onViewExerciseHistory?: (exerciseName: string, exerciseTemplateId?: number) => void;
+  onViewExerciseHistory?: (
+    exerciseName: string,
+    exerciseTemplateId?: number,
+    meta?: { muscleGroup?: string; equipment?: string; imageUrl?: string },
+  ) => void;
 };
 
 export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onCancel, onViewExerciseHistory }: Props) {
@@ -1716,9 +1720,13 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             </TouchableOpacity>
             <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
             <TouchableOpacity style={styles.exMenuItem} onPress={() => {
-              const idx = renderedMenuIdx;
+              const ex = exercises[renderedMenuIdx!];
               setOpenMenuIdx(null);
-              onViewExerciseHistory?.(exercises[idx].name, exercises[idx].exercise_template_id);
+              onViewExerciseHistory?.(ex.name, ex.exercise_template_id, {
+                muscleGroup: ex.muscle_group,
+                equipment: ex.equipment,
+                imageUrl: ex.image_url,
+              });
             }}>
               <Ionicons name="bar-chart-outline" size={15} color={colors.textPrimary} />
               <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>View History</Text>
