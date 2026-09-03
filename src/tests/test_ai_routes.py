@@ -1,7 +1,8 @@
 """
 Tests for AI generation routes:
-  POST /api/ai/generate — returns a 200 preview, persists nothing
-  POST /api/ai/save     — persists a previewed routine/template, returns 201
+  POST /api/ai/generate  — returns a 200 preview, persists nothing
+  POST /api/ai/save      — persists a previewed routine/template, returns 201
+  POST /api/ai/insights  — returns AI coaching insights, persists nothing
 """
 import sys
 import json
@@ -43,6 +44,13 @@ ROUTINE_JSON = {
 TEMPLATE_JSON = {
     'name': 'AI Upper Body',
     'exercises': ['Bench Press', 'Overhead Press', 'Pull-Up', 'Barbell Row', 'Bicep Curl'],
+}
+
+INSIGHTS_JSON = {
+    'insights': [
+        {'title': 'Add pulling volume', 'body': 'Your back sets are below MEV this week.'},
+        {'title': 'Deload soon', 'body': 'Average RPE has been 9+ for two weeks.'},
+    ],
 }
 
 
@@ -361,3 +369,87 @@ class TestGenerateErrors:
                         headers=auth_headers(auth_token),
                     )
             assert res.status_code == 200, f'Failed for experience={exp}'
+
+
+# ---------------------------------------------------------------------------
+# POST /api/ai/insights
+# ---------------------------------------------------------------------------
+
+class TestAiInsights:
+
+    def _post(self, client, token, body=None, response_json=None):
+        mock_ant = _make_anthropic_mock(response_json or INSIGHTS_JSON)
+        with patch.dict(sys.modules, {'anthropic': mock_ant}):
+            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+                res = client.post('/api/ai/insights', json=body or {}, headers=auth_headers(token))
+        return res, mock_ant
+
+    def test_requires_auth(self, client):
+        res = client.post('/api/ai/insights', json={})
+        assert res.status_code == 401
+
+    def test_returns_503_when_no_api_key(self, client, auth_token):
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('ANTHROPIC_API_KEY', None)
+            res = client.post('/api/ai/insights', json={}, headers=auth_headers(auth_token))
+        assert res.status_code == 503
+        assert 'not configured' in res.get_json()['message'].lower()
+
+    def test_returns_insights_list_and_timestamp(self, client, auth_token):
+        res, _ = self._post(client, auth_token)
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data['insights'] == INSIGHTS_JSON['insights']
+        assert 'generated_at' in data
+
+    def test_body_fields_are_optional(self, client, auth_token):
+        """CoachProfile is client-side only; the endpoint must work with an empty body."""
+        res, _ = self._post(client, auth_token, body={})
+        assert res.status_code == 200
+
+    def test_accepts_experience_goal_avoid(self, client, auth_token):
+        res, _ = self._post(client, auth_token, body={
+            'experience': 'advanced', 'goal': 'hypertrophy', 'avoid': 'barbell squat',
+        })
+        assert res.status_code == 200
+
+    def test_uses_haiku_model(self, client, auth_token):
+        _, mock_ant = self._post(client, auth_token)
+        call_kwargs = mock_ant.Anthropic.return_value.messages.create.call_args[1]
+        assert 'haiku' in call_kwargs['model']
+
+    def test_works_with_no_workout_history(self, client, auth_token):
+        """A brand-new user with zero workouts should still get a 200, not a 500
+        from the context builder."""
+        res, _ = self._post(client, auth_token)
+        assert res.status_code == 200
+
+    def test_persists_nothing(self, client, auth_token):
+        self._post(client, auth_token)
+        workouts = client.get('/api/workouts', headers=auth_headers(auth_token)).get_json()
+        routines = client.get('/api/routines', headers=auth_headers(auth_token)).get_json()
+        assert workouts == [] and routines == []
+
+    def test_malformed_json_from_ai_returns_500(self, client, auth_token):
+        mock_ant = MagicMock()
+        mock_content = MagicMock()
+        mock_content.text = 'not json'
+        mock_ant.Anthropic.return_value.messages.create.return_value.content = [mock_content]
+        with patch.dict(sys.modules, {'anthropic': mock_ant}):
+            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+                res = client.post('/api/ai/insights', json={}, headers=auth_headers(auth_token))
+        assert res.status_code == 500
+        assert 'json' in res.get_json()['message'].lower()
+
+    def test_anthropic_exception_returns_500(self, client, auth_token):
+        mock_ant = MagicMock()
+        mock_ant.Anthropic.return_value.messages.create.side_effect = Exception('API down')
+        with patch.dict(sys.modules, {'anthropic': mock_ant}):
+            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+                res = client.post('/api/ai/insights', json={}, headers=auth_headers(auth_token))
+        assert res.status_code == 500
+
+    def test_missing_insights_key_yields_empty_list(self, client, auth_token):
+        res, _ = self._post(client, auth_token, response_json={'something_else': True})
+        assert res.status_code == 200
+        assert res.get_json()['insights'] == []

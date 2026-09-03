@@ -1838,3 +1838,124 @@ class TestExerciseStatsBodyweightVolume:
         data = client.get(f'/api/stats/exercise?name=Pull Up&exercise_template_id={tid}', headers=h).get_json()
         assert data['history'][0]['volume'] == 0
         assert data['personal_bests']['max_set_volume'] == 0
+
+
+# ---------------------------------------------------------------------------
+# GET /api/stats/recent-exercises
+# ---------------------------------------------------------------------------
+
+class TestRecentExercises:
+
+    def _get(self, client, token):
+        res = client.get('/api/stats/recent-exercises', headers=auth_headers(token))
+        assert res.status_code == 200
+        return res.get_json()['recent']
+
+    def test_requires_auth(self, client):
+        assert client.get('/api/stats/recent-exercises').status_code == 401
+
+    def test_empty_when_no_workouts(self, client, auth_token):
+        assert self._get(client, auth_token) == []
+
+    def test_lists_logged_exercises_with_template_id(self, client, auth_token):
+        tid = _create_template(client, auth_token, name='Bench Press')
+        _create_mapped_workout(client, auth_token, tid, name='Bench Press')
+        recent = self._get(client, auth_token)
+        assert recent[0]['name'] == 'Bench Press'
+        assert recent[0]['exercise_template_id'] == tid
+
+    def test_custom_exercise_without_template_reported_with_null_id(self, client, auth_token):
+        client.post('/api/workouts', json={
+            'workoutName': 'W',
+            'exercises': [{'name': 'Sled Drag', 'sets': [{'reps': 1, 'weight': 90}]}],
+        }, headers=auth_headers(auth_token))
+        recent = self._get(client, auth_token)
+        entry = next(e for e in recent if e['name'] == 'Sled Drag')
+        assert entry['exercise_template_id'] is None
+
+    def test_ordered_most_recent_first_and_capped_at_10(self, client, auth_token, app):
+        ids = []
+        for i in range(12):
+            tid = _create_template(client, auth_token, name=f'Lift {i}')
+            wid = _create_mapped_workout(client, auth_token, tid, name=f'Lift {i}')
+            _backdate(app, wid, date.today() - timedelta(days=i))
+            ids.append((i, tid))
+        recent = self._get(client, auth_token)
+        assert len(recent) == 10
+        assert recent[0]['name'] == 'Lift 0'   # today, most recent
+
+    def test_scoped_to_current_user(self, client, auth_token, auth_token2):
+        tid = _create_template(client, auth_token, name='Squat')
+        _create_mapped_workout(client, auth_token, tid, name='Squat')
+        assert self._get(client, auth_token2) == []
+
+
+# ---------------------------------------------------------------------------
+# GET /api/stats/exercise/last-session
+# ---------------------------------------------------------------------------
+
+class TestExerciseLastSession:
+
+    def _get(self, client, token, name, template_id=None):
+        q = f'/api/stats/exercise/last-session?name={name}'
+        if template_id is not None:
+            q += f'&exercise_template_id={template_id}'
+        return client.get(q, headers=auth_headers(token))
+
+    def test_requires_auth(self, client):
+        assert client.get('/api/stats/exercise/last-session?name=Bench').status_code == 401
+
+    def test_missing_name_param_returns_400(self, client, auth_token):
+        assert self._get(client, auth_token, '').status_code == 400
+
+    def test_no_history_returns_empty_sets(self, client, auth_token):
+        res = self._get(client, auth_token, 'Bench Press')
+        assert res.status_code == 200
+        assert res.get_json() == {'sets': []}
+
+    def test_returns_most_recent_sessions_sets(self, client, auth_token, app):
+        tid = _create_template(client, auth_token, name='Bench Press')
+        old = client.post('/api/workouts', json={
+            'workoutName': 'Old', 'exercises': [{
+                'name': 'Bench Press', 'exercise_template_id': tid,
+                'sets': [{'reps': 5, 'weight': 100}],
+            }],
+        }, headers=auth_headers(auth_token)).get_json()['id']
+        _backdate(app, old, date.today() - timedelta(days=30))
+        client.post('/api/workouts', json={
+            'workoutName': 'New', 'exercises': [{
+                'name': 'Bench Press', 'exercise_template_id': tid,
+                'sets': [{'reps': 8, 'weight': 155}, {'reps': 6, 'weight': 165}],
+            }],
+        }, headers=auth_headers(auth_token))
+
+        sets = self._get(client, auth_token, 'Bench Press', tid).get_json()['sets']
+        assert [(s['reps'], s['weight']) for s in sets] == [('8', '155.0'), ('6', '165.0')]
+
+    def test_excludes_warmup_sets(self, client, auth_token):
+        tid = _create_template(client, auth_token, name='Bench Press')
+        client.post('/api/workouts', json={
+            'workoutName': 'W', 'exercises': [{
+                'name': 'Bench Press', 'exercise_template_id': tid,
+                'sets': [
+                    {'reps': 10, 'weight': 45, 'set_type': 'W'},
+                    {'reps': 5, 'weight': 185, 'set_type': 'N'},
+                ],
+            }],
+        }, headers=auth_headers(auth_token))
+        sets = self._get(client, auth_token, 'Bench Press', tid).get_json()['sets']
+        assert len(sets) == 1
+        assert sets[0]['reps'] == '5' and sets[0]['set_type'] == 'N'
+
+    def test_name_match_is_case_insensitive(self, client, auth_token):
+        tid = _create_template(client, auth_token, name='Bench Press')
+        _create_mapped_workout(client, auth_token, tid, name='Bench Press')
+        res = self._get(client, auth_token, 'bench press')
+        assert res.status_code == 200
+        assert len(res.get_json()['sets']) == 3
+
+    def test_scoped_to_current_user(self, client, auth_token, auth_token2):
+        tid = _create_template(client, auth_token, name='Bench Press')
+        _create_mapped_workout(client, auth_token, tid, name='Bench Press')
+        res = self._get(client, auth_token2, 'Bench Press')
+        assert res.get_json() == {'sets': []}

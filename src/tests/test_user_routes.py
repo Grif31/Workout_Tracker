@@ -2,13 +2,27 @@
 Tests for user routes:
   GET    /api/me
   PATCH  /api/me
+  POST   /api/me/avatar
   DELETE /api/me
 """
+import io
+import os
 import pytest
 
 
 def auth_headers(token):
     return {'Authorization': f'Bearer {token}'}
+
+
+@pytest.fixture
+def tmp_static(app, tmp_path, monkeypatch):
+    """Redirect the app's static folder so avatar uploads land in a temp dir."""
+    monkeypatch.setattr(app, 'static_folder', str(tmp_path), raising=False)
+    return tmp_path
+
+
+def _img_bytes(size=64):
+    return io.BytesIO(b'\xff\xd8\xff' + b'0' * size)
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +118,64 @@ class TestUpdateUserInfo:
     def test_requires_auth(self, client):
         res = client.patch('/api/me', json={'name': 'Hacker'})
         assert res.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# POST /api/me/avatar
+# ---------------------------------------------------------------------------
+
+class TestUploadAvatar:
+
+    def _upload(self, client, token, filename='me.jpg', data=None):
+        return client.post(
+            '/api/me/avatar',
+            data={'avatar': (data or _img_bytes(), filename)},
+            content_type='multipart/form-data', headers=auth_headers(token),
+        )
+
+    def test_requires_auth(self, client, tmp_static):
+        res = client.post('/api/me/avatar',
+                          data={'avatar': (_img_bytes(), 'me.jpg')},
+                          content_type='multipart/form-data')
+        assert res.status_code == 401
+
+    def test_upload_success_returns_url_and_persists_path(self, client, auth_token, tmp_static):
+        me_id = client.get('/api/me', headers=auth_headers(auth_token)).get_json()['id']
+        res = self._upload(client, auth_token)
+        assert res.status_code == 200
+        assert res.get_json()['avatar_url'].endswith(f'/static/avatars/{me_id}.jpg')
+        # the stored path shows up on the profile
+        me = client.get('/api/me', headers=auth_headers(auth_token)).get_json()
+        assert me['profile_pic_url'] == f'/static/avatars/{me_id}.jpg'
+        assert os.path.isfile(tmp_static / 'avatars' / f'{me_id}.jpg')
+
+    def test_missing_file_returns_400(self, client, auth_token, tmp_static):
+        res = client.post('/api/me/avatar', data={}, content_type='multipart/form-data',
+                          headers=auth_headers(auth_token))
+        assert res.status_code == 400
+
+    def test_disallowed_extension_returns_400(self, client, auth_token, tmp_static):
+        res = self._upload(client, auth_token, filename='avatar.gif')
+        assert res.status_code == 400
+        assert 'not allowed' in res.get_json()['message'].lower()
+
+    def test_oversized_file_returns_400(self, client, auth_token, tmp_static):
+        big = io.BytesIO(b'0' * (5 * 1024 * 1024 + 1))
+        res = self._upload(client, auth_token, data=big)
+        assert res.status_code == 400
+        assert 'large' in res.get_json()['message'].lower()
+
+    def test_new_upload_replaces_old_extension(self, client, auth_token, tmp_static):
+        me_id = client.get('/api/me', headers=auth_headers(auth_token)).get_json()['id']
+        self._upload(client, auth_token, filename='first.jpg')
+        self._upload(client, auth_token, filename='second.png')
+        avatars = os.listdir(tmp_static / 'avatars')
+        assert avatars == [f'{me_id}.png']  # the .jpg was removed
+
+    def test_avatar_is_per_user(self, client, auth_token, auth_token2, tmp_static):
+        self._upload(client, auth_token)
+        me2 = client.get('/api/me', headers=auth_headers(auth_token2)).get_json()
+        assert me2['profile_pic_url'] in (None, '')
 
 
 # ---------------------------------------------------------------------------

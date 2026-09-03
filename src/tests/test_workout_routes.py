@@ -123,6 +123,38 @@ class TestGetRecentWorkouts:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/workouts/dates
+# ---------------------------------------------------------------------------
+
+class TestGetWorkoutDates:
+
+    def _dates(self, client, token):
+        res = client.get('/api/workouts/dates', headers={'Authorization': f'Bearer {token}'})
+        assert res.status_code == 200
+        return res.get_json()['dates']
+
+    def test_requires_auth(self, client):
+        assert client.get('/api/workouts/dates').status_code == 401
+
+    def test_empty_when_no_workouts(self, client, auth_token):
+        assert self._dates(client, auth_token) == []
+
+    def test_returns_iso_date_strings_sorted_ascending(self, client, auth_token):
+        for d in ('2024-03-10', '2024-01-05', '2024-02-20'):
+            create_workout(client, auth_token, {**WORKOUT_PAYLOAD, 'date': d})
+        assert self._dates(client, auth_token) == ['2024-01-05', '2024-02-20', '2024-03-10']
+
+    def test_same_day_workouts_collapse_to_one_entry(self, client, auth_token):
+        create_workout(client, auth_token, {**WORKOUT_PAYLOAD, 'workoutName': 'AM', 'date': '2024-05-01'})
+        create_workout(client, auth_token, {**WORKOUT_PAYLOAD, 'workoutName': 'PM', 'date': '2024-05-01'})
+        assert self._dates(client, auth_token) == ['2024-05-01']
+
+    def test_scoped_to_current_user(self, client, auth_token, auth_token2):
+        create_workout(client, auth_token, {**WORKOUT_PAYLOAD, 'date': '2024-06-01'})
+        assert self._dates(client, auth_token2) == []
+
+
+# ---------------------------------------------------------------------------
 # GET /api/workouts/<id>
 # ---------------------------------------------------------------------------
 
