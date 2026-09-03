@@ -95,7 +95,7 @@ const EXPERIENCE_LABELS: Record<string, string> = {
   beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced',
 };
 const EQUIPMENT_LABELS: Record<string, string> = {
-  full_gym: 'Full Gym', home_barbell: 'Home Barbell', dumbbells: 'Dumbbells', bodyweight: 'Bodyweight',
+  full_gym: 'Full Gym', home_barbell: 'Home Gym', dumbbells: 'Dumbbells', bodyweight: 'Bodyweight',
 };
 const AVOID_LABELS: Record<string, string> = {
   lower_back: 'Lower Back', knees: 'Knees', shoulders: 'Shoulders',

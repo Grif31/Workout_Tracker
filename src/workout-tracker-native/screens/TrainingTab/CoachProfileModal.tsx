@@ -159,7 +159,7 @@ export default function CoachProfileModal({ visible, onClose, onSave }: Props) {
           <View style={styles.chipRow}>
             {[
               { value: 'full_gym', label: 'Full Gym' },
-              { value: 'home_barbell', label: 'Home Barbell' },
+              { value: 'home_barbell', label: 'Home Gym' },
               { value: 'dumbbells', label: 'Dumbbells' },
               { value: 'bodyweight', label: 'Bodyweight' },
             ].map(({ value, label }) => (
