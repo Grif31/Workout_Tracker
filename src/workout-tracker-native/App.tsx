@@ -65,7 +65,10 @@ function App(): JSX.Element {
     setUpLiveWorkoutCategory();
 
     const navigateToWorkoutLog = () => {
-      (navigationRef as any).navigate('DashboardTab', { screen: 'WorkoutLog', params: {}, initial: false });
+      // No `params` — passing `params: {}` replaces WorkoutLog's existing route
+      // params, dropping `prefill` and making WorkoutLog treat it as a param
+      // change. We only want to surface the already-open screen.
+      (navigationRef as any).navigate('DashboardTab', { screen: 'WorkoutLog', initial: false });
     };
 
     const isWorkoutNotification = (response: Notifications.NotificationResponse) => {

@@ -580,7 +580,15 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   useEffect(() => { fetchExercises(); fetchRecentExercises(); fetchTemplates(); }, []);
 
+  // Apply the prefill exactly once. A later prefill -> undefined transition
+  // must NOT re-run this: the live-workout notification re-navigates to
+  // WorkoutLog with empty params, which would otherwise wipe an in-progress
+  // prefilled workout while its timer kept running. Restoring a minimized or
+  // crash-backed-up session is the mount effect above's job, not this one's.
+  const prefillHandledRef = useRef(false);
   useEffect(() => {
+    if (prefillHandledRef.current) return;
+    prefillHandledRef.current = true;
     if (prefill) {
       setWorkoutName(prefill.name);
       setNotes(prefill.notes);
@@ -654,10 +662,6 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           setExercises([...enriched]);
         })();
       }
-    } else if (!session) {
-      setWorkoutName('');
-      setNotes('');
-      setExercises([]);
     }
   }, [prefill]);
 
