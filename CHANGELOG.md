@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.1.5 (2026-09-03)
+
+### New: Endurance Score
+- Running now counts toward your Greek Rank. Your best times on running exercises are scored against pace standards for each distance, and the rank's performance slot takes whichever is stronger — lifting or running — so a cardio-focused athlete has a real path to Aretē.
+- Runners who haven't logged a weigh-in still get an Endurance Score and a Greek Rank; only the strength percentile waits on bodyweight.
+
+### New: Set Type Picker
+- Tapping a set's type badge now opens a labeled picker — Normal, Warm-up, Drop set, Failure — instead of silently cycling through the options.
+
+### Redesigned: Coach Tab
+- New hero header: your coach profile (goal, setup, injuries) shown at a glance, with the whole card tapping through to edit it.
+- Your rank is now a pill that jumps straight to the Strength Score screen.
+
+### Redesigned: PR Banner & Share Cards
+- The "New PR!" banner has a cleaner gold-outline look, and the workout, PR, and score share cards now share a consistent frame.
+
+### Improved
+- Bodyweight-exercise volume now scales by movement — push-ups, sit-ups, pull-ups and the like each count a realistic fraction of your bodyweight toward volume instead of a flat figure.
+- The "Home Barbell" equipment option in your coach profile is now labeled "Home Gym".
+
+### Bug Fixes
+- Fixed the exercise 3-dot menu sticking open and blocking taps on the rest of the card.
+- The live-workout notification no longer clears a workout you'd pre-filled but not yet started.
+- Fixed the muscle breakdown not showing when opening an exercise's history from the Workout Log.
+
 ## 1.1.4 (2026-08-28)
 
 ### New: Drag-to-Reorder Exercises
