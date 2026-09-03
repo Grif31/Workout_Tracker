@@ -10,30 +10,14 @@ from schemas import WorkoutSchema, UpdateWorkoutSchema
 from utils.validation import validate_body
 from utils.strength_standards import epley_1rm
 from utils.volume import get_bodyweight_at
+# Milestone tables moved to utils/endurance_standards.py so the Endurance
+# Score's pace tables share the exact float keys PR rows are written with.
+from utils.endurance_standards import CARDIO_DISTANCE_MILESTONES, CARDIO_DURATION_MILESTONES
 
 workout_bp = Blueprint('workout_bp', __name__)
 
 _workout_schema        = WorkoutSchema()
 _update_workout_schema = UpdateWorkoutSchema()
-
-
-CARDIO_DISTANCE_MILESTONES = [
-    (0.4,     '400m'),
-    (0.8,     '800m'),
-    (1.0,     '1K'),
-    (1.60934, '1 Mile'),
-    (5.0,     '5K'),
-    (10.0,    '10K'),
-    (21.0975, 'Half Marathon'),
-    (42.195,  'Marathon'),
-]
-
-CARDIO_DURATION_MILESTONES = [
-    (10.0,  '10 min'),
-    (20.0,  '20 min'),
-    (30.0,  '30 min'),
-    (60.0,  '60 min'),
-]
 
 
 def _record_pr_event(user_id, exercise, pr_type, value, previous_value, weight_context, achieved_at):

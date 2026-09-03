@@ -89,6 +89,11 @@ SEEDER_STANDARDS_MAP: dict[tuple[str, str | None], str] = {
     ('hip thrust',           'smith machine'):'Hip Thrust',
     ('hip thrust',           'machine'):      'Hip Thrust',
     ('power clean',          'barbell'):      'Power Clean',
+    # Cardio — feeds the Endurance Score (utils/endurance_standards.py), not
+    # the strength tables. Outdoor + treadmill pool into one key, the same way
+    # Bench Press pools across barbell/smith/cable.
+    ('running',              None):           'Running',
+    ('running',              'treadmill'):    'Running',
 }
 
 BIG_6 = ['Squat', 'Bench Press', 'Deadlift', 'Overhead Press', 'Barbell Row', 'Pull-up']

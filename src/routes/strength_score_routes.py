@@ -115,19 +115,20 @@ def strength_score():
     user_id = get_jwt_identity()
     user = db.session.get(User, int(user_id))
 
-    missing = []
     if not user.gender:
-        missing.append('gender')
-    if not user.bodyweight:
-        missing.append('bodyweight')
-    if missing:
-        return jsonify({'missing': missing}), 422
+        return jsonify({'missing': ['gender']}), 422
+    # Bodyweight only gates the STRENGTH leg (its percentiles are
+    # bodyweight-ratio based). The endurance leg and the Greek rank's other
+    # components don't need it, so a runner who never logged a weigh-in still
+    # gets a rank — the response carries missing_for_strength so
+    # StrengthScoreScreen can keep showing its "Log Bodyweight" gate.
+    has_bodyweight = bool(user.bodyweight)
 
     kg_to_lbs = 2.20462
     # Logged weights are stored in the user's unit — normalise to lbs so
     # bodyweight ratios compare against the lbs-calibrated standards.
     unit_to_lbs = kg_to_lbs if (user.weight_unit or 'lbs') == 'kg' else 1.0
-    bw_lbs = user.bodyweight * unit_to_lbs
+    bw_lbs = user.bodyweight * unit_to_lbs if has_bodyweight else None
 
     # Most recent bodyweight log entry — surfaced so the UI can flag a stale
     # bodyweight (the score uses the live User.bodyweight scalar, which can
@@ -167,13 +168,15 @@ def strength_score():
     exercise_1rms: dict[str, float] = {}
     exercise_true_1rms: dict[str, float] = {}
 
-    for exercise_name, template_ids in templates_by_key.items():
-        result = _exercise_percentile_data(user_id, exercise_name, template_ids, user.gender, unit_to_lbs, bw_lbs, age_factor)
-        if result is not None:
-            exercise_percentiles[exercise_name] = result['percentile']
-            exercise_1rms[exercise_name] = result['best_1rm']
-            if result['true_1rm'] is not None:
-                exercise_true_1rms[exercise_name] = result['true_1rm']
+    if has_bodyweight:
+        for exercise_name, template_ids in templates_by_key.items():
+            result = _exercise_percentile_data(user_id, exercise_name, template_ids, user.gender, unit_to_lbs, bw_lbs, age_factor)
+            if result is not None:
+                exercise_percentiles[exercise_name] = result['percentile']
+                exercise_1rms[exercise_name] = result['best_1rm']
+                if result['true_1rm'] is not None:
+                    exercise_true_1rms[exercise_name] = result['true_1rm']
+    has_strength_data = bool(exercise_percentiles)
 
     # No hard gate on missing exercise_percentiles here — a user with zero
     # tracked strength lifts (e.g. cardio-only) still has a valid Greek rank
@@ -210,6 +213,44 @@ def strength_score():
     # Muscle group scores
     muscle_groups = compute_muscle_group_scores(exercise_percentiles)
 
+    # ── Endurance leg (running only in v1) ─────────────────────────────────
+    # best_time PRs on standards_key='Running' templates (outdoor + treadmill
+    # pool) → pace per milestone distance → percentile vs. PACE_STANDARDS.
+    # Needs gender but NOT bodyweight, so it computes even when the strength
+    # leg was skipped above.
+    from utils.endurance_standards import (
+        compute_pace_percentile, compute_endurance_overall,
+        endurance_age_factor, CORE_DISTANCES, DISTANCE_LABELS,
+    )
+
+    running_prs = (
+        db.session.query(PersonalRecord.weight_context, PersonalRecord.value)
+        .join(ExerciseTemplate, PersonalRecord.exercise_template_id == ExerciseTemplate.id)
+        .filter(
+            PersonalRecord.user_id == user_id,
+            PersonalRecord.pr_type == 'best_time',
+            ExerciseTemplate.standards_key == 'Running',
+        )
+        .all()
+    )
+    best_pace_by_distance: dict[float, float] = {}
+    for dist_km, time_min in running_prs:
+        if not dist_km or dist_km <= 0 or not time_min or time_min <= 0:
+            continue
+        pace = time_min / dist_km
+        if dist_km not in best_pace_by_distance or pace < best_pace_by_distance[dist_km]:
+            best_pace_by_distance[dist_km] = pace
+
+    # Age credit divides pace (faster effective pace) before lookup — the
+    # endurance anchors are WMA running age-grading, not the lifting curve.
+    e_age_factor = endurance_age_factor(user_age) if user_age else 1.0
+    endurance_percentiles: dict[float, float] = {}
+    for dist_km, pace in best_pace_by_distance.items():
+        pct = compute_pace_percentile(dist_km, user.gender, pace / e_age_factor)
+        if pct is not None:
+            endurance_percentiles[dist_km] = pct
+    endurance_overall = compute_endurance_overall(endurance_percentiles)
+
     # Greek rank composite
     twelve_wks_ago  = datetime.now() - timedelta(weeks=12)
     thirteen_wks_ago = datetime.now() - timedelta(weeks=13)
@@ -231,19 +272,26 @@ def strength_score():
     consistency = compute_consistency_score(workouts_12wk)
     dedication  = compute_dedication_score(workouts_13wk_count)
     volume_sig  = compute_volume_score(workouts_8wk_count)
-    greek_score = compute_greek_score(consistency, overall, dedication, volume_sig)
+    # The 45% "performance" slot takes whichever discipline is stronger — a
+    # lifter who never runs is unaffected, a hybrid athlete gets credit for
+    # their better leg, and a missing leg contributes 0 without blocking.
+    performance = max(overall, endurance_overall or 0.0)
+    greek_score = compute_greek_score(consistency, performance, dedication, volume_sig)
     greek_rank  = greek_rank_from_score(greek_score)
 
-    # Save snapshot once per 24h
-    last_snap = (
-        StrengthScoreSnapshot.query
-        .filter_by(user_id=user_id)
-        .order_by(StrengthScoreSnapshot.created_at.desc())
-        .first()
-    )
-    if not last_snap or (datetime.now() - last_snap.created_at).total_seconds() > 86400:
-        db.session.add(StrengthScoreSnapshot(user_id=user_id, score=overall))
-        db.session.commit()
+    # Save snapshot once per 24h — only when there's actual strength data, so
+    # cardio-only (or bodyweight-less) users don't pollute their strength
+    # history chart with score-0 rows.
+    if has_strength_data:
+        last_snap = (
+            StrengthScoreSnapshot.query
+            .filter_by(user_id=user_id)
+            .order_by(StrengthScoreSnapshot.created_at.desc())
+            .first()
+        )
+        if not last_snap or (datetime.now() - last_snap.created_at).total_seconds() > 86400:
+            db.session.add(StrengthScoreSnapshot(user_id=user_id, score=overall))
+            db.session.commit()
 
     # Build response
     # TODO(post-launch): server-side premium — RevenueCat webhook sets
@@ -253,7 +301,9 @@ def strength_score():
 
     def _ex_entry(name):
         pct = exercise_percentiles.get(name)
-        thresholds = _compute_thresholds(name, user.gender, bw_lbs, unit_to_lbs)
+        # bw_lbs is None when bodyweight is missing — 0 makes
+        # compute_weight_at_percentile return None, yielding empty thresholds
+        thresholds = _compute_thresholds(name, user.gender, bw_lbs or 0, unit_to_lbs)
         return {
             'exercise': name,
             'percentile': round(pct, 1) if pct is not None else None,
@@ -295,8 +345,12 @@ def strength_score():
     )
 
     resp: dict = {
-        'overall': round(overall, 1),
-        'overall_rank': percentile_to_strength_rank(overall),
+        # None (not 0) when no strength data — "no score yet" is different
+        # from "0th percentile", and consumers guard with `?? null` /
+        # `overall_rank?.label` already
+        'overall': round(overall, 1) if has_strength_data else None,
+        'overall_rank': percentile_to_strength_rank(overall) if has_strength_data else None,
+        'endurance_overall': round(endurance_overall, 1) if endurance_overall is not None else None,
         'greek_rank': greek_rank,
         'exercises_used': len(exercise_percentiles),
         'muscle_groups_used': len(muscle_groups),
@@ -308,6 +362,8 @@ def strength_score():
         'weight_unit': user.weight_unit or 'lbs',
         'last_updated': datetime.now().isoformat(),
     }
+    if not has_bodyweight:
+        resp['missing_for_strength'] = ['bodyweight']
 
     history_snaps = (
         StrengthScoreSnapshot.query
@@ -324,7 +380,11 @@ def strength_score():
         resp['greek_score'] = round(greek_score, 1)
         resp['greek_score_components'] = {
             'consistency': round(consistency, 1),
+            # strength/endurance are the two candidate legs; performance is
+            # the max() of them and is what the 45% slot actually used
             'strength': round(overall, 1),
+            'endurance': round(endurance_overall, 1) if endurance_overall is not None else 0.0,
+            'performance': round(performance, 1),
             'dedication': round(dedication, 1),
             'volume': round(volume_sig, 1),
         }
@@ -332,6 +392,23 @@ def strength_score():
         resp['supplemental'] = supp_list
         resp['supplemental_coverage'] = supp_coverage
         resp['muscle_groups'] = muscle_groups
+        resp['endurance'] = {
+            'overall': round(endurance_overall, 1) if endurance_overall is not None else None,
+            'distances': sorted(
+                [
+                    {
+                        'distance_km': d,
+                        'label': DISTANCE_LABELS.get(d, f'{d} km'),
+                        'pace_min_per_km': round(best_pace_by_distance[d], 2),
+                        'percentile': round(p, 1),
+                        'rank': percentile_to_strength_rank(p),
+                        'tier': 'core' if d in CORE_DISTANCES else 'speed',
+                    }
+                    for d, p in endurance_percentiles.items()
+                ],
+                key=lambda x: x['distance_km'],
+            ),
+        }
 
     return jsonify(resp), 200
 

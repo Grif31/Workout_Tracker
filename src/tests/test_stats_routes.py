@@ -1228,7 +1228,9 @@ class TestStrengthScoreCardioOnlyUser:
         assert res.status_code == 200
         data = res.get_json()
         assert data['exercises_used'] == 0
-        assert data['overall'] == 0
+        # None, not 0 — "no strength score yet" is distinct from "0th percentile"
+        assert data['overall'] is None
+        assert data['overall_rank'] is None
         assert data['muscle_groups_used'] == 0
         # Every Big 6 lift is reported as untracked rather than the list being omitted
         assert all(not e['has_data'] for e in data['big6'])
@@ -1237,6 +1239,9 @@ class TestStrengthScoreCardioOnlyUser:
         assert data['greek_rank'] is not None
         assert data['greek_score'] > 0
         assert data['greek_score_components']['strength'] == 0
+        # This template is a user-created custom with no standards_key, so it
+        # earns PRs but no endurance percentile (same rule as custom lifts)
+        assert data['endurance_overall'] is None
 
     def test_zero_workouts_still_returns_200(self, client, auth_token):
         # Brand-new user, no workouts logged at all yet — still not an error.
@@ -1250,6 +1255,126 @@ class TestStrengthScoreCardioOnlyUser:
         assert data['exercises_used'] == 0
         assert data['greek_score'] == 0
         assert data['greek_rank'] == 'Neophyte'
+
+
+# ---------------------------------------------------------------------------
+# GET /api/stats/strength-score — endurance leg (running pace percentiles).
+# Only templates with standards_key='Running' feed it; the Greek rank's 45%
+# performance slot takes max(strength, endurance); bodyweight gates only the
+# strength leg (gender still gates everything).
+# ---------------------------------------------------------------------------
+
+class TestEnduranceLeg:
+
+    def _seed_running_template(self):
+        from models import ExerciseTemplate
+        tmpl = ExerciseTemplate(
+            name='Running', exercise_type='cardio', standards_key='Running',
+        )
+        db.session.add(tmpl)
+        db.session.commit()
+        return tmpl.id
+
+    def _seed_bench_template(self):
+        from models import ExerciseTemplate
+        tmpl = ExerciseTemplate(name='Bench Press', equipment='Barbell', standards_key='Bench Press')
+        db.session.add(tmpl)
+        db.session.commit()
+        return tmpl.id
+
+    def _log_run(self, client, h, tmpl_id, distance_km, duration_min):
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Run',
+            'exercises': [{
+                'name': 'Running', 'exercise_template_id': tmpl_id, 'exercise_type': 'cardio',
+                'sets': [{'cardio_duration': duration_min, 'distance': distance_km, 'distance_unit': 'km'}],
+            }],
+        }, headers=h)
+        assert res.status_code == 201
+
+    def _log_bench_single(self, client, h, tmpl_id, weight):
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Bench',
+            'exercises': [{
+                'name': 'Bench Press', 'exercise_template_id': tmpl_id,
+                'sets': [{'reps': 1, 'weight': weight}],
+            }],
+        }, headers=h)
+        assert res.status_code == 201
+
+    def test_runner_without_bodyweight_gets_endurance_score_and_rank(self, client, auth_token):
+        h = auth_headers(auth_token)
+        # Gender set, bodyweight deliberately NOT set — endurance doesn't need it
+        res = client.patch('/api/me', json={'gender': 'male'}, headers=h)
+        assert res.status_code == 200
+
+        tmpl_id = self._seed_running_template()
+        self._log_run(client, h, tmpl_id, distance_km=5, duration_min=25)  # 5:00/km
+
+        res = client.get('/api/stats/strength-score', headers=h)
+        assert res.status_code == 200
+        data = res.get_json()
+
+        # Strength leg skipped, flagged for the frontend's bodyweight gate
+        assert data['overall'] is None
+        assert data['missing_for_strength'] == ['bodyweight']
+
+        # 5:00/km male: 5K pct = 68.75 (core best), 1 Mile pct ~= 64.29
+        # (speed best) -> overall = 0.7*68.75 + 0.3*64.2857 ~= 67.4
+        assert data['endurance_overall'] == pytest.approx(67.4, abs=0.1)
+        assert data['greek_score_components']['endurance'] == pytest.approx(67.4, abs=0.1)
+        assert data['greek_score_components']['performance'] == pytest.approx(67.4, abs=0.1)
+        assert data['greek_rank'] is not None
+        assert data['greek_score'] > 0
+
+        # Per-distance breakdown covers every milestone the 5K run reached
+        distances = data['endurance']['distances']
+        labels = {d['label'] for d in distances}
+        assert {'5K', '1 Mile', '1K', '800m', '400m'} <= labels
+        assert all(d['tier'] in ('core', 'speed') for d in distances)
+        five_k = next(d for d in distances if d['label'] == '5K')
+        assert five_k['tier'] == 'core'
+        assert five_k['percentile'] == pytest.approx(68.75, abs=0.05)
+        assert five_k['pace_min_per_km'] == pytest.approx(5.0, abs=0.01)
+
+    def test_performance_is_max_of_strength_and_endurance(self, client, auth_token):
+        h = auth_headers(auth_token)
+        res = client.patch('/api/me', json={'gender': 'male', 'bodyweight': 180}, headers=h)
+        assert res.status_code == 200
+
+        # Weak bench single (~10th pct at 0.35xBW = 63 lbs) + solid 5K
+        self._log_bench_single(client, h, self._seed_bench_template(), weight=63)
+        tmpl_id = self._seed_running_template()
+        self._log_run(client, h, tmpl_id, distance_km=5, duration_min=25)
+
+        data = client.get('/api/stats/strength-score', headers=h).get_json()
+        comp = data['greek_score_components']
+        assert comp['endurance'] > comp['strength']
+        assert comp['performance'] == pytest.approx(max(comp['strength'], comp['endurance']))
+
+    def test_strength_only_user_unaffected(self, client, auth_token):
+        h = auth_headers(auth_token)
+        res = client.patch('/api/me', json={'gender': 'male', 'bodyweight': 180}, headers=h)
+        assert res.status_code == 200
+
+        self._log_bench_single(client, h, self._seed_bench_template(), weight=225)
+
+        data = client.get('/api/stats/strength-score', headers=h).get_json()
+        assert data['endurance_overall'] is None
+        assert data['endurance']['distances'] == []
+        comp = data['greek_score_components']
+        # No endurance data: the performance slot is exactly the strength leg
+        assert comp['performance'] == pytest.approx(comp['strength'])
+        assert 'missing_for_strength' not in data
+
+    def test_missing_gender_still_gates_everything(self, client, auth_token):
+        h = auth_headers(auth_token)
+        tmpl_id = self._seed_running_template()
+        self._log_run(client, h, tmpl_id, distance_km=5, duration_min=25)
+
+        res = client.get('/api/stats/strength-score', headers=h)
+        assert res.status_code == 422
+        assert res.get_json()['missing'] == ['gender']
 
 
 # ---------------------------------------------------------------------------

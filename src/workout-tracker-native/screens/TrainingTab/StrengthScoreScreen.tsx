@@ -71,6 +71,7 @@ interface ScoreData {
   weight_unit?: 'lbs' | 'kg';
   last_updated?: string;
   history?: HistoryPoint[];
+  missing_for_strength?: string[];
 }
 
 interface HistoryPoint { date: string; score: number }
@@ -171,12 +172,19 @@ export default function StrengthScoreScreen({ navigation }: Props) {
       }
       const data: ScoreData = await res.json();
       // No strength lifts tracked (e.g. cardio-only user) — the endpoint still
-      // returns 200 with a real Greek rank (consistency/dedication/volume don't
-      // need strength data), but this screen is specifically about lifts, so it
-      // shows its own empty state rather than a card full of zeroed-out rows.
+      // returns 200 with a real Greek rank (the endurance leg and
+      // consistency/dedication/volume don't need strength data), but this
+      // screen is specifically about lifts, so it shows its own empty state.
+      // missing_for_strength means the strength leg was skipped for a missing
+      // profile field (bodyweight) — show the setup gate, not "no data".
       if (data.exercises_used === 0) {
-        setNoData(true);
-        setMissingFields([]);
+        if (data.missing_for_strength?.length) {
+          setMissingFields(data.missing_for_strength);
+          setNoData(false);
+        } else {
+          setNoData(true);
+          setMissingFields([]);
+        }
         setError(false);
         return;
       }

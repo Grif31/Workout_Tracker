@@ -537,6 +537,7 @@ def main():
                 name=name,
                 equipment=equipment,
                 exercise_type='cardio',
+                standards_key=SEEDER_STANDARDS_MAP.get((name.lower(), equipment.lower() if equipment else None)),
                 description=EXERCISE_DESCRIPTIONS.get(name),
             )
             db.session.add(new_ex)

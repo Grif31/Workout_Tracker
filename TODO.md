@@ -878,3 +878,62 @@ Check off items as you complete them.
 
 - [x] **Admin page (internal only, lowest priority)**
   - [x] `admin_routes.py:63` — "Exercise Images — Aretē Admin" → pipe
+
+---
+
+## 🏃 18. Endurance Score
+> Cardio counterpart to the Strength Score: pace-percentile ranking for running, feeding the Greek rank's 45% performance slot as `max(strength_overall, endurance_overall)` so cardio-focused users have a real path to Aretē without diluting the strength score. Planned 2026-09-02 (full design discussion in session history).
+>
+> **Locked decisions:**
+> - **Real pace standards** (min/km percentile tables by gender, mirroring `STANDARDS`' bodyweight-ratio tables), not relative-improvement scoring
+> - **Running only in v1** — seeded `Running` + `Running (Treadmill)` templates get `standards_key='Running'` (pooled, like Bench Press across equipment). Cycling/rowing/walking still log + earn PRs but don't feed the score. Rowing is the natural fast-follow (Concept2 times are highly standardized) — per-key design already supports adding activities
+> - **Two tiers**: Core (5K / 10K / Half / Marathon) 70% + Speed (400m / 800m / 1K / 1 Mile) 30%; missing tier drops and weights renormalize (same as strength). Speed tier is what makes sub-5K-only runners scoreable at all — they generate no core-distance PRs
+> - **Best-within-tier, not mean-within-tier** — every stored short-distance `best_time` is linearly-scaled average pace from a longer run (systematically slower than a true effort), and all of a runner's per-distance times derive from the same runs, so a mean double-counts the extrapolation penalty. True interval efforts logged as separate sets DO produce accurate short-distance PRs and naturally dominate via the existing upsert (keeps fastest)
+> - **`max()` blend, not average** — a lifter who never runs is completely unaffected; a hybrid athlete gets credit for their stronger discipline; trivially correct when one leg is missing
+> - **Endurance-specific age anchors** (WMA age-grading curve), NOT the lifting Masters coefficients in `age_scaling_factor` — running declines differently with age
+> - **Lookup is inverted vs. strength** — lower pace = better; interpolate downward, clamp at 99.9 fast / floor 1.0 slow
+> - Draft pace table calibrated against recreational race-finisher distributions (sanity anchors, men: sub-20 5K ≈ 90th pct, sub-3:00 marathon ≈ high-90s, median marathon ~4:25; women ~12% slower per breakpoint). Keyed off `CARDIO_DISTANCE_MILESTONES` floats by import (1.60934, 21.0975, 42.195) so the join key can't drift
+> - Unit safety verified: `_convert_stored_weights` only touches `max_weight`/`estimated_1rm`/`max_reps` — cardio `best_time`/`best_distance` values stay minutes/km regardless of kg↔lbs switches
+
+### Phase 1 — Backend foundation (runners get a real Greek rank, no new UI) — built 2026-09-03
+
+- [x] **`utils/endurance_standards.py`** (new file — keep the 460-line strength file focused)
+  - [x] `PACE_STANDARDS[gender][distance_km][percentile] = min_per_km` for all 8 milestone distances, both genders
+  - [x] `compute_pace_percentile(distance_km, gender, pace)` — downward interpolation, strength-style clamping
+  - [x] `CORE_DISTANCES` / `SPEED_DISTANCES` tier constants — `CARDIO_DISTANCE_MILESTONES`/`CARDIO_DURATION_MILESTONES` were MOVED here (workout_routes now imports them from this file), so the pace-table keys share the exact floats PR rows are written with
+  - [x] `endurance_age_factor(age)` — WMA-based piecewise-linear anchors (same interpolation pattern as `_AGE_FACTOR_ANCHORS`, different values)
+  - [x] `compute_endurance_overall(per_distance_percentiles)` — best-within-tier, 70/30, renormalize missing tier
+- [x] **Standards-key wiring**
+  - [x] `SEEDER_STANDARDS_MAP` += `('running', None)` / `('running', 'treadmill')` → `'Running'`; seed.py's cardio loop now assigns `standards_key` (it never did before)
+  - [x] Data migration `l0m1n2o3p4q5` backfilling `standards_key='Running'` on the two seeded global Running templates — applied + verified on local dev DB
+- [x] **`strength_score()` updates** (`routes/strength_score_routes.py`)
+  - [x] **Split the 422 gate**: `gender` missing → still 422; `bodyweight` missing → strength leg skipped (`overall`/`overall_rank` = `null`, not 0 — StrengthScoreScreen reads `missing_for_strength` to keep its "Log Bodyweight" gate), endurance + Greek rank compute normally
+  - [x] `endurance_overall` from `best_time` PRs on `standards_key='Running'` templates (fastest pace per distance across pooled templates, endurance age credit before lookup)
+  - [x] `performance = max(strength_overall, endurance_overall)` into `compute_greek_score`'s 45% slot
+  - [x] Additive response fields: `endurance_overall`, `endurance.distances` breakdown (label/pace/percentile/rank/tier), `greek_score_components.endurance` + `.performance`
+  - [x] Bonus: snapshot writes now skipped when there's no strength data (cardio-only users no longer accrue score-0 `StrengthScoreSnapshot` rows)
+- [x] **Backend tests**: 22 unit tests (`tests/test_endurance_standards.py` — table integrity incl. monotonicity both axes + gender gap, interpolation/clamping, age factor, tier aggregation) + 4 route tests (`TestEnduranceLeg` in `test_stats_routes.py` — runner-without-bodyweight end-to-end, max() blend, strength-only unaffected, gender still gates)
+- [x] Confirmed `test_unit_conversion_registry.py` still passes (no new weight columns)
+
+### Phase 2 — EnduranceScoreScreen (parity with Strength Score)
+
+- [ ] **`GET /api/stats/endurance-score`** — full payload: hero score + rank (reuse `STRENGTH_TIERS` percentile tiers — tier system is discipline-agnostic), tier breakdown, per-distance list (pace, percentile, rank badge, thresholds = pace needed at each tier boundary), history
+- [ ] **Snapshot history split**: add `score_type` column to `StrengthScoreSnapshot` (`server_default='strength'`) + migration; filter **all three** existing reads by `score_type='strength'` (`strength_score()`'s history query, its 24h-dedupe check, `/api/stats/strength-score/history`) or endurance snapshots pollute the strength chart
+- [ ] **`screens/TrainingTab/EnduranceScoreScreen.tsx`** — mirrors `StrengthScoreScreen` structure (hero ring, distance rows instead of lift rows, score-over-time chart via `computeChartYAxisRange`, share card via shared `components/share/ShareCardParts.tsx` chrome, rank-up celebration + `AsyncStorage` last-tier key pattern)
+  - [ ] Pace displayed in min/mi or min/km per existing `gps_distance_unit_${uid}` pref (stored values always min/km)
+- [ ] **Navigation**: register in `TrainingStack` + `navigation/types.ts`; entry tile on `CoachScreen` next to the Strength Score tile; add `/api/stats/endurance-score` to `PreloadScreen`'s preload list
+
+### Phase 3 — Polish
+
+- [ ] **`GreekRankScreen` Score Breakdown**: replace the single ambiguous "Strength" row with separate Strength + Endurance rows, higher one marked as the counting "Performance" component
+- [ ] Info-modal copy on both score screens explaining the `max()` blend + endurance methodology (best-within-tier, extrapolation caveat)
+- [ ] CLAUDE.md updates (new util file, new route, new screen, `score_type` column, 45%-slot formula) + CHANGELOG entry
+
+### Phase 4 — GPS best-efforts extraction (fixes the interval-training gap)
+> **The gap**: `GPSCardioScreen` saves a session as one continuous recording — a track workout's fast 400m reps get averaged away with warmup/recovery jogs into one slow bout, so GPS-tracked interval training never produces true short-distance PRs (manual multi-set logging does — `_compute_and_upsert_cardio_prs` treats each set as its own bout). A Strava-style best-efforts scan makes speed-tier data honest for everyone, not just manual loggers.
+
+- [ ] **Best-efforts scan on GPS save**: from the recorded GPS points (timestamped route data already captured for `route_polyline`), find the fastest rolling window covering each milestone distance ≤ total run distance (400m / 800m / 1K / 1 Mile at minimum; longer milestones benefit too — a negative-split 10K contains a faster 5K than the run's average)
+- [ ] Feed extracted segment times into the existing PR pipeline (`best_time` upsert per milestone) alongside the whole-bout computation — upsert keeps the fastest, so this only ever improves PRs
+- [ ] Decide where the scan runs: client-side before save (has raw points + timestamps in memory; polyline encoding is lossy on timing) vs. backend (needs timestamped points persisted, not just the encoded polyline — likely a schema addition). Leaning client-side — no migration, data's already in hand at save time
+- [ ] Surface extracted best efforts on `CardioDetailsScreen` ("Best 1K: 4:32" chips) so users see what the scan found
+- [ ] Backfill consideration: historical GPS runs only have the lossy polyline (no per-point timestamps) — best efforts apply to new runs only; document that
