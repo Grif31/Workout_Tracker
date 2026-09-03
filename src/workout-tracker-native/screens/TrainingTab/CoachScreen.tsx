@@ -252,13 +252,19 @@ export default function CoachScreen({ navigation }: Props) {
   const [routineGenerating, setRoutineGenerating] = useState(false);
 
   // ── Initialization ──────────────────────────────────────────────────────────
+  // Keyed on user.id: it can be undefined on first mount while auth hydrates,
+  // and a `_undefined` key would just read back the defaults.
   useEffect(() => {
-    AsyncStorage.multiGet([`${COACH_PROFILE_KEY}_${user?.id}`, `workout_weekly_goal_${user?.id}`]).then(([profileRaw, goalRaw]) => {
+    if (!user?.id) return;
+    AsyncStorage.multiGet([`${COACH_PROFILE_KEY}_${user.id}`, `workout_weekly_goal_${user.id}`]).then(([profileRaw, goalRaw]) => {
       if (profileRaw[1]) {
         try { setCoachProfile({ ...DEFAULT_PROFILE, ...JSON.parse(profileRaw[1]) }); } catch { }
       }
       if (goalRaw[1]) setWeeklyGoal(parseInt(goalRaw[1], 10) || 3);
     });
+  }, [user?.id]);
+
+  useEffect(() => {
     // Load cached insights
     AsyncStorage.getItem(COACH_INSIGHTS_KEY).then(raw => {
       if (!raw) return;
@@ -951,28 +957,18 @@ export default function CoachScreen({ navigation }: Props) {
                 Hey {user?.name || user?.username || 'Athlete'}, your AI coach is here.
               </Text>
 
-              <View style={styles.coachProfileChips}>
-                {([
-                  { icon: 'flag-outline', label: GOAL_LABELS[coachProfile.goal] ?? coachProfile.goal },
-                  { icon: 'trending-up-outline', label: EXPERIENCE_LABELS[coachProfile.experience] ?? coachProfile.experience },
-                  { icon: 'barbell-outline', label: EQUIPMENT_LABELS[coachProfile.equipment] ?? coachProfile.equipment },
-                  { icon: 'calendar-outline', label: `${coachProfile.days_per_week}x / week` },
-                  { icon: 'time-outline', label: `${coachProfile.session_length_min} min` },
-                ] as { icon: keyof typeof Ionicons.glyphMap; label: string }[]).map(chip => (
-                  <View key={chip.label} style={styles.coachProfileChip}>
-                    <Ionicons name={chip.icon} size={12} color={colors.textSecondary} />
-                    <Text style={styles.coachProfileChipText}>{chip.label}</Text>
-                  </View>
-                ))}
-                {coachProfile.avoid.map(a => (
-                  <View key={a} style={[styles.coachProfileChip, styles.coachProfileChipAvoid]}>
-                    <Ionicons name="medkit-outline" size={12} color={colors.danger} />
-                    <Text style={[styles.coachProfileChipText, styles.coachProfileChipAvoidText]}>
-                      Avoid {AVOID_LABELS[a] ?? a}
-                    </Text>
-                  </View>
-                ))}
-              </View>
+              <Text style={styles.coachProfileSummary} numberOfLines={2}>
+                {[
+                  GOAL_LABELS[coachProfile.goal] ?? coachProfile.goal,
+                  EXPERIENCE_LABELS[coachProfile.experience] ?? coachProfile.experience,
+                  EQUIPMENT_LABELS[coachProfile.equipment] ?? coachProfile.equipment,
+                  `${coachProfile.days_per_week}x/wk`,
+                  `${coachProfile.session_length_min} min`,
+                  ...(coachProfile.avoid.length
+                    ? [`Avoid: ${coachProfile.avoid.map(a => AVOID_LABELS[a] ?? a).join(', ')}`]
+                    : []),
+                ].join('  ·  ')}
+              </Text>
             </View>
           </View>
 
@@ -1498,15 +1494,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   coachGreeting: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 20 },
   profileBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   profileBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.accent },
-  coachProfileChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: 2 },
-  coachProfileChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border,
-    borderRadius: 20, paddingHorizontal: spacing.sm, paddingVertical: 5,
+  coachProfileSummary: {
+    fontSize: typography.fontSize.xs, color: colors.textSecondary,
+    fontWeight: '600', lineHeight: 17, marginTop: 1,
   },
-  coachProfileChipText: { fontSize: typography.fontSize.xs, color: colors.textSecondary, fontWeight: '600' },
-  coachProfileChipAvoid: { borderColor: colors.danger + '55', backgroundColor: colors.danger + '12' },
-  coachProfileChipAvoidText: { color: colors.danger },
   aiCoachCard: { marginBottom: spacing.md, gap: spacing.sm },
   generateBtnRow: { flexDirection: 'row', gap: spacing.sm },
   generateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.save, borderRadius: spacing.sm, paddingVertical: 12 },
