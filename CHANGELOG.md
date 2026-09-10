@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.6 (unreleased)
+
+### Bug Fixes
+- Fixed workouts failing to save with an "internal server error" when a set's rep count contained a decimal point. The workout is no longer lost, and the reps field now only accepts whole numbers.
+
 ## 1.1.5 (2026-09-03)
 
 ### New: Endurance Score

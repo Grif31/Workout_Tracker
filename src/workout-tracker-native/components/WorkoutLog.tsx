@@ -1338,7 +1338,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         }
         return {
           id: s.id,
-          reps: Number(s.reps),
+          // Round: reps is an integer column server-side, and a decimal here
+          // used to desync the saved row from the in-memory value and crash
+          // the PR calculation. The +/- buttons already round; typed input
+          // (older builds allowed a decimal point) did not.
+          reps: Math.round(Number(s.reps)),
           weight: isBodyweight(ex) ? 0 : Number(s.weight),
           order: setIndex,
           set_type: s.set_type ?? 'N',

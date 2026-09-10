@@ -93,7 +93,10 @@ function SetRow({
           style={[styles.setInput, colStyles.input, isDone && styles.setInputDone]}
           placeholder="—"
           placeholderTextColor={colors.placeholder}
-          keyboardType="numeric"
+          // number-pad, not numeric: reps are whole numbers, and numeric's iOS
+          // keypad offers a decimal point. Weight below stays numeric — it is
+          // legitimately fractional.
+          keyboardType="number-pad"
           editable={!isDone}
           value={set.reps}
           onChangeText={onChangeReps}

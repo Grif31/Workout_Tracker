@@ -228,6 +228,92 @@ class TestCreateWorkout:
 
 
 # ---------------------------------------------------------------------------
+# POST/PATCH /api/workouts -- non-integer reps in the payload
+#
+# Regression (found in prod logs 2026-09-10, 18 crashes over 7 days): Set.reps
+# is an Integer column, but the workout payload is unvalidated (WorkoutSchema
+# types `exercises` as a bare list of dicts) and the RN reps input used
+# keyboardType="numeric", whose iOS keypad offers a decimal point. SQLAlchemy
+# does not coerce on attribute assignment, so 8.5 stayed a float in memory,
+# int()-truncated to 8 in the max_reps PR lookup, matched no set, and a bare
+# next() raised StopIteration -- a 500 that rolled the entire workout back
+# before it was ever committed, silently losing the user's session.
+# ---------------------------------------------------------------------------
+
+class TestNonIntegerReps:
+
+    AUTH = staticmethod(lambda token: {'Authorization': f'Bearer {token}'})
+
+    def _template(self, client, token):
+        res = client.post(
+            '/api/exercises',
+            json={'name': 'Bench Press', 'muscle_group': 'Chest'},
+            headers=self.AUTH(token),
+        )
+        assert res.status_code == 201
+        return res.get_json()['id']
+
+    def _payload(self, tid, reps):
+        return {
+            'workoutName': 'Push Day',
+            'exercises': [{
+                'name': 'Bench Press',
+                'exercise_template_id': tid,
+                'sets': [{'reps': reps, 'weight': 135}],
+            }],
+        }
+
+    def test_decimal_reps_saves_instead_of_500(self, client, auth_token):
+        tid = self._template(client, auth_token)
+        res = create_workout(client, auth_token, self._payload(tid, 8.5))
+        assert res.status_code == 201
+
+    def test_decimal_reps_stored_as_rounded_int(self, client, auth_token):
+        tid = self._template(client, auth_token)
+        create_workout(client, auth_token, self._payload(tid, 8.5))
+        workout_id = get_workout_id(client, auth_token)
+        data = client.get(f'/api/workouts/{workout_id}', headers=self.AUTH(auth_token)).get_json()
+        assert data['exercises'][0]['sets'][0]['reps'] == 8
+
+    def test_decimal_reps_still_records_the_max_reps_pr(self, client, auth_token):
+        tid = self._template(client, auth_token)
+        create_workout(client, auth_token, self._payload(tid, 8.5))
+        prs = client.get(f'/api/personal-records/{tid}', headers=self.AUTH(auth_token)).get_json()
+        entry = next(p for p in prs['per_weight_reps'] if p['weight'] == 135)
+        assert entry['max_reps'] == 8
+
+    def test_decimal_reps_on_edit_does_not_500(self, client, auth_token):
+        tid = self._template(client, auth_token)
+        create_workout(client, auth_token, self._payload(tid, 8))
+        workout_id = get_workout_id(client, auth_token)
+        res = client.patch(
+            f'/api/workouts/{workout_id}',
+            json=self._payload(tid, 10.5),
+            headers=self.AUTH(auth_token),
+        )
+        assert res.status_code == 200
+
+    def test_numeric_string_reps_does_not_crash(self, client, auth_token):
+        # The payload is unvalidated, so a stringified number must not 500
+        # either (it previously raised TypeError on the `r <= 15` comparison).
+        tid = self._template(client, auth_token)
+        res = create_workout(client, auth_token, self._payload(tid, '9'))
+        assert res.status_code == 201
+        workout_id = get_workout_id(client, auth_token)
+        data = client.get(f'/api/workouts/{workout_id}', headers=self.AUTH(auth_token)).get_json()
+        assert data['exercises'][0]['sets'][0]['reps'] == 9
+
+    def test_below_two_decimal_reps_still_skips_max_reps(self, client, auth_token):
+        # 1.5 truncated to 1 always hit the `best_reps < 2` guard, so it never
+        # crashed -- it must still round to 2 now and not regress into a PR of 1
+        tid = self._template(client, auth_token)
+        create_workout(client, auth_token, self._payload(tid, 1.5))
+        workout_id = get_workout_id(client, auth_token)
+        data = client.get(f'/api/workouts/{workout_id}', headers=self.AUTH(auth_token)).get_json()
+        assert data['exercises'][0]['sets'][0]['reps'] == 2
+
+
+# ---------------------------------------------------------------------------
 # POST /api/workouts -- whole-workout PRs (is_best_volume / is_best_reps)
 # ---------------------------------------------------------------------------
 

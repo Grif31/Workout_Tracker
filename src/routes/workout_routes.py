@@ -20,6 +20,25 @@ _workout_schema        = WorkoutSchema()
 _update_workout_schema = UpdateWorkoutSchema()
 
 
+def _coerce_reps(value):
+    """Normalise a payload reps value to an int (or None).
+
+    Set.reps is an Integer column, but the workout payload is unvalidated —
+    WorkoutSchema types `exercises` as a bare list of dicts — and the RN reps
+    input uses keyboardType="numeric", whose iOS keypad includes a decimal
+    point. SQLAlchemy does NOT coerce on attribute assignment, so a payload
+    like 8.5 stays a float in memory while Postgres stores the rounded int,
+    desyncing the two. Rounding here keeps every downstream consumer (PR
+    math, volume, exports) working on the same value the DB holds.
+    """
+    if value is None:
+        return None
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+
+
 def _record_pr_event(user_id, exercise, pr_type, value, previous_value, weight_context, achieved_at):
     """Append a PREvent history row alongside every PersonalRecord upsert."""
     db.session.add(PREvent(
@@ -191,10 +210,16 @@ def _compute_and_upsert_prs(user_id, exercise_set_pairs, workout_date):
         # ── max_reps: one record per weight used in this workout ───────────────
         for weight in set(w for _, w, _ in valid):
             sets_at_weight = [(r, sid) for r, w, sid in valid if w == weight]
-            best_reps = int(max(r for r, _ in sets_at_weight))
+            best_raw  = max(r for r, _ in sets_at_weight)
+            best_reps = int(best_raw)
             if best_reps < 2:
                 continue  # 1-rep sets are max_weight, not max_reps
-            pr_set_id = next(sid for r, sid in sets_at_weight if r == best_reps)
+            # Match on the RAW value, not the int-coerced one — a non-integer
+            # reps value (8.5) matches nothing once truncated to 8, and a bare
+            # next() then raises StopIteration, which surfaced as a 500 that
+            # rolled the entire workout back before it was ever committed.
+            # Defaulting to None mirrors the max_weight branch above.
+            pr_set_id = next((sid for r, sid in sets_at_weight if r == best_raw), None)
 
             existing = PersonalRecord.query.filter_by(
                 user_id=user_id,
@@ -539,7 +564,7 @@ def add_workout():
             for set_index, s in enumerate(ex.get('sets', [])):
                 new_set = Set(
                     exercise_id=new_ex.id,
-                    reps=s.get('reps'),
+                    reps=_coerce_reps(s.get('reps')),
                     weight=s.get('weight'),
                     order=s.get('order', set_index),
                     set_type=s.get('set_type', 'N'),
@@ -704,7 +729,7 @@ def update_workout(workout_id):
                     if s_id and s_id in setIds:
                         s = next(st for st in ex.sets if st.id == s_id)
                         if "reps" in s_data:
-                            s.reps = s_data["reps"]
+                            s.reps = _coerce_reps(s_data["reps"])
                         if "weight" in s_data:
                             s.weight = s_data["weight"]
                         if "set_type" in s_data:
@@ -724,7 +749,7 @@ def update_workout(workout_id):
                         s.order = s_data.get('order', set_index)
                     else:
                         ex.sets.append(Set(
-                            reps=s_data.get("reps"),
+                            reps=_coerce_reps(s_data.get("reps")),
                             weight=s_data.get("weight"),
                             order=s_data.get('order', set_index),
                             set_type=s_data.get('set_type', 'N'),
@@ -747,7 +772,7 @@ def update_workout(workout_id):
                 )
                 for set_index, s in enumerate(exData.get("sets", [])):
                     new_ex.sets.append(Set(
-                        reps=s.get("reps"),
+                        reps=_coerce_reps(s.get("reps")),
                         weight=s.get("weight"),
                         order=s.get('order', set_index),
                         set_type=s.get('set_type', 'N'),
