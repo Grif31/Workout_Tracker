@@ -11,8 +11,11 @@ import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
 import ExerciseListModal from '../../components/ExerciseList';
+import { makeUid } from '../../components/workout/types';
+import { animateNextRowChange } from '../../utils/layoutAnimation';
 
 import { apiFetch } from '../../utils/api';
+import { showToast } from '../../utils/toast';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
 
@@ -21,9 +24,13 @@ type Props = NativeStackScreenProps<TrainingStackParamsList, 'CreateRoutine'>;
 type Exercise = { id: number; name: string; muscle_group: string };
 type Template = { id: number; name: string; exercises: Exercise[] };
 
-type DayEntry =
+// uid is the React key. List position can't be: LayoutAnimation tracks views by
+// key, so with index keys removing a day fades out the last card while the
+// remaining cards swap contents.
+type DayEntry = { uid: string } & (
   | { mode: 'existing'; label: string; templateId: number; templateName: string }
-  | { mode: 'new'; label: string; exercises: Exercise[] };
+  | { mode: 'new'; label: string; exercises: Exercise[] }
+);
 
 export default function CreateRoutineScreen({ route, navigation }: Props) {
   const routineId = route.params?.routineId;
@@ -34,7 +41,11 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
   const { user } = useAuth();
   const [routineName, setRoutineName] = useState('');
   const [description, setDescription] = useState('');
-  const [days, setDays] = useState<DayEntry[]>([]);
+  // Every routine needs at least one day, so a new one starts with Day 1.
+  // Editing loads the routine's real days instead.
+  const [days, setDays] = useState<DayEntry[]>(() =>
+    isEditing ? [] : [{ uid: makeUid(), mode: 'new', label: 'Day 1', exercises: [] }],
+  );
   const [exerciseList, setExerciseList] = useState<Exercise[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [saving, setSaving] = useState(false);
@@ -64,6 +75,7 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
       setRoutineName(data.name ?? '');
       setDescription(data.description ?? '');
       setDays((data.days ?? []).map((d: any) => ({
+        uid: makeUid(),
         mode: 'existing' as const,
         label: d.label,
         templateId: d.workout_template.id,
@@ -95,10 +107,14 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
   };
 
   const addDay = () => {
-    setDays(prev => [...prev, { mode: 'new', label: `Day ${prev.length + 1}`, exercises: [] }]);
+    animateNextRowChange();
+    setDays(prev => [...prev, { uid: makeUid(), mode: 'new', label: `Day ${prev.length + 1}`, exercises: [] }]);
   };
 
-  const removeDay = (idx: number) => setDays(prev => prev.filter((_, i) => i !== idx));
+  const removeDay = (idx: number) => {
+    animateNextRowChange();
+    setDays(prev => prev.filter((_, i) => i !== idx));
+  };
 
   const updateLabel = (idx: number, label: string) =>
     setDays(prev => prev.map((d, i) => i === idx ? { ...d, label } : d));
@@ -106,15 +122,15 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
   const switchMode = (idx: number, mode: 'new' | 'existing') => {
     setDays(prev => prev.map((d, i) => {
       if (i !== idx) return d;
-      if (mode === 'new') return { mode: 'new', label: d.label, exercises: [] };
-      return { mode: 'existing', label: d.label, templateId: 0, templateName: '' };
+      if (mode === 'new') return { uid: d.uid, mode: 'new', label: d.label, exercises: [] };
+      return { uid: d.uid, mode: 'existing', label: d.label, templateId: 0, templateName: '' };
     }));
     if (mode === 'existing') setTmplPickerDay(idx);
   };
 
   const pickTemplate = (dayIdx: number, tmpl: Template) => {
     setDays(prev => prev.map((d, i) =>
-      i !== dayIdx ? d : { mode: 'existing', label: d.label, templateId: tmpl.id, templateName: tmpl.name }
+      i !== dayIdx ? d : { uid: d.uid, mode: 'existing', label: d.label, templateId: tmpl.id, templateName: tmpl.name }
     ));
     setTmplPickerDay(null);
   };
@@ -122,18 +138,19 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
   const addExerciseToDay = (dayIdx: number, exercise: { id: number; name: string }) => {
     const full = exerciseList.find(ex => ex.id === exercise.id);
     if (!full) return;
+    animateNextRowChange();
     setDays(prev => prev.map((d, i) => {
       if (i !== dayIdx || d.mode !== 'new') return d;
-      if (d.exercises.some(e => e.id === full.id)) {
-        Alert.alert('Already added', `${full.name} is already in this day`);
-        return d;
-      }
+      // Multi-select calls this once per picked exercise. One already in the
+      // day is skipped silently: an Alert per duplicate would stack.
+      if (d.exercises.some(e => e.id === full.id)) return d;
       return { ...d, exercises: [...d.exercises, full] };
     }));
     setExPickerDay(null);
   };
 
   const removeExerciseFromDay = (dayIdx: number, exerciseId: number) => {
+    animateNextRowChange();
     setDays(prev => prev.map((d, i) => {
       if (i !== dayIdx || d.mode !== 'new') return d;
       return { ...d, exercises: d.exercises.filter(e => e.id !== exerciseId) };
@@ -180,6 +197,8 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
       );
 
       if (res.ok) {
+        // ToastBanner lives at the app root, so this stays visible after goBack
+        showToast('Routine saved');
         navigation.goBack();
       } else {
         const data = await res.json();
@@ -233,7 +252,7 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
       <Text style={styles.sectionHeader}>Days</Text>
 
       {days.map((day, dayIdx) => (
-        <View key={dayIdx} style={styles.dayCard}>
+        <View key={day.uid} style={styles.dayCard}>
           <View style={styles.dayHeader}>
             <TextInput
               style={styles.dayLabelInput}
@@ -297,7 +316,10 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
         </View>
       ))}
 
-      <TouchableOpacity style={styles.addDayBtn} onPress={addDay}>
+      {/* activeOpacity 1: this stays mounted and moves down when a day is added,
+          and LayoutAnimation commits its mid-fade opacity, leaving it stuck dark.
+          Same issue as ExerciseBlock's Add Set buttons. */}
+      <TouchableOpacity style={styles.addDayBtn} activeOpacity={1} onPress={addDay}>
         <Text style={styles.addDayBtnText}>+ Add Day</Text>
       </TouchableOpacity>
 
@@ -318,6 +340,7 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
           onClose={() => setExPickerDay(null)}
           exercises={exerciseList}
           onSelect={ex => addExerciseToDay(exPickerDay!, ex)}
+          multiSelect
           onAddExercise={addNewExerciseToLib}
           muscleGroups={muscleGroups}
         />

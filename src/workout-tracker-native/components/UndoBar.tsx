@@ -9,13 +9,17 @@ type Props = {
   message: string;
   onUndo: () => void;
   onDismiss: () => void;
+  /** Text of the action button; defaults to "Undo". */
+  actionLabel?: string;
+  /** Larger text and padding, for a bar asking a question rather than offering an undo. */
+  prominent?: boolean;
   /** Height of any bar the UndoBar must float above (e.g. a bottom action bar). */
   bottomOffset?: number;
 };
 
 const AUTO_DISMISS_MS = 4000;
 
-export default function UndoBar({ visible, message, onUndo, onDismiss, bottomOffset = 0 }: Props) {
+export default function UndoBar({ visible, message, onUndo, onDismiss, actionLabel = 'Undo', prominent = false, bottomOffset = 0 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const anim = useRef(new Animated.Value(0)).current;
@@ -39,6 +43,7 @@ export default function UndoBar({ visible, message, onUndo, onDismiss, bottomOff
     <Animated.View
       style={[
         styles.bar,
+        prominent && styles.barProminent,
         {
           bottom: bottomOffset + spacing.sm,
           opacity: anim,
@@ -46,9 +51,9 @@ export default function UndoBar({ visible, message, onUndo, onDismiss, bottomOff
         },
       ]}
     >
-      <Text style={styles.message} numberOfLines={1}>{message}</Text>
+      <Text style={[styles.message, prominent && styles.messageProminent]} numberOfLines={1}>{message}</Text>
       <TouchableOpacity onPress={onUndo} hitSlop={8}>
-        <Text style={[styles.undoText, { color: colors.accent }]}>Undo</Text>
+        <Text style={[styles.undoText, prominent && styles.undoTextProminent, { color: colors.accent }]}>{actionLabel}</Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -82,5 +87,16 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   undoText: {
     fontSize: typography.fontSize.sm,
     fontWeight: '700',
+  },
+  barProminent: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  messageProminent: {
+    fontSize: typography.fontSize.md,
+    fontWeight: '600',
+  },
+  undoTextProminent: {
+    fontSize: typography.fontSize.md,
   },
 });

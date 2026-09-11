@@ -17,6 +17,7 @@ import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { apiFetch } from '../../utils/api';
+import { showToast } from '../../utils/toast';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
 
@@ -47,11 +48,14 @@ const parseHoldMinutes = (reps: string): string => {
 
 export default function TemplateDetailScreen({ route, navigation }: Props) {
   const { templateId, muscleGroups: targetMuscles } = route.params;
+  // No id means a template being created. Nothing exists on the server until
+  // the first save, so backing out never leaves an empty template behind.
+  const isNew = templateId == null;
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
 
-  const [name, setName] = useState('');
+  const [name, setName] = useState(isNew ? 'New Template' : '');
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [progMap, setProgMap] = useState<Record<number, ProgrammingEntry>>({});
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
@@ -62,14 +66,16 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
   const [editExId, setEditExId] = useState<number | null>(null);
   const [removed, setRemoved] = useState<RemovedState>(null);
   const [listDragging, setListDragging] = useState(false);
+  // Shows the "log it now?" bar right after a new template's first save
+  const [justCreated, setJustCreated] = useState(false);
 
   const fetchTemplate = async () => {
     try {
       const [tmplRes] = await Promise.all([
-        apiFetch(`/api/workout-templates/${templateId}`),
+        isNew ? null : apiFetch(`/api/workout-templates/${templateId}`),
         loadExerciseList(user?.id, data => setAllExercises(data as Exercise[])),
       ]);
-      if (tmplRes.ok) {
+      if (tmplRes?.ok) {
         const data: Template = await tmplRes.json();
         setName(data.name);
         setExercises(data.exercises);
@@ -112,11 +118,10 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
       });
       setSwitchExId(null);
     } else {
-      if (exercises.some(e => e.id === full.id)) {
-        Alert.alert('Already added', `${full.name} is already in this template`);
-        return;
-      }
-      setExercises(prev => [...prev, full]);
+      // Adding is multi-select, which calls this once per picked exercise. One
+      // already in the template is skipped silently: an Alert per duplicate
+      // would stack when several are picked at once.
+      if (!exercises.some(e => e.id === full.id)) setExercises(prev => [...prev, full]);
     }
     setPickerVisible(false);
   };
@@ -159,8 +164,8 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
     if (!name.trim()) { Alert.alert('Error', 'Template name is required'); return; }
     setSaving(true);
     try {
-      const res = await apiFetch(`/api/workout-templates/${templateId}`, {
-        method: 'PATCH',
+      const res = await apiFetch(isNew ? '/api/workout-templates' : `/api/workout-templates/${templateId}`, {
+        method: isNew ? 'POST' : 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
@@ -168,11 +173,21 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
           programming: exercises.filter(e => progMap[e.id]).map(e => progMap[e.id]),
         }),
       });
-      if (res.ok) {
-        Alert.alert('Saved', 'Template updated');
-        navigation.goBack();
+      if (!res.ok) {
+        Alert.alert('Error', isNew ? 'Failed to create template' : 'Failed to save template');
+      } else if (isNew) {
+        const data = await res.json();
+        // Stay here as the saved template: the new id brings back Log Workout
+        // and Delete. A pending exercise-removal undo is dropped, since the save
+        // already committed the removal and both bars sit in the same spot.
+        navigation.setParams({ templateId: data.id });
+        setRemoved(null);
+        setJustCreated(true);
       } else {
-        Alert.alert('Error', 'Failed to save template');
+        // Toast, not an Alert: ToastBanner lives at the app root, so it stays up
+        // through goBack instead of making the user tap OK before leaving.
+        showToast('Template saved');
+        navigation.goBack();
       }
     } catch {
       Alert.alert('Error', 'Something went wrong');
@@ -259,20 +274,18 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Template</Text>
-        <TouchableOpacity onPress={handleDelete}>
-          <Text style={styles.deleteText}>Delete</Text>
-        </TouchableOpacity>
+        {isNew ? (
+          // Nothing to delete before the first save. The spacer stands in for
+          // the button so space-between doesn't push the title to the right.
+          <View style={styles.headerSpacer} />
+        ) : (
+          <TouchableOpacity onPress={handleDelete}>
+            <Text style={styles.deleteText}>Delete</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={styles.content} scrollEnabled={!listDragging}>
-        {targetMuscles && targetMuscles.length > 0 && (
-          <View style={[styles.muscleBanner, { backgroundColor: colors.accent + '18', borderColor: colors.accent }]}>
-            <Ionicons name="body-outline" size={14} color={colors.accent} />
-            <Text style={[styles.muscleBannerText, { color: colors.accent }]}>
-              Training: {targetMuscles.join(', ')}
-            </Text>
-          </View>
-        )}
         <TextInput
           style={styles.nameInput}
           value={name}
@@ -280,19 +293,14 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
           placeholder="Template name"
           placeholderTextColor={colors.placeholder}
         />
-        <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.logBtn} onPress={handleLog}>
-            <Ionicons name="play" size={14} color={colors.accentText} />
-            <Text style={styles.logBtnText}>Log Workout</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.saveBtn, saving && { opacity: 0.6 }]}
-            onPress={handleSave}
-            disabled={saving}
-          >
-            <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Changes'}</Text>
-          </TouchableOpacity>
-        </View>
+        {!isNew && (
+          <View style={styles.actionRow}>
+            <TouchableOpacity style={styles.logBtn} onPress={handleLog}>
+              <Ionicons name="play" size={14} color={colors.accentText} />
+              <Text style={styles.logBtnText}>Log Workout</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         <Text style={styles.sectionLabel}>Exercises ({exercises.length})</Text>
 
         {exercises.length === 0 ? (
@@ -336,6 +344,16 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
             Swipe an exercise left for actions · hold & drag to reorder
           </Text>
         )}
+
+        <TouchableOpacity
+          style={[styles.saveBtn, saving && { opacity: 0.6 }]}
+          onPress={handleSave}
+          disabled={saving}
+        >
+          <Text style={styles.saveBtnText}>
+            {saving ? 'Saving…' : isNew ? 'Save Template' : 'Save Changes'}
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
 
       <UndoBar
@@ -345,11 +363,23 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         onDismiss={() => setRemoved(null)}
       />
 
+      <UndoBar
+        visible={justCreated}
+        message="Template saved. Log it now?"
+        actionLabel="Log Now"
+        prominent
+        bottomOffset={spacing.xl}
+        onUndo={() => { setJustCreated(false); handleLog(); }}
+        onDismiss={() => setJustCreated(false)}
+      />
+
       <ExerciseListModal
         visible={pickerVisible}
         onClose={() => { setPickerVisible(false); setSwitchExId(null); }}
         exercises={allExercises}
         onSelect={handlePickExercise}
+        // Single-select when swapping an exercise; multi-select when adding.
+        multiSelect={switchExId == null}
         initialMuscle={targetMuscles?.[0]}
         onAddExercise={async (name, muscle, _equipment, exerciseType) => {
           const res = await apiFetch('/api/exercises', {
@@ -389,18 +419,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   backBtn: { padding: 2 },
   headerTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },
   deleteText: { color: colors.danger, fontWeight: '600', fontSize: typography.fontSize.sm },
+  // backBtn's 24px icon plus its 2px padding on each side
+  headerSpacer: { width: 28 },
   content: { padding: spacing.md, paddingBottom: spacing.xl },
-  muscleBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    borderWidth: 1,
-    borderRadius: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 7,
-    marginBottom: spacing.sm,
-  },
-  muscleBannerText: { fontSize: typography.fontSize.sm, fontWeight: '600', flex: 1 },
   nameInput: {
     fontSize: typography.fontSize.xl,
     fontWeight: '700',
@@ -416,8 +437,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.lg,
   },
   logBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.xs,
     backgroundColor: colors.accent,
     borderRadius: spacing.sm,
@@ -426,11 +449,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   logBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
   saveBtn: {
-    flex: 1,
     backgroundColor: colors.save,
     borderRadius: spacing.sm,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
     alignItems: 'center',
+    marginTop: spacing.lg,
   },
   saveBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
   sectionLabel: {

@@ -89,7 +89,7 @@ export type TrainingStackParamsList = {
     TrainingHome: undefined;
     CreateRoutine: { routineId?: number; routineName?: string } | undefined;
     RoutineDetail: { routineId: number; routineName: string };
-    TemplateDetail: { templateId: number; muscleGroups?: string[] };
+    TemplateDetail: { templateId?: number; muscleGroups?: string[] };
     WorkoutDetails: { workoutId: number };
     WorkoutSummary: WorkoutSummaryParams;
     ExerciseDetail: ExerciseDetailParams;

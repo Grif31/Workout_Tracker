@@ -549,26 +549,13 @@ export default function CoachScreen({ navigation }: Props) {
     setMusclePickerVisible(true);
   };
 
-  const handleCreateTemplateWithMuscles = async () => {
+  const handleCreateTemplateWithMuscles = () => {
     setMusclePickerVisible(false);
-    try {
-      const res = await apiFetch('/api/workout-templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'New Template' }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        navigation.navigate('TemplateDetail', {
-          templateId: data.id,
-          muscleGroups: selectedMuscles.length > 0 ? selectedMuscles : undefined,
-        });
-      } else {
-        Alert.alert('Error', 'Failed to create template');
-      }
-    } catch {
-      Alert.alert('Error', 'Something went wrong');
-    }
+    // No template id: TemplateDetail creates the template on its first save, so
+    // backing out without saving doesn't leave an empty template behind.
+    navigation.navigate('TemplateDetail', {
+      muscleGroups: selectedMuscles.length > 0 ? selectedMuscles : undefined,
+    });
   };
 
   const handleRangeChange = (newRange: ChartRange) => {
@@ -774,7 +761,7 @@ export default function CoachScreen({ navigation }: Props) {
               ? () => navigation.navigate('RoutineDetail', { routineId: activeRoutine.id, routineName: activeRoutine.name })
               : handleActiveBlockPress}
           >
-            <SectionRule label="Active Routine" style={{ marginBottom: spacing.sm }} />
+            <Text style={styles.activeRoutineLabel}>Active Routine</Text>
             {activeRoutine ? (
               <View style={styles.activeRoutineNameRow}>
                 <Text style={styles.activeRoutineName} numberOfLines={1}>{activeRoutine.name}</Text>
@@ -1301,7 +1288,7 @@ export default function CoachScreen({ navigation }: Props) {
         visible={musclePickerVisible}
         onClose={() => setMusclePickerVisible(false)}
         title="What muscles are you training?"
-        subtitle="Select any that apply. We'll pre-filter your exercise list."
+        subtitle="We'll pre-filter your exercise list."
         muscles={muscleGroups}
         selected={selectedMuscles}
         onToggle={mg => setSelectedMuscles(prev => prev.includes(mg) ? prev.filter(m => m !== mg) : [...prev, mg])}
@@ -1428,6 +1415,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   // ── Training tab ────────────────────────────────────────────────────────────
   trainingScroll: { flex: 1, paddingHorizontal: spacing.md },
   activeBlock: { backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 3, borderLeftColor: colors.accent },
+  // Same label treatment as SectionRule, minus the hairlines and centering.
+  activeRoutineLabel: { fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.sm },
   // No marginBottom: this row is the card's last element now that the day list
   // navigates to RoutineDetail instead of expanding inline.
   activeRoutineNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

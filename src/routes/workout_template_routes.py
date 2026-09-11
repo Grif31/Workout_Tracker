@@ -24,6 +24,9 @@ def create_workout_template():
 
     ex_ids = data.get('exercise_template_ids', [])
     template = WorkoutTemplate(user_id=user_id, name=name)
+    prog = data.get('programming')
+    if prog:
+        template.programming_json = json.dumps(prog)
     db.session.add(template)
     db.session.flush()
     for i, ex_id in enumerate(ex_ids):

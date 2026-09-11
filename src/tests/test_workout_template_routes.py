@@ -6,6 +6,7 @@ Tests for workout template routes:
   PATCH  /api/workout-templates/<id>
   DELETE /api/workout-templates/<id>
 """
+import json
 
 
 def create_exercise(client, auth_token, name='Squat', muscle='Quads'):
@@ -38,6 +39,24 @@ class TestCreateWorkoutTemplate:
         data = res.get_json()
         assert len(data['exercises']) == 1
         assert data['exercises'][0]['name'] == 'Bench Press'
+
+    def test_create_with_programming(self, client, auth_token):
+        # The app creates a template on its first save, so sets/reps entered
+        # before that have to be accepted by POST, not only by PATCH.
+        ex_id = create_exercise(client, auth_token, 'Bench Press', 'Chest')
+        programming = [{'exercise_template_id': ex_id, 'sets': 4, 'reps': '8-10', 'rpe': None}]
+        res = client.post('/api/workout-templates', json={
+            'name': 'Chest Day',
+            'exercise_template_ids': [ex_id],
+            'programming': programming,
+        }, headers={'Authorization': f'Bearer {auth_token}'})
+        assert res.status_code == 201
+        assert json.loads(res.get_json()['programming_json']) == programming
+
+    def test_create_without_programming_stores_none(self, client, auth_token):
+        res = create_template(client, auth_token, 'Push Day')
+        assert res.status_code == 201
+        assert res.get_json()['programming_json'] is None
 
     def test_create_requires_auth(self, client):
         res = client.post('/api/workout-templates', json={'name': 'Push Day'})

@@ -85,6 +85,10 @@ class RoutineSchema(_Base):
 class WorkoutTemplateSchema(_Base):
     name                  = fields.Str(required=True, validate=validate.Length(min=1))
     exercise_template_ids = fields.List(fields.Int(), load_default=[])
+    # Per-exercise sets/reps. Accepted on create because the app now creates a
+    # template on its first save, so programming entered beforehand has to
+    # arrive with the POST rather than a later PATCH.
+    programming           = fields.List(fields.Dict(), load_default=None)
 
 # ── Bodyweight ────────────────────────────────────────────────
 class BodyweightSchema(_Base):
