@@ -2,6 +2,10 @@
 
 ## 1.1.6 (unreleased)
 
+### New: Swipe to Delete Sets
+- Swipe a set all the way to the left and let go to delete it. A shorter swipe still reveals the Delete button, and the button grows as you pull so you can see when letting go will delete.
+- Adding or removing a set now animates, with the rows below sliding into place instead of jumping.
+
 ### Improved: Active Routine Card
 - The Dashboard's routine card now shows the day you're due to train next, with a Log button right there. It tracks which days you've already done this week, resets to day 1 each new week, and picks the earliest day you haven't finished if you train out of order.
 - The card header shows how many days are in the routine, and expanding it marks the days you've already completed this week.

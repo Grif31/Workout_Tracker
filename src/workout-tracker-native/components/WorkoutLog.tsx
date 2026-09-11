@@ -55,6 +55,7 @@ import {
 import WorkoutHeader from './workout/WorkoutHeader';
 import ExerciseBlock from './workout/ExerciseBlock';
 import DraggableList from './DraggableList';
+import { animateNextRowChange } from '../utils/layoutAnimation';
 import ExerciseReorderRow, { EXERCISE_REORDER_ROW_HEIGHT } from './workout/ExerciseReorderRow';
 import RestTimer from './workout/RestTimer';
 import PlateCalculatorModal from './PlateCalculatorModal';
@@ -862,6 +863,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   }, [autoStartRest, startRest, showPRBanner]);
 
   const addSetToExercise = useCallback((exIndex: number) => {
+    animateNextRowChange();
     setExercises(prev => {
       const ex = prev[exIndex];
       if (!ex) return prev;
@@ -878,6 +880,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   }, [repeatLastSet]);
 
   const deleteSet = useCallback((exIndex: number, setIndex: number) => {
+    animateNextRowChange();
     setExercises(prev => {
       const ex = prev[exIndex];
       if (!ex) return prev;

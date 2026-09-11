@@ -128,7 +128,12 @@ function ExerciseBlock({
                     onDelete={() => onDeleteSet(exIndex, setIndex)}
                   />
                 ))}
-                <TouchableOpacity style={styles.addSetBtn} onPress={() => onAddSet(exIndex)}>
+                {/* activeOpacity 1: adding a set fires a LayoutAnimation, which
+                    takes over this view natively while TouchableOpacity's
+                    ~150ms fade back to full opacity is still running, then
+                    commits the dimmed value it snapshotted and leaves the
+                    button stuck dark. The row sliding in is the feedback. */}
+                <TouchableOpacity style={styles.addSetBtn} activeOpacity={1} onPress={() => onAddSet(exIndex)}>
                   <Ionicons name="add" size={15} color={colors.save} />
                   <Text style={styles.addSetText}>Add Bout</Text>
                 </TouchableOpacity>
@@ -156,7 +161,8 @@ function ExerciseBlock({
                   />
                 ))}
 
-                <TouchableOpacity style={styles.addSetBtn} onPress={() => onAddSet(exIndex)}>
+                {/* activeOpacity 1: see the first Add button above */}
+                <TouchableOpacity style={styles.addSetBtn} activeOpacity={1} onPress={() => onAddSet(exIndex)}>
                   <Ionicons name="add" size={15} color={colors.save} />
                   <Text style={styles.addSetText}>Add Set</Text>
                 </TouchableOpacity>
@@ -203,7 +209,8 @@ function ExerciseBlock({
                   );
                 })}
 
-                <TouchableOpacity style={styles.addSetBtn} onPress={() => onAddSet(exIndex)}>
+                {/* activeOpacity 1: see the first Add button above */}
+                <TouchableOpacity style={styles.addSetBtn} activeOpacity={1} onPress={() => onAddSet(exIndex)}>
                   <Ionicons name="add" size={15} color={colors.save} />
                   <Text style={styles.addSetText}>Add Set</Text>
                 </TouchableOpacity>
