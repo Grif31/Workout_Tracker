@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Dimensions, ActivityIndicator,
+  // Aliased: `Animated` in this file is Reanimated (for the entering
+  // animations). The PR list's height/opacity collapse uses RN's own Animated.
+  Animated as RNAnimated, Easing,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -18,7 +21,8 @@ import { GREEK_RANKS } from '../../constants/greekRanks';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import WorkoutShareCard from '../../components/WorkoutShareCard';
 import { LaurelBranch } from '../../components/LaurelWreath';
-import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
+import { PR_GOLD } from '../../constants/prColors';
+import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import { DashboardStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -44,6 +48,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const [duration, setDuration] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [prExpanded, setPrExpanded] = useState(false);
+  const prAnim = useCollapseAnim(prExpanded);
   const [sharing, setSharing] = useState(false);
   const [greekRank, setGreekRank] = useState<string | null>(null);
   const [greekScore, setGreekScore] = useState<number | null>(null);
@@ -217,12 +222,12 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           <Animated.View entering={FadeInDown.delay(100).duration(400)} style={s.section}>
             {groupedPrs.length === 1 ? (
               <View style={s.prDropdownHeader}>
-                <LaurelBranch height={20} color={PR_GOLD_TEXT} />
+                <LaurelBranch height={20} color={PR_GOLD} />
                 <Text style={s.prText}>
                   {groupedPrs[0].exercise_name}: new {PR_TYPE_LABELS[groupedPrs[0].pr_type] ?? groupedPrs[0].pr_type.replace(/_/g, ' ')} PR!
                   {groupedPrs[0].count > 1 ? ` ×${groupedPrs[0].count}` : ''}
                 </Text>
-                <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
+                <LaurelBranch side="right" height={20} color={PR_GOLD} />
               </View>
             ) : (
               <>
@@ -231,23 +236,39 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
                   onPress={() => setPrExpanded(v => !v)}
                   activeOpacity={0.8}
                 >
-                  <LaurelBranch height={20} color={PR_GOLD_TEXT} />
+                  <LaurelBranch height={20} color={PR_GOLD} />
                   <Text style={s.prText}>
                     {filteredPrs.length} Personal Records
                   </Text>
-                  <Text style={s.prChevron}>{prExpanded ? '▲' : '▼'}</Text>
-                  <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
+                  <RNAnimated.Text
+                    style={[
+                      s.prChevron,
+                      {
+                        transform: [{
+                          rotate: prAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: ['0deg', '180deg'],
+                          }),
+                        }],
+                      },
+                    ]}
+                  >
+                    ▼
+                  </RNAnimated.Text>
+                  <LaurelBranch side="right" height={20} color={PR_GOLD} />
                 </TouchableOpacity>
-                {prExpanded && groupedPrs.map((pr, i) => (
-                  <View key={i} style={s.prBanner}>
-                    <LaurelBranch height={20} color={PR_GOLD_TEXT} />
-                    <Text style={s.prText}>
-                      {pr.exercise_name}: new {PR_TYPE_LABELS[pr.pr_type] ?? pr.pr_type.replace(/_/g, ' ')} PR!
-                      {pr.count > 1 ? ` ×${pr.count}` : ''}
-                    </Text>
-                    <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
-                  </View>
-                ))}
+                <Collapsible progress={prAnim} expanded={prExpanded}>
+                  {groupedPrs.map((pr, i) => (
+                    <View key={i} style={s.prBanner}>
+                      <LaurelBranch height={20} color={PR_GOLD} />
+                      <Text style={s.prBannerText}>
+                        {pr.exercise_name}: new {PR_TYPE_LABELS[pr.pr_type] ?? pr.pr_type.replace(/_/g, ' ')} PR!
+                        {pr.count > 1 ? ` ×${pr.count}` : ''}
+                      </Text>
+                      <LaurelBranch side="right" height={20} color={PR_GOLD} />
+                    </View>
+                  ))}
+                </Collapsible>
               </>
             )}
           </Animated.View>
@@ -378,10 +399,23 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   headline: { fontSize: typography.fontSize.xl, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
   subline: { fontSize: 15, color: colors.textSecondary, marginTop: spacing.xs, textAlign: 'center' },
   section: { paddingHorizontal: 20, marginBottom: 20 },
-  prDropdownHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: PR_GOLD, borderRadius: 10, padding: 12, marginBottom: spacing.sm },
-  prBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: PR_GOLD_BG, borderRadius: 10, padding: 12, marginBottom: spacing.sm },
-  prText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: PR_GOLD_TEXT, flex: 1 },
-  prChevron: { fontSize: 13, color: PR_GOLD_TEXT, marginLeft: spacing.xs },
+  // Gold outline on a surface fill, matching WorkoutLog's PR banner and the
+  // PR Dashboard box — not the old filled-gold blocks.
+  prDropdownHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: PR_GOLD,
+    borderRadius: 10, padding: 12, marginBottom: spacing.sm,
+  },
+  prBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: PR_GOLD + '66',
+    borderRadius: 10, padding: 12, marginBottom: spacing.sm,
+  },
+  prText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: PR_GOLD, flex: 1 },
+  prBannerText: { fontSize: typography.fontSize.sm, fontWeight: '500', color: colors.textPrimary, flex: 1 },
+  prChevron: { fontSize: 13, color: PR_GOLD, marginLeft: spacing.xs },
   statsRow: { flexDirection: 'row', gap: 10 },
   statBox: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: 14, alignItems: 'center' },
   statValue: { fontSize: typography.fontSize.xl, fontWeight: '700', color: colors.textPrimary },

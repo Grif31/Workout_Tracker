@@ -1905,15 +1905,23 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           activeOpacity={1}
           onPress={() => setSetTypePickerTarget(null)}
         />
-        <View style={[styles.rpeModal, { backgroundColor: colors.surface }]}>
+        {/* Only four short options, so the sheet stays compact: a 2x2 grid
+            instead of full-width rows, and the bottom padding tracks the safe
+            area rather than the fixed spacing.xl * 2 the taller RPE sheet needs. */}
+        <View
+          style={[
+            styles.rpeModal,
+            { backgroundColor: colors.surface, paddingBottom: insets.bottom + spacing.md },
+          ]}
+        >
           <View style={[styles.rpeModalHandle, { backgroundColor: colors.border }]} />
-          <View style={styles.rpeModalHeader}>
+          <View style={styles.setTypeHeader}>
             <Text style={[styles.rpeModalTitle, { color: colors.textPrimary }]}>Set Type</Text>
             <TouchableOpacity onPress={() => setSetTypePickerTarget(null)} hitSlop={8}>
-              <Ionicons name="close" size={22} color={colors.textSecondary} />
+              <Ionicons name="close" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
-          <View style={styles.setTypeList}>
+          <View style={styles.setTypeGrid}>
             {SET_TYPES.map(t => {
               const current = setTypePickerTarget
                 ? ((exercises[setTypePickerTarget.exIdx]?.sets[setTypePickerTarget.setIdx]?.set_type as SetType) ?? 'N')
@@ -1923,7 +1931,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
               return (
                 <TouchableOpacity
                   key={t}
-                  style={styles.setTypeRow}
+                  style={[
+                    styles.setTypeTile,
+                    { borderColor: selected ? tc : colors.border },
+                    selected && { backgroundColor: tc + '18' },
+                  ]}
                   activeOpacity={0.75}
                   onPress={() => {
                     if (setTypePickerTarget) {
@@ -1935,10 +1947,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                   <View style={[styles.setTypeBadge, { borderColor: tc }]}>
                     <Text style={[styles.setTypeBadgeText, { color: tc }]}>{t}</Text>
                   </View>
-                  <Text style={[styles.setTypeLabel, { color: colors.textPrimary }]}>{SET_TYPE_LABELS[t]}</Text>
-                  {selected && (
-                    <Ionicons name="checkmark" size={20} color={colors.accent} style={{ marginLeft: 'auto' }} />
-                  )}
+                  <Text
+                    style={[styles.setTypeLabel, { color: colors.textPrimary }]}
+                    numberOfLines={1}
+                  >
+                    {SET_TYPE_LABELS[t]}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
@@ -2137,21 +2151,38 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     lineHeight: 14,
   },
 
-  setTypeList: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-  },
-  setTypeRow: {
+  setTypeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  setTypeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  setTypeTile: {
+    // flexBasis under half leaves room for the gap, so exactly two tiles
+    // sit per row and the four options land as a 2x2 block
+    flexBasis: '47%',
+    flexGrow: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderWidth: 1,
+    borderRadius: spacing.xs,
   },
   setTypeBadge: {
     borderWidth: 1,
     borderRadius: 4,
-    width: 32,
-    height: 32,
+    width: 26,
+    height: 26,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2160,7 +2191,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '700',
   },
   setTypeLabel: {
-    fontSize: typography.fontSize.md,
+    flexShrink: 1,
+    fontSize: typography.fontSize.sm,
     fontWeight: '600',
   },
 

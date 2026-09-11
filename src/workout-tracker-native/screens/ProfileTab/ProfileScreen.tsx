@@ -507,33 +507,27 @@ export default function ProfileScreen({ navigation }: Props) {
             <Text style={styles.workoutDate}>
               {new Date(item.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
             </Text>
-            {item.workout_type === 'cardio' ? (
-              <View style={styles.pillRow}>
-                {item.duration != null && (
-                  <View style={styles.pill}>
-                    <Text style={styles.pillText}>{item.duration} min</Text>
-                  </View>
-                )}
-                {item.distance != null && item.distance > 0 && (
-                  <View style={styles.pill}>
-                    <Text style={styles.pillText}>{item.distance.toFixed(2)} {item.distance_unit || 'km'}</Text>
-                  </View>
-                )}
-              </View>
-            ) : (
-              <View style={styles.pillRow}>
-                {!!item.num_exercises && (
-                  <View style={styles.pill}>
-                    <Text style={styles.pillText}>{item.num_exercises} exercise{item.num_exercises !== 1 ? 's' : ''}</Text>
-                  </View>
-                )}
-                {item.volume != null && item.volume > 0 && (
-                  <View style={styles.pill}>
-                    <Text style={styles.pillText}>{toDisplayVolume(item.volume, weightUnit)}</Text>
-                  </View>
-                )}
-              </View>
-            )}
+            {(() => {
+              // Plain middot-joined text rather than pills — the bubbles read as
+              // tappable chips on a card that is itself the tap target.
+              const parts = item.workout_type === 'cardio'
+                ? [
+                    item.duration != null ? `${item.duration} min` : null,
+                    item.distance != null && item.distance > 0
+                      ? `${item.distance.toFixed(2)} ${item.distance_unit || 'km'}`
+                      : null,
+                  ]
+                : [
+                    item.num_exercises
+                      ? `${item.num_exercises} exercise${item.num_exercises !== 1 ? 's' : ''}`
+                      : null,
+                    item.volume != null && item.volume > 0
+                      ? toDisplayVolume(item.volume, weightUnit)
+                      : null,
+                  ];
+              const line = parts.filter(Boolean).join('  ·  ');
+              return line ? <Text style={styles.workoutMeta}>{line}</Text> : null;
+            })()}
           </TouchableOpacity>
         )}
       />
@@ -761,16 +755,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   prRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginLeft: spacing.sm },
   prText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: PR_GOLD_TEXT },
   workoutDate: { fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
-  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  pill: {
-    backgroundColor: colors.background,
-    borderRadius: 10,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  pillText: { fontSize: typography.fontSize.xs, fontWeight: '500', color: colors.textSecondary },
+  workoutMeta: { fontSize: typography.fontSize.xs, fontWeight: '500', color: colors.textSecondary },
   weightRow: {
     flexDirection: 'row',
     alignItems: 'center',

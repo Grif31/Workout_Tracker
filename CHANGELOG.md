@@ -2,8 +2,21 @@
 
 ## 1.1.6 (unreleased)
 
+### Improved: Active Routine Card
+- The Dashboard's routine card now shows the day you're due to train next, with a Log button right there. It tracks which days you've already done this week, resets to day 1 each new week, and picks the earliest day you haven't finished if you train out of order.
+- The card header shows how many days are in the routine, and expanding it marks the days you've already completed this week.
+- On the Coach tab, tapping the routine card now opens the routine itself instead of expanding a list.
+
+### Improved: Workout History & PRs
+- Workout history rows on your profile now read as plain text instead of bubbles.
+- PR lists on the workout details and summary screens use the same gold outline as the rest of the app, and expand and collapse smoothly.
+
+### Improved: Set Type Picker
+- The picker is now a compact grid instead of a tall list, so it takes up far less of the screen.
+
 ### Bug Fixes
 - Fixed workouts failing to save with an "internal server error" when a set's rep count contained a decimal point. The workout is no longer lost, and the reps field now only accepts whole numbers.
+- Fixed expandable lists collapsing in a jerky way, where the contents lingered over a card that had already shrunk.
 
 ## 1.1.5 (2026-09-03)
 

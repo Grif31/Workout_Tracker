@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert,
-  ActivityIndicator, Animated, ScrollView, PanResponder, Modal, RefreshControl,
+  ActivityIndicator, Animated, ScrollView, PanResponder, Modal, RefreshControl, Easing,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -22,13 +22,22 @@ import { PR_GOLD_TEXT } from '../../constants/prColors';
 import { WEEKLY_SUMMARY_LAST_SHOWN_KEY } from './WeeklySummaryScreen';
 import SectionRule from '../../components/SectionRule';
 import PressableScale from '../../components/PressableScale';
-import { animateNextLayout } from '../../utils/layoutAnimation';
+import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 
 const GREETINGS = [
   'Ready to workout', 'Welcome', 'Ready to Train', "Let's Workout",
   'Crush it today', 'Train hard today', 'Make today count',
   'Stronger every day', 'Time to sweat', 'Bring your best',
 ];
+
+// Monday of the current week as YYYY-MM-DD, local time. Matches the Mon-start
+// convention the weekly summary popup and the backend's streak math already use.
+function currentWeekMondayStr() {
+  const today = new Date();
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - ((today.getDay() + 6) % 7)); // getDay(): 0=Sun
+  return toLocalDateStr(monday);
+}
 
 function getDailyGreeting() {
   const key = toLocalDateStr(new Date());
@@ -213,7 +222,14 @@ export default function DashboardScreen({ navigation }: Props) {
   const displayName = (user?.name || user?.username || '').replace(/ /g, ' ');
   const [activeRoutine, setActiveRoutine] = useState<ActiveRoutine | null>(null);
   const [daysVisible, setDaysVisible] = useState(false);
-  const toggleDaysVisible = () => { animateNextLayout(); setDaysVisible(v => !v); };
+  // No animateNextLayout() here: the day list drives its own height/opacity
+  // animation below. Running LayoutAnimation as well made the card's height
+  // snap shut on its own schedule while the rows were still fading, which is
+  // what made the collapse look broken.
+  const toggleDaysVisible = () => setDaysVisible(v => !v);
+  // Lowercased labels of workouts logged since Monday — drives which routine
+  // day is "up next" and which rows render as already done.
+  const [weekWorkoutNames, setWeekWorkoutNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null);
   const [dateWorkouts, setDateWorkouts] = useState<Workout[]>([]);
@@ -230,6 +246,44 @@ export default function DashboardScreen({ navigation }: Props) {
 
   const streakAnim        = useRef(new Animated.Value(0)).current;
   const [displayStreakValue, setDisplayStreakValue] = useState(0);
+
+  // ── Active routine: which day is up next ───────────────────────────────────
+  const routineDays = useMemo(
+    () => [...(activeRoutine?.days ?? [])].sort((a, b) => a.day_order - b.day_order),
+    [activeRoutine]
+  );
+  const doneLabels = useMemo(() => new Set(weekWorkoutNames), [weekWorkoutNames]);
+  const isDayDone = useCallback(
+    (day: RoutineDay) => doneLabels.has((day.label || '').trim().toLowerCase()),
+    [doneLabels]
+  );
+  // First day (by day_order) with no matching workout logged since Monday.
+  // That single rule covers all three cases the card needs: a fresh week has
+  // nothing logged so it lands on day 1 regardless of what happened last week;
+  // days completed out of order still resolve to the earliest unfinished one;
+  // and a fully-completed week yields null (rendered as the all-done state).
+  const nextDay = useMemo(
+    () => routineDays.find(d => !isDayDone(d)) ?? null,
+    [routineDays, isDayDone]
+  );
+
+  const logRoutineDay = (day: RoutineDay) => navigation.navigate('WorkoutLog', {
+    prefill: {
+      name: day.label,
+      notes: '',
+      exercises: day.workout_template.exercises.map(ex => ({
+        name: ex.name,
+        exercise_template_id: ex.id,
+        exercise_type: ex.exercise_type ?? 'strength',
+        muscle_group: ex.muscle_group,
+        equipment: ex.equipment,
+        sets: [{ reps: '', weight: '' }],
+      })),
+    },
+    editMode: false,
+  });
+
+  const expandAnim = useCollapseAnim(daysVisible);
 
   // Populate from preload cache instantly on mount
   useEffect(() => {
@@ -282,7 +336,7 @@ export default function DashboardScreen({ navigation }: Props) {
   useFocusEffect(useCallback(() => {
     const firstLoad = !hasLoaded.current;
     if (firstLoad) setLoading(true);
-    Promise.all([fetchUser(), fetchRecentWorkouts(), fetchAllWorkoutDates(), fetchStreak()]).finally(() => {
+    Promise.all([fetchUser(), fetchRecentWorkouts(), fetchWeekWorkouts(), fetchAllWorkoutDates(), fetchStreak()]).finally(() => {
       setLoading(false);
       hasLoaded.current = true;
     });
@@ -291,7 +345,7 @@ export default function DashboardScreen({ navigation }: Props) {
 
   const handleRefresh = () => {
     setRefreshing(true);
-    Promise.all([fetchUser(), fetchRecentWorkouts(), fetchAllWorkoutDates(), fetchStreak()]).finally(() => setRefreshing(false));
+    Promise.all([fetchUser(), fetchRecentWorkouts(), fetchWeekWorkouts(), fetchAllWorkoutDates(), fetchStreak()]).finally(() => setRefreshing(false));
   };
 
   const fetchUser = async () => {
@@ -321,6 +375,26 @@ export default function DashboardScreen({ navigation }: Props) {
     } catch {
       Alert.alert('Error', 'Failed to load workouts');
     }
+  };
+
+  // Separate from fetchRecentWorkouts: /api/workouts/recent caps at 5 rows,
+  // which can miss days in a heavy training week. 25 comfortably covers any
+  // week, and we only need each workout's name + date.
+  const fetchWeekWorkouts = async () => {
+    try {
+      const res = await apiFetch('/api/workouts?page=1&per_page=25');
+      if (!res.ok) return;
+      const data = await res.json();
+      const mondayStr = currentWeekMondayStr();
+      setWeekWorkoutNames(
+        (data.workouts ?? [])
+          // Compare as YYYY-MM-DD strings rather than Date objects — the
+          // backend sends an ISO timestamp and lexical compare on the local
+          // date string avoids any timezone drift at the week boundary.
+          .filter((w: Workout) => toLocalDateStr(new Date(w.date)) >= mondayStr)
+          .map((w: Workout) => (w.name || '').trim().toLowerCase())
+      );
+    } catch { /* silently fail — the card falls back to day 1 */ }
   };
 
   const handleCalendarSelect = async (dateStr: string) => {
@@ -431,52 +505,87 @@ export default function DashboardScreen({ navigation }: Props) {
               style={styles.activeBlock}
               onPress={toggleDaysVisible}
             >
-              <SectionRule label="Active Routine" style={{ marginBottom: spacing.sm }} />
               <View style={styles.activeRoutineNameRow}>
-                <Text style={styles.activeRoutineName}>{activeRoutine.name}</Text>
-                <TouchableOpacity
-                  style={styles.toggleDaysBtn}
-                  onPress={toggleDaysVisible}
-                >
+                <Text style={styles.activeRoutineName} numberOfLines={1}>{activeRoutine.name}</Text>
+                {/* Plain View, not a TouchableOpacity: the whole card already
+                    toggles via PressableScale, and nesting a touchable inside
+                    it left the label stuck at its pressed opacity because the
+                    outer responder swallowed the press-out. */}
+                <View style={styles.toggleDaysBtn}>
                   <Text style={[styles.toggleDaysBtnText, { color: colors.accent }]}>
-                    {daysVisible ? 'Hide' : 'Show'}
+                    {routineDays.length} Day{routineDays.length !== 1 ? 's' : ''}
                   </Text>
-                  <Ionicons
-                    name={daysVisible ? 'chevron-up' : 'chevron-down'}
-                    size={14}
-                    color={colors.accent}
-                  />
-                </TouchableOpacity>
-              </View>
-              {daysVisible && activeRoutine.days.map(day => (
-                <View key={day.id} style={styles.dayRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.dayLabel}>{day.label}</Text>
-                    <Text style={styles.dayExCount}>
-                      {day.workout_template.exercises.length} exercise{day.workout_template.exercises.length !== 1 ? 's' : ''}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.logDayBtn}
-                    onPress={() => navigation.navigate('WorkoutLog', {
-                      prefill: {
-                        name: day.label, notes: '',
-                        exercises: day.workout_template.exercises.map(ex => ({
-                          name: ex.name,
-                          exercise_template_id: ex.id,
-                          exercise_type: ex.exercise_type ?? 'strength',
-                          muscle_group: ex.muscle_group,
-                          equipment: ex.equipment,
-                          sets: [{ reps: '', weight: '' }],
-                        })),
-                      },
-                      editMode: false,
-                    })}
+                  <Animated.View
+                    style={{
+                      transform: [{
+                        rotate: expandAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['0deg', '180deg'],
+                        }),
+                      }],
+                    }}
                   >
+                    <Ionicons name="chevron-down" size={14} color={colors.accent} />
+                  </Animated.View>
+                </View>
+              </View>
+
+              {/* Up next — the day to train, with a one-tap Log */}
+              {nextDay ? (
+                <View style={styles.upNextRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.upNextLabel}>Up Next</Text>
+                    {/* Name and exercise count share a line to keep the card short */}
+                    <View style={styles.upNextNameRow}>
+                      <Text style={styles.upNextName} numberOfLines={1}>{nextDay.label}</Text>
+                      <Text style={styles.upNextMeta}>
+                        {nextDay.workout_template.exercises.length} ex
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity style={styles.logNextBtn} onPress={() => logRoutineDay(nextDay)}>
                     <Text style={styles.logDayBtnText}>Log</Text>
                   </TouchableOpacity>
                 </View>
-              ))}
+              ) : (
+                <View style={styles.allDoneRow}>
+                  <Ionicons name="checkmark-circle" size={18} color={colors.save} />
+                  <Text style={styles.allDoneText}>
+                    All {routineDays.length} day{routineDays.length !== 1 ? 's' : ''} done this week
+                  </Text>
+                </View>
+              )}
+
+              <Collapsible progress={expandAnim} expanded={daysVisible}>
+                <View style={styles.daysList}>
+                  {routineDays.map(day => {
+                    const done = isDayDone(day);
+                    return (
+                      <View key={day.id} style={styles.dayRow}>
+                        <View style={{ flex: 1 }}>
+                          <View style={styles.dayLabelRow}>
+                            {done && <Ionicons name="checkmark-circle" size={14} color={colors.save} />}
+                            <Text style={[styles.dayLabel, done && styles.dayLabelDone]} numberOfLines={1}>
+                              {day.label}
+                            </Text>
+                          </View>
+                          <Text style={styles.dayExCount}>
+                            {day.workout_template.exercises.length} exercise{day.workout_template.exercises.length !== 1 ? 's' : ''}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          style={[styles.logDayBtn, done && styles.logDayBtnDone]}
+                          onPress={() => logRoutineDay(day)}
+                        >
+                          <Text style={[styles.logDayBtnText, done && { color: colors.textSecondary }]}>
+                            {done ? 'Again' : 'Log'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
+              </Collapsible>
             </PressableScale>
           )}
 
@@ -648,7 +757,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   activeBlock: {
     backgroundColor: colors.surface,
     borderRadius: spacing.sm,
-    padding: spacing.md,
+    padding: spacing.sm + spacing.xs,
     marginBottom: spacing.md,
     borderTopWidth: 1,
     borderRightWidth: 1,
@@ -663,7 +772,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   activeRoutineName: {
     fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, flex: 1,
@@ -678,15 +787,53 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontWeight: '600',
   },
+  upNextRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: spacing.sm,
+    backgroundColor: colors.accent + '14',
+    borderRadius: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs + 2,
+  },
+  upNextLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.accent,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  upNextNameRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs },
+  upNextName: {
+    fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, flexShrink: 1,
+  },
+  upNextMeta: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
+  logNextBtn: {
+    backgroundColor: colors.save, borderRadius: spacing.xs,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2,
+  },
+  allDoneRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    backgroundColor: colors.save + '14',
+    borderRadius: spacing.xs,
+    paddingHorizontal: spacing.sm, paddingVertical: spacing.xs + 2,
+  },
+  allDoneText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
   dayRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: spacing.xs, borderTopWidth: 1, borderTopColor: colors.border,
   },
-  dayLabel: { fontSize: typography.fontSize.md, color: colors.textPrimary },
+  daysList: { paddingTop: spacing.xs },
+  dayLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  dayLabel: { fontSize: typography.fontSize.md, color: colors.textPrimary, flexShrink: 1 },
+  dayLabelDone: { color: colors.textSecondary },
   dayExCount: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 1 },
   logDayBtn: {
     backgroundColor: colors.save, borderRadius: spacing.xs,
     paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+  },
+  logDayBtnDone: {
+    backgroundColor: 'transparent',
+    borderWidth: 1, borderColor: colors.border,
   },
   logDayBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
 

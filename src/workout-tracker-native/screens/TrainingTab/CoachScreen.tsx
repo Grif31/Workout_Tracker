@@ -24,7 +24,6 @@ import { SCORE_RANK_COLORS } from '../../constants/strengthRanks';
 import CoachProfileModal, { CoachProfile, COACH_PROFILE_KEY } from './CoachProfileModal';
 import SectionRule from '../../components/SectionRule';
 import PressableScale from '../../components/PressableScale';
-import { animateNextLayout } from '../../utils/layoutAnimation';
 import { GREEK_RANK_COLORS, GREEK_RANKS } from '../../constants/greekRanks';
 import WeeklyGoalModal from '../../components/coach/WeeklyGoalModal';
 import WorkingSetsInfoModal from '../../components/coach/WorkingSetsInfoModal';
@@ -239,8 +238,6 @@ export default function CoachScreen({ navigation }: Props) {
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [activeRoutine, setActiveRoutine] = useState<ActiveRoutine | null>(null);
   const [selectModalVisible, setSelectModalVisible] = useState(false);
-  const [daysVisible, setDaysVisible] = useState(false);
-  const toggleDaysVisible = () => { animateNextLayout(); setDaysVisible(v => !v); };
   // Muscle picker for creating blank templates (existing feature)
   const [musclePickerVisible, setMusclePickerVisible] = useState(false);
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
@@ -774,54 +771,24 @@ export default function CoachScreen({ navigation }: Props) {
           <PressableScale
             style={styles.activeBlock}
             onPress={activeRoutine
-              ? toggleDaysVisible
+              ? () => navigation.navigate('RoutineDetail', { routineId: activeRoutine.id, routineName: activeRoutine.name })
               : handleActiveBlockPress}
           >
             <SectionRule label="Active Routine" style={{ marginBottom: spacing.sm }} />
             {activeRoutine ? (
-              <>
-                <View style={styles.activeRoutineNameRow}>
-                  <Text style={styles.activeRoutineName}>{activeRoutine.name}</Text>
-                  <TouchableOpacity style={styles.toggleDaysBtn} onPress={toggleDaysVisible}>
-                    <Text style={[styles.toggleDaysBtnText, { color: colors.accent }]}>
-                      {daysVisible ? 'Hide' : 'Show'}
-                    </Text>
-                    <Ionicons name={daysVisible ? 'chevron-up' : 'chevron-down'} size={14} color={colors.accent} />
-                  </TouchableOpacity>
+              <View style={styles.activeRoutineNameRow}>
+                <Text style={styles.activeRoutineName} numberOfLines={1}>{activeRoutine.name}</Text>
+                {/* Plain View, not a TouchableOpacity: the card itself is the
+                    tap target, and nesting a touchable inside PressableScale
+                    left the label stuck at its pressed opacity because the
+                    outer responder swallowed the press-out. */}
+                <View style={styles.toggleDaysBtn}>
+                  <Text style={[styles.toggleDaysBtnText, { color: colors.accent }]}>
+                    {activeRoutine.days.length} Day{activeRoutine.days.length !== 1 ? 's' : ''}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.accent} />
                 </View>
-                {daysVisible && activeRoutine.days.map(day => (
-                  <View key={day.id} style={styles.dayRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.dayLabel}>{day.label}</Text>
-                      <Text style={styles.dayExCount}>
-                        {day.workout_template.exercises.length} exercise{day.workout_template.exercises.length !== 1 ? 's' : ''}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.logDayBtn}
-                      onPress={() => (navigation as any).navigate('DashboardTab', {
-                        screen: 'WorkoutLog',
-                        initial: false,
-                        params: {
-                          prefill: {
-                            name: day.label, notes: '',
-                            exercises: day.workout_template.exercises.map(ex => ({
-                              name: ex.name,
-                              exercise_template_id: ex.id,
-                              exercise_type: ex.exercise_type ?? 'strength',
-                              muscle_group: ex.muscle_group,
-                              equipment: ex.equipment,
-                              sets: [{ reps: '', weight: '' }],
-                            })),
-                          },
-                        },
-                      })}
-                    >
-                      <Text style={styles.logDayBtnText}>Log</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </>
+              </View>
             ) : (
               <Text style={styles.noRoutineText}>
                 {routines.length === 0 ? 'No routines yet. Tap to create one' : 'No active routine. Tap to select one'}
@@ -1461,15 +1428,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   // ── Training tab ────────────────────────────────────────────────────────────
   trainingScroll: { flex: 1, paddingHorizontal: spacing.md },
   activeBlock: { backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 3, borderLeftColor: colors.accent },
-  activeRoutineNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+  // No marginBottom: this row is the card's last element now that the day list
+  // navigates to RoutineDetail instead of expanding inline.
+  activeRoutineNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   activeRoutineName: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, flex: 1 },
   toggleDaysBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: spacing.sm },
   toggleDaysBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600' },
-  dayRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.xs, borderTopWidth: 1, borderTopColor: colors.border },
-  dayLabel: { fontSize: typography.fontSize.md, color: colors.textPrimary },
-  dayExCount: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 1 },
-  logDayBtn: { backgroundColor: colors.save, borderRadius: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  logDayBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
   noRoutineText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontStyle: 'italic' },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   newTemplateBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },

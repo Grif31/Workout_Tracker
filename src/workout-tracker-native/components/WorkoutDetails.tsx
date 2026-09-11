@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator,
-  Modal, TextInput, KeyboardAvoidingView, Platform,
+  Modal, TextInput, KeyboardAvoidingView, Platform, Animated, Easing,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -23,7 +23,8 @@ import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { estimateCalories } from '../utils/cardioCalories';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toKm } from '../utils/units';
-import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../constants/prColors';
+import { PR_GOLD } from '../constants/prColors';
+import Collapsible, { useCollapseAnim } from './Collapsible';
 import { captureAndShare } from '../utils/shareCapture';
 import MuscleDiagram from './MuscleDiagram';
 import { fmtHold } from './workout/types';
@@ -99,6 +100,7 @@ export default function WorkoutDetailsScreen({
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [loading, setLoading] = useState(true);
   const [prExpanded, setPrExpanded] = useState(false);
+  const prAnim = useCollapseAnim(prExpanded);
   const shareCardRef = useRef<View>(null);
   const [templateModal, setTemplateModal] = useState<{ visible: boolean; name: string; excluded: number }>({
     visible: false, name: '', excluded: 0,
@@ -455,12 +457,12 @@ export default function WorkoutDetailsScreen({
             <View style={styles.prSection}>
               {workoutPrs.length === 1 ? (
                 <View style={styles.prHeader}>
-                  <LaurelBranch height={20} color={PR_GOLD_TEXT} />
+                  <LaurelBranch height={20} color={PR_GOLD} />
                   <Text style={styles.prHeaderText}>
                     {workoutPrs[0].exercise_name}: {PR_LABELS[workoutPrs[0].pr_type] ?? 'PR'}
                     {workoutPrs[0].count > 1 ? ` ×${workoutPrs[0].count}` : ''}
                   </Text>
-                  <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
+                  <LaurelBranch side="right" height={20} color={PR_GOLD} />
                 </View>
               ) : (
                 <>
@@ -469,21 +471,37 @@ export default function WorkoutDetailsScreen({
                     onPress={() => setPrExpanded(v => !v)}
                     activeOpacity={0.8}
                   >
-                    <LaurelBranch height={20} color={PR_GOLD_TEXT} />
+                    <LaurelBranch height={20} color={PR_GOLD} />
                     <Text style={styles.prHeaderText}>{totalPrCount} Personal Records</Text>
-                    <Text style={styles.prChevron}>{prExpanded ? '▲' : '▼'}</Text>
-                    <LaurelBranch side="right" height={20} color={PR_GOLD_TEXT} />
+                    <Animated.Text
+                      style={[
+                        styles.prChevron,
+                        {
+                          transform: [{
+                            rotate: prAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: ['0deg', '180deg'],
+                            }),
+                          }],
+                        },
+                      ]}
+                    >
+                      ▼
+                    </Animated.Text>
+                    <LaurelBranch side="right" height={20} color={PR_GOLD} />
                   </TouchableOpacity>
-                  {prExpanded && workoutPrs.map((pr, i) => (
-                    <View key={i} style={styles.prRow}>
-                      <LaurelBranch height={18} color={PR_GOLD_TEXT} />
-                      <Text style={styles.prRowText}>
-                        {pr.exercise_name}: {PR_LABELS[pr.pr_type] ?? 'PR'}
-                        {pr.count > 1 ? ` ×${pr.count}` : ''}
-                      </Text>
-                      <LaurelBranch side="right" height={18} color={PR_GOLD_TEXT} />
-                    </View>
-                  ))}
+                  <Collapsible progress={prAnim} expanded={prExpanded}>
+                    {workoutPrs.map((pr, i) => (
+                      <View key={i} style={styles.prRow}>
+                        <LaurelBranch height={18} color={PR_GOLD} />
+                        <Text style={styles.prRowText}>
+                          {pr.exercise_name}: {PR_LABELS[pr.pr_type] ?? 'PR'}
+                          {pr.count > 1 ? ` ×${pr.count}` : ''}
+                        </Text>
+                        <LaurelBranch side="right" height={18} color={PR_GOLD} />
+                      </View>
+                    ))}
+                  </Collapsible>
                 </>
               )}
             </View>
@@ -962,11 +980,23 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     textAlign: 'center',
   },
   prSection: { paddingHorizontal: spacing.md, marginBottom: spacing.md },
-  prHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: PR_GOLD, borderRadius: 10, padding: 12, marginBottom: spacing.xs },
-  prHeaderText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: PR_GOLD_TEXT, flex: 1 },
-  prChevron: { fontSize: 12, color: PR_GOLD_TEXT },
-  prRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: PR_GOLD_BG, borderRadius: 10, padding: 12, marginTop: spacing.xs },
-  prRowText: { fontSize: typography.fontSize.sm, fontWeight: '500', color: PR_GOLD_TEXT, flex: 1 },
+  // Gold outline on a surface fill, matching WorkoutLog's PR banner and the
+  // PR Dashboard box — not the old filled-gold blocks.
+  prHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: PR_GOLD,
+    borderRadius: 10, padding: 12, marginBottom: spacing.xs,
+  },
+  prHeaderText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: PR_GOLD, flex: 1 },
+  prChevron: { fontSize: 12, color: PR_GOLD },
+  prRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: PR_GOLD + '66',
+    borderRadius: 10, padding: 12, marginTop: spacing.xs,
+  },
+  prRowText: { fontSize: typography.fontSize.sm, fontWeight: '500', color: colors.textPrimary, flex: 1 },
   exercisesLabel: {
     fontSize: typography.fontSize.sm,
     fontWeight: '700',
