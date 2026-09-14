@@ -23,38 +23,58 @@ pursuit of excellence and marks your progress toward it.
 
 ---
 
-## Tagline & positioning
-
-**Primary tagline** (live on the homepage today):
-
-> **Pursue excellence. Track every rep.**
-
-**Short form** (page titles, tight spaces — also live today, in the
-homepage `<title>`):
+## Slogan
 
 > **Pursue Excellence**
+
+The official slogan (adopted September 2026; already live in the homepage
+`<title>`). It is the name translated into an instruction: *aretē* means
+excellence, and the slogan tells you what to do with it. It stands on its
+own without the app beside it and doesn't go stale as features change.
+
+### Usage
+
+**Do**
+- Set it in title case, two words, no trailing period when it stands alone:
+  **Pursue Excellence**.
+- Pair it with the wordmark on dark grounds, slogan set below the mark.
+- Uppercase is fine in eyebrows and small labels: **PURSUE EXCELLENCE**.
+
+**Don't**
+- Reword it: not "Pursuing Excellence," "Pursue Your Excellence," or
+  "Excellence Pursued."
+- Add to it: no "Pursue Excellence!" or "Pursue Excellence with Aretē."
+- Join it to another line with a dash. When it needs a partner line, use a
+  period (see the extended line below).
+
+### Supporting lines
+
+**Extended line** (homepage hero today): use where the product needs naming
+alongside the slogan. Sentence case with periods, since it reads as two
+sentences.
+
+> **Pursue excellence. Track every rep.**
 
 **Descriptor line** (FAQ / App Store style, one sentence, use when a fuller
 explanation is needed):
 
 > Aretē is a workout tracking app focused on helping you measure and pursue
-> excellence in your training — log strength and cardio workouts, track
+> excellence in your training. Log strength and cardio workouts, track
 > personal records, monitor progress over time, and get AI-generated
 > programs tailored to your goals.
 
-### Additional slogan options (drafted, not yet shipped anywhere)
+### Considered, not chosen
 
-Kept in the same register as the primary tagline — short, imperative or
-declarative, tied to a real mechanic in the app rather than generic fitness
-talk. Pick one to promote, or keep the primary as the only canonical one:
+These were slogan candidates. They are retired as slogans but still usable
+as feature or campaign headlines, always below the slogan:
 
-| Option | Ties to |
+| Line | Best fit now |
 |---|---|
-| **Measure your excellence.** | Echoes the FAQ's "measure and pursue excellence" line directly |
-| **Rise through the ranks.** | The Greek Rank system (Neophyte → Aretē) — most distinctive mechanic in the app |
-| **Excellence, logged.** | Core workout-logging feature, wry/short |
-| **Every rep counts toward the ascent.** | Rank progression + PR culture together |
-| **Train like it matters.** | Most generic of the set — only use if the others read too "gamer" for a given placement |
+| **Rise through the ranks.** | Greek Rank feature headline (Neophyte → Aretē) |
+| **Measure your excellence.** | Strength Score and progress screens |
+| **Excellence, logged.** | Workout-complete moments |
+| **Every rep counts toward the ascent.** | Rank-up and PR celebration copy |
+| **Train like it matters.** | Most generic. Avoid unless the others read too gamified for a placement |
 
 ---
 
@@ -84,9 +104,11 @@ Two lockups ship today, both in `src/workout-tracker-native/assets/`:
 - **`Arete_name.png`** — full wordmark: a barbell forms the "A," followed
   by "reté" in a bold, rounded geometric sans with the macron over the e.
   Rendered **white**, for dark surfaces (homepage header on `#0D0D0D`,
-  splash screen on `#141416`). There is currently no dark-on-light variant
-  of the wordmark — on a light surface, use the icon mark instead or place
-  the wordmark on a dark chip.
+  splash screen on `#141416`, share cards, Welcome and onboarding screens).
+- **`Arete_name_dark.png`** — the same wordmark in ink `#0D0D0D` for light
+  surfaces, with the barbell bar set in `#8E8E93` so it still reads as a
+  separate bar in front of the "A" (a flat single-color version merges the
+  bar, plates, and legs into one shape).
 - **`Arete_icon.png`** — icon mark only: the barbell-A monogram, no
   wordmark text. Rendered as a glossy black mark on a light ground. This is
   the app icon / adaptive-icon foreground / notification icon source.
@@ -104,10 +126,76 @@ terminals on the "r," "e," "t"). This is baked into the PNG, not a live app
 font — if the wordmark needs to be reset in text at some point, Poppins
 Black is the closest safe substitute available on Google Fonts.
 
-**Minimum clear space / don't-do's** aren't formally defined yet — no
-documented minimum size, safe area, or "don't stretch/recolor/rotate" rules
-exist in the codebase today. Worth establishing before the mark appears
-outside the app and homepage (App Store assets, social, merch).
+### Clear space
+
+The unit **x** is the height of the lowercase "e" in the wordmark (about
+38% of the wordmark's total height). Keep at least **1x** of empty space on
+every side of the wordmark: no text, edges, or other graphics inside it.
+For the icon mark alone, keep clear space equal to the width of one weight
+plate.
+
+### Minimum size
+
+| Mark | Digital | Print |
+|---|---|---|
+| Wordmark | 28 px tall (about 72 px wide) | 20 mm wide |
+| Icon mark | 20 px | 6 mm |
+
+Below the wordmark minimum the macron and the gaps in the barbell stop
+reading. Switch to the icon mark instead of shrinking further.
+
+### Source files
+
+Vector masters exported from Figma live in `src/workout-tracker-native/assets/`:
+
+| File | Size | Use |
+|---|---|---|
+| `Arete_name.svg` | Vector | Master. Use for anything large: App Store, social, print, web |
+| `Arete_name_dark.svg` | Vector | Ink master, generated from `Arete_name.svg` (white → `#0D0D0D`, bar `#EFEFEF` → `#8E8E93`, group opacity removed) |
+| `Arete_name@4x.png`, `Arete_name_dark@4x.png` | 1472 × 572 | For tools that can't take SVG |
+| `Arete_name.png`, `Arete_name_dark.png` | 368 × 143 | In-app and homepage only |
+
+Never upscale the 368 px PNGs. In the white master, the "A" and barbell
+are drawn at 95% opacity, slightly softer than "retē"; keep that as is.
+If the wordmark changes in Figma, re-export the SVG and regenerate the ink
+version from it instead of editing the ink files by hand.
+
+### Color variants
+
+| Variant | File | Use on |
+|---|---|---|
+| White | `Arete_name.png` | Dark neutrals: `#0D0D0D`, `#141416`, `#1C1C1E` |
+| Ink | `Arete_name_dark.png` | Light neutrals: `#F2F2F7`, `#FFFFFF`, `PR_GOLD_BG` |
+
+Don't place either variant on an accent color fill or on a photo without a
+dark overlay of at least 60% opacity.
+
+### Don't
+
+- Stretch, squash, rotate, or skew the mark.
+- Recolor it outside the two variants above, including accent colors and
+  PR gold.
+- Add outlines, drop shadows, or gradients to the mark. The one approved
+  effect is the soft radial glow *behind* the wordmark on the splash screen.
+- Separate the barbell from the "A," or replace it with a dumbbell or other
+  equipment.
+- Retype "retē" in a live font, change the spacing between the "A" and
+  "retē," or drop the macron.
+
+### Slogan lockup
+
+The wordmark with **Pursue Excellence** set below it, both centered:
+
+- **Slogan type:** Poppins SemiBold, uppercase, letter-spacing 0.22em.
+- **Slogan size:** font size equal to 0.16 × the wordmark's height
+  (about 19 px under a 120 px tall wordmark).
+- **Gap:** 1x (the "e" height) between the bottom of the wordmark and the
+  top of the slogan.
+- **Slogan color:** `#8E8E93` under the white wordmark, `#6C6C70` under the
+  ink wordmark.
+- **Clear space and minimum size:** 1x clear space around the whole lockup.
+  Don't use the lockup below 48 px wordmark height, where the slogan drops
+  under 8 px. Use the wordmark alone instead.
 
 ---
 
@@ -144,11 +232,6 @@ Two distinct golds, used for two distinct things. Don't conflate them:
 | `PR_GOLD_TEXT` | `#ad9206` | Dark text/laurel color on gold or surface backgrounds |
 | `PR_GOLD_BG` | `#FFF3C4` | Cream background for PR banners |
 | **Aretē rank gold** | `#FFD700` | The single highest Greek Rank ("Aretē" itself) — brighter, more saturated than PR gold, deliberately reserved for the pinnacle rank so it reads as rarer |
-
-> Note: `CLAUDE.md` currently documents `PR_GOLD` as `#FFE066` /
-> `PR_GOLD_TEXT` as `#7A5800` — that's stale against
-> `constants/prColors.ts`, which is the real source of truth and what's
-> reflected here. Worth a follow-up fix to `CLAUDE.md` itself.
 
 ### Neutrals — dark (default surface for marketing + share cards)
 
