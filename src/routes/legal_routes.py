@@ -10,6 +10,9 @@ HOMEPAGE = """<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Aretē Fitness: Pursue Excellence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wdth,wght@62..125,600..800&display=swap">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -32,6 +35,8 @@ HOMEPAGE = """<!DOCTYPE html>
     }
     .tagline {
       margin-top: 14px;
+      font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
+      font-weight: 600;
       font-size: 1.1rem;
       color: #8E8E93;
       letter-spacing: 0.3px;
@@ -72,19 +77,22 @@ HOMEPAGE = """<!DOCTYPE html>
       padding: 64px 24px;
     }
     .section-label {
+      font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
+      font-stretch: 112%;
       font-size: 0.75rem;
-      font-weight: 700;
+      font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 1.4px;
       color: #30D158;
       margin-bottom: 10px;
     }
     .section-title {
+      font-family: 'Archivo Black', 'Arial Black', sans-serif;
       font-size: 1.75rem;
-      font-weight: 800;
+      font-weight: 400;
       color: #F2F2F7;
       margin-bottom: 24px;
-      letter-spacing: -0.5px;
+      letter-spacing: -0.01em;
     }
 
     /* ── Support card ── */

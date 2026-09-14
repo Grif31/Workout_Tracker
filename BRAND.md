@@ -102,7 +102,7 @@ production, not a new invention:
 Two lockups ship today, both in `src/workout-tracker-native/assets/`:
 
 - **`Arete_name.png`** — full wordmark: a barbell forms the "A," followed
-  by "reté" in a bold, rounded geometric sans with the macron over the e.
+  by "retē" in Archivo Black with the macron over the e.
   Rendered **white**, for dark surfaces (homepage header on `#0D0D0D`,
   splash screen on `#141416`, share cards, Welcome and onboarding screens).
 - **`Arete_name_dark.png`** — the same wordmark in ink `#0D0D0D` for light
@@ -120,11 +120,11 @@ the crossbar ends) — the monogram *is* the equipment, not a barbell icon
 placed next to a letter. Keep that construction intact if the mark is ever
 redrawn or resized; don't substitute a generic dumbbell glyph.
 
-**Wordmark typeface:** a bold/black-weight rounded geometric sans (visually
-closest to **Poppins ExtraBold/Black** or **Montserrat Black** — rounded
-terminals on the "r," "e," "t"). This is baked into the PNG, not a live app
-font — if the wordmark needs to be reset in text at some point, Poppins
-Black is the closest safe substitute available on Google Fonts.
+**Wordmark typeface:** "retē" is set in **Archivo Black**, outlined into
+shapes in the logo files, so it isn't a live font. The barbell "A" is
+custom-drawn and doesn't come from any font. Archivo Black is also the
+marketing headline face (see Typography), so headlines and the logo share
+one voice.
 
 ### Clear space
 
@@ -186,7 +186,8 @@ dark overlay of at least 60% opacity.
 
 The wordmark with **Pursue Excellence** set below it, both centered:
 
-- **Slogan type:** Poppins SemiBold, uppercase, letter-spacing 0.22em.
+- **Slogan type:** Archivo SemiBold (600) at 112% width, uppercase,
+  letter-spacing 0.22em.
 - **Slogan size:** font size equal to 0.16 × the wordmark's height
   (about 19 px under a 120 px tall wordmark).
 - **Gap:** 1x (the "e" height) between the bottom of the wordmark and the
@@ -267,13 +268,12 @@ Two distinct golds, used for two distinct things. Don't conflate them:
 
 ## Typography
 
-Two separate type systems, deliberately: a **display face for the logo
-only**, and **the OS system font for everything else**. There is no custom
-webfont/app font loaded anywhere in the codebase — this is a real choice
-already in place, not a gap.
+Two type systems: **Archivo** for marketing (headlines, the slogan, labels,
+and stats outside the app), and **the OS system font** for the app UI and
+all body text. The app itself loads no custom font.
 
-- **Wordmark / display** — bold rounded geometric sans (see Logo section
-  above). Logo-only; never used for running UI text.
+- **Wordmark** — Archivo Black, outlined into the logo files (see Logo
+  section above).
 - **Product UI** — system default: San Francisco on iOS, Roboto on Android
   (`typography.ts` sets no `fontFamily`, so it inherits the OS default).
   Scale:
@@ -290,8 +290,29 @@ already in place, not a gap.
   | `body` | 15 |
   | `button` | 16, weight 600 |
 
-- **Marketing site** (`legal_routes.py` homepage) — system-ui stack:
-  `-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif`.
+### Marketing type
+
+For the homepage, App Store screenshots, social posts, and this guide. One
+family, Archivo, with the system font for body text:
+
+| Role | Face | Setting |
+|---|---|---|
+| Headlines | **Archivo Black** | Sentence case, letter-spacing -0.01em |
+| Subheads | **Archivo Bold** (700) | Normal width, sentence case |
+| Slogan, eyebrows, small labels | **Archivo SemiBold** (600) | 112% width, uppercase, letter-spacing 0.22em (slogan) or 0.08em (labels) |
+| Big stat numbers | **Archivo ExtraBold** (800) | 75% width |
+| Greek Rank names | **Archivo Black** | In the rank's color |
+| Body | **System font** | `-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif` |
+
+**Loading:**
+`https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wdth,wght@62..125,600..800&display=swap`
+
+**Fallbacks:** `'Archivo Black', 'Arial Black', sans-serif` for headlines;
+`Archivo` followed by the system stack for everything else.
+
+**Don't** set paragraphs or buttons in Archivo Black, and don't add a second
+display face. Round geometric fonts (Poppins, Montserrat) clash with
+Archivo's squared shapes.
 
 ---
 
