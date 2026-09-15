@@ -129,7 +129,7 @@ Real strings from the app, rewritten to the rules above.
 | Workout summary, first workout | "Your first workout. Incredible!" | "Your first workout. The pursuit starts here." |
 | Workout summary | "Highest volume workout yet!" | "Your highest-volume workout yet." |
 | Workout summary, default | "Great workout!" | "Workout complete." |
-| Strength Score rank up | "Rank Up! Demigod" | "You've reached Demigod" |
+| Strength Score rank up | "Rank Up! Elite" | "You've reached Elite" |
 | PR share card banner | "New Max Weight PR!" | "New PR: Max Weight" |
 | Paywall toasts | "Welcome to Premium!" / "Purchases restored!" | "Premium is active." / "Purchases restored." |
 
@@ -454,6 +454,112 @@ Archivo's squared shapes.
   itself) mirrors the brand's Greek-excellence framing end to end — worth
   keeping in mind for any future feature that adds tiers, badges, or
   progression language.
+
+### Naming checklist
+
+Aretē has two progression ladders:
+
+| Ladder | Tiers, low to high | Measures |
+|---|---|---|
+| Greek Rank | Neophyte, Athlete, Hero, Demigod, Olympian, Titan, Aretē | Whole-account training excellence |
+| Strength Score | Novice, Beginner, Intermediate, Advanced, Elite, Legend | Per-lift and overall strength percentile |
+
+Before naming a new tier, badge, rank, or feature:
+
+- [ ] **Does it belong to an existing ladder?** Extend that ladder instead of
+  inventing a third.
+- [ ] **Greek names rise from mortal to divine.** A new one sits clearly
+  between its neighbors, and nothing goes above Aretē.
+- [ ] **Greek vocabulary is for ranks, not utilities.** Features keep plain
+  names: "Coach", not "Oracle".
+- [ ] **No gamer slang:** "noob", "grind", "beast mode".
+- [ ] **Gold (`#FFD700`) is only for the top tier** of a ladder, as with Aretē
+  and Legend.
+- [ ] **Color never identifies a tier by itself.** Pair it with an icon or
+  letter, as `STRENGTH_TIERS` and `GREEK_RANKS` do.
+- [ ] **Capitalize it as a proper noun** and add it to the word list.
+
+The bottom Strength Score tier was renamed from "Noobie" to **Novice** in
+September 2026 to follow the no-slang rule.
+
+## Share cards
+
+Five cards share one frame in `components/share/ShareCardParts.tsx`: PR,
+workout, weekly summary, Strength Score, and cardio. They're saved as images
+and shared outside the app, so they always use a fixed dark look
+(`constants/shareCardTheme.ts`), whatever the viewer's theme.
+
+| Part | Spec |
+|---|---|
+| Frame | 360 px wide, `#0D0D0D`, 20 px corner radius, 5 px accent-color bar across the top |
+| Header | White wordmark (86 × 28) on the left, date on the right in `#8E8E93` at 12 px |
+| Banner (PRs and rank ups only) | Laurel branches around centered text; 1.5 px `PR_GOLD` outline on `#1C1C1E`; text in `PR_GOLD_TEXT`, 13 px bold |
+| Hero | One large number in the user's accent color, 42 px, weight 800, with a muted uppercase label below |
+| Stats row | Stats on `#1C1C1E` with `#2C2C2E` dividers; values white 17 px bold, labels `#8E8E93` 10 px |
+| Footer | `aretefitnessapp.com`, centered, `#636366` |
+
+- **One hero number per card.** Everything else goes in the stats row.
+- **The gold banner is only for a PR or rank up**, never an ordinary workout.
+- **Banner and headline text follow the copy rules:** "New PR: Max Weight",
+  not "New Max Weight PR!".
+- **Accent color is always the preset's bright dark-mode value**, because
+  the card is always dark. The deeper light-mode shades are too dim on
+  `#0D0D0D`.
+
+## Imagery
+
+### At launch: product-led, no photography
+
+Marketing shows the product itself: app screens, Archivo headlines, the
+wordmark, and the dark background.
+
+- **Show real screens with realistic data:** a new PR, a Strength Score, a
+  routine. Never an empty state.
+- **Backgrounds are `#0D0D0D` or `#141416`.** Gold appears only on
+  achievements (PRs and rank ups).
+- **No stock fitness photography**, even as a placeholder.
+
+### Later: original gym photography
+
+Photos added later are shot in-house, of real lifters in real gyms.
+
+**Look**
+- **Low, directional light.** Shoot near a window or a single light source
+  and let shadows stay dark. Avoid flat overhead gym lighting.
+- **Black and white by default**, so photos sit on the dark UI and gold or
+  the accent stays the only color. If you shoot color instead, keep it muted
+  and use the same look in every photo.
+- **Candid effort, not posing:** chalking hands, bracing before a lift, the
+  top of a rep, re-racking. Nobody smiling at the camera with a dumbbell.
+- **Details count as much as people:** chalk, bar knurling, loaded plates, a
+  hand on the bar.
+
+**Subjects**
+- **Real lifters, not models**, across ages, body types, genders, and
+  strength levels. Not only elite lifters.
+- **Safe, correct technique in every frame.** An app that coaches lifting
+  can't show a rounded-back deadlift.
+- **No visible brand logos** on clothing, equipment, or the gym, other than
+  Aretē's.
+
+**Permission**
+- **A signed model release** from everyone recognizable, and the gym's
+  permission before shooting.
+- **Nobody in the background without consent.** Crop them out or blur them.
+
+**Technical**
+- **Shoot at full resolution.** Frame for portrait (4:5 or 9:16) for social
+  and the app, and landscape (16:9) for the web.
+- **Keep the originals.** Export compressed JPG or WebP, about 1600 px on the
+  long edge, for anything bundled into the app, to keep the download small.
+
+**Using photos in the app**
+- **Photos go on moments, not data:** onboarding, the welcome screen, empty
+  states, rank-up celebrations. Never behind charts, set logs, or numbers.
+- **Text over a photo needs a dark overlay** of at least 60% and white text,
+  the same rule as the logo.
+- **Brand photos are separate from users' progress photos**, which stay
+  private to each user.
 
 ---
 
