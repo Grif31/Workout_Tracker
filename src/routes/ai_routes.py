@@ -8,12 +8,13 @@ from sqlalchemy.orm import aliased
 from models import (
     db, WorkoutTemplate, ExerciseTemplate, Routine, RoutineDay,
     User, Exercise, Set, Workout, PersonalRecord, ExerciseMuscleMapping,
-    BodyweightLog, StrengthScoreSnapshot,
+    BodyweightLog, StrengthScoreSnapshot, PREvent,
 )
 from schemas import AiGenerateSchema, AiInsightsSchema
 from utils.validation import validate_body
 from utils.lift_progress import compute_most_improved_lift
 from utils.cardio_progress import compute_most_improved_cardio, _MILESTONE_LABELS
+from routes.personal_record_routes import compute_days_since_last_pr, _pr_label
 from limiter import limiter
 
 # System prompt for every Coach request, so AI-written text follows the brand
@@ -51,6 +52,70 @@ def _brand_copy(text, heading=False):
     text = re.sub(r'\s*—\s*', ', ', text)
     text = re.sub(r'!+', '.', text)
     return text.rstrip('.') if heading else text
+
+
+COACH_PR_WINDOW_DAYS = 28
+STALL_DAYS = 21
+STALLED_CATEGORY_LABELS = {'weight': 'max weight', 'reps': 'rep', 'time': 'time', 'distance': 'distance'}
+
+INSIGHT_EXAMPLES = (
+    "Examples of the tone and specificity wanted. They show the format only: never reuse their "
+    "exercises or numbers, only the user's data above.\n"
+    'Good: {"type":"achievement","title":"Bench Press Max Weight Up 10 lbs","body":"Your Bench Press max '
+    'weight rose from 225 to 235 lbs in the last 2 weeks. Keep the same rep scheme one more week before '
+    'adding load.","priority":"medium"}\n'
+    'Good: {"type":"suggestion","title":"Overhead Press Has Stalled","body":"No new Overhead Press max weight '
+    'PR in 45 days. Switch to 4 sets of 5 at a heavier load for the next 3 weeks.","priority":"high"}\n'
+    'Good: {"type":"frequency","title":"Back Volume Down This Week","body":"You logged 6 back sets this week, '
+    'down from 12 last week. Add 2 sets of rows to your next pull day.","priority":"medium"}\n'
+    'Bad: {"type":"achievement","title":"Great Progress","body":"You are getting stronger, keep it up.",'
+    '"priority":"low"} (no metric, no numbers, no next step)'
+)
+
+
+def _fmt_pr_value(pr_type, value, unit):
+    if pr_type == 'max_reps':
+        return f"{value:g} reps"
+    if pr_type == 'max_duration':
+        return f"{round(value * 60)} s"
+    if pr_type == 'best_time':
+        return f"{value:.1f} min"
+    if pr_type == 'best_distance':
+        return f"{value:.2f} km"
+    return f"{round(value, 1):g} {unit}"
+
+
+def _summarize_recent_prs(rows, unit, now, limit=12):
+    """One before → after fact per exercise, PR type, and weight or distance,
+    newest first, so the Coach reads the trend instead of every intermediate PR.
+    rows: (PREvent, exercise_name) pairs ordered oldest first."""
+    facts = {}
+    for event, exercise_name in rows:
+        key = (exercise_name, event.pr_type, event.weight_context)
+        if key in facts:
+            facts[key]['after'] = event.value
+            facts[key]['last_at'] = event.achieved_at
+        else:
+            facts[key] = {
+                'event': event, 'name': exercise_name, 'before': event.previous_value,
+                'after': event.value, 'last_at': event.achieved_at,
+            }
+
+    lines = []
+    for fact in sorted(facts.values(), key=lambda f: f['last_at'], reverse=True)[:limit]:
+        event = fact['event']
+        label = _pr_label(event)
+        if event.pr_type == 'max_reps':
+            label += f" at {_fmt_pr_value('max_weight', event.weight_context, unit)}" if event.weight_context > 0 else " at bodyweight"
+        days = (now - fact['last_at']).days
+        when = 'today' if days == 0 else f"{days} day{'s' if days != 1 else ''} ago"
+        after = _fmt_pr_value(event.pr_type, fact['after'], unit)
+        if fact['before'] is None:
+            lines.append(f"{fact['name']}, {label}: {after} (first recorded, {when})")
+        else:
+            before = _fmt_pr_value(event.pr_type, fact['before'], unit)
+            lines.append(f"{fact['name']}, {label}: {before} → {after} ({when})")
+    return lines
 
 ai_bp = Blueprint('ai_bp', __name__)
 
@@ -677,10 +742,24 @@ def _build_insights_context(user_id: int, experience: str | None = None, goal: s
         .scalar()
     )
 
+    unit = (user.weight_unit or 'lbs') if user else 'lbs'
+    pr_event_rows = (
+        db.session.query(PREvent, ExerciseTemplate.name)
+        .join(ExerciseTemplate, PREvent.exercise_template_id == ExerciseTemplate.id)
+        .filter(PREvent.user_id == user_id, PREvent.achieved_at >= now - timedelta(days=COACH_PR_WINDOW_DAYS))
+        .order_by(PREvent.achieved_at.asc(), PREvent.id.asc())
+        .all()
+    )
+    stalled_lifts = [
+        r for r in compute_days_since_last_pr(user_id, now) if r['days_since_last_pr'] >= STALL_DAYS
+    ][:5]
+
     return {
         'now': now,
         'name': (user.name or user.username) if user else 'Athlete',
-        'weight_unit': (user.weight_unit or 'lbs') if user else 'lbs',
+        'weight_unit': unit,
+        'recent_pr_facts': _summarize_recent_prs(pr_event_rows, unit, now),
+        'stalled_lifts': stalled_lifts,
         'greek_rank': greek_rank,
         'greek_score': greek_score,
         'experience': experience,
@@ -796,6 +875,22 @@ def _build_insights_prompt(ctx: dict) -> str:
             f"(gain {most_improved_cardio['gain']} {cardio_unit})"
         )
 
+    recent_pr_facts = ctx.get('recent_pr_facts', [])
+    if recent_pr_facts:
+        lines.append(f"\nPRs in the last {COACH_PR_WINDOW_DAYS} days (before → after, newest first):")
+        lines += [f"  {fact}" for fact in recent_pr_facts]
+
+    stalled_lifts = ctx.get('stalled_lifts', [])
+    if stalled_lifts:
+        lines.append(f"\nMost-trained lifts with no new PR in {STALL_DAYS}+ days (longest gap first):")
+        for r in stalled_lifts:
+            label = STALLED_CATEGORY_LABELS.get(r['stalest_category'], r['stalest_category'])
+            lines.append(f"  {r['exercise_name']}: no {label} PR in {r['days_since_last_pr']} days")
+        lines.append(
+            "  → Treat these as plateaus that need a specific fix (rep scheme, exercise variation, or a deload). "
+            "Don't call any other lift stalled."
+        )
+
     top_prs = ctx.get('top_prs', [])
     if top_prs:
         lines.append(f"\nTop estimated 1-rep maxes ({unit}):")
@@ -829,6 +924,8 @@ def _build_insights_prompt(ctx: dict) -> str:
         "When an insight says a lift or cardio result improved, name exactly what increased (estimated 1RM, "
         "max weight, reps at a weight, distance, or time) and give the before and after values with units, "
         "e.g. \"Your Bench Press estimated 1RM rose from 200 to 210 lbs.\" Only claim improvements shown in the data above.",
+        "",
+        INSIGHT_EXAMPLES,
         "",
         'Respond ONLY with valid JSON (no markdown):\n{"insights":[{"type":"<type>","title":"<6 words max>","body":"<1-2 sentences with specific data>","priority":"high|medium|low"}]}',
     ]

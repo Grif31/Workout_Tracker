@@ -517,3 +517,47 @@ class TestCoachVoice:
         line = next(l for l in prompt.splitlines() if l.startswith('Most improved lift'))
         assert 'estimated 1RM' in line
         assert 'Bench Press 200.0 → 210.0 lbs (+10.0 lbs)' in line
+
+
+# ---------------------------------------------------------------------------
+# Insight facts — recent PR summaries, stalled lifts, examples
+# ---------------------------------------------------------------------------
+
+class TestInsightFacts:
+
+    def test_recent_prs_collapse_into_one_before_after_fact_each(self):
+        from datetime import datetime, timedelta
+        from types import SimpleNamespace
+        from routes.ai_routes import _summarize_recent_prs
+        now = datetime(2026, 9, 15, 12, 0)
+
+        def ev(pr_type, value, previous, context, days_ago):
+            return SimpleNamespace(pr_type=pr_type, value=value, previous_value=previous,
+                                   weight_context=context, achieved_at=now - timedelta(days=days_ago))
+
+        rows = [
+            (ev('max_weight', 230, 225, -1.0, 5), 'Bench Press'),
+            (ev('max_weight', 315, None, -1.0, 2), 'Deadlift'),
+            (ev('max_weight', 235, 230, -1.0, 3), 'Bench Press'),
+            (ev('max_reps', 10, 8, 185.0, 1), 'Squat'),
+            (ev('best_time', 25.8, 26.4, 5.0, 0), 'Run'),
+        ]
+        rows.sort(key=lambda r: r[0].achieved_at)
+
+        assert _summarize_recent_prs(rows, 'lbs', now) == [
+            'Run, 5K Best Time: 26.4 min → 25.8 min (today)',
+            'Squat, Max Reps at 185 lbs: 8 reps → 10 reps (1 day ago)',
+            'Deadlift, Max Weight: 315 lbs (first recorded, 2 days ago)',
+            'Bench Press, Max Weight: 225 lbs → 235 lbs (3 days ago)',
+        ]
+
+    def test_insights_prompt_includes_pr_facts_stalled_lifts_and_examples(self):
+        from routes.ai_routes import _build_insights_prompt
+        prompt = _build_insights_prompt({
+            'weight_unit': 'lbs',
+            'recent_pr_facts': ['Bench Press, Max Weight: 225 lbs → 235 lbs (3 days ago)'],
+            'stalled_lifts': [{'exercise_name': 'Overhead Press', 'days_since_last_pr': 45, 'stalest_category': 'weight'}],
+        })
+        assert '  Bench Press, Max Weight: 225 lbs → 235 lbs (3 days ago)' in prompt
+        assert '  Overhead Press: no max weight PR in 45 days' in prompt
+        assert 'Good: {' in prompt and 'Bad: {' in prompt

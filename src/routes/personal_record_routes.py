@@ -68,6 +68,95 @@ FEED_PR_TYPES = [t for types in FEED_TYPE_FILTERS.values() for t in types]
 RECENT_FEED_WINDOW_DAYS = 7
 
 
+def compute_days_since_last_pr(user_id, now):
+    """Days since the last PR per exercise for the user's 10 most-trained
+    exercises, longest gap first. Shared by the PR Dashboard and the AI Coach."""
+    most_trained = (
+        db.session.query(
+            Exercise.exercise_template_id,
+            ExerciseTemplate.name,
+            func.count(func.distinct(Exercise.workout_id)).label('workout_count'),
+        )
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .join(ExerciseTemplate, Exercise.exercise_template_id == ExerciseTemplate.id)
+        .filter(Workout.user_id == user_id, Exercise.exercise_template_id.isnot(None))
+        .group_by(Exercise.exercise_template_id, ExerciseTemplate.name)
+        .order_by(func.count(func.distinct(Exercise.workout_id)).desc())
+        .limit(10)
+        .all()
+    )
+    # Grouped by (exercise, pr_type, weight_context) rather than just exercise,
+    # so the frontend can let users switch "Time Since Last PR" between
+    # Weight/Reps/Time/Distance without a second round trip — see by_type
+    # below. weight_context is included in the grouping (not just pr_type) so
+    # the summary can report which specific weight a max_reps PR was set at —
+    # collapsing it out here would lose that.
+    last_event_rows = (
+        db.session.query(
+            PREvent.exercise_template_id, PREvent.pr_type, PREvent.weight_context,
+            func.max(PREvent.achieved_at),
+        )
+        .filter(
+            PREvent.user_id == user_id,
+            PREvent.pr_type.in_(FEED_PR_TYPES),
+            PREvent.exercise_template_id.in_([t for t, _, _ in most_trained] or [-1]),
+        )
+        .group_by(PREvent.exercise_template_id, PREvent.pr_type, PREvent.weight_context)
+        .all()
+    )
+    last_by_template_and_type = {}
+    for template_id, pr_type, weight_context, achieved_at in last_event_rows:
+        last_by_template_and_type.setdefault(template_id, {}).setdefault(pr_type, []).append(
+            (weight_context, achieved_at)
+        )
+
+    def _category_latest(template_id, category):
+        """(weight_context, achieved_at) of the single most recent event in this
+        category — maxing across the category's pr_types and, for a type with
+        multiple weight contexts (max_reps), across those too."""
+        by_type = last_by_template_and_type.get(template_id, {})
+        candidates = [c for t in FEED_TYPE_FILTERS[category] for c in by_type.get(t, [])]
+        return max(candidates, key=lambda c: c[1]) if candidates else None
+
+    def _category_summary(template_id, category):
+        latest = _category_latest(template_id, category)
+        if not latest:
+            return None
+        weight_context, last_dt = latest
+        return {
+            'days_since_last_pr': (now - last_dt).days,
+            'last_pr_at': last_dt.isoformat(),
+            'weight_context': None if weight_context < 0 else weight_context,
+        }
+
+    days_since_last_pr = []
+    for template_id, name, workout_count in most_trained:
+        by_type = {
+            category: _category_summary(template_id, category)
+            for category in FEED_TYPE_FILTERS
+        }
+        present = [(category, summary) for category, summary in by_type.items() if summary]
+        if not present:
+            continue
+        # The exercise's headline "days since last PR" is driven by whichever
+        # category has gone the LONGEST without a PR — not whichever was hit
+        # most recently. Rep PRs are earned far more easily/often than weight
+        # PRs, so "most recent of any type" would trivially always be Reps,
+        # masking genuinely stalled categories like Weight.
+        stalest_category, stalest_summary = max(present, key=lambda cs: cs[1]['days_since_last_pr'])
+        days_since_last_pr.append({
+            'exercise_template_id': template_id,
+            'exercise_name': name,
+            'workout_count': workout_count,
+            'days_since_last_pr': stalest_summary['days_since_last_pr'],
+            'last_pr_at': stalest_summary['last_pr_at'],
+            'stalest_category': stalest_category,
+            'by_type': by_type,
+        })
+    days_since_last_pr.sort(key=lambda r: r['days_since_last_pr'], reverse=True)
+    return days_since_last_pr
+
+
 @pr_bp.get('/api/personal-records')
 @jwt_required()
 def get_personal_records():
@@ -237,90 +326,7 @@ def get_pr_dashboard():
         sum(value - previous_value for pr_type, value, previous_value in weekly_pr_rows if pr_type == 'max_reps')
     )
 
-    # Days since last PR per exercise, for the user's 10 most-trained exercises
-    most_trained = (
-        db.session.query(
-            Exercise.exercise_template_id,
-            ExerciseTemplate.name,
-            func.count(func.distinct(Exercise.workout_id)).label('workout_count'),
-        )
-        .join(Workout, Exercise.workout_id == Workout.id)
-        .join(ExerciseTemplate, Exercise.exercise_template_id == ExerciseTemplate.id)
-        .filter(Workout.user_id == user_id, Exercise.exercise_template_id.isnot(None))
-        .group_by(Exercise.exercise_template_id, ExerciseTemplate.name)
-        .order_by(func.count(func.distinct(Exercise.workout_id)).desc())
-        .limit(10)
-        .all()
-    )
-    # Grouped by (exercise, pr_type, weight_context) rather than just exercise,
-    # so the frontend can let users switch "Time Since Last PR" between
-    # Weight/Reps/Time/Distance without a second round trip — see by_type
-    # below. weight_context is included in the grouping (not just pr_type) so
-    # the summary can report which specific weight a max_reps PR was set at —
-    # collapsing it out here would lose that.
-    last_event_rows = (
-        db.session.query(
-            PREvent.exercise_template_id, PREvent.pr_type, PREvent.weight_context,
-            func.max(PREvent.achieved_at),
-        )
-        .filter(
-            PREvent.user_id == user_id,
-            PREvent.pr_type.in_(FEED_PR_TYPES),
-            PREvent.exercise_template_id.in_([t for t, _, _ in most_trained] or [-1]),
-        )
-        .group_by(PREvent.exercise_template_id, PREvent.pr_type, PREvent.weight_context)
-        .all()
-    )
-    last_by_template_and_type = {}
-    for template_id, pr_type, weight_context, achieved_at in last_event_rows:
-        last_by_template_and_type.setdefault(template_id, {}).setdefault(pr_type, []).append(
-            (weight_context, achieved_at)
-        )
-
-    def _category_latest(template_id, category):
-        """(weight_context, achieved_at) of the single most recent event in this
-        category — maxing across the category's pr_types and, for a type with
-        multiple weight contexts (max_reps), across those too."""
-        by_type = last_by_template_and_type.get(template_id, {})
-        candidates = [c for t in FEED_TYPE_FILTERS[category] for c in by_type.get(t, [])]
-        return max(candidates, key=lambda c: c[1]) if candidates else None
-
-    def _category_summary(template_id, category):
-        latest = _category_latest(template_id, category)
-        if not latest:
-            return None
-        weight_context, last_dt = latest
-        return {
-            'days_since_last_pr': (now - last_dt).days,
-            'last_pr_at': last_dt.isoformat(),
-            'weight_context': None if weight_context < 0 else weight_context,
-        }
-
-    days_since_last_pr = []
-    for template_id, name, workout_count in most_trained:
-        by_type = {
-            category: _category_summary(template_id, category)
-            for category in FEED_TYPE_FILTERS
-        }
-        present = [(category, summary) for category, summary in by_type.items() if summary]
-        if not present:
-            continue
-        # The exercise's headline "days since last PR" is driven by whichever
-        # category has gone the LONGEST without a PR — not whichever was hit
-        # most recently. Rep PRs are earned far more easily/often than weight
-        # PRs, so "most recent of any type" would trivially always be Reps,
-        # masking genuinely stalled categories like Weight.
-        stalest_category, stalest_summary = max(present, key=lambda cs: cs[1]['days_since_last_pr'])
-        days_since_last_pr.append({
-            'exercise_template_id': template_id,
-            'exercise_name': name,
-            'workout_count': workout_count,
-            'days_since_last_pr': stalest_summary['days_since_last_pr'],
-            'last_pr_at': stalest_summary['last_pr_at'],
-            'stalest_category': stalest_category,
-            'by_type': by_type,
-        })
-    days_since_last_pr.sort(key=lambda r: r['days_since_last_pr'], reverse=True)
+    days_since_last_pr = compute_days_since_last_pr(user_id, now)
 
     return jsonify({
         'recent_events': recent_events,
