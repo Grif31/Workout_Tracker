@@ -16,7 +16,7 @@ import { typography } from '../../theme/typography';
 import { WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
 import { toLocalDateStr } from '../../utils/date';
 import { COACH_INSIGHTS_KEY } from '../../constants/storageKeys';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, isNetworkError } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import { TrainingStackParamsList } from '../../navigation/types';
 import { muscleGroups } from '../../constants/muscleGroups';
@@ -428,14 +428,14 @@ export default function CoachScreen({ navigation }: Props) {
         }),
       });
       const data = await res.json();
-      if (!res.ok) { Alert.alert('Error', data.message || 'Could not load insights'); return; }
+      if (!res.ok) { Alert.alert("Couldn't Load Insights", data.message || 'Try again in a moment.'); return; }
       setInsights(data.insights ?? []);
       await AsyncStorage.setItem(COACH_INSIGHTS_KEY, JSON.stringify({
         insights: data.insights,
         fetchedAt: data.generated_at || new Date().toISOString(),
       }));
-    } catch {
-      Alert.alert('Error', 'Could not reach AI service');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Load Insights", 'Try again in a moment.');
     } finally {
       setInsightsLoading(false);
     }
@@ -462,7 +462,7 @@ export default function CoachScreen({ navigation }: Props) {
         }),
       });
       const data = await res.json();
-      if (!res.ok) { Alert.alert('Error', data.message || 'Generation failed'); return; }
+      if (!res.ok) { Alert.alert("Couldn't Generate Workout", data.message || 'Try again in a moment.'); return; }
       navigation.navigate('AIWorkoutPreview', {
         generateType: data.type,
         name: data.name,
@@ -477,8 +477,8 @@ export default function CoachScreen({ navigation }: Props) {
         coachAvoid: coachProfile.avoid[0] ?? 'none',
         coachNotes: coachProfile.notes,
       });
-    } catch {
-      Alert.alert('Error', 'Could not reach AI service');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Generate Workout", 'Try again in a moment.');
     } finally {
       setAiGenerating(false);
       setAiSelectedMuscles([]);
@@ -503,7 +503,7 @@ export default function CoachScreen({ navigation }: Props) {
         }),
       });
       const data = await res.json();
-      if (!res.ok) { Alert.alert('Error', data.message || 'Generation failed'); return; }
+      if (!res.ok) { Alert.alert("Couldn't Generate Routine", data.message || 'Try again in a moment.'); return; }
       navigation.navigate('AIWorkoutPreview', {
         generateType: data.type,
         name: data.name,
@@ -518,8 +518,8 @@ export default function CoachScreen({ navigation }: Props) {
         coachAvoid: coachProfile.avoid[0] ?? 'none',
         coachNotes: coachProfile.notes,
       });
-    } catch {
-      Alert.alert('Error', 'Could not reach AI service');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Generate Routine", 'Try again in a moment.');
     } finally {
       setRoutineGenerating(false);
     }
@@ -534,8 +534,8 @@ export default function CoachScreen({ navigation }: Props) {
         updateUser({ active_routine_id: data.active_routine_id });
         setSelectModalVisible(false);
       }
-    } catch {
-      Alert.alert('Error', 'Failed to set active routine');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Set Active Routine", 'Try again in a moment.');
     }
   };
 

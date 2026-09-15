@@ -22,7 +22,7 @@ import { ProfileStackParamsList } from 'navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
-import { apiFetch, resolveMediaUrl } from '../../utils/api';
+import { apiFetch, resolveMediaUrl, isNetworkError } from '../../utils/api';
 import { toLocalDateStr } from '../../utils/date';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'EditProfile'>;
@@ -115,10 +115,10 @@ export default function EditProfileScreen({ navigation }: Props) {
         navigation.goBack();
       } else {
         const data = await res.json();
-        Alert.alert('Error', data.message || 'Failed to save profile');
+        Alert.alert("Couldn't Save Profile", data.message || 'Try again in a moment.');
       }
     } catch (err) {
-      Alert.alert('Error', 'Something went wrong');
+      if (!isNetworkError(err)) Alert.alert("Couldn't Save Profile", 'Try again in a moment.');
     } finally {
       setSaving(false);
     }

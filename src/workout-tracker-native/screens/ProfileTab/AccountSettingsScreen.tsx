@@ -10,7 +10,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, isNetworkError } from '../../utils/api';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'AccountSettings'>;
 
@@ -24,7 +24,7 @@ export default function AccountSettingsScreen({ navigation }: Props) {
     setExporting(true);
     try {
       const res = await apiFetch('/api/workouts/export');
-      if (!res.ok) { Alert.alert('Error', 'Export failed. Please try again.'); return; }
+      if (!res.ok) { Alert.alert("Couldn't Export Workouts", 'Try again in a moment.'); return; }
       const csvText = await res.text();
       const FileSystem = await import('expo-file-system/legacy');
       const { shareAsync } = await import('expo-sharing');
@@ -37,8 +37,8 @@ export default function AccountSettingsScreen({ navigation }: Props) {
         const { Share } = await import('react-native');
         await Share.share({ title: 'Workout Export', message: csvText });
       }
-    } catch {
-      Alert.alert('Error', 'Export failed. Please try again.');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Export Workouts", 'Try again in a moment.');
     } finally {
       setExporting(false);
     }
@@ -75,10 +75,10 @@ export default function AccountSettingsScreen({ navigation }: Props) {
                       if (res.ok) {
                         logout();
                       } else {
-                        Alert.alert('Error', 'Failed to delete account. Please try again.');
+                        Alert.alert("Couldn't Delete Account", 'Try again in a moment.');
                       }
-                    } catch {
-                      Alert.alert('Error', 'Something went wrong. Please try again.');
+                    } catch (err) {
+                      if (!isNetworkError(err)) Alert.alert("Couldn't Delete Account", 'Try again in a moment.');
                     }
                   },
                 },

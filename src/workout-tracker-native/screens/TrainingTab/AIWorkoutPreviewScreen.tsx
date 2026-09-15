@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, isNetworkError } from '../../utils/api';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
 import ExerciseListModal from '../../components/ExerciseList';
@@ -80,7 +80,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
         }),
       });
       const data = await res.json();
-      if (!res.ok) { Alert.alert('Error', data.message || 'Generation failed'); return; }
+      if (!res.ok) { Alert.alert("Couldn't Generate Workout", data.message || 'Try again in a moment.'); return; }
       setName(data.name);
       if (generateType === 'template') {
         setExercises(data.exercises ?? []);
@@ -88,15 +88,15 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
         setDescription(data.description ?? '');
         setDays(data.days ?? []);
       }
-    } catch {
-      Alert.alert('Error', 'Could not reach AI service');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Generate Workout", 'Try again in a moment.');
     } finally {
       setRegenerating(false);
     }
   };
 
   const handleSave = async () => {
-    if (!name.trim()) { Alert.alert('Error', 'Workout name is required'); return; }
+    if (!name.trim()) { Alert.alert('Name Required', 'Add a name for this workout before saving.'); return; }
     setSaving(true);
     try {
       const toProgramming = (exList: PreviewExercise[]) =>
@@ -133,15 +133,15 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) { Alert.alert('Error', data.message || 'Save failed'); return; }
+      if (!res.ok) { Alert.alert("Couldn't Save Workout", data.message || 'Try again in a moment.'); return; }
 
       if (generateType === 'template') {
         navigation.replace('TemplateDetail', { templateId: data.id });
       } else {
         navigation.replace('RoutineDetail', { routineId: data.id, routineName: data.name });
       }
-    } catch {
-      Alert.alert('Error', 'Something went wrong');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Save Workout", 'Try again in a moment.');
     } finally {
       setSaving(false);
     }

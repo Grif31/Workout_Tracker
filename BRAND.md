@@ -137,7 +137,8 @@ Real strings from the app, rewritten to the rules above.
 
 | Where | Now | Rewrite |
 |---|---|---|
-| 16 alerts across the app | "Error" / "Something went wrong" | Title names the failure, e.g. "Couldn't Save Template" / "Check your connection and try again." |
+| 67 alerts across the app | "Error" / "Something went wrong" | Title names the failure, e.g. "Couldn't Save Template". Body is the server's message when there is one, otherwise "Try again in a moment." When the request never reaches the server, the app shows a single "Network error" banner and no dialog. |
+| Form validation (routines, templates, AI workouts) | "Error" / "Please enter a routine name" | "Name Required" / "Add a name for this routine before saving." |
 | Dashboard | "Error" / "Failed to load workouts" | "Couldn't Load Workouts" / "Check your connection and try again." |
 | Save as template (`WorkoutDetails.tsx`) | "Cannot Save Template" / "None of the exercises in this workout were selected from the exercise library. To create a template, use exercises from the library when logging." | "Can't Save as Template" / "Templates only work with exercises from the library, and this workout doesn't have any." |
 | Discard workout (`WorkoutLog.tsx`) | "Discard Workout" / "Are you sure you want to discard this workout?" | "Discard Workout?" / "Your logged sets will be lost." |

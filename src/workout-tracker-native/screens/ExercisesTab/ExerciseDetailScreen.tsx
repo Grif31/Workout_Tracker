@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LineChart, BarChart } from 'react-native-gifted-charts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
-import { apiFetch, resolveMediaUrl } from '../../utils/api';
+import { apiFetch, resolveMediaUrl, isNetworkError } from '../../utils/api';
 import { ExerciseDetailParams } from '../../navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
@@ -178,10 +178,10 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
                 navigation.goBack();
               } else {
                 const data = await res.json();
-                Alert.alert('Error', data.message || 'Could not delete exercise');
+                Alert.alert("Couldn't Delete Exercise", data.message || 'Try again in a moment.');
               }
-            } catch {
-              Alert.alert('Error', 'Something went wrong');
+            } catch (err) {
+              if (!isNetworkError(err)) Alert.alert("Couldn't Delete Exercise", 'Try again in a moment.');
             } finally {
               setDeleting(false);
             }

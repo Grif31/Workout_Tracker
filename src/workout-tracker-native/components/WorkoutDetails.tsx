@@ -17,7 +17,7 @@ const MapView: React.ComponentType<any> | null = _MapsModule?.default ?? null;
 const Polyline: React.ComponentType<any> | null = _MapsModule?.Polyline ?? null;
 import { Workout } from '../types/models';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../utils/api';
+import { apiFetch, isNetworkError } from '../utils/api';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -120,10 +120,10 @@ export default function WorkoutDetailsScreen({
     setLoading(true);
     try {
       const res = await apiFetch(`/api/workouts/${workoutId}`);
-      if (!res.ok) { Alert.alert('Error', 'Failed to load workout'); return; }
+      if (!res.ok) { Alert.alert("Couldn't Load Workout", 'Try again in a moment.'); return; }
       setWorkout(await res.json());
-    } catch {
-      Alert.alert('Error', 'Failed to load workout');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Load Workout", 'Try again in a moment.');
     } finally {
       setLoading(false);
     }
@@ -171,12 +171,12 @@ export default function WorkoutDetailsScreen({
       });
       if (!res.ok) {
         const err = await res.json();
-        Alert.alert('Error', err.message || 'Failed to delete workout');
+        Alert.alert("Couldn't Delete Workout", err.message || 'Try again in a moment.');
         return;
       }
       onDelete?.(workoutId);
-    } catch {
-      Alert.alert('Error', 'Failed to delete workout');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Delete Workout", 'Try again in a moment.');
     }
   };
 
@@ -196,10 +196,10 @@ export default function WorkoutDetailsScreen({
         Alert.alert('Template Saved', `"${name}" saved as a template.`);
         onSaveAsTemplate?.();
       } else {
-        Alert.alert('Error', 'Failed to save template');
+        Alert.alert("Couldn't Save Template", 'Try again in a moment.');
       }
-    } catch {
-      Alert.alert('Error', 'Something went wrong');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Save Template", 'Try again in a moment.');
     }
   };
 

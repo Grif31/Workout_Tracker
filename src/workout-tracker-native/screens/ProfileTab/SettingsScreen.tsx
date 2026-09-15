@@ -22,7 +22,7 @@ import { usePurchase } from '../../context/PurchaseContext';
 import { ProfileStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, isNetworkError } from '../../utils/api';
 import { APP_ICONS_ENABLED, HEALTH_SYNC_ENABLED } from '../../constants/featureFlags';
 import {
   requestNotificationPermission,
@@ -118,10 +118,10 @@ export default function SettingsScreen({ navigation }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ weight_unit: newUnit }),
       });
-    } catch {
+    } catch (err) {
       setUnitIsKg(!value);
       updateUser({ weight_unit: value ? 'lbs' : 'kg' });
-      Alert.alert('Error', 'Failed to save unit preference.');
+      if (!isNetworkError(err)) Alert.alert("Couldn't Change Units", 'Try again in a moment.');
     } finally {
       setSavingUnit(false);
     }

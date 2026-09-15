@@ -12,6 +12,19 @@ export function resolveMediaUrl(path: string | null | undefined): string | undef
   return `${BASE}${path}`;
 }
 const NETWORK_ERROR_MSG = 'Network error. Check your connection and try again.';
+// Marked by name, not a subclass: Babel-compiled classes extending Error can fail instanceof checks.
+const NETWORK_ERROR_NAME = 'NetworkError';
+
+function networkError(): Error {
+  const err = new Error('Network request failed');
+  err.name = NETWORK_ERROR_NAME;
+  return err;
+}
+
+// apiFetch has already shown the network toast for these, so callers skip their own alert.
+export function isNetworkError(err: unknown): boolean {
+  return err instanceof Error && err.name === NETWORK_ERROR_NAME;
+}
 
 // Module-level token store — lives outside React so apiFetch can read the
 // latest tokens without needing a context ref or prop drilling.
@@ -95,7 +108,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   } catch {
     // Network unreachable — no HTTP response at all.
     showToast(NETWORK_ERROR_MSG);
-    throw new Error('Network request failed');
+    throw networkError();
   }
 
   if (res.status === 401 && _refresh) {
@@ -107,7 +120,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
         res = await fetch(`${BASE}${path}`, { ...init, headers });
       } catch {
         showToast(NETWORK_ERROR_MSG);
-        throw new Error('Network request failed');
+        throw networkError();
       }
     } else if (outcome.invalid) {
       // Refresh token is expired or invalid — session is unrecoverable.

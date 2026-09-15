@@ -23,7 +23,7 @@ import { muscleGroups } from '../../constants/muscleGroups';
 import { equipmentTypes } from '../../constants/equipmentTypes';
 import NewExerciseForm from '../../components/NewExerciseForm';
 import SectionRule from '../../components/SectionRule';
-import { apiFetch, resolveMediaUrl } from '../../utils/api';
+import { apiFetch, resolveMediaUrl, isNetworkError } from '../../utils/api';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
 
@@ -66,7 +66,7 @@ export default function ExercisesScreen({ navigation }: Props) {
 
   const fetchExercises = async () => {
     const { ok, usedCache } = await loadExerciseList(user?.id, data => setExerciseList(data as Exercise[]));
-    if (!ok && !usedCache) Alert.alert('Error', 'Failed to load exercises');
+    if (!ok && !usedCache) Alert.alert("Couldn't Load Exercises", 'Try again in a moment.');
   };
 
   const fetchRecentExercises = async () => {
@@ -100,10 +100,10 @@ export default function ExercisesScreen({ navigation }: Props) {
         fetchExercises();
         Alert.alert('Success', 'Exercise added');
       } else {
-        Alert.alert('Error', data.message || 'Failed to add exercise');
+        Alert.alert("Couldn't Add Exercise", data.message || 'Try again in a moment.');
       }
-    } catch {
-      Alert.alert('Error', 'Something went wrong');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Add Exercise", 'Try again in a moment.');
     }
   };
 

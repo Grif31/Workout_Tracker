@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../utils/api';
+import { apiFetch, isNetworkError } from '../utils/api';
 import { toLocalDateStr } from '../utils/date';
 import { useTheme } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
@@ -698,8 +698,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       });
       const data = await res.json();
       if (res.ok) { fetchExercises(); Alert.alert('Success', 'Exercise added'); }
-      else Alert.alert('Error', data.message || 'Please try again');
-    } catch { Alert.alert('Error', 'Something went wrong'); }
+      else Alert.alert("Couldn't Add Exercise", data.message || 'Try again in a moment.');
+    } catch (err) { if (!isNetworkError(err)) Alert.alert("Couldn't Add Exercise", 'Try again in a moment.'); }
   };
 
   const weightDelta = weightUnit === 'kg' ? 2.5 : 5;
@@ -1398,7 +1398,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         }
       );
       const data = await res.json();
-      if (!res.ok) { Alert.alert('Error', data.message || 'Please try again'); return; }
+      if (!res.ok) { Alert.alert("Couldn't Save Workout", data.message || 'Try again in a moment.'); return; }
       cancelLiveWorkoutNotification();
       clearSession();
       AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
@@ -1425,7 +1425,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           isBestReps: data.is_best_reps ?? false,
         }
       );
-    } catch { Alert.alert('Error', 'Something went wrong'); }
+    } catch (err) { if (!isNetworkError(err)) Alert.alert("Couldn't Save Workout", 'Try again in a moment.'); }
   };
 
   const submitWorkout = () => {

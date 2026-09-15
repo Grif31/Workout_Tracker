@@ -12,7 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useActionSheet } from '@expo/react-native-action-sheet';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, isNetworkError } from '../../utils/api';
 import { estimateCalories } from '../../utils/cardioCalories';
 import { fmtDuration, fmtPace } from '../../utils/cardioFormat';
 import { GPS_DISTANCE_UNIT_KEY, toKm } from '../../utils/units';
@@ -160,13 +160,13 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
         body: JSON.stringify({ workoutName: name }),
       });
       if (!res.ok) {
-        Alert.alert('Error', 'Failed to rename activity');
+        Alert.alert("Couldn't Rename Activity", 'Try again in a moment.');
         return;
       }
       setWorkout(prev => prev ? { ...prev, name } : prev);
       setRenameVisible(false);
-    } catch {
-      Alert.alert('Error', 'Failed to rename activity');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Rename Activity", 'Try again in a moment.');
     }
   };
 

@@ -16,7 +16,7 @@ import { TrainingStackParamsList } from 'navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, isNetworkError } from '../../utils/api';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'RoutineDetail'>;
 
@@ -61,10 +61,10 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
       if (res.ok) {
         setRoutine(await res.json());
       } else {
-        Alert.alert('Error', 'Failed to load routine');
+        Alert.alert("Couldn't Load Routine", 'Try again in a moment.');
       }
-    } catch {
-      Alert.alert('Error', 'Something went wrong');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Load Routine", 'Try again in a moment.');
     } finally {
       setLoading(false);
     }
@@ -82,9 +82,9 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
           try {
             const res = await apiFetch(`/api/routines/${routineId}`, { method: 'DELETE' });
             if (res.ok) navigation.goBack();
-            else Alert.alert('Error', 'Failed to delete routine');
-          } catch {
-            Alert.alert('Error', 'Something went wrong');
+            else Alert.alert("Couldn't Delete Routine", 'Try again in a moment.');
+          } catch (err) {
+            if (!isNetworkError(err)) Alert.alert("Couldn't Delete Routine", 'Try again in a moment.');
           }
         },
       },
@@ -99,10 +99,10 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
         const data = await res.json();
         updateUser({ active_routine_id: data.active_routine_id });
       } else {
-        Alert.alert('Error', 'Failed to update active routine');
+        Alert.alert("Couldn't Update Active Routine", 'Try again in a moment.');
       }
-    } catch {
-      Alert.alert('Error', 'Something went wrong');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Update Active Routine", 'Try again in a moment.');
     }
   };
 

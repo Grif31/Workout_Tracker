@@ -14,7 +14,7 @@ import ExerciseListModal from '../../components/ExerciseList';
 import { makeUid } from '../../components/workout/types';
 import { animateNextRowChange } from '../../utils/layoutAnimation';
 
-import { apiFetch } from '../../utils/api';
+import { apiFetch, isNetworkError } from '../../utils/api';
 import { showToast } from '../../utils/toast';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
@@ -70,7 +70,7 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
     if (!routineId) return;
     try {
       const res = await apiFetch(`/api/routines/${routineId}`);
-      if (!res.ok) { Alert.alert('Error', 'Failed to load routine'); navigation.goBack(); return; }
+      if (!res.ok) { Alert.alert("Couldn't Load Routine", 'Try again in a moment.'); navigation.goBack(); return; }
       const data = await res.json();
       setRoutineName(data.name ?? '');
       setDescription(data.description ?? '');
@@ -81,8 +81,8 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
         templateId: d.workout_template.id,
         templateName: d.workout_template.name,
       })));
-    } catch {
-      Alert.alert('Error', 'Something went wrong');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Load Routine", 'Try again in a moment.');
       navigation.goBack();
     } finally {
       setLoadingRoutine(false);
@@ -169,10 +169,10 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
   };
 
   const saveRoutine = async () => {
-    if (!routineName.trim()) { Alert.alert('Error', 'Please enter a routine name'); return; }
-    if (days.length === 0) { Alert.alert('Error', 'Please add at least one day'); return; }
+    if (!routineName.trim()) { Alert.alert('Name Required', 'Add a name for this routine before saving.'); return; }
+    if (days.length === 0) { Alert.alert('Add a Day', 'A routine needs at least one day.'); return; }
     const incomplete = days.find(d => d.mode === 'existing' && !d.templateId);
-    if (incomplete) { Alert.alert('Error', 'Please select a template for each day or switch it to New'); return; }
+    if (incomplete) { Alert.alert('Choose Templates', 'Pick a template for each day, or switch the day to New.'); return; }
 
     setSaving(true);
     try {
@@ -202,10 +202,10 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
         navigation.goBack();
       } else {
         const data = await res.json();
-        Alert.alert('Error', data.message || 'Failed to save routine');
+        Alert.alert("Couldn't Save Routine", data.message || 'Try again in a moment.');
       }
-    } catch {
-      Alert.alert('Error', 'Something went wrong');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Save Routine", 'Try again in a moment.');
     } finally {
       setSaving(false);
     }

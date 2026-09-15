@@ -4,7 +4,7 @@ import * as Google from 'expo-auth-session/providers/google';
 import * as Facebook from 'expo-auth-session/providers/facebook';
 import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../utils/api';
+import { apiFetch, isNetworkError } from '../utils/api';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -43,8 +43,8 @@ export function useSocialAuth() {
       } else {
         Alert.alert('Sign In Failed', data.message || 'Could not sign in with social account.');
       }
-    } catch {
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Sign In", 'Try again in a moment.');
     }
   };
 

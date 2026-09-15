@@ -16,7 +16,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, isNetworkError } from '../../utils/api';
 import { showToast } from '../../utils/toast';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
@@ -88,8 +88,8 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         }
         setProgMap(map);
       }
-    } catch {
-      Alert.alert('Error', 'Failed to load template');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Load Template", 'Try again in a moment.');
     } finally {
       setLoading(false);
     }
@@ -161,7 +161,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
   };
 
   const handleSave = async () => {
-    if (!name.trim()) { Alert.alert('Error', 'Template name is required'); return; }
+    if (!name.trim()) { Alert.alert('Name Required', 'Add a name for this template before saving.'); return; }
     setSaving(true);
     try {
       const res = await apiFetch(isNew ? '/api/workout-templates' : `/api/workout-templates/${templateId}`, {
@@ -174,7 +174,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         }),
       });
       if (!res.ok) {
-        Alert.alert('Error', isNew ? 'Failed to create template' : 'Failed to save template');
+        Alert.alert(isNew ? "Couldn't Create Template" : "Couldn't Save Template", 'Try again in a moment.');
       } else if (isNew) {
         const data = await res.json();
         // Stay here as the saved template: the new id brings back Log Workout
@@ -189,8 +189,8 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         showToast('Template saved');
         navigation.goBack();
       }
-    } catch {
-      Alert.alert('Error', 'Something went wrong');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Save Template", 'Try again in a moment.');
     } finally {
       setSaving(false);
     }
@@ -213,10 +213,10 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
                 data.message ?? 'This template is used in a routine. Remove it from the routine or delete the routine first.',
               );
             } else {
-              Alert.alert('Error', 'Failed to delete template');
+              Alert.alert("Couldn't Delete Template", 'Try again in a moment.');
             }
-          } catch {
-            Alert.alert('Error', 'Something went wrong');
+          } catch (err) {
+            if (!isNetworkError(err)) Alert.alert("Couldn't Delete Template", 'Try again in a moment.');
           }
         },
       },

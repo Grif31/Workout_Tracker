@@ -15,7 +15,7 @@ import { toDisplayVolume, WeightUnit } from 'utils/units';
 import { toLocalDateStr } from 'utils/date';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, isNetworkError } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { PR_GOLD_TEXT } from '../../constants/prColors';
@@ -356,8 +356,8 @@ export default function DashboardScreen({ navigation }: Props) {
       setUser(data);
       if (data.active_routine_id) fetchActiveRoutine(data.active_routine_id);
       else setActiveRoutine(null);
-    } catch {
-      Alert.alert('Error', 'Failed to load user');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Load Profile", 'Try again in a moment.');
     }
   };
 
@@ -372,8 +372,8 @@ export default function DashboardScreen({ navigation }: Props) {
     try {
       const res = await apiFetch('/api/workouts/recent');
       if (res.ok) setWorkouts(await res.json());
-    } catch {
-      Alert.alert('Error', 'Failed to load workouts');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Load Workouts", 'Try again in a moment.');
     }
   };
 

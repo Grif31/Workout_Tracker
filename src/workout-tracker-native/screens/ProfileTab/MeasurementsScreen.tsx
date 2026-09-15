@@ -23,7 +23,7 @@ import { ProfileStackParamsList } from '../../navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, isNetworkError } from '../../utils/api';
 import { roundTenth } from '../../utils/units';
 import { toLocalDateStr } from '../../utils/date';
 
@@ -115,10 +115,10 @@ export default function MeasurementsScreen({ navigation }: Props) {
         setBwInput('');
         setBwModal(false);
       } else {
-        Alert.alert('Error', 'Failed to save entry.');
+        Alert.alert("Couldn't Save Bodyweight", 'Try again in a moment.');
       }
-    } catch {
-      Alert.alert('Error', 'Something went wrong.');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Save Bodyweight", 'Try again in a moment.');
     } finally {
       setBwSaving(false);
     }
@@ -138,8 +138,8 @@ export default function MeasurementsScreen({ navigation }: Props) {
               setBwLogs(remaining);
               updateUser({ bodyweight: remaining[0]?.weight ?? null });
             }
-          } catch {
-            Alert.alert('Error', 'Failed to delete entry.');
+          } catch (err) {
+            if (!isNetworkError(err)) Alert.alert("Couldn't Delete Entry", 'Try again in a moment.');
           }
         },
       },
@@ -172,10 +172,10 @@ export default function MeasurementsScreen({ navigation }: Props) {
         setMWaist(''); setMChest(''); setMRArm(''); setMLArm(''); setMRLeg(''); setMLLeg('');
         setMModal(false);
       } else {
-        Alert.alert('Error', 'Failed to save measurement.');
+        Alert.alert("Couldn't Save Measurement", 'Try again in a moment.');
       }
-    } catch {
-      Alert.alert('Error', 'Something went wrong.');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Save Measurement", 'Try again in a moment.');
     } finally {
       setMSaving(false);
     }
@@ -191,8 +191,8 @@ export default function MeasurementsScreen({ navigation }: Props) {
           try {
             const res = await apiFetch(`/api/measurements/${id}`, { method: 'DELETE' });
             if (res.ok) setMLogs(prev => prev.filter(m => m.id !== id));
-          } catch {
-            Alert.alert('Error', 'Failed to delete measurement.');
+          } catch (err) {
+            if (!isNetworkError(err)) Alert.alert("Couldn't Delete Measurement", 'Try again in a moment.');
           }
         },
       },
@@ -226,10 +226,10 @@ export default function MeasurementsScreen({ navigation }: Props) {
         const photo = await res.json();
         setPhotos(prev => [photo, ...prev]);
       } else {
-        Alert.alert('Error', 'Failed to upload photo.');
+        Alert.alert("Couldn't Upload Photo", 'Try again in a moment.');
       }
-    } catch {
-      Alert.alert('Error', 'Something went wrong.');
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Upload Photo", 'Try again in a moment.');
     } finally {
       setUploading(false);
     }
@@ -248,8 +248,8 @@ export default function MeasurementsScreen({ navigation }: Props) {
               setPhotos(prev => prev.filter(p => p.id !== photo.id));
               setSelectedPhoto(null);
             }
-          } catch {
-            Alert.alert('Error', 'Failed to delete photo.');
+          } catch (err) {
+            if (!isNetworkError(err)) Alert.alert("Couldn't Delete Photo", 'Try again in a moment.');
           }
         },
       },
