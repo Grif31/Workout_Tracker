@@ -16,6 +16,11 @@ const ACTION_WIDTH = 96;
 // two stay in proportion; with friction at 1 this is also the actual finger
 // travel required. A release flick counts for extra via Swipeable's DRAG_TOSS.
 const FULL_SWIPE_DISTANCE = Math.round(ACTION_WIDTH * 1.6);
+// Drag distance over which the trash icon grows into its committed size. The
+// crossing itself can't be detected (listeners never fire on Swipeable's drag
+// interpolation), so the size is interpolated from the drag and simply peaks at
+// the threshold.
+const ICON_GROW_RANGE = 28;
 
 type Props = {
   set: WorkoutSet;
@@ -145,6 +150,13 @@ function SetRow({
           outputRange: [1, 0.82, 0.82],
           extrapolate: 'clamp',
         });
+        // Ramps up over the last stretch before the threshold so the icon is at
+        // full size exactly when releasing would delete.
+        const iconScale = dragX.interpolate({
+          inputRange: [-FULL_SWIPE_DISTANCE, -FULL_SWIPE_DISTANCE + ICON_GROW_RANGE, 0],
+          outputRange: [1.45, 1, 1],
+          extrapolate: 'clamp',
+        });
         return (
           // Fixed width: Swipeable measures this to decide how far the row can
           // drag. A flex-sized action measures ~0 and pins the drag range shut.
@@ -157,7 +169,9 @@ function SetRow({
                 activeOpacity={1}
                 onPress={onDelete}
               >
-                <Text style={styles.swipeDeleteText}>Delete</Text>
+                <Animated.View style={{ transform: [{ scale: iconScale }] }}>
+                  <Ionicons name="trash" size={20} color="#fff" />
+                </Animated.View>
               </TouchableOpacity>
             </Animated.View>
           </View>
@@ -333,14 +347,14 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   swipeDelete: {
     backgroundColor: colors.danger,
     justifyContent: 'center',
-    borderRadius: spacing.sm,
+    // Square corners so the red sits flush against the set row
     marginBottom: spacing.sm,
     overflow: 'hidden',
     alignSelf: 'flex-end',
     height: '100%',
   },
   // Fills the action so the whole red area stays tappable as it grows, with the
-  // label pinned right: it then sits under the thumb through the swipe instead
+  // icon pinned right: it then sits under the thumb through the swipe instead
   // of drifting toward the middle of an ever-wider button.
   swipeDeleteHit: {
     flex: 1,
@@ -348,5 +362,4 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     alignItems: 'flex-end',
     paddingHorizontal: spacing.lg,
   },
-  swipeDeleteText: { color: '#fff', fontWeight: '700' },
 });

@@ -1,15 +1,15 @@
 # Changelog
 
-## 1.1.6 (unreleased)
+## 1.1.6 (2026-09-14)
 
 ### New: Swipe to Delete Sets
-- Swipe a set all the way to the left and let go to delete it. A shorter swipe still reveals the Delete button, and the button grows as you pull so you can see when letting go will delete.
+- Swipe a set all the way to the left and let go to delete it. A shorter swipe still reveals the delete button, and its trash icon grows as you reach the point where letting go will delete.
 - Adding or removing a set now animates, with the rows below sliding into place instead of jumping.
 
 ### Improved: Templates & Routines
 - A new template is only created when you tap Save Template, so backing out no longer leaves an empty template behind. Right after saving, a prompt offers to log it.
 - Pick several exercises at once when adding to a template or a routine day.
-- Saving a template or routine shows a brief confirmation instead of an alert you have to dismiss.
+- Saving a template or routine now shows a brief confirmation that disappears on its own, with no alert to dismiss.
 - New routines start with Day 1 already added.
 - Adding or removing days and exercises in a routine animates smoothly.
 - A template's Save button now sits at the bottom, under Add Exercise.
