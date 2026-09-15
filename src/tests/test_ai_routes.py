@@ -453,3 +453,67 @@ class TestAiInsights:
         res, _ = self._post(client, auth_token, response_json={'something_else': True})
         assert res.status_code == 200
         assert res.get_json()['insights'] == []
+
+
+# ---------------------------------------------------------------------------
+# Coach voice — brand system prompt and copy cleanup
+# ---------------------------------------------------------------------------
+
+class TestCoachVoice:
+
+    def _post(self, client, token, path, payload, response_json):
+        mock_ant = _make_anthropic_mock(response_json)
+        with patch.dict(sys.modules, {'anthropic': mock_ant}):
+            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+                res = client.post(path, json=payload, headers=auth_headers(token))
+        return res, mock_ant
+
+    def test_generate_and_insights_send_coach_voice_system_prompt(self, client, auth_token):
+        from routes.ai_routes import COACH_VOICE
+        _, gen_mock = self._post(
+            client, auth_token, '/api/ai/generate',
+            {'days_per_week': 3, 'goal': 'strength', 'experience': 'intermediate', 'generate_type': 'template'},
+            TEMPLATE_JSON,
+        )
+        _, insights_mock = self._post(client, auth_token, '/api/ai/insights', {}, INSIGHTS_JSON)
+        for mock_ant in (gen_mock, insights_mock):
+            call_kwargs = mock_ant.Anthropic.return_value.messages.create.call_args[1]
+            assert call_kwargs['system'] == COACH_VOICE
+
+    def test_routine_text_has_no_em_dashes_or_exclamation_marks(self, client, auth_token):
+        routine = {
+            'name': 'Push Pull Legs!',
+            'description': 'A 3-day split — built for strength!',
+            'days': [{'label': 'Push Day!', 'exercises': ['Bench Press']}],
+        }
+        res, _ = self._post(
+            client, auth_token, '/api/ai/generate',
+            {'days_per_week': 3, 'goal': 'strength', 'experience': 'intermediate', 'generate_type': 'routine'},
+            routine,
+        )
+        data = res.get_json()
+        assert data['name'] == 'Push Pull Legs'
+        assert data['description'] == 'A 3-day split, built for strength.'
+        assert data['days'][0]['label'] == 'Push Day'
+
+    def test_insight_text_has_no_em_dashes_or_exclamation_marks(self, client, auth_token):
+        insights = {'insights': [{
+            'title': 'Bench Press Up 10 lbs!',
+            'body': 'Legs are behind — add a lower-body workout!',
+            'priority': 'high',
+        }]}
+        res, _ = self._post(client, auth_token, '/api/ai/insights', {}, insights)
+        insight = res.get_json()['insights'][0]
+        assert insight['title'] == 'Bench Press Up 10 lbs'
+        assert insight['body'] == 'Legs are behind, add a lower-body workout.'
+        assert insight['priority'] == 'high'
+
+    def test_insights_prompt_names_the_metric_for_most_improved_lift(self):
+        from routes.ai_routes import _build_insights_prompt
+        prompt = _build_insights_prompt({
+            'weight_unit': 'lbs',
+            'most_improved_lift': {'exercise_name': 'Bench Press', 'prev_best': 200.0, 'this_best': 210.0, 'gain': 10.0},
+        })
+        line = next(l for l in prompt.splitlines() if l.startswith('Most improved lift'))
+        assert 'estimated 1RM' in line
+        assert 'Bench Press 200.0 → 210.0 lbs (+10.0 lbs)' in line

@@ -174,6 +174,41 @@ Real strings from the app, rewritten to the rules above.
 | **Premium** | Pro, subscription (in UI) | |
 | **Aretē** | Arete | Macron everywhere in copy. |
 
+### Coach voice
+
+The AI Coach writes text users read directly: workout and routine names,
+routine descriptions, day labels, and insight titles and bodies. It follows
+the same voice as the rest of the app, set in `COACH_VOICE` in
+`src/routes/ai_routes.py` and sent as the system prompt on every Coach
+request.
+
+- **A knowledgeable coach, not a hype account.** Lead with what the data
+  shows or what to do next.
+- **Specific over enthusiastic.** "Your bench press is up 10 lbs in 4
+  weeks." beats "Amazing progress!"
+- **Speak to "you"** and cite the user's own numbers: weights, reps, set
+  counts, days.
+- **Name what improved.** Never just "stronger": say which metric changed
+  (estimated 1RM, max weight, reps at a weight, distance, time) and give the
+  before and after, like "Your Bench Press estimated 1RM rose from 200 to
+  210 lbs."
+- **Never shame** a missed week or a bodyweight change. State the fact and
+  the next step.
+- **No slang, emoji, exclamation marks, or em dashes.** The backend also
+  strips em dashes and exclamation marks from Coach text as a safety net.
+- **Use the word list:** workout, PR, Greek Rank, Strength Score, routine,
+  bodyweight, "225 lbs".
+- **Names are short, descriptive, Title Case:** "Upper Body Strength",
+  "Push Day". No puns.
+- **No medical advice.** For pain or injury, suggest rest and a
+  professional.
+
+| Where | Off-brand | On-brand |
+|---|---|---|
+| Insight title | "Crushing Your Bench Goals! 💪" | "Bench Press Up 10 lbs" |
+| Insight body | "You've been slacking on legs — time to get back in there!" | "You logged 2 leg sets in the last 14 days. Add a lower-body workout this week." |
+| Routine description | "An epic 4-day split to build insane gains!" | "A 4-day upper/lower split. Built for strength, with extra back volume." |
+
 ---
 
 ## Logo

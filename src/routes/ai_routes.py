@@ -16,6 +16,42 @@ from utils.lift_progress import compute_most_improved_lift
 from utils.cardio_progress import compute_most_improved_cardio, _MILESTONE_LABELS
 from limiter import limiter
 
+# System prompt for every Coach request, so AI-written text follows the brand
+# voice (BRAND.md, "Coach voice"). Users read the names, descriptions, day
+# labels, and insight text verbatim.
+COACH_VOICE = (
+    "You are the Coach in Aretē, a strength and cardio training app. Aretē is the Greek "
+    "word for excellence, and the app's slogan is \"Pursue Excellence\".\n\n"
+    "Everything a user will read (workout and routine names, descriptions, day labels, "
+    "insight titles and bodies) follows the Aretē voice:\n"
+    "- Sound like a knowledgeable coach, not a hype account. Lead with what the data "
+    "shows or what to do next.\n"
+    "- Be specific instead of enthusiastic. \"Your bench press is up 10 lbs in 4 weeks.\" "
+    "is better than \"Amazing progress!\"\n"
+    "- Speak to the user as \"you\" and cite their own numbers: weights, reps, set counts, days.\n"
+    "- When something improved, name the exact metric (estimated 1RM, max weight, reps at a weight, "
+    "distance, or time) and give the before and after values. Never just say a lift got \"stronger\".\n"
+    "- Never shame a missed week or a bodyweight change. State the fact and the next step.\n"
+    "- No slang (\"crush it\", \"gains\", \"beast mode\"), no emoji, no exclamation marks, "
+    "and no em dashes. Use periods, commas, or colons.\n"
+    "- Use these terms: workout (not session), PR, Greek Rank, Strength Score, routine, "
+    "bodyweight, warm-up. Write weights with a space before the unit, like 225 lbs.\n"
+    "- Names and labels are short, descriptive, and Title Case, like \"Upper Body Strength\" "
+    "or \"Push Day\". No puns.\n"
+    "- Use US spelling.\n"
+    "- Don't diagnose pain or injuries. Suggest rest and seeing a professional instead."
+)
+
+
+def _brand_copy(text, heading=False):
+    """Replaces em dashes and exclamation marks in Coach text shown to users.
+    The system prompt asks for this too; this guarantees it."""
+    if not isinstance(text, str):
+        return text
+    text = re.sub(r'\s*—\s*', ', ', text)
+    text = re.sub(r'!+', '.', text)
+    return text.rstrip('.') if heading else text
+
 ai_bp = Blueprint('ai_bp', __name__)
 
 _ai_generate_schema = AiGenerateSchema()
@@ -746,8 +782,9 @@ def _build_insights_prompt(ctx: dict) -> str:
     most_improved = ctx.get('most_improved_lift')
     if most_improved:
         lines.append(
-            f"\nMost improved lift this week: {most_improved['exercise_name']} "
-            f"{most_improved['prev_best']} → {most_improved['this_best']} {unit} (+{most_improved['gain']})"
+            f"\nMost improved lift this week (estimated 1RM: a new all-time best, compared with last week's best "
+            f"estimated 1RM): {most_improved['exercise_name']} "
+            f"{most_improved['prev_best']} → {most_improved['this_best']} {unit} (+{most_improved['gain']} {unit})"
         )
     most_improved_cardio = ctx.get('most_improved_cardio')
     if most_improved_cardio:
@@ -788,7 +825,10 @@ def _build_insights_prompt(ctx: dict) -> str:
     lines += [
         "",
         "Insight types: deload, rest, frequency, routine, achievement, suggestion",
-        "Be specific — cite actual numbers from the data above. Each insight must be actionable.",
+        "Be specific: cite actual numbers from the data above. Each insight must be actionable.",
+        "When an insight says a lift or cardio result improved, name exactly what increased (estimated 1RM, "
+        "max weight, reps at a weight, distance, or time) and give the before and after values with units, "
+        "e.g. \"Your Bench Press estimated 1RM rose from 200 to 210 lbs.\" Only claim improvements shown in the data above.",
         "",
         'Respond ONLY with valid JSON (no markdown):\n{"insights":[{"type":"<type>","title":"<6 words max>","body":"<1-2 sentences with specific data>","priority":"high|medium|low"}]}',
     ]
@@ -819,6 +859,7 @@ def generate_workout():
         msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=4096,
+            system=COACH_VOICE,
             messages=[{"role": "user", "content": prompt}],
         )
 
@@ -828,18 +869,18 @@ def generate_workout():
             days_preview = []
             for day in result.get('days', []):
                 exercises = _match_exercises(day.get('exercises', []))
-                days_preview.append({'label': day['label'], 'exercises': exercises})
+                days_preview.append({'label': _brand_copy(day['label'], heading=True), 'exercises': exercises})
             return jsonify({
                 'type': 'routine',
-                'name': result['name'],
-                'description': result.get('description', ''),
+                'name': _brand_copy(result['name'], heading=True),
+                'description': _brand_copy(result.get('description', '')),
                 'days': days_preview,
             }), 200
         else:
             exercises = _match_exercises(result.get('exercises', []))
             return jsonify({
                 'type': 'template',
-                'name': result['name'],
+                'name': _brand_copy(result['name'], heading=True),
                 'exercises': exercises,
             }), 200
 
@@ -876,10 +917,14 @@ def get_ai_insights():
         msg = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=2048,
+            system=COACH_VOICE,
             messages=[{'role': 'user', 'content': prompt}],
         )
         result = _parse_ai_json(msg.content[0].text)
-        insights = result.get('insights', [])
+        insights = [
+            {**i, 'title': _brand_copy(i.get('title'), heading=True), 'body': _brand_copy(i.get('body'))}
+            for i in result.get('insights', [])
+        ]
         return jsonify({'insights': insights, 'generated_at': datetime.now().isoformat()}), 200
 
     except ImportError:
