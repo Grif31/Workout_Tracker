@@ -6,20 +6,23 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type AccentPreset = {
   name: string;
-  value: string;
-  text: string; // text color to use ON an accent-colored background
+  value: string;     // dark-mode accent
+  text: string;      // text color to use ON the dark-mode accent
+  light: string;     // light-mode accent; the bright values fail WCAG contrast on light backgrounds
+  lightText: string; // text color to use ON the light-mode accent
 };
 
+// No Yellow preset: it matched the Aretē rank gold (#FFD700) in dark mode, and a
+// yellow dark enough to read in light mode lands on PR gold's hue. Gold means achievement.
 export const ACCENT_PRESETS: AccentPreset[] = [
-  { name: 'Green',  value: '#30D158', text: '#000000' },
-  { name: 'Blue',   value: '#007AFF', text: '#000000' },
-  { name: 'Purple', value: '#BF5AF2', text: '#000000' },
-  { name: 'Orange', value: '#FF9F0A', text: '#000000' },
-  { name: 'Red',    value: '#FF453A', text: '#000000' },
-  { name: 'Pink',   value: '#FF375F', text: '#000000' },
-  { name: 'Teal',   value: '#5AC8FA', text: '#000000' },
-  { name: 'Yellow', value: '#FFD60A', text: '#000000' },
-  { name: 'Indigo', value: '#5E5CE6', text: '#FFFFFF' },
+  { name: 'Green',  value: '#30D158', text: '#000000', light: '#1C7F35', lightText: '#FFFFFF' },
+  { name: 'Blue',   value: '#007AFF', text: '#000000', light: '#006BE0', lightText: '#FFFFFF' },
+  { name: 'Purple', value: '#BF5AF2', text: '#000000', light: '#A922EE', lightText: '#FFFFFF' },
+  { name: 'Orange', value: '#FF9F0A', text: '#000000', light: '#C93400', lightText: '#FFFFFF' },
+  { name: 'Red',    value: '#FF453A', text: '#000000', light: '#D70015', lightText: '#FFFFFF' },
+  { name: 'Pink',   value: '#FF375F', text: '#000000', light: '#D30F45', lightText: '#FFFFFF' },
+  { name: 'Teal',   value: '#5AC8FA', text: '#000000', light: '#0576AA', lightText: '#FFFFFF' },
+  { name: 'Indigo', value: '#5E5CE6', text: '#FFFFFF', light: '#5E5CE6', lightText: '#FFFFFF' },
 ];
 
 // ── Color type ────────────────────────────────────────────────────────────────
@@ -67,11 +70,12 @@ const DARK_BASE = {
 
 function buildColors(mode: 'light' | 'dark', preset: AccentPreset): Colors {
   const base = mode === 'light' ? LIGHT_BASE : DARK_BASE;
+  const accent = mode === 'light' ? preset.light : preset.value;
   return {
     ...base,
-    accent:     preset.value,
-    accentText: preset.text,
-    save:       preset.value,
+    accent,
+    accentText: mode === 'light' ? preset.lightText : preset.text,
+    save:       accent,
   };
 }
 

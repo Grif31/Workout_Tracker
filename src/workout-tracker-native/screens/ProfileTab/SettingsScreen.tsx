@@ -201,7 +201,7 @@ export default function SettingsScreen({ navigation }: Props) {
             <Text style={styles.rowLabel}>Accent Color</Text>
           </View>
           <View style={styles.accentRowRight}>
-            <View style={[styles.accentCircle, { backgroundColor: accentPreset.value }]} />
+            <View style={[styles.accentCircle, { backgroundColor: colors.accent }]} />
             <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
           </View>
         </TouchableOpacity>
@@ -512,11 +512,11 @@ export default function SettingsScreen({ navigation }: Props) {
                 >
                   <View style={[
                     styles.accentGridCircle,
-                    { backgroundColor: preset.value },
+                    { backgroundColor: mode === 'light' ? preset.light : preset.value },
                     accentPreset.name === preset.name && styles.accentCircleSelected,
                   ]}>
                     {accentPreset.name === preset.name && (
-                      <Ionicons name="checkmark" size={18} color={preset.text} />
+                      <Ionicons name="checkmark" size={18} color={mode === 'light' ? preset.lightText : preset.text} />
                     )}
                   </View>
 

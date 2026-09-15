@@ -283,53 +283,56 @@ The wordmark with **Pursue Excellence** set below it, both centered:
 ### Brand accent
 
 The app doesn't have one fixed "brand color" in the traditional sense —
-users pick their own accent from 9 presets, and the whole UI re-themes
+users pick their own accent from 8 presets, and the whole UI re-themes
 around it. For anything *outside* the app where one fixed color is needed
 (marketing site, App Store graphics, social), **Green is the canonical
 default** — it's what the homepage CTA button and section labels already
 use.
 
-| Preset | Hex | Text-on-fill |
-|---|---|---|
-| **Green (default)** | `#30D158` | `#000000` |
-| Blue | `#007AFF` | `#FFFFFF` |
-| Purple | `#BF5AF2` | `#FFFFFF` |
-| Orange | `#FF9F0A` | `#000000` |
-| Red | `#FF453A` | `#FFFFFF` |
-| Pink | `#FF375F` | `#FFFFFF` |
-| Teal | `#5AC8FA` | `#000000` |
-| Yellow | `#FFD60A` | `#000000` |
-| Indigo | `#5E5CE6` | `#FFFFFF` |
+Each preset has a dark-mode and a light-mode shade. The bright dark-mode
+colors are unreadable on light backgrounds, so light mode uses a deeper
+shade with white text:
+
+| Preset | Dark mode | Text on fill | Light mode | Text on fill |
+|---|---|---|---|---|
+| **Green (default)** | `#30D158` | `#000000` | `#1C7F35` | `#FFFFFF` |
+| Blue | `#007AFF` | `#000000` | `#006BE0` | `#FFFFFF` |
+| Purple | `#BF5AF2` | `#000000` | `#A922EE` | `#FFFFFF` |
+| Orange | `#FF9F0A` | `#000000` | `#C93400` | `#FFFFFF` |
+| Red | `#FF453A` | `#000000` | `#D70015` | `#FFFFFF` |
+| Pink | `#FF375F` | `#000000` | `#D30F45` | `#FFFFFF` |
+| Teal | `#5AC8FA` | `#000000` | `#0576AA` | `#FFFFFF` |
+| Indigo | `#5E5CE6` | `#FFFFFF` | `#5E5CE6` | `#FFFFFF` |
+
+**No Yellow preset.** Removed September 2026. In dark mode it was nearly
+identical to the Aretē rank gold (`#FFD700`), and a yellow dark enough to
+read in light mode lands on PR gold's hue. Gold is reserved for
+achievement. Anyone who had picked Yellow falls back to Green.
 
 ### Accent contrast
 
-WCAG contrast ratios for each preset. **4.5** is the minimum for normal
-text, **3.0** for large text, icons, and button shapes.
+WCAG contrast ratios. **4.5** is the minimum for normal text, **3.0** for
+large text, icons, and button shapes.
 
-| Preset | On dark bg `#141416` | On light bg `#F2F2F7` | Text on fill today | Better text on fill |
+| Preset | Dark: accent on `#141416` | Dark: text on fill | Light: accent on `#F2F2F7` | Light: text on fill |
 |---|---|---|---|---|
-| Green | 9.10 text | **1.81 fails** | black 10.39 | (keep) |
-| Blue | 4.58 text (4.24 on `#1C1C1E` surface) | 3.60 icons only | **white 4.02 fails** | black 5.23 |
-| Purple | 5.22 text | 3.16 icons only | **white 3.52 fails** | black 5.96 |
-| Orange | 8.95 text | **1.84 fails** | black 10.22 | (keep) |
-| Red | 5.40 text | 3.05 icons only | **white 3.41 fails** | black 6.16 |
-| Pink | 5.22 text | 3.16 icons only | **white 3.52 fails** | black 5.96 |
-| Teal | 9.70 text | **1.70 fails** | black 11.08 | (keep) |
-| Yellow | 13.03 text | **1.27 fails** | black 14.88 | (keep) |
-| Indigo | **3.64 icons only** | 4.54 text | white 5.06 | (keep) |
+| Green | 9.10 | 10.39 | 4.55 | 5.08 |
+| Blue | 4.58 | 5.23 | 4.50 | 5.02 |
+| Purple | 5.22 | 5.96 | 4.53 | 5.06 |
+| Orange | 8.95 | 10.22 | 4.73 | 5.28 |
+| Red | 5.40 | 6.16 | 4.83 | 5.38 |
+| Pink | 5.22 | 5.96 | 4.80 | 5.35 |
+| Teal | 9.70 | 11.08 | 4.50 | 5.03 |
+| Indigo | 3.64 | 5.06 | 4.54 | 5.06 |
 
-What this means:
-- **Dark mode** is fine for every preset except Indigo, which is too dark
-  for small accent-colored text (Blue is borderline on card surfaces).
-- **Light mode** can't use Green, Orange, Teal, or Yellow as text, icons, or
-  outlines at all. They need darker light-mode shades, or should only
-  appear as fills with black text.
-- **Text on accent buttons** fails for Blue, Purple, Red, and Pink with
-  today's white text. Black text passes on all four.
-- **Marketing** uses Green on the dark ground (9+), which passes. Never set
+- **Light-mode shades** keep each preset's hue, darkened to 4.5 on
+  `#F2F2F7`, except Orange, Red, and Pink, which use Apple's
+  increased-contrast shades so the warm colors stay distinct from each other.
+- **Known gaps:** Indigo in dark mode (3.64) is fine for icons and large
+  text but too dark for small accent-colored text. Blue on dark card
+  surfaces (`#1C1C1E`) is 4.24, borderline for small text.
+- **Marketing** uses the dark-mode Green on `#0D0D0D`. Never set bright
   Green text on a light background.
-
-Nothing in `ThemeContext.tsx` has been changed yet. These are open fixes.
 
 ### Gold — achievement signal
 
