@@ -122,8 +122,8 @@ class TestStrengthScoreHistory:
 class TestPercentileToStrengthRank:
 
     @pytest.mark.parametrize('pct,label,tier', [
-        (0.0,   'Noobie',       1),
-        (9.9,   'Noobie',       3),
+        (0.0,   'Novice',       1),
+        (9.9,   'Novice',       3),
         (10.0,  'Beginner',     1),
         (25.0,  'Beginner',     3),
         (30.0,  'Intermediate', 1),

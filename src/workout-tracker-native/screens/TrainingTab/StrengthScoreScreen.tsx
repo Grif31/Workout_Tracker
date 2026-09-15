@@ -770,7 +770,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
             <View style={styles.infoSection}>
               <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>Strength Percentile</Text>
               <Text style={[styles.infoBody, { color: colors.textSecondary }]}>
-                Your estimated 1RM for each exercise is compared against population standards adjusted for your gender and bodyweight. The result is a percentile: how you stack up against all lifters. Ranks go from Noobie → Beginner → Intermediate → Advanced → Elite → Legend.
+                Your estimated 1RM for each exercise is compared against population standards adjusted for your gender and bodyweight. The result is a percentile: how you stack up against all lifters. Ranks go from Novice → Beginner → Intermediate → Advanced → Elite → Legend.
               </Text>
             </View>
 

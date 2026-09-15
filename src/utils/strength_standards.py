@@ -278,7 +278,7 @@ MUSCLE_GROUP_MAP: dict[str, list[str]] = {
 
 # Strength rank tiers: (low_pct, high_pct, label, sub_ranges)
 STRENGTH_RANK_TIERS = [
-    (0,  10,  'Noobie',       [(0, 3.3), (3.3, 6.7), (6.7, 10)]),
+    (0,  10,  'Novice',       [(0, 3.3), (3.3, 6.7), (6.7, 10)]),
     (10, 30,  'Beginner',     [(10, 16.7), (16.7, 23.3), (23.3, 30)]),
     (30, 60,  'Intermediate', [(30, 40), (40, 50), (50, 60)]),
     (60, 80,  'Advanced',     [(60, 66.7), (66.7, 73.3), (73.3, 80)]),
