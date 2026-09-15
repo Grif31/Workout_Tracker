@@ -709,7 +709,7 @@ export default function WorkoutDetailsScreen({
             durationMin={shareData.durationMin}
             elevationM={shareData.elevationM}
             coords={shareData.coords}
-            accentColor={colors.accent}
+            accentColor={colors.accentDark}
           />
         ) : (
           <WorkoutShareCard
@@ -722,7 +722,7 @@ export default function WorkoutDetailsScreen({
             weightUnit={weightUnit}
             exercises={shareData.exercises}
             prs={shareData.prs}
-            accentColor={colors.accent}
+            accentColor={colors.accentDark}
           />
         )}
       </View>

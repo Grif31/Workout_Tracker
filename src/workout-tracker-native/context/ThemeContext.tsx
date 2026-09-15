@@ -36,6 +36,7 @@ export type Colors = {
   placeholder: string;
   accent: string;     // primary action / highlight color
   accentText: string; // text on an accent-colored background
+  accentDark: string; // accent for surfaces that stay dark in both themes (share cards)
   save: string;       // alias for accent (backwards compat)
   danger: string;
   warmup: string;     // warm-up set indicator
@@ -75,6 +76,7 @@ function buildColors(mode: 'light' | 'dark', preset: AccentPreset): Colors {
     ...base,
     accent,
     accentText: mode === 'light' ? preset.lightText : preset.text,
+    accentDark: preset.value,
     save:       accent,
   };
 }

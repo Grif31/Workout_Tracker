@@ -38,6 +38,7 @@ export const mockThemeColors = {
   placeholder: '#636366',
   accent: '#30D158',
   accentText: '#000000',
+  accentDark: '#30D158',
   save: '#30D158',
   danger: '#FF453A',
 };

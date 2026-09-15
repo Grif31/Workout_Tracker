@@ -269,7 +269,8 @@ export default function ProfileScreen({ navigation }: Props) {
     `${Math.floor(min)}:${String(Math.round((min % 1) * 60)).padStart(2, '0')}`;
 
   const getPinnedPR = (pin: Pin): PR | undefined => {
-    if (!pin) return undefined;
+    // Pins saved before estimated 1RM was dropped from the picker show as an empty slot.
+    if (!pin || pin.prType === 'estimated_1rm') return undefined;
     const { exerciseId, prType, context } = pin;
     const matches = prs.filter(p => p.exercise_template_id === exerciseId && p.pr_type === prType);
     if (context != null) return matches.find(p => p.weight_context === context) ?? matches[0];
@@ -344,7 +345,7 @@ export default function ProfileScreen({ navigation }: Props) {
                         {pr.exercise_name}
                       </Text>
                       <Text style={[styles.prCardValue, { color: PR_GOLD_TEXT }]}>
-                        {pr.pr_type === 'max_weight' || pr.pr_type === 'estimated_1rm'
+                        {pr.pr_type === 'max_weight'
                           ? `${pr.value} ${unit}`
                           : pr.pr_type === 'max_reps'
                             ? `${pr.value} reps`
@@ -356,7 +357,6 @@ export default function ProfileScreen({ navigation }: Props) {
                       </Text>
                       <Text style={styles.prCardType}>
                         {pr.pr_type === 'max_weight' ? 'Max Weight'
-                          : pr.pr_type === 'estimated_1rm' ? 'Est. 1RM'
                           : pr.pr_type === 'max_reps'
                             ? (pr.weight_context != null ? `@ ${pr.weight_context} ${unit}` : 'Max Reps')
                             : pr.pr_label}
@@ -567,13 +567,14 @@ export default function ProfileScreen({ navigation }: Props) {
                   const opts: { label: string; value: string; prType: PR['pr_type']; context: number | null }[] = [];
                   const seen = new Set<string>();
                   for (const p of exercisePRs) {
+                    // Estimated 1RM is a trend metric, never shown as a PR.
+                    if (p.pr_type === 'estimated_1rm') continue;
                     const key = `${p.pr_type}:${p.weight_context ?? ''}`;
                     if (seen.has(key)) continue;
                     seen.add(key);
                     let label = p.pr_label;
                     let valueStr = '';
                     if (p.pr_type === 'max_weight') { label = 'Max Weight'; valueStr = `${p.value} ${unit}`; }
-                    else if (p.pr_type === 'estimated_1rm') { label = 'Est. 1RM'; valueStr = `${p.value} ${unit}`; }
                     else if (p.pr_type === 'max_reps') { label = 'Max Reps'; valueStr = `${p.value} reps${p.weight_context != null ? ` @ ${p.weight_context} ${unit}` : ''}`; }
                     else if (p.pr_type === 'best_time') { valueStr = fmtTime(p.value); }
                     else if (p.pr_type === 'best_distance') { valueStr = `${toDisplayDistance(p.value, distanceUnit).toFixed(1)} ${distanceUnit}`; }

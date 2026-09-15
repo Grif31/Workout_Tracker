@@ -242,7 +242,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
           durationMin={durationMin}
           elevationM={elevationGainM}
           coords={displayCoords}
-          accentColor={colors.accent}
+          accentColor={colors.accentDark}
         />
       </View>
 

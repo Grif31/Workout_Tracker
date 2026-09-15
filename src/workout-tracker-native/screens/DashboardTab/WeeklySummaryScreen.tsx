@@ -373,7 +373,7 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
             mostImprovedLift={data.most_improved_lift}
             mostImprovedCardio={data.most_improved_cardio}
             streak={streak}
-            accentColor={colors.accent}
+            accentColor={colors.accentDark}
           />
         </View>
       )}

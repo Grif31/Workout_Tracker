@@ -55,7 +55,7 @@ const WorkoutShareCard = forwardRef<View, WorkoutShareCardProps>(
   ({ workoutName, date, totalVolume, totalSets, totalReps, duration, weightUnit, exercises, prs, accentColor }, ref) => {
     const prLabel =
       prs.length === 1
-        ? `New ${prs[0].exercise_name} ${PR_TYPE_LABELS[prs[0].pr_type] ?? 'PR'}!`
+        ? `New ${prs[0].exercise_name} ${PR_TYPE_LABELS[prs[0].pr_type] ?? 'PR'}`
         : `${prs.length} New PRs`;
 
     // All-bodyweight sessions have 0 volume — reps become the brag number

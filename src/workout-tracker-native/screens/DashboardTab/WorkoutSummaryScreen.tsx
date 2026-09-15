@@ -181,7 +181,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           weightUnit={weightUnit}
           exercises={exercises.slice(0, 3).map(e => ({ name: e.name, bestSet: bestSetOf(e) }))}
           prs={filteredPrs}
-          accentColor={colors.accent}
+          accentColor={colors.accentDark}
         />
       </View>
 

@@ -790,7 +790,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
             value={fmtPrValue(shareEvent, unit, distanceUnit)}
             delta={fmtPrDelta(shareEvent, unit, distanceUnit)}
             date={fmtDate(shareEvent.achieved_at)}
-            accentColor={colors.accent}
+            accentColor={colors.accentDark}
           />
         </View>
       )}

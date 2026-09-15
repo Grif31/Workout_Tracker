@@ -78,7 +78,7 @@ jest.mock('./context/ThemeContext', () => ({
     colors: {
       background: '#000', surface: '#1C1C1E', border: '#333',
       textPrimary: '#FFF', textSecondary: '#AAA', placeholder: '#666',
-      accent: '#30D158', accentText: '#000', save: '#30D158', danger: '#FF453A',
+      accent: '#30D158', accentText: '#000', accentDark: '#30D158', save: '#30D158', danger: '#FF453A',
     },
     mode: 'dark',
     accentPreset: { name: 'Green', value: '#30D158', text: '#000' },
