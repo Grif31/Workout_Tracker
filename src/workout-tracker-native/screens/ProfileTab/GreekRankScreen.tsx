@@ -279,7 +279,7 @@ export default function GreekRankScreen({ navigation }: Props) {
               <Text style={styles.progressLabel}>
                 {nextRank
                   ? `${ptsToNext} more point${ptsToNext !== 1 ? 's' : ''} to reach ${nextRank.name}`
-                  : "You've reached the highest rank!"}
+                  : "You've reached the highest rank."}
               </Text>
 
               {components && (

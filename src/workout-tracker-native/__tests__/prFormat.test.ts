@@ -115,7 +115,7 @@ describe('nearPrHint', () => {
   });
 
   it('recognizes beating the PR', () => {
-    expect(nearPrHint('255', 250, 'lbs')).toBe('Beats your 250 lbs PR!');
+    expect(nearPrHint('255', 250, 'lbs')).toBe('Beats your 250 lbs PR');
   });
 });
 

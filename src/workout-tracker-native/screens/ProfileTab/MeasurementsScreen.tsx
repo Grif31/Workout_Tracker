@@ -469,7 +469,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
             onPress={() => setActiveTab(tab)}
           >
             <Text style={[styles.tabLabel, activeTab === tab && { color: colors.accent }]}>
-              {tab === 'bodyweight' ? 'Body Weight' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === 'bodyweight' ? 'Bodyweight' : tab.charAt(0).toUpperCase() + tab.slice(1)}
             </Text>
           </TouchableOpacity>
         ))}

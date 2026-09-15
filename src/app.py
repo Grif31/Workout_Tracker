@@ -486,8 +486,8 @@ def _send_reengagement_pushes(app):
             return
         send_push(
             [d.token for d in devices],
-            title="Miss your gains? 💪",
-            body="You haven't logged a workout in a while. Jump back in!",
+            title="Your next PR is waiting",
+            body="It's been over a week since your last workout. Pick up where you left off.",
         )
         for d in devices:
             d.last_reengagement_at = now

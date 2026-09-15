@@ -186,7 +186,7 @@ export default function CoachProfileModal({ visible, onClose, onSave }: Props) {
           </View>
 
           {/* Session Length */}
-          <Text style={styles.sectionLabel}>Session Length</Text>
+          <Text style={styles.sectionLabel}>Workout Length</Text>
           <View style={styles.chipRow}>
             {[
               { value: 30, label: '30 min' },

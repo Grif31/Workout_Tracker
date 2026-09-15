@@ -178,8 +178,8 @@ function MiniWorkoutBar() {
           style={[styles.miniBtn, { borderWidth: 1, borderColor: colors.border }]}
           onPress={() => {
             Alert.alert(
-              'Discard Workout',
-              'Are you sure you want to discard this workout? All progress will be lost.',
+              'Discard Workout?',
+              'Your logged sets will be lost.',
               [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Discard', style: 'destructive', onPress: clearSession },

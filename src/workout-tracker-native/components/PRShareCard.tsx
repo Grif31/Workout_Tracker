@@ -27,7 +27,7 @@ const PRShareCard = forwardRef<View, PRShareCardProps>(
     <ShareCardFrame ref={ref} accentColor={accentColor}>
       <ShareCardHeader date={date} />
 
-      <ShareCardBanner text={`New ${prLabel} PR!`} style={styles.banner} />
+      <ShareCardBanner text={`New PR: ${prLabel}`} style={styles.banner} />
 
       <Text style={styles.exerciseName} numberOfLines={2}>{exerciseName}</Text>
 

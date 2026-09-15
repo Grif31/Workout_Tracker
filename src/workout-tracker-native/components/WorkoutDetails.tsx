@@ -311,8 +311,8 @@ export default function WorkoutDetailsScreen({
           .filter((id): id is number => id != null);
         if (ids.length === 0) {
           Alert.alert(
-            'Cannot Save Template',
-            'None of the exercises in this workout were selected from the exercise library. To create a template, use exercises from the library when logging.',
+            "Can't Save as Template",
+            "Templates only work with exercises from the library, and this workout doesn't have any.",
           );
           return;
         }

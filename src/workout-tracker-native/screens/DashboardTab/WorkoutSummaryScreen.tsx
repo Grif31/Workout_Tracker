@@ -206,14 +206,14 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           <Text style={s.trophy}>🏆</Text>
           <Text style={s.headline}>
             {isFirstWorkout
-              ? 'Your first workout. Incredible!'
+              ? 'Your first workout. The pursuit starts here.'
               : isBestVolume && isBestReps
-              ? 'Biggest workout yet!'
+              ? 'Your biggest workout yet.'
               : isBestVolume
-              ? 'Highest volume workout yet!'
+              ? 'Your highest-volume workout yet.'
               : isBestReps
-              ? 'Most reps in a workout yet!'
-              : 'Great workout!'}
+              ? 'Your most reps in a workout yet.'
+              : 'Workout complete.'}
           </Text>
           <Text style={s.subline}>"{workoutName}"</Text>
         </Animated.View>
@@ -297,7 +297,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
                     <Text style={s.rankBadgeSub}>
                       {nextRank
                         ? `Keep training to reach ${nextRank.name}`
-                        : "You've reached the highest rank!"}
+                        : "You've reached the highest rank."}
                     </Text>
                   </View>
                 </View>

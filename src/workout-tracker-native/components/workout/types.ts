@@ -10,12 +10,12 @@ export const WORKOUT_BACKUP_KEY = '@workout_open_backup';
 export const TIMER_CHECKPOINT_KEY = '@workout_timer_checkpoint';
 
 export const RPE_LABELS = [
-  { value: 5,  desc: 'Moderate — many reps left' },
+  { value: 5,  desc: 'Moderate: many reps left' },
   { value: 6,  desc: 'Could do 4–5 more reps' },
   { value: 7,  desc: 'Could do 3–4 more reps' },
   { value: 8,  desc: 'Could do 2–3 more reps' },
   { value: 9,  desc: 'Could do 1 more rep' },
-  { value: 10, desc: 'Max effort — no reps left' },
+  { value: 10, desc: 'Max effort: no reps left' },
 ];
 
 export const SET_TYPES = ['N', 'W', 'D', 'F'] as const;

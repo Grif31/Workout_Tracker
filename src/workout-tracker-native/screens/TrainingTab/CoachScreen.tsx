@@ -798,7 +798,7 @@ export default function CoachScreen({ navigation }: Props) {
             </TouchableOpacity>
           </View>
           {templates.length === 0 ? (
-            <Text style={styles.emptyText}>No templates yet</Text>
+            <Text style={styles.emptyText}>No templates yet. Save a workout as a template to reuse it.</Text>
           ) : (
             (showAllTemplates ? templates : templates.slice(0, 5)).map(t => (
               <TouchableOpacity
@@ -1213,7 +1213,7 @@ export default function CoachScreen({ navigation }: Props) {
                     />
                   ) : (
                     <View style={styles.chartEmpty}>
-                      <Text style={styles.emptyText}>No data yet. Log some workouts first</Text>
+                      <Text style={styles.emptyText}>No data yet. Log a few workouts to fill this in.</Text>
                     </View>
                   )}
 

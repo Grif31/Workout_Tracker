@@ -393,7 +393,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               ]}
             >
               <Ionicons name={SCORE_RANK_ICONS[scoreData.overall_rank.label] ?? 'star'} size={18} color={rankColor} />
-              <Text style={[styles.rankUpText, { color: rankColor }]}>Rank Up! {scoreData.overall_rank.display}</Text>
+              <Text style={[styles.rankUpText, { color: rankColor }]}>{`You've reached ${scoreData.overall_rank.display}`}</Text>
               <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={8} style={styles.rankUpShareBtn}>
                 <Ionicons name="share-outline" size={16} color={rankColor} />
               </TouchableOpacity>

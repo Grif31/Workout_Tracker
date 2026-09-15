@@ -36,7 +36,7 @@ const WATCH_OPTS: Location.LocationTaskOptions = {
   pausesUpdatesAutomatically: false,
   showsBackgroundLocationIndicator: true,
   foregroundService: {
-    notificationTitle: 'Aretē — tracking your activity',
+    notificationTitle: 'Aretē · Tracking your activity',
     notificationBody: 'GPS cardio workout in progress',
   },
 };

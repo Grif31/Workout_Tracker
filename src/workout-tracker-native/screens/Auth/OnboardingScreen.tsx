@@ -66,7 +66,7 @@ const STEPS = [
   },
   {
     key: 'session_length',
-    botText: 'How long can you train per session?',
+    botText: 'How long can each workout be?',
     options: [
       { label: '30–45 min', value: '30' },
       { label: '45–60 min', value: '45' },
@@ -86,7 +86,7 @@ const STEPS = [
   },
   {
     key: 'routine',
-    botText: "Got it, I have everything I need.\n\nWant me to build your personalised program right now?",
+    botText: "Got it, I have everything I need.\n\nWant me to build your personalized program right now?",
     options: [
       { label: 'Yes, build my program', value: 'yes' },
       { label: 'Maybe later', value: 'no' },
@@ -94,8 +94,8 @@ const STEPS = [
   },
 ];
 
-const DONE_TEXT_LATER = "No problem! When you're ready, you can generate a personalised program anytime from the Coach tab.\n\nTap Continue to enter the app.";
-const GENERATING_TEXT = "Perfect, building your personalised program now. This takes a few seconds… 🏗️";
+const DONE_TEXT_LATER = "No problem. When you're ready, you can generate a personalized program anytime from the Coach tab.\n\nTap Continue to enter the app.";
+const GENERATING_TEXT = "Perfect, building your personalized program now. This takes a few seconds…";
 const GENERATE_FAILED_TEXT = "I couldn't build your program right now. You can generate one anytime from the Coach tab.\n\nTap Continue to enter the app.";
 
 type GeneratedRoutine = {

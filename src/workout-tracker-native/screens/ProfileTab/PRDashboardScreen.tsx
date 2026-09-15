@@ -728,7 +728,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
               </Text>
               <Text style={styles.emptySubtitle}>
                 {stats && stats.total_prs > 0
-                  ? "You haven't set one of these yet. Keep training!"
+                  ? "You haven't set one of these yet."
                   : 'Log some workouts to start your history.'}
               </Text>
             </View>

@@ -136,7 +136,7 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
           <View style={styles.iconCircle}>
             <Ionicons name="checkmark-circle" size={36} color={AUTH.accent} />
           </View>
-          <Text style={styles.title}>Password Reset!</Text>
+          <Text style={styles.title}>Password Reset</Text>
           <Text style={styles.subtitle}>
             Your password has been updated. You can now sign in with your new password.
           </Text>
@@ -223,7 +223,7 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
                 activeOpacity={0.85}
               >
                 <Text style={styles.primaryBtnText}>
-                  {otpVerified ? 'Verified!' : loading ? 'Verifying…' : 'Verify Code'}
+                  {otpVerified ? 'Verified' : loading ? 'Verifying…' : 'Verify Code'}
                 </Text>
               </TouchableOpacity>
 

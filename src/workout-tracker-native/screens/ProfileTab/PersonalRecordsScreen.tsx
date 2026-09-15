@@ -404,7 +404,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             sections={filteredWeightByMuscle}
             keyExtractor={item => item.id.toString()}
             contentContainerStyle={styles.list}
-            ListEmptyComponent={<Text style={styles.empty}>No max-weight records yet.</Text>}
+            ListEmptyComponent={<Text style={styles.empty}>No max weight PRs yet. Log a strength workout to set your first.</Text>}
             renderSectionHeader={({ section }) => (
               <GoldSectionRule icon="body-outline" label={section.title} style={[styles.sectionHeaderRow, { backgroundColor: colors.background }]} />
             )}
@@ -448,7 +448,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             data={filteredWeightRows}
             keyExtractor={item => item.id.toString()}
             contentContainerStyle={styles.list}
-            ListEmptyComponent={<Text style={styles.empty}>No max-weight records yet.</Text>}
+            ListEmptyComponent={<Text style={styles.empty}>No max weight PRs yet. Log a strength workout to set your first.</Text>}
             renderItem={({ item, index }) => (
               <TouchableOpacity
                 style={[styles.row, { backgroundColor: colors.surface }]}

@@ -157,7 +157,7 @@ export default function EditProfileScreen({ navigation }: Props) {
       <Text style={styles.label}>Bio</Text>
       <TextInput
         style={[styles.input, styles.bioInput]}
-        placeholder="Describe yourself, your fitness goals, or anything you like!"
+        placeholder="Describe yourself, your fitness goals, or anything you like."
         placeholderTextColor={colors.placeholder}
         value={bio}
         onChangeText={setBio}

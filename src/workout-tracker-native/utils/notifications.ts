@@ -50,8 +50,8 @@ export async function scheduleRestTimerAlert(seconds: number): Promise<void> {
   try {
     restTimerNotifId = await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'Rest over. Time to lift! 💪',
-        body: 'Your rest period has ended.',
+        title: 'Rest over',
+        body: 'Time for your next set.',
         sound: true,
         interruptionLevel: 'timeSensitive',
         data: { type: 'rest_timer' },
@@ -118,7 +118,7 @@ export function postLiveWorkoutNotification(opts: {
       await Notifications.scheduleNotificationAsync({
         identifier: LIVE_WORKOUT_NOTIF_ID,
         content: {
-          title: `${opts.workoutName}  ·  ${opts.elapsed}  —  ${opts.setsDone}/${opts.setsTotal} sets`,
+          title: `${opts.workoutName}  ·  ${opts.elapsed}  ·  ${opts.setsDone}/${opts.setsTotal} sets`,
           body: opts.currentExercise ?? '',
           categoryIdentifier: LIVE_WORKOUT_CATEGORY,
           data: { type: 'live_workout' },
@@ -153,8 +153,8 @@ export async function scheduleWorkoutReminder(hour: number, minute: number): Pro
   try {
     const id = await Notifications.scheduleNotificationAsync({
       content: {
-        title: "Time to work out! 💪",
-        body: "Don't forget your workout today.",
+        title: "Time to train",
+        body: "Log today's workout to keep your progress moving.",
         sound: true,
       },
       trigger: {

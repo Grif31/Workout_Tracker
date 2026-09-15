@@ -12,11 +12,11 @@ export type AccentPreset = {
 
 export const ACCENT_PRESETS: AccentPreset[] = [
   { name: 'Green',  value: '#30D158', text: '#000000' },
-  { name: 'Blue',   value: '#007AFF', text: '#FFFFFF' },
-  { name: 'Purple', value: '#BF5AF2', text: '#FFFFFF' },
+  { name: 'Blue',   value: '#007AFF', text: '#000000' },
+  { name: 'Purple', value: '#BF5AF2', text: '#000000' },
   { name: 'Orange', value: '#FF9F0A', text: '#000000' },
-  { name: 'Red',    value: '#FF453A', text: '#FFFFFF' },
-  { name: 'Pink',   value: '#FF375F', text: '#FFFFFF' },
+  { name: 'Red',    value: '#FF453A', text: '#000000' },
+  { name: 'Pink',   value: '#FF375F', text: '#000000' },
   { name: 'Teal',   value: '#5AC8FA', text: '#000000' },
   { name: 'Yellow', value: '#FFD60A', text: '#000000' },
   { name: 'Indigo', value: '#5E5CE6', text: '#FFFFFF' },

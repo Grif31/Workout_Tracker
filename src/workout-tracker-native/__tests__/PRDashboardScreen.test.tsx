@@ -448,6 +448,6 @@ describe('PRDashboardScreen', () => {
     await waitFor(() => expect(getByText('Distance')).toBeTruthy());
     fireEvent.press(getByText('Distance'));
     await waitFor(() => expect(getByText('No PRs of this type yet')).toBeTruthy());
-    expect(getByText(/keep training/i)).toBeTruthy();
+    expect(getByText(/haven't set one of these yet/i)).toBeTruthy();
   });
 });

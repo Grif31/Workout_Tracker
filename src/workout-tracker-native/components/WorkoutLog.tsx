@@ -428,7 +428,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           // This branch only runs while the JS interval is alive, i.e. the app
           // is foregrounded — the scheduled OS notification (crash/background
           // insurance) is suppressed in that case, so show an in-app banner instead.
-          showToast('Rest over. Time to lift! 💪');
+          showToast('Rest over. Time for your next set.');
           return 0;
         }
         return prev - 1;
@@ -1662,8 +1662,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             <TouchableOpacity
               style={styles.discardBtn}
               onPress={() => Alert.alert(
-                'Discard Workout',
-                'Are you sure you want to discard this workout?',
+                'Discard Workout?',
+                'Your logged sets will be lost.',
                 [
                   { text: 'Cancel', style: 'cancel' },
                   { text: 'Discard', style: 'destructive', onPress: () => { clearSession(); AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY); AsyncStorage.removeItem(WORKOUT_BACKUP_KEY); onCancel?.(); } },
@@ -1978,7 +1978,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         >
           <Ionicons name="trophy" size={22} color={PR_GOLD} />
           <View style={styles.prBannerText}>
-            <Text style={styles.prBannerTitle}>Personal Record!</Text>
+            <Text style={styles.prBannerTitle}>New PR</Text>
             <Text style={styles.prBannerExercise} numberOfLines={1}>{prBanner.name}</Text>
             <Text style={styles.prBannerType}>{prBanner.type}</Text>
           </View>

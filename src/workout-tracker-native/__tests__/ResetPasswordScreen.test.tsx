@@ -151,7 +151,7 @@ describe('ResetPasswordScreen', () => {
       fireEvent.changeText(getByPlaceholderText('Confirm new password'), 'newpassword456');
       fireEvent.press(getByText('Reset Password'));
 
-      await waitFor(() => expect(getByText('Password Reset!')).toBeTruthy());
+      await waitFor(() => expect(getByText('Password Reset')).toBeTruthy());
       const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
       expect(url).toContain('/api/reset-password');
       expect(JSON.parse(init.body)).toEqual({
@@ -168,7 +168,7 @@ describe('ResetPasswordScreen', () => {
       fireEvent.changeText(getByPlaceholderText('New password (min 6 chars)'), 'newpassword456');
       fireEvent.changeText(getByPlaceholderText('Confirm new password'), 'newpassword456');
       fireEvent.press(getByText('Reset Password'));
-      await waitFor(() => expect(getByText('Password Reset!')).toBeTruthy());
+      await waitFor(() => expect(getByText('Password Reset')).toBeTruthy());
 
       fireEvent.press(getByText('Back to Log In'));
       expect(nav.navigate).toHaveBeenCalledWith('Login');

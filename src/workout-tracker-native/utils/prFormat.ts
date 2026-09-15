@@ -194,7 +194,7 @@ export function nearPrHint(
   if (!maxWeightPr || maxWeightPr <= 0) return null;
   const w = parseFloat(weightStr ?? '');
   if (!isFinite(w) || w <= 0) return null;
-  if (w > maxWeightPr) return `Beats your ${maxWeightPr} ${unit} PR!`;
+  if (w > maxWeightPr) return `Beats your ${maxWeightPr} ${unit} PR`;
   if (w === maxWeightPr) return `Ties your ${maxWeightPr} ${unit} PR`;
   const diff = maxWeightPr - w;
   if (diff / maxWeightPr > 0.05) return null;

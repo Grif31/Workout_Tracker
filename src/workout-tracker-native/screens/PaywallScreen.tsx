@@ -60,7 +60,7 @@ export default function PaywallScreen({ navigation }: Props) {
     const success = await purchasePackage(pkg);
     setPurchasing(false);
     if (success) {
-      showToast('Welcome to Premium!');
+      showToast('Premium is active.');
       navigation.goBack();
     }
   };
@@ -70,7 +70,7 @@ export default function PaywallScreen({ navigation }: Props) {
     const success = await restorePurchases();
     setRestoring(false);
     if (success) {
-      showToast('Purchases restored!');
+      showToast('Purchases restored.');
       navigation.goBack();
     } else {
       showToast('No purchases found');

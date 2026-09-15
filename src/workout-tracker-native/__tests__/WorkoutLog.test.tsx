@@ -91,7 +91,7 @@ describe('WorkoutLog', () => {
     await waitFor(() => expect(getByText('5 lbs from your 250 lbs PR')).toBeTruthy());
 
     fireEvent.changeText(weightInput, '255');
-    await waitFor(() => expect(getByText('Beats your 250 lbs PR!')).toBeTruthy());
+    await waitFor(() => expect(getByText('Beats your 250 lbs PR')).toBeTruthy());
 
     // Far from the PR — hint disappears
     fireEvent.changeText(weightInput, '200');

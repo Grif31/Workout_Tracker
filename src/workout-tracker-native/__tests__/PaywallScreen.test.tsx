@@ -106,7 +106,7 @@ describe('PaywallScreen', () => {
       });
       const { getByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
       fireEvent.press(getByText('Get Premium'));
-      await waitFor(() => expect(showToast).toHaveBeenCalledWith('Welcome to Premium!'));
+      await waitFor(() => expect(showToast).toHaveBeenCalledWith('Premium is active.'));
       expect(nav.goBack).toHaveBeenCalled();
     });
 
@@ -118,7 +118,7 @@ describe('PaywallScreen', () => {
       const { getByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
       fireEvent.press(getByText('Get Premium'));
       await waitFor(() => expect(purchasePackage).toHaveBeenCalled());
-      expect(showToast).not.toHaveBeenCalledWith('Welcome to Premium!');
+      expect(showToast).not.toHaveBeenCalledWith('Premium is active.');
       expect(nav.goBack).not.toHaveBeenCalled();
     });
   });
@@ -129,7 +129,7 @@ describe('PaywallScreen', () => {
       mockUsePurchase.mockReturnValue({ offerings: null, purchasePackage: jest.fn(), restorePurchases });
       const { getByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
       fireEvent.press(getByText('Restore Purchases'));
-      await waitFor(() => expect(showToast).toHaveBeenCalledWith('Purchases restored!'));
+      await waitFor(() => expect(showToast).toHaveBeenCalledWith('Purchases restored.'));
       expect(nav.goBack).toHaveBeenCalled();
     });
 

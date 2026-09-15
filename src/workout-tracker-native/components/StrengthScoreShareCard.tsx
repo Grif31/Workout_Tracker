@@ -34,7 +34,7 @@ const StrengthScoreShareCard = forwardRef<View, StrengthScoreShareCardProps>(
       <ShareCardFrame ref={ref} accentColor={accentColor}>
         <ShareCardHeader date={date} />
 
-        <Text style={styles.title}>{isRankUp ? 'Rank Up!' : 'My Strength Score'}</Text>
+        <Text style={styles.title}>{isRankUp ? 'New Rank' : 'My Strength Score'}</Text>
 
         {isRankUp && <ShareCardBanner text={`Now: ${rankLabel}`} />}
 
