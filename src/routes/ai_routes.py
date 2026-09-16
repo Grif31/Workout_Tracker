@@ -63,14 +63,111 @@ INSIGHT_EXAMPLES = (
     "exercises or numbers, only the user's data above.\n"
     'Good: {"type":"achievement","title":"Bench Press Max Weight Up 10 lbs","body":"Your Bench Press max '
     'weight rose from 225 to 235 lbs in the last 2 weeks. Keep the same rep scheme one more week before '
-    'adding load.","priority":"medium"}\n'
+    'adding load.","priority":"medium","evidence":{"exercise":"Bench Press","metric":"Max Weight",'
+    '"before":225,"after":235,"window_days":14}}\n'
     'Good: {"type":"suggestion","title":"Overhead Press Has Stalled","body":"No new Overhead Press max weight '
-    'PR in 45 days. Switch to 4 sets of 5 at a heavier load for the next 3 weeks.","priority":"high"}\n'
+    'PR in 45 days. Switch to 4 sets of 5 at a heavier load for the next 3 weeks.","priority":"high",'
+    '"evidence":{"exercise":"Overhead Press","metric":"Max Weight","before":null,"after":null,"window_days":45}}\n'
     'Good: {"type":"frequency","title":"Back Volume Down This Week","body":"You logged 6 back sets this week, '
-    'down from 12 last week. Add 2 sets of rows to your next pull day.","priority":"medium"}\n'
+    'down from 12 last week. Add 2 sets of rows to your next pull day.","priority":"medium",'
+    '"evidence":{"exercise":null,"metric":null,"before":null,"after":null,"window_days":7}}\n'
     'Bad: {"type":"achievement","title":"Great Progress","body":"You are getting stronger, keep it up.",'
-    '"priority":"low"} (no metric, no numbers, no next step)'
+    '"priority":"low","evidence":{"exercise":null,"metric":null,"before":null,"after":null,"window_days":null}} '
+    '(no metric, no numbers, no next step)'
 )
+
+# The API enforces this shape, so the model can't return prose, markdown, or a
+# missing field. "evidence" is what lets the backend check an insight against
+# the data it was given before the user ever sees it.
+INSIGHT_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'insights': {
+            'type': 'array',
+            'items': {
+                'type': 'object',
+                'properties': {
+                    'type': {'type': 'string',
+                             'enum': ['deload', 'rest', 'frequency', 'routine', 'achievement', 'suggestion']},
+                    'title': {'type': 'string'},
+                    'body': {'type': 'string'},
+                    'priority': {'type': 'string', 'enum': ['high', 'medium', 'low']},
+                    'evidence': {
+                        'type': 'object',
+                        'properties': {
+                            'exercise': {'type': ['string', 'null']},
+                            'metric': {'type': ['string', 'null']},
+                            'before': {'type': ['number', 'null']},
+                            'after': {'type': ['number', 'null']},
+                            'window_days': {'type': ['integer', 'null']},
+                        },
+                        'required': ['exercise', 'metric', 'before', 'after', 'window_days'],
+                        'additionalProperties': False,
+                    },
+                },
+                'required': ['type', 'title', 'body', 'priority', 'evidence'],
+                'additionalProperties': False,
+            },
+        },
+    },
+    'required': ['insights'],
+    'additionalProperties': False,
+}
+
+PRIORITY_ORDER = {'high': 0, 'medium': 1, 'low': 2}
+MAX_INSIGHTS = 5
+
+
+def _fact_matches(fact, evidence, tolerance=0.5):
+    for key in ('before', 'after'):
+        claimed = evidence.get(key)
+        if claimed is None:
+            continue
+        actual = fact.get(key)
+        if actual is None or abs(float(claimed) - float(actual)) > tolerance:
+            return False
+    return True
+
+
+def _verify_insights(insights, ctx):
+    """Drops insights citing an exercise or numbers the Coach was never given,
+    then keeps one per insight type, highest priority first."""
+    facts = ctx.get('recent_pr_facts', [])
+    known = {f['exercise'].lower() for f in facts}
+    known |= {r['exercise_name'].lower() for r in ctx.get('stalled_lifts', [])}
+    known |= {row.name.lower() for row in ctx.get('top_prs', [])}
+    known |= {row.name.lower() for row in ctx.get('cardio_prs', [])}
+    # Volume insights legitimately name a muscle group here rather than an
+    # exercise ("Back: 6 sets this week"), so those count as known subjects too.
+    for key in ('muscle_sets_week', 'muscle_sets_last_week', 'muscle_rpe_week'):
+        known |= {muscle.lower() for muscle in (ctx.get(key) or {})}
+    for key in ('most_improved_lift', 'most_improved_cardio'):
+        entry = ctx.get(key)
+        if entry:
+            known.add(entry['exercise_name'].lower())
+
+    kept, seen_types = [], set()
+    for insight in insights:
+        if not insight.get('title') or not insight.get('body'):
+            continue
+        evidence = insight.get('evidence') or {}
+        exercise = (evidence.get('exercise') or '').strip()
+        if exercise:
+            if exercise.lower() not in known:
+                continue
+            exercise_facts = [f for f in facts if f['exercise'].lower() == exercise.lower()]
+            claims_numbers = evidence.get('before') is not None or evidence.get('after') is not None
+            if exercise_facts and claims_numbers and not any(_fact_matches(f, evidence) for f in exercise_facts):
+                continue
+        insight_type = insight.get('type')
+        if insight_type:
+            if insight_type in seen_types:
+                continue
+            seen_types.add(insight_type)
+        kept.append(insight)
+
+    kept.sort(key=lambda i: PRIORITY_ORDER.get(i.get('priority'), 3))
+    return kept[:MAX_INSIGHTS]
 
 
 def _fmt_pr_value(pr_type, value, unit):
@@ -88,7 +185,10 @@ def _fmt_pr_value(pr_type, value, unit):
 def _summarize_recent_prs(rows, unit, now, limit=12):
     """One before → after fact per exercise, PR type, and weight or distance,
     newest first, so the Coach reads the trend instead of every intermediate PR.
-    rows: (PREvent, exercise_name) pairs ordered oldest first."""
+    rows: (PREvent, exercise_name) pairs ordered oldest first.
+
+    Returns dicts carrying both the prompt line ('text') and the underlying
+    numbers, so insights can be checked against the facts they cite."""
     facts = {}
     for event, exercise_name in rows:
         key = (exercise_name, event.pr_type, event.weight_context)
@@ -101,7 +201,7 @@ def _summarize_recent_prs(rows, unit, now, limit=12):
                 'after': event.value, 'last_at': event.achieved_at,
             }
 
-    lines = []
+    out = []
     for fact in sorted(facts.values(), key=lambda f: f['last_at'], reverse=True)[:limit]:
         event = fact['event']
         label = _pr_label(event)
@@ -111,11 +211,20 @@ def _summarize_recent_prs(rows, unit, now, limit=12):
         when = 'today' if days == 0 else f"{days} day{'s' if days != 1 else ''} ago"
         after = _fmt_pr_value(event.pr_type, fact['after'], unit)
         if fact['before'] is None:
-            lines.append(f"{fact['name']}, {label}: {after} (first recorded, {when})")
+            text = f"{fact['name']}, {label}: {after} (first recorded, {when})"
         else:
             before = _fmt_pr_value(event.pr_type, fact['before'], unit)
-            lines.append(f"{fact['name']}, {label}: {before} → {after} ({when})")
-    return lines
+            text = f"{fact['name']}, {label}: {before} → {after} ({when})"
+        out.append({
+            'exercise': fact['name'],
+            'metric': label,
+            'pr_type': event.pr_type,
+            'before': fact['before'],
+            'after': fact['after'],
+            'days_ago': days,
+            'text': text,
+        })
+    return out
 
 ai_bp = Blueprint('ai_bp', __name__)
 
@@ -878,7 +987,7 @@ def _build_insights_prompt(ctx: dict) -> str:
     recent_pr_facts = ctx.get('recent_pr_facts', [])
     if recent_pr_facts:
         lines.append(f"\nPRs in the last {COACH_PR_WINDOW_DAYS} days (before → after, newest first):")
-        lines += [f"  {fact}" for fact in recent_pr_facts]
+        lines += [f"  {fact['text']}" for fact in recent_pr_facts]
 
     stalled_lifts = ctx.get('stalled_lifts', [])
     if stalled_lifts:
@@ -927,7 +1036,11 @@ def _build_insights_prompt(ctx: dict) -> str:
         "",
         INSIGHT_EXAMPLES,
         "",
-        'Respond ONLY with valid JSON (no markdown):\n{"insights":[{"type":"<type>","title":"<6 words max>","body":"<1-2 sentences with specific data>","priority":"high|medium|low"}]}',
+        'Return 3-5 insights. Title: 6 words max. Body: 1-2 sentences with specific data.',
+        'Fill "evidence" whenever an insight cites one lift\'s numbers: "exercise" exactly as written above, '
+        '"metric" (Max Weight, Estimated 1RM, 5K Best Time, and so on), "before" and "after" as plain numbers, '
+        'and "window_days". Leave those fields null for insights that are not about a single lift\'s numbers. '
+        'Insights citing an exercise or numbers that do not appear above are discarded.',
     ]
     return '\n'.join(lines)
 
@@ -1015,6 +1128,7 @@ def get_ai_insights():
             model='claude-haiku-4-5-20251001',
             max_tokens=2048,
             system=COACH_VOICE,
+            output_config={'format': {'type': 'json_schema', 'schema': INSIGHT_SCHEMA}},
             messages=[{'role': 'user', 'content': prompt}],
         )
         result = _parse_ai_json(msg.content[0].text)
@@ -1022,7 +1136,7 @@ def get_ai_insights():
             {**i, 'title': _brand_copy(i.get('title'), heading=True), 'body': _brand_copy(i.get('body'))}
             for i in result.get('insights', [])
         ]
-        return jsonify({'insights': insights, 'generated_at': datetime.now().isoformat()}), 200
+        return jsonify({'insights': _verify_insights(insights, ctx), 'generated_at': datetime.now().isoformat()}), 200
 
     except ImportError:
         return jsonify({'message': 'anthropic package not installed'}), 503

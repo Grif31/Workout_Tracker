@@ -544,18 +544,89 @@ class TestInsightFacts:
         ]
         rows.sort(key=lambda r: r[0].achieved_at)
 
-        assert _summarize_recent_prs(rows, 'lbs', now) == [
+        facts = _summarize_recent_prs(rows, 'lbs', now)
+        assert [f['text'] for f in facts] == [
             'Run, 5K Best Time: 26.4 min → 25.8 min (today)',
             'Squat, Max Reps at 185 lbs: 8 reps → 10 reps (1 day ago)',
             'Deadlift, Max Weight: 315 lbs (first recorded, 2 days ago)',
             'Bench Press, Max Weight: 225 lbs → 235 lbs (3 days ago)',
         ]
+        bench = next(f for f in facts if f['exercise'] == 'Bench Press')
+        assert (bench['pr_type'], bench['before'], bench['after']) == ('max_weight', 225, 235)
+
+    def test_insights_request_uses_the_insight_schema(self, client, auth_token):
+        from routes.ai_routes import INSIGHT_SCHEMA
+        mock_ant = _make_anthropic_mock(INSIGHTS_JSON)
+        with patch.dict(sys.modules, {'anthropic': mock_ant}):
+            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+                client.post('/api/ai/insights', json={}, headers=auth_headers(auth_token))
+        call_kwargs = mock_ant.Anthropic.return_value.messages.create.call_args[1]
+        assert call_kwargs['output_config'] == {'format': {'type': 'json_schema', 'schema': INSIGHT_SCHEMA}}
+
+    def test_verify_insights_drops_unknown_exercises_and_wrong_numbers(self):
+        from routes.ai_routes import _verify_insights
+        ctx = {
+            'recent_pr_facts': [{
+                'exercise': 'Bench Press', 'metric': 'Max Weight', 'pr_type': 'max_weight',
+                'before': 225, 'after': 235, 'days_ago': 3, 'text': '',
+            }],
+            'stalled_lifts': [{'exercise_name': 'Overhead Press', 'days_since_last_pr': 45, 'stalest_category': 'weight'}],
+        }
+
+        def insight(title, insight_type, exercise=None, before=None, after=None):
+            return {
+                'type': insight_type, 'title': title, 'body': 'body', 'priority': 'medium',
+                'evidence': {'exercise': exercise, 'metric': 'Max Weight', 'before': before,
+                             'after': after, 'window_days': 28},
+            }
+
+        kept = _verify_insights([
+            insight('real pr', 'achievement', 'Bench Press', 225, 235),
+            insight('invented lift', 'suggestion', 'Zercher Squat', 100, 150),
+            insight('wrong numbers', 'rest', 'Bench Press', 315, 405),
+            insight('stalled lift', 'routine', 'Overhead Press'),
+        ], ctx)
+        assert [i['title'] for i in kept] == ['real pr', 'stalled lift']
+
+    def test_verify_insights_keeps_muscle_group_subjects(self):
+        """Volume insights name a muscle group, not an exercise — the live model
+        returns evidence.exercise = "Back" for those."""
+        from routes.ai_routes import _verify_insights
+        ctx = {'muscle_sets_week': {'Back': 6}, 'muscle_sets_last_week': {'Back': 12}}
+
+        def insight(title, subject):
+            return {
+                'type': 'frequency', 'title': title, 'body': 'body', 'priority': 'medium',
+                'evidence': {'exercise': subject, 'metric': 'Working Sets', 'before': 12,
+                             'after': 6, 'window_days': 7},
+            }
+
+        assert [i['title'] for i in _verify_insights([insight('back volume', 'Back')], ctx)] == ['back volume']
+        assert _verify_insights([insight('invented muscle', 'Gastrocnemius')], ctx) == []
+
+    def test_verify_insights_dedupes_types_sorts_by_priority_and_caps_at_five(self):
+        from routes.ai_routes import _verify_insights
+
+        def insight(title, insight_type, priority='medium'):
+            return {'type': insight_type, 'title': title, 'body': 'body', 'priority': priority, 'evidence': {}}
+
+        kept = _verify_insights([
+            insight('low one', 'rest', 'low'),
+            insight('first frequency', 'frequency'),
+            insight('second frequency', 'frequency'),
+            insight('high one', 'deload', 'high'),
+        ], {})
+        assert [i['title'] for i in kept] == ['high one', 'first frequency', 'low one']
+
+        six = [insight(f'n{i}', t) for i, t in enumerate(
+            ['deload', 'rest', 'frequency', 'routine', 'achievement', 'suggestion'])]
+        assert len(_verify_insights(six, {})) == 5
 
     def test_insights_prompt_includes_pr_facts_stalled_lifts_and_examples(self):
         from routes.ai_routes import _build_insights_prompt
         prompt = _build_insights_prompt({
             'weight_unit': 'lbs',
-            'recent_pr_facts': ['Bench Press, Max Weight: 225 lbs → 235 lbs (3 days ago)'],
+            'recent_pr_facts': [{'text': 'Bench Press, Max Weight: 225 lbs → 235 lbs (3 days ago)'}],
             'stalled_lifts': [{'exercise_name': 'Overhead Press', 'days_since_last_pr': 45, 'stalest_category': 'weight'}],
         })
         assert '  Bench Press, Max Weight: 225 lbs → 235 lbs (3 days ago)' in prompt
