@@ -115,6 +115,22 @@ class TestUpdateUserInfo:
         assert data['name'] == 'Griffin'
         assert data['bio'] == 'Athlete'
 
+    def test_partial_update_does_not_clear_gender(self, client, auth_token):
+        # Settings' unit toggle PATCHes weight_unit alone. gender used to carry a
+        # load_default, so marshmallow injected it as None and the route wiped it,
+        # locking the user out of the Strength and Endurance scores.
+        h = auth_headers(auth_token)
+        assert client.patch('/api/me', json={'gender': 'female'}, headers=h).status_code == 200
+        client.patch('/api/me', json={'weight_unit': 'kg'}, headers=h)
+        assert client.get('/api/me', headers=h).get_json()['gender'] == 'female'
+
+    def test_explicit_null_still_clears_gender(self, client, auth_token):
+        h = auth_headers(auth_token)
+        client.patch('/api/me', json={'gender': 'male'}, headers=h)
+        res = client.patch('/api/me', json={'gender': None}, headers=h)
+        assert res.status_code == 200
+        assert res.get_json()['gender'] is None
+
     def test_requires_auth(self, client):
         res = client.patch('/api/me', json={'name': 'Hacker'})
         assert res.status_code == 401

@@ -45,7 +45,10 @@ class UpdateProfileSchema(_Base):
     bodyweight      = fields.Float()
     height          = fields.Float()
     weight_unit     = fields.Str(validate=validate.OneOf(['kg', 'lbs']))
-    gender          = fields.Str(validate=validate.OneOf(['male', 'female']), load_default=None, allow_none=True)
+    # gender had a load_default and so was injected as None into every partial
+    # PATCH, wiping it whenever Settings sent only weight_unit. Sending an
+    # explicit null still clears it.
+    gender          = fields.Str(validate=validate.OneOf(['male', 'female']), allow_none=True)
     birth_date      = fields.Date(allow_none=True)
 
 class DeviceTokenSchema(_Base):
