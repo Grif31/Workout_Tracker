@@ -502,11 +502,15 @@ class StrengthScoreSnapshot(db.Model):
     id         = db.Column(db.Integer, primary_key=True)
     user_id    = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
     score      = db.Column(db.Float, nullable=False)   # overall percentile 0–100
+    # 'strength' | 'endurance': both ladders share this table, so every read
+    # filters by type or one chart shows the other's points.
+    score_type = db.Column(db.String(16), nullable=False, server_default='strength')
     created_at = db.Column(db.DateTime, default=datetime.now)
 
     def to_dict(self):
         return {
             'id': self.id,
             'score': self.score,
+            'score_type': self.score_type,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }

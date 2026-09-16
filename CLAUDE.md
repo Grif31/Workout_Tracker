@@ -74,6 +74,7 @@ src/
 │   │   │   ├── CoachScreen.tsx           # tab home: insights + training overview (character removed)
 │   │   │   ├── CoachCharacter.tsx        # UNUSED — SVG character, no longer rendered anywhere
 │   │   │   ├── StrengthScoreScreen.tsx   # percentile ranks — uses SCORE_RANK_COLORS, NOT Greek colors
+│   │   │   ├── EnduranceScoreScreen.tsx  # running pace percentiles — same tiers/colors as Strength Score
 │   │   │   └── CoachProfileModal.tsx     # coach personalization (goal/equipment/schedule/injuries)
 │   │   ├── ProfileTab/           # profile, settings, bodyweight, measurements
 │   │   │   ├── PRDashboardScreen.tsx     # PR dashboard — recent PRs, streaks, stalled lifts, pinned progression
@@ -118,7 +119,7 @@ src/
 │   ├── workout_routes.py         # CRUD workouts + sets
 │   ├── exercise_routes.py        # exercise library
 │   ├── stats_routes.py           # exercise/profile/dashboard/progress stats, muscle volume, recent exercises
-│   ├── strength_score_routes.py  # strength score, percentile ranks, score history
+│   ├── strength_score_routes.py  # strength score, endurance score, percentile ranks, score history
 │   ├── weekly_summary_routes.py  # weekly summary + weekly summary history
 │   ├── personal_record_routes.py # PR lookup, PR Dashboard aggregate (feed/stats/stalled), per-exercise history
 │   ├── user_routes.py            # profile, device token, bodyweight
@@ -137,6 +138,7 @@ src/
 ├── utils/
 │   ├── push_service.py           # Expo push HTTP helper (batches of 100)
 │   ├── strength_standards.py     # percentile standards, ranks, Greek score
+│   ├── endurance_standards.py    # running pace standards, cardio milestones, endurance score
 │   └── validation.py             # validate_body decorator
 └── tests/                        # pytest suite
 ```
@@ -232,6 +234,7 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 | `pr_dashboard_pins_${uid}` | — | Exercises (optionally a specific PR type + context) pinned to PR Dashboard's Pinned Progression section — JSON `{id, name, prType?, weightContext?}[]`, max 6 slots total; an exercise can have more than one pin for different PR types (keyed by exercise+type+context, not exercise id alone). Toggled from PRProgressionScreen. Legacy pins with no `prType` loosely match any type on that exercise |
 | `coach_profile_${uid}` | — | Coach personalization JSON (goal/equipment/schedule/injuries) |
 | `strength_score_last_tier_${uid}` | — | Last celebrated overall Strength Score tier index (`STRENGTH_TIERS` ordinal), used to detect rank-up moments across app opens |
+| `endurance_score_last_tier_${uid}` | — | Same thing for the Endurance Score — its own slot, so ranking up as a runner and as a lifter are separate moments |
 | `weekly_summary_last_shown_${uid}` | — | Monday date-string of the last week the Weekly Summary auto-popup was checked/shown for, so it only appears once per week |
 | `exercise_list_cache_${uid}` | — | Exercise list cache, 24h TTL (`utils/exerciseCache.ts`; falls back to un-suffixed key when no userId passed) |
 | `offline_workout_queue_${uid}` | — | Offline workout queue (`utils/offlineQueue.ts`) — deliberately NOT cleared on logout; each user's queue waits for them and is only flushed while they are logged in |
@@ -282,6 +285,7 @@ return jsonify({ 'message': 'error reason' }), 400   # client error
 - **Custom exercises:** `ExerciseTemplate.user_id` — NULL = global library exercise, set = that user's private custom exercise
 - **RPE:** 1–10 scale, optional per set, only shown when user enables it in workout settings
 - **User gender:** `user.gender` is `'male'` | `'female'` | `None` — used for strength score percentile calculations
+- **Scores:** Strength Score (lift percentiles vs bodyweight) and Endurance Score (running pace percentiles, best-within-tier: core 5K+ 70% / speed 400m-1mi 30%) share the `STRENGTH_TIERS` percentile tiers and both write to `strength_score_snapshots`, separated by `score_type` (`'strength'` | `'endurance'`) — every snapshot read must filter on it. The Greek Rank's 45% performance slot takes `max(strength_overall, endurance_overall)`, so running and lifting never dilute each other
 
 ---
 

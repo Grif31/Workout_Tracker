@@ -923,13 +923,13 @@ Check off items as you complete them.
 - [x] **Backend tests**: 22 unit tests (`tests/test_endurance_standards.py` — table integrity incl. monotonicity both axes + gender gap, interpolation/clamping, age factor, tier aggregation) + 4 route tests (`TestEnduranceLeg` in `test_stats_routes.py` — runner-without-bodyweight end-to-end, max() blend, strength-only unaffected, gender still gates)
 - [x] Confirmed `test_unit_conversion_registry.py` still passes (no new weight columns)
 
-### Phase 2 — EnduranceScoreScreen (parity with Strength Score)
+### Phase 2 — EnduranceScoreScreen (parity with Strength Score) ✅ DONE
 
-- [ ] **`GET /api/stats/endurance-score`** — full payload: hero score + rank (reuse `STRENGTH_TIERS` percentile tiers — tier system is discipline-agnostic), tier breakdown, per-distance list (pace, percentile, rank badge, thresholds = pace needed at each tier boundary), history
-- [ ] **Snapshot history split**: add `score_type` column to `StrengthScoreSnapshot` (`server_default='strength'`) + migration; filter **all three** existing reads by `score_type='strength'` (`strength_score()`'s history query, its 24h-dedupe check, `/api/stats/strength-score/history`) or endurance snapshots pollute the strength chart
-- [ ] **`screens/TrainingTab/EnduranceScoreScreen.tsx`** — mirrors `StrengthScoreScreen` structure (hero ring, distance rows instead of lift rows, score-over-time chart via `computeChartYAxisRange`, share card via shared `components/share/ShareCardParts.tsx` chrome, rank-up celebration + `AsyncStorage` last-tier key pattern)
-  - [ ] Pace displayed in min/mi or min/km per existing `gps_distance_unit_${uid}` pref (stored values always min/km)
-- [ ] **Navigation**: register in `TrainingStack` + `navigation/types.ts`; entry tile on `CoachScreen` next to the Strength Score tile; add `/api/stats/endurance-score` to `PreloadScreen`'s preload list
+- [x] **`GET /api/stats/endurance-score`** — full payload: hero score + rank (reuse `STRENGTH_TIERS` percentile tiers — tier system is discipline-agnostic), tier breakdown, per-distance list (pace, percentile, rank badge, thresholds = pace needed at each tier boundary), history
+- [x] **Snapshot history split**: add `score_type` column to `StrengthScoreSnapshot` (`server_default='strength'`) + migration; filter **all three** existing reads by `score_type='strength'` (`strength_score()`'s history query, its 24h-dedupe check, `/api/stats/strength-score/history`) or endurance snapshots pollute the strength chart
+- [x] **`screens/TrainingTab/EnduranceScoreScreen.tsx`** — mirrors `StrengthScoreScreen` structure (hero ring, distance rows instead of lift rows, score-over-time chart via `computeChartYAxisRange`, share card via shared `components/share/ShareCardParts.tsx` chrome, rank-up celebration + `AsyncStorage` last-tier key pattern)
+  - [x] Pace displayed in min/mi or min/km per existing `gps_distance_unit_${uid}` pref (stored values always min/km)
+- [x] **Navigation**: register in `TrainingStack` + `navigation/types.ts`; entry tile on `CoachScreen` next to the Strength Score tile; add `/api/stats/endurance-score` to `PreloadScreen`'s preload list
 
 ### Phase 3 — Polish
 

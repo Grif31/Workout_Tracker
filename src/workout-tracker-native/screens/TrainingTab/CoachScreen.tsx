@@ -226,6 +226,8 @@ export default function CoachScreen({ navigation }: Props) {
   const [thisWeekCount, setThisWeekCount] = useState(0);
   const [strengthPercentile, setStrengthPercentile] = useState<number | null>(null);
   const [strengthRankLabel, setStrengthRankLabel] = useState<string | null>(null);
+  const [endurancePercentile, setEndurancePercentile] = useState<number | null>(null);
+  const [enduranceRankLabel, setEnduranceRankLabel] = useState<string | null>(null);
   const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeData | null>(null);
   const [weeklySummaryPreview, setWeeklySummaryPreview] = useState<WeeklySummaryPreview | null>(null);
   const [rangePickerVisible, setRangePickerVisible] = useState(false);
@@ -364,6 +366,18 @@ export default function CoachScreen({ navigation }: Props) {
     } catch { }
   };
 
+  const fetchEnduranceScore = async () => {
+    try {
+      const res = await apiFetch('/api/stats/endurance-score');
+      if (res.ok) {
+        const data = await res.json();
+        setEndurancePercentile(data.overall ?? null);
+        setEnduranceRankLabel(data.overall_rank?.label ?? null);
+        appCache.set('endurance_score', data);
+      }
+    } catch { }
+  };
+
   const fetchThisWeekCount = async () => {
     try {
       const res = await apiFetch('/api/stats/progress?range=30d');
@@ -408,6 +422,7 @@ export default function CoachScreen({ navigation }: Props) {
     fetchRoutines();
     fetchActiveRoutine();
     fetchStrengthScore();
+    fetchEnduranceScore();
     fetchMuscleGroupData();
     fetchThisWeekCount();
     fetchWeeklySummaryPreview();
@@ -1105,6 +1120,9 @@ export default function CoachScreen({ navigation }: Props) {
             const scoreRingColor = strengthRankLabel
               ? (SCORE_RANK_COLORS[strengthRankLabel] ?? colors.accent)
               : colors.border;
+            const enduranceColor = enduranceRankLabel
+              ? (SCORE_RANK_COLORS[enduranceRankLabel] ?? colors.accent)
+              : colors.textSecondary;
 
             return (
               <>
@@ -1153,6 +1171,32 @@ export default function CoachScreen({ navigation }: Props) {
                     </Text>
                   </TouchableOpacity>
                 </View>
+
+                {/* Endurance Score entry point - the running counterpart to
+                    the Strength circle above, so cardio users have a door in */}
+                <TouchableOpacity
+                  style={styles.weeklySummaryCard}
+                  onPress={() => isPremium
+                    ? navigation.navigate('EnduranceScore')
+                    : (navigation as any).navigate('Paywall', { source: 'endurance_score' })
+                  }
+                >
+                  <Ionicons name="walk-outline" size={20} color={enduranceColor} />
+                  <View style={styles.weeklySummaryTextWrap}>
+                    <Text style={styles.weeklySummaryText}>Endurance Score</Text>
+                    <Text style={styles.weeklySummarySub} numberOfLines={1}>
+                      {enduranceRankLabel && endurancePercentile != null
+                        ? `${enduranceRankLabel} · faster than ${Math.round(endurancePercentile)}% of runners`
+                        : 'Log a run to see how your pace ranks'}
+                    </Text>
+                  </View>
+                  {endurancePercentile != null && (
+                    <Text style={[styles.enduranceScoreNum, { color: enduranceColor }]}>
+                      {Math.round(endurancePercentile)}
+                    </Text>
+                  )}
+                  <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
 
                 {/* Weekly Summary entry point */}
                 <TouchableOpacity
@@ -1359,6 +1403,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   goalCirclesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: spacing.sm },
   goalCircle: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   goalSideSub: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
+  enduranceScoreNum: { fontSize: typography.fontSize.lg, fontWeight: '800' },
   weeklySummaryCard: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     backgroundColor: colors.surface, borderRadius: spacing.sm, borderWidth: 1, borderColor: colors.border,

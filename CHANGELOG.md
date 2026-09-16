@@ -2,6 +2,13 @@
 
 ## 1.1.7 (unreleased)
 
+### New: Endurance Score
+- Runners now get an Endurance Score, the running counterpart to the Strength Score. Your best pace at each distance is ranked against pace standards for your gender, with the same tiers and rank colors as the Strength Score.
+- Every run also scores the shorter distances inside it, so a 5K gives you a mile time too. Endurance distances (5K and up) count for 70 percent of the score and speed distances (400m to 1 mile) for 30 percent, and whichever tier you have no times for drops out.
+- Your Greek Rank now uses whichever is higher, your Endurance Score or your Strength Score, so running and lifting never dilute each other.
+- Paces show in min/mi or min/km to match your GPS distance setting, and each distance shows the pace the next rank asks for.
+- The score tracks over time on its own chart, and it can be shared the same way as the Strength Score.
+
 ### Improved: Swipe to Delete
 - Swiping a set to delete it now shows a trash icon that grows as you reach the point where letting go will delete, and the delete button sits flush against the set.
 
@@ -18,6 +25,9 @@
 - The summary now shows total reps, and volume as an exact figure instead of a rounded shorthand. Volume and duration sit on their own row above exercises, sets and reps.
 
 ### Bug Fixes
+- Changing your weight unit in Settings no longer clears the gender on your profile. That was quietly hiding your Strength Score until you re-saved your profile.
+- Paces that round up to a full minute now read correctly. A 4:59.7 pace showed as "4:60" on run details, the GPS tracker, exercise stats and share cards.
+- The age-adjusted badge no longer appears when the credit is too small to show, where it read "+0%".
 - Tapping a day in the Dashboard calendar now shows the same workout cards as Recent Workouts, with PR counts, exercise and rep counts, and the muscles worked.
 - Workout volume now converts to kilograms when that is your unit, instead of showing the pound figure with a kg label.
 

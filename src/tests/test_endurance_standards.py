@@ -8,7 +8,7 @@ import pytest
 from utils.endurance_standards import (
     PACE_STANDARDS, CARDIO_DISTANCE_MILESTONES,
     CORE_DISTANCES, SPEED_DISTANCES,
-    compute_pace_percentile, compute_endurance_overall,
+    compute_pace_percentile, compute_pace_at_percentile, compute_endurance_overall,
     endurance_age_factor, _ENDURANCE_AGE_ANCHORS,
 )
 
@@ -86,6 +86,31 @@ class TestComputePacePercentile:
         # Holding 5:00/km for a half marathon is a stronger performance than
         # holding it for 1K — the standards must reflect that
         assert compute_pace_percentile(21.0975, 'male', 5.0) > compute_pace_percentile(1.0, 'male', 5.0)
+
+
+class TestComputePaceAtPercentile:
+
+    def test_returns_the_breakpoint_pace_at_a_breakpoint(self):
+        # Male 5K 90th percentile is exactly 4.10 min/km
+        assert compute_pace_at_percentile(5.0, 'male', 90) == pytest.approx(4.10)
+
+    def test_interpolates_between_breakpoints(self):
+        # Male 5K: 50th = 5.6, 75th = 4.8; halfway is the 62.5th
+        assert compute_pace_at_percentile(5.0, 'male', 62.5) == pytest.approx(5.2)
+
+    def test_clamps_outside_the_table(self):
+        assert compute_pace_at_percentile(5.0, 'male', 1) == pytest.approx(8.0)    # 10th
+        assert compute_pace_at_percentile(5.0, 'male', 100) == pytest.approx(3.4)  # 99th
+
+    def test_unknown_distance_or_gender_returns_none(self):
+        assert compute_pace_at_percentile(3.0, 'male', 50) is None
+        assert compute_pace_at_percentile(5.0, 'other', 50) is None
+
+    def test_round_trips_with_compute_pace_percentile(self):
+        # The inverse of the lookup should land back on the same percentile
+        for pct in (25, 50, 75, 90):
+            pace = compute_pace_at_percentile(10.0, 'female', pct)
+            assert compute_pace_percentile(10.0, 'female', pace) == pytest.approx(pct, abs=0.01)
 
 
 class TestEnduranceAgeFactor:

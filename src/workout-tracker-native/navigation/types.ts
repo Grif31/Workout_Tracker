@@ -94,6 +94,7 @@ export type TrainingStackParamsList = {
     WorkoutSummary: WorkoutSummaryParams;
     ExerciseDetail: ExerciseDetailParams;
     StrengthScore: undefined;
+    EnduranceScore: undefined;
     WeeklySummary: WeeklySummaryParams;
     AIWorkoutPreview: {
         generateType: 'routine' | 'template';

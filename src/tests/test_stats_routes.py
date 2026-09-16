@@ -1378,6 +1378,105 @@ class TestEnduranceLeg:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/stats/endurance-score - the running counterpart to strength-score.
+# Shares _endurance_data with it, and keeps its own snapshot history in
+# strength_score_snapshots, separated by score_type.
+# ---------------------------------------------------------------------------
+
+class TestEnduranceScoreEndpoint:
+
+    def _seed_running_template(self):
+        from models import ExerciseTemplate
+        tmpl = ExerciseTemplate(name='Running', exercise_type='cardio', standards_key='Running')
+        db.session.add(tmpl)
+        db.session.commit()
+        return tmpl.id
+
+    def _log_run(self, client, h, tmpl_id, distance_km, duration_min):
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Run',
+            'exercises': [{
+                'name': 'Running', 'exercise_template_id': tmpl_id, 'exercise_type': 'cardio',
+                'sets': [{'cardio_duration': duration_min, 'distance': distance_km, 'distance_unit': 'km'}],
+            }],
+        }, headers=h)
+        assert res.status_code == 201
+
+    def _runner(self, client, token):
+        h = auth_headers(token)
+        assert client.patch('/api/me', json={'gender': 'male'}, headers=h).status_code == 200
+        self._log_run(client, h, self._seed_running_template(), distance_km=5, duration_min=25)
+        return h
+
+    def test_requires_gender(self, client, auth_token):
+        h = auth_headers(auth_token)
+        self._log_run(client, h, self._seed_running_template(), distance_km=5, duration_min=25)
+        res = client.get('/api/stats/endurance-score', headers=h)
+        assert res.status_code == 422
+        assert res.get_json()['missing'] == ['gender']
+
+    def test_scores_a_runner_by_distance(self, client, auth_token):
+        h = self._runner(client, auth_token)
+        res = client.get('/api/stats/endurance-score', headers=h)
+        assert res.status_code == 200
+        data = res.get_json()
+
+        # 5:00/km male: 5K = 68.75 (core best), 1 Mile = 64.29 (speed best)
+        assert data['overall'] == pytest.approx(67.4, abs=0.1)
+        assert data['overall_rank']['label'] == 'Advanced'
+        assert data['tiers']['core']['best'] == pytest.approx(68.75, abs=0.05)
+        assert data['tiers']['speed']['best'] == pytest.approx(64.3, abs=0.1)
+        assert data['tiers']['core']['weight'] == 0.7
+
+        # A 5K run extrapolates every milestone at or below 5K
+        labels = [d['label'] for d in data['distances']]
+        assert labels == ['400m', '800m', '1K', '1 Mile', '5K']
+        assert data['distances_tracked'] == 5
+
+        five_k = next(d for d in data['distances'] if d['label'] == '5K')
+        assert five_k['tier'] == 'core'
+        assert five_k['pace_min_per_km'] == pytest.approx(5.0, abs=0.01)
+        # Thresholds say what each rank boundary asks for at this distance
+        legend = next(t for t in five_k['thresholds'] if t['rank'] == 'Legend')
+        assert legend['pace_min_per_km'] == pytest.approx(3.8, abs=0.01)
+
+    def test_no_running_data_is_not_an_error(self, client, auth_token):
+        h = auth_headers(auth_token)
+        assert client.patch('/api/me', json={'gender': 'male'}, headers=h).status_code == 200
+        res = client.get('/api/stats/endurance-score', headers=h)
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data['overall'] is None
+        assert data['overall_rank'] is None
+        assert data['distances'] == []
+        assert data['tiers']['core']['best'] is None
+
+    def test_a_sub_one_percent_age_credit_is_not_flagged_as_adjusted(self, client, auth_token):
+        # The badge renders the credit as a whole percent, so a factor that
+        # rounds to +0% must not claim the score was age-adjusted.
+        from datetime import date
+        h = self._runner(client, auth_token)
+        age_27 = date.today().replace(year=date.today().year - 27).isoformat()
+        assert client.patch('/api/me', json={'birth_date': age_27}, headers=h).status_code == 200
+
+        data = client.get('/api/stats/endurance-score', headers=h).get_json()
+        assert data['age'] == 27
+        assert 1.0 < data['age_factor'] < 1.005
+        assert data['age_adjusted'] is False
+
+    def test_history_is_separate_from_the_strength_chart(self, client, auth_token):
+        # Both scores snapshot into strength_score_snapshots. Without the
+        # score_type split, endurance points would plot on the strength chart.
+        h = self._runner(client, auth_token)
+        endurance = client.get('/api/stats/endurance-score', headers=h).get_json()
+        assert len(endurance['history']) == 1
+
+        strength = client.get('/api/stats/strength-score', headers=h).get_json()
+        assert strength['history'] == []
+        assert client.get('/api/stats/strength-score/history', headers=h).get_json()['history'] == []
+
+
+# ---------------------------------------------------------------------------
 # GET /api/stats/strength-score — additive response fields (age_factor,
 # bodyweight_updated_at, coverage). Purely additive — must not change any of
 # the existing fields asserted above.

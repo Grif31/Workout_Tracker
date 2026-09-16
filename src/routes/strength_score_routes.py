@@ -78,6 +78,10 @@ def _exercise_percentile_data(user_id, standards_key, template_ids, gender, unit
     }
 
 
+# Both screens render the credit as a whole percent ("Age-adjusted +3%"), so a
+# factor under this floor would show as "+0%". Don't claim an adjustment then.
+_MIN_AGE_CREDIT = 1.005
+
 _TIER_BOUNDARIES = [
     (10,  'Beginner'),
     (30,  'Intermediate'),
@@ -98,6 +102,53 @@ def _compute_thresholds(standards_key, gender, bw_lbs, unit_to_lbs):
         if w is not None:
             thresholds.append({'percentile': boundary_pct, 'rank': rank_name, 'weight': round(w / unit_to_lbs, 1)})
     return thresholds
+
+
+def _endurance_data(user_id, gender, user_age):
+    """Running pace percentiles for one user: the best pace at each milestone
+    distance, that distance's percentile, and the tier-weighted overall.
+
+    Shared by strength_score(), which blends it into the Greek rank, and the
+    endurance-score endpoint. Needs gender (the pace tables are gendered) but
+    not bodyweight, which pace does not depend on.
+    """
+    from utils.endurance_standards import (
+        compute_pace_percentile, compute_endurance_overall, endurance_age_factor,
+    )
+
+    running_prs = (
+        db.session.query(PersonalRecord.weight_context, PersonalRecord.value)
+        .join(ExerciseTemplate, PersonalRecord.exercise_template_id == ExerciseTemplate.id)
+        .filter(
+            PersonalRecord.user_id == user_id,
+            PersonalRecord.pr_type == 'best_time',
+            ExerciseTemplate.standards_key == 'Running',
+        )
+        .all()
+    )
+    best_pace_by_distance: dict[float, float] = {}
+    for dist_km, time_min in running_prs:
+        if not dist_km or dist_km <= 0 or not time_min or time_min <= 0:
+            continue
+        pace = time_min / dist_km
+        if dist_km not in best_pace_by_distance or pace < best_pace_by_distance[dist_km]:
+            best_pace_by_distance[dist_km] = pace
+
+    # Age credit divides pace (a faster effective pace) before lookup. The
+    # endurance anchors are WMA running age-grading, not the lifting curve.
+    age_factor = endurance_age_factor(user_age) if user_age else 1.0
+    percentiles: dict[float, float] = {}
+    for dist_km, pace in best_pace_by_distance.items():
+        pct = compute_pace_percentile(dist_km, gender, pace / age_factor)
+        if pct is not None:
+            percentiles[dist_km] = pct
+
+    return {
+        'paces': best_pace_by_distance,
+        'percentiles': percentiles,
+        'overall': compute_endurance_overall(percentiles),
+        'age_factor': age_factor,
+    }
 
 
 @strength_score_bp.get('/api/stats/strength-score')
@@ -218,38 +269,11 @@ def strength_score():
     # pool) → pace per milestone distance → percentile vs. PACE_STANDARDS.
     # Needs gender but NOT bodyweight, so it computes even when the strength
     # leg was skipped above.
-    from utils.endurance_standards import (
-        compute_pace_percentile, compute_endurance_overall,
-        endurance_age_factor, CORE_DISTANCES, DISTANCE_LABELS,
-    )
-
-    running_prs = (
-        db.session.query(PersonalRecord.weight_context, PersonalRecord.value)
-        .join(ExerciseTemplate, PersonalRecord.exercise_template_id == ExerciseTemplate.id)
-        .filter(
-            PersonalRecord.user_id == user_id,
-            PersonalRecord.pr_type == 'best_time',
-            ExerciseTemplate.standards_key == 'Running',
-        )
-        .all()
-    )
-    best_pace_by_distance: dict[float, float] = {}
-    for dist_km, time_min in running_prs:
-        if not dist_km or dist_km <= 0 or not time_min or time_min <= 0:
-            continue
-        pace = time_min / dist_km
-        if dist_km not in best_pace_by_distance or pace < best_pace_by_distance[dist_km]:
-            best_pace_by_distance[dist_km] = pace
-
-    # Age credit divides pace (faster effective pace) before lookup — the
-    # endurance anchors are WMA running age-grading, not the lifting curve.
-    e_age_factor = endurance_age_factor(user_age) if user_age else 1.0
-    endurance_percentiles: dict[float, float] = {}
-    for dist_km, pace in best_pace_by_distance.items():
-        pct = compute_pace_percentile(dist_km, user.gender, pace / e_age_factor)
-        if pct is not None:
-            endurance_percentiles[dist_km] = pct
-    endurance_overall = compute_endurance_overall(endurance_percentiles)
+    from utils.endurance_standards import CORE_DISTANCES, DISTANCE_LABELS
+    _endurance = _endurance_data(user_id, user.gender, user_age)
+    best_pace_by_distance = _endurance['paces']
+    endurance_percentiles = _endurance['percentiles']
+    endurance_overall = _endurance['overall']
 
     # Greek rank composite
     twelve_wks_ago  = datetime.now() - timedelta(weeks=12)
@@ -285,12 +309,12 @@ def strength_score():
     if has_strength_data:
         last_snap = (
             StrengthScoreSnapshot.query
-            .filter_by(user_id=user_id)
+            .filter_by(user_id=user_id, score_type='strength')
             .order_by(StrengthScoreSnapshot.created_at.desc())
             .first()
         )
         if not last_snap or (datetime.now() - last_snap.created_at).total_seconds() > 86400:
-            db.session.add(StrengthScoreSnapshot(user_id=user_id, score=overall))
+            db.session.add(StrengthScoreSnapshot(user_id=user_id, score=overall, score_type='strength'))
             db.session.commit()
 
     # Build response
@@ -354,7 +378,7 @@ def strength_score():
         'greek_rank': greek_rank,
         'exercises_used': len(exercise_percentiles),
         'muscle_groups_used': len(muscle_groups),
-        'age_adjusted': age_factor > 1.0,
+        'age_adjusted': age_factor >= _MIN_AGE_CREDIT,
         'age': user_age,
         'age_factor': round(age_factor, 3),
         'bodyweight_updated_at': last_bw_log_date.isoformat() if last_bw_log_date else None,
@@ -367,7 +391,7 @@ def strength_score():
 
     history_snaps = (
         StrengthScoreSnapshot.query
-        .filter_by(user_id=user_id)
+        .filter_by(user_id=user_id, score_type='strength')
         .order_by(StrengthScoreSnapshot.created_at.asc())
         .all()
     )
@@ -475,13 +499,109 @@ def strength_score_for_exercise():
     }), 200
 
 
+@strength_score_bp.get('/api/stats/endurance-score')
+@jwt_required()
+def endurance_score():
+    """Running counterpart to strength_score(): per-distance pace percentiles,
+    the tier-weighted overall, and its own snapshot history. Gender gates it
+    because the pace tables are gendered; bodyweight is irrelevant to pace."""
+    from datetime import datetime, date as _date
+    from utils.strength_standards import percentile_to_strength_rank
+    from utils.endurance_standards import (
+        CORE_DISTANCES, CORE_WEIGHT, SPEED_WEIGHT, DISTANCE_LABELS,
+        compute_pace_at_percentile,
+    )
+
+    user_id = get_jwt_identity()
+    user = db.session.get(User, int(user_id))
+    if not user.gender:
+        return jsonify({'missing': ['gender']}), 422
+
+    today = _date.today()
+    user_age = None
+    if user.birth_date:
+        user_age = today.year - user.birth_date.year - (
+            (today.month, today.day) < (user.birth_date.month, user.birth_date.day)
+        )
+
+    data = _endurance_data(user_id, user.gender, user_age)
+    percentiles, paces, overall = data['percentiles'], data['paces'], data['overall']
+
+    def _thresholds(dist_km):
+        out = []
+        for boundary_pct, rank_name in _TIER_BOUNDARIES:
+            pace = compute_pace_at_percentile(dist_km, user.gender, boundary_pct)
+            if pace is not None:
+                out.append({'percentile': boundary_pct, 'rank': rank_name,
+                            'pace_min_per_km': round(pace, 2)})
+        return out
+
+    distances = sorted(
+        [
+            {
+                'distance_km': d,
+                'label': DISTANCE_LABELS.get(d, f'{d} km'),
+                'pace_min_per_km': round(paces[d], 2),
+                'percentile': round(p, 1),
+                'rank': percentile_to_strength_rank(p),
+                'tier': 'core' if d in CORE_DISTANCES else 'speed',
+                'thresholds': _thresholds(d),
+            }
+            for d, p in percentiles.items()
+        ],
+        key=lambda x: x['distance_km'],
+    )
+
+    # Each tier reports its best distance, which is what the overall weights.
+    # See compute_endurance_overall for why it is best-within-tier, not a mean.
+    core_best = max((p for d, p in percentiles.items() if d in CORE_DISTANCES), default=None)
+    speed_best = max((p for d, p in percentiles.items() if d not in CORE_DISTANCES), default=None)
+
+    if overall is not None:
+        last_snap = (
+            StrengthScoreSnapshot.query
+            .filter_by(user_id=user_id, score_type='endurance')
+            .order_by(StrengthScoreSnapshot.created_at.desc())
+            .first()
+        )
+        if not last_snap or (datetime.now() - last_snap.created_at).total_seconds() > 86400:
+            db.session.add(StrengthScoreSnapshot(user_id=user_id, score=overall, score_type='endurance'))
+            db.session.commit()
+
+    history = [
+        {'date': s.created_at.isoformat(), 'score': s.score}
+        for s in (
+            StrengthScoreSnapshot.query
+            .filter_by(user_id=user_id, score_type='endurance')
+            .order_by(StrengthScoreSnapshot.created_at.asc())
+            .all()
+        )
+    ]
+
+    return jsonify({
+        'overall': round(overall, 1) if overall is not None else None,
+        'overall_rank': percentile_to_strength_rank(overall) if overall is not None else None,
+        'distances': distances,
+        'distances_tracked': len(distances),
+        'tiers': {
+            'core':  {'best': round(core_best, 1) if core_best is not None else None, 'weight': CORE_WEIGHT},
+            'speed': {'best': round(speed_best, 1) if speed_best is not None else None, 'weight': SPEED_WEIGHT},
+        },
+        'age': user_age,
+        'age_factor': round(data['age_factor'], 3),
+        'age_adjusted': data['age_factor'] >= _MIN_AGE_CREDIT,
+        'history': history,
+        'last_updated': datetime.now().isoformat(),
+    }), 200
+
+
 @strength_score_bp.get('/api/stats/strength-score/history')
 @jwt_required()
 def strength_score_history():
     user_id = get_jwt_identity()
     snapshots = (
         StrengthScoreSnapshot.query
-        .filter_by(user_id=user_id)
+        .filter_by(user_id=user_id, score_type='strength')
         .order_by(StrengthScoreSnapshot.created_at.asc())
         .all()
     )

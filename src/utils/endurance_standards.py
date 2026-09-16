@@ -133,6 +133,28 @@ def compute_pace_percentile(distance_km: float, gender: str, pace: float) -> flo
     return None
 
 
+def compute_pace_at_percentile(distance_km: float, gender: str, target_pct: float) -> float | None:
+    """Pace (min/km) needed to reach a percentile at one distance. Inverse of
+    compute_pace_percentile, for showing what each rank boundary asks for.
+    Mirrors compute_weight_at_percentile on the strength side.
+    """
+    standards = PACE_STANDARDS.get(gender, {}).get(distance_km)
+    if not standards:
+        return None
+    points = sorted(standards.items())
+    pcts  = [p for p, _ in points]
+    paces = [v for _, v in points]
+    if target_pct <= pcts[0]:
+        return paces[0]
+    if target_pct >= pcts[-1]:
+        return paces[-1]
+    for i in range(len(pcts) - 1):
+        if pcts[i] <= target_pct <= pcts[i + 1]:
+            t = (target_pct - pcts[i]) / (pcts[i + 1] - pcts[i])
+            return paces[i] + t * (paces[i + 1] - paces[i])
+    return None
+
+
 def compute_endurance_overall(percentiles_by_distance: dict[float, float]) -> float | None:
     """Overall endurance percentile from per-distance percentiles.
 
