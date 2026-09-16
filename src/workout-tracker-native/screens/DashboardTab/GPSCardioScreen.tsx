@@ -35,6 +35,7 @@ import { DashboardStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { estimateCalories } from '../../utils/cardioCalories';
+import { fmtPaceValue } from '../../utils/cardioFormat';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
 import { toLocalDateStr } from '../../utils/date';
 
@@ -110,13 +111,6 @@ function fmtElapsed(totalSec: number): string {
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
   if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
-function fmtPace(paceMinPerKm: number): string {
-  if (!isFinite(paceMinPerKm) || paceMinPerKm <= 0) return '--:--';
-  const m = Math.floor(paceMinPerKm);
-  const s = Math.round((paceMinPerKm - m) * 60);
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
@@ -609,7 +603,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
               </View>
               <View style={styles.statSep} />
               <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtPace(pace)}</Text>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtPaceValue(pace)}</Text>
                 <Text style={styles.statLabel}>/{distanceUnit}</Text>
               </View>
             </View>
@@ -640,7 +634,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
               </View>
               <View style={styles.statSep} />
               <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtPace(pace)}</Text>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtPaceValue(pace)}</Text>
                 <Text style={styles.statLabel}>/{distanceUnit}</Text>
               </View>
             </View>
@@ -683,7 +677,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
                 <Text style={[styles.modalStatLabel, { color: colors.textSecondary }]}>Distance</Text>
               </View>
               <View style={styles.modalStatItem}>
-                <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>{fmtPace(pace)} /{distanceUnit}</Text>
+                <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>{fmtPaceValue(pace)} /{distanceUnit}</Text>
                 <Text style={[styles.modalStatLabel, { color: colors.textSecondary }]}>Avg Pace</Text>
               </View>
               <View style={styles.modalStatItem}>

@@ -22,6 +22,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { toDisplayWeight, toDisplayVolume, convertWeight, WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayPace } from 'utils/units';
+import { fmtPaceValue } from '../../utils/cardioFormat';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import { SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
 import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModal';
@@ -537,11 +538,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     );
   };
 
-  const fmtPace = (pace: number, unit: string) => {
-    const m = Math.floor(pace);
-    const s = Math.round((pace - m) * 60);
-    return `${m}:${String(s).padStart(2, '0')} /${unit}`;
-  };
+  const fmtPace = (pace: number, unit: string) => `${fmtPaceValue(pace)} /${unit}`;
 
   const renderCardioStats = () => {
     if (loading) return <ActivityIndicator size="large" color={colors.save} />;

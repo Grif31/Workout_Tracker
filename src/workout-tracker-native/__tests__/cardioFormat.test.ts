@@ -1,4 +1,4 @@
-import { fmtDuration, fmtPace } from '../utils/cardioFormat';
+import { fmtDuration, fmtPace, fmtPaceValue, fmtPaceForUnit } from '../utils/cardioFormat';
 
 describe('fmtDuration', () => {
   it('shows h + m (no seconds) once the duration is an hour or more', () => {
@@ -44,5 +44,40 @@ describe('fmtPace', () => {
   it('handles a near-whole-minute pace without dropping digits', () => {
     // 4.999 min/unit: guard against NaN / empty output at the rounding edge.
     expect(fmtPace(4.999, 1)).toMatch(/^\d+:\d{2}$/);
+  });
+
+  it('carries a 60-second rounding into the minute', () => {
+    // 4.999 min rounds to 60s, which must read 5:00 and never 4:60
+    expect(fmtPace(4.999, 1)).toBe('5:00');
+  });
+});
+
+describe('fmtPaceValue', () => {
+  it('formats a pace that is already per display unit', () => {
+    expect(fmtPaceValue(5)).toBe('5:00');
+    expect(fmtPaceValue(5.5)).toBe('5:30');
+  });
+
+  it('carries instead of emitting :60', () => {
+    expect(fmtPaceValue(4.999)).toBe('5:00');
+    expect(fmtPaceValue(9.9999)).toBe('10:00');
+  });
+
+  it('guards against zero, negative and non-finite paces', () => {
+    expect(fmtPaceValue(0)).toBe('--:--');
+    expect(fmtPaceValue(-3)).toBe('--:--');
+    expect(fmtPaceValue(Infinity)).toBe('--:--');
+    expect(fmtPaceValue(NaN)).toBe('--:--');
+  });
+});
+
+describe('fmtPaceForUnit', () => {
+  it('leaves a km pace alone', () => {
+    expect(fmtPaceForUnit(5, 'km')).toBe('5:00');
+  });
+
+  it('converts a km pace to the slower per-mile figure', () => {
+    // 5:00/km is 8:03/mi
+    expect(fmtPaceForUnit(5, 'mi')).toBe('8:03');
   });
 });
