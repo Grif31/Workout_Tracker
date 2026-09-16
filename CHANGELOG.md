@@ -1,9 +1,28 @@
 # Changelog
 
-## 1.1.6 (2026-09-14)
+## 1.1.7 (unreleased)
+
+### Improved: Swipe to Delete
+- Swiping a set to delete it now shows a trash icon that grows as you reach the point where letting go will delete, and the delete button sits flush against the set.
+
+### Improved: Readability
+- Accent colors are easier to read in both light and dark mode, with deeper shades in light mode.
+- Share cards stay bright when the app is in light mode.
+
+### Improved: Messages
+- Error messages now say what went wrong, such as "Couldn't Save Routine", instead of just "Error".
+- Losing your connection shows a single message instead of an extra alert.
+- Notifications, celebrations and confirmations are clearer and point to your next step.
+
+### Changed
+- The first Strength Score tier is now called Novice instead of Noobie.
+- The Yellow accent has been removed. If you were using it, your accent is now Green.
+- Estimated 1RM is no longer offered as a PR pin on your profile. A pin that used it now shows as an empty slot you can refill.
+
+## 1.1.6 (2026-09-11)
 
 ### New: Swipe to Delete Sets
-- Swipe a set all the way to the left and let go to delete it. A shorter swipe still reveals the delete button, and its trash icon grows as you reach the point where letting go will delete.
+- Swipe a set all the way to the left and let go to delete it. A shorter swipe still reveals the Delete button, and the button grows as you pull so you can see when letting go will delete.
 - Adding or removing a set now animates, with the rows below sliding into place instead of jumping.
 
 ### Improved: Templates & Routines
