@@ -8,6 +8,7 @@ Tests for workout routes:
   PATCH  /api/workouts/<id>
 """
 import pytest
+from datetime import datetime
 
 
 # ---------------------------------------------------------------------------
@@ -311,6 +312,61 @@ class TestNonIntegerReps:
         workout_id = get_workout_id(client, auth_token)
         data = client.get(f'/api/workouts/{workout_id}', headers=self.AUTH(auth_token)).get_json()
         assert data['exercises'][0]['sets'][0]['reps'] == 2
+
+
+# ---------------------------------------------------------------------------
+# GET /api/workouts?date= -- the dashboard renders these with the same card as
+# /api/workouts/recent, so both responses must carry the same fields.
+# ---------------------------------------------------------------------------
+
+class TestWorkoutsByDate:
+
+    def _today(self):
+        return datetime.now().date().isoformat()
+
+    def test_returns_workout_card_fields(self, client, auth_token):
+        create_workout(client, auth_token)
+        res = client.get(f'/api/workouts?date={self._today()}',
+                         headers={'Authorization': f'Bearer {auth_token}'})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert len(data) == 1
+        w = data[0]
+        assert w['num_exercises'] == 2
+        assert w['total_reps'] == 20  # 5 + 5 + 10
+        assert w['pr_count'] == 0     # payload exercises carry no template id
+        assert 'muscles' in w
+
+    def test_matches_recent_shape(self, client, auth_token):
+        create_workout(client, auth_token)
+        hdrs = {'Authorization': f'Bearer {auth_token}'}
+        by_date = client.get(f'/api/workouts?date={self._today()}', headers=hdrs).get_json()[0]
+        recent = client.get('/api/workouts/recent', headers=hdrs).get_json()[0]
+        assert set(by_date) == set(recent)
+
+    def test_pr_count_excludes_estimated_1rm(self, client, auth_token):
+        # A first-time exercise earns max_weight, estimated_1rm and max_reps.
+        # estimated_1rm is never shown to users as a PR, so the card counts 2.
+        hdrs = {'Authorization': f'Bearer {auth_token}'}
+        ex = client.post('/api/exercises', json={'name': 'Bench Press', 'muscle_group': 'Chest'}, headers=hdrs)
+        ex_id = ex.get_json()['id']
+        create_workout(client, auth_token, {
+            'workoutName': 'Push Day',
+            'exercises': [{
+                'name': 'Bench Press', 'exercise_template_id': ex_id,
+                'sets': [{'reps': 5, 'weight': 100}],
+            }],
+        })
+        recent = client.get('/api/workouts/recent', headers=hdrs).get_json()[0]
+        by_date = client.get(f'/api/workouts?date={self._today()}', headers=hdrs).get_json()[0]
+        assert recent['pr_count'] == 2
+        assert by_date['pr_count'] == 2
+
+    def test_other_day_returns_empty(self, client, auth_token):
+        create_workout(client, auth_token)
+        res = client.get('/api/workouts?date=2020-01-01',
+                         headers={'Authorization': f'Bearer {auth_token}'})
+        assert res.get_json() == []
 
 
 # ---------------------------------------------------------------------------

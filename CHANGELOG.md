@@ -14,6 +14,13 @@
 - Losing your connection shows a single message instead of an extra alert.
 - Notifications, celebrations and confirmations are clearer and point to your next step.
 
+### Improved: Workout Details
+- The summary now shows total reps, and volume as an exact figure instead of a rounded shorthand. Volume and duration sit on their own row above exercises, sets and reps.
+
+### Bug Fixes
+- Tapping a day in the Dashboard calendar now shows the same workout cards as Recent Workouts, with PR counts, exercise and rep counts, and the muscles worked.
+- Workout volume now converts to kilograms when that is your unit, instead of showing the pound figure with a kg label.
+
 ### Changed
 - The first Strength Score tier is now called Novice instead of Noobie.
 - The Yellow accent has been removed. If you were using it, your accent is now Green.

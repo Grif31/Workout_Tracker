@@ -358,6 +358,56 @@ def _recompute_prs_for_templates(user_id, template_ids):
 
 
 # Get all workouts for current user
+def _workout_card_payload(workouts, include_exercises=False):
+    """to_dict plus the fields a dashboard workout card renders: rep and
+    exercise counts, muscles worked, rounded volume, and PR count. Shared by
+    /recent and the date-filtered list so both produce identical cards.
+
+    Runs a PR count per workout, so only use it on a bounded set.
+    """
+    template_ids = {
+        ex.exercise_template_id
+        for w in workouts for ex in w.exercises
+        if ex.exercise_template_id
+    }
+    templates_by_id = {
+        t.id: t for t in ExerciseTemplate.query.filter(ExerciseTemplate.id.in_(template_ids)).all()
+    } if template_ids else {}
+
+    result = []
+    for w in workouts:
+        total_reps = 0
+        muscles = []
+        set_ids = []
+
+        for ex in w.exercises:
+            if ex.exercise_template_id:
+                tmpl = templates_by_id.get(ex.exercise_template_id)
+                if tmpl and tmpl.muscle_group:
+                    for m in tmpl.muscle_group.split(','):
+                        m = m.strip()
+                        if m and m not in muscles:
+                            muscles.append(m)
+            for s in ex.sets:
+                set_ids.append(s.id)
+                if s.reps:
+                    total_reps += s.reps
+
+        pr_count = PersonalRecord.query.filter(
+            PersonalRecord.set_id.in_(set_ids)
+        ).count() if set_ids else 0
+
+        data = w.to_dict(include_exercises=include_exercises)
+        data['total_reps'] = total_reps
+        data['volume'] = round(w.volume or 0.0)
+        data['num_exercises'] = len(w.exercises)
+        data['muscles'] = muscles
+        data['pr_count'] = pr_count
+        result.append(data)
+
+    return result
+
+
 @workout_bp.get('/api/workouts')
 @jwt_required()
 def get_workouts():
@@ -419,6 +469,14 @@ def get_workouts():
                 'has_more': pagination.has_next,
             }), 200
 
+        if date_filter:
+            # A single day is a bounded set, so it gets the same card payload as
+            # /recent. The unfiltered list below is unbounded and stays plain.
+            day_workouts = query.options(
+                selectinload(Workout.exercises).selectinload(Exercise.sets)
+            ).all()
+            return jsonify(_workout_card_payload(day_workouts, include_exercises)), 200
+
         return jsonify([w.to_dict(include_exercises=include_exercises) for w in query.all()]), 200
 
     except Exception:
@@ -439,47 +497,7 @@ def get_recent_workouts():
         .all()
     )
 
-    template_ids = {
-        ex.exercise_template_id
-        for w in workouts for ex in w.exercises
-        if ex.exercise_template_id
-    }
-    templates_by_id = {
-        t.id: t for t in ExerciseTemplate.query.filter(ExerciseTemplate.id.in_(template_ids)).all()
-    } if template_ids else {}
-
-    result = []
-    for w in workouts:
-        total_reps = 0
-        muscles = []
-        set_ids = []
-
-        for ex in w.exercises:
-            if ex.exercise_template_id:
-                tmpl = templates_by_id.get(ex.exercise_template_id)
-                if tmpl and tmpl.muscle_group:
-                    for m in tmpl.muscle_group.split(','):
-                        m = m.strip()
-                        if m and m not in muscles:
-                            muscles.append(m)
-            for s in ex.sets:
-                set_ids.append(s.id)
-                if s.reps:
-                    total_reps += s.reps
-
-        pr_count = PersonalRecord.query.filter(
-            PersonalRecord.set_id.in_(set_ids)
-        ).count() if set_ids else 0
-
-        data = w.to_dict()
-        data['total_reps'] = total_reps
-        data['volume'] = round(w.volume or 0.0)
-        data['num_exercises'] = len(w.exercises)
-        data['muscles'] = muscles
-        data['pr_count'] = pr_count
-        result.append(data)
-
-    return jsonify(result), 200
+    return jsonify(_workout_card_payload(workouts)), 200
 
 # GET ALL WORKOUT DATES (for calendar view)
 

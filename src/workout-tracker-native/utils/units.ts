@@ -28,6 +28,14 @@ export function toDisplayVolume(lbs: number, unit: WeightUnit): string {
   return `${Math.round(val)} ${suffix}`;
 }
 
+// Exact volume for surfaces that show a precise total (Workout Details'
+// summary bar), where toDisplayVolume's abbreviated "12.4k" hides the figure.
+// Returns the number only: callers label the unit themselves.
+export function toExactVolume(lbs: number, unit: WeightUnit): string {
+  const val = unit === 'kg' ? lbs * KG_PER_LB : lbs;
+  return Math.round(val).toLocaleString();
+}
+
 // Chart values: stored weights are already in the display unit.
 export function convertWeight(value: number, _unit: WeightUnit): number {
   return value;

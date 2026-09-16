@@ -22,7 +22,7 @@ import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { estimateCalories } from '../utils/cardioCalories';
-import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toKm } from '../utils/units';
+import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toExactVolume, toKm } from '../utils/units';
 import { PR_GOLD } from '../constants/prColors';
 import Collapsible, { useCollapseAnim } from './Collapsible';
 import { captureAndShare } from '../utils/shareCapture';
@@ -68,12 +68,6 @@ type Props = {
   onSaveAsTemplate?: () => void;
   onPerformAgain?: (prefill: PrefillWorkoutData) => void;
 };
-
-function fmtVolume(v: number): string {
-  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}k`;
-  return String(Math.round(v));
-}
 
 function fmtDuration(mins: number): string {
   if (mins < 60) return `${mins}m`;
@@ -388,8 +382,16 @@ export default function WorkoutDetailsScreen({
   }
 
   const totalSets = workout.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+  const totalReps = workout.exercises.reduce((sum, ex) =>
+    sum + ex.sets.reduce((s, set) => s + (parseFloat(set.reps ?? '0') || 0), 0), 0);
   const totalVolume = workout.volume ?? workout.exercises.reduce((sum, ex) =>
     sum + ex.sets.reduce((s, set) => s + (parseFloat(set.reps ?? '0') || 0) * (parseFloat(set.weight ?? '0') || 0), 0), 0);
+  // The backend reports volume in lbs whatever the user's unit, so it converts.
+  // The fallback above (older workouts with no stored volume) sums stored set
+  // weights, which are already in the user's unit, so it must not be converted.
+  const exactVolume = workout.volume != null
+    ? toExactVolume(workout.volume, weightUnit)
+    : Math.round(totalVolume).toLocaleString();
 
   return (
     <>
@@ -426,30 +428,46 @@ export default function WorkoutDetailsScreen({
           ) : null}
 
           {/* Summary bar */}
-          <View style={styles.summaryBar}>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryValue}>{workout.exercises.length}</Text>
-              <Text style={styles.summaryLabel}>{workout.exercises.length === 1 ? 'Exercise' : 'Exercises'}</Text>
+          <View style={styles.summaryCard}>
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryItem}>
+                {/* Exact, not abbreviated: this is the workout's own detail view */}
+                <Text style={styles.summaryValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  {exactVolume}
+                </Text>
+                <Text style={styles.summaryLabel}>Volume ({weightUnit})</Text>
+              </View>
+              {workout.duration ? (
+                <>
+                  <View style={styles.summaryDivider} />
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryValue}>{fmtDuration(workout.duration)}</Text>
+                    <Text style={styles.summaryLabel}>Duration</Text>
+                  </View>
+                </>
+              ) : null}
             </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryValue}>{totalSets}</Text>
-              <Text style={styles.summaryLabel}>{totalSets === 1 ? 'Set' : 'Sets'}</Text>
+
+            <View style={styles.summaryRowDivider} />
+
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryValue}>{workout.exercises.length}</Text>
+                <Text style={styles.summaryLabel}>{workout.exercises.length === 1 ? 'Exercise' : 'Exercises'}</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryValue}>{totalSets}</Text>
+                <Text style={styles.summaryLabel}>{totalSets === 1 ? 'Set' : 'Sets'}</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  {totalReps.toLocaleString()}
+                </Text>
+                <Text style={styles.summaryLabel}>{totalReps === 1 ? 'Rep' : 'Reps'}</Text>
+              </View>
             </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryValue}>{fmtVolume(totalVolume)}</Text>
-              <Text style={styles.summaryLabel}>Volume ({weightUnit})</Text>
-            </View>
-            {workout.duration ? (
-              <>
-                <View style={styles.summaryDivider} />
-                <View style={styles.summaryItem}>
-                  <Text style={styles.summaryValue}>{fmtDuration(workout.duration)}</Text>
-                  <Text style={styles.summaryLabel}>Duration</Text>
-                </View>
-              </>
-            ) : null}
           </View>
 
           {/* PR dropdown */}
@@ -808,12 +826,18 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.md,
   },
 
-  summaryBar: {
-    flexDirection: 'row',
+  summaryCard: {
     backgroundColor: colors.surface,
     borderRadius: spacing.sm,
     paddingVertical: spacing.sm,
     marginBottom: spacing.md,
+  },
+  summaryRow: { flexDirection: 'row' },
+  summaryRowDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.md,
+    marginVertical: spacing.sm,
   },
   summaryItem: { flex: 1, alignItems: 'center' },
   summaryValue: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },
