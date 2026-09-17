@@ -9,7 +9,10 @@ from utils.strength_standards import (
     workout_training_load, compute_training_load_score,
     CARDIO_MINUTES_PER_LOAD, MAX_LOAD_PER_WORKOUT,
     compute_greek_score, apply_greek_rank_gates, GREEK_WEIGHTS,
+    _compute_streak_weeks, compute_consistency_score, compute_dedication_score,
 )
+from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 
 
 class TestAgeScalingFactor:
@@ -145,3 +148,113 @@ class TestApplyGreekRankGates:
         rank, gate = apply_greek_rank_gates(50, 75)
         assert rank == 'Demigod'
         assert gate == {'rank': 'Titan', 'required_percentile': 50.0, 'met': True}
+
+
+# Monday 2026-09-14 starts ISO week 38. Workouts only need a `.date`.
+MONDAY = date(2026, 9, 14)
+
+
+def _workout(d, hour=18):
+    return SimpleNamespace(date=datetime(d.year, d.month, d.day, hour))
+
+
+def _weekly(weeks_back, day_offset=2):
+    """One workout in each of the given weeks before MONDAY's week (1 = last week)."""
+    return [_workout(MONDAY - timedelta(weeks=w) + timedelta(days=day_offset)) for w in weeks_back]
+
+
+class TestStreakWeeks:
+
+    def test_no_workouts(self):
+        assert _compute_streak_weeks([], today=MONDAY) == 0
+
+    def test_empty_current_week_does_not_break_the_streak(self):
+        # Trained each of the last 11 weeks, nothing yet this week.
+        workouts = _weekly(range(1, 12))
+        for today in (MONDAY, MONDAY + timedelta(days=3), MONDAY + timedelta(days=6)):
+            assert _compute_streak_weeks(workouts, today=today) == 11
+
+    def test_training_this_week_extends_the_streak(self):
+        workouts = _weekly(range(1, 12)) + [_workout(MONDAY + timedelta(days=1))]
+        assert _compute_streak_weeks(workouts, today=MONDAY + timedelta(days=2)) == 12
+
+    def test_missing_last_week_breaks_the_streak(self):
+        workouts = _weekly(range(2, 12))
+        assert _compute_streak_weeks(workouts, today=MONDAY) == 0
+
+    def test_missing_last_week_but_trained_this_week_counts_only_this_week(self):
+        workouts = _weekly(range(2, 12)) + [_workout(MONDAY)]
+        assert _compute_streak_weeks(workouts, today=MONDAY + timedelta(days=1)) == 1
+
+    def test_gap_stops_the_count(self):
+        workouts = _weekly([1, 2, 3, 5, 6])
+        assert _compute_streak_weeks(workouts, today=MONDAY) == 3
+
+    def test_multiple_workouts_in_a_week_count_once(self):
+        workouts = _weekly([1, 1, 1], day_offset=0) + _weekly([1], day_offset=5) + _weekly([2])
+        assert _compute_streak_weeks(workouts, today=MONDAY) == 2
+
+    def test_sunday_and_monday_are_different_weeks(self):
+        sunday = MONDAY - timedelta(days=1)
+        workouts = [_workout(sunday, hour=23), _workout(MONDAY, hour=0)]
+        assert _compute_streak_weeks(workouts, today=MONDAY) == 2
+
+    def test_crosses_the_iso_year_boundary(self):
+        # ISO 2026-W01 starts Mon 2025-12-29; 2025 has 52 ISO weeks.
+        jan_monday = date(2026, 1, 5)  # ISO 2026-W02
+        workouts = [_workout(date(2025, 12, 22)), _workout(date(2025, 12, 30)), _workout(jan_monday)]
+        assert _compute_streak_weeks(workouts, today=jan_monday) == 3
+
+    def test_defaults_to_today(self):
+        this_week = date.today()
+        assert _compute_streak_weeks([_workout(this_week)]) == 1
+
+
+class TestConsistencyScore:
+
+    def test_no_workouts_is_zero(self):
+        assert compute_consistency_score([], today=MONDAY) == 0.0
+
+    def test_every_week_with_a_full_streak_is_100(self):
+        workouts = _weekly(range(1, 13))
+        assert compute_consistency_score(workouts, today=MONDAY) == pytest.approx(100)
+
+    def test_active_weeks_are_80_percent_and_streak_is_20(self):
+        # 6 active weeks, the most recent 3 in a row: 6/12*80 + 3/12*20
+        workouts = _weekly([1, 2, 3, 6, 8, 10])
+        assert compute_consistency_score(workouts, today=MONDAY) == pytest.approx(40 + 5)
+
+    def test_empty_current_week_keeps_the_full_streak_bonus(self):
+        history = _weekly(range(1, 12))
+        before = compute_consistency_score(history, today=MONDAY)
+        # Training this week adds an active week and a streak week, so it can only go up.
+        after = compute_consistency_score(history + [_workout(MONDAY)], today=MONDAY)
+        assert before == pytest.approx(11 / 12 * 80 + 11 / 12 * 20)
+        assert after >= before
+
+    def test_capped_at_100_when_the_window_spans_13_iso_weeks(self):
+        # A 12-week lookback can touch 13 ISO weeks (partial first week).
+        workouts = _weekly(range(0, 13), day_offset=0)
+        assert compute_consistency_score(workouts, today=MONDAY) == 100.0
+
+
+class TestDedicationScore:
+
+    @pytest.mark.parametrize('count, points', [
+        (0, 0), (4, 15), (8, 30), (13, 45), (20, 60), (26, 75), (39, 88), (52, 100),
+    ])
+    def test_milestones(self, count, points):
+        assert compute_dedication_score(count) == pytest.approx(points)
+
+    def test_interpolates_between_milestones(self):
+        assert compute_dedication_score(2) == pytest.approx(7.5)
+        assert compute_dedication_score(30) == pytest.approx(75 + 4 / 13 * 13)
+
+    def test_capped_at_100(self):
+        assert compute_dedication_score(53) == 100.0
+        assert compute_dedication_score(500) == 100.0
+
+    def test_monotonically_non_decreasing(self):
+        scores = [compute_dedication_score(n) for n in range(0, 80)]
+        assert all(b >= a for a, b in zip(scores, scores[1:]))
+

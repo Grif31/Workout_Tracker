@@ -476,27 +476,35 @@ def compute_muscle_group_scores(
     return results
 
 
-def _compute_streak_weeks(workouts: list) -> int:
+def _compute_streak_weeks(workouts: list, today=None) -> int:
     if not workouts:
         return 0
     week_set = {w.date.isocalendar()[:2] for w in workouts}
     from datetime import date, timedelta
-    today = date.today()
-    streak = 0
+
+    def previous_week(week):
+        d = date.fromisocalendar(week[0], week[1], 1) - timedelta(weeks=1)
+        return d.isocalendar()[:2]
+
+    today = today or date.today()
     check = today.isocalendar()[:2]
+    # The current week is still in progress: it extends the streak once it has
+    # a workout, but an empty one doesn't break it. Otherwise every streak read
+    # as 0 from Monday until the first workout, dropping the Greek score ~7 pts.
+    if check not in week_set:
+        check = previous_week(check)
+    streak = 0
     while check in week_set:
         streak += 1
-        # move back one week
-        d = date.fromisocalendar(check[0], check[1], 1) - timedelta(weeks=1)
-        check = d.isocalendar()[:2]
+        check = previous_week(check)
     return streak
 
 
-def compute_consistency_score(workouts_12wk: list) -> float:
+def compute_consistency_score(workouts_12wk: list, today=None) -> float:
     if not workouts_12wk:
         return 0.0
     active_weeks = len({w.date.isocalendar()[:2] for w in workouts_12wk})
-    streak = _compute_streak_weeks(workouts_12wk)
+    streak = _compute_streak_weeks(workouts_12wk, today)
     raw = (active_weeks / 12) * 80 + min(streak / 12, 1.0) * 20
     return min(100.0, raw)
 
