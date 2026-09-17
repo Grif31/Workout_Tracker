@@ -1,12 +1,14 @@
 # Changelog
 
-## 1.1.7 (unreleased)
+## 1.1.7 (2026-09-17)
 
 ### New: Endurance Score
 - Runners now get an Endurance Score, the running counterpart to the Strength Score. Your best pace at each distance is ranked against pace standards for your gender, with the same tiers and rank colors as the Strength Score.
 - Every run also scores the shorter distances inside it, so a 5K gives you a mile time too. Endurance distances (5K and up) count for 70 percent of the score and speed distances (400m to 1 mile) for 30 percent, and whichever tier you have no times for drops out.
 - Each distance shows your finish time and the time the next rank asks for. From 5K up your pace shows too, in min/mi or min/km to match your GPS distance setting.
 - The score tracks over time on its own chart, and it can be shared the same way as the Strength Score.
+- Tap a distance to see where your time ranks, how much faster the next rank is, and the time every rank takes at that distance.
+- Find it on the Coach tab's Progress view, under your Strength Score, or from the Greek Rank screen.
 
 ### Changed: Greek Rank
 - Everyone now gets a Greek Rank, even without gender or bodyweight in their profile. Your rank is earned by training: Consistency counts for 40%, Dedication for 30% and Volume for 30%.
@@ -31,7 +33,33 @@
 ### Improved: Workout Details
 - The summary now shows total reps, and volume as an exact figure instead of a rounded shorthand. Volume and duration sit on their own row above exercises, sets and reps.
 
+### Improved: Strength Score
+- Tap a lift to see the weight every rank takes, with your current rank highlighted.
+- A one-rep max you actually lifted is now labeled as your 1RM instead of an estimate.
+- On the Coach tab, the Strength Score circle is labeled as your Strength Score and shows your rank above the number.
+- Score charts on the Strength and Endurance Score screens fit the screen instead of scrolling sideways, however long your history.
+- The score card at the top of both score screens opens and closes smoothly.
+
+### Improved: AI Coach
+- Insights name what actually improved, with before and after numbers, drawing on your recent PRs for lifts, rep records, holds and cardio.
+- The Coach points out your most-trained lifts that haven't had a PR in three weeks.
+- Insights are checked against your own data before they're shown, so the Coach doesn't cite numbers you never logged.
+- Generated workouts, routines and insights follow Aretē's voice.
+
+### Improved: Offline Saves
+- A workout or GPS activity saved without a connection now shows a clearer message that stays up longer.
+- Home shows a card while workouts are waiting to upload, explaining why they're not in your history yet, with a Try Now button.
+- Editing a workout while offline shows a banner, since edits need a connection to save.
+
 ### Bug Fixes
+- The Greek Rank screen now opens centered on your current rank every time.
+- A minimized workout's timer no longer counts time twice, and a paused timer stays paused.
+- This week's stats, streaks, the Dashboard calendar and the weekly summary now roll over at your midnight. In the Americas they had been moving to the new week on Sunday afternoon or evening.
+- Your Greek Rank no longer dips at the start of each week before your first workout.
+- Exercises in a saved routine or AI plan keep the order you arranged them in.
+- A workout saved offline while earlier ones were uploading is no longer lost.
+- If a weight unit change fails to save, the setting switches back instead of showing the wrong unit.
+- Deleting a bodyweight entry, measurement or progress photo now tells you when it fails.
 - The Strength and Endurance Score screens now show how long ago your score was updated correctly in every timezone, instead of always "just now" or hours off, and a late-evening point on the score chart no longer lands on the next day.
 - AI Coach now refers to your actual Greek Rank. It had been working one out from your Strength Score, which could name the wrong rank.
 - Changing your weight unit in Settings no longer clears the gender on your profile. That was quietly hiding your Strength Score until you re-saved your profile.
@@ -39,6 +67,11 @@
 - The age-adjusted badge no longer appears when the credit is too small to show, where it read "+0%".
 - Tapping a day in the Dashboard calendar now shows the same workout cards as Recent Workouts, with PR counts, exercise and rep counts, and the muscles worked.
 - Workout volume now converts to kilograms when that is your unit, instead of showing the pound figure with a kg label.
+
+### Security & Privacy
+- Deleting your account now also deletes your progress photos, and the final confirmation says what gets deleted.
+- Your custom exercises can no longer be seen by other users.
+- Google sign-in is verified more strictly, and a deleted account can no longer stay signed in.
 
 ### Changed
 - The first Strength Score tier is now called Novice instead of Noobie.
