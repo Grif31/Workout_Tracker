@@ -78,6 +78,10 @@ def signup():
 @jwt_required(refresh=True)
 def refresh():
     user_id = get_jwt_identity()
+    # Refresh tokens outlive account deletion; without this a deleted account
+    # could keep minting access tokens until the refresh token expires.
+    if not db.session.get(User, int(user_id)):
+        return jsonify({'message': 'User not found'}), 401
     new_access  = create_access_token(identity=user_id)
     new_refresh = create_refresh_token(identity=user_id)
     return jsonify({'access_token': new_access, 'refresh_token': new_refresh}), 200
@@ -208,7 +212,7 @@ def change_password():
 @limiter.limit('20 per hour')
 def social_auth():
     data = request.get_json()
-    provider = data.get('provider')  # 'apple' | 'google' | 'facebook'
+    provider = data.get('provider')  # 'apple' | 'google'
     token = data.get('token')
 
     if not provider or not token:
@@ -310,31 +314,44 @@ def _send_otp_email(recipient: str, otp: str) -> None:
 def _extract_social_identity(provider: str, token: str):
     """Return (email, display_name) for the given OAuth token."""
     if provider == 'google':
-        resp = http_requests.get(
-            'https://www.googleapis.com/userinfo/v2/me',
-            headers={'Authorization': f'Bearer {token}'},
-            timeout=10,
-        )
-        if not resp.ok:
-            raise ValueError('Google token invalid')
-        info = resp.json()
-        return info.get('email'), info.get('name')
-
-    if provider == 'facebook':
-        resp = http_requests.get(
-            'https://graph.facebook.com/me',
-            params={'fields': 'id,name,email', 'access_token': token},
-            timeout=10,
-        )
-        if not resp.ok:
-            raise ValueError('Facebook token invalid')
-        info = resp.json()
-        return info.get('email'), info.get('name')
+        return _verify_google_token(token)
 
     if provider == 'apple':
         return _verify_apple_token(token)
 
     raise ValueError(f'Unknown provider: {provider}')
+
+
+def _verify_google_token(access_token: str):
+    """Verify a Google OAuth access token was issued to this app and return (email, name)."""
+    # userinfo alone accepts a token minted for ANY Google client, so another
+    # app could replay its users' tokens here. tokeninfo exposes the audience.
+    client_ids = {c.strip() for c in os.environ.get('GOOGLE_CLIENT_IDS', '').split(',') if c.strip()}
+    if not client_ids:
+        raise ValueError('Google Sign-In is not configured (GOOGLE_CLIENT_IDS missing)')
+
+    resp = http_requests.get(
+        'https://oauth2.googleapis.com/tokeninfo',
+        params={'access_token': access_token},
+        timeout=10,
+    )
+    if not resp.ok:
+        raise ValueError('Google token invalid')
+    info = resp.json()
+    if info.get('aud') not in client_ids and info.get('azp') not in client_ids:
+        raise ValueError('Google token was not issued for this app')
+    # Accounts are matched by email, so an unverified address would let the
+    # caller sign into someone else's existing account.
+    if str(info.get('email_verified')).lower() != 'true':
+        raise ValueError('Google email is not verified')
+
+    profile = http_requests.get(
+        'https://www.googleapis.com/userinfo/v2/me',
+        headers={'Authorization': f'Bearer {access_token}'},
+        timeout=10,
+    )
+    name = profile.json().get('name') if profile.ok else None
+    return info.get('email'), name
 
 
 def _verify_apple_token(identity_token: str):
