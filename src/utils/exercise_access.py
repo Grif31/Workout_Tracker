@@ -1,4 +1,4 @@
-from models import db, ExerciseTemplate
+from models import db, ExerciseTemplate, WorkoutTemplateExercise
 
 
 def _visible_to(user_id):
@@ -21,3 +21,18 @@ def visible_exercise_ids(user_id, ids):
     """`ids` filtered like visible_exercises, keeping the caller's order."""
     allowed = {e.id for e in visible_exercises(user_id, ids)}
     return [i for i in ids if i in allowed]
+
+
+def add_template_exercises(template_id, user_id, ids):
+    """Attach the visible exercises from `ids` to a template in the given order.
+
+    Workout templates read their exercises back sorted by
+    WorkoutTemplateExercise.order; passing a list to the `exercises`
+    relationship leaves that column NULL, so the saved order was arbitrary.
+    """
+    for order, ex_id in enumerate(visible_exercise_ids(user_id, ids)):
+        db.session.add(WorkoutTemplateExercise(
+            workout_template_id=template_id,
+            exercise_template_id=ex_id,
+            order=order,
+        ))

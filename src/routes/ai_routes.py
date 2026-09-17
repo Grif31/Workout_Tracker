@@ -13,7 +13,7 @@ from models import (
 from schemas import AiGenerateSchema, AiInsightsSchema
 from utils.validation import validate_body
 from utils.lift_progress import compute_most_improved_lift
-from utils.exercise_access import visible_exercises
+from utils.exercise_access import add_template_exercises
 from utils.cardio_progress import compute_most_improved_cardio, _MILESTONE_LABELS
 from routes.personal_record_routes import compute_days_since_last_pr, _pr_label
 from limiter import limiter
@@ -1146,17 +1146,15 @@ def save_generated_workout():
         db.session.flush()
 
         for order, day in enumerate(data.get('days', [])):
-            ex_ids = day.get('exercise_ids', [])
-            exercises = visible_exercises(user_id, ex_ids)
             day_prog = day.get('programming')
             template = WorkoutTemplate(
                 user_id=user_id,
                 name=day['label'],
-                exercises=exercises,
                 programming_json=json.dumps(day_prog) if day_prog else None,
             )
             db.session.add(template)
             db.session.flush()
+            add_template_exercises(template.id, user_id, day.get('exercise_ids', []))
             db.session.add(RoutineDay(
                 routine_id=routine.id,
                 workout_template_id=template.id,
@@ -1168,16 +1166,15 @@ def save_generated_workout():
         return jsonify({'type': 'routine', 'id': routine.id, 'name': routine.name}), 201
 
     elif gen_type == 'template':
-        ex_ids = data.get('exercise_ids', [])
-        exercises = visible_exercises(user_id, ex_ids)
         tmpl_prog = data.get('programming')
         template = WorkoutTemplate(
             user_id=user_id,
             name=data.get('name', 'My Workout'),
-            exercises=exercises,
             programming_json=json.dumps(tmpl_prog) if tmpl_prog else None,
         )
         db.session.add(template)
+        db.session.flush()
+        add_template_exercises(template.id, user_id, data.get('exercise_ids', []))
         db.session.commit()
         return jsonify({'type': 'template', 'id': template.id, 'name': template.name}), 201
 

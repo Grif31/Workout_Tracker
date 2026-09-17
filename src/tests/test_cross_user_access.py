@@ -250,3 +250,53 @@ class TestPrivateCustomExercises:
         tid = make_template(client, alice, ex_ids=[ids['alice_custom']])
         tmpl = client.get(f'/api/workout-templates/{tid}', headers=hdrs(alice)).get_json()
         assert self._names(tmpl) == [self.SECRET]
+
+
+class TestTemplateExerciseOrder:
+    """Every path that builds a template must keep the order the user arranged.
+    Routine and AI saves used to hand exercises to the relationship, leaving
+    WorkoutTemplateExercise.order NULL, so templates came back in arbitrary order."""
+
+    @pytest.fixture
+    def ids(self):
+        a, b, c = make_global_exercise('A Squat'), make_global_exercise('B Bench'), make_global_exercise('C Row')
+        return [c, a, b]
+
+    def _ids(self, template_dict):
+        return [e['id'] for e in template_dict['exercises']]
+
+    def test_template_create_and_update(self, client, alice, ids):
+        tid = make_template(client, alice, ex_ids=ids)
+        assert self._ids(client.get(f'/api/workout-templates/{tid}', headers=hdrs(alice)).get_json()) == ids
+        reordered = [ids[2], ids[0], ids[1]]
+        res = client.patch(f'/api/workout-templates/{tid}', json={'exercise_template_ids': reordered}, headers=hdrs(alice))
+        assert self._ids(res.get_json()) == reordered
+
+    def test_routine_create_and_update(self, client, alice, ids):
+        res = client.post('/api/routines', json={
+            'name': 'R', 'days': [{'label': 'A', 'exercise_template_ids': ids}],
+        }, headers=hdrs(alice))
+        assert self._ids(res.get_json()['days'][0]['workout_template']) == ids
+
+        reordered = [ids[1], ids[2], ids[0]]
+        res = client.patch(f"/api/routines/{res.get_json()['id']}", json={
+            'days': [{'label': 'A', 'exercise_template_ids': reordered}],
+        }, headers=hdrs(alice))
+        assert self._ids(res.get_json()['days'][0]['workout_template']) == reordered
+
+    def test_ai_save_template(self, client, alice, ids):
+        res = client.post('/api/ai/save', json={'type': 'template', 'name': 'T', 'exercise_ids': ids}, headers=hdrs(alice))
+        tmpl = client.get(f"/api/workout-templates/{res.get_json()['id']}", headers=hdrs(alice)).get_json()
+        assert self._ids(tmpl) == ids
+
+    def test_ai_save_routine(self, client, alice, ids):
+        second = [ids[1], ids[0]]
+        res = client.post('/api/ai/save', json={
+            'type': 'routine', 'name': 'R',
+            'days': [{'label': 'A', 'exercise_ids': ids}, {'label': 'B', 'exercise_ids': second}],
+        }, headers=hdrs(alice))
+        routine = client.get(f"/api/routines/{res.get_json()['id']}", headers=hdrs(alice)).get_json()
+        days = sorted(routine['days'], key=lambda d: d['label'])
+        assert self._ids(days[0]['workout_template']) == ids
+        assert self._ids(days[1]['workout_template']) == second
+

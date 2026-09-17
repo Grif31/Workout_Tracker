@@ -3,7 +3,7 @@ from models import db, Routine, RoutineDay, WorkoutTemplate, User
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from schemas import RoutineSchema
 from utils.validation import validate_body
-from utils.exercise_access import visible_exercises
+from utils.exercise_access import add_template_exercises
 
 routine_bp = Blueprint('routine_bp', __name__)
 
@@ -38,11 +38,10 @@ def create_routine():
             if not template:
                 return jsonify({'message': f'Template {existing_id} not found'}), 404
         else:
-            ex_ids = day.get('exercise_template_ids', [])
-            exercises = visible_exercises(user_id, ex_ids)
-            template = WorkoutTemplate(user_id=user_id, name=f"{name} - {label}", exercises=exercises)
+            template = WorkoutTemplate(user_id=user_id, name=f"{name} - {label}")
             db.session.add(template)
             db.session.flush()
+            add_template_exercises(template.id, user_id, day.get('exercise_template_ids', []))
 
         routine_day = RoutineDay(
             routine_id=routine.id,
@@ -106,11 +105,10 @@ def update_routine(routine_id):
                 if not template:
                     return jsonify({'message': f'Template {existing_id} not found'}), 404
             else:
-                ex_ids = day.get('exercise_template_ids', [])
-                exercises = visible_exercises(user_id, ex_ids)
-                template = WorkoutTemplate(user_id=user_id, name=f"{routine.name} - {label}", exercises=exercises)
+                template = WorkoutTemplate(user_id=user_id, name=f"{routine.name} - {label}")
                 db.session.add(template)
                 db.session.flush()
+                add_template_exercises(template.id, user_id, day.get('exercise_template_ids', []))
 
             db.session.add(RoutineDay(
                 routine_id=routine.id,
