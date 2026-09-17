@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, Easing, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 /**
  * Drives a collapse from a single Animated.Value so height and opacity can
@@ -42,36 +42,34 @@ type Props = {
 
 export default function Collapsible({ progress, expanded, children, style }: Props) {
   const [contentH, setContentH] = useState(0);
-  const measured = contentH > 0;
 
   return (
     <Animated.View
       style={[
-        { overflow: 'hidden' },
-        measured
-          ? {
-              height: progress.interpolate({ inputRange: [0, 1], outputRange: [0, contentH] }),
-              // Held at 0 through the last 30% of the collapse so the content is
-              // gone before the container finishes closing, instead of lingering
-              // over a shrinking box.
-              opacity: progress.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0, 0, 1] }),
-            }
-          // Before the first measurement the wrapper stays unconstrained so the
-          // content can lay out at its natural height and report it — measuring
-          // inside an already-clipped zero-height box reports 0, which would pin
-          // the collapse shut forever. Transparent so that pass isn't visible.
-          : { opacity: 0 },
+        styles.wrapper,
+        {
+          height: progress.interpolate({ inputRange: [0, 1], outputRange: [0, contentH] }),
+          // Held at 0 through the last 30% of the collapse so the content is
+          // gone before the container finishes closing, instead of lingering
+          // over a shrinking box.
+          opacity: progress.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0, 0, 1] }),
+        },
         style,
       ]}
       pointerEvents={expanded ? 'auto' : 'none'}
     >
+      {/* Absolutely positioned so the wrapper's animated height can never
+          constrain how the content measures. Yoga measures an in-flow child of
+          a fixed-height, non-scroll container at most that height, so a
+          collapsed (0px) wrapper squeezed text to 0 while padding and margins
+          stayed, and that too-small reading replaced the real one. An absolute
+          child with no height or bottom offset always measures at its natural
+          height. */}
       <View
+        style={styles.content}
         onLayout={e => {
           const h = e.nativeEvent.layout.height;
-          // Ignore zero readings: once the wrapper is clipped to 0 the child can
-          // report 0, and storing that would undo the real measurement and leave
-          // the content permanently stuck closed.
-          if (h > 0 && h !== contentH) setContentH(h);
+          if (h !== contentH) setContentH(h);
         }}
       >
         {children}
@@ -79,3 +77,8 @@ export default function Collapsible({ progress, expanded, children, style }: Pro
     </Animated.View>
   );
 }
+
+const styles = StyleSheet.create({
+  wrapper: { overflow: 'hidden' },
+  content: { position: 'absolute', top: 0, left: 0, right: 0 },
+});
