@@ -32,6 +32,7 @@
 - The summary now shows total reps, and volume as an exact figure instead of a rounded shorthand. Volume and duration sit on their own row above exercises, sets and reps.
 
 ### Bug Fixes
+- The Strength and Endurance Score screens now show how long ago your score was updated correctly in every timezone, instead of always "just now" or hours off, and a late-evening point on the score chart no longer lands on the next day.
 - AI Coach now refers to your actual Greek Rank. It had been working one out from your Strength Score, which could name the wrong rank.
 - Changing your weight unit in Settings no longer clears the gender on your profile. That was quietly hiding your Strength Score until you re-saved your profile.
 - Paces that round up to a full minute now read correctly. A 4:59.7 pace showed as "4:60" on run details, the GPS tracker, exercise stats and share cards.

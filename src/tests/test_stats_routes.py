@@ -2273,3 +2273,53 @@ class TestExerciseLastSession:
         _create_mapped_workout(client, auth_token, tid, name='Bench Press')
         res = self._get(client, auth_token2, 'Bench Press')
         assert res.get_json() == {'sets': []}
+
+
+# ---------------------------------------------------------------------------
+# Server-clock timestamps carry a UTC offset. Sent naive, the app read them as
+# the phone's local time: "Updated" said "just now" forever behind UTC and
+# history points could shift a day.
+# ---------------------------------------------------------------------------
+
+class TestScoreTimestampsCarryOffset:
+
+    def _has_offset(self, value):
+        from datetime import datetime
+        return datetime.fromisoformat(value).tzinfo is not None
+
+    def test_strength_score_last_updated_and_history(self, client, auth_token):
+        from models import ExerciseTemplate
+        h = auth_headers(auth_token)
+        client.patch('/api/me', json={'gender': 'male', 'bodyweight': 180, 'weight_unit': 'lbs'}, headers=h)
+        tmpl = ExerciseTemplate(name='Bench Press', equipment='Barbell', standards_key='Bench Press')
+        db.session.add(tmpl)
+        db.session.commit()
+        client.post('/api/workouts', json={
+            'workoutName': 'Bench',
+            'exercises': [{'name': 'Bench Press', 'exercise_template_id': tmpl.id,
+                           'sets': [{'reps': 5, 'weight': 185}]}],
+        }, headers=h)
+
+        data = client.get('/api/stats/strength-score', headers=h).get_json()
+        assert self._has_offset(data['last_updated'])
+        assert data['history'] and all(self._has_offset(p['date']) for p in data['history'])
+
+        history = client.get('/api/stats/strength-score/history', headers=h).get_json()['history']
+        assert history and all(self._has_offset(p['date']) for p in history)
+
+    def test_endurance_score_last_updated_and_history(self, client, auth_token):
+        from models import ExerciseTemplate
+        h = auth_headers(auth_token)
+        client.patch('/api/me', json={'gender': 'male'}, headers=h)
+        tmpl = ExerciseTemplate(name='Running', exercise_type='cardio', standards_key='Running')
+        db.session.add(tmpl)
+        db.session.commit()
+        client.post('/api/workouts', json={
+            'workoutName': 'Run',
+            'exercises': [{'name': 'Running', 'exercise_template_id': tmpl.id, 'exercise_type': 'cardio',
+                           'sets': [{'cardio_duration': 25, 'distance': 5, 'distance_unit': 'km'}]}],
+        }, headers=h)
+
+        data = client.get('/api/stats/endurance-score', headers=h).get_json()
+        assert self._has_offset(data['last_updated'])
+        assert data['history'] and all(self._has_offset(p['date']) for p in data['history'])

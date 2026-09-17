@@ -82,6 +82,19 @@ def _exercise_percentile_data(user_id, standards_key, template_ids, gender, unit
 # factor under this floor would show as "+0%". Don't claim an adjustment then.
 _MIN_AGE_CREDIT = 1.005
 
+
+def _server_time_iso(dt):
+    """ISO string for a timestamp from this server's clock (datetime.now(), or a
+    column defaulting to it), with the server's UTC offset attached.
+
+    Sent naive, the app parses it as the phone's local time, which is hours off
+    anywhere but the server's timezone: "Updated" always read "just now" behind
+    UTC, showed phantom hours ahead of it, and a late-evening history point
+    could plot on the next day. Not for user-entered dates like Workout.date,
+    which are already the user's own local wall time.
+    """
+    return dt.astimezone().isoformat()
+
 _TIER_BOUNDARIES = [
     (10,  'Beginner'),
     (30,  'Intermediate'),
@@ -493,7 +506,7 @@ def strength_score():
         'bodyweight_updated_at': last_bw_log_date.isoformat() if last_bw_log_date else None,
         'coverage': coverage,
         'weight_unit': user.weight_unit or 'lbs',
-        'last_updated': datetime.now().isoformat(),
+        'last_updated': _server_time_iso(datetime.now()),
     }
     if not has_bodyweight:
         resp['missing_for_strength'] = ['bodyweight']
@@ -505,7 +518,7 @@ def strength_score():
         .all()
     )
     resp['history'] = [
-        {'date': s.created_at.isoformat(), 'score': s.score}
+        {'date': _server_time_iso(s.created_at), 'score': s.score}
         for s in history_snaps
     ]
 
@@ -723,7 +736,7 @@ def endurance_score():
             db.session.commit()
 
     history = [
-        {'date': s.created_at.isoformat(), 'score': s.score}
+        {'date': _server_time_iso(s.created_at), 'score': s.score}
         for s in (
             StrengthScoreSnapshot.query
             .filter_by(user_id=user_id, score_type='endurance')
@@ -745,7 +758,7 @@ def endurance_score():
         'age_factor': round(data['age_factor'], 3),
         'age_adjusted': data['age_factor'] >= _MIN_AGE_CREDIT,
         'history': history,
-        'last_updated': datetime.now().isoformat(),
+        'last_updated': _server_time_iso(datetime.now()),
     }), 200
 
 
@@ -761,7 +774,7 @@ def strength_score_history():
     )
     return jsonify({
         'history': [
-            {'date': s.created_at.isoformat(), 'score': s.score}
+            {'date': _server_time_iso(s.created_at), 'score': s.score}
             for s in snapshots
         ]
     }), 200
