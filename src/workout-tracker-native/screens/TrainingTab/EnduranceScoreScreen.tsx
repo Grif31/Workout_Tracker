@@ -332,7 +332,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
           <EnduranceScoreShareCard
             score={data.overall}
             rankLabel={data.overall_rank.label}
-            distancesTracked={data.distances_tracked}
+            longestDistance={data.distances[data.distances.length - 1].label}
             bestTime={fmtRaceTime(bestDistance.pace_min_per_km * bestDistance.distance_km)}
             bestTimeLabel={`${bestDistance.label} Time`}
             accentColor={rankColor}
@@ -458,7 +458,11 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
                 </View>
               </View>
               <Text style={styles.basedOn}>
-                Based on {data.distances_tracked} distance{data.distances_tracked !== 1 ? 's' : ''}
+                {/* The range, not a count: one 5K run fills in every shorter
+                    distance too, so "5 distances" overstated what was logged */}
+                {data.distances.length === 1
+                  ? `Based on your ${data.distances[0].label} time`
+                  : `Based on your times from ${data.distances[0].label} to ${data.distances[data.distances.length - 1].label}`}
                 {data.last_updated ? `  ·  Updated ${timeAgo(data.last_updated)}` : ''}
               </Text>
               <Collapsible progress={heroAnim} expanded={heroExpanded} style={styles.heroCollapsible}>

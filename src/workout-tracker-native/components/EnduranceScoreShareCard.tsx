@@ -15,7 +15,9 @@ import { SHARE_TEXT } from '../constants/shareCardTheme';
 type EnduranceScoreShareCardProps = {
   score: number;
   rankLabel: string;
-  distancesTracked: number;
+  /** Label of the longest distance scored, e.g. "10K". A count would
+   *  overstate it, since one run fills in every shorter distance. */
+  longestDistance: string;
   /** Finish time at the best-scoring distance, e.g. "25:00". */
   bestTime: string;
   bestTimeLabel: string;
@@ -26,10 +28,10 @@ type EnduranceScoreShareCardProps = {
 };
 
 const EnduranceScoreShareCard = forwardRef<View, EnduranceScoreShareCardProps>(
-  ({ score, rankLabel, distancesTracked, bestTime, bestTimeLabel, accentColor, date, isRankUp }, ref) => {
+  ({ score, rankLabel, longestDistance, bestTime, bestTimeLabel, accentColor, date, isRankUp }, ref) => {
     const statItems: ShareCardStatItem[] = [
       { value: bestTime, label: bestTimeLabel },
-      { value: distancesTracked, label: distancesTracked === 1 ? 'Distance' : 'Distances' },
+      { value: longestDistance, label: 'Longest Distance' },
     ];
 
     return (
