@@ -1967,6 +1967,45 @@ class TestStrengthScoreForExercise:
         assert data['rank']['label']
         assert data['estimated_1rm'] > 0
 
+    def test_flags_a_logged_single_as_a_true_1rm(self, client, auth_token):
+        # A real single is preferred over the Epley estimate and returned under
+        # estimated_1rm, so is_true_1rm is what tells the app not to say "Est."
+        h = auth_headers(auth_token)
+        client.patch('/api/me', json={'gender': 'male', 'bodyweight': 180, 'weight_unit': 'lbs'}, headers=h)
+        tid = self._seed_template(name='Squat', standards_key='Squat')
+        client.post('/api/workouts', json={
+            'workoutName': 'Leg Day',
+            'exercises': [{'name': 'Squat', 'exercise_template_id': tid,
+                           'sets': [{'reps': 5, 'weight': 225, 'set_type': 'N'},
+                                    {'reps': 1, 'weight': 275, 'set_type': 'N'}]}],
+        }, headers=h)
+
+        single = client.get(f'/api/stats/strength-score/exercise?exercise_template_id={tid}', headers=h).get_json()
+        assert single['estimated_1rm'] == 275
+        assert single['is_true_1rm'] is True
+
+        full = client.get('/api/stats/strength-score', headers=h).get_json()
+        squat = next(e for e in full['big6'] if e['exercise'] == 'Squat')
+        assert squat['estimated_1rm'] == 275
+        assert squat['is_true_1rm'] is True
+
+    def test_an_estimate_is_not_flagged_as_true(self, client, auth_token):
+        h = auth_headers(auth_token)
+        client.patch('/api/me', json={'gender': 'male', 'bodyweight': 180, 'weight_unit': 'lbs'}, headers=h)
+        tid = self._seed_template(name='Squat', standards_key='Squat')
+        client.post('/api/workouts', json={
+            'workoutName': 'Leg Day',
+            'exercises': [{'name': 'Squat', 'exercise_template_id': tid,
+                           'sets': [{'reps': 5, 'weight': 225, 'set_type': 'N'}]}],
+        }, headers=h)
+
+        single = client.get(f'/api/stats/strength-score/exercise?exercise_template_id={tid}', headers=h).get_json()
+        assert single['is_true_1rm'] is False
+        full = client.get('/api/stats/strength-score', headers=h).get_json()
+        assert next(e for e in full['big6'] if e['exercise'] == 'Squat')['is_true_1rm'] is False
+        # Big 6 lifts with no data at all aren't flagged either
+        assert next(e for e in full['big6'] if e['exercise'] == 'Deadlift')['is_true_1rm'] is False
+
     def test_matches_full_strength_score_percentile(self, client, auth_token):
         # Cross-check: this endpoint and strength_score()'s own big6 list share
         # _exercise_percentile_data, so they must agree on the same lift.

@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../context/ThemeContext';
-import { spacing } from '../theme/spacing';
+import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { STRENGTH_TIERS, SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../constants/strengthRanks';
 import SectionRule from './SectionRule';
@@ -11,7 +11,10 @@ export type LiftEntry = {
   exercise: string;
   percentile: number | null;
   rank: { label: string; tier: number; display: string } | null;
+  /** The best 1RM: a logged single when there is one, else an Epley estimate. */
   estimated_1rm?: number | null;
+  /** True when estimated_1rm is a logged single rather than an estimate. */
+  is_true_1rm?: boolean;
   thresholds?: { percentile: number; rank: string; weight: number }[];
   has_data: boolean;
 };
@@ -69,7 +72,7 @@ export default function LiftDetailModal({ visible, onClose, lift, weightUnit }: 
                     </View>
                   )}
                   {lift.estimated_1rm != null && (
-                    <Text style={styles.liftOneRM}>Est. 1RM: {lift.estimated_1rm} {weightUnit}</Text>
+                    <Text style={styles.liftOneRM}>{lift.is_true_1rm ? '1RM' : 'Est. 1RM'}: {lift.estimated_1rm} {weightUnit}</Text>
                   )}
                   {nextThreshold && lbsToNext != null && lbsToNext > 0 && (
                     <Text style={[styles.nextRankText, { color: colors.textPrimary }]}>
@@ -94,26 +97,57 @@ export default function LiftDetailModal({ visible, onClose, lift, weightUnit }: 
                       />
                     ))}
                   </View>
-                  {/* Labels + weight thresholds */}
+                  {/* Names only: the weights get their own readable list below
+                      instead of 7px text under slices as narrow as Legend's 5% */}
                   <View style={{ flexDirection: 'row', marginTop: spacing.xs }}>
-                    {TIERS.map(tier => {
-                      const threshold = lift.thresholds?.find(t => t.rank === tier.label);
-                      const reached = pct >= tier.low;
-                      return (
-                        <View key={tier.label} style={{ flex: tier.high - tier.low, alignItems: 'center' }}>
-                          <Text style={[styles.tierBarLabel, { color: reached ? tier.color : colors.textSecondary }]} numberOfLines={1}>
-                            {tier.label}
-                          </Text>
-                          {threshold && (
-                            <Text style={[styles.tierBarWeight, { color: reached ? tier.color : colors.textSecondary }]} numberOfLines={1}>
-                              {threshold.weight} {weightUnit}
-                            </Text>
-                          )}
-                        </View>
-                      );
-                    })}
+                    {TIERS.map(tier => (
+                      <View key={tier.label} style={{ flex: tier.high - tier.low, alignItems: 'center' }}>
+                        <Text style={[styles.tierBarLabel, { color: pct >= tier.low ? tier.color : colors.textSecondary }]} numberOfLines={1}>
+                          {tier.label}
+                        </Text>
+                      </View>
+                    ))}
                   </View>
                 </View>
+
+                {/* Every rank and the estimated 1RM it takes */}
+                {!!lift.thresholds?.length && (
+                  <>
+                    <SectionRule label="Weight By Rank" style={{ marginTop: spacing.sm }} />
+                    <View>
+                      {TIERS.map(tier => {
+                        const threshold = lift.thresholds?.find(t => t.rank === tier.label);
+                        // Novice has no lower boundary: it's anything below Beginner
+                        const beginner = lift.thresholds?.find(t => t.rank === 'Beginner');
+                        const reached = pct >= tier.low;
+                        const isCurrent = tier.label === lift.rank?.label;
+                        return (
+                          <View
+                            key={tier.label}
+                            testID={`lift-tier-${tier.label}${isCurrent ? '-current' : ''}`}
+                            style={[styles.tierListRow, isCurrent && { backgroundColor: tier.color + '1F' }]}
+                          >
+                            <Ionicons
+                              name={reached ? (SCORE_RANK_ICONS[tier.label] ?? 'ellipse-outline') : 'lock-closed'}
+                              size={14}
+                              color={reached ? tier.color : colors.textSecondary}
+                            />
+                            <Text style={[styles.tierListName, { color: reached ? tier.color : colors.textSecondary }, isCurrent && styles.tierListCurrent]}>
+                              {tier.label}
+                            </Text>
+                            {threshold ? (
+                              <Text style={[styles.tierListWeight, isCurrent && styles.tierListCurrent]}>
+                                {threshold.weight} {weightUnit}
+                              </Text>
+                            ) : beginner ? (
+                              <Text style={styles.tierListNote}>Below {beginner.weight} {weightUnit}</Text>
+                            ) : null}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </>
+                )}
 
                 {/* Tier sub-rank dots */}
                 {lift.rank && (
@@ -167,7 +201,14 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     top: 2,
   },
   tierBarLabel: { fontSize: 8, fontWeight: '600', textAlign: 'center' },
-  tierBarWeight: { fontSize: 7, textAlign: 'center', marginTop: 1 },
+  tierListRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    paddingVertical: 6, paddingHorizontal: spacing.sm, borderRadius: radius.sm,
+  },
+  tierListName: { fontSize: typography.fontSize.sm, fontWeight: '600', flex: 1 },
+  tierListWeight: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
+  tierListNote: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
+  tierListCurrent: { fontWeight: '800' },
   miniRankBadge: {
     borderRadius: 6, borderWidth: 1, paddingHorizontal: spacing.sm, paddingVertical: 2,
     flexDirection: 'row', alignItems: 'center', gap: 3,

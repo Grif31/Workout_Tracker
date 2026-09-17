@@ -437,6 +437,11 @@ def strength_score():
             'percentile': round(pct, 1) if pct is not None else None,
             'rank': percentile_to_strength_rank(pct) if pct is not None else None,
             'estimated_1rm': exercise_1rms.get(name),
+            # estimated_1rm already holds a logged single when one exists (it's
+            # preferred over the Epley estimate); this says which it is so the
+            # app doesn't call a real 1RM estimated. The field keeps its name
+            # for app builds that read it.
+            'is_true_1rm': name in exercise_true_1rms,
             'thresholds': thresholds,
             'has_data': pct is not None,
         }
@@ -643,6 +648,7 @@ def strength_score_for_exercise():
         'percentile': round(result['percentile'], 1),
         'rank': percentile_to_strength_rank(result['percentile']),
         'estimated_1rm': result['best_1rm'],
+        'is_true_1rm': result['true_1rm'] is not None,
         'thresholds': _compute_thresholds(standards_key, user.gender, bw_lbs, unit_to_lbs),
     }), 200
 
