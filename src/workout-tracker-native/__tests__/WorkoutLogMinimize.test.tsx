@@ -38,7 +38,13 @@ jest.mock('../context/WorkoutSessionContext', () => ({
 const { sessionElapsedSeconds } = jest.requireActual('../context/WorkoutSessionContext');
 
 const MIN = 60_000;
-const advance = (ms: number) => act(() => { jest.advanceTimersByTime(ms); });
+// The timer derives elapsed time from Date.now(), so jump the clock and run a
+// single tick instead of firing (and re-rendering for) every simulated second.
+const advance = (ms: number) => act(() => {
+  const tick = Math.min(ms, 1000);
+  jest.setSystemTime(Date.now() + ms - tick);
+  jest.advanceTimersByTime(tick);
+});
 // Header has the minimize chevron first; the rest timer panel may render another.
 const minimize = (r: ReturnType<typeof render>) => fireEvent.press(r.UNSAFE_getAllByProps({ name: 'chevron-down' })[0]);
 const toggleTimer = (r: ReturnType<typeof render>) => fireEvent.press(r.getByText('Duration'));

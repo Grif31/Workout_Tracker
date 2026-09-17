@@ -25,6 +25,27 @@ def app():
         _db.drop_all()
 
 
+# Production hashes use werkzeug's default 1,000,000 pbkdf2 iterations, about
+# 1.4s per hash and per check on this machine. Nearly every test signs up and
+# logs in, so that alone made the suite take many minutes. Tests only need a
+# real, verifiable hash; the iteration count is stored in the hash string, so
+# check_password_hash stays fast too. Production code is untouched.
+FAST_HASH_METHOD = 'pbkdf2:sha256:1000'
+
+
+@pytest.fixture(scope='session', autouse=True)
+def fast_password_hashing():
+    import routes.auth_routes as auth_routes
+
+    def _fast_hash(password, method=None, salt_length=16):
+        return generate_password_hash(password, method=FAST_HASH_METHOD, salt_length=salt_length)
+
+    original = auth_routes.generate_password_hash
+    auth_routes.generate_password_hash = _fast_hash
+    yield
+    auth_routes.generate_password_hash = original
+
+
 @pytest.fixture(scope='function')
 def client(app):
     """Flask test client."""

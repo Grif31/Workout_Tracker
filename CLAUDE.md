@@ -46,7 +46,7 @@ npx expo install <pkg>      # install Expo-compatible package version
 ./venv/Scripts/flask.exe db migrate -m "msg" # generate migration
 ./venv/Scripts/flask.exe db upgrade           # apply migrations
 ./venv/Scripts/pip.exe install <pkg>          # install Python package
-python -m pytest tests/ -q --tb=short        # run all backend tests (~14 min on this machine — run in background, it is not hung)
+./venv/Scripts/python.exe -m pytest tests/ -q --tb=short   # run all backend tests (~30s; conftest swaps in cheap password hashing, the prod 1M-iteration pbkdf2 made this ~14 min)
 python -m pytest tests/test_foo.py -v        # run single test file
 ```
 
