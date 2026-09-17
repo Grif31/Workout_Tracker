@@ -63,7 +63,7 @@ export default function AccountSettingsScreen({ navigation }: Props) {
           onPress: () => {
             Alert.alert(
               'Are you sure?',
-              `Type your email to confirm: this will delete all data for ${user?.email ?? 'your account'}.`,
+              `All workouts, PRs, progress photos and settings for ${user?.email ?? 'your account'} will be deleted. This can't be undone.`,
               [
                 { text: 'Cancel', style: 'cancel' },
                 {

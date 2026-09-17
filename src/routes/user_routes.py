@@ -230,7 +230,9 @@ def _delete_all_user_data(user_id: int) -> None:
     IntegrityError for any user with data.
     """
     # Rows that only reference the user
-    for model in (PersonalRecord, StrengthScoreSnapshot, DeviceToken,
+    # PREvent also cascades from workouts in Postgres, but deleting it here
+    # doesn't rely on DB-level cascades (SQLite, which tests use, skips them).
+    for model in (PersonalRecord, PREvent, StrengthScoreSnapshot, DeviceToken,
                   BodyweightLog, BodyMeasurement, ProgressPhoto):
         model.query.filter_by(user_id=user_id).delete(synchronize_session=False)
 
@@ -278,6 +280,13 @@ def delete_account():
     if not user:
         return jsonify({'message': 'User not found'}), 404
 
+    # Read before the rows go: the image files are publicly served from
+    # /static and would outlive the account otherwise.
+    photo_filenames = [
+        os.path.basename(p.photo_url.split('/static/progress_photos/')[-1])
+        for p in ProgressPhoto.query.filter_by(user_id=user_id).all()
+    ]
+
     try:
         _delete_all_user_data(user_id)
         db.session.commit()
@@ -290,6 +299,12 @@ def delete_account():
     for ext in ALLOWED_EXTENSIONS:
         path = os.path.join(avatars_dir, f'{user_id}.{ext}')
         if os.path.exists(path):
+            os.remove(path)
+
+    photos_dir = os.path.join(current_app.static_folder, 'progress_photos')
+    for filename in photo_filenames:
+        path = os.path.join(photos_dir, filename)
+        if filename and os.path.exists(path):
             os.remove(path)
 
     return jsonify({'message': 'Account deleted'}), 200

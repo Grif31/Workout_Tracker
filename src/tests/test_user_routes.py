@@ -261,12 +261,13 @@ class TestDeleteAccount:
             User, Workout, Exercise, Set, PersonalRecord, DeviceToken,
             BodyweightLog, BodyMeasurement, Routine, RoutineDay,
             WorkoutTemplate, WorkoutTemplateExercise, ExerciseTemplate,
-            ExerciseMuscleMapping,
+            ExerciseMuscleMapping, PREvent,
         )
         user_id = registered_user['user']['id']
         ex_id = _build_full_account(client, auth_token)
         # Sanity: PRs were created from the workout
         assert PersonalRecord.query.filter_by(user_id=user_id).count() > 0
+        assert PREvent.query.filter_by(user_id=user_id).count() > 0
 
         res = client.delete('/api/me', headers=auth_headers(auth_token))
         assert res.status_code == 200
@@ -276,6 +277,7 @@ class TestDeleteAccount:
         assert Exercise.query.count() == 0
         assert Set.query.count() == 0
         assert PersonalRecord.query.filter_by(user_id=user_id).count() == 0
+        assert PREvent.query.filter_by(user_id=user_id).count() == 0
         assert DeviceToken.query.filter_by(user_id=user_id).count() == 0
         assert BodyweightLog.query.filter_by(user_id=user_id).count() == 0
         assert BodyMeasurement.query.filter_by(user_id=user_id).count() == 0
@@ -300,6 +302,41 @@ class TestDeleteAccount:
         workouts = res.get_json()
         assert len(workouts) == 1
         assert workouts[0]['name'] == 'User2 Day'
+
+    def _upload_photo(self, client, token):
+        res = client.post('/api/progress-photos', data={
+            'photo': (_img_bytes(), 'progress.jpg'),
+        }, content_type='multipart/form-data', headers=auth_headers(token))
+        assert res.status_code == 201
+        return os.path.basename(res.get_json()['photo_url'])
+
+    def test_progress_photo_files_removed(self, client, auth_token, tmp_static):
+        names = [self._upload_photo(client, auth_token) for _ in range(2)]
+        photos_dir = tmp_static / 'progress_photos'
+        assert all((photos_dir / n).exists() for n in names)
+
+        assert client.delete('/api/me', headers=auth_headers(auth_token)).status_code == 200
+        assert not any((photos_dir / n).exists() for n in names)
+
+    def test_other_users_photo_files_kept(self, client, auth_token, auth_token2, tmp_static):
+        self._upload_photo(client, auth_token)
+        theirs = self._upload_photo(client, auth_token2)
+
+        client.delete('/api/me', headers=auth_headers(auth_token))
+        assert (tmp_static / 'progress_photos' / theirs).exists()
+        res = client.get('/api/progress-photos', headers=auth_headers(auth_token2))
+        assert len(res.get_json()) == 1
+
+    def test_avatar_file_removed(self, client, auth_token, tmp_static):
+        res = client.post('/api/me/avatar', data={
+            'avatar': (_img_bytes(), 'me.jpg'),
+        }, content_type='multipart/form-data', headers=auth_headers(auth_token))
+        assert res.status_code in (200, 201), res.get_json()
+        avatars = list((tmp_static / 'avatars').iterdir())
+        assert avatars
+
+        client.delete('/api/me', headers=auth_headers(auth_token))
+        assert not any(p.exists() for p in avatars)
 
 
 # ---------------------------------------------------------------------------
