@@ -479,14 +479,39 @@ def compute_dedication_score(workouts_13wk: int) -> float:
     return 100.0
 
 
-def compute_volume_score(workouts_8wk: int) -> float:
-    avg_per_week = workouts_8wk / 8
-    milestones = [(0, 0), (1, 20), (2, 40), (3, 65), (4, 80), (5, 90), (6, 100)]
+# Greek rank "Volume" measures training load, not workout count. Consistency
+# and dedication already count workouts, so counting them a third time here
+# let a 6-set session score the same as a 25-set one.
+#
+# Load is working sets plus cardio minutes converted to set-equivalents: a set
+# and its rest take about 3 minutes, so a 30-minute run counts as 10 and a
+# 60-minute ride as 20, level with a short and a full lifting session.
+CARDIO_MINUTES_PER_LOAD = 3.0
+# Real sessions stay under this (40 is a very long lift or a 2-hour ride), so
+# the cap only bites on a padded log, which could otherwise max eight weeks of
+# Volume in one entry.
+MAX_LOAD_PER_WORKOUT = 40.0
+TRAINING_LOAD_WINDOW_WEEKS = 8
+
+
+def workout_training_load(working_sets: int, cardio_minutes: float) -> float:
+    """One workout's load: working sets plus cardio set-equivalents, capped."""
+    load = (working_sets or 0) + (cardio_minutes or 0.0) / CARDIO_MINUTES_PER_LOAD
+    return min(load, MAX_LOAD_PER_WORKOUT)
+
+
+def compute_training_load_score(weekly_load: float) -> float:
+    """0-100 from average weekly load. Three full lifting sessions (~54) land
+    near where three workouts a week scored under the old count-based curve,
+    so a typical user barely moves; short sessions now score less."""
+    milestones = [(0, 0), (15, 20), (30, 40), (50, 65), (70, 80), (90, 90), (120, 100)]
+    if weekly_load <= 0:
+        return 0.0
     for i in range(len(milestones) - 1):
-        lo_cnt, lo_pts = milestones[i]
-        hi_cnt, hi_pts = milestones[i + 1]
-        if avg_per_week <= hi_cnt:
-            t = (avg_per_week - lo_cnt) / (hi_cnt - lo_cnt)
+        lo_load, lo_pts = milestones[i]
+        hi_load, hi_pts = milestones[i + 1]
+        if weekly_load <= hi_load:
+            t = (weekly_load - lo_load) / (hi_load - lo_load)
             return lo_pts + t * (hi_pts - lo_pts)
     return 100.0
 

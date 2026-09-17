@@ -4,7 +4,11 @@ Tests for utils/strength_standards.py:
   bodyweight ratios (see routes/strength_score_routes.py strength_score()).
 """
 import pytest
-from utils.strength_standards import age_scaling_factor, _AGE_FACTOR_ANCHORS
+from utils.strength_standards import (
+    age_scaling_factor, _AGE_FACTOR_ANCHORS,
+    workout_training_load, compute_training_load_score,
+    CARDIO_MINUTES_PER_LOAD, MAX_LOAD_PER_WORKOUT,
+)
 
 
 class TestAgeScalingFactor:
@@ -40,3 +44,54 @@ class TestAgeScalingFactor:
     def test_interpolates_between_anchors(self):
         # Midpoint between the 25→1.00 and 35→1.03 anchors
         assert age_scaling_factor(30) == pytest.approx(1.015, abs=0.001)
+
+
+class TestWorkoutTrainingLoad:
+
+    def test_working_sets_count_one_each(self):
+        assert workout_training_load(18, 0) == 18
+
+    def test_cardio_converts_at_one_per_three_minutes(self):
+        assert CARDIO_MINUTES_PER_LOAD == 3.0
+        assert workout_training_load(0, 30) == pytest.approx(10)
+        assert workout_training_load(0, 60) == pytest.approx(20)
+
+    def test_mixed_session_adds_both(self):
+        # 12 sets of lifting plus a 15-minute finisher
+        assert workout_training_load(12, 15) == pytest.approx(17)
+
+    def test_capped_per_workout(self):
+        assert MAX_LOAD_PER_WORKOUT == 40.0
+        assert workout_training_load(100, 0) == 40
+        assert workout_training_load(0, 300) == 40
+        assert workout_training_load(30, 60) == 40
+
+    def test_missing_values_count_as_zero(self):
+        assert workout_training_load(None, None) == 0
+
+
+class TestComputeTrainingLoadScore:
+
+    @pytest.mark.parametrize('load, points', [
+        (0, 0), (15, 20), (30, 40), (50, 65), (70, 80), (90, 90), (120, 100),
+    ])
+    def test_hits_each_anchor_exactly(self, load, points):
+        assert compute_training_load_score(load) == pytest.approx(points)
+
+    def test_interpolates_between_anchors(self):
+        # Halfway from (30, 40) to (50, 65)
+        assert compute_training_load_score(40) == pytest.approx(52.5)
+
+    def test_clamps_at_both_ends(self):
+        assert compute_training_load_score(-5) == 0
+        assert compute_training_load_score(500) == 100
+
+    def test_monotonically_non_decreasing(self):
+        values = [compute_training_load_score(x) for x in range(0, 150)]
+        for prev, curr in zip(values, values[1:]):
+            assert curr >= prev
+
+    def test_three_full_sessions_score_near_the_old_three_workout_mark(self):
+        # 3 x 18 working sets = 54/week. The old count-based curve gave three
+        # workouts a week 65, so typical users should barely move.
+        assert compute_training_load_score(54) == pytest.approx(68, abs=1)

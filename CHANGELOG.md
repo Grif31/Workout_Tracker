@@ -6,8 +6,13 @@
 - Runners now get an Endurance Score, the running counterpart to the Strength Score. Your best pace at each distance is ranked against pace standards for your gender, with the same tiers and rank colors as the Strength Score.
 - Every run also scores the shorter distances inside it, so a 5K gives you a mile time too. Endurance distances (5K and up) count for 70 percent of the score and speed distances (400m to 1 mile) for 30 percent, and whichever tier you have no times for drops out.
 - Your Greek Rank now uses whichever is higher, your Endurance Score or your Strength Score, so running and lifting never dilute each other.
+- The Greek Rank breakdown shows a Performance score with your Strength and Endurance scores under it, and highlights the one that counts. Both score screens are one tap away from it.
 - Paces show in min/mi or min/km to match your GPS distance setting, and each distance shows the pace the next rank asks for.
 - The score tracks over time on its own chart, and it can be shared the same way as the Strength Score.
+
+### Changed: Greek Rank Volume
+- The Volume part of your Greek Rank now measures how much training you do, not how many workouts you log. It counts your working sets plus cardio time, where 3 minutes of cardio counts as one set. Warm-up sets don't count, and a single workout counts for at most 40.
+- A short session now counts for less than a full one. If your sessions are typically full length, your rank will barely change.
 
 ### Improved: Swipe to Delete
 - Swiping a set to delete it now shows a trash icon that grows as you reach the point where letting go will delete, and the delete button sits flush against the set.

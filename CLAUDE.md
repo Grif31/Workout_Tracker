@@ -286,6 +286,7 @@ return jsonify({ 'message': 'error reason' }), 400   # client error
 - **RPE:** 1–10 scale, optional per set, only shown when user enables it in workout settings
 - **User gender:** `user.gender` is `'male'` | `'female'` | `None` — used for strength score percentile calculations
 - **Scores:** Strength Score (lift percentiles vs bodyweight) and Endurance Score (running pace percentiles, best-within-tier: core 5K+ 70% / speed 400m-1mi 30%) share the `STRENGTH_TIERS` percentile tiers and both write to `strength_score_snapshots`, separated by `score_type` (`'strength'` | `'endurance'`) — every snapshot read must filter on it. The Greek Rank's 45% performance slot takes `max(strength_overall, endurance_overall)`, so running and lifting never dilute each other
+- **Greek Rank Volume (10%)** is weekly training load, not workout count (Consistency and Dedication already count workouts): working sets (warm-ups and rows with no reps excluded; a timed-hold set counts as 1) plus cardio minutes / 3, capped at 40 per workout, averaged over 8 weeks, scored by `compute_training_load_score` in `utils/strength_standards.py`
 
 ---
 

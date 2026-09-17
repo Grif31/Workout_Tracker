@@ -1258,6 +1258,80 @@ class TestStrengthScoreCardioOnlyUser:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/stats/strength-score — Greek rank Volume is weekly training load
+# (working sets + cardio minutes / 3, capped at 40 per workout, averaged over
+# 8 weeks), not workout count.
+# ---------------------------------------------------------------------------
+
+class TestGreekVolumeTrainingLoad:
+
+    def _volume(self, client, h):
+        res = client.get('/api/stats/strength-score', headers=h)
+        assert res.status_code == 200
+        return res.get_json()['greek_score_components']['volume']
+
+    def _setup(self, client, auth_token):
+        h = auth_headers(auth_token)
+        assert client.patch('/api/me', json={'gender': 'male'}, headers=h).status_code == 200
+        return h
+
+    def _log_lift(self, client, h, sets):
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Lift',
+            'exercises': [{'name': 'Custom Press', 'sets': sets}],
+        }, headers=h)
+        assert res.status_code == 201
+
+    def _log_cardio(self, client, h, minutes):
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Ride',
+            'exercises': [{
+                'name': 'Cycling', 'exercise_type': 'cardio',
+                'sets': [{'cardio_duration': minutes, 'distance': 20, 'distance_unit': 'km'}],
+            }],
+        }, headers=h)
+        assert res.status_code == 201
+
+    def test_warm_ups_are_excluded(self, client, auth_token):
+        h = self._setup(client, auth_token)
+        # 30 working sets + 10 warm-ups -> load 30 -> 3.75/week -> 5.0 points
+        self._log_lift(client, h, [{'reps': 5, 'weight': 100}] * 30
+                                  + [{'reps': 5, 'weight': 45, 'set_type': 'W'}] * 10)
+        assert self._volume(client, h) == pytest.approx(5.0, abs=0.05)
+
+    def test_cardio_minutes_score_the_same_as_equivalent_sets(self, client, auth_token):
+        h = self._setup(client, auth_token)
+        # 90 minutes / 3 = load 30, identical to 30 working sets above
+        self._log_cardio(client, h, 90)
+        assert self._volume(client, h) == pytest.approx(5.0, abs=0.05)
+
+    def test_one_padded_workout_is_capped(self, client, auth_token):
+        h = self._setup(client, auth_token)
+        # 100 sets caps at 40 -> 5/week -> 6.7 points
+        self._log_lift(client, h, [{'reps': 5, 'weight': 100}] * 100)
+        assert self._volume(client, h) == pytest.approx(6.7, abs=0.05)
+
+    def test_empty_set_rows_do_not_count(self, client, auth_token):
+        h = self._setup(client, auth_token)
+        self._log_lift(client, h, [{'weight': 100}] * 10)
+        assert self._volume(client, h) == 0
+
+    def test_short_sessions_score_below_full_ones(self, client, auth_token, auth_token2):
+        # The old count-based score gave these two users the same Volume
+        h = self._setup(client, auth_token)
+        for _ in range(3):
+            self._log_lift(client, h, [{'reps': 8, 'weight': 100}] * 6)
+        short = self._volume(client, h)
+
+        h2 = self._setup(client, auth_token2)
+        for _ in range(3):
+            self._log_lift(client, h2, [{'reps': 8, 'weight': 100}] * 18)
+        full = self._volume(client, h2)
+
+        assert full > short
+
+
+# ---------------------------------------------------------------------------
 # GET /api/stats/strength-score — endurance leg (running pace percentiles).
 # Only templates with standards_key='Running' feed it; the Greek rank's 45%
 # performance slot takes max(strength, endurance); bodyweight gates only the

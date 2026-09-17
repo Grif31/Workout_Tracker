@@ -19,10 +19,10 @@ const NEOPHYTE = GREEK_RANKS[0];
 const CIRCLE_SIZE = 120;
 
 const PILLARS = [
-  { emoji: '⚡', label: 'Strength', pct: '45%', desc: 'Lift heavier on the Big 6 lifts' },
+  { emoji: '⚡', label: 'Performance', pct: '45%', desc: 'Your Strength or Endurance Score, whichever is higher' },
   { emoji: '🔄', label: 'Consistency', pct: '30%', desc: 'Train regularly week over week' },
   { emoji: '🎯', label: 'Dedication', pct: '15%', desc: 'Maintain your training over months' },
-  { emoji: '📈', label: 'Volume', pct: '10%', desc: 'Log more workouts per week' },
+  { emoji: '📈', label: 'Volume', pct: '10%', desc: 'Do more working sets and cardio minutes each week' },
 ];
 
 export default function GreekRankIntroScreen({ navigation }: Props) {

@@ -160,7 +160,8 @@ def strength_score():
         percentile_to_strength_rank, greek_rank_from_score,
         compute_muscle_group_scores, compute_overall_score,
         compute_consistency_score, compute_dedication_score,
-        compute_volume_score, compute_greek_score, age_scaling_factor,
+        compute_training_load_score, workout_training_load, TRAINING_LOAD_WINDOW_WEEKS,
+        compute_greek_score, age_scaling_factor,
     )
 
     user_id = get_jwt_identity()
@@ -288,14 +289,40 @@ def strength_score():
         Workout.user_id == user_id,
         Workout.date >= thirteen_wks_ago,
     ).count()
-    workouts_8wk_count = Workout.query.filter(
-        Workout.user_id == user_id,
-        Workout.date >= eight_wks_ago,
-    ).count()
+    # Per-workout load in one query: working sets (warm-ups and empty rows
+    # excluded; a timed hold counts as a set) and cardio minutes. Grouped by
+    # workout because the anti-padding cap applies per workout.
+    from sqlalchemy import func, case, and_, or_
+    ex_type = func.lower(func.coalesce(Exercise.exercise_type, 'strength'))
+    not_warmup = or_(Set.set_type.is_(None), Set.set_type != 'W')
+    load_rows = (
+        db.session.query(
+            Workout.id,
+            func.sum(case(
+                (ex_type == 'cardio', 0),
+                (and_(ex_type == 'duration', not_warmup, Set.cardio_duration > 0), 1),
+                (and_(ex_type != 'duration', not_warmup, Set.reps > 0), 1),
+                else_=0,
+            )),
+            func.sum(case(
+                (ex_type == 'cardio', func.coalesce(Set.cardio_duration, 0)),
+                else_=0,
+            )),
+        )
+        .join(Exercise, Exercise.workout_id == Workout.id)
+        .join(Set, Set.exercise_id == Exercise.id)
+        .filter(Workout.user_id == user_id, Workout.date >= eight_wks_ago)
+        .group_by(Workout.id)
+        .all()
+    )
+    total_load = sum(
+        workout_training_load(int(sets or 0), float(cardio_min or 0))
+        for _, sets, cardio_min in load_rows
+    )
 
     consistency = compute_consistency_score(workouts_12wk)
     dedication  = compute_dedication_score(workouts_13wk_count)
-    volume_sig  = compute_volume_score(workouts_8wk_count)
+    volume_sig  = compute_training_load_score(total_load / TRAINING_LOAD_WINDOW_WEEKS)
     # The 45% "performance" slot takes whichever discipline is stronger — a
     # lifter who never runs is unaffected, a hybrid athlete gets credit for
     # their better leg, and a missing leg contributes 0 without blocking.
