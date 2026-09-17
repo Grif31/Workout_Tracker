@@ -36,6 +36,9 @@ npx expo start              # start dev server (scan QR with Expo Go)
 npx expo start --ios        # iOS simulator
 npx expo start --android    # Android emulator
 npx jest --maxWorkers=2     # run all frontend tests (default parallelism causes false timeout failures on this machine)
+#   jest testTimeout is 15s (package.json), not the 5s default: the first test in a screen file pays that
+#   file's one-time render/module init (~3s locally for GPSCardioScreen, more on CI's 2 workers), so the
+#   default made whichever test ran first flake on CI while the same test passed alone
 npx jest __tests__/Foo.test.tsx --verbose   # run single test file
 npx expo install <pkg>      # install Expo-compatible package version
 ```
