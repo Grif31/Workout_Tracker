@@ -151,17 +151,177 @@ def _endurance_data(user_id, gender, user_age):
     }
 
 
+def _user_age(user):
+    if not user.birth_date:
+        return None
+    from datetime import date as _date
+    today = _date.today()
+    return today.year - user.birth_date.year - (
+        (today.month, today.day) < (user.birth_date.month, user.birth_date.day)
+    )
+
+
+def _strength_data(user, user_age):
+    """Per-lift percentiles and the weighted overall for one user.
+
+    Shared by strength_score() and _greek_rank_data(), which only needs the
+    overall to check the top-rank gates. Needs gender. Without bodyweight the
+    percentiles are skipped (they're bodyweight ratios), so overall is None.
+    """
+    from utils.strength_standards import STANDARDS, age_scaling_factor, compute_overall_score
+
+    has_bodyweight = bool(user.bodyweight)
+    kg_to_lbs = 2.20462
+    # Logged weights are stored in the user's unit, so normalise to lbs before
+    # comparing bodyweight ratios against the lbs-calibrated standards.
+    unit_to_lbs = kg_to_lbs if (user.weight_unit or 'lbs') == 'kg' else 1.0
+    bw_lbs = user.bodyweight * unit_to_lbs if has_bodyweight else None
+    age_factor = age_scaling_factor(user_age) if user_age else 1.0
+
+    # Per-exercise percentiles via standards_key: one bulk query, no fuzzy matching
+    valid_keys = set(STANDARDS.get(user.gender, {}).keys())
+    keyed_templates = (
+        db.session.query(ExerciseTemplate.id, ExerciseTemplate.standards_key)
+        .filter(ExerciseTemplate.standards_key.in_(valid_keys))
+        .all()
+    )
+    templates_by_key: dict[str, list[int]] = {}
+    for tmpl_id, sk in keyed_templates:
+        templates_by_key.setdefault(sk, []).append(tmpl_id)
+
+    percentiles: dict[str, float] = {}
+    best_1rms: dict[str, float] = {}
+    true_1rms: dict[str, float] = {}
+    if has_bodyweight:
+        for exercise_name, template_ids in templates_by_key.items():
+            result = _exercise_percentile_data(user.id, exercise_name, template_ids, user.gender, unit_to_lbs, bw_lbs, age_factor)
+            if result is not None:
+                percentiles[exercise_name] = result['percentile']
+                best_1rms[exercise_name] = result['best_1rm']
+                if result['true_1rm'] is not None:
+                    true_1rms[exercise_name] = result['true_1rm']
+
+    return {
+        'has_bodyweight': has_bodyweight,
+        'unit_to_lbs': unit_to_lbs,
+        'bw_lbs': bw_lbs,
+        'age_factor': age_factor,
+        'valid_keys': valid_keys,
+        'percentiles': percentiles,
+        'best_1rms': best_1rms,
+        'true_1rms': true_1rms,
+        'overall': compute_overall_score(percentiles) if percentiles else None,
+    }
+
+
+def _effort_components(user_id):
+    """Consistency, dedication and training-load volume, each 0-100."""
+    from datetime import datetime, timedelta
+    from sqlalchemy import func, case, and_, or_
+    from utils.strength_standards import (
+        compute_consistency_score, compute_dedication_score,
+        compute_training_load_score, workout_training_load, TRAINING_LOAD_WINDOW_WEEKS,
+    )
+
+    now = datetime.now()
+    workouts_12wk = Workout.query.filter(
+        Workout.user_id == user_id,
+        Workout.date >= now - timedelta(weeks=12),
+    ).all()
+    workouts_13wk_count = Workout.query.filter(
+        Workout.user_id == user_id,
+        Workout.date >= now - timedelta(weeks=13),
+    ).count()
+
+    # Per-workout load in one query: working sets (warm-ups and empty rows
+    # excluded; a timed hold counts as a set) and cardio minutes. Grouped by
+    # workout because the anti-padding cap applies per workout.
+    ex_type = func.lower(func.coalesce(Exercise.exercise_type, 'strength'))
+    not_warmup = or_(Set.set_type.is_(None), Set.set_type != 'W')
+    load_rows = (
+        db.session.query(
+            Workout.id,
+            func.sum(case(
+                (ex_type == 'cardio', 0),
+                (and_(ex_type == 'duration', not_warmup, Set.cardio_duration > 0), 1),
+                (and_(ex_type != 'duration', not_warmup, Set.reps > 0), 1),
+                else_=0,
+            )),
+            func.sum(case(
+                (ex_type == 'cardio', func.coalesce(Set.cardio_duration, 0)),
+                else_=0,
+            )),
+        )
+        .join(Exercise, Exercise.workout_id == Workout.id)
+        .join(Set, Set.exercise_id == Exercise.id)
+        .filter(Workout.user_id == user_id, Workout.date >= now - timedelta(weeks=TRAINING_LOAD_WINDOW_WEEKS))
+        .group_by(Workout.id)
+        .all()
+    )
+    total_load = sum(
+        workout_training_load(int(sets or 0), float(cardio_min or 0))
+        for _, sets, cardio_min in load_rows
+    )
+
+    return (
+        compute_consistency_score(workouts_12wk),
+        compute_dedication_score(workouts_13wk_count),
+        compute_training_load_score(total_load / TRAINING_LOAD_WINDOW_WEEKS),
+    )
+
+
+_NOT_COMPUTED = object()
+
+
+def _greek_rank_data(user, strength_overall=_NOT_COMPUTED, endurance_overall=_NOT_COMPUTED):
+    """The Greek rank for one user.
+
+    Effort sets the score, so every user gets a rank with no profile fields
+    required. Performance (the higher of the Strength and Endurance Scores)
+    only gates Titan and Aretē. A caller that already computed a leg passes
+    it in, None meaning no score, to avoid computing it twice.
+    """
+    from utils.strength_standards import (
+        compute_greek_score, greek_rank_from_score, apply_greek_rank_gates,
+    )
+
+    if user.gender:
+        user_age = _user_age(user)
+        if strength_overall is _NOT_COMPUTED:
+            strength_overall = _strength_data(user, user_age)['overall']
+        if endurance_overall is _NOT_COMPUTED:
+            endurance_overall = _endurance_data(user.id, user.gender, user_age)['overall']
+    else:
+        # Both the lift and pace standards are gendered, so neither leg scores
+        strength_overall = endurance_overall = None
+
+    consistency, dedication, volume = _effort_components(user.id)
+    score = compute_greek_score(consistency, dedication, volume)
+    legs = [v for v in (strength_overall, endurance_overall) if v is not None]
+    performance = max(legs) if legs else None
+    rank, next_gate = apply_greek_rank_gates(score, performance)
+
+    return {
+        'rank': rank,
+        'score': score,
+        'score_rank': greek_rank_from_score(score),
+        'next_gate': next_gate,
+        'consistency': consistency,
+        'dedication': dedication,
+        'volume': volume,
+        'strength': strength_overall,
+        'endurance': endurance_overall,
+        'performance': performance,
+    }
+
+
 @strength_score_bp.get('/api/stats/strength-score')
 @jwt_required()
 def strength_score():
     from datetime import datetime, timedelta
     from utils.strength_standards import (
-        STANDARDS, BIG_6, COMPOUND_SECONDARY,
-        percentile_to_strength_rank, greek_rank_from_score,
-        compute_muscle_group_scores, compute_overall_score,
-        compute_consistency_score, compute_dedication_score,
-        compute_training_load_score, workout_training_load, TRAINING_LOAD_WINDOW_WEEKS,
-        compute_greek_score, age_scaling_factor,
+        BIG_6, COMPOUND_SECONDARY,
+        percentile_to_strength_rank, compute_muscle_group_scores,
     )
 
     user_id = get_jwt_identity()
@@ -170,19 +330,22 @@ def strength_score():
     if not user.gender:
         return jsonify({'missing': ['gender']}), 422
     # Bodyweight only gates the STRENGTH leg (its percentiles are
-    # bodyweight-ratio based). The endurance leg and the Greek rank's other
-    # components don't need it, so a runner who never logged a weigh-in still
-    # gets a rank — the response carries missing_for_strength so
-    # StrengthScoreScreen can keep showing its "Log Bodyweight" gate.
-    has_bodyweight = bool(user.bodyweight)
+    # bodyweight-ratio based). The endurance leg and the Greek rank don't need
+    # it, and the response carries missing_for_strength so StrengthScoreScreen
+    # can keep showing its "Log Bodyweight" gate.
+    user_age = _user_age(user)
+    _strength = _strength_data(user, user_age)
+    has_bodyweight = _strength['has_bodyweight']
+    unit_to_lbs = _strength['unit_to_lbs']
+    bw_lbs = _strength['bw_lbs']
+    age_factor = _strength['age_factor']
+    valid_keys = _strength['valid_keys']
+    exercise_percentiles = _strength['percentiles']
+    exercise_1rms = _strength['best_1rms']
+    exercise_true_1rms = _strength['true_1rms']
+    has_strength_data = bool(exercise_percentiles)
 
-    kg_to_lbs = 2.20462
-    # Logged weights are stored in the user's unit — normalise to lbs so
-    # bodyweight ratios compare against the lbs-calibrated standards.
-    unit_to_lbs = kg_to_lbs if (user.weight_unit or 'lbs') == 'kg' else 1.0
-    bw_lbs = user.bodyweight * unit_to_lbs if has_bodyweight else None
-
-    # Most recent bodyweight log entry — surfaced so the UI can flag a stale
+    # Most recent bodyweight log entry, surfaced so the UI can flag a stale
     # bodyweight (the score uses the live User.bodyweight scalar, which can
     # silently drift out of date if the user hasn't logged in a while).
     last_bw_log_date = (
@@ -191,52 +354,10 @@ def strength_score():
         .scalar()
     )
 
-    from datetime import date as _date
-    today = _date.today()
-    if user.birth_date:
-        user_age = today.year - user.birth_date.year - (
-            (today.month, today.day) < (user.birth_date.month, user.birth_date.day)
-        )
-    else:
-        user_age = None
-    age_factor = age_scaling_factor(user_age) if user_age else 1.0
-
-    # Build per-exercise percentiles using standards_key — one bulk query, no fuzzy matching
-    valid_keys = set(STANDARDS.get(user.gender, {}).keys())
-
-    # Fetch all templates that have a standards_key relevant to this gender's standards
-    keyed_templates = (
-        db.session.query(ExerciseTemplate.id, ExerciseTemplate.standards_key)
-        .filter(ExerciseTemplate.standards_key.in_(valid_keys))
-        .all()
-    )
-
-    # Group template IDs by standards_key
-    templates_by_key: dict[str, list[int]] = {}
-    for tmpl_id, sk in keyed_templates:
-        templates_by_key.setdefault(sk, []).append(tmpl_id)
-
-    exercise_percentiles: dict[str, float] = {}
-    exercise_1rms: dict[str, float] = {}
-    exercise_true_1rms: dict[str, float] = {}
-
-    if has_bodyweight:
-        for exercise_name, template_ids in templates_by_key.items():
-            result = _exercise_percentile_data(user_id, exercise_name, template_ids, user.gender, unit_to_lbs, bw_lbs, age_factor)
-            if result is not None:
-                exercise_percentiles[exercise_name] = result['percentile']
-                exercise_1rms[exercise_name] = result['best_1rm']
-                if result['true_1rm'] is not None:
-                    exercise_true_1rms[exercise_name] = result['true_1rm']
-    has_strength_data = bool(exercise_percentiles)
-
-    # No hard gate on missing exercise_percentiles here — a user with zero
-    # tracked strength lifts (e.g. cardio-only) still has a valid Greek rank
-    # from consistency/dedication/volume alone (strength contributes 0 to the
-    # 45% weight below, it doesn't block the other 55%). StrengthScoreScreen
-    # detects this case itself via `exercises_used === 0` in the response
-    # rather than relying on an error status, so its own empty state is
-    # unaffected — see fetchScore() there.
+    # No hard gate on missing exercise_percentiles here: a user with zero
+    # tracked strength lifts (e.g. cardio-only) still gets a Greek rank, which
+    # is effort-based. StrengthScoreScreen detects this case itself via
+    # `exercises_used === 0` in the response rather than an error status.
 
     # Overall score — Big 6 (70%), compound secondary (20%), isolation (10%).
     # Missing categories are dropped and weights renormalized automatically.
@@ -260,7 +381,7 @@ def strength_score():
         'isolation': {'tracked': len(isolation_scores), 'total': isolation_total},
     }
 
-    overall = compute_overall_score(exercise_percentiles) or 0.0
+    overall = _strength['overall'] or 0.0
 
     # Muscle group scores
     muscle_groups = compute_muscle_group_scores(exercise_percentiles)
@@ -276,59 +397,15 @@ def strength_score():
     endurance_percentiles = _endurance['percentiles']
     endurance_overall = _endurance['overall']
 
-    # Greek rank composite
-    twelve_wks_ago  = datetime.now() - timedelta(weeks=12)
-    thirteen_wks_ago = datetime.now() - timedelta(weeks=13)
-    eight_wks_ago   = datetime.now() - timedelta(weeks=8)
-
-    workouts_12wk = Workout.query.filter(
-        Workout.user_id == user_id,
-        Workout.date >= twelve_wks_ago,
-    ).all()
-    workouts_13wk_count = Workout.query.filter(
-        Workout.user_id == user_id,
-        Workout.date >= thirteen_wks_ago,
-    ).count()
-    # Per-workout load in one query: working sets (warm-ups and empty rows
-    # excluded; a timed hold counts as a set) and cardio minutes. Grouped by
-    # workout because the anti-padding cap applies per workout.
-    from sqlalchemy import func, case, and_, or_
-    ex_type = func.lower(func.coalesce(Exercise.exercise_type, 'strength'))
-    not_warmup = or_(Set.set_type.is_(None), Set.set_type != 'W')
-    load_rows = (
-        db.session.query(
-            Workout.id,
-            func.sum(case(
-                (ex_type == 'cardio', 0),
-                (and_(ex_type == 'duration', not_warmup, Set.cardio_duration > 0), 1),
-                (and_(ex_type != 'duration', not_warmup, Set.reps > 0), 1),
-                else_=0,
-            )),
-            func.sum(case(
-                (ex_type == 'cardio', func.coalesce(Set.cardio_duration, 0)),
-                else_=0,
-            )),
-        )
-        .join(Exercise, Exercise.workout_id == Workout.id)
-        .join(Set, Set.exercise_id == Exercise.id)
-        .filter(Workout.user_id == user_id, Workout.date >= eight_wks_ago)
-        .group_by(Workout.id)
-        .all()
+    # Both legs are already computed above, so hand them over instead of
+    # letting _greek_rank_data compute them again.
+    greek = _greek_rank_data(
+        user,
+        strength_overall=overall if has_strength_data else None,
+        endurance_overall=endurance_overall,
     )
-    total_load = sum(
-        workout_training_load(int(sets or 0), float(cardio_min or 0))
-        for _, sets, cardio_min in load_rows
-    )
-
-    consistency = compute_consistency_score(workouts_12wk)
-    dedication  = compute_dedication_score(workouts_13wk_count)
-    volume_sig  = compute_training_load_score(total_load / TRAINING_LOAD_WINDOW_WEEKS)
-    # The 45% "performance" slot takes whichever discipline is stronger — a
-    # lifter who never runs is unaffected, a hybrid athlete gets credit for
-    # their better leg, and a missing leg contributes 0 without blocking.
-    performance = max(overall, endurance_overall or 0.0)
-    greek_score = compute_greek_score(consistency, performance, dedication, volume_sig)
-    greek_rank  = greek_rank_from_score(greek_score)
+    greek_score = greek['score']
+    greek_rank = greek['rank']
 
     # Save snapshot once per 24h — only when there's actual strength data, so
     # cardio-only (or bodyweight-less) users don't pollute their strength
@@ -429,15 +506,15 @@ def strength_score():
 
     if is_pro:
         resp['greek_score'] = round(greek_score, 1)
+        # Kept in this shape for app builds that read the Greek rank from here
+        # (1.1.6 and earlier). Newer builds use GET /api/stats/greek-rank.
         resp['greek_score_components'] = {
-            'consistency': round(consistency, 1),
-            # strength/endurance are the two candidate legs; performance is
-            # the max() of them and is what the 45% slot actually used
+            'consistency': round(greek['consistency'], 1),
             'strength': round(overall, 1),
             'endurance': round(endurance_overall, 1) if endurance_overall is not None else 0.0,
-            'performance': round(performance, 1),
-            'dedication': round(dedication, 1),
-            'volume': round(volume_sig, 1),
+            'performance': round(greek['performance'] or 0.0, 1),
+            'dedication': round(greek['dedication'], 1),
+            'volume': round(greek['volume'], 1),
         }
         resp['big6'] = big6_list
         resp['supplemental'] = supp_list
@@ -462,6 +539,50 @@ def strength_score():
         }
 
     return jsonify(resp), 200
+
+
+@strength_score_bp.get('/api/stats/greek-rank')
+@jwt_required()
+def greek_rank():
+    """Greek rank for any user. Unlike strength-score it needs no gender or
+    bodyweight: those only feed the performance gate on the top two ranks."""
+    from utils.strength_standards import GREEK_WEIGHTS, GREEK_RANK_PERFORMANCE_GATES
+
+    user = db.session.get(User, int(get_jwt_identity()))
+    data = _greek_rank_data(user)
+
+    def _r(v):
+        return round(v, 1) if v is not None else None
+
+    # What would let performance count: without gender neither leg can score;
+    # with gender but no bodyweight only the strength leg is blocked.
+    profile_missing = []
+    if not user.gender:
+        profile_missing.append('gender')
+    elif not user.bodyweight:
+        profile_missing.append('bodyweight')
+
+    return jsonify({
+        'greek_rank': data['rank'],
+        'greek_score': round(data['score'], 1),
+        'score_rank': data['score_rank'],
+        'held_by_gate': data['rank'] != data['score_rank'],
+        'next_gate': data['next_gate'],
+        # Every gated rank's required percentile, for listing all of them
+        'gates': GREEK_RANK_PERFORMANCE_GATES,
+        'components': {
+            'consistency': _r(data['consistency']),
+            'dedication': _r(data['dedication']),
+            'volume': _r(data['volume']),
+        },
+        'weights': GREEK_WEIGHTS,
+        'performance': {
+            'strength': _r(data['strength']),
+            'endurance': _r(data['endurance']),
+            'best': _r(data['performance']),
+        },
+        'profile_missing': profile_missing,
+    }), 200
 
 
 @strength_score_bp.get('/api/stats/strength-score/exercise')

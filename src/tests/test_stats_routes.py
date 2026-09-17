@@ -1258,6 +1258,108 @@ class TestStrengthScoreCardioOnlyUser:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/stats/greek-rank — effort-only score for every user (no gender or
+# bodyweight needed); the higher of Strength/Endurance only gates Titan (50th)
+# and Aretē (80th). Effort is pinned via monkeypatch so these tests exercise the
+# gate wiring; the effort formulas have their own tests.
+# ---------------------------------------------------------------------------
+
+class TestGreekRankEndpoint:
+
+    def _pin_effort(self, monkeypatch, consistency, dedication, volume):
+        import routes.strength_score_routes as ssr
+        monkeypatch.setattr(ssr, '_effort_components', lambda user_id: (consistency, dedication, volume))
+
+    def _log_run(self, client, h, distance_km, duration_min):
+        from models import ExerciseTemplate
+        tmpl = ExerciseTemplate(name='Running', exercise_type='cardio', standards_key='Running')
+        db.session.add(tmpl)
+        db.session.commit()
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Run',
+            'exercises': [{
+                'name': 'Running', 'exercise_template_id': tmpl.id, 'exercise_type': 'cardio',
+                'sets': [{'cardio_duration': duration_min, 'distance': distance_km, 'distance_unit': 'km'}],
+            }],
+        }, headers=h)
+        assert res.status_code == 201
+
+    def test_user_with_no_profile_fields_gets_a_rank(self, client, auth_token):
+        h = auth_headers(auth_token)
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Lift',
+            'exercises': [{'name': 'Custom Press', 'sets': [{'reps': 5, 'weight': 100}] * 10}],
+        }, headers=h)
+        assert res.status_code == 201
+
+        # strength-score still gates on gender; greek-rank does not
+        assert client.get('/api/stats/strength-score', headers=h).status_code == 422
+        res = client.get('/api/stats/greek-rank', headers=h)
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data['greek_score'] > 0
+        assert data['greek_rank'] in ('Neophyte', 'Athlete', 'Hero')
+        assert data['performance'] == {'strength': None, 'endurance': None, 'best': None}
+        assert data['profile_missing'] == ['gender']
+
+    def test_brand_new_user_is_neophyte(self, client, auth_token):
+        data = client.get('/api/stats/greek-rank', headers=auth_headers(auth_token)).get_json()
+        assert data['greek_rank'] == 'Neophyte'
+        assert data['greek_score'] == 0
+        assert data['held_by_gate'] is False
+
+    def test_maxed_effort_without_performance_is_held_at_olympian(self, client, auth_token, monkeypatch):
+        self._pin_effort(monkeypatch, 100, 100, 100)
+        data = client.get('/api/stats/greek-rank', headers=auth_headers(auth_token)).get_json()
+        assert data['greek_score'] == 100
+        assert data['score_rank'] == 'Aretē'
+        assert data['greek_rank'] == 'Olympian'
+        assert data['held_by_gate'] is True
+        assert data['next_gate'] == {'rank': 'Titan', 'required_percentile': 50.0, 'met': False}
+        assert data['gates'] == {'Titan': 50.0, 'Aretē': 80.0}
+
+    def test_runner_clears_the_titan_gate(self, client, auth_token, monkeypatch):
+        self._pin_effort(monkeypatch, 100, 100, 100)
+        h = auth_headers(auth_token)
+        assert client.patch('/api/me', json={'gender': 'male'}, headers=h).status_code == 200
+        # 5:00/km male 5K -> endurance 67.4: clears Titan (50), not Aretē (80)
+        self._log_run(client, h, distance_km=5, duration_min=25)
+
+        data = client.get('/api/stats/greek-rank', headers=h).get_json()
+        assert data['performance']['endurance'] == pytest.approx(67.4, abs=0.1)
+        assert data['performance']['strength'] is None
+        assert data['greek_rank'] == 'Titan'
+        assert data['next_gate'] == {'rank': 'Aretē', 'required_percentile': 80.0, 'met': False}
+        # Gender set but no bodyweight: only the strength leg is blocked
+        assert data['profile_missing'] == ['bodyweight']
+
+    def test_strength_score_reports_the_same_rank(self, client, auth_token, monkeypatch):
+        # Builds on 1.1.6 read the rank from strength-score, so both must agree
+        self._pin_effort(monkeypatch, 100, 100, 100)
+        h = auth_headers(auth_token)
+        assert client.patch('/api/me', json={'gender': 'male'}, headers=h).status_code == 200
+        self._log_run(client, h, distance_km=5, duration_min=25)
+
+        greek = client.get('/api/stats/greek-rank', headers=h).get_json()
+        strength = client.get('/api/stats/strength-score', headers=h).get_json()
+        assert strength['greek_rank'] == greek['greek_rank'] == 'Titan'
+        assert strength['greek_score'] == greek['greek_score']
+
+    def test_ai_coach_contexts_use_the_real_greek_rank(self, client, auth_token, monkeypatch):
+        # These used to read a Strength/Endurance percentile snapshot through a
+        # separate threshold table, so the Coach could cite the wrong rank.
+        from routes.ai_routes import _build_user_context, _build_insights_context
+        self._pin_effort(monkeypatch, 100, 100, 100)
+        h = auth_headers(auth_token)
+        user_id = client.get('/api/me', headers=h).get_json()['id']
+
+        expected = client.get('/api/stats/greek-rank', headers=h).get_json()['greek_rank']
+        assert expected == 'Olympian'
+        assert _build_user_context(user_id)['greek_rank'] == expected
+        assert _build_insights_context(user_id)['greek_rank'] == expected
+
+
+# ---------------------------------------------------------------------------
 # GET /api/stats/strength-score — Greek rank Volume is weekly training load
 # (working sets + cardio minutes / 3, capped at 40 per workout, averaged over
 # 8 weeks), not workout count.

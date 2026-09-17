@@ -314,6 +314,40 @@ def greek_rank_from_score(score: float) -> str:
     return 'Aretē'
 
 
+# Effort alone tops out at Olympian. Titan and Aretē also need the higher of
+# the Strength and Endurance Scores to reach this percentile, so the top ranks
+# still mean excellence: Titan asks for an Intermediate-level score, Aretē
+# for Elite.
+GREEK_RANK_PERFORMANCE_GATES: dict[str, float] = {'Titan': 50.0, 'Aretē': 80.0}
+
+
+def apply_greek_rank_gates(score: float, performance: float | None) -> tuple[str, dict | None]:
+    """Rank earned by `score`, stepped down past any gate `performance` misses.
+
+    Returns (rank, next_gate). next_gate is the first gated rank above the
+    final rank, so the UI can say what unlocks it, or None at the top.
+    `performance` is None when the user has no Strength or Endurance Score.
+    """
+    names = [name for _, _, name in GREEK_RANK_THRESHOLDS]
+    idx = names.index(greek_rank_from_score(score))
+    while names[idx] in GREEK_RANK_PERFORMANCE_GATES and (
+        performance is None or performance < GREEK_RANK_PERFORMANCE_GATES[names[idx]]
+    ):
+        idx -= 1
+
+    next_gate = None
+    for name in names[idx + 1:]:
+        if name in GREEK_RANK_PERFORMANCE_GATES:
+            required = GREEK_RANK_PERFORMANCE_GATES[name]
+            next_gate = {
+                'rank': name,
+                'required_percentile': required,
+                'met': performance is not None and performance >= required,
+            }
+            break
+    return names[idx], next_gate
+
+
 # Anchors sit at the midpoint of each former decade band, so the factor at
 # each anchor age is unchanged from the old step function — only the
 # transition BETWEEN anchors is now a ramp instead of a cliff at the boundary.
@@ -516,9 +550,17 @@ def compute_training_load_score(weekly_load: float) -> float:
     return 100.0
 
 
-def compute_greek_score(consistency: float, strength: float,
-                        dedication: float, volume: float) -> float:
-    # Strength (45%) anchors the floor so inactive users drop ~2 ranks max.
-    # Consistency, dedication (rolling 3-month), and volume all decay when
-    # the user stops training, pulling the composite score down naturally.
-    return strength * 0.45 + consistency * 0.30 + dedication * 0.15 + volume * 0.10
+# The Greek score is effort only, so every user gets a rank without entering
+# gender or bodyweight. Ability doesn't add points; it gates the top two ranks
+# (GREEK_RANK_PERFORMANCE_GATES). Consistency leads but no longer dominates:
+# at the old 30/15/10 split scaled up, one workout a week maxed it and reached
+# Olympian, while 40/30/30 needs more and harder training to climb.
+GREEK_WEIGHTS = {'consistency': 0.40, 'dedication': 0.30, 'volume': 0.30}
+
+
+def compute_greek_score(consistency: float, dedication: float, volume: float) -> float:
+    return (
+        consistency * GREEK_WEIGHTS['consistency']
+        + dedication * GREEK_WEIGHTS['dedication']
+        + volume * GREEK_WEIGHTS['volume']
+    )

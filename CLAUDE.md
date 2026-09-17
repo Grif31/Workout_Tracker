@@ -103,7 +103,8 @@ src/
 │   │   ├── units.ts              # weight unit conversion
 │   │   ├── cardioCalories.ts     # cardio calorie estimation
 │   │   ├── prFormat.ts           # PR value/delta/date formatting, chart y-axis snapping (computeChartYAxisRange), metric priority
-│   │   └── prPins.ts             # PR Dashboard pin storage — keyed by exercise + PR type + context, not just exercise id
+│   │   ├── prPins.ts             # PR Dashboard pin storage — keyed by exercise + PR type + context, not just exercise id
+│   │   └── greekRank.ts          # GET /api/stats/greek-rank type, best-score pick, top-rank gate unlock wording
 │   ├── theme/
 │   │   ├── spacing.ts            # xs/sm/md/lg/xl
 │   │   └── typography.ts         # fontSize.sm/md/lg
@@ -285,8 +286,9 @@ return jsonify({ 'message': 'error reason' }), 400   # client error
 - **Custom exercises:** `ExerciseTemplate.user_id` — NULL = global library exercise, set = that user's private custom exercise
 - **RPE:** 1–10 scale, optional per set, only shown when user enables it in workout settings
 - **User gender:** `user.gender` is `'male'` | `'female'` | `None` — used for strength score percentile calculations
-- **Scores:** Strength Score (lift percentiles vs bodyweight) and Endurance Score (running pace percentiles, best-within-tier: core 5K+ 70% / speed 400m-1mi 30%) share the `STRENGTH_TIERS` percentile tiers and both write to `strength_score_snapshots`, separated by `score_type` (`'strength'` | `'endurance'`) — every snapshot read must filter on it. The Greek Rank's 45% performance slot takes `max(strength_overall, endurance_overall)`, so running and lifting never dilute each other
-- **Greek Rank Volume (10%)** is weekly training load, not workout count (Consistency and Dedication already count workouts): working sets (warm-ups and rows with no reps excluded; a timed-hold set counts as 1) plus cardio minutes / 3, capped at 40 per workout, averaged over 8 weeks, scored by `compute_training_load_score` in `utils/strength_standards.py`
+- **Scores:** Strength Score (lift percentiles vs bodyweight) and Endurance Score (running pace percentiles, best-within-tier: core 5K+ 70% / speed 400m-1mi 30%) share the `STRENGTH_TIERS` percentile tiers and both write to `strength_score_snapshots`, separated by `score_type` (`'strength'` | `'endurance'`) — every snapshot read must filter on it. Neither score adds Greek Rank points; the higher one only gates the top two ranks (see Greek Rank below)
+- **Greek Rank Volume (30%)** is weekly training load, not workout count (Consistency and Dedication already count workouts): working sets (warm-ups and rows with no reps excluded; a timed-hold set counts as 1) plus cardio minutes / 3, capped at 40 per workout, averaged over 8 weeks, scored by `compute_training_load_score` in `utils/strength_standards.py`
+- **Greek Rank:** the score is effort only, `consistency*0.40 + dedication*0.30 + volume*0.30` (`compute_greek_score`), so every user gets a rank with no gender or bodyweight. Titan also needs the higher of the Strength/Endurance Scores at >= 50th percentile and Aretē >= 80th (`GREEK_RANK_PERFORMANCE_GATES`, applied by `apply_greek_rank_gates`); a user who misses a gate is held one rank below it. Read the rank from `GET /api/stats/greek-rank` (no gender required, returns `next_gate`, `gates`, `held_by_gate`, `profile_missing`) via `_greek_rank_data()` in `strength_score_routes.py`. `strength-score` still returns `greek_rank`/`greek_score`/`greek_score_components` from the same helper only for app builds 1.1.6 and earlier; new code must not read the rank from there, since it returns 422 without gender. Frame unlocks and rank-circle state follow the rank held, never the raw score, because a gated score can sit inside a band the user hasn't unlocked
 
 ---
 

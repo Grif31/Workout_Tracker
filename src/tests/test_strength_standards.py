@@ -8,6 +8,7 @@ from utils.strength_standards import (
     age_scaling_factor, _AGE_FACTOR_ANCHORS,
     workout_training_load, compute_training_load_score,
     CARDIO_MINUTES_PER_LOAD, MAX_LOAD_PER_WORKOUT,
+    compute_greek_score, apply_greek_rank_gates, GREEK_WEIGHTS,
 )
 
 
@@ -95,3 +96,52 @@ class TestComputeTrainingLoadScore:
         # 3 x 18 working sets = 54/week. The old count-based curve gave three
         # workouts a week 65, so typical users should barely move.
         assert compute_training_load_score(54) == pytest.approx(68, abs=1)
+
+
+class TestComputeGreekScore:
+
+    def test_weights_are_40_30_30(self):
+        assert GREEK_WEIGHTS == {'consistency': 0.40, 'dedication': 0.30, 'volume': 0.30}
+        assert compute_greek_score(100, 0, 0) == pytest.approx(40)
+        assert compute_greek_score(0, 100, 0) == pytest.approx(30)
+        assert compute_greek_score(0, 0, 100) == pytest.approx(30)
+
+    def test_maxed_effort_is_100(self):
+        assert compute_greek_score(100, 100, 100) == pytest.approx(100)
+
+
+class TestApplyGreekRankGates:
+
+    def test_ranks_below_titan_are_never_gated(self):
+        # 70 is Olympian by score; no performance needed
+        rank, gate = apply_greek_rank_gates(70, None)
+        assert rank == 'Olympian'
+        assert gate == {'rank': 'Titan', 'required_percentile': 50.0, 'met': False}
+
+    def test_titan_score_without_any_performance_holds_at_olympian(self):
+        rank, gate = apply_greek_rank_gates(85, None)
+        assert rank == 'Olympian'
+        assert gate['rank'] == 'Titan' and gate['met'] is False
+
+    def test_titan_gate_boundary(self):
+        assert apply_greek_rank_gates(85, 49.9)[0] == 'Olympian'
+        rank, gate = apply_greek_rank_gates(85, 50.0)
+        assert rank == 'Titan'
+        assert gate == {'rank': 'Aretē', 'required_percentile': 80.0, 'met': False}
+
+    def test_arete_score_steps_down_only_as_far_as_needed(self):
+        # Clears Titan's gate but not Aretē's, so lands on Titan, not Olympian
+        rank, gate = apply_greek_rank_gates(95, 60)
+        assert rank == 'Titan'
+        assert gate['rank'] == 'Aretē' and gate['met'] is False
+
+    def test_arete_with_elite_performance(self):
+        rank, gate = apply_greek_rank_gates(95, 80)
+        assert rank == 'Aretē'
+        assert gate is None
+
+    def test_met_flag_reports_an_unlocked_gate_the_score_has_not_reached(self):
+        # Performance already clears Titan; effort is what's missing
+        rank, gate = apply_greek_rank_gates(50, 75)
+        assert rank == 'Demigod'
+        assert gate == {'rank': 'Titan', 'required_percentile': 50.0, 'met': True}
