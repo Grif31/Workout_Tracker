@@ -18,6 +18,7 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { captureAndShare } from '../../utils/shareCapture';
+import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import EnduranceScoreShareCard from '../../components/EnduranceScoreShareCard';
 import { appCache } from '../../utils/appCache';
 import { GPS_DISTANCE_UNIT_KEY, type DistanceUnit } from '../../utils/units';
@@ -92,6 +93,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [infoVisible, setInfoVisible] = useState(false);
   const [heroExpanded, setHeroExpanded] = useState(false);
+  const heroAnim = useCollapseAnim(heroExpanded);
   const [chartRange, setChartRange] = useState<'1M' | '3M' | '6M' | 'All'>('3M');
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>('mi');
   const [sharing, setSharing] = useState(false);
@@ -419,8 +421,8 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
                 Based on {data.distances_tracked} distance{data.distances_tracked !== 1 ? 's' : ''}
                 {data.last_updated ? `  ·  Updated ${timeAgo(data.last_updated)}` : ''}
               </Text>
-              {heroExpanded && (
-                <>
+              <Collapsible progress={heroAnim} expanded={heroExpanded} style={styles.heroCollapsible}>
+                <View style={styles.heroExpandedBody}>
                   <Text style={styles.insightText}>
                     "Faster than" compares your best pace at each distance to reference pace standards for your gender, not literally every runner in the app.
                   </Text>
@@ -431,11 +433,15 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
                       </Text>
                     </View>
                   )}
-                </>
-              )}
+                </View>
+              </Collapsible>
               <View style={styles.heroExpandToggle} pointerEvents="none">
                 <Text style={styles.heroExpandText}>{heroExpanded ? 'Show less' : 'Show more'}</Text>
-                <Ionicons name={heroExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
+                <Animated.View
+                  style={{ transform: [{ rotate: heroAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}
+                >
+                  <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
+                </Animated.View>
               </View>
             </TouchableOpacity>
           </Reanimated.View>
@@ -706,6 +712,10 @@ const createStyles = (colors: Colors) =>
       borderRadius: 6, paddingHorizontal: spacing.sm, paddingVertical: 3,
     },
     ageBadgeText: { fontSize: typography.fontSize.xs, color: colors.accent, fontWeight: '600' },
+    // The card's `gap` still applies around the collapsed (0-height) wrapper,
+    // so pull it back up by one gap and restore that space inside the body.
+    heroCollapsible: { marginTop: -spacing.sm },
+    heroExpandedBody: { gap: spacing.sm, paddingTop: spacing.sm },
     heroExpandToggle: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
       marginTop: spacing.sm, paddingVertical: spacing.xs,

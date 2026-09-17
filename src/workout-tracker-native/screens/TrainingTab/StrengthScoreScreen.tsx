@@ -19,6 +19,7 @@ import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import { captureAndShare } from '../../utils/shareCapture';
+import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import { TrainingStackParamsList } from '../../navigation/types';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import { STRENGTH_TIERS, SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
@@ -52,7 +53,14 @@ interface ScoreData {
   overall_rank: { label: string; tier: number; display: string };
   greek_rank: string;
   greek_score?: number;
-  greek_score_components?: { consistency: number; strength: number; dedication: number; volume: number };
+  greek_score_components?: {
+    consistency: number;
+    strength: number;
+    endurance: number;
+    performance: number;
+    dedication: number;
+    volume: number;
+  };
   exercises_used: number;
   muscle_groups_used: number;
   big6?: Array<{ exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; estimated_1rm?: number | null; thresholds?: { percentile: number; rank: string; weight: number }[]; has_data: boolean }>;
@@ -120,6 +128,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
 
   // Hero card starts collapsed to just the score + based-on line
   const [heroExpanded, setHeroExpanded] = useState(false);
+  const heroAnim = useCollapseAnim(heroExpanded);
 
   // Score Over Time chart range — same client-side filter pattern as ExerciseDetailScreen
   const [chartRange, setChartRange] = useState<'1M' | '3M' | '6M' | 'All'>('3M');
@@ -448,8 +457,8 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                 Based on {scoreData.exercises_used} exercise{scoreData.exercises_used !== 1 ? 's' : ''} across {scoreData.muscle_groups_used} muscle group{scoreData.muscle_groups_used !== 1 ? 's' : ''}
                 {scoreData.last_updated ? `  ·  Updated ${timeAgo(scoreData.last_updated)}` : ''}
               </Text>
-              {heroExpanded && (
-                <>
+              <Collapsible progress={heroAnim} expanded={heroExpanded} style={styles.heroCollapsible}>
+                <View style={styles.heroExpandedBody}>
                   <Text style={styles.insightText}>
                     "Stronger than" compares your bodyweight-adjusted lifts to reference strength standards for your gender, not literally every lifter in the app.
                   </Text>
@@ -483,20 +492,15 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                       </View>
                     </View>
                   )}
-                  {scoreData.greek_rank && (
-                    <TouchableOpacity
-                      onPress={() => (navigation as any).navigate('ProfileTab', { screen: 'GreekRank', initial: false })}
-                    >
-                      <Text style={styles.greekTeaserText}>
-                        Strength is 45% of your Greek Rank ({scoreData.greek_rank}) →
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </>
-              )}
+                </View>
+              </Collapsible>
               <View style={styles.heroExpandToggle} pointerEvents="none">
                 <Text style={styles.heroExpandText}>{heroExpanded ? 'Show less' : 'Show more'}</Text>
-                <Ionicons name={heroExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
+                <Animated.View
+                  style={{ transform: [{ rotate: heroAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}
+                >
+                  <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
+                </Animated.View>
               </View>
             </TouchableOpacity>
           </Reanimated.View>
@@ -777,7 +781,14 @@ export default function StrengthScoreScreen({ navigation }: Props) {
             <View style={styles.infoSection}>
               <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>Overall Score</Text>
               <Text style={[styles.infoBody, { color: colors.textSecondary }]}>
-                The Big 6 lifts (Squat, Bench Press, Deadlift, Overhead Press, Barbell Row, Pull-up) count for 70% of your score. Other compound lifts (Romanian Deadlift, Incline Bench, Dips, etc.) count for 20%. Isolation exercises make up the remaining 10%. Your strength score also counts for 45% of your Greek rank.
+                The Big 6 lifts (Squat, Bench Press, Deadlift, Overhead Press, Barbell Row, Pull-up) count for 70% of your score. Other compound lifts (Romanian Deadlift, Incline Bench, Dips, etc.) count for 20%. Isolation exercises make up the remaining 10%.
+              </Text>
+            </View>
+
+            <View style={styles.infoSection}>
+              <Text style={[styles.infoHeading, { color: colors.textPrimary }]}>Your Greek Rank</Text>
+              <Text style={[styles.infoBody, { color: colors.textSecondary }]}>
+                Your Greek Rank takes whichever is higher, your Strength Score or your Endurance Score, and counts it for 45% of your rank. Running and lifting never dilute each other.
               </Text>
             </View>
 
@@ -1041,7 +1052,10 @@ const createStyles = (colors: Colors) =>
       textTransform: 'uppercase', letterSpacing: 0.5,
     },
     strongestWeakestValue: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary, marginTop: 2 },
-    greekTeaserText: { fontSize: typography.fontSize.sm, color: colors.accent, fontWeight: '600', marginTop: spacing.xs },
+    // The card's `gap` still applies around the collapsed (0-height) wrapper,
+    // so pull it back up by one gap and restore that space inside the body.
+    heroCollapsible: { marginTop: -spacing.sm },
+    heroExpandedBody: { gap: spacing.sm, paddingTop: spacing.sm },
     heroExpandToggle: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
       marginTop: spacing.sm, paddingVertical: spacing.xs,

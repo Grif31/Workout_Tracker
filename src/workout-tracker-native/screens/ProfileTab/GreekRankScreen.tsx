@@ -29,7 +29,18 @@ const ITEM_WIDTH = CIRCLE_SIZE + CIRCLE_GAP;
 interface RankData {
   greek_rank: string;
   greek_score?: number;
-  greek_score_components?: { consistency: number; strength: number; dedication: number; volume: number };
+  // null when the user has no data for that discipline yet, which is
+  // different from a real 0th-percentile score
+  overall?: number | null;
+  endurance_overall?: number | null;
+  greek_score_components?: {
+    consistency: number;
+    strength: number;
+    endurance: number;
+    performance: number;
+    dedication: number;
+    volume: number;
+  };
 }
 
 const CIRCLE_INNER = CIRCLE_SIZE - 20;
@@ -191,6 +202,16 @@ export default function GreekRankScreen({ navigation }: Props) {
 
   const components = rankData?.greek_score_components;
 
+  // The 45% performance slot takes the higher of the two scores. A tie goes
+  // to Strength, matching the backend's max(strength, endurance).
+  const hasStrength = rankData?.overall != null;
+  const hasEndurance = rankData?.endurance_overall != null;
+  const countingLeg: 'strength' | 'endurance' | null = !components
+    ? null
+    : hasStrength && (!hasEndurance || components.strength >= components.endurance)
+      ? 'strength'
+      : hasEndurance ? 'endurance' : null;
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <View style={styles.header}>
@@ -288,34 +309,77 @@ export default function GreekRankScreen({ navigation }: Props) {
                   <Text style={styles.componentTitle}>Score Breakdown</Text>
                   {[
                     { label: 'Consistency', value: components.consistency, icon: 'calendar-outline' as const },
-                    { label: 'Strength',    value: components.strength,    icon: 'barbell-outline' as const },
+                    { label: 'Performance', value: components.performance, icon: 'flash-outline' as const },
                     { label: 'Dedication',  value: components.dedication,  icon: 'trophy-outline' as const },
                     { label: 'Volume',      value: components.volume,      icon: 'flame-outline' as const },
                   ].map(comp => (
-                    <View key={comp.label} style={styles.compRow}>
-                      <View style={styles.compLeft}>
-                        <Ionicons name={comp.icon} size={16} color={colors.textSecondary} />
-                        <Text style={styles.compLabel}>{comp.label}</Text>
+                    <React.Fragment key={comp.label}>
+                      <View style={styles.compRow}>
+                        <View style={styles.compLeft}>
+                          <Ionicons name={comp.icon} size={16} color={colors.textSecondary} />
+                          <Text style={styles.compLabel}>{comp.label}</Text>
+                        </View>
+                        <View style={styles.compBarTrack}>
+                          <View style={[styles.compBarFill, { width: `${comp.value}%` as any, backgroundColor: currentRank.color }]} />
+                        </View>
+                        <Text style={styles.compValue}>{Math.round(comp.value)}</Text>
                       </View>
-                      <View style={styles.compBarTrack}>
-                        <View style={[styles.compBarFill, { width: `${comp.value}%` as any, backgroundColor: currentRank.color }]} />
-                      </View>
-                      <Text style={styles.compValue}>{Math.round(comp.value)}</Text>
-                    </View>
+                      {/* Performance is whichever of these two is higher; the one
+                          that fed it is highlighted */}
+                      {comp.label === 'Performance' && ([
+                        { key: 'strength' as const,  label: 'Strength',  value: components.strength,  hasData: hasStrength },
+                        { key: 'endurance' as const, label: 'Endurance', value: components.endurance, hasData: hasEndurance },
+                      ]).map(leg => {
+                        const counts = countingLeg === leg.key;
+                        return (
+                          <View
+                            key={leg.key}
+                            testID={`greek-leg-${leg.key}${counts ? '-counts' : ''}`}
+                            style={[styles.compRow, styles.legRow, counts && { backgroundColor: currentRank.color + '1F' }]}
+                          >
+                            <View style={styles.compLeft}>
+                              <Text style={[styles.legLabel, counts && styles.legTextCounts]}>{leg.label}</Text>
+                            </View>
+                            <View style={styles.compBarTrack}>
+                              {leg.hasData && (
+                                <View
+                                  style={[
+                                    styles.compBarFill,
+                                    { width: `${leg.value}%` as any, backgroundColor: counts ? currentRank.color : colors.textSecondary },
+                                  ]}
+                                />
+                              )}
+                            </View>
+                            <Text style={[styles.compValue, counts && styles.legTextCounts]}>
+                              {leg.hasData ? Math.round(leg.value) : '–'}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </React.Fragment>
                   ))}
                 </>
               )}
             </View>
           )}
 
-          {/* View Full Breakdown */}
-          <TouchableOpacity
-            style={[styles.fullBreakdownBtn, { borderColor: colors.accent }]}
-            onPress={() => (navigation as any).navigate('TrainingTab', { screen: 'StrengthScore', initial: false })}
-          >
-            <Text style={[styles.fullBreakdownText, { color: colors.accent }]}>View Full Strength Breakdown</Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.accent} />
-          </TouchableOpacity>
+          {/* Full score breakdowns */}
+          <View style={styles.scoreLinksRow}>
+            <TouchableOpacity
+              style={[styles.scoreLinkBtn, { borderColor: colors.accent }]}
+              onPress={() => (navigation as any).navigate('TrainingTab', { screen: 'StrengthScore', initial: false })}
+            >
+              <Text style={[styles.fullBreakdownText, { color: colors.accent }]}>Strength Score</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.accent} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.scoreLinkBtn, { borderColor: colors.accent }]}
+              onPress={() => (navigation as any).navigate('TrainingTab', { screen: 'EnduranceScore', initial: false })}
+            >
+              <Text style={[styles.fullBreakdownText, { color: colors.accent }]}>Endurance Score</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.accent} />
+            </TouchableOpacity>
+          </View>
 
           <View style={{ height: spacing.xl * 2 }} />
         </ScrollView>
@@ -363,9 +427,18 @@ const createStyles = (colors: Colors) =>
       gap: spacing.xs, paddingVertical: spacing.sm,
     },
     lockedHintText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
-    fullBreakdownBtn: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      gap: spacing.xs, marginHorizontal: spacing.md, borderWidth: 1,
+    // The highlight pill's padding is cancelled by a matching negative margin
+    // so the sub-row bars stay aligned with the rows above them.
+    legRow: {
+      marginHorizontal: -spacing.xs, paddingHorizontal: spacing.xs,
+      paddingVertical: 3, borderRadius: radius.sm,
+    },
+    legLabel: { fontSize: typography.fontSize.sm, color: colors.textSecondary, paddingLeft: 20 },
+    legTextCounts: { color: colors.textPrimary, fontWeight: '700' },
+    scoreLinksRow: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.md },
+    scoreLinkBtn: {
+      flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+      gap: spacing.xs, borderWidth: 1,
       borderRadius: radius.md, paddingVertical: spacing.sm,
     },
     fullBreakdownText: { fontSize: typography.fontSize.md, fontWeight: '600' },

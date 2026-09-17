@@ -931,11 +931,11 @@ Check off items as you complete them.
   - [x] Pace displayed in min/mi or min/km per existing `gps_distance_unit_${uid}` pref (stored values always min/km)
 - [x] **Navigation**: register in `TrainingStack` + `navigation/types.ts`; entry tile on `CoachScreen` next to the Strength Score tile; add `/api/stats/endurance-score` to `PreloadScreen`'s preload list
 
-### Phase 3 — Polish
+### Phase 3 — Polish ✅ DONE
 
-- [ ] **`GreekRankScreen` Score Breakdown**: replace the single ambiguous "Strength" row with separate Strength + Endurance rows, higher one marked as the counting "Performance" component
-- [ ] Info-modal copy on both score screens explaining the `max()` blend + endurance methodology (best-within-tier, extrapolation caveat)
-- [ ] CLAUDE.md updates (new util file, new route, new screen, `score_type` column, 45%-slot formula) + CHANGELOG entry
+- [x] **`GreekRankScreen` Score Breakdown**: replace the single ambiguous "Strength" row with separate Strength + Endurance rows, higher one marked as the counting "Performance" component
+- [x] Info-modal copy on both score screens explaining the `max()` blend + endurance methodology (best-within-tier, extrapolation caveat)
+- [x] CLAUDE.md updates (new util file, new route, new screen, `score_type` column, 45%-slot formula) + CHANGELOG entry
 
 ### Phase 4 — GPS best-efforts extraction (fixes the interval-training gap)
 > **The gap**: `GPSCardioScreen` saves a session as one continuous recording — a track workout's fast 400m reps get averaged away with warmup/recovery jogs into one slow bout, so GPS-tracked interval training never produces true short-distance PRs (manual multi-set logging does — `_compute_and_upsert_cardio_prs` treats each set as its own bout). A Strava-style best-efforts scan makes speed-tier data honest for everyone, not just manual loggers.
