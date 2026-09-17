@@ -262,6 +262,9 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 ### Migration chain
 Each migration's `down_revision` must point to the previous migration's `revision`. Check the latest revision before creating a new one.
 
+### "Today" and week boundaries — never `date.today()` in request code
+The server runs on UTC. Use `user_today()` from `utils/local_date.py`, which reads the app's `X-Local-Date` header (sent by `apiFetch`) and only trusts it within a day of UTC. `date.today()` rolls "this week" over on Sunday afternoon in the Americas.
+
 ### Response shape convention
 ```python
 return jsonify({ 'message': 'ok', ...data }), 200   # success
