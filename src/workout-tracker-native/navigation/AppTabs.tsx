@@ -3,8 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, AppState, An
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { postLiveWorkoutNotification, cancelLiveWorkoutNotification } from '../utils/notifications';
-import { onPendingCountChange, initPendingCount, flushQueue } from '../utils/offlineQueue';
-import { showToast } from '../utils/toast';
+import { onPendingCountChange, initPendingCount, flushQueue, announceFlushResult } from '../utils/offlineQueue';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { DashboardStack } from './DashboardStack';
@@ -299,10 +298,7 @@ function CustomTabBar(props: BottomTabBarProps) {
     // The tab bar mounts on every login — flush the (re)authenticated user's
     // parked queue here, since NetInfo only triggers a flush when connectivity
     // actually changes.
-    flushQueue().then(({ synced, dropped }) => {
-      if (synced > 0) showToast(`${synced} workout${synced > 1 ? 's' : ''} synced`);
-      if (dropped > 0) showToast(`${dropped} workout${dropped > 1 ? 's' : ''} couldn't sync and ${dropped > 1 ? 'were' : 'was'} removed`);
-    });
+    flushQueue().then(announceFlushResult);
     return onPendingCountChange(setPendingCount);
   }, []);
 

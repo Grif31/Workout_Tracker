@@ -4,6 +4,10 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 
+jest.mock('@react-native-community/netinfo', () =>
+  require('@react-native-community/netinfo/jest/netinfo-mock')
+);
+
 jest.mock('@expo/vector-icons', () => ({
   Ionicons: 'Ionicons',
   MaterialIcons: 'MaterialIcons',
@@ -79,6 +83,7 @@ jest.mock('./context/ThemeContext', () => ({
       background: '#000', surface: '#1C1C1E', border: '#333',
       textPrimary: '#FFF', textSecondary: '#AAA', placeholder: '#666',
       accent: '#30D158', accentText: '#000', accentDark: '#30D158', save: '#30D158', danger: '#FF453A',
+      warmup: '#FF9500',
     },
     mode: 'dark',
     accentPreset: { name: 'Green', value: '#30D158', text: '#000' },

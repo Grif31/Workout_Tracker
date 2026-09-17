@@ -16,6 +16,8 @@ import { toLocalDateStr } from 'utils/date';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch, isNetworkError } from '../../utils/api';
+import { announceFlushResult, flushQueue, getPendingCount, onPendingCountChange } from '../../utils/offlineQueue';
+import { showToast } from '../../utils/toast';
 import { appCache } from '../../utils/appCache';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { PR_GOLD_TEXT } from '../../constants/prColors';
@@ -221,6 +223,23 @@ export default function DashboardScreen({ navigation }: Props) {
   // the second line as a whole instead of splitting across both lines.
   const displayName = (user?.name || user?.username || '').replace(/ /g, ' ');
   const [activeRoutine, setActiveRoutine] = useState<ActiveRoutine | null>(null);
+  const [pendingSyncCount, setPendingSyncCount] = useState(getPendingCount);
+  useEffect(() => onPendingCountChange(setPendingSyncCount), []);
+  const [retryingSync, setRetryingSync] = useState(false);
+  // Automatic flushes only run on reconnect or login, so a workout that failed
+  // while online (e.g. the server was down) would otherwise sit here until then.
+  const retrySync = async () => {
+    setRetryingSync(true);
+    try {
+      const result = await flushQueue();
+      announceFlushResult(result);
+      if (result.synced === 0 && getPendingCount() > 0) {
+        showToast("Couldn't upload right now. It's still saved on this phone and will keep trying.");
+      }
+    } finally {
+      setRetryingSync(false);
+    }
+  };
   const [daysVisible, setDaysVisible] = useState(false);
   // No animateNextLayout() here: the day list drives its own height/opacity
   // animation below. Running LayoutAnimation as well made the card's height
@@ -499,6 +518,34 @@ export default function DashboardScreen({ navigation }: Props) {
             <Text style={styles.trackButtonText}>Track Activity</Text>
           </TouchableOpacity>
 
+          {/* Explains the dot on the Home tab icon: queued workouts aren't in the list below yet */}
+          {pendingSyncCount > 0 && (
+            <View style={styles.pendingSyncCard} accessibilityRole="summary">
+              <Ionicons name="cloud-upload-outline" size={24} color={colors.warmup} />
+              <View style={styles.pendingSyncTextBlock}>
+                <Text style={styles.pendingSyncTitle}>
+                  {pendingSyncCount === 1 ? '1 workout waiting to upload' : `${pendingSyncCount} workouts waiting to upload`}
+                </Text>
+                <Text style={styles.pendingSyncBody}>
+                  {pendingSyncCount === 1
+                    ? "Saved on this phone while you were offline. It will upload automatically when you're back online, then show up in your history."
+                    : "Saved on this phone while you were offline. They will upload automatically when you're back online, then show up in your history."}
+                </Text>
+                <TouchableOpacity
+                  style={styles.pendingSyncButton}
+                  onPress={retrySync}
+                  disabled={retryingSync}
+                  accessibilityRole="button"
+                  accessibilityLabel="Try uploading now"
+                >
+                  {retryingSync
+                    ? <ActivityIndicator size="small" color={colors.textPrimary} />
+                    : <Text style={styles.pendingSyncButtonText}>Try Now</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {/* Active Routine */}
           {activeRoutine && (
             <PressableScale
@@ -752,6 +799,34 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     backgroundColor: colors.surface,
   },
   trackButtonText: { color: colors.accent, fontSize: typography.fontSize.sm, fontWeight: '600' },
+
+  pendingSyncCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm + spacing.xs,
+    backgroundColor: colors.warmup + '1A',
+    borderWidth: 1,
+    borderColor: colors.warmup + '66',
+    borderRadius: spacing.sm,
+    padding: spacing.sm + spacing.xs,
+    marginBottom: spacing.md,
+  },
+  pendingSyncTextBlock: { flex: 1 },
+  pendingSyncTitle: { color: colors.textPrimary, fontSize: typography.fontSize.md, fontWeight: '700' },
+  pendingSyncBody: { color: colors.textSecondary, fontSize: typography.fontSize.sm, lineHeight: 19, marginTop: 2 },
+  pendingSyncButton: {
+    alignSelf: 'flex-start',
+    minWidth: 88,
+    minHeight: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.warmup,
+  },
+  pendingSyncButtonText: { color: colors.textPrimary, fontSize: typography.fontSize.sm, fontWeight: '700' },
 
   // Active Routine
   activeBlock: {

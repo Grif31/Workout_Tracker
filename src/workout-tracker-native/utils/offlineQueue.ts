@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from './api';
 import { syncWorkoutToHealthKit } from './healthKit';
 import { syncWorkoutToHealthConnect } from './healthConnect';
+import { showToast } from './toast';
 
 // Per-user queue: workouts queued offline by user A must never be posted with
 // user B's token. Each user's queue is parked under their own key and only
@@ -13,6 +14,12 @@ const queueKey = (userId: number | string) => `offline_workout_queue_${userId}`;
 type QueueItem = { id: string; payload: object; enqueuedAt: string; attempts?: number };
 
 export type FlushResult = { synced: number; dropped: number };
+
+// Shared by every flush trigger (reconnect, login, the Home card's Try Now) so the wording matches.
+export function announceFlushResult({ synced, dropped }: FlushResult) {
+  if (synced > 0) showToast(`${synced} workout${synced > 1 ? 's' : ''} synced`);
+  if (dropped > 0) showToast(`${dropped} workout${dropped > 1 ? 's' : ''} couldn't sync and ${dropped > 1 ? 'were' : 'was'} removed`);
+}
 
 // A 4xx (other than auth/rate-limit) means the server will never accept this
 // payload — give it a few tries in case of a backend hotfix, then drop it so
@@ -28,6 +35,10 @@ const _subs: Array<(n: number) => void> = [];
 function _notify(n: number) {
   _count = n;
   _subs.forEach(s => s(n));
+}
+
+export function getPendingCount(): number {
+  return _count;
 }
 
 export function onPendingCountChange(cb: (n: number) => void): () => void {

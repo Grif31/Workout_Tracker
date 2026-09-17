@@ -103,6 +103,15 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   const [workoutName, setWorkoutName] = useState('');
   const [notes, setNotes] = useState('');
+  // Edits aren't queued offline (a delayed PATCH can overwrite newer changes),
+  // so tell the user up front instead of only failing when they tap Update.
+  const [isOffline, setIsOffline] = useState(false);
+  useEffect(() => {
+    if (!editMode) return;
+    return NetInfo.addEventListener(state => {
+      setIsOffline(state.isConnected === false || state.isInternetReachable === false);
+    });
+  }, [editMode]);
   const [exercises, setExercises] = useState<ExerciseEntry[]>([]);
   // Lets stable (useCallback'd) handlers read the latest exercises without
   // depending on `exercises` itself — depending on it would recreate the
@@ -1382,7 +1391,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         clearSession();
         AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
         AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
-        showToast('Saved offline. Will sync when connected');
+        showToast(
+          "It's stored on this phone and will upload automatically when you're back online. It won't show in your history until then.",
+          { title: 'Workout saved offline', icon: 'cloud-offline-outline', tone: 'warning', durationMs: 6500 },
+        );
         onCancel?.();
         return;
       }
@@ -1527,6 +1539,14 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           }
         </TouchableOpacity>
       </View>
+      {editMode && isOffline && (
+        <View style={styles.offlineBanner} accessibilityRole="alert">
+          <Ionicons name="cloud-offline-outline" size={20} color={colors.warmup} />
+          <Text style={styles.offlineBannerText}>
+            You're offline. Your changes are kept here, so tap Update once you're back online.
+          </Text>
+        </View>
+      )}
 
       <ExerciseListModal
         visible={exerciseModalVisible}
@@ -2005,6 +2025,23 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerBtn: { width: 60 },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.warmup + '1F',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.warmup + '55',
+  },
+  offlineBannerText: {
+    flex: 1,
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    lineHeight: 19,
+  },
   headerTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },
   saveText: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.save, textAlign: 'right' },
 

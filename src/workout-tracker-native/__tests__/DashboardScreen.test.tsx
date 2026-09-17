@@ -1,5 +1,8 @@
 import React from 'react';
-import { render, waitFor, fireEvent } from '@testing-library/react-native';
+import { render, waitFor, fireEvent, act } from '@testing-library/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { enqueueWorkout, flushQueue, initPendingCount } from '../utils/offlineQueue';
+import { registerToastCallback } from '../utils/toast';
 import { mockFetchSequence, createMockNavigation, createMockRoute } from './testUtils';
 import DashboardScreen from '../screens/DashboardTab/DashboardScreen';
 
@@ -50,5 +53,91 @@ describe('DashboardScreen', () => {
   it('shows the Track Activity button', async () => {
     const { getByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Track Activity')).toBeTruthy());
+  });
+
+  describe('workouts waiting to upload', () => {
+    afterEach(async () => {
+      await AsyncStorage.clear();
+      await initPendingCount();
+    });
+
+    it('shows nothing when the offline queue is empty', async () => {
+      const { getByText, queryByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(getByText('Push Day')).toBeTruthy());
+      expect(queryByText(/waiting to upload/)).toBeNull();
+    });
+
+    it('explains queued workouts and clears once they sync', async () => {
+      await AsyncStorage.setItem('user', JSON.stringify({ id: 1 }));
+      await enqueueWorkout({ workoutName: 'Offline Legs' });
+
+      const { getByText, queryByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(getByText('1 workout waiting to upload')).toBeTruthy());
+      expect(getByText(/upload automatically when you're back online, then show up in your history/)).toBeTruthy();
+
+      await act(async () => { await enqueueWorkout({ workoutName: 'Offline Arms' }); });
+      expect(getByText('2 workouts waiting to upload')).toBeTruthy();
+
+      (global.fetch as jest.Mock) = jest.fn(() => Promise.resolve({ ok: true, status: 201, json: () => Promise.resolve({}) }));
+      await act(async () => { await flushQueue(); });
+      expect(queryByText(/waiting to upload/)).toBeNull();
+    });
+
+    describe('Try Now', () => {
+      const toasts: string[] = [];
+      beforeEach(async () => {
+        toasts.length = 0;
+        registerToastCallback(msg => toasts.push(msg));
+        await AsyncStorage.setItem('user', JSON.stringify({ id: 1 }));
+        await enqueueWorkout({ workoutName: 'Offline Legs' });
+      });
+      afterEach(() => registerToastCallback(() => {}));
+
+      const queueResponse = (resp: any) => {
+        (global.fetch as jest.Mock) = jest.fn((url: string, init: any = {}) =>
+          String(url).endsWith('/api/workouts') && init.method === 'POST'
+            ? resp()
+            : Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) }));
+      };
+
+      it('uploads queued workouts and removes the card', async () => {
+        const { getByText, queryByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+        await waitFor(() => expect(getByText('Try Now')).toBeTruthy());
+
+        queueResponse(() => Promise.resolve({ ok: true, status: 201, json: () => Promise.resolve({ id: 5 }) }));
+        await act(async () => { fireEvent.press(getByText('Try Now')); });
+
+        await waitFor(() => expect(queryByText(/waiting to upload/)).toBeNull());
+        expect(toasts).toEqual(['1 workout synced']);
+      });
+
+      it('keeps the card and says so when the upload fails', async () => {
+        const { getByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+        await waitFor(() => expect(getByText('Try Now')).toBeTruthy());
+
+        queueResponse(() => Promise.resolve({ ok: false, status: 503, json: () => Promise.resolve({}) }));
+        await act(async () => { fireEvent.press(getByText('Try Now')); });
+
+        await waitFor(() => expect(toasts).toContain("Couldn't upload right now. It's still saved on this phone and will keep trying."));
+        expect(getByText('1 workout waiting to upload')).toBeTruthy();
+        expect(getByText('Try Now')).toBeTruthy();
+      });
+
+      it('shows a spinner and ignores taps while uploading', async () => {
+        const { getByText, queryByText, getByLabelText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+        await waitFor(() => expect(getByText('Try Now')).toBeTruthy());
+
+        let finish: () => void = () => {};
+        queueResponse(() => new Promise(r => { finish = () => r({ ok: true, status: 201, json: () => Promise.resolve({}) }); }));
+        await act(async () => { fireEvent.press(getByText('Try Now')); });
+        expect(queryByText('Try Now')).toBeNull();
+        expect(getByLabelText('Try uploading now')).toBeDisabled();
+
+        await act(async () => { finish(); });
+        await waitFor(() => expect(queryByText(/waiting to upload/)).toBeNull());
+        const posts = (global.fetch as jest.Mock).mock.calls.filter(([u, i]) => String(u).endsWith('/api/workouts') && i?.method === 'POST');
+        expect(posts).toHaveLength(1);
+      });
+    });
   });
 });

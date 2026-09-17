@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert } from 'react-native';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import WorkoutLog from '../components/WorkoutLog';
 
 jest.mock('react-native-gesture-handler', () => {
@@ -24,9 +24,13 @@ jest.mock('../theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, 
 jest.mock('../theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));
 
 const mockNetInfoFetch = jest.fn();
+let mockNetInfoListener: ((state: any) => void) | null = null;
 jest.mock('@react-native-community/netinfo', () => ({
   __esModule: true,
-  default: { fetch: () => mockNetInfoFetch(), addEventListener: () => () => {} },
+  default: {
+    fetch: () => mockNetInfoFetch(),
+    addEventListener: (cb: any) => { mockNetInfoListener = cb; return () => { mockNetInfoListener = null; }; },
+  },
 }));
 const mockEnqueueWorkout = jest.fn((_payload: any) => Promise.resolve());
 jest.mock('../utils/offlineQueue', () => ({ enqueueWorkout: (p: any) => mockEnqueueWorkout(p) }));
@@ -102,6 +106,7 @@ describe('WorkoutLog save', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockNetInfoListener = null;
     mockNetInfoFetch.mockResolvedValue({ isConnected: true, isInternetReachable: true });
     alertSpy = answerAlertsWith('Check Off & Save');
   });
@@ -221,7 +226,11 @@ describe('WorkoutLog save', () => {
     expect(queued.exercises[2].sets[0].cardio_duration).toBe(1.5);
     expect(mockClearSession).toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(showToast).toHaveBeenCalledWith('Saved offline. Will sync when connected');
+    expect(showToast).toHaveBeenCalledWith(
+      expect.stringContaining("won't show in your history"),
+      expect.objectContaining({ title: 'Workout saved offline', durationMs: expect.any(Number) }),
+    );
+    expect((showToast as jest.Mock).mock.calls[0][1].durationMs).toBeGreaterThan(3000);
   });
 
   it('treats a connected-but-unreachable network as offline', async () => {
@@ -279,5 +288,47 @@ describe('WorkoutLog save', () => {
     finishSave();
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(saveCalls()).toHaveLength(1);
+  });
+
+  describe('offline banner while editing', () => {
+    const OFFLINE_TEXT = /You're offline\. Your changes are kept here/;
+
+    it('appears when connectivity drops and hides when it returns', async () => {
+      mockServer({ status: 200, body: {} });
+      const { queryByText } = render(
+        <WorkoutLog prefill={prefill as any} editMode workoutId={55} onSubmit={jest.fn()} onCancel={jest.fn()} />,
+      );
+      expect(queryByText(OFFLINE_TEXT)).toBeNull();
+
+      act(() => mockNetInfoListener!({ isConnected: false, isInternetReachable: false }));
+      expect(queryByText(OFFLINE_TEXT)).toBeTruthy();
+
+      act(() => mockNetInfoListener!({ isConnected: true, isInternetReachable: true }));
+      expect(queryByText(OFFLINE_TEXT)).toBeNull();
+    });
+
+    it('shows when connected to a network with no internet', () => {
+      mockServer({ status: 200, body: {} });
+      const { queryByText } = render(
+        <WorkoutLog prefill={prefill as any} editMode workoutId={55} onSubmit={jest.fn()} onCancel={jest.fn()} />,
+      );
+      act(() => mockNetInfoListener!({ isConnected: true, isInternetReachable: false }));
+      expect(queryByText(OFFLINE_TEXT)).toBeTruthy();
+    });
+
+    it('does not appear before reachability is known', () => {
+      mockServer({ status: 200, body: {} });
+      const { queryByText } = render(
+        <WorkoutLog prefill={prefill as any} editMode workoutId={55} onSubmit={jest.fn()} onCancel={jest.fn()} />,
+      );
+      act(() => mockNetInfoListener!({ isConnected: true, isInternetReachable: null }));
+      expect(queryByText(OFFLINE_TEXT)).toBeNull();
+    });
+
+    it('is not used for new workouts, which save offline instead', () => {
+      mockServer({ status: 201, body: {} });
+      render(<WorkoutLog prefill={prefill as any} onSubmit={jest.fn()} onCancel={jest.fn()} />);
+      expect(mockNetInfoListener).toBeNull();
+    });
   });
 });

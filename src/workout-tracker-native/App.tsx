@@ -6,8 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import NetInfo from '@react-native-community/netinfo';
 import { setUpLiveWorkoutCategory } from './utils/notifications';
-import { flushQueue, initPendingCount } from './utils/offlineQueue';
-import { showToast } from './utils/toast';
+import { announceFlushResult, flushQueue, initPendingCount } from './utils/offlineQueue';
 import  RootNav  from '../workout-tracker-native/navigation/RootNav'
 import { AuthProvider } from 'context/AuthContext';
 import { ThemeProvider } from 'context/ThemeContext';
@@ -53,9 +52,7 @@ function App(): JSX.Element {
     initPendingCount();
     const netUnsub = NetInfo.addEventListener(async (state) => {
       if (state.isConnected && state.isInternetReachable !== false) {
-        const { synced, dropped } = await flushQueue();
-        if (synced > 0) showToast(`${synced} workout${synced > 1 ? 's' : ''} synced`);
-        if (dropped > 0) showToast(`${dropped} workout${dropped > 1 ? 's' : ''} couldn't sync and ${dropped > 1 ? 'were' : 'was'} removed`);
+        announceFlushResult(await flushQueue());
       }
     });
     return () => netUnsub();
