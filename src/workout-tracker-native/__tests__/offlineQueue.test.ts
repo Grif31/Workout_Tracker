@@ -120,4 +120,77 @@ describe('offlineQueue', () => {
     expect(await readKey('offline_workout_queue_7')).toHaveLength(1);
     expect(await AsyncStorage.getItem('offline_workout_queue')).toBeNull();
   });
+
+  it('does not double-post when two flushes overlap', async () => {
+    await loginAs(7);
+    await enqueueWorkout({ workoutName: 'Push Day' });
+    let resolvePost: (v: any) => void = () => {};
+    mockApiFetch.mockImplementation(() => new Promise(r => { resolvePost = r; }));
+
+    const first = flushQueue();
+    const second = flushQueue();
+    await new Promise(r => setImmediate(r));
+    resolvePost({ ok: true });
+    const results = await Promise.all([first, second]);
+
+    expect(mockApiFetch).toHaveBeenCalledTimes(1);
+    expect(results.map(r => r.synced).sort()).toEqual([0, 1]);
+    expect(await readKey('offline_workout_queue_7')).toHaveLength(0);
+  });
+
+  it('allows a new flush once the previous one has finished, even if it threw', async () => {
+    await loginAs(7);
+    await enqueueWorkout({ workoutName: 'Push Day' });
+    (AsyncStorage.setItem as jest.Mock).mockImplementationOnce(() => Promise.reject(new Error('disk full')));
+    mockApiFetch.mockResolvedValue({ ok: false, status: 500 });
+    await expect(flushQueue()).rejects.toThrow('disk full');
+
+    mockApiFetch.mockResolvedValue({ ok: true });
+    const { synced } = await flushQueue();
+    expect(synced).toBe(1);
+  });
+
+  it('keeps a workout saved offline while a flush is in progress', async () => {
+    await loginAs(7);
+    await enqueueWorkout({ workoutName: 'Morning' });
+    let resolvePost: (v: any) => void = () => {};
+    mockApiFetch.mockImplementation(() => new Promise(r => { resolvePost = r; }));
+
+    const flushing = flushQueue();
+    await new Promise(r => setImmediate(r));
+    await new Promise(r => setTimeout(r, 2)); // distinct Date.now()-based id
+    await enqueueWorkout({ workoutName: 'Evening' });
+    resolvePost({ ok: true });
+    await flushing;
+
+    const q = await readKey('offline_workout_queue_7');
+    expect(q.map((i: any) => i.payload.workoutName)).toEqual(['Evening']);
+  });
+
+  it('treats 429 as transient and keeps retrying', async () => {
+    await loginAs(7);
+    await enqueueWorkout({ workoutName: 'Push Day' });
+    mockApiFetch.mockResolvedValue({ ok: false, status: 429 });
+    for (let i = 0; i < 5; i++) await flushQueue();
+    expect(await readKey('offline_workout_queue_7')).toHaveLength(1);
+  });
+
+  it('posts queued workouts in order and removes only the ones that synced', async () => {
+    await loginAs(7);
+    await AsyncStorage.setItem('offline_workout_queue_7', JSON.stringify([
+      { id: 'a', payload: { workoutName: 'One' }, enqueuedAt: new Date().toISOString() },
+      { id: 'b', payload: { workoutName: 'Two' }, enqueuedAt: new Date().toISOString() },
+    ]));
+    mockApiFetch
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({ ok: true });
+
+    const { synced } = await flushQueue();
+
+    expect(synced).toBe(1);
+    expect(mockApiFetch.mock.calls.map(c => JSON.parse(c[1].body).workoutName)).toEqual(['One', 'Two']);
+    expect(mockApiFetch.mock.calls[0][0]).toBe('/api/workouts');
+    expect(mockApiFetch.mock.calls[0][1].method).toBe('POST');
+    expect((await readKey('offline_workout_queue_7')).map((i: any) => i.id)).toEqual(['a']);
+  });
 });

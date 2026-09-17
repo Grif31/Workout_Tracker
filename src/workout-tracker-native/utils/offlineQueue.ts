@@ -164,7 +164,11 @@ export async function flushQueue(): Promise<FlushResult> {
         remaining.push(item); // network — retry next flush
       }
     }
-    await writeQueue(key, remaining);
+    // `q` is a snapshot from before the POSTs. A workout saved offline while
+    // they were in flight is already in storage and must not be overwritten.
+    const latest = await readQueue(key);
+    const addedDuringFlush = latest.filter(l => !q.some(i => i.id === l.id));
+    await writeQueue(key, [...remaining, ...addedDuringFlush]);
     return { synced, dropped };
   } finally {
     _flushing = false;
