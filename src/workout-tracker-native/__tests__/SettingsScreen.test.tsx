@@ -47,4 +47,47 @@ describe('SettingsScreen', () => {
     const { getByText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
     expect(getByText('Contact Support')).toBeTruthy();
   });
+
+  describe('weight unit toggle', () => {
+    const { updateUser } = require('../context/AuthContext').useAuth();
+
+    it('saves the new unit to the server', async () => {
+      const { getByTestId } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
+      fireEvent(getByTestId('weight-unit-switch'), 'valueChange', true);
+
+      await waitFor(() => expect(getByTestId('weight-unit-switch').props.disabled).toBe(false));
+      expect(updateUser).toHaveBeenCalledWith({ weight_unit: 'kg' });
+      expect(updateUser).not.toHaveBeenCalledWith({ weight_unit: 'lbs' });
+      const [, init] = (global.fetch as jest.Mock).mock.calls.find(([u]) => String(u).endsWith('/api/me'));
+      expect(init.method).toBe('PATCH');
+      expect(JSON.parse(init.body)).toEqual({ weight_unit: 'kg' });
+      expect(getByTestId('weight-unit-switch').props.value).toBe(true);
+    });
+
+    it('rolls back when the server rejects the change', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      mockFetch({ message: 'boom' }, false, 500);
+      const { getByTestId } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
+      fireEvent(getByTestId('weight-unit-switch'), 'valueChange', true);
+
+      await waitFor(() => expect(updateUser).toHaveBeenLastCalledWith({ weight_unit: 'lbs' }));
+      expect(getByTestId('weight-unit-switch').props.value).toBe(false);
+      expect(alertSpy).toHaveBeenCalledWith("Couldn't Change Units", expect.any(String));
+      alertSpy.mockRestore();
+    });
+
+    it('rolls back without an extra alert on a network failure', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const { getByTestId } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
+      (global.fetch as jest.Mock).mockImplementation((url: string) =>
+        String(url).endsWith('/api/me') ? Promise.reject(new TypeError('Network request failed')) : Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) }),
+      );
+      fireEvent(getByTestId('weight-unit-switch'), 'valueChange', true);
+
+      await waitFor(() => expect(updateUser).toHaveBeenLastCalledWith({ weight_unit: 'lbs' }));
+      expect(getByTestId('weight-unit-switch').props.value).toBe(false);
+      expect(alertSpy).not.toHaveBeenCalledWith("Couldn't Change Units", expect.any(String));
+      alertSpy.mockRestore();
+    });
+  });
 });

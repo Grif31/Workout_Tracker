@@ -113,11 +113,14 @@ export default function SettingsScreen({ navigation }: Props) {
     setSavingUnit(true);
     try {
       await updateUser({ weight_unit: newUnit });
-      await apiFetch('/api/me', {
+      const res = await apiFetch('/api/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ weight_unit: newUnit }),
       });
+      // apiFetch only throws on network failure; a rejected PATCH means the
+      // server never converted stored weights, so the local unit must roll back.
+      if (!res.ok) throw new Error(`Unit change failed (${res.status})`);
     } catch (err) {
       setUnitIsKg(!value);
       updateUser({ weight_unit: value ? 'lbs' : 'kg' });
@@ -258,6 +261,7 @@ export default function SettingsScreen({ navigation }: Props) {
           <View style={styles.unitToggle}>
             <Text style={[styles.unitLabel, !unitIsKg && styles.unitActive]}>lbs</Text>
             <Switch
+              testID="weight-unit-switch"
               value={unitIsKg}
               onValueChange={handleUnitToggle}
               disabled={savingUnit}
