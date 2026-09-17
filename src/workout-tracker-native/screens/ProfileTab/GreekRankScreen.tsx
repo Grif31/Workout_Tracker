@@ -143,6 +143,9 @@ export default function GreekRankScreen({ navigation }: Props) {
   const [selectedFrame, setSelectedFrame] = useState('Neophyte');
 
   const listRef = useRef<FlatList>(null);
+  // Measured rather than the window width, so centering holds wherever the
+  // list is laid out
+  const [listWidth, setListWidth] = useState(SCREEN_WIDTH);
 
   const fetchData = async () => {
     const [frameVal] = await AsyncStorage.multiGet([frameKey]);
@@ -155,11 +158,7 @@ export default function GreekRankScreen({ navigation }: Props) {
         setRankData(data);
         appCache.set('greek_rank', data);
         const idx = GREEK_RANKS.findIndex(r => r.name === data.greek_rank);
-        const targetIdx = idx >= 0 ? idx : 0;
-        setSelectedIdx(targetIdx);
-        setTimeout(() => {
-          listRef.current?.scrollToIndex({ index: targetIdx, animated: true, viewPosition: 0.5 });
-        }, 300);
+        setSelectedIdx(idx >= 0 ? idx : 0);
         await AsyncStorage.setItem(GREEK_RANK_CACHED_KEY, data.greek_rank);
       }
     } catch {}
@@ -181,6 +180,21 @@ export default function GreekRankScreen({ navigation }: Props) {
     : greekScore >= currentRank.high ? 1 : 0;
   const ptsToNext   = nextRank ? Math.max(0, Math.ceil(nextRank.low - greekScore)) : 0;
   const nextGateText = rankData && nextRank ? gateRequirementText(rankData, nextRank.name) : null;
+
+  // Half the leftover width on each side puts a circle dead center when the
+  // scroll offset is exactly ITEM_WIDTH * index, which is also where
+  // snapToInterval stops.
+  const sidePadding = (listWidth - ITEM_WIDTH) / 2;
+
+  // Centered from onContentSizeChange rather than a timer: this list remounts
+  // on every focus (the loading state swaps it out), and scrolling before it
+  // has content either no-ops or clamps. scrollToIndex isn't used because its
+  // centering math ignores the side padding and reads a 0 viewport width
+  // before the first layout, so it landed somewhere different each time.
+  const centerOnHeldRank = () => {
+    if (!rankData) return;
+    listRef.current?.scrollToOffset({ offset: ITEM_WIDTH * currentIdx, animated: false });
+  };
 
   // Frames follow the rank held, not the score (see RankCircle)
   const isUnlocked = (rankName: string) => {
@@ -236,7 +250,9 @@ export default function GreekRankScreen({ navigation }: Props) {
             showsHorizontalScrollIndicator={false}
             snapToInterval={ITEM_WIDTH}
             decelerationRate="fast"
-            contentContainerStyle={{ paddingHorizontal: (SCREEN_WIDTH - ITEM_WIDTH) / 2 }}
+            contentContainerStyle={{ paddingHorizontal: sidePadding }}
+            onLayout={e => setListWidth(e.nativeEvent.layout.width)}
+            onContentSizeChange={centerOnHeldRank}
             renderItem={({ item, index }) => (
               <RankCircle
                 rank={item}
@@ -249,8 +265,7 @@ export default function GreekRankScreen({ navigation }: Props) {
               />
             )}
             style={{ marginVertical: spacing.md }}
-            getItemLayout={(_, index) => ({ length: ITEM_WIDTH, offset: ITEM_WIDTH * index, index })}
-            onScrollToIndexFailed={() => {}}
+            getItemLayout={(_, index) => ({ length: ITEM_WIDTH, offset: sidePadding + ITEM_WIDTH * index, index })}
           />
 
           {/* Equip button for selected rank — locked ranks show the unlock hint */}
