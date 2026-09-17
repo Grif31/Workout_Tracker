@@ -8,7 +8,7 @@ from sqlalchemy.orm import aliased
 from models import (
     db, WorkoutTemplate, ExerciseTemplate, Routine, RoutineDay,
     User, Exercise, Set, Workout, PersonalRecord, ExerciseMuscleMapping,
-    BodyweightLog, StrengthScoreSnapshot, PREvent,
+    BodyweightLog, PREvent,
 )
 from schemas import AiGenerateSchema, AiInsightsSchema
 from utils.validation import validate_body
@@ -239,11 +239,6 @@ MUSCLE_MEV = {
     'Chest': 8, 'Back': 10, 'Shoulders': 8, 'Biceps': 8, 'Triceps': 6,
     'Forearms': 4, 'Quads': 8, 'Hamstrings': 6, 'Glutes': 4, 'Calves': 8, 'Core': 6,
 }
-GREEK_THRESHOLDS = [
-    (90, 'Aretē'), (75, 'Titan'), (60, 'Olympian'),
-    (45, 'Demigod'), (30, 'Hero'), (15, 'Athlete'), (0, 'Neophyte'),
-]
-
 # Shared between _build_prompt (generation) and _build_insights_prompt
 # (insights) — both need to render a client's goal/experience/injury profile.
 GOAL_LABELS = {
@@ -272,13 +267,6 @@ AVOID_MAP = {
     ),
     'none': 'No injuries — full exercise library available.',
 }
-
-
-def _greek_rank_from_score(score: float) -> str:
-    for threshold, name in GREEK_THRESHOLDS:
-        if score >= threshold:
-            return name
-    return 'Neophyte'
 
 
 def _routine_rotation_context(user_id: int, routine_id: int) -> dict | None:
@@ -455,15 +443,11 @@ def _build_user_context(user_id: int) -> dict:
         .scalar()
     )
 
-    # Greek rank
-    snapshot = (
-        StrengthScoreSnapshot.query
-        .filter_by(user_id=user_id)
-        .order_by(StrengthScoreSnapshot.created_at.desc())
-        .first()
-    )
-    greek_score = snapshot.score if snapshot else None
-    greek_rank = _greek_rank_from_score(greek_score) if greek_score is not None else None
+    # Greek rank, from the same helper the app's rank screens use. This used to
+    # read the latest score snapshot, which holds a Strength or Endurance
+    # percentile rather than the Greek score, through its own threshold table.
+    from routes.strength_score_routes import _greek_rank_data
+    greek_rank = _greek_rank_data(user)['rank']
 
     # Active routine name + where the user sits in its day rotation
     active_routine_name = None
@@ -835,15 +819,11 @@ def _build_insights_context(user_id: int, experience: str | None = None, goal: s
         .all()
     )
 
-    # Greek rank from latest snapshot
-    snapshot = (
-        StrengthScoreSnapshot.query
-        .filter_by(user_id=user_id)
-        .order_by(StrengthScoreSnapshot.created_at.desc())
-        .first()
-    )
-    greek_score = snapshot.score if snapshot else None
-    greek_rank = _greek_rank_from_score(greek_score) if greek_score is not None else 'Neophyte'
+    # Greek rank from the shared helper (see _build_user_context)
+    from routes.strength_score_routes import _greek_rank_data
+    _greek = _greek_rank_data(user)
+    greek_rank = _greek['rank']
+    greek_score = _greek['score']
 
     last_workout = (
         db.session.query(db.func.max(Workout.date))
