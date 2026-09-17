@@ -20,6 +20,7 @@ function buildCalls() {
     { key: 'prs',              url: '/api/personal-records' },
     { key: 'strength_score',   url: '/api/stats/strength-score' },
     { key: 'endurance_score',  url: '/api/stats/endurance-score' },
+    { key: 'greek_rank',       url: '/api/stats/greek-rank' },
     { key: 'templates',        url: '/api/workout-templates' },
     { key: 'routines',         url: '/api/routines' },
     { key: 'progress',         url: '/api/stats/progress?range=30d' },

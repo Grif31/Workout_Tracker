@@ -17,6 +17,8 @@ import { ProfileStackParamsList } from '../../navigation/types';
 import { GREEK_RANK_COLORS, GREEK_RANKS } from '../../constants/greekRanks';
 import ProfileAvatarFrame from '../../components/ProfileAvatarFrame';
 import { GREEK_RANK_CACHED_KEY } from '../../constants/storageKeys';
+import { appCache } from '../../utils/appCache';
+import { type GreekRankData, bestPerformanceLeg, gateRequirementText } from '../../utils/greekRank';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'GreekRank'>;
 
@@ -25,23 +27,6 @@ const CIRCLE_SIZE = 88;
 const CIRCLE_GAP = 16;
 const ITEM_WIDTH = CIRCLE_SIZE + CIRCLE_GAP;
 
-
-interface RankData {
-  greek_rank: string;
-  greek_score?: number;
-  // null when the user has no data for that discipline yet, which is
-  // different from a real 0th-percentile score
-  overall?: number | null;
-  endurance_overall?: number | null;
-  greek_score_components?: {
-    consistency: number;
-    strength: number;
-    endurance: number;
-    performance: number;
-    dedication: number;
-    volume: number;
-  };
-}
 
 const CIRCLE_INNER = CIRCLE_SIZE - 20;
 
@@ -56,9 +41,11 @@ const circleStyles = StyleSheet.create({
 });
 
 function RankCircle({
-  rank, greekScore, isSelected, selectedFrame, onSelect,
+  rank, rankIdx, currentIdx, greekScore, isSelected, selectedFrame, onSelect,
 }: {
   rank: typeof GREEK_RANKS[number];
+  rankIdx: number;
+  currentIdx: number;
   greekScore: number;
   isSelected: boolean;
   selectedFrame: string;
@@ -66,9 +53,11 @@ function RankCircle({
 }) {
   const { colors } = useTheme();
 
-  const isCompleted = greekScore > rank.high;
-  const isCurrent   = greekScore >= rank.low && greekScore < rank.high;
-  const isLocked    = greekScore < rank.low;
+  // Position comes from the rank held, not the raw score: a score held back by
+  // a top-rank gate sits inside a band the user hasn't actually unlocked.
+  const isCompleted = rankIdx < currentIdx;
+  const isCurrent   = rankIdx === currentIdx;
+  const isLocked    = rankIdx > currentIdx;
   const isEquipped  = selectedFrame === rank.name;
 
   const r            = CIRCLE_SIZE / 2 - 6;
@@ -148,7 +137,7 @@ export default function GreekRankScreen({ navigation }: Props) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const frameKey = `profile_frame_rank_${user?.id}`;
 
-  const [rankData, setRankData] = useState<RankData | null>(null);
+  const [rankData, setRankData] = useState<GreekRankData | null>(null);
   const [loading, setLoading]   = useState(true);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [selectedFrame, setSelectedFrame] = useState('Neophyte');
@@ -160,10 +149,11 @@ export default function GreekRankScreen({ navigation }: Props) {
     if (frameVal[1]) setSelectedFrame(frameVal[1]);
 
     try {
-      const res = await apiFetch('/api/stats/strength-score');
+      const res = await apiFetch('/api/stats/greek-rank');
       if (res.ok) {
-        const data: RankData = await res.json();
+        const data: GreekRankData = await res.json();
         setRankData(data);
+        appCache.set('greek_rank', data);
         const idx = GREEK_RANKS.findIndex(r => r.name === data.greek_rank);
         const targetIdx = idx >= 0 ? idx : 0;
         setSelectedIdx(targetIdx);
@@ -182,16 +172,20 @@ export default function GreekRankScreen({ navigation }: Props) {
   }, []));
 
   const greekScore = rankData?.greek_score ?? 0;
+  const heldIdx     = GREEK_RANKS.findIndex(r => r.name === rankData?.greek_rank);
+  const currentIdx  = heldIdx >= 0 ? heldIdx : 0;
   const currentRank = GREEK_RANKS[selectedIdx];
   const nextRank    = GREEK_RANKS[selectedIdx + 1];
   const progress    = greekScore >= currentRank.low && greekScore < currentRank.high
     ? (greekScore - currentRank.low) / (currentRank.high - currentRank.low)
     : greekScore >= currentRank.high ? 1 : 0;
   const ptsToNext   = nextRank ? Math.max(0, Math.ceil(nextRank.low - greekScore)) : 0;
+  const nextGateText = rankData && nextRank ? gateRequirementText(rankData, nextRank.name) : null;
 
+  // Frames follow the rank held, not the score (see RankCircle)
   const isUnlocked = (rankName: string) => {
-    const r = GREEK_RANKS.find(x => x.name === rankName);
-    return r ? greekScore >= r.low : false;
+    const idx = GREEK_RANKS.findIndex(x => x.name === rankName);
+    return idx >= 0 && idx <= currentIdx;
   };
 
   const handleEquip = async (rankName: string) => {
@@ -200,17 +194,13 @@ export default function GreekRankScreen({ navigation }: Props) {
     await AsyncStorage.setItem(frameKey, rankName);
   };
 
-  const components = rankData?.greek_score_components;
-
-  // The 45% performance slot takes the higher of the two scores. A tie goes
-  // to Strength, matching the backend's max(strength, endurance).
-  const hasStrength = rankData?.overall != null;
-  const hasEndurance = rankData?.endurance_overall != null;
-  const countingLeg: 'strength' | 'endurance' | null = !components
-    ? null
-    : hasStrength && (!hasEndurance || components.strength >= components.endurance)
-      ? 'strength'
-      : hasEndurance ? 'endurance' : null;
+  const components = rankData?.components;
+  const performance = rankData?.performance;
+  const bestLeg = performance ? bestPerformanceLeg(performance) : null;
+  // The first top rank still locked, and what unlocks it, unless the progress
+  // label above already says it
+  const lockedGate = rankData ? Object.keys(rankData.gates).find(r => gateRequirementText(rankData, r)) : undefined;
+  const lockedGateText = rankData && lockedGate ? gateRequirementText(rankData, lockedGate) : null;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -250,6 +240,8 @@ export default function GreekRankScreen({ navigation }: Props) {
             renderItem={({ item, index }) => (
               <RankCircle
                 rank={item}
+                rankIdx={index}
+                currentIdx={currentIdx}
                 greekScore={greekScore}
                 isSelected={index === selectedIdx}
                 selectedFrame={selectedFrame}
@@ -298,9 +290,13 @@ export default function GreekRankScreen({ navigation }: Props) {
                 }]} />
               </View>
               <Text style={styles.progressLabel}>
-                {nextRank
-                  ? `${ptsToNext} more point${ptsToNext !== 1 ? 's' : ''} to reach ${nextRank.name}`
-                  : "You've reached the highest rank."}
+                {/* At 0 points the score already earns the next rank, so a
+                    top-rank gate is what's holding it back */}
+                {!nextRank
+                  ? "You've reached the highest rank."
+                  : ptsToNext > 0
+                    ? `${ptsToNext} more point${ptsToNext !== 1 ? 's' : ''} to reach ${nextRank.name}`
+                    : nextGateText ?? `Keep training to reach ${nextRank.name}`}
               </Text>
 
               {components && (
@@ -309,28 +305,31 @@ export default function GreekRankScreen({ navigation }: Props) {
                   <Text style={styles.componentTitle}>Score Breakdown</Text>
                   {[
                     { label: 'Consistency', value: components.consistency, icon: 'calendar-outline' as const },
-                    { label: 'Performance', value: components.performance, icon: 'flash-outline' as const },
                     { label: 'Dedication',  value: components.dedication,  icon: 'trophy-outline' as const },
                     { label: 'Volume',      value: components.volume,      icon: 'flame-outline' as const },
                   ].map(comp => (
-                    <React.Fragment key={comp.label}>
-                      <View style={styles.compRow}>
-                        <View style={styles.compLeft}>
-                          <Ionicons name={comp.icon} size={16} color={colors.textSecondary} />
-                          <Text style={styles.compLabel}>{comp.label}</Text>
-                        </View>
-                        <View style={styles.compBarTrack}>
-                          <View style={[styles.compBarFill, { width: `${comp.value}%` as any, backgroundColor: currentRank.color }]} />
-                        </View>
-                        <Text style={styles.compValue}>{Math.round(comp.value)}</Text>
+                    <View key={comp.label} style={styles.compRow}>
+                      <View style={styles.compLeft}>
+                        <Ionicons name={comp.icon} size={16} color={colors.textSecondary} />
+                        <Text style={styles.compLabel}>{comp.label}</Text>
                       </View>
-                      {/* Performance is whichever of these two is higher; the one
-                          that fed it is highlighted */}
-                      {comp.label === 'Performance' && ([
-                        { key: 'strength' as const,  label: 'Strength',  value: components.strength,  hasData: hasStrength },
-                        { key: 'endurance' as const, label: 'Endurance', value: components.endurance, hasData: hasEndurance },
+                      <View style={styles.compBarTrack}>
+                        <View style={[styles.compBarFill, { width: `${comp.value}%` as any, backgroundColor: currentRank.color }]} />
+                      </View>
+                      <Text style={styles.compValue}>{Math.round(comp.value)}</Text>
+                    </View>
+                  ))}
+
+                  {/* Performance adds no points; the higher score unlocks the top ranks */}
+                  {performance && rankData && (
+                    <>
+                      <View style={styles.divider} />
+                      <Text style={styles.componentTitle}>Unlock Top Ranks</Text>
+                      {([
+                        { key: 'strength' as const,  label: 'Strength',  value: performance.strength },
+                        { key: 'endurance' as const, label: 'Endurance', value: performance.endurance },
                       ]).map(leg => {
-                        const counts = countingLeg === leg.key;
+                        const counts = bestLeg === leg.key;
                         return (
                           <View
                             key={leg.key}
@@ -341,7 +340,7 @@ export default function GreekRankScreen({ navigation }: Props) {
                               <Text style={[styles.legLabel, counts && styles.legTextCounts]}>{leg.label}</Text>
                             </View>
                             <View style={styles.compBarTrack}>
-                              {leg.hasData && (
+                              {leg.value != null && (
                                 <View
                                   style={[
                                     styles.compBarFill,
@@ -351,13 +350,27 @@ export default function GreekRankScreen({ navigation }: Props) {
                               )}
                             </View>
                             <Text style={[styles.compValue, counts && styles.legTextCounts]}>
-                              {leg.hasData ? Math.round(leg.value) : '–'}
+                              {leg.value != null ? Math.round(leg.value) : '\u2013'}
                             </Text>
                           </View>
                         );
                       })}
-                    </React.Fragment>
-                  ))}
+                      {Object.entries(rankData.gates).map(([gateRank, required]) => {
+                        const met = performance.best != null && performance.best >= required;
+                        const gateColor = GREEK_RANK_COLORS[gateRank] ?? currentRank.color;
+                        return (
+                          <View key={gateRank} testID={`greek-gate-${gateRank}-${met ? 'met' : 'locked'}`} style={styles.gateRow}>
+                            <Ionicons name={met ? 'checkmark-circle' : 'lock-closed'} size={16} color={met ? gateColor : colors.textSecondary} />
+                            <Text style={[styles.gateRank, { color: met ? gateColor : colors.textPrimary }]}>{gateRank}</Text>
+                            <Text style={styles.gateRequirement}>{Math.round(required)}th percentile</Text>
+                          </View>
+                        );
+                      })}
+                      {lockedGateText && lockedGateText !== nextGateText && (
+                        <Text style={styles.gateHint}>{lockedGateText}</Text>
+                      )}
+                    </>
+                  )}
                 </>
               )}
             </View>
@@ -435,6 +448,10 @@ const createStyles = (colors: Colors) =>
     },
     legLabel: { fontSize: typography.fontSize.sm, color: colors.textSecondary, paddingLeft: 20 },
     legTextCounts: { color: colors.textPrimary, fontWeight: '700' },
+    gateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+    gateRank: { fontSize: typography.fontSize.sm, fontWeight: '700', width: 72 },
+    gateRequirement: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+    gateHint: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
     scoreLinksRow: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.md },
     scoreLinkBtn: {
       flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

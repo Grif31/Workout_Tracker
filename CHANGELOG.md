@@ -5,12 +5,14 @@
 ### New: Endurance Score
 - Runners now get an Endurance Score, the running counterpart to the Strength Score. Your best pace at each distance is ranked against pace standards for your gender, with the same tiers and rank colors as the Strength Score.
 - Every run also scores the shorter distances inside it, so a 5K gives you a mile time too. Endurance distances (5K and up) count for 70 percent of the score and speed distances (400m to 1 mile) for 30 percent, and whichever tier you have no times for drops out.
-- Your Greek Rank now uses whichever is higher, your Endurance Score or your Strength Score, so running and lifting never dilute each other.
-- The Greek Rank breakdown shows a Performance score with your Strength and Endurance scores under it, and highlights the one that counts. Both score screens are one tap away from it.
 - Paces show in min/mi or min/km to match your GPS distance setting, and each distance shows the pace the next rank asks for.
 - The score tracks over time on its own chart, and it can be shared the same way as the Strength Score.
 
-### Changed: Greek Rank Volume
+### Changed: Greek Rank
+- Everyone now gets a Greek Rank, even without gender or bodyweight in their profile. Your rank is earned by training: Consistency counts for 40%, Dedication for 30% and Volume for 30%.
+- The top two ranks also ask for ability. Titan needs a Strength or Endurance Score at the 50th percentile or higher, and Aretē needs the 80th. Until you reach it you stay one rank below, and the Greek Rank screen shows what unlocks the next one.
+- If you were Titan or Aretē without the score for it, your rank now shows one step lower.
+- The breakdown shows your Strength and Endurance scores with the higher one highlighted, and a lock or check for each top rank. Both score screens are one tap away from it.
 - The Volume part of your Greek Rank now measures how much training you do, not how many workouts you log. It counts your working sets plus cardio time, where 3 minutes of cardio counts as one set. Warm-up sets don't count, and a single workout counts for at most 40.
 - A short session now counts for less than a full one. If your sessions are typically full length, your rank will barely change.
 
@@ -30,6 +32,7 @@
 - The summary now shows total reps, and volume as an exact figure instead of a rounded shorthand. Volume and duration sit on their own row above exercises, sets and reps.
 
 ### Bug Fixes
+- AI Coach now refers to your actual Greek Rank. It had been working one out from your Strength Score, which could name the wrong rank.
 - Changing your weight unit in Settings no longer clears the gender on your profile. That was quietly hiding your Strength Score until you re-saved your profile.
 - Paces that round up to a full minute now read correctly. A 4:59.7 pace showed as "4:60" on run details, the GPS tracker, exercise stats and share cards.
 - The age-adjusted badge no longer appears when the credit is too small to show, where it read "+0%".

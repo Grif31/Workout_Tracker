@@ -25,6 +25,7 @@ import type { PR } from './PersonalRecordsScreen';
 import { toDisplayVolume, roundTenth, type WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from 'utils/units';
 import { toLocalDateStr } from 'utils/date';
 import { GREEK_RANK_CACHED_KEY } from '../../constants/storageKeys';
+import type { GreekRankData } from '../../utils/greekRank';
 import { apiFetch, resolveMediaUrl } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
@@ -118,7 +119,8 @@ export default function ProfileScreen({ navigation }: Props) {
     const pw = appCache.get<{ workouts: Workout[]; total: number; has_more: boolean }>('profile_workouts');
     const ps = appCache.get<ProfileStats>('profile_stats');
     const cachedPrs = appCache.get<PR[]>('prs');
-    const score = appCache.get<any>('strength_score');
+    // greek-rank, not strength-score: it needs no gender, so every user has one
+    const greek = appCache.get<GreekRankData>('greek_rank');
     if (pw) {
       setWorkouts(pw.workouts ?? []);
       setTotalWorkouts(pw.total);
@@ -140,9 +142,9 @@ export default function ProfileScreen({ navigation }: Props) {
         }
       });
     }
-    if (score?.greek_rank) {
-      setGreekRank(score.greek_rank);
-      AsyncStorage.setItem(GREEK_RANK_CACHED_KEY, score.greek_rank);
+    if (greek?.greek_rank) {
+      setGreekRank(greek.greek_rank);
+      AsyncStorage.setItem(GREEK_RANK_CACHED_KEY, greek.greek_rank);
     }
   }, []);
 
@@ -181,7 +183,7 @@ export default function ProfileScreen({ navigation }: Props) {
         apiFetch(`/api/workouts?page=1&per_page=${PAGE_SIZE}`),
         apiFetch(`/api/stats/profile?weekly_goal=${weeklyGoal}`),
         apiFetch('/api/personal-records'),
-        apiFetch('/api/stats/strength-score'),
+        apiFetch('/api/stats/greek-rank'),
       ]);
       if (workoutsRes.ok) {
         const data = await workoutsRes.json();

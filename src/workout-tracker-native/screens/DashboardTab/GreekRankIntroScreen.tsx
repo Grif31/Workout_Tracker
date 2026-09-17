@@ -18,11 +18,13 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const NEOPHYTE = GREEK_RANKS[0];
 const CIRCLE_SIZE = 120;
 
+// Effort earns the score. Performance adds no points; it unlocks the top two
+// ranks, so its row shows what it does instead of a weight.
 const PILLARS = [
-  { emoji: '⚡', label: 'Performance', pct: '45%', desc: 'Your Strength or Endurance Score, whichever is higher' },
-  { emoji: '🔄', label: 'Consistency', pct: '30%', desc: 'Train regularly week over week' },
-  { emoji: '🎯', label: 'Dedication', pct: '15%', desc: 'Maintain your training over months' },
-  { emoji: '📈', label: 'Volume', pct: '10%', desc: 'Do more working sets and cardio minutes each week' },
+  { emoji: '\u{1F504}', label: 'Consistency', pct: '40%', desc: 'Train regularly week over week' },
+  { emoji: '\u{1F3AF}', label: 'Dedication', pct: '30%', desc: 'Maintain your training over months' },
+  { emoji: '\u{1F4C8}', label: 'Volume', pct: '30%', desc: 'Do more working sets and cardio minutes each week' },
+  { emoji: '\u26A1', label: 'Performance', pct: 'Unlocks', desc: 'Titan needs a Strength or Endurance Score in the top half, Aretē the top 20%' },
 ];
 
 export default function GreekRankIntroScreen({ navigation }: Props) {
@@ -58,7 +60,7 @@ export default function GreekRankIntroScreen({ navigation }: Props) {
           <Text style={s.sectionTitle}>What is Greek Rank?</Text>
           <Text style={s.bodyText}>
             Greek Rank measures your overall progress as an athlete across four training pillars.
-            Complete more workouts, lift heavier, and stay consistent to climb from Neophyte all the way to Aretē, the pinnacle of human achievement.
+            Train consistently, put in the work, and get stronger or faster to climb from Neophyte all the way to Aretē, the pinnacle of human achievement.
           </Text>
         </Animated.View>
 

@@ -3,84 +3,130 @@ import { render, waitFor, fireEvent } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { mockFetch, createMockNavigation, createMockRoute } from './testUtils';
 import GreekRankScreen from '../screens/ProfileTab/GreekRankScreen';
+import type { GreekRankData } from '../utils/greekRank';
 
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 
 const route = createMockRoute('GreekRank');
+const ARETE = 'Aretē';
 
-// The 45% performance slot is max(strength, endurance). `overall` and
-// `endurance_overall` are null when the user has no data for that side.
-function payload(strength: number | null, endurance: number | null) {
-  const s = strength ?? 0;
-  const e = endurance ?? 0;
+// Mirrors GET /api/stats/greek-rank. The score is effort only; the higher of
+// Strength/Endurance (null = no score) gates Titan at 50 and Aretē at 80.
+function payload(
+  strength: number | null,
+  endurance: number | null,
+  overrides: Partial<GreekRankData> = {},
+): GreekRankData {
+  const legs = [strength, endurance].filter((v): v is number => v != null);
+  const best = legs.length ? Math.max(...legs) : null;
   return {
-    greek_rank: 'Hoplite',
+    greek_rank: 'Hero',
     greek_score: 40,
-    overall: strength,
-    endurance_overall: endurance,
-    greek_score_components: {
-      consistency: 60,
-      strength: s,
-      endurance: e,
-      performance: Math.max(s, e),
-      dedication: 30,
-      volume: 50,
-    },
+    score_rank: 'Hero',
+    held_by_gate: false,
+    next_gate: { rank: 'Titan', required_percentile: 50, met: best != null && best >= 50 },
+    gates: { Titan: 50, [ARETE]: 80 },
+    components: { consistency: 60, dedication: 30, volume: 25 },
+    weights: { consistency: 0.4, dedication: 0.3, volume: 0.3 },
+    performance: { strength, endurance, best },
+    profile_missing: [],
+    ...overrides,
   };
 }
 
-async function renderWith(strength: number | null, endurance: number | null) {
-  mockFetch(payload(strength, endurance));
+async function renderWith(data: GreekRankData) {
+  mockFetch(data);
   const nav = createMockNavigation();
   const utils = render(<GreekRankScreen navigation={nav as any} route={route as any} />);
-  await waitFor(() => expect(utils.getByText('Performance')).toBeTruthy());
+  await waitFor(() => expect(utils.getByText('Unlock Top Ranks')).toBeTruthy());
   return { ...utils, nav };
 }
 
-describe('GreekRankScreen score breakdown', () => {
+describe('GreekRankScreen', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     await AsyncStorage.clear();
   });
 
-  it('highlights Endurance for a cardio-only user and dashes the missing Strength score', async () => {
-    const { getByTestId, queryByTestId, getByText, getAllByText } = await renderWith(null, 67);
-    expect(getByTestId('greek-leg-endurance-counts')).toBeTruthy();
-    expect(queryByTestId('greek-leg-strength-counts')).toBeNull();
-    expect(getByText('–')).toBeTruthy();
-    // Once on Performance (which took the endurance score) and once on Endurance
-    expect(getAllByText('67')).toHaveLength(2);
+  it('loads from the greek-rank endpoint, which needs no gender', async () => {
+    await renderWith(payload(null, null));
+    const urls = (global.fetch as jest.Mock).mock.calls.map(c => String(c[0]));
+    expect(urls.some(u => u.includes('/api/stats/greek-rank'))).toBe(true);
+    expect(urls.some(u => u.includes('/api/stats/strength-score'))).toBe(false);
   });
 
-  it('highlights Strength for a lifter who has never run', async () => {
-    const { getByTestId, queryByTestId, getByText } = await renderWith(72, null);
-    expect(getByTestId('greek-leg-strength-counts')).toBeTruthy();
-    expect(queryByTestId('greek-leg-endurance-counts')).toBeNull();
-    expect(getByText('–')).toBeTruthy();
+  it('shows the three effort components and no Performance points row', async () => {
+    const { getByText, queryByText } = await renderWith(payload(41, 67));
+    expect(getByText('Consistency')).toBeTruthy();
+    expect(getByText('Dedication')).toBeTruthy();
+    expect(getByText('Volume')).toBeTruthy();
+    expect(queryByText('Performance')).toBeNull();
   });
 
-  it('highlights the higher score for a hybrid athlete', async () => {
-    const { getByTestId, queryByTestId } = await renderWith(41, 67);
-    expect(getByTestId('greek-leg-endurance-counts')).toBeTruthy();
-    expect(queryByTestId('greek-leg-strength-counts')).toBeNull();
+  describe('score highlight', () => {
+    it('highlights Endurance for a cardio-only user and dashes Strength', async () => {
+      const { getByTestId, queryByTestId, getByText } = await renderWith(payload(null, 67));
+      expect(getByTestId('greek-leg-endurance-counts')).toBeTruthy();
+      expect(queryByTestId('greek-leg-strength-counts')).toBeNull();
+      expect(getByText('–')).toBeTruthy();
+    });
+
+    it('highlights Strength for a lifter who has never run', async () => {
+      const { getByTestId, queryByTestId } = await renderWith(payload(72, null));
+      expect(getByTestId('greek-leg-strength-counts')).toBeTruthy();
+      expect(queryByTestId('greek-leg-endurance-counts')).toBeNull();
+    });
+
+    it('gives a tie to Strength, matching the backend', async () => {
+      const { getByTestId, queryByTestId } = await renderWith(payload(55, 55));
+      expect(getByTestId('greek-leg-strength-counts')).toBeTruthy();
+      expect(queryByTestId('greek-leg-endurance-counts')).toBeNull();
+    });
+
+    it('highlights neither with no score on either side', async () => {
+      const { queryByTestId, getAllByText } = await renderWith(payload(null, null));
+      expect(queryByTestId('greek-leg-strength-counts')).toBeNull();
+      expect(queryByTestId('greek-leg-endurance-counts')).toBeNull();
+      expect(getAllByText('–')).toHaveLength(2);
+    });
   });
 
-  it('gives a tie to Strength, matching the backend', async () => {
-    const { getByTestId, queryByTestId } = await renderWith(55, 55);
-    expect(getByTestId('greek-leg-strength-counts')).toBeTruthy();
-    expect(queryByTestId('greek-leg-endurance-counts')).toBeNull();
-  });
+  describe('top-rank gates', () => {
+    it('marks each gate met or locked from the best score', async () => {
+      const { getByTestId } = await renderWith(payload(41, 67));
+      expect(getByTestId('greek-gate-Titan-met')).toBeTruthy();
+      expect(getByTestId(`greek-gate-${ARETE}-locked`)).toBeTruthy();
+    });
 
-  it('highlights neither when there is no data on either side', async () => {
-    const { queryByTestId, getAllByText } = await renderWith(null, null);
-    expect(queryByTestId('greek-leg-strength-counts')).toBeNull();
-    expect(queryByTestId('greek-leg-endurance-counts')).toBeNull();
-    expect(getAllByText('–')).toHaveLength(2);
+    it('asks for gender when the profile has none', async () => {
+      const { getByText } = await renderWith(payload(null, null, { profile_missing: ['gender'] }));
+      expect(getByText('Add your gender to your profile to unlock Titan')).toBeTruthy();
+    });
+
+    it('says what the gate needs instead of "0 more points" when held at Olympian', async () => {
+      const { getByText, queryByText } = await renderWith(payload(null, 41, {
+        greek_rank: 'Olympian', greek_score: 90, score_rank: 'Titan', held_by_gate: true,
+      }));
+      expect(getByText('Reach the 50th percentile in Strength or Endurance to unlock Titan')).toBeTruthy();
+      expect(queryByText(/0 more points/)).toBeNull();
+    });
+
+    it("doesn't offer the frame of a rank the score reached but a gate holds back", async () => {
+      const { getByText, getAllByText, queryByText } = await renderWith(payload(null, 41, {
+        greek_rank: 'Olympian', greek_score: 90, score_rank: 'Titan', held_by_gate: true,
+      }));
+      // The carousel opens on the held rank; Olympian's frame is usable
+      expect(getByText('Use This Frame')).toBeTruthy();
+      // "Titan" also labels its gate row further down; the carousel comes first
+      fireEvent.press(getAllByText('Titan')[0]);
+      await waitFor(() => expect(getByText('Rank up to unlock frame')).toBeTruthy());
+      expect(queryByText('Use This Frame')).toBeNull();
+    });
   });
 
   it('links to both full score screens', async () => {
-    const { getByText, nav } = await renderWith(41, 67);
+    const { getByText, nav } = await renderWith(payload(41, 67));
     fireEvent.press(getByText('Strength Score'));
     expect(nav.navigate).toHaveBeenCalledWith('TrainingTab', { screen: 'StrengthScore', initial: false });
     fireEvent.press(getByText('Endurance Score'));

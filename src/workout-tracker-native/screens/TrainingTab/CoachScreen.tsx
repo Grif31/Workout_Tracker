@@ -26,6 +26,7 @@ import CoachProfileModal, { CoachProfile, COACH_PROFILE_KEY } from './CoachProfi
 import SectionRule from '../../components/SectionRule';
 import PressableScale from '../../components/PressableScale';
 import { GREEK_RANK_COLORS, GREEK_RANKS } from '../../constants/greekRanks';
+import type { GreekRankData } from '../../utils/greekRank';
 import WeeklyGoalModal from '../../components/coach/WeeklyGoalModal';
 import WorkingSetsInfoModal from '../../components/coach/WorkingSetsInfoModal';
 import RangePickerModal from '../../components/coach/RangePickerModal';
@@ -307,7 +308,8 @@ export default function CoachScreen({ navigation }: Props) {
     if (prog) setProgressData(prog.buckets ?? []);
     if (score?.overall != null) setStrengthPercentile(score.overall);
     if (score?.overall_rank?.label) setStrengthRankLabel(score.overall_rank.label);
-    if (score?.greek_rank) setGreekRank(score.greek_rank);
+    const greek = appCache.get<GreekRankData>('greek_rank');
+    if (greek?.greek_rank) setGreekRank(greek.greek_rank);
     if (me?.active_routine_id) fetchActiveRoutine();
     const mv = appCache.get<MuscleVolumeData>('muscle_volume');
     if (mv) setMuscleVolume(mv);
@@ -367,7 +369,18 @@ export default function CoachScreen({ navigation }: Props) {
         const data = await res.json();
         setStrengthPercentile(data.overall ?? null);
         if (data.overall_rank?.label) setStrengthRankLabel(data.overall_rank.label);
-        if (data.greek_rank) setGreekRank(data.greek_rank);
+      }
+    } catch { }
+  };
+
+  // Separate from strength-score, which needs gender: the rank doesn't
+  const fetchGreekRank = async () => {
+    try {
+      const res = await apiFetch('/api/stats/greek-rank');
+      if (res.ok) {
+        const data: GreekRankData = await res.json();
+        setGreekRank(data.greek_rank);
+        appCache.set('greek_rank', data);
       }
     } catch { }
   };
@@ -429,6 +442,7 @@ export default function CoachScreen({ navigation }: Props) {
     fetchActiveRoutine();
     fetchStrengthScore();
     fetchEnduranceScore();
+    fetchGreekRank();
     fetchMuscleGroupData();
     fetchThisWeekCount();
     fetchWeeklySummaryPreview();

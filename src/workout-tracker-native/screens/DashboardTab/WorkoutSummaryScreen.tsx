@@ -27,6 +27,7 @@ import { DashboardStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { GREEK_RANK_CACHED_KEY } from '../../constants/storageKeys';
+import { type GreekRankData, gateRequirementText } from '../../utils/greekRank';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WorkoutSummary'>;
 
@@ -51,7 +52,8 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const prAnim = useCollapseAnim(prExpanded);
   const [sharing, setSharing] = useState(false);
   const [greekRank, setGreekRank] = useState<string | null>(null);
-  const [greekScore, setGreekScore] = useState<number | null>(null);
+  const [rankData, setRankData] = useState<GreekRankData | null>(null);
+  const greekScore = rankData?.greek_score ?? null;
   const [selectedFrame, setSelectedFrame] = useState('Neophyte');
 
   const PR_TYPE_ORDER: Record<string, number> = { max_weight: 0, max_reps: 1, max_duration: 2, best_distance: 3, best_time: 4 };
@@ -89,11 +91,12 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
     // Live score (for the rank-up progress bar) — the cached rank name above
     // is enough for the badge and renders instantly, but the numeric score
     // needed to compute progress isn't cached, so fetch it separately.
-    apiFetch('/api/stats/strength-score')
+    apiFetch('/api/stats/greek-rank')
       .then(r => (r.ok ? r.json() : null))
-      .then(data => {
-        if (data?.greek_score != null) setGreekScore(data.greek_score);
-        if (data?.greek_rank) setGreekRank(data.greek_rank);
+      .then((data: GreekRankData | null) => {
+        if (!data) return;
+        setRankData(data);
+        setGreekRank(data.greek_rank);
       })
       .catch(() => {});
   }, []);
@@ -307,7 +310,11 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
                       <View style={[s.progressFill, { width: `${Math.round(progress * 100)}%`, backgroundColor: rankColor }]} />
                     </View>
                     <Text style={s.progressLabel}>
-                      {ptsToNext} point{ptsToNext !== 1 ? 's' : ''} to {nextRank.name}
+                      {/* At 0 points the score already earns the next rank, so a
+                          top-rank gate is what's holding it back */}
+                      {ptsToNext === 0 && rankData
+                        ? gateRequirementText(rankData, nextRank.name) ?? `Keep training to reach ${nextRank.name}`
+                        : `${ptsToNext} point${ptsToNext !== 1 ? 's' : ''} to ${nextRank.name}`}
                     </Text>
                   </View>
                 )}
