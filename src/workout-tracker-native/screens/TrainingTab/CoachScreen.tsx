@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { BarChart } from 'react-native-gifted-charts';
+import Svg, { Circle } from 'react-native-svg';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { usePurchase } from '../../context/PurchaseContext';
@@ -20,7 +21,7 @@ import { apiFetch, isNetworkError } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import { TrainingStackParamsList } from '../../navigation/types';
 import { muscleGroups } from '../../constants/muscleGroups';
-import { SCORE_RANK_COLORS } from '../../constants/strengthRanks';
+import { SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
 import CoachProfileModal, { CoachProfile, COACH_PROFILE_KEY } from './CoachProfileModal';
 import SectionRule from '../../components/SectionRule';
 import PressableScale from '../../components/PressableScale';
@@ -30,6 +31,11 @@ import WorkingSetsInfoModal from '../../components/coach/WorkingSetsInfoModal';
 import RangePickerModal from '../../components/coach/RangePickerModal';
 import RoutinePickerModal from '../../components/coach/RoutinePickerModal';
 import MusclePickerModal from '../../components/coach/MusclePickerModal';
+
+const MINI_RING_SIZE = 44;
+const MINI_RING_STROKE = 4;
+const MINI_RING_R = (MINI_RING_SIZE - MINI_RING_STROKE) / 2;
+const MINI_RING_CIRCUMFERENCE = 2 * Math.PI * MINI_RING_R;
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'TrainingHome'>;
 
@@ -1172,8 +1178,9 @@ export default function CoachScreen({ navigation }: Props) {
                   </TouchableOpacity>
                 </View>
 
-                {/* Endurance Score entry point - the running counterpart to
-                    the Strength circle above, so cardio users have a door in */}
+                {/* Endurance Score entry point. The mini ring echoes the Strength
+                    circle above at a smaller size, so it reads as a sibling
+                    rather than competing with it. */}
                 <TouchableOpacity
                   style={styles.weeklySummaryCard}
                   onPress={() => isPremium
@@ -1181,19 +1188,41 @@ export default function CoachScreen({ navigation }: Props) {
                     : (navigation as any).navigate('Paywall', { source: 'endurance_score' })
                   }
                 >
-                  <Ionicons name="walk-outline" size={20} color={enduranceColor} />
+                  <View style={styles.enduranceRing}>
+                    <Svg width={MINI_RING_SIZE} height={MINI_RING_SIZE}>
+                      <Circle
+                        cx={MINI_RING_SIZE / 2} cy={MINI_RING_SIZE / 2} r={MINI_RING_R}
+                        stroke={colors.border} strokeWidth={MINI_RING_STROKE} fill="none"
+                      />
+                      {endurancePercentile != null && (
+                        <Circle
+                          cx={MINI_RING_SIZE / 2} cy={MINI_RING_SIZE / 2} r={MINI_RING_R}
+                          stroke={enduranceColor} strokeWidth={MINI_RING_STROKE} fill="none"
+                          strokeDasharray={`${MINI_RING_CIRCUMFERENCE}`}
+                          strokeDashoffset={MINI_RING_CIRCUMFERENCE * (1 - endurancePercentile / 100)}
+                          strokeLinecap="round"
+                          transform={`rotate(-90 ${MINI_RING_SIZE / 2} ${MINI_RING_SIZE / 2})`}
+                        />
+                      )}
+                    </Svg>
+                    <View style={styles.enduranceRingCenter}>
+                      {endurancePercentile != null ? (
+                        <Text style={[styles.enduranceRingNum, { color: enduranceColor }]}>
+                          {Math.round(endurancePercentile)}
+                        </Text>
+                      ) : (
+                        <Ionicons name="walk-outline" size={18} color={colors.textSecondary} />
+                      )}
+                    </View>
+                  </View>
                   <View style={styles.weeklySummaryTextWrap}>
                     <Text style={styles.weeklySummaryText}>Endurance Score</Text>
-                    <Text style={styles.weeklySummarySub} numberOfLines={1}>
-                      {enduranceRankLabel && endurancePercentile != null
-                        ? `${enduranceRankLabel} · faster than ${Math.round(endurancePercentile)}% of runners`
-                        : 'Log a run to see how your pace ranks'}
-                    </Text>
                   </View>
-                  {endurancePercentile != null && (
-                    <Text style={[styles.enduranceScoreNum, { color: enduranceColor }]}>
-                      {Math.round(endurancePercentile)}
-                    </Text>
+                  {enduranceRankLabel && (
+                    <View style={[styles.enduranceRankPill, { backgroundColor: enduranceColor + '22', borderColor: enduranceColor }]}>
+                      <Ionicons name={SCORE_RANK_ICONS[enduranceRankLabel] ?? 'ellipse-outline'} size={11} color={enduranceColor} />
+                      <Text style={[styles.enduranceRankText, { color: enduranceColor }]}>{enduranceRankLabel}</Text>
+                    </View>
                   )}
                   <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
                 </TouchableOpacity>
@@ -1403,7 +1432,14 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   goalCirclesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: spacing.sm },
   goalCircle: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   goalSideSub: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
-  enduranceScoreNum: { fontSize: typography.fontSize.lg, fontWeight: '800' },
+  enduranceRing: { width: MINI_RING_SIZE, height: MINI_RING_SIZE, alignItems: 'center', justifyContent: 'center' },
+  enduranceRingCenter: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  enduranceRingNum: { fontSize: typography.fontSize.sm, fontWeight: '800' },
+  enduranceRankPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    borderRadius: 6, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2,
+  },
+  enduranceRankText: { fontSize: typography.fontSize.xs, fontWeight: '700' },
   weeklySummaryCard: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     backgroundColor: colors.surface, borderRadius: spacing.sm, borderWidth: 1, borderColor: colors.border,
