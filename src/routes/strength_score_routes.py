@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from utils.local_date import user_today
 from models import db, Exercise, Set, Workout, User, ExerciseTemplate, PersonalRecord, StrengthScoreSnapshot, BodyweightLog
 
 strength_score_bp = Blueprint('strength_score_bp', __name__)
@@ -277,7 +278,7 @@ def _effort_components(user_id):
     )
 
     return (
-        compute_consistency_score(workouts_12wk),
+        compute_consistency_score(workouts_12wk, user_today()),
         compute_dedication_score(workouts_13wk_count),
         compute_training_load_score(total_load / TRAINING_LOAD_WINDOW_WEEKS),
     )

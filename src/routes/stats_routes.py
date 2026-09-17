@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from utils.local_date import user_today
 from sqlalchemy.orm import selectinload
 from models import db, Workout, Exercise, Set, User, ExerciseTemplate, ExerciseMuscleMapping
 from utils.strength_standards import epley_1rm
@@ -255,7 +256,7 @@ def profile_stats():
         monday = w_date - timedelta(days=w_date.weekday())
         week_counts[monday] += 1
 
-    today = date.today()
+    today = user_today()
     current_monday = today - timedelta(days=today.weekday())
 
     # Longest streak: longest run of consecutive weeks each meeting the goal
@@ -350,7 +351,7 @@ def dashboard_stats():
     user_id = get_jwt_identity()
     user = db.session.get(User, int(user_id))
 
-    today = date.today()
+    today = user_today()
     start_of_week = today - timedelta(days=today.weekday())  # Monday
     eight_weeks_ago = start_of_week - timedelta(weeks=7)
 
@@ -417,7 +418,7 @@ def progress_stats():
     from datetime import date, timedelta
     user_id = get_jwt_identity()
     range_param = request.args.get('range', '30d')
-    today = date.today()
+    today = user_today()
 
     if range_param == '30d':
         start_of_week = today - timedelta(days=today.weekday())
@@ -528,11 +529,7 @@ def muscle_volume():
     from datetime import date, timedelta
     user_id = get_jwt_identity()
 
-    local_date_str = request.args.get('local_date')
-    try:
-        today = date.fromisoformat(local_date_str) if local_date_str else date.today()
-    except ValueError:
-        today = date.today()
+    today = user_today()
     week_start = today - timedelta(days=today.weekday())   # Monday
     last_week_start = week_start - timedelta(weeks=1)
 

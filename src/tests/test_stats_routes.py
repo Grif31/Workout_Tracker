@@ -499,13 +499,14 @@ class TestMuscleVolume:
 
     # -- local_date / UTC boundary fix --
 
-    def test_local_date_fixes_utc_boundary(self, client, auth_token, app):
+    def test_local_date_fixes_utc_boundary(self, client, auth_token, app, monkeypatch):
         # Bug: Railway runs UTC. Late Sunday (user's local time) the server's date is
         # already Monday, so week_start jumps to NEXT Monday and excludes all workouts
         # from the user's actual current week. Passing local_date fixes this.
         monday = _this_week_monday()
         sunday = monday + timedelta(days=6)      # last day of this week (user's perspective)
         next_monday = monday + timedelta(days=7)  # what the UTC server thinks is "today"
+        _pin_utc_now(monkeypatch, next_monday)
 
         tid = _create_template(client, auth_token)
         wid = _create_mapped_workout(client, auth_token, tid, n_sets=3)
@@ -523,6 +524,22 @@ class TestMuscleVolume:
 # ---------------------------------------------------------------------------
 # GET /api/stats/weekly-summary — recap of a completed week
 # ---------------------------------------------------------------------------
+
+def _pin_utc_now(monkeypatch, utc_day):
+    """Pin the server's UTC clock to 1am on utc_day. local_date is only trusted
+    within a day of UTC, so boundary tests need a known server date."""
+    import utils.local_date as local_date_module
+    from datetime import datetime as _dt, timezone as _tz
+
+    fixed = _dt(utc_day.year, utc_day.month, utc_day.day, 1, 0, tzinfo=_tz.utc)
+
+    class _Fixed(_dt):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed if tz else fixed.replace(tzinfo=None)
+
+    monkeypatch.setattr(local_date_module, 'datetime', _Fixed)
+
 
 class TestWeeklySummary:
 
@@ -757,13 +774,14 @@ class TestWeeklySummary:
         assert data['muscle_sets'].get('Chest', 0) == 2
         assert data['muscle_sets'].get('Triceps', 0) == 1
 
-    def test_local_date_fixes_utc_boundary(self, client, auth_token, app):
+    def test_local_date_fixes_utc_boundary(self, client, auth_token, app, monkeypatch):
         # Same bug/fix as muscle-volume's test of the same name, adapted for
         # this endpoint's "most recently COMPLETED week" default.
         monday = _this_week_monday()
         last_week_monday = monday - timedelta(weeks=1)
         sunday = monday + timedelta(days=6)       # last day of the current week (user's true local time)
         next_monday = monday + timedelta(days=7)  # what a UTC-ahead server might think "today" is
+        _pin_utc_now(monkeypatch, next_monday)
 
         tid = _create_template(client, auth_token)
         wid = _create_mapped_workout(client, auth_token, tid, n_sets=3)

@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from utils.local_date import user_today
 from models import db, Workout, Exercise, Set, User, PersonalRecord, ExerciseTemplate, BodyweightLog, ExerciseMuscleMapping
 from utils.lift_progress import compute_most_improved_lift
 from utils.cardio_progress import compute_most_improved_cardio
@@ -59,11 +60,7 @@ def weekly_summary():
     user = db.session.get(User, int(user_id))
     kg_to_lbs = 2.20462 if (user.weight_unit or 'lbs') == 'kg' else 1.0
 
-    local_date_str = request.args.get('local_date')
-    try:
-        today = date.fromisoformat(local_date_str) if local_date_str else date.today()
-    except ValueError:
-        today = date.today()
+    today = user_today()
     this_week_start = today - timedelta(days=today.weekday())
 
     week_param = request.args.get('week')
@@ -315,11 +312,7 @@ def weekly_summary_history():
     from datetime import date, timedelta
     user_id = get_jwt_identity()
 
-    local_date_str = request.args.get('local_date')
-    try:
-        today = date.fromisoformat(local_date_str) if local_date_str else date.today()
-    except ValueError:
-        today = date.today()
+    today = user_today()
     this_week_start = today - timedelta(days=today.weekday())
 
     weeks_back = min(request.args.get('weeks', default=12, type=int), 52)

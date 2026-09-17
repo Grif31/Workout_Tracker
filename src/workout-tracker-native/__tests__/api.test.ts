@@ -45,6 +45,19 @@ describe('apiFetch', () => {
     expect(authHeader(fetchMock.mock.calls[0])).toBe('Bearer old-access');
   });
 
+  it("sends the device's local calendar date for week and streak math", async () => {
+    jest.useFakeTimers({ now: new Date(2026, 8, 20, 23, 30), doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+    try {
+      const fetchMock = queueFetch({ status: 401 }, { status: 200, body: { access_token: 'a2' } }, { status: 200 });
+      await apiFetch('/api/stats/greek-rank');
+      // Sunday 11:30pm local, including on the retry after a token refresh.
+      expect((fetchMock.mock.calls[0][1].headers as Headers).get('X-Local-Date')).toBe('2026-09-20');
+      expect((fetchMock.mock.calls[2][1].headers as Headers).get('X-Local-Date')).toBe('2026-09-20');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('refreshes on 401 and retries once with the new token', async () => {
     await AsyncStorage.setItem('user', '{"id":1}');
     const fetchMock = queueFetch(

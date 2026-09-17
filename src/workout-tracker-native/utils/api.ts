@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showToast } from './toast';
+import { toLocalDateStr } from './date';
 
 const BASE = process.env.EXPO_PUBLIC_API_URL ?? '';
 
@@ -101,6 +102,9 @@ async function doRefresh(): Promise<RefreshOutcome> {
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers as HeadersInit | undefined);
   if (_access) headers.set('Authorization', `Bearer ${_access}`);
+  // The server runs on UTC; this lets "this week" stats and streaks roll over
+  // at the user's midnight instead of the server's.
+  headers.set('X-Local-Date', toLocalDateStr(new Date()));
 
   let res: Response;
   try {
