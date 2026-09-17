@@ -137,6 +137,8 @@ export default function MeasurementsScreen({ navigation }: Props) {
               const remaining = bwLogs.filter(l => l.id !== id);
               setBwLogs(remaining);
               updateUser({ bodyweight: remaining[0]?.weight ?? null });
+            } else {
+              Alert.alert("Couldn't Delete Entry", 'Try again in a moment.');
             }
           } catch (err) {
             if (!isNetworkError(err)) Alert.alert("Couldn't Delete Entry", 'Try again in a moment.');
@@ -191,6 +193,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
           try {
             const res = await apiFetch(`/api/measurements/${id}`, { method: 'DELETE' });
             if (res.ok) setMLogs(prev => prev.filter(m => m.id !== id));
+            else Alert.alert("Couldn't Delete Measurement", 'Try again in a moment.');
           } catch (err) {
             if (!isNetworkError(err)) Alert.alert("Couldn't Delete Measurement", 'Try again in a moment.');
           }
@@ -247,6 +250,8 @@ export default function MeasurementsScreen({ navigation }: Props) {
             if (res.ok) {
               setPhotos(prev => prev.filter(p => p.id !== photo.id));
               setSelectedPhoto(null);
+            } else {
+              Alert.alert("Couldn't Delete Photo", 'Try again in a moment.');
             }
           } catch (err) {
             if (!isNetworkError(err)) Alert.alert("Couldn't Delete Photo", 'Try again in a moment.');
