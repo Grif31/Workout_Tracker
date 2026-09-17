@@ -1,4 +1,4 @@
-import { fmtDuration, fmtPace, fmtPaceValue, fmtPaceForUnit } from '../utils/cardioFormat';
+import { fmtDuration, fmtPace, fmtPaceValue, fmtPaceForUnit, fmtRaceTime } from '../utils/cardioFormat';
 
 describe('fmtDuration', () => {
   it('shows h + m (no seconds) once the duration is an hour or more', () => {
@@ -79,5 +79,28 @@ describe('fmtPaceForUnit', () => {
   it('converts a km pace to the slower per-mile figure', () => {
     // 5:00/km is 8:03/mi
     expect(fmtPaceForUnit(5, 'mi')).toBe('8:03');
+  });
+});
+
+describe('fmtRaceTime', () => {
+  it('shows m:ss under an hour', () => {
+    expect(fmtRaceTime(25)).toBe('25:00');        // 5K at 5:00/km
+    expect(fmtRaceTime(0.4 * 4.5)).toBe('1:48');   // 400m at 4:30/km
+  });
+
+  it('shows h:mm:ss from an hour up', () => {
+    expect(fmtRaceTime(60)).toBe('1:00:00');
+    expect(fmtRaceTime(42.195 * 5.3)).toBe('3:43:38');
+  });
+
+  it('carries rounded seconds into the minute and hour', () => {
+    expect(fmtRaceTime(4.9999)).toBe('5:00');
+    expect(fmtRaceTime(59.9999)).toBe('1:00:00');
+  });
+
+  it('guards against zero, negative and non-finite times', () => {
+    expect(fmtRaceTime(0)).toBe('--:--');
+    expect(fmtRaceTime(-1)).toBe('--:--');
+    expect(fmtRaceTime(NaN)).toBe('--:--');
   });
 });

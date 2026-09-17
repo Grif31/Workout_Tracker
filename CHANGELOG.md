@@ -5,7 +5,7 @@
 ### New: Endurance Score
 - Runners now get an Endurance Score, the running counterpart to the Strength Score. Your best pace at each distance is ranked against pace standards for your gender, with the same tiers and rank colors as the Strength Score.
 - Every run also scores the shorter distances inside it, so a 5K gives you a mile time too. Endurance distances (5K and up) count for 70 percent of the score and speed distances (400m to 1 mile) for 30 percent, and whichever tier you have no times for drops out.
-- Paces show in min/mi or min/km to match your GPS distance setting, and each distance shows the pace the next rank asks for.
+- Each distance shows your finish time and the time the next rank asks for. From 5K up your pace shows too, in min/mi or min/km to match your GPS distance setting.
 - The score tracks over time on its own chart, and it can be shared the same way as the Strength Score.
 
 ### Changed: Greek Rank

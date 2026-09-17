@@ -26,6 +26,18 @@ export function fmtPace(durationMin: number, distance: number): string {
   return fmtPaceValue(durationMin / distance);
 }
 
+// Finish time for a race distance: m:ss, or h:mm:ss from an hour up
+// (a marathon reads 3:45:10, not 225:10). Seconds carry like fmtPaceValue.
+export function fmtRaceTime(minutes: number): string {
+  if (!isFinite(minutes) || minutes <= 0) return '--:--';
+  const totalSec = Math.round(minutes * 60);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const ss = String(s).padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+}
+
 // Endurance paces are stored per km; the reader sees their own GPS unit.
 export function fmtPaceForUnit(minPerKm: number, unit: DistanceUnit): string {
   return fmtPaceValue(toDisplayPace(minPerKm, unit));

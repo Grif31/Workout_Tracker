@@ -19,6 +19,7 @@ import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import { captureAndShare } from '../../utils/shareCapture';
+import { computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH } from '../../utils/prFormat';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import { TrainingStackParamsList } from '../../navigation/types';
 import MuscleDiagram from '../../components/MuscleDiagram';
@@ -31,6 +32,8 @@ import SectionRule from '../../components/SectionRule';
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'StrengthScore'>;
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const CHART_Y_AXIS_WIDTH = 32;
+const CHART_EDGE_SPACING = 24;
 const RING_SIZE = 108;
 const RING_STROKE = 10;
 const RING_R = (RING_SIZE - RING_STROKE) / 2;
@@ -63,8 +66,8 @@ interface ScoreData {
   };
   exercises_used: number;
   muscle_groups_used: number;
-  big6?: Array<{ exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; estimated_1rm?: number | null; thresholds?: { percentile: number; rank: string; weight: number }[]; has_data: boolean }>;
-  supplemental?: Array<{ exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; estimated_1rm?: number | null; thresholds?: { percentile: number; rank: string; weight: number }[]; has_data: boolean }>;
+  big6?: Array<{ exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; estimated_1rm?: number | null; is_true_1rm?: boolean; thresholds?: { percentile: number; rank: string; weight: number }[]; has_data: boolean }>;
+  supplemental?: Array<{ exercise: string; percentile: number | null; rank: { label: string; tier: number; display: string } | null; estimated_1rm?: number | null; is_true_1rm?: boolean; thresholds?: { percentile: number; rank: string; weight: number }[]; has_data: boolean }>;
   supplemental_coverage?: Array<{ exercise: string; category: 'compound' | 'isolation'; has_data: boolean; true_1rm?: number | null }>;
   muscle_groups?: Array<{ name: string; score: number; rank: { label: string; tier: number; display: string } }>;
   age_adjusted?: boolean;
@@ -284,14 +287,30 @@ export default function StrengthScoreScreen({ navigation }: Props) {
     cutoff.setMonth(cutoff.getMonth() - months);
     return historyWithToday.filter(h => new Date(h.date) >= cutoff);
   }, [historyWithToday, chartRange]);
+  const CHART_W = Dimensions.get('window').width - spacing.md * 2 - spacing.sm * 2;
+  // Every point fits inside the card, so a long range compresses instead of scrolling
+  const chartFit = computeChartXFit(rangedHistory.length, CHART_W, CHART_Y_AXIS_WIDTH, CHART_EDGE_SPACING);
   const chartData = rangedHistory.map((h, i) => {
     const d = new Date(h.date);
     const dateLabel = `${d.getMonth() + 1}/${d.getDate()}`;
-    const labelEvery = rangedHistory.length <= 6 ? 1 : Math.ceil(rangedHistory.length / 5);
-    const showLabel = i % labelEvery === 0 || i === rangedHistory.length - 1;
-    return { value: h.score, dateLabel, label: showLabel ? dateLabel : '' };
+    const showLabel = showChartXLabel(i, rangedHistory.length, chartFit.labelEvery);
+    return {
+      value: h.score,
+      dateLabel,
+      // Drawn wider than the library's spacing-wide label box and centered on
+      // the point, so a date stays on one line however tightly points pack
+      labelComponent: showLabel
+        ? () => (
+          <Text
+            style={[styles.axisLabel, styles.xAxisDate, { marginLeft: (chartFit.spacing - CHART_X_LABEL_WIDTH) / 2 }]}
+            numberOfLines={1}
+          >
+            {dateLabel}
+          </Text>
+        )
+        : undefined,
+    };
   });
-  const CHART_W = Dimensions.get('window').width - spacing.md * 2 - spacing.sm * 2;
 
   // Strongest / weakest relative lift — pure client-side derivation from data
   // already in scoreData, only meaningful with at least 2 tracked lifts.
@@ -691,14 +710,12 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                   {chartData.length >= 2 ? (
                   <LineChart
                     data={chartData}
-                    width={CHART_W}
+                    width={chartFit.plotWidth}
                     height={140}
-                    // Floor of 40 (not just enough to fit the points) so an "M/D"
-                    // label always has room to render on one line — LineChart
-                    // scrolls horizontally on its own once content exceeds
-                    // CHART_W, so a long history just becomes swipeable instead
-                    // of squeezing labels until they wrap/clip.
-                    spacing={Math.max(40, Math.floor((CHART_W - 48) / (chartData.length - 1)))}
+                    spacing={chartFit.spacing}
+                    disableScroll
+                    // Dots merge into a smear once points pack this tight; the line still shows the trend
+                    hideDataPoints={chartFit.spacing < 6}
                     color={rankColor}
                     thickness={2}
                     dataPointsColor={rankColor}
@@ -713,8 +730,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                     rulesColor={colors.border}
                     rulesThickness={1}
                     yAxisTextStyle={styles.axisLabel}
-                    yAxisLabelWidth={32}
-                    xAxisLabelTextStyle={styles.axisLabel}
+                    yAxisLabelWidth={CHART_Y_AXIS_WIDTH}
                     xAxisTextNumberOfLines={1}
                     yAxisThickness={0}
                     xAxisThickness={1}
@@ -723,8 +739,8 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                     maxValue={maxV - minV}
                     yAxisOffset={minV}
                     roundToDigits={0}
-                    initialSpacing={24}
-                    endSpacing={24}
+                    initialSpacing={CHART_EDGE_SPACING}
+                    endSpacing={CHART_EDGE_SPACING}
                     isAnimated
                     pointerConfig={{
                       activatePointersOnLongPress: true,
@@ -1081,6 +1097,7 @@ const createStyles = (colors: Colors) =>
     tooltipDate: { fontSize: 10, color: colors.textSecondary },
     tooltipValue: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
     axisLabel: { fontSize: 10, color: colors.textSecondary },
+    xAxisDate: { width: CHART_X_LABEL_WIDTH, textAlign: 'center' },
     ageBadge: {
       alignSelf: 'flex-start',
       backgroundColor: colors.accent + '18',

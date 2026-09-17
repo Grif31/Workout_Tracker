@@ -1,6 +1,6 @@
 import {
   fmtPrValue, fmtPrDelta, fmtPrContext, fmtMinSec, nearPrHint,
-  fmtRelativeDate, fmtChartDate, formatChartYLabel, computeChartYAxisRange, prTypeIcon, stalledUrgency,
+  fmtRelativeDate, fmtChartDate, formatChartYLabel, computeChartYAxisRange, computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH, prTypeIcon, stalledUrgency,
   stalledCategoryToPrType, pickDefaultPrSeries,
   type PREventItem,
 } from '../utils/prFormat';
@@ -279,5 +279,50 @@ describe('pickDefaultPrSeries', () => {
     const newer = { ...ev('max_reps', 5, null, 205), achieved_at: '2026-08-01T00:00:00' };
     // events are chronological (oldest first), as the history endpoint returns them
     expect(pickDefaultPrSeries([older, newer])).toEqual([newer]);
+  });
+});
+
+describe('computeChartXFit', () => {
+  // A 343px card: 32px y-axis, 24px either side of the points
+  const fit = (points: number) => computeChartXFit(points, 343, 32, 24);
+
+  it('gives the plot the card width minus the y-axis', () => {
+    expect(fit(10).plotWidth).toBe(311);
+  });
+
+  it('spreads the points so the content exactly fills the plot, never more', () => {
+    for (const points of [2, 7, 30, 90, 365]) {
+      const { plotWidth, spacing } = fit(points);
+      expect(24 + spacing * (points - 1) + 24).toBeCloseTo(plotWidth, 6);
+    }
+  });
+
+  it('shows every label on a short series', () => {
+    expect(fit(2).labelEvery).toBe(1);
+    expect(fit(6).labelEvery).toBe(1);
+  });
+
+  it('keeps shown labels at least a label width apart on a dense series', () => {
+    for (const points of [30, 90, 365]) {
+      const { spacing, labelEvery } = fit(points);
+      expect(spacing * labelEvery).toBeGreaterThanOrEqual(CHART_X_LABEL_WIDTH);
+    }
+  });
+});
+
+describe('showChartXLabel', () => {
+  it('always labels the last point', () => {
+    expect(showChartXLabel(9, 10, 4)).toBe(true);
+  });
+
+  it('labels every Nth point', () => {
+    expect([0, 1, 2, 3, 4].map(i => showChartXLabel(i, 10, 4))).toEqual([true, false, false, false, true]);
+  });
+
+  it('drops a regular label that would crowd the last one', () => {
+    // 10 points every 4: 0, 4, 8 and 9. 8 sits one step from 9, so it goes.
+    expect(showChartXLabel(8, 10, 4)).toBe(false);
+    const shown = Array.from({ length: 10 }, (_, i) => i).filter(i => showChartXLabel(i, 10, 4));
+    expect(shown).toEqual([0, 4, 9]);
   });
 });

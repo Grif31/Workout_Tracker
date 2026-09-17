@@ -114,6 +114,44 @@ export function computeChartYAxisRange(values: number[], sections: number): { ma
   return { maxValue: step * sections, yAxisOffset };
 }
 
+/** Width an "M/D" x-axis date needs on one line at the charts' 10px axis font. */
+export const CHART_X_LABEL_WIDTH = 36;
+
+/**
+ * Horizontal sizing that keeps a gifted-charts LineChart inside its card with
+ * no scrolling, however many points it has. The chart draws
+ * `width + yAxisLabelWidth` in total and scrolls once
+ * `initialSpacing + spacing * (points - 1) + endSpacing` exceeds `width`, so
+ * the plot gets what's left after the y-axis and the points share it evenly.
+ *
+ * The library sizes each x-axis label box to `spacing`, which gets narrower
+ * than a date as points crowd together. So labels are thinned until neighbours
+ * sit at least a label's width apart (and to about 5 on long series), and
+ * callers draw each shown label CHART_X_LABEL_WIDTH wide, centered on its point.
+ */
+export function computeChartXFit(
+  pointCount: number,
+  containerWidth: number,
+  yAxisLabelWidth: number,
+  edgeSpacing: number,
+): { plotWidth: number; spacing: number; labelEvery: number } {
+  const plotWidth = containerWidth - yAxisLabelWidth;
+  const spacing = (plotWidth - edgeSpacing * 2) / Math.max(pointCount - 1, 1);
+  const labelEvery = Math.max(
+    pointCount <= 6 ? 1 : Math.ceil(pointCount / 5),
+    Math.ceil(CHART_X_LABEL_WIDTH / spacing),
+  );
+  return { plotWidth, spacing, labelEvery };
+}
+
+/** Whether point `index` gets an x-axis label. The last point always does, so
+ *  the chart ends on today; a regular label too close before it is dropped so
+ *  the two can't overlap. */
+export function showChartXLabel(index: number, pointCount: number, labelEvery: number): boolean {
+  const last = pointCount - 1;
+  return index === last || (index % labelEvery === 0 && last - index >= labelEvery);
+}
+
 export type StalledCategory = 'weight' | 'reps' | 'time' | 'distance';
 
 /**

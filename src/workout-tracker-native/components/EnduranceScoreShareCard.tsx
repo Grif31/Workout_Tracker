@@ -16,9 +16,9 @@ type EnduranceScoreShareCardProps = {
   score: number;
   rankLabel: string;
   distancesTracked: number;
-  /** Already formatted for the user's unit, e.g. "8:03/mi". */
-  bestPace: string;
-  bestPaceLabel: string;
+  /** Finish time at the best-scoring distance, e.g. "25:00". */
+  bestTime: string;
+  bestTimeLabel: string;
   accentColor: string;
   date: string;
   /** Swaps in the gold/laurel "Rank Up!" treatment used for PR banners elsewhere. */
@@ -26,9 +26,9 @@ type EnduranceScoreShareCardProps = {
 };
 
 const EnduranceScoreShareCard = forwardRef<View, EnduranceScoreShareCardProps>(
-  ({ score, rankLabel, distancesTracked, bestPace, bestPaceLabel, accentColor, date, isRankUp }, ref) => {
+  ({ score, rankLabel, distancesTracked, bestTime, bestTimeLabel, accentColor, date, isRankUp }, ref) => {
     const statItems: ShareCardStatItem[] = [
-      { value: bestPace, label: bestPaceLabel },
+      { value: bestTime, label: bestTimeLabel },
       { value: distancesTracked, label: distancesTracked === 1 ? 'Distance' : 'Distances' },
     ];
 

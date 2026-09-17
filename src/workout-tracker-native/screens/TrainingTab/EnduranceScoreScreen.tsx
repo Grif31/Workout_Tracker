@@ -18,11 +18,13 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { captureAndShare } from '../../utils/shareCapture';
+import { computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH } from '../../utils/prFormat';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import EnduranceScoreShareCard from '../../components/EnduranceScoreShareCard';
+import DistanceDetailModal from '../../components/DistanceDetailModal';
 import { appCache } from '../../utils/appCache';
 import { GPS_DISTANCE_UNIT_KEY, type DistanceUnit } from '../../utils/units';
-import { fmtPaceForUnit } from '../../utils/cardioFormat';
+import { fmtPaceForUnit, fmtRaceTime } from '../../utils/cardioFormat';
 import { TrainingStackParamsList } from '../../navigation/types';
 import { STRENGTH_TIERS, SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
 import { toLocalDateStr } from '../../utils/date';
@@ -31,6 +33,8 @@ import SectionRule from '../../components/SectionRule';
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'EnduranceScore'>;
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const CHART_Y_AXIS_WIDTH = 32;
+const CHART_EDGE_SPACING = 24;
 const RING_SIZE = 108;
 const RING_STROKE = 10;
 const RING_R = (RING_SIZE - RING_STROKE) / 2;
@@ -93,6 +97,9 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [infoVisible, setInfoVisible] = useState(false);
   const [heroExpanded, setHeroExpanded] = useState(false);
+  // Kept after close (visibility is separate) so the sheet doesn't empty mid-slide
+  const [selectedDistance, setSelectedDistance] = useState<DistanceRow | null>(null);
+  const [distanceModalVisible, setDistanceModalVisible] = useState(false);
   const heroAnim = useCollapseAnim(heroExpanded);
   const [chartRange, setChartRange] = useState<'1M' | '3M' | '6M' | 'All'>('3M');
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>('mi');
@@ -230,14 +237,30 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
     return historyWithToday.filter(h => new Date(h.date) >= cutoff);
   }, [historyWithToday, chartRange]);
 
+  const CHART_W = Dimensions.get('window').width - spacing.md * 2 - spacing.sm * 2;
+  // Every point fits inside the card, so a long range compresses instead of scrolling
+  const chartFit = computeChartXFit(rangedHistory.length, CHART_W, CHART_Y_AXIS_WIDTH, CHART_EDGE_SPACING);
   const chartData = rangedHistory.map((h, i) => {
     const d = new Date(h.date);
     const dateLabel = `${d.getMonth() + 1}/${d.getDate()}`;
-    const labelEvery = rangedHistory.length <= 6 ? 1 : Math.ceil(rangedHistory.length / 5);
-    const showLabel = i % labelEvery === 0 || i === rangedHistory.length - 1;
-    return { value: h.score, dateLabel, label: showLabel ? dateLabel : '' };
+    const showLabel = showChartXLabel(i, rangedHistory.length, chartFit.labelEvery);
+    return {
+      value: h.score,
+      dateLabel,
+      // Drawn wider than the library's spacing-wide label box and centered on
+      // the point, so a date stays on one line however tightly points pack
+      labelComponent: showLabel
+        ? () => (
+          <Text
+            style={[styles.axisLabel, styles.xAxisDate, { marginLeft: (chartFit.spacing - CHART_X_LABEL_WIDTH) / 2 }]}
+            numberOfLines={1}
+          >
+            {dateLabel}
+          </Text>
+        )
+        : undefined,
+    };
   });
-  const CHART_W = Dimensions.get('window').width - spacing.md * 2 - spacing.sm * 2;
 
   const paceUnitLabel = distanceUnit === 'mi' ? '/mi' : '/km';
 
@@ -251,28 +274,45 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
     const rowColor = SCORE_RANK_COLORS[row.rank.label] ?? colors.accent;
     // The first boundary above the current percentile is what to chase next
     const next = row.thresholds.find(t => t.percentile > row.percentile);
+    // Runners quote a finish time at every distance (a 1:50 400m, not a
+    // 7:21/mi one). Pace is only worth adding from 5K up, where it's how a
+    // race gets planned; the speed distances show the time alone.
+    const showPace = row.tier === 'core';
     return (
       <React.Fragment key={row.label}>
         {i > 0 && <View style={styles.divider} />}
-        <View style={styles.distanceRow}>
+        <TouchableOpacity
+          style={styles.distanceRow}
+          activeOpacity={0.7}
+          testID={`distance-row-${row.label}`}
+          onPress={() => { setSelectedDistance(row); setDistanceModalVisible(true); }}
+        >
           <View style={{ flex: 1 }}>
             <View style={styles.distanceTitleRow}>
               <Text style={styles.distanceName}>{row.label}</Text>
-              <Text style={[styles.pace, { color: rowColor }]}>
-                {fmtPaceForUnit(row.pace_min_per_km, distanceUnit)}{paceUnitLabel}
+              <Text style={[styles.raceTime, { color: rowColor }]}>
+                {fmtRaceTime(row.pace_min_per_km * row.distance_km)}
               </Text>
+              {showPace && (
+                <Text style={styles.paceSecondary}>
+                  {fmtPaceForUnit(row.pace_min_per_km, distanceUnit)}{paceUnitLabel}
+                </Text>
+              )}
             </View>
             <AnimatedBar percent={row.percentile} color={rowColor} trackColor={colors.border} delay={i * 40} />
             {next && (
               <Text style={styles.nextText}>
-                {next.rank} at {fmtPaceForUnit(next.pace_min_per_km, distanceUnit)}{paceUnitLabel}
+                {next.rank} at {fmtRaceTime(next.pace_min_per_km * row.distance_km)}
               </Text>
             )}
           </View>
-          <View style={[styles.miniRankBadge, { backgroundColor: rowColor + '22', borderColor: rowColor }]}>
-            <Text style={[styles.miniRankText, { color: rowColor }]}>{row.rank.display}</Text>
+          <View style={styles.rowTrailing}>
+            <View style={[styles.miniRankBadge, { backgroundColor: rowColor + '22', borderColor: rowColor }]}>
+              <Text style={[styles.miniRankText, { color: rowColor }]}>{row.rank.display}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
           </View>
-        </View>
+        </TouchableOpacity>
       </React.Fragment>
     );
   };
@@ -293,8 +333,8 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
             score={data.overall}
             rankLabel={data.overall_rank.label}
             distancesTracked={data.distances_tracked}
-            bestPace={`${fmtPaceForUnit(bestDistance.pace_min_per_km, distanceUnit)}${paceUnitLabel}`}
-            bestPaceLabel={`${bestDistance.label} Pace`}
+            bestTime={fmtRaceTime(bestDistance.pace_min_per_km * bestDistance.distance_km)}
+            bestTimeLabel={`${bestDistance.label} Time`}
             accentColor={rankColor}
             date={new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
             isRankUp={rankUpVisible}
@@ -523,9 +563,12 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
                   {chartData.length >= 2 ? (
                     <LineChart
                       data={chartData}
-                      width={CHART_W}
+                      width={chartFit.plotWidth}
                       height={140}
-                      spacing={Math.max(40, Math.floor((CHART_W - 48) / (chartData.length - 1)))}
+                      spacing={chartFit.spacing}
+                      disableScroll
+                      // Dots merge into a smear once points pack this tight; the line still shows the trend
+                      hideDataPoints={chartFit.spacing < 6}
                       color={rankColor}
                       thickness={2}
                       dataPointsColor={rankColor}
@@ -540,8 +583,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
                       rulesColor={colors.border}
                       rulesThickness={1}
                       yAxisTextStyle={styles.axisLabel}
-                      yAxisLabelWidth={32}
-                      xAxisLabelTextStyle={styles.axisLabel}
+                      yAxisLabelWidth={CHART_Y_AXIS_WIDTH}
                       xAxisTextNumberOfLines={1}
                       yAxisThickness={0}
                       xAxisThickness={1}
@@ -550,8 +592,8 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
                       maxValue={maxV - minV}
                       yAxisOffset={minV}
                       roundToDigits={0}
-                      initialSpacing={24}
-                      endSpacing={24}
+                      initialSpacing={CHART_EDGE_SPACING}
+                      endSpacing={CHART_EDGE_SPACING}
                       isAnimated
                       pointerConfig={{
                         activatePointersOnLongPress: true,
@@ -582,6 +624,13 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
           <View style={{ height: spacing.xl * 2 }} />
         </ScrollView>
       ) : null}
+
+      <DistanceDetailModal
+        visible={distanceModalVisible}
+        onClose={() => setDistanceModalVisible(false)}
+        distance={selectedDistance}
+        distanceUnit={distanceUnit}
+      />
 
       <Modal visible={infoVisible} transparent animationType="slide" onRequestClose={() => setInfoVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setInfoVisible(false)}>
@@ -736,8 +785,10 @@ const createStyles = (colors: Colors) =>
     },
     distanceTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: 4 },
     distanceName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
-    pace: { fontSize: typography.fontSize.xs, fontWeight: '700', letterSpacing: 0.2 },
+    raceTime: { fontSize: typography.fontSize.sm, fontWeight: '700', letterSpacing: 0.2 },
+    paceSecondary: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
     nextText: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 3 },
+    rowTrailing: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
     miniRankBadge: { borderRadius: 6, borderWidth: 1, paddingHorizontal: spacing.sm, paddingVertical: 2 },
     miniRankText: { fontSize: typography.fontSize.sm, fontWeight: '700' },
     editHint: {
@@ -754,6 +805,7 @@ const createStyles = (colors: Colors) =>
     rangeBtn: { paddingVertical: spacing.xs, paddingHorizontal: 12, borderRadius: radius.sm, alignItems: 'center' },
     rangeBtnText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
     axisLabel: { fontSize: 10, color: colors.textSecondary },
+    xAxisDate: { width: CHART_X_LABEL_WIDTH, textAlign: 'center' },
     tooltipBubble: {
       backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
       borderRadius: 8, padding: spacing.xs, alignItems: 'center',
