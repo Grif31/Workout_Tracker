@@ -28,7 +28,7 @@ import ExerciseListModal from '../components/ExerciseList';
 import NewExerciseForm from '../components/NewExerciseForm';
 import { PrefillWorkoutData } from './WorkoutDetails';
 import { muscleGroups } from 'constants/muscleGroups';
-import { useWorkoutSession } from '../context/WorkoutSessionContext';
+import { useWorkoutSession, sessionElapsedSeconds } from '../context/WorkoutSessionContext';
 import { PR_GOLD } from '../constants/prColors';
 import { nearPrHint } from '../utils/prFormat';
 
@@ -334,8 +334,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       setExercises(session.exercises as ExerciseEntry[]);
       setSelectedDate(session.selectedDate);
       // Add the time that passed while minimized to baseRef so the timer continues from where it left off.
-      baseRef.current = session.baseElapsed + Math.floor((Date.now() - session.startedAt.getTime()) / 1000);
+      baseRef.current = sessionElapsedSeconds(session);
       startRef.current = new Date();
+      if (session.timerPaused) setTimerPaused(true);
       clearSession();
       AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
       AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
@@ -1487,13 +1488,19 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   };
 
   const minimizeWorkout = () => {
+    const paused = timerPausedRef.current;
     saveSession({
       workoutName,
       notes,
       exercises,
       selectedDate,
-      startedAt: startRef.current,
-      baseElapsed: baseRef.current + Math.floor((Date.now() - startRef.current.getTime()) / 1000),
+      // baseElapsed already includes everything up to now, so startedAt must be
+      // now too; the original start time made readers count that stretch twice.
+      startedAt: new Date(),
+      baseElapsed: paused
+        ? baseRef.current
+        : baseRef.current + Math.floor((Date.now() - startRef.current.getTime()) / 1000),
+      timerPaused: paused,
       editMode,
       workoutId,
     });

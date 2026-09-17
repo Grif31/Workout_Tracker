@@ -13,7 +13,7 @@ import { ProfileStack } from './ProfileStack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { AppStack } from './types';
 import { useTheme, type Colors } from '../context/ThemeContext';
-import { useWorkoutSession } from '../context/WorkoutSessionContext';
+import { useWorkoutSession, sessionElapsedSeconds } from '../context/WorkoutSessionContext';
 import { navigationRef } from './navigationRef';
 import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -94,8 +94,7 @@ function MiniWorkoutBar() {
 
   useEffect(() => {
     if (!session) { if (tickRef.current) clearInterval(tickRef.current); return; }
-    const compute = () =>
-      session.baseElapsed + Math.floor((Date.now() - session.startedAt.getTime()) / 1000);
+    const compute = () => sessionElapsedSeconds(session);
     setElapsed(compute());
     tickRef.current = setInterval(() => setElapsed(compute()), 1000);
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
@@ -112,7 +111,7 @@ function MiniWorkoutBar() {
         if (liveOff === 'false') return;
         const done = session.exercises.flatMap(e => e.sets).filter(s => s.done).length;
         const total = session.exercises.flatMap(e => e.sets).length;
-        const secs = session.baseElapsed + Math.floor((Date.now() - session.startedAt.getTime()) / 1000);
+        const secs = sessionElapsedSeconds(session);
         const currentExercise = (
           session.exercises.find(e => e.sets.some(s => !s.done)) ?? session.exercises[session.exercises.length - 1]
         )?.name;

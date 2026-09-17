@@ -32,11 +32,21 @@ export type MinimizedSession = {
   notes: string;
   exercises: SessionExercise[];
   selectedDate: Date;
+  // When baseElapsed was measured, not when the workout began.
   startedAt: Date;
   baseElapsed: number;
+  timerPaused?: boolean;
   editMode?: boolean;
   workoutId?: number;
 };
+
+export function sessionElapsedSeconds(
+  s: Pick<MinimizedSession, 'baseElapsed' | 'startedAt' | 'timerPaused'>,
+  now: number = Date.now(),
+): number {
+  if (s.timerPaused) return s.baseElapsed;
+  return s.baseElapsed + Math.floor((now - s.startedAt.getTime()) / 1000);
+}
 
 export const SESSION_KEY = 'minimized_workout_session';
 
@@ -90,10 +100,12 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
         }
         let baseElapsed = 0;
         let startedAt = new Date();
+        let timerPaused = false;
         if (cpRaw) {
           try {
             const cp = JSON.parse(cpRaw);
             baseElapsed = cp.base ?? 0;
+            timerPaused = !!cp.paused;
             // A running timer keeps counting from when the checkpoint was
             // written; a paused one stays frozen at its base.
             if (!cp.paused && cp.savedAt) startedAt = new Date(cp.savedAt);
@@ -106,6 +118,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
           selectedDate: new Date(backup.selectedDate ?? Date.now()),
           startedAt,
           baseElapsed,
+          timerPaused,
         };
         await AsyncStorage.multiRemove([WORKOUT_BACKUP_KEY, TIMER_CHECKPOINT_KEY]);
         await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(restored));
