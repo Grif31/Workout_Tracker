@@ -1156,14 +1156,24 @@ export default function CoachScreen({ navigation }: Props) {
                     }
                   >
                     <View style={[styles.scoreCircle, { borderColor: scoreRingColor }]}>
+                      {strengthRankLabel && (
+                        // The ring narrows toward the top, so the longest rank
+                        // ("Intermediate") shrinks slightly rather than touch it
+                        <Text
+                          style={[styles.scoreRankLabel, { color: scoreRingColor }]}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.8}
+                        >
+                          {strengthRankLabel}
+                        </Text>
+                      )}
                       <Text style={[styles.scoreNum, { color: scoreRingColor }]}>
                         {strengthPercentile != null ? Math.round(strengthPercentile) : '–'}
                       </Text>
-                      <Text style={styles.scoreCircleLabel}>SCORE</Text>
+                      {/* Two lines: at this size and letter spacing one line would touch the ring */}
+                      <Text style={styles.scoreCircleLabel}>{'Strength\nScore'}</Text>
                     </View>
-                    {strengthRankLabel && (
-                      <Text style={[styles.scoreRankLabel, { color: scoreRingColor }]}>{strengthRankLabel}</Text>
-                    )}
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.goalSide} onPress={() => setGoalModalVisible(true)}>
@@ -1436,8 +1446,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
   },
   scoreNum: { fontSize: typography.fontSize.xxl, fontWeight: '800', lineHeight: 32 },
-  scoreCircleLabel: { fontSize: 9, fontWeight: '700', color: colors.textSecondary, letterSpacing: 1, textTransform: 'uppercase' },
-  scoreRankLabel: { fontSize: typography.fontSize.xs, fontWeight: '700', letterSpacing: 0.3 },
+  scoreCircleLabel: { fontSize: 9, lineHeight: 11, fontWeight: '700', color: colors.textSecondary, letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' },
+  scoreRankLabel: { fontSize: typography.fontSize.xs, fontWeight: '700', letterSpacing: 0.3, maxWidth: 68, textAlign: 'center' },
   goalSide: {
     flex: 1, backgroundColor: colors.surface, borderRadius: spacing.sm,
     padding: spacing.md, borderWidth: 1, borderColor: colors.border, justifyContent: 'center',
