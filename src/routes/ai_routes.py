@@ -13,6 +13,7 @@ from models import (
 from schemas import AiGenerateSchema, AiInsightsSchema
 from utils.validation import validate_body
 from utils.lift_progress import compute_most_improved_lift
+from utils.exercise_access import visible_exercises
 from utils.cardio_progress import compute_most_improved_cardio, _MILESTONE_LABELS
 from routes.personal_record_routes import compute_days_since_last_pr, _pr_label
 from limiter import limiter
@@ -1146,10 +1147,7 @@ def save_generated_workout():
 
         for order, day in enumerate(data.get('days', [])):
             ex_ids = day.get('exercise_ids', [])
-            exercises = (
-                ExerciseTemplate.query.filter(ExerciseTemplate.id.in_(ex_ids)).all()
-                if ex_ids else []
-            )
+            exercises = visible_exercises(user_id, ex_ids)
             day_prog = day.get('programming')
             template = WorkoutTemplate(
                 user_id=user_id,
@@ -1171,10 +1169,7 @@ def save_generated_workout():
 
     elif gen_type == 'template':
         ex_ids = data.get('exercise_ids', [])
-        exercises = (
-            ExerciseTemplate.query.filter(ExerciseTemplate.id.in_(ex_ids)).all()
-            if ex_ids else []
-        )
+        exercises = visible_exercises(user_id, ex_ids)
         tmpl_prog = data.get('programming')
         template = WorkoutTemplate(
             user_id=user_id,

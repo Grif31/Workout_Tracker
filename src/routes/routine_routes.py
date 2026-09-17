@@ -1,8 +1,9 @@
 from flask import Blueprint, request, jsonify, g
-from models import db, Routine, RoutineDay, WorkoutTemplate, ExerciseTemplate, User
+from models import db, Routine, RoutineDay, WorkoutTemplate, User
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from schemas import RoutineSchema
 from utils.validation import validate_body
+from utils.exercise_access import visible_exercises
 
 routine_bp = Blueprint('routine_bp', __name__)
 
@@ -38,7 +39,7 @@ def create_routine():
                 return jsonify({'message': f'Template {existing_id} not found'}), 404
         else:
             ex_ids = day.get('exercise_template_ids', [])
-            exercises = ExerciseTemplate.query.filter(ExerciseTemplate.id.in_(ex_ids)).all() if ex_ids else []
+            exercises = visible_exercises(user_id, ex_ids)
             template = WorkoutTemplate(user_id=user_id, name=f"{name} - {label}", exercises=exercises)
             db.session.add(template)
             db.session.flush()
@@ -106,7 +107,7 @@ def update_routine(routine_id):
                     return jsonify({'message': f'Template {existing_id} not found'}), 404
             else:
                 ex_ids = day.get('exercise_template_ids', [])
-                exercises = ExerciseTemplate.query.filter(ExerciseTemplate.id.in_(ex_ids)).all() if ex_ids else []
+                exercises = visible_exercises(user_id, ex_ids)
                 template = WorkoutTemplate(user_id=user_id, name=f"{routine.name} - {label}", exercises=exercises)
                 db.session.add(template)
                 db.session.flush()

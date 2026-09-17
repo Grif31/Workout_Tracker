@@ -5,6 +5,7 @@ from models import db, WorkoutTemplate, WorkoutTemplateExercise
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from schemas import WorkoutTemplateSchema
 from utils.validation import validate_body
+from utils.exercise_access import visible_exercise_ids
 
 workout_template_bp = Blueprint('workout_template_bp', __name__)
 
@@ -22,7 +23,7 @@ def create_workout_template():
     if not name:
         return jsonify({'message': 'Name is required'}), 400
 
-    ex_ids = data.get('exercise_template_ids', [])
+    ex_ids = visible_exercise_ids(user_id, data.get('exercise_template_ids', []))
     template = WorkoutTemplate(user_id=user_id, name=name)
     prog = data.get('programming')
     if prog:
@@ -69,7 +70,7 @@ def update_workout_template(template_id):
     if 'name' in data:
         template.name = data['name'].strip() or template.name
     if 'exercise_template_ids' in data:
-        ex_ids = data['exercise_template_ids']
+        ex_ids = visible_exercise_ids(user_id, data['exercise_template_ids'])
         WorkoutTemplateExercise.query.filter_by(workout_template_id=template.id).delete()
         for i, ex_id in enumerate(ex_ids):
             db.session.add(WorkoutTemplateExercise(
