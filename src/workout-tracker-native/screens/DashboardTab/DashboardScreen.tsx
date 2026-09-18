@@ -274,8 +274,6 @@ export default function DashboardScreen({ navigation }: Props) {
   const [dragging, setDragging] = useState(false);
   const hasLoaded = useRef(false);
 
-  const streakAnim        = useRef(new Animated.Value(0)).current;
-  const [displayStreakValue, setDisplayStreakValue] = useState(0);
 
   // ── Active routine: which day is up next ───────────────────────────────────
   const routineDays = useMemo(
@@ -474,17 +472,6 @@ export default function DashboardScreen({ navigation }: Props) {
   };
 
 
-  useEffect(() => {
-    const target = streakType === 'weekly' ? weeklyStreak
-      : streakType === 'monthly' ? monthlyStreak
-      : dailyStreak;
-    if (target === 0) { setDisplayStreakValue(0); return; }
-    const id = streakAnim.addListener(({ value }) => setDisplayStreakValue(Math.round(target * value)));
-    streakAnim.setValue(0);
-    Animated.timing(streakAnim, { toValue: 1, duration: 400, useNativeDriver: false }).start();
-    return () => streakAnim.removeListener(id);
-  }, [streakType, weeklyStreak, monthlyStreak, dailyStreak]);
-
   if (loading) return <ActivityIndicator size="large" style={{ flex: 1, marginTop: 50 }} />;
 
   return (
@@ -514,7 +501,7 @@ export default function DashboardScreen({ navigation }: Props) {
                   accessibilityRole="button"
                   accessibilityLabel="Change streak type"
                 >
-                  <Text style={styles.streakCount}>{displayStreakValue}{streakDisplay.unit}</Text>
+                  <Text style={styles.streakCount}>{streakDisplay.value}{streakDisplay.unit}</Text>
                   <Text style={styles.streakLabel}>Streak</Text>
                 </TouchableOpacity>
                 <View style={[styles.topbarSide, styles.topbarSideRight]}>
@@ -1080,7 +1067,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
 
   // Plain text, not a chip: the surface card and flame read as another
   // action competing with Log Workout
-  streakBadge: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+  // Sits with the greeting's first line rather than centred against the
+  // two-line block, which left it floating low in the row
+  streakBadge: { flexDirection: 'row', alignItems: 'baseline', gap: 4, alignSelf: 'flex-start' },
   streakCount: { fontSize: typography.fontSize.md, fontWeight: '800', color: colors.textPrimary },
   streakLabel: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
 
