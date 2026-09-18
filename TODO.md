@@ -1004,3 +1004,33 @@ Check off items as you complete them.
 ### Done when
 - [ ] CLAUDE.md documents the widget setup, the snapshot schema and every write point (so a new screen that changes widget data knows to write it)
 - [ ] App Store screenshots/description mention widgets; CHANGELOG entry for the release that ships them
+
+---
+
+## 🔁 20. Drag & Reorder Upgrade
+> Two related jobs: make `DraggableList` feel like a real reorder (it currently snaps), then let Home's actual cards be dragged instead of the chips arrange mode swaps in. Planned 2026-09-18.
+>
+> **Where it stands**: `components/DraggableList.tsx` is used in four places — Home's arrange mode, `TemplateDetailScreen`, `AIWorkoutPreviewScreen` and `WorkoutLog`'s reorder mode. It is PanResponder + RN Animated on purpose: Reanimated worklets crash in this app ("non-worklet function on the UI thread"), which is what killed react-native-draggable-flatlist here. Every row must be the same fixed `rowHeight`, and there is no autoscroll, so it only suits short lists that fit on screen.
+>
+> **Read the component's header comment before starting.** A previous version animated every row live so neighbours slid out of the way, using a persistent `Animated.Value` per row reset in a layout effect. It was reverted: the reset proved unreliable and rows could end up stuck mid-transform, overlapping a neighbour. Today only the dragged row is ever transformed, which is why the rest of the list snaps into place on drop. A redesign has to beat that failure, not repeat it.
+
+### Part A — Make the drag look right
+- [ ] **Neighbours move out of the way** as the dragged row passes them, instead of everything snapping on drop. Safer shape than the reverted attempt: derive each row's offset from the single drag `Animated.Value` plus its index (one interpolation per row, nothing persistent to reset), so a finished drag leaves no state behind
+- [ ] **Lift feedback**: shadow/scale on pickup already exists but is subtle; consider a short spring on lift and drop, and a haptic on each position swap (currently only on pickup)
+- [ ] **Drop animation**: the dragged row currently jumps to its new slot the instant the array reorders. Animate it home instead
+- [ ] **Autoscroll** when the finger nears the top/bottom of the enclosing ScrollView, so long lists (WorkoutLog's exercise reorder) stop being capped by what fits on screen
+- [ ] Verify each of the four call sites still behaves, especially `WorkoutLog` (the memo/stable-props note in the component header) and the swipe-to-delete rows in `TemplateDetailScreen`
+
+### Part B — Drag Home's real cards
+> Home's arrange mode swaps each card for an equal-height chip because the cards range from a fixed-height calendar to a workouts list hundreds of points tall, which `DraggableList` can't take. Dragging the cards themselves needs variable-height support.
+- [ ] **Variable row heights**: measure each card with `onLayout`, keep a height table, and compute swap thresholds from cumulative offsets rather than `index * rowHeight`. Depends on Part A's autoscroll, since a tall card can exceed the viewport
+- [ ] **Decide what a dragged card looks like**: full-size cards make a long page during a drag. Options: scale the lifted card down (Apple-style), collapse the non-dragged cards to headers while dragging, or cap the dragged card's height with a fade
+- [ ] **Long-press to enter**: hold any card to start arranging, matching the home screen convention, with the existing options button kept as the discoverable path
+- [ ] Cards that are conditional (Active Routine only exists when one is active) must keep their place in the order while absent
+- [ ] Keep the eye/hide affordance reachable without the chips: an overlay control per card in arrange mode
+- [ ] Retire the chips only once cards drag as well as chips do; `dashboard_layout` storage and `utils/dashboardLayout.ts` stay as they are either way
+
+### Done when
+- [ ] A reorder reads as continuous motion in all four call sites, with nothing left transformed after a drop
+- [ ] Home's cards can be dragged at their real size, and `WorkoutLog`'s reorder list scrolls while dragging
+- [ ] CLAUDE.md notes the new contract (variable heights, autoscroll) so future call sites know what they can rely on
