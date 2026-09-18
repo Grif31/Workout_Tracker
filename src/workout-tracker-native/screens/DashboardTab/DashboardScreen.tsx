@@ -24,6 +24,7 @@ import { PR_GOLD_TEXT } from '../../constants/prColors';
 import { WEEKLY_SUMMARY_LAST_SHOWN_KEY } from './WeeklySummaryScreen';
 import SectionRule from '../../components/SectionRule';
 import PressableScale from '../../components/PressableScale';
+import StreakFlame from '../../components/StreakFlame';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import { activeDayFilter, defaultLayout, loadDashboardLayout, saveDashboardLayout, visibleCards, type DashboardLayout } from '../../utils/dashboardLayout';
 import { DASHBOARD_CARDS, type DashboardCardId } from '../../constants/dashboardCards';
@@ -501,6 +502,12 @@ export default function DashboardScreen({ navigation }: Props) {
                   accessibilityRole="button"
                   accessibilityLabel="Change streak type"
                 >
+                  <StreakFlame
+                    size={18}
+                    active={streakDisplay.value > 0}
+                    inactiveColor={colors.textSecondary}
+                    testID="streak-flame"
+                  />
                   <Text style={styles.streakCount}>{streakDisplay.value}{streakDisplay.unit}</Text>
                   <Text style={styles.streakLabel}>Streak</Text>
                 </TouchableOpacity>
@@ -1069,7 +1076,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   // action competing with Log Workout
   // Sits with the greeting's first line rather than centred against the
   // two-line block, which left it floating low in the row
-  streakBadge: { flexDirection: 'row', alignItems: 'baseline', gap: 4, alignSelf: 'flex-start' },
+  // Pulled above the greeting's first line; centre-aligned so the flame sits
+  // with the number rather than on the text baseline
+  streakBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: -6 },
   streakCount: { fontSize: typography.fontSize.md, fontWeight: '800', color: colors.textPrimary },
   streakLabel: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
 
