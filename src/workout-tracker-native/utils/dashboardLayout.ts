@@ -52,6 +52,18 @@ export function visibleCards(layout: DashboardLayout): DashboardCardId[] {
   return layout.order.filter(id => !layout.hidden.includes(id));
 }
 
+/**
+ * The day filter to apply to the workouts list.
+ *
+ * Hiding the calendar takes away the only control for clearing a selected day,
+ * so a selection made before it was hidden would leave the list stuck on that
+ * day for as long as the screen stays mounted. The selection is kept rather
+ * than cleared, so turning the calendar back on restores it.
+ */
+export function activeDayFilter(layout: DashboardLayout, selectedDate: string | null): string | null {
+  return visibleCards(layout).includes('weekCalendar') ? selectedDate : null;
+}
+
 export async function loadDashboardLayout(userId?: number | string): Promise<DashboardLayout> {
   if (userId == null) return defaultLayout();
   try {

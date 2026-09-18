@@ -65,6 +65,20 @@ describe('ProfileScreen', () => {
     await waitFor(() => expect(getByText('80.5 km')).toBeTruthy());
   });
 
+  it('shows total time instead of distance for time-only cardio', async () => {
+    // Machine cardio is often logged as minutes with no distance
+    mockFetchSequence([
+      workoutsResponse,
+      { data: { ...statsResponse.data, cardio_activities: 4, cardio_distance_km: 0, cardio_minutes: 125 } },
+      { data: [] },
+      strengthScoreResponse,
+    ]);
+    const { getByText, queryByText } = render(<ProfileScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Total Time')).toBeTruthy());
+    expect(getByText('2h 5m')).toBeTruthy();
+    expect(queryByText('Total Distance')).toBeNull();
+  });
+
   it('renders without crashing', () => {
     render(<ProfileScreen navigation={nav as any} route={route as any} />);
   });

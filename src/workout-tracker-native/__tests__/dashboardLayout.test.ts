@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  activeDayFilter,
   DASHBOARD_LAYOUT_KEY,
   defaultLayout,
   loadDashboardLayout,
@@ -70,5 +71,24 @@ describe('loadDashboardLayout / saveDashboardLayout', () => {
   it('survives corrupt stored JSON', async () => {
     await AsyncStorage.setItem(`${DASHBOARD_LAYOUT_KEY}_1`, '{not json');
     expect(await loadDashboardLayout(1)).toEqual(defaultLayout());
+  });
+});
+
+describe('activeDayFilter', () => {
+  const layout = (hidden: string[] = []) =>
+    ({ order: ['activeRoutine', 'weekCalendar', 'workouts'], hidden } as any);
+
+  it('keeps the selected day while the calendar is on screen', () => {
+    expect(activeDayFilter(layout(), '2026-09-18')).toBe('2026-09-18');
+  });
+
+  it('drops the day filter when the calendar is hidden', () => {
+    // Otherwise the workouts list stays stuck on that day with no way to clear it
+    expect(activeDayFilter(layout(['weekCalendar']), '2026-09-18')).toBeNull();
+  });
+
+  it('passes through no selection', () => {
+    expect(activeDayFilter(layout(), null)).toBeNull();
+    expect(activeDayFilter(layout(['weekCalendar']), null)).toBeNull();
   });
 });

@@ -26,7 +26,7 @@ import SectionRule from '../../components/SectionRule';
 import PressableScale from '../../components/PressableScale';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import { type DashboardCardId } from '../../constants/dashboardCards';
-import { defaultLayout, loadDashboardLayout, visibleCards, type DashboardLayout } from '../../utils/dashboardLayout';
+import { activeDayFilter, defaultLayout, loadDashboardLayout, visibleCards, type DashboardLayout } from '../../utils/dashboardLayout';
 
 const GREETINGS = [
   'Ready to workout', 'Welcome', 'Ready to Train', "Let's Workout",
@@ -565,6 +565,8 @@ export default function DashboardScreen({ navigation }: Props) {
           {/* Cards render in the user's saved order, hidden ones dropped
               (Customize Home). Everything above stays put. */}
           {(() => {
+            const visible = visibleCards(layout);
+            const activeDate = activeDayFilter(layout, selectedCalDate);
             const cardNodes: Record<DashboardCardId, React.ReactNode> = {
               activeRoutine: (
                 <>
@@ -673,16 +675,16 @@ export default function DashboardScreen({ navigation }: Props) {
                 <>
           {/* Workouts — filtered by selected date or recent */}
           <SectionRule
-            label={selectedCalDate
-              ? new Date(selectedCalDate + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
+            label={activeDate
+              ? new Date(activeDate + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
               : 'Recent Workouts'}
             style={{ marginBottom: spacing.sm }}
           />
           {(() => {
-            const list = selectedCalDate ? dateWorkouts : workouts;
+            const list = activeDate ? dateWorkouts : workouts;
             if (list.length === 0) return (
               <Text style={styles.emptyText}>
-                {selectedCalDate ? 'No workouts on this day' : 'No recent workouts'}
+                {activeDate ? 'No workouts on this day' : 'No recent workouts'}
               </Text>
             );
             return list.map((item) => {
@@ -759,7 +761,7 @@ export default function DashboardScreen({ navigation }: Props) {
                 </>
               ),
             };
-            return visibleCards(layout).map(id => (
+            return visible.map(id => (
               <React.Fragment key={id}>{cardNodes[id]}</React.Fragment>
             ));
           })()}

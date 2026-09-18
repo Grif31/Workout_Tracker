@@ -26,6 +26,9 @@ export default function CustomizeHomeScreen({ navigation }: Props) {
   const { user } = useAuth();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [layout, setLayout] = useState<DashboardLayout | null>(null);
+  // The rows live inside a ScrollView, which would otherwise pan away
+  // under the finger mid-drag
+  const [dragging, setDragging] = useState(false);
 
   useFocusEffect(useCallback(() => {
     loadDashboardLayout(user?.id).then(setLayout);
@@ -70,7 +73,7 @@ export default function CustomizeHomeScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={styles.scroll} scrollEnabled={!dragging}>
         <Text style={styles.hint}>
           Press and hold a card to drag it into a new order. Turn one off to hide it from Home.
         </Text>
@@ -82,6 +85,7 @@ export default function CustomizeHomeScreen({ navigation }: Props) {
             rowHeight={ROW_HEIGHT}
             gap={spacing.sm}
             onReorder={reorder}
+            onDragActiveChange={setDragging}
             renderItem={card => {
               const isHidden = layout.hidden.includes(card.id);
               return (
@@ -94,6 +98,7 @@ export default function CustomizeHomeScreen({ navigation }: Props) {
                   <Switch
                     value={!isHidden}
                     onValueChange={() => toggle(card.id)}
+                    accessibilityLabel={`Show ${card.title} on Home`}
                     trackColor={{ true: colors.accent, false: colors.border }}
                     thumbColor={colors.surface}
                   />

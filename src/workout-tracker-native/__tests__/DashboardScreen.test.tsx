@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor, fireEvent, act } from '@testing-library/react-native';
+import { render, waitFor, fireEvent, act, cleanup } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { enqueueWorkout, flushQueue, initPendingCount } from '../utils/offlineQueue';
 import { registerToastCallback } from '../utils/toast';
@@ -71,6 +71,24 @@ describe('DashboardScreen', () => {
       const texts = textsInOrder(r.toJSON());
       expect(texts.indexOf('Recent Workouts')).toBeLessThan(texts.indexOf('This Week'));
     });
+  });
+
+  it('drops the day filter when the calendar is hidden', async () => {
+    // Tapping a day filters the list; with the calendar gone there'd be no way
+    // to clear it, so the list goes back to recent workouts
+    const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(r.getByText('Recent Workouts')).toBeTruthy());
+    const today = new Date();
+    fireEvent.press(r.getByText(String(today.getDate())));
+    await waitFor(() => expect(r.queryByText('Recent Workouts')).toBeNull());
+
+    // Hide the calendar and reopen the screen: the filter must not survive
+    await saveLayout(['activeRoutine', 'weekCalendar', 'workouts'], ['weekCalendar']);
+    cleanup();
+    mockFetchSequence([{ data: mockUser }, { data: mockWorkouts }, { data: mockStats }]);
+    const after = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(after.getByText('Recent Workouts')).toBeTruthy());
+    expect(after.getByText('Push Day')).toBeTruthy();
   });
 
   it('opens Customize Home from the top bar', async () => {

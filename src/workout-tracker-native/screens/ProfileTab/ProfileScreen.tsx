@@ -23,6 +23,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 import type { PR } from './PersonalRecordsScreen';
 import { toDisplayVolume, roundTenth, type WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from 'utils/units';
+import { fmtDuration } from '../../utils/cardioFormat';
 import { toLocalDateStr } from 'utils/date';
 import { GREEK_RANK_CACHED_KEY } from '../../constants/storageKeys';
 import type { GreekRankData } from '../../utils/greekRank';
@@ -458,9 +459,13 @@ export default function ProfileScreen({ navigation }: Props) {
             <Text style={styles.statValue}>{stats.cardio_activities}</Text>
           </View>
           <View style={[styles.statBox, styles.statBoxDivider]}>
-            <Text style={styles.statLabel}>Total Distance</Text>
+            {/* Machine cardio is often logged as time with no distance, which
+                would read "0 mi" — show what they actually logged */}
+            <Text style={styles.statLabel}>{stats.cardio_distance_km > 0 ? 'Total Distance' : 'Total Time'}</Text>
             <Text style={styles.statValue}>
-              {roundTenth(toDisplayDistance(stats.cardio_distance_km, distanceUnit)).toLocaleString()} {distanceUnit}
+              {stats.cardio_distance_km > 0
+                ? `${roundTenth(toDisplayDistance(stats.cardio_distance_km, distanceUnit)).toLocaleString()} ${distanceUnit}`
+                : fmtDuration(stats.cardio_minutes)}
             </Text>
           </View>
         </View>
