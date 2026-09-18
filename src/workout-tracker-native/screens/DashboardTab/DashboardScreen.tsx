@@ -496,34 +496,38 @@ export default function DashboardScreen({ navigation }: Props) {
       >
           {(() => {
             const streakDisplay = streakType === 'weekly'
-              ? { value: weeklyStreak, unit: 'w', label: 'Week Streak' }
+              ? { value: weeklyStreak, unit: 'wk' }
               : streakType === 'monthly'
-              ? { value: monthlyStreak, unit: 'mo', label: 'Month Streak' }
-              : { value: dailyStreak, unit: 'd', label: 'Day Streak' };
+              ? { value: monthlyStreak, unit: 'mo' }
+              : { value: dailyStreak, unit: 'd' };
             return (
               <View style={styles.topbar}>
-                <View style={styles.greetingBlock}>
-                  <Text style={styles.greetingText}>{getDailyGreeting()},</Text>
-                  <Text style={styles.greetingName}>{displayName}</Text>
+                {/* Both sides flex equally, so the streak lands dead centre
+                    however long the greeting or the Done label is */}
+                <View style={styles.topbarSide}>
+                  <Text style={styles.greetingText} numberOfLines={1}>{getDailyGreeting()},</Text>
+                  <Text style={styles.greetingName} numberOfLines={1}>{displayName}</Text>
                 </View>
-                <View style={styles.topbarActions}>
                 <TouchableOpacity
-                  onPress={() => setArranging(v => !v)}
-                  style={styles.customizeButton}
+                  onPress={() => setStreakModalVisible(true)}
+                  style={styles.streakBadge}
                   accessibilityRole="button"
-                  accessibilityLabel={arranging ? 'Done arranging Home' : 'Arrange Home'}
+                  accessibilityLabel="Change streak type"
                 >
-                  {arranging
-                    ? <Text style={[styles.doneText, { color: colors.accent }]}>Done</Text>
-                    : <Ionicons name="options-outline" size={20} color={colors.textSecondary} />}
+                  <Text style={styles.streakCount}>{displayStreakValue}{streakDisplay.unit}</Text>
+                  <Text style={styles.streakLabel}>Streak</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => setStreakModalVisible(true)} style={styles.streakBadge}>
-                  <Text style={styles.streakEmoji}>🔥</Text>
-                  <View style={styles.streakText}>
-                    <Text style={styles.streakCount}>{displayStreakValue}{streakDisplay.unit}</Text>
-                    <Text style={styles.streakLabel}>{streakDisplay.label}</Text>
-                  </View>
-                </TouchableOpacity>
+                <View style={[styles.topbarSide, styles.topbarSideRight]}>
+                  <TouchableOpacity
+                    onPress={() => setArranging(v => !v)}
+                    style={styles.customizeButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={arranging ? 'Done arranging Home' : 'Arrange Home'}
+                  >
+                    {arranging
+                      ? <Text style={[styles.doneText, { color: colors.accent }]}>Done</Text>
+                      : <Ionicons name="options-outline" size={20} color={colors.textSecondary} />}
+                  </TouchableOpacity>
                 </View>
               </View>
             );
@@ -853,7 +857,7 @@ export default function DashboardScreen({ navigation }: Props) {
           <View style={styles.streakModalBox}>
             <Text style={styles.streakModalTitle}>Streak Type</Text>
             {([
-              { key: 'weekly' as const, emoji: '🔥', label: 'Weekly', value: weeklyStreak, unit: 'w', sub: null },
+              { key: 'weekly' as const, emoji: '🔥', label: 'Weekly', value: weeklyStreak, unit: 'wk', sub: null },
               { key: 'monthly' as const, emoji: '📅', label: 'Monthly', value: monthlyStreak, unit: 'mo', sub: null },
               { key: 'daily' as const, emoji: '⚡', label: 'Daily', value: dailyStreak, unit: 'd', sub: `longest: ${longestDailyStreak}d` },
             ] as const).map(row => (
@@ -886,7 +890,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
   content: { padding: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xl },
-  topbarActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  topbarSide: { flex: 1 },
+  topbarSideRight: { alignItems: 'flex-end' },
   doneText: { fontSize: typography.fontSize.md, fontWeight: '700' },
   arrangePanel: { gap: spacing.sm, marginBottom: spacing.md },
   arrangeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -907,7 +912,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   arrangeHint: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
   customizeButton: { padding: spacing.xs },
   topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
-  greetingBlock: { flex: 1, marginRight: spacing.sm },
   greetingText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
   greetingName: { fontSize: typography.fontSize.xl, fontWeight: '800', color: colors.textPrimary, marginTop: 1 },
 
@@ -1074,27 +1078,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   muscles: { fontSize: 12, color: colors.textSecondary, marginTop: 2, fontStyle: 'italic' },
   emptyText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontStyle: 'italic' },
 
-  streakBadge: {
-    backgroundColor: colors.surface,
-    borderRadius: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderTopWidth: 1,
-    borderRightWidth: 1,
-    borderBottomWidth: 1,
-    borderLeftWidth: 3,
-    borderTopColor: colors.border,
-    borderRightColor: colors.border,
-    borderBottomColor: colors.border,
-    borderLeftColor: colors.accent,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  streakEmoji: { fontSize: 18, lineHeight: 22 },
-  streakText: { alignItems: 'flex-end' },
+  // Plain text, not a chip: the surface card and flame read as another
+  // action competing with Log Workout
+  streakBadge: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
   streakCount: { fontSize: typography.fontSize.md, fontWeight: '800', color: colors.textPrimary },
-  streakLabel: { fontSize: 10, fontWeight: '600', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  streakLabel: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
 
   streakOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
   streakModalBox: {

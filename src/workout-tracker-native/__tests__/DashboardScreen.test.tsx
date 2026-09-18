@@ -91,6 +91,16 @@ describe('DashboardScreen', () => {
     expect(after.getByText('Push Day')).toBeTruthy();
   });
 
+  it('shows the streak as plain text with no chip or flame', async () => {
+    const { getByText, queryByText, getByLabelText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Streak')).toBeTruthy());
+    expect(getByText(/^\d+wk$/)).toBeTruthy();
+    expect(queryByText('🔥')).toBeNull();
+    // Tapping it still opens the day/week/month picker
+    fireEvent.press(getByLabelText('Change streak type'));
+    await waitFor(() => expect(getByText('Weekly')).toBeTruthy());
+  });
+
   describe('arrange mode', () => {
     const enterArrangeMode = async () => {
       const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
