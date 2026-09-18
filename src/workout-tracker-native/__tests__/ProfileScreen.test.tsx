@@ -37,6 +37,34 @@ describe('ProfileScreen', () => {
     ]);
   });
 
+  // 80.4672 km is exactly 50 miles
+  const cardioStats = {
+    data: { ...statsResponse.data, cardio_activities: 12, cardio_distance_km: 80.4672, cardio_minutes: 430 },
+  };
+  const withCardio = () => mockFetchSequence([workoutsResponse, cardioStats, { data: [] }, strengthScoreResponse]);
+
+  it('hides the cardio totals for a user with no cardio', async () => {
+    const { getByText, queryByText } = render(<ProfileScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Total Volume')).toBeTruthy());
+    expect(queryByText('Total Distance')).toBeNull();
+    expect(queryByText('Activities')).toBeNull();
+  });
+
+  it('shows activities and total distance in miles', async () => {
+    withCardio();
+    const { getByText } = render(<ProfileScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Total Distance')).toBeTruthy());
+    expect(getByText('12')).toBeTruthy();
+    expect(getByText('50 mi')).toBeTruthy();
+  });
+
+  it('shows total distance in km when that is the preference', async () => {
+    await AsyncStorage.setItem('gps_distance_unit_1', 'km');
+    withCardio();
+    const { getByText } = render(<ProfileScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('80.5 km')).toBeTruthy());
+  });
+
   it('renders without crashing', () => {
     render(<ProfileScreen navigation={nav as any} route={route as any} />);
   });

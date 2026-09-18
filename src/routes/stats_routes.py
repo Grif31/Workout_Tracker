@@ -239,6 +239,33 @@ def profile_stats():
         .scalar()
     ) or 0.0
 
+    # Cardio totals, for the Profile card runners get instead of volume alone.
+    # Only exercise_type 'cardio' counts: a 'duration' hold (plank) also fills
+    # cardio_duration but has no distance and isn't an activity. Distances are
+    # stored in whatever unit the set was logged in, so they're normalised to
+    # km here and converted for display on the phone, which owns the user's
+    # distance preference.
+    cardio_sets = (
+        db.session.query(
+            db.func.sum(
+                db.case(
+                    (db.func.lower(db.func.coalesce(Set.distance_unit, 'km')) == 'mi', Set.distance * 1.60934),
+                    else_=Set.distance,
+                )
+            ),
+            db.func.sum(db.func.coalesce(Set.cardio_duration, 0)),
+            db.func.count(db.func.distinct(Workout.id)),
+        )
+        .join(Exercise, Set.exercise_id == Exercise.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .filter(
+            Workout.user_id == user_id,
+            db.func.lower(db.func.coalesce(Exercise.exercise_type, 'strength')) == 'cardio',
+        )
+        .first()
+    )
+    cardio_distance_km, cardio_minutes, cardio_activities = cardio_sets or (None, None, 0)
+
     # Fetch only dates for streak calculations — no exercises or sets needed
     workout_dates = [
         row[0].date() if hasattr(row[0], 'date') else row[0]
@@ -341,6 +368,9 @@ def profile_stats():
         'current_monthly_streak': monthly_current,
         'longest_monthly_streak': monthly_longest,
         'this_week_count': week_counts.get(current_monday, 0),
+        'cardio_activities': cardio_activities or 0,
+        'cardio_distance_km': round(cardio_distance_km or 0.0, 3),
+        'cardio_minutes': round(cardio_minutes or 0.0, 1),
     })
 
 

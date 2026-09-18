@@ -60,6 +60,9 @@ type ProfileStats = {
   longest_streak: number;
   current_streak: number;
   total_volume: number;
+  cardio_activities: number;
+  cardio_distance_km: number;
+  cardio_minutes: number;
 };
 
 // Unique exercises that have at least one PR record
@@ -446,6 +449,23 @@ export default function ProfileScreen({ navigation }: Props) {
         </View>
       </View>
 
+      {/* Cardio totals, the runner's counterpart to Total Volume. Hidden for
+          lifters: nothing to show until an activity is logged. */}
+      {!!stats?.cardio_activities && (
+        <View style={styles.cardioStatsRow}>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>Activities</Text>
+            <Text style={styles.statValue}>{stats.cardio_activities}</Text>
+          </View>
+          <View style={[styles.statBox, styles.statBoxDivider]}>
+            <Text style={styles.statLabel}>Total Distance</Text>
+            <Text style={styles.statValue}>
+              {roundTenth(toDisplayDistance(stats.cardio_distance_km, distanceUnit)).toLocaleString()} {distanceUnit}
+            </Text>
+          </View>
+        </View>
+      )}
+
       <TouchableOpacity
         style={styles.weightRow}
         onPress={() => navigation.navigate('Measurements')}
@@ -470,7 +490,7 @@ export default function ProfileScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
     </View>
-  ), [styles, avatarSource, selectedFrame, displayName, user, stats, greekRank, prs, pins, weightUnit, unit, colors]);
+  ), [styles, avatarSource, selectedFrame, displayName, user, stats, greekRank, prs, pins, weightUnit, unit, distanceUnit, colors]);
 
   return (
     <>
@@ -790,6 +810,16 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     overflow: 'hidden',
     borderTopWidth: 2,
     borderTopColor: colors.border,
+  },
+  // Same card as statsRow, minus the rank-colored top border that belongs to
+  // the row above it
+  cardioStatsRow: {
+    flexDirection: 'row',
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: spacing.sm,
+    overflow: 'hidden',
   },
   statBox: {
     flex: 1,

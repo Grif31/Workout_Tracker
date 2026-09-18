@@ -2341,3 +2341,71 @@ class TestScoreTimestampsCarryOffset:
         data = client.get('/api/stats/endurance-score', headers=h).get_json()
         assert self._has_offset(data['last_updated'])
         assert data['history'] and all(self._has_offset(p['date']) for p in data['history'])
+
+
+# ---------------------------------------------------------------------------
+# GET /api/stats/profile — cardio totals for the Profile card. Distances are
+# summed in km whatever unit each set was logged in; the app converts.
+# ---------------------------------------------------------------------------
+
+class TestProfileCardioTotals:
+
+    def _stats(self, client, h):
+        res = client.get('/api/stats/profile', headers=h)
+        assert res.status_code == 200
+        return res.get_json()
+
+    def _log_cardio(self, client, h, name='Running', sets=None, exercise_type='cardio'):
+        res = client.post('/api/workouts', json={
+            'workoutName': name,
+            'exercises': [{'name': name, 'exercise_type': exercise_type, 'sets': sets or []}],
+        }, headers=h)
+        assert res.status_code == 201
+
+    def test_zero_for_a_lifter(self, client, auth_token):
+        h = auth_headers(auth_token)
+        client.post('/api/workouts', json={
+            'workoutName': 'Push', 'exercises': [{'name': 'Bench', 'sets': [{'reps': 5, 'weight': 135}]}],
+        }, headers=h)
+        data = self._stats(client, h)
+        assert data['cardio_activities'] == 0
+        assert data['cardio_distance_km'] == 0
+        assert data['cardio_minutes'] == 0
+
+    def test_sums_distance_across_units(self, client, auth_token):
+        h = auth_headers(auth_token)
+        self._log_cardio(client, h, sets=[{'cardio_duration': 25, 'distance': 5, 'distance_unit': 'km'}])
+        self._log_cardio(client, h, sets=[{'cardio_duration': 40, 'distance': 3, 'distance_unit': 'mi'}])
+
+        data = self._stats(client, h)
+        assert data['cardio_activities'] == 2
+        assert data['cardio_distance_km'] == pytest.approx(5 + 3 * 1.60934, abs=0.01)
+        assert data['cardio_minutes'] == pytest.approx(65)
+
+    def test_counts_activities_not_sets(self, client, auth_token):
+        # An interval session is one activity, however many bouts it holds
+        h = auth_headers(auth_token)
+        self._log_cardio(client, h, sets=[
+            {'cardio_duration': 2, 'distance': 0.4, 'distance_unit': 'km'},
+            {'cardio_duration': 2, 'distance': 0.4, 'distance_unit': 'km'},
+            {'cardio_duration': 2, 'distance': 0.4, 'distance_unit': 'km'},
+        ])
+        data = self._stats(client, h)
+        assert data['cardio_activities'] == 1
+        assert data['cardio_distance_km'] == pytest.approx(1.2, abs=0.01)
+
+    def test_timed_holds_are_not_cardio(self, client, auth_token):
+        # A plank fills cardio_duration but is a strength workout with no distance
+        h = auth_headers(auth_token)
+        self._log_cardio(client, h, name='Plank', exercise_type='duration',
+                         sets=[{'cardio_duration': 1.5}])
+        data = self._stats(client, h)
+        assert data['cardio_activities'] == 0
+        assert data['cardio_minutes'] == 0
+
+    def test_scoped_to_the_current_user(self, client, auth_token, auth_token2):
+        h = auth_headers(auth_token)
+        self._log_cardio(client, h, sets=[{'cardio_duration': 25, 'distance': 5, 'distance_unit': 'km'}])
+        other = self._stats(client, auth_headers(auth_token2))
+        assert other['cardio_activities'] == 0
+        assert other['cardio_distance_km'] == 0
