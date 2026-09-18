@@ -25,8 +25,9 @@ import { WEEKLY_SUMMARY_LAST_SHOWN_KEY } from './WeeklySummaryScreen';
 import SectionRule from '../../components/SectionRule';
 import PressableScale from '../../components/PressableScale';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
-import { type DashboardCardId } from '../../constants/dashboardCards';
-import { activeDayFilter, defaultLayout, loadDashboardLayout, visibleCards, type DashboardLayout } from '../../utils/dashboardLayout';
+import { activeDayFilter, defaultLayout, loadDashboardLayout, saveDashboardLayout, visibleCards, type DashboardLayout } from '../../utils/dashboardLayout';
+import { DASHBOARD_CARDS, type DashboardCardId } from '../../constants/dashboardCards';
+import DraggableList from '../../components/DraggableList';
 
 const GREETINGS = [
   'Ready to workout', 'Welcome', 'Ready to Train', "Let's Workout",
@@ -66,6 +67,8 @@ type RoutineDay = {
 type ActiveRoutine = { id: number; name: string; days: RoutineDay[] };
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'DashboardHome'>;
+
+const ARRANGE_ROW_HEIGHT = 64;
 
 // ─── This Week Calendar ──────────────────────────────────────────────────────
 function WeekCalendar({
@@ -264,6 +267,11 @@ export default function DashboardScreen({ navigation }: Props) {
 
   const [refreshing, setRefreshing] = useState(false);
   const [layout, setLayout] = useState<DashboardLayout>(defaultLayout);
+  // Arrange mode swaps the cards for equal-height chips in place, rather than
+  // sending the user to a separate screen to arrange a copy of their Home
+  const [arranging, setArranging] = useState(false);
+  // Rows drag inside the page's ScrollView, which would pan under the finger
+  const [dragging, setDragging] = useState(false);
   const hasLoaded = useRef(false);
 
   const streakAnim        = useRef(new Animated.Value(0)).current;
@@ -482,6 +490,7 @@ export default function DashboardScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <ScrollView
+        scrollEnabled={!dragging}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} colors={[colors.accent]} />}
       >
@@ -499,12 +508,14 @@ export default function DashboardScreen({ navigation }: Props) {
                 </View>
                 <View style={styles.topbarActions}>
                 <TouchableOpacity
-                  onPress={() => navigation.navigate('CustomizeHome')}
+                  onPress={() => setArranging(v => !v)}
                   style={styles.customizeButton}
                   accessibilityRole="button"
-                  accessibilityLabel="Customize Home"
+                  accessibilityLabel={arranging ? 'Done arranging Home' : 'Arrange Home'}
                 >
-                  <Ionicons name="options-outline" size={20} color={colors.textSecondary} />
+                  {arranging
+                    ? <Text style={[styles.doneText, { color: colors.accent }]}>Done</Text>
+                    : <Ionicons name="options-outline" size={20} color={colors.textSecondary} />}
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setStreakModalVisible(true)} style={styles.streakBadge}>
                   <Text style={styles.streakEmoji}>🔥</Text>
@@ -761,9 +772,78 @@ export default function DashboardScreen({ navigation }: Props) {
                 </>
               ),
             };
-            return visible.map(id => (
-              <React.Fragment key={id}>{cardNodes[id]}</React.Fragment>
-            ));
+            if (!arranging) {
+              return visible.map(id => (
+                <React.Fragment key={id}>{cardNodes[id]}</React.Fragment>
+              ));
+            }
+
+            const persistLayout = (next: DashboardLayout) => {
+              setLayout(next);
+              saveDashboardLayout(authUser?.id, next);
+            };
+            const cards = layout.order
+              .map(id => DASHBOARD_CARDS.find(c => c.id === id))
+              .filter((c): c is typeof DASHBOARD_CARDS[number] => !!c);
+
+            return (
+              <View style={styles.arrangePanel}>
+                <View style={styles.arrangeHeader}>
+                  <Text style={styles.arrangeTitle}>Arrange your Home</Text>
+                  <TouchableOpacity onPress={() => persistLayout(defaultLayout())}>
+                    <Text style={[styles.arrangeReset, { color: colors.accent }]}>Reset</Text>
+                  </TouchableOpacity>
+                </View>
+                <DraggableList
+                  data={cards}
+                  keyExtractor={c => c.id}
+                  rowHeight={ARRANGE_ROW_HEIGHT}
+                  gap={spacing.sm}
+                  onDragActiveChange={setDragging}
+                  onReorder={(from, to) => {
+                    const order = [...layout.order];
+                    const [moved] = order.splice(from, 1);
+                    order.splice(to, 0, moved);
+                    persistLayout({ ...layout, order });
+                  }}
+                  renderItem={card => {
+                    const isHidden = layout.hidden.includes(card.id);
+                    return (
+                      <View
+                        style={[styles.arrangeRow, isHidden && styles.arrangeRowHidden]}
+                        testID={`arrange-row-${card.id}`}
+                      >
+                        <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
+                        <View style={styles.arrangeRowText}>
+                          <Text style={styles.arrangeRowTitle}>{card.title}</Text>
+                          <Text style={styles.arrangeRowDescription} numberOfLines={1}>{card.description}</Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => persistLayout({
+                            ...layout,
+                            hidden: isHidden
+                              ? layout.hidden.filter(h => h !== card.id)
+                              : [...layout.hidden, card.id],
+                          })}
+                          style={styles.arrangeToggle}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${isHidden ? 'Show' : 'Hide'} ${card.title} on Home`}
+                        >
+                          <Ionicons
+                            name={isHidden ? 'eye-off-outline' : 'eye-outline'}
+                            size={20}
+                            color={isHidden ? colors.textSecondary : colors.accent}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  }}
+                />
+                <Text style={styles.arrangeHint}>
+                  Press and hold a card to drag it. Tap the eye to hide one. Log Workout and Track Activity always stay at the top.
+                </Text>
+              </View>
+            );
           })()}
 
         </ScrollView>
@@ -807,6 +887,24 @@ const createStyles = (colors: Colors) => StyleSheet.create({
 
   content: { padding: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xl },
   topbarActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  doneText: { fontSize: typography.fontSize.md, fontWeight: '700' },
+  arrangePanel: { gap: spacing.sm, marginBottom: spacing.md },
+  arrangeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  arrangeTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
+  arrangeReset: { fontSize: typography.fontSize.sm, fontWeight: '600' },
+  arrangeRow: {
+    height: ARRANGE_ROW_HEIGHT,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface, borderRadius: spacing.sm,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  arrangeRowHidden: { opacity: 0.55 },
+  arrangeRowText: { flex: 1 },
+  arrangeRowTitle: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
+  arrangeRowDescription: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
+  arrangeToggle: { height: '100%', justifyContent: 'center', paddingLeft: spacing.sm },
+  arrangeHint: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
   customizeButton: { padding: spacing.xs },
   topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   greetingBlock: { flex: 1, marginRight: spacing.sm },

@@ -91,11 +91,49 @@ describe('DashboardScreen', () => {
     expect(after.getByText('Push Day')).toBeTruthy();
   });
 
-  it('opens Customize Home from the top bar', async () => {
-    const { getByLabelText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => expect(getByLabelText('Customize Home')).toBeTruthy());
-    fireEvent.press(getByLabelText('Customize Home'));
-    expect(nav.navigate).toHaveBeenCalledWith('CustomizeHome');
+  describe('arrange mode', () => {
+    const enterArrangeMode = async () => {
+      const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(r.getByLabelText('Arrange Home')).toBeTruthy());
+      fireEvent.press(r.getByLabelText('Arrange Home'));
+      await waitFor(() => expect(r.getByText('Arrange your Home')).toBeTruthy());
+      return r;
+    };
+
+    it('swaps the cards for chips in place, without leaving Home', async () => {
+      const r = await enterArrangeMode();
+      // Still on Home: the fixed actions stay put
+      expect(r.getAllByText(/log workout/i).length).toBeGreaterThan(0);
+      expect(nav.navigate).not.toHaveBeenCalled();
+      // Cards give way to one chip each
+      expect(r.getByTestId('arrange-row-activeRoutine')).toBeTruthy();
+      expect(r.getByTestId('arrange-row-weekCalendar')).toBeTruthy();
+      expect(r.getByTestId('arrange-row-workouts')).toBeTruthy();
+      expect(r.queryByText('Push Day')).toBeNull();
+    });
+
+    it('hides a card and brings the rest back on Done', async () => {
+      const r = await enterArrangeMode();
+      fireEvent.press(r.getByLabelText('Hide Recent Workouts on Home'));
+      fireEvent.press(r.getByLabelText('Done arranging Home'));
+
+      await waitFor(() => expect(r.getByText(/log workout/i)).toBeTruthy());
+      expect(r.queryByText('Recent Workouts')).toBeNull();
+      expect(r.queryByText('Push Day')).toBeNull();
+      expect(JSON.parse((await AsyncStorage.getItem('dashboard_layout_1'))!).hidden).toEqual(['workouts']);
+    });
+
+    it('restores the default layout from Reset', async () => {
+      await saveLayout(['workouts', 'weekCalendar', 'activeRoutine'], ['workouts']);
+      const r = await enterArrangeMode();
+      fireEvent.press(r.getByText('Reset'));
+
+      await waitFor(async () =>
+        expect(JSON.parse((await AsyncStorage.getItem('dashboard_layout_1'))!)).toEqual({
+          order: ['activeRoutine', 'weekCalendar', 'workouts'],
+          hidden: [],
+        }));
+    });
   });
 
   it('renders without crashing', () => {
