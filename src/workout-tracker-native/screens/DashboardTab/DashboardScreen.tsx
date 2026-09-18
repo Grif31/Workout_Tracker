@@ -25,6 +25,8 @@ import { WEEKLY_SUMMARY_LAST_SHOWN_KEY } from './WeeklySummaryScreen';
 import SectionRule from '../../components/SectionRule';
 import PressableScale from '../../components/PressableScale';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
+import { type DashboardCardId } from '../../constants/dashboardCards';
+import { defaultLayout, loadDashboardLayout, visibleCards, type DashboardLayout } from '../../utils/dashboardLayout';
 
 const GREETINGS = [
   'Ready to workout', 'Welcome', 'Ready to Train', "Let's Workout",
@@ -261,6 +263,7 @@ export default function DashboardScreen({ navigation }: Props) {
   const [streakModalVisible, setStreakModalVisible] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
+  const [layout, setLayout] = useState<DashboardLayout>(defaultLayout);
   const hasLoaded = useRef(false);
 
   const streakAnim        = useRef(new Animated.Value(0)).current;
@@ -360,7 +363,10 @@ export default function DashboardScreen({ navigation }: Props) {
       hasLoaded.current = true;
     });
     checkWeeklySummaryPopup();
-  }, []));
+    // Re-read on focus: the Customize screen saves as the user drags.
+    // authUser, not the /api/me copy below, which is undefined on first render
+    loadDashboardLayout(authUser?.id).then(setLayout);
+  }, [authUser?.id]));
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -491,6 +497,15 @@ export default function DashboardScreen({ navigation }: Props) {
                   <Text style={styles.greetingText}>{getDailyGreeting()},</Text>
                   <Text style={styles.greetingName}>{displayName}</Text>
                 </View>
+                <View style={styles.topbarActions}>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('CustomizeHome')}
+                  style={styles.customizeButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Customize Home"
+                >
+                  <Ionicons name="options-outline" size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
                 <TouchableOpacity onPress={() => setStreakModalVisible(true)} style={styles.streakBadge}>
                   <Text style={styles.streakEmoji}>🔥</Text>
                   <View style={styles.streakText}>
@@ -498,6 +513,7 @@ export default function DashboardScreen({ navigation }: Props) {
                     <Text style={styles.streakLabel}>{streakDisplay.label}</Text>
                   </View>
                 </TouchableOpacity>
+                </View>
               </View>
             );
           })()}
@@ -546,6 +562,12 @@ export default function DashboardScreen({ navigation }: Props) {
             </View>
           )}
 
+          {/* Cards render in the user's saved order, hidden ones dropped
+              (Customize Home). Everything above stays put. */}
+          {(() => {
+            const cardNodes: Record<DashboardCardId, React.ReactNode> = {
+              activeRoutine: (
+                <>
           {/* Active Routine */}
           {activeRoutine && (
             <PressableScale
@@ -635,14 +657,20 @@ export default function DashboardScreen({ navigation }: Props) {
               </Collapsible>
             </PressableScale>
           )}
-
+                </>
+              ),
+              weekCalendar: (
+                <>
           {/* Week Calendar */}
           <WeekCalendar
             workoutDates={allWorkoutDates}
             selectedDate={selectedCalDate}
             onSelectDate={handleCalendarSelect}
           />
-
+                </>
+              ),
+              workouts: (
+                <>
           {/* Workouts — filtered by selected date or recent */}
           <SectionRule
             label={selectedCalDate
@@ -728,6 +756,14 @@ export default function DashboardScreen({ navigation }: Props) {
               );
             });
           })()}
+                </>
+              ),
+            };
+            return visibleCards(layout).map(id => (
+              <React.Fragment key={id}>{cardNodes[id]}</React.Fragment>
+            ));
+          })()}
+
         </ScrollView>
       {/* Streak selector modal */}
       <Modal visible={streakModalVisible} transparent animationType="fade">
@@ -768,6 +804,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
   content: { padding: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xl },
+  topbarActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  customizeButton: { padding: spacing.xs },
   topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   greetingBlock: { flex: 1, marginRight: spacing.sm },
   greetingText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },

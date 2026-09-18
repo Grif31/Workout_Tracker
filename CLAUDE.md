@@ -237,6 +237,7 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 | `@pr_pins_${uid}` | — | JSON array of 3 pinned PR slots on Profile (Pin\|null)[] |
 | `pr_dashboard_pins_${uid}` | — | Exercises (optionally a specific PR type + context) pinned to PR Dashboard's Pinned Progression section — JSON `{id, name, prType?, weightContext?}[]`, max 6 slots total; an exercise can have more than one pin for different PR types (keyed by exercise+type+context, not exercise id alone). Toggled from PRProgressionScreen. Legacy pins with no `prType` loosely match any type on that exercise |
 | `coach_profile_${uid}` | — | Coach personalization JSON (goal/equipment/schedule/injuries) |
+| `dashboard_layout_${uid}` | — | Home card order + hidden ids (`utils/dashboardLayout.ts`), edited on CustomizeHomeScreen. `normalizeLayout` repairs a stored layout against `constants/dashboardCards.ts`: unknown ids are dropped and cards added in later releases slot back at their default position, so a saved layout never hides a new card |
 | `strength_score_last_tier_${uid}` | — | Last celebrated overall Strength Score tier index (`STRENGTH_TIERS` ordinal), used to detect rank-up moments across app opens |
 | `endurance_score_last_tier_${uid}` | — | Same thing for the Endurance Score — its own slot, so ranking up as a runner and as a lifter are separate moments |
 | `weekly_summary_last_shown_${uid}` | — | Monday date-string of the last week the Weekly Summary auto-popup was checked/shown for, so it only appears once per week |

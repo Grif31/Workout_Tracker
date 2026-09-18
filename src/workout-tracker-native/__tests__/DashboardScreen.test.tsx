@@ -23,12 +23,61 @@ const mockWorkouts = [
 ];
 
 describe('DashboardScreen', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Per-user keys (the saved Home layout) would otherwise leak between tests
+    await AsyncStorage.clear();
     mockFetchSequence([
       { data: mockUser },     // fetchUser
       { data: mockWorkouts }, // fetchRecentWorkouts
       { data: mockStats },    // fetchDashStats
     ]);
+  });
+
+  // Customize Home: the Dashboard renders cards in the saved order, minus hidden
+  const saveLayout = (order: string[], hidden: string[] = []) =>
+    AsyncStorage.setItem('dashboard_layout_1', JSON.stringify({ order, hidden }));
+
+  // Text in render order. toJSON can't be JSON.stringify'd (refreshControl
+  // holds a circular fiber reference), so walk it instead.
+  const textsInOrder = (node: any, out: string[] = []): string[] => {
+    if (node == null) return out;
+    if (typeof node === 'string') { out.push(node); return out; }
+    if (Array.isArray(node)) { node.forEach(n => textsInOrder(n, out)); return out; }
+    if (node.children) node.children.forEach((c: any) => textsInOrder(c, out));
+    return out;
+  };
+
+  it('hides a card the user turned off', async () => {
+    await saveLayout(['activeRoutine', 'weekCalendar', 'workouts'], ['workouts']);
+    const { getByText, queryByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+    // The layout loads from storage after mount, so wait for it to apply
+    await waitFor(() => expect(queryByText('Recent Workouts')).toBeNull());
+    expect(getByText(/log workout/i)).toBeTruthy();
+    expect(queryByText('Push Day')).toBeNull();
+  });
+
+  it('keeps every card when nothing is hidden', async () => {
+    const { getByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Recent Workouts')).toBeTruthy());
+  });
+
+  it('renders cards in the saved order', async () => {
+    await saveLayout(['workouts', 'weekCalendar', 'activeRoutine']);
+    const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(r.getByText('Recent Workouts')).toBeTruthy());
+
+    // 'This Week' belongs to the calendar, which this order puts last
+    await waitFor(() => {
+      const texts = textsInOrder(r.toJSON());
+      expect(texts.indexOf('Recent Workouts')).toBeLessThan(texts.indexOf('This Week'));
+    });
+  });
+
+  it('opens Customize Home from the top bar', async () => {
+    const { getByLabelText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByLabelText('Customize Home')).toBeTruthy());
+    fireEvent.press(getByLabelText('Customize Home'));
+    expect(nav.navigate).toHaveBeenCalledWith('CustomizeHome');
   });
 
   it('renders without crashing', () => {

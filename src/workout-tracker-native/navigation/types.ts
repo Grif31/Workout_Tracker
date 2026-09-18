@@ -68,6 +68,7 @@ export type DashboardStackParamsList = {
     ExerciseDetail: ExerciseDetailParams;
     GreekRankIntro: undefined;
     WeeklySummary: WeeklySummaryParams;
+    CustomizeHome: undefined;
 };
 export type ExercisesStackParamsList = {
     ExercisesHome: undefined;
