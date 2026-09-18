@@ -503,7 +503,7 @@ export default function DashboardScreen({ navigation }: Props) {
                   accessibilityLabel="Change streak type"
                 >
                   <StreakFlame
-                    size={18}
+                    size={20}
                     active={streakDisplay.value > 0}
                     inactiveColor={colors.textSecondary}
                     testID="streak-flame"
