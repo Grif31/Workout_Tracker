@@ -69,6 +69,7 @@ HOMEPAGE = """<!DOCTYPE html>
       margin: 0 auto;
     }
     .tagline {
+      /* an h1: font-size and weight are set here, not left to the UA stylesheet */
       margin-top: 14px;
       font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
       font-weight: 600;
@@ -277,7 +278,7 @@ HOMEPAGE = """<!DOCTYPE html>
   <!-- Header -->
   <header>
     <div class="logo"><img src="/brand/Arete_name.png" alt="Aretē Fitness"></div>
-    <p class="tagline">Pursue excellence. Track every rep.</p>
+    <h1 class="tagline">Pursue excellence. Track every rep.</h1>
     <div class="cta-row">
       <span class="btn btn-soon">Coming soon to the App Store</span>
       <a href="mailto:support@aretefitnessapp.com" class="btn btn-ghost">Contact Support</a>
