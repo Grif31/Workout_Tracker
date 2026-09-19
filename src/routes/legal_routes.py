@@ -22,6 +22,29 @@ HOMEPAGE = """<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Aretē Fitness: Pursue Excellence</title>
+  <meta name="description" content="Aretē is a workout tracking app for iOS. Log strength and cardio, track personal records, measure your Strength Score, and rise through the Greek Ranks.">
+  <link rel="canonical" href="https://aretefitnessapp.com/">
+  <meta name="theme-color" content="#0D0D0D">
+  <link rel="icon" type="image/png" href="/brand/favicon.png">
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Aretē Fitness">
+  <meta property="og:title" content="Aretē Fitness: Pursue Excellence">
+  <meta property="og:description" content="Aretē is a workout tracking app for iOS. Log strength and cardio, track personal records, measure your Strength Score, and rise through the Greek Ranks.">
+  <meta property="og:url" content="https://aretefitnessapp.com/">
+  <meta property="og:image" content="https://aretefitnessapp.com/brand/og-image.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Aretē. Pursue Excellence.">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Aretē Fitness: Pursue Excellence">
+  <meta name="twitter:description" content="Aretē is a workout tracking app for iOS. Log strength and cardio, track personal records, measure your Strength Score, and rise through the Greek Ranks.">
+  <meta name="twitter:image" content="https://aretefitnessapp.com/brand/og-image.png">
+  <meta name="twitter:image:alt" content="Aretē. Pursue Excellence.">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wdth,wght@62..125,600..800&display=swap">
@@ -73,6 +96,61 @@ HOMEPAGE = """<!DOCTYPE html>
     .btn-green  { background: #30D158; color: #000; }
     .btn-ghost  { background: transparent; color: #F2F2F7; border: 1.5px solid #3A3A3C; }
     .btn-ghost:hover { border-color: #636366; opacity: 1; }
+    .btn-soon   { background: #1C1C1E; color: #8E8E93; border: 1.5px solid #2C2C2E; cursor: default; }
+
+    /* -- Features -- */
+    .feature-row {
+      display: grid;
+      grid-template-columns: 1fr 268px;
+      align-items: center;
+      gap: 60px;
+      padding: 44px 0;
+      border-top: 1px solid #1C1C1E;
+    }
+    .feature-row:first-of-type { border-top: none; padding-top: 24px; }
+    /* mirrored rows: the template flips too, or the shot lands in the wide column */
+    .feature-row:nth-child(even) { grid-template-columns: 268px 1fr; }
+    .feature-row:nth-child(even) .feature-copy { order: 2; }
+    .feature-eyebrow {
+      font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.4px;
+      color: #30D158;
+      margin-bottom: 8px;
+    }
+    .feature-copy h3 {
+      font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #F2F2F7;
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .feature-copy p { color: #8E8E93; font-size: 0.97rem; }
+    .feature-shot img {
+      width: 100%;
+      height: auto;
+      border-radius: 26px;
+      border: 1px solid #2C2C2E;
+      display: block;
+    }
+
+    @media (max-width: 760px) {
+      .feature-row {
+        grid-template-columns: 1fr;
+        gap: 28px;
+        padding: 44px 0;
+        justify-items: center;
+        text-align: center;
+      }
+      /* let every screenshot sit below its copy once stacked. the even-row rule
+         above is more specific than .feature-row, so it must be undone by name */
+      .feature-row:nth-child(even) { grid-template-columns: 1fr; }
+      .feature-row:nth-child(even) .feature-copy { order: 0; }
+      .feature-shot { max-width: 260px; }
+    }
 
     /* ── Divider ── */
     .divider {
@@ -88,6 +166,8 @@ HOMEPAGE = """<!DOCTYPE html>
       margin: 0 auto;
       padding: 64px 24px;
     }
+    /* must follow .section: same specificity, so source order decides */
+    .section-wide { max-width: 1040px; }
     .section-label {
       font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
       font-stretch: 112%;
@@ -199,10 +279,86 @@ HOMEPAGE = """<!DOCTYPE html>
     <div class="logo"><img src="/brand/Arete_name.png" alt="Aretē Fitness"></div>
     <p class="tagline">Pursue excellence. Track every rep.</p>
     <div class="cta-row">
-      <a href="https://apps.apple.com/app/id6744030558" class="btn btn-green">Download on the App Store</a>
+      <span class="btn btn-soon">Coming soon to the App Store</span>
       <a href="mailto:support@aretefitnessapp.com" class="btn btn-ghost">Contact Support</a>
     </div>
   </header>
+
+  <div class="divider"></div>
+
+  <!-- Features -->
+  <div class="section section-wide">
+    <p class="section-label">Features</p>
+    <h2 class="section-title">Built for people who train on purpose</h2>
+    <div class="feature-list">
+      <div class="feature-row">
+        <div class="feature-copy">
+          <p class="feature-eyebrow">Home</p>
+          <h3>Your week, the moment you open it</h3>
+          <p>A running workout streak, this week at a glance, and your active routine ready to log. Recent sessions list their exercises, reps and volume, with every personal record you hit that day.</p>
+        </div>
+        <div class="feature-shot">
+          <img src="/brand/shots/slide-dashboard.webp" width="620" height="1342" loading="lazy" decoding="async"
+               alt="Aretē home dashboard showing workout streak, weekly calendar and recent workouts">
+        </div>
+      </div>
+      <div class="feature-row">
+        <div class="feature-copy">
+          <p class="feature-eyebrow">Logging</p>
+          <h3>Log every set as you lift</h3>
+          <p>Each exercise shows what you did last time, so you always know what to beat. Track reps, weight and RPE, tick sets off as you go, and watch duration, set count and total volume build as you train.</p>
+        </div>
+        <div class="feature-shot">
+          <img src="/brand/shots/slide-workout.webp" width="620" height="1342" loading="lazy" decoding="async"
+               alt="Live workout logging screen with previous set values, reps, weight and RPE">
+        </div>
+      </div>
+      <div class="feature-row">
+        <div class="feature-copy">
+          <p class="feature-eyebrow">Strength Score</p>
+          <h3>See exactly where you stand</h3>
+          <p>Your lifts are scored against real strength standards for your bodyweight, so you get a percentile instead of a guess. A full-body map ranks every muscle group, showing what is carrying you and what is lagging.</p>
+        </div>
+        <div class="feature-shot">
+          <img src="/brand/shots/slide-strength.webp" width="620" height="1342" loading="lazy" decoding="async"
+               alt="Strength Score screen with percentile rank and colour-coded muscle group body map">
+        </div>
+      </div>
+      <div class="feature-row">
+        <div class="feature-copy">
+          <p class="feature-eyebrow">Progress</p>
+          <h3>Volume you can actually read</h3>
+          <p>Track volume, sets and workouts over time, hit a weekly goal you set yourself, and see each muscle group measured against MEV, MAV and MRV landmarks so you know what is below target and what is on track.</p>
+        </div>
+        <div class="feature-shot">
+          <img src="/brand/shots/slide-progress.webp" width="620" height="1342" loading="lazy" decoding="async"
+               alt="Progress screen with volume chart, weekly goal and per-muscle volume landmarks">
+        </div>
+      </div>
+      <div class="feature-row">
+        <div class="feature-copy">
+          <p class="feature-eyebrow">AI Coach</p>
+          <h3>A coach that reads your training</h3>
+          <p>Generate templates and full weekly routines around your goal, equipment and schedule. The Coach also reviews your recent training and flags what the numbers show, like a split falling out of balance or muscles dropping below threshold.</p>
+        </div>
+        <div class="feature-shot">
+          <img src="/brand/shots/slide-ai.webp" width="620" height="1342" loading="lazy" decoding="async"
+               alt="AI Coach tab generating routines and showing training insights">
+        </div>
+      </div>
+      <div class="feature-row">
+        <div class="feature-copy">
+          <p class="feature-eyebrow">Greek Rank</p>
+          <h3>Rise through the ranks</h3>
+          <p>Consistency, dedication and training load combine into a single rank, from Neophyte to Aretē. Your profile keeps your lifetime totals, every personal record and your full workout history in one place.</p>
+        </div>
+        <div class="feature-shot">
+          <img src="/brand/shots/slide-profile.webp" width="620" height="1342" loading="lazy" decoding="async"
+               alt="Profile screen showing Olympian Greek Rank, lifetime stats and personal records">
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="divider"></div>
 
