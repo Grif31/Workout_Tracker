@@ -1,6 +1,18 @@
-from flask import Blueprint, render_template_string
+import os
+
+from flask import Blueprint, render_template_string, send_from_directory
 
 legal_bp = Blueprint('legal', __name__)
+
+# Brand assets are served from src/brand/, not src/static/: production mounts a
+# persistent volume over /app/static for user uploads (avatars, progress photos),
+# which shadows the whole directory, so nothing committed under static/ is reachable.
+BRAND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'brand')
+
+
+@legal_bp.route('/brand/<path:filename>')
+def brand_asset(filename):
+    return send_from_directory(BRAND_DIR, filename, max_age=31536000)
 
 # ── Homepage ──────────────────────────────────────────────────────────────────
 
@@ -184,7 +196,7 @@ HOMEPAGE = """<!DOCTYPE html>
 
   <!-- Header -->
   <header>
-    <div class="logo"><img src="/static/Arete_name.png" alt="Aretē Fitness"></div>
+    <div class="logo"><img src="/brand/Arete_name.png" alt="Aretē Fitness"></div>
     <p class="tagline">Pursue excellence. Track every rep.</p>
     <div class="cta-row">
       <a href="https://apps.apple.com/app/id6744030558" class="btn btn-green">Download on the App Store</a>
