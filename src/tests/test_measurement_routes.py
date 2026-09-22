@@ -2,6 +2,7 @@
 Tests for measurement + progress-photo routes:
   GET    /api/measurements
   POST   /api/measurements
+  PUT    /api/measurements/<id>
   DELETE /api/measurements/<id>
   GET    /api/progress-photos
   POST   /api/progress-photos
@@ -136,6 +137,54 @@ class TestDeleteMeasurement:
         # still there for the owner
         rows = client.get('/api/measurements', headers=auth_headers(auth_token)).get_json()
         assert len(rows) == 1
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/measurements/<id>
+# ---------------------------------------------------------------------------
+
+class TestUpdateMeasurement:
+
+    def _create(self, client, token, **fields):
+        return client.post('/api/measurements', json=fields, headers=auth_headers(token)).get_json()['id']
+
+    def test_replaces_fields_and_date(self, client, auth_token):
+        entry_id = self._create(client, auth_token, waist=32, chest=40, date='2024-01-01')
+        res = client.put(f'/api/measurements/{entry_id}',
+                         json={'waist': 31.5, 'right_arm': 15, 'date': '2024-01-05'},
+                         headers=auth_headers(auth_token))
+        assert res.status_code == 200
+        body = res.get_json()
+        assert body['waist'] == 31.5
+        assert body['right_arm'] == 15
+        # Blank in the edit form means cleared
+        assert body['chest'] is None
+        assert body['date'].startswith('2024-01-05')
+
+    def test_keeps_date_when_omitted(self, client, auth_token):
+        entry_id = self._create(client, auth_token, waist=32, date='2024-01-01')
+        body = client.put(f'/api/measurements/{entry_id}', json={'waist': 30},
+                          headers=auth_headers(auth_token)).get_json()
+        assert body['date'].startswith('2024-01-01')
+
+    def test_rejects_all_blank(self, client, auth_token):
+        entry_id = self._create(client, auth_token, waist=32)
+        res = client.put(f'/api/measurements/{entry_id}', json={}, headers=auth_headers(auth_token))
+        assert res.status_code == 400
+
+    def test_rejects_invalid_date(self, client, auth_token):
+        entry_id = self._create(client, auth_token, waist=32)
+        res = client.put(f'/api/measurements/{entry_id}', json={'waist': 30, 'date': '01/05/2024'},
+                         headers=auth_headers(auth_token))
+        assert res.status_code == 400
+
+    def test_cannot_edit_other_users_entry(self, client, auth_token, auth_token2):
+        entry_id = self._create(client, auth_token, waist=32)
+        res = client.put(f'/api/measurements/{entry_id}', json={'waist': 1}, headers=auth_headers(auth_token2))
+        assert res.status_code == 404
+
+    def test_requires_auth(self, client):
+        assert client.put('/api/measurements/1', json={'waist': 30}).status_code == 401
 
 
 # ---------------------------------------------------------------------------

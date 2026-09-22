@@ -137,3 +137,54 @@ class TestDeleteBodyweight:
     def test_requires_auth(self, client):
         res = client.delete('/api/bodyweight/1')
         assert res.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/bodyweight/<id>
+# ---------------------------------------------------------------------------
+
+class TestUpdateBodyweight:
+
+    def test_updates_weight_and_date(self, client, auth_token):
+        entry_id = log_weight(client, auth_token, 185.0, date='2026-01-01T08:00:00').get_json()['id']
+        res = client.put(f'/api/bodyweight/{entry_id}',
+                         json={'weight': 183.4, 'date': '2026-01-03T00:00:00'},
+                         headers=auth_headers(auth_token))
+        assert res.status_code == 200
+        body = res.get_json()
+        assert body['weight'] == 183.4
+        assert body['date'].startswith('2026-01-03')
+
+    def test_backdating_the_latest_entry_resyncs_user_bodyweight(self, client, auth_token):
+        log_weight(client, auth_token, 180.0, date='2026-02-01T08:00:00')
+        newer_id = log_weight(client, auth_token, 190.0, date='2026-03-01T08:00:00').get_json()['id']
+        client.put(f'/api/bodyweight/{newer_id}',
+                   json={'weight': 190.0, 'date': '2026-01-01T00:00:00'},
+                   headers=auth_headers(auth_token))
+        me = client.get('/api/me', headers=auth_headers(auth_token)).get_json()
+        assert me['bodyweight'] == 180.0
+
+    def test_editing_latest_weight_updates_user_bodyweight(self, client, auth_token):
+        entry_id = log_weight(client, auth_token, 185.0).get_json()['id']
+        client.put(f'/api/bodyweight/{entry_id}', json={'weight': 187.0}, headers=auth_headers(auth_token))
+        me = client.get('/api/me', headers=auth_headers(auth_token)).get_json()
+        assert me['bodyweight'] == 187.0
+
+    def test_rejects_non_positive_weight(self, client, auth_token):
+        entry_id = log_weight(client, auth_token, 185.0).get_json()['id']
+        res = client.put(f'/api/bodyweight/{entry_id}', json={'weight': 0}, headers=auth_headers(auth_token))
+        assert res.status_code == 400
+
+    def test_rejects_invalid_date(self, client, auth_token):
+        entry_id = log_weight(client, auth_token, 185.0).get_json()['id']
+        res = client.put(f'/api/bodyweight/{entry_id}', json={'weight': 185.0, 'date': 'nope'},
+                         headers=auth_headers(auth_token))
+        assert res.status_code == 400
+
+    def test_cannot_edit_other_users_entry(self, client, auth_token, auth_token2):
+        entry_id = log_weight(client, auth_token, 185.0).get_json()['id']
+        res = client.put(f'/api/bodyweight/{entry_id}', json={'weight': 100.0}, headers=auth_headers(auth_token2))
+        assert res.status_code == 404
+
+    def test_requires_auth(self, client):
+        assert client.put('/api/bodyweight/1', json={'weight': 180}).status_code == 401

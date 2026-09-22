@@ -54,6 +54,40 @@ def log_bodyweight():
     return jsonify(entry.to_dict()), 201
 
 
+@bodyweight_bp.put('/api/bodyweight/<int:entry_id>')
+@jwt_required()
+@validate_body(_bodyweight_schema)
+def update_bodyweight(entry_id):
+    user_id = get_jwt_identity()
+    entry = BodyweightLog.query.filter_by(id=entry_id, user_id=user_id).first()
+    if not entry:
+        return jsonify({'message': 'Entry not found'}), 404
+
+    data = g.validated
+    if data['weight'] <= 0:
+        return jsonify({'message': 'A valid weight is required'}), 400
+    if data.get('date'):
+        try:
+            entry.date = datetime.fromisoformat(data['date'])
+        except ValueError:
+            return jsonify({'message': 'Invalid date'}), 400
+    entry.weight = float(data['weight'])
+    db.session.flush()
+
+    # Editing the date can change which entry is the latest
+    latest = (
+        BodyweightLog.query
+        .filter_by(user_id=user_id)
+        .order_by(BodyweightLog.date.desc())
+        .first()
+    )
+    user = db.session.get(User, user_id)
+    user.bodyweight = latest.weight
+
+    db.session.commit()
+    return jsonify(entry.to_dict()), 200
+
+
 @bodyweight_bp.delete('/api/bodyweight/<int:entry_id>')
 @jwt_required()
 def delete_bodyweight(entry_id):

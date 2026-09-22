@@ -407,6 +407,19 @@ class TestWeightUnitConversion:
         client.patch('/api/me', json={'weight_unit': 'lbs'}, headers=auth_headers(auth_token))
         assert self._set_weights(client, auth_token) == [100.0, 120.0]
 
+    def test_switch_converts_body_measurements_between_in_and_cm(self, client, auth_token):
+        h = auth_headers(auth_token)
+        client.post('/api/measurements', json={'waist': 32, 'right_arm': 15.5}, headers=h)
+        client.patch('/api/me', json={'weight_unit': 'kg'}, headers=h)
+        row = client.get('/api/measurements', headers=h).get_json()[0]
+        assert row['waist'] == 81.3       # 81.28 cm to the tenth
+        assert row['right_arm'] == 39.4
+        assert row['chest'] is None       # blanks stay blank
+        client.patch('/api/me', json={'weight_unit': 'lbs'}, headers=h)
+        row = client.get('/api/measurements', headers=h).get_json()[0]
+        assert row['waist'] == 32.0
+        assert row['right_arm'] == 15.5
+
     def test_same_unit_patch_is_noop(self, client, auth_token):
         _setup_lbs_user_with_data(client, auth_token)
         client.patch('/api/me', json={'weight_unit': 'lbs'}, headers=auth_headers(auth_token))

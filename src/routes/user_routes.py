@@ -25,6 +25,7 @@ user_bp = Blueprint('user_bp', __name__)
 
 KG_PER_LB = 0.453592
 LBS_PER_KG = 2.20462
+CM_PER_IN = 2.54
 
 
 # Converted weights land on a half only when the true value is genuinely close
@@ -99,6 +100,15 @@ def _convert_stored_weights(user_id: int, new_unit: str) -> None:
 
     BodyweightLog.query.filter_by(user_id=user_id).update(
         {BodyweightLog.weight: _converted(BodyweightLog.weight)}, synchronize_session=False)
+
+    # Body measurements have no unit of their own: they follow the weight unit
+    # (lbs users measure in inches, kg users in cm), so they switch with it.
+    # Tenths, not the weight half-snap, since tape measurements are that fine.
+    length_factor = CM_PER_IN if new_unit == 'kg' else 1 / CM_PER_IN
+    BodyMeasurement.query.filter_by(user_id=user_id).update({
+        getattr(BodyMeasurement, f): db.func.round(getattr(BodyMeasurement, f) * length_factor * 10) / 10.0
+        for f in ('waist', 'chest', 'right_arm', 'left_arm', 'right_leg', 'left_leg')
+    }, synchronize_session=False)
 
 @user_bp.get('/api/me')
 @jwt_required()

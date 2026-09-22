@@ -5,7 +5,7 @@ from flask import Blueprint, jsonify, request, current_app, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.utils import secure_filename
 from models import db, BodyMeasurement, ProgressPhoto
-from schemas import MeasurementSchema
+from schemas import MeasurementSchema, _MEASUREMENT_FIELDS
 from utils.validation import validate_body
 
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
@@ -61,6 +61,30 @@ def create_measurement():
     db.session.add(entry)
     db.session.commit()
     return jsonify(entry.to_dict()), 201
+
+
+@measurement_bp.put('/api/measurements/<int:entry_id>')
+@jwt_required()
+@validate_body(_measurement_schema)
+def update_measurement(entry_id):
+    user_id = get_jwt_identity()
+    entry = db.session.get(BodyMeasurement, entry_id)
+    if not entry or str(entry.user_id) != str(user_id):
+        return jsonify({'message': 'Not found'}), 404
+
+    data = g.validated
+    if data.get('date'):
+        try:
+            entry.date = datetime.strptime(data['date'], "%Y-%m-%d")
+        except ValueError:
+            return jsonify({'message': 'Invalid date'}), 400
+    # Full replace: a field left blank in the edit form is cleared, not kept
+    for field in _MEASUREMENT_FIELDS:
+        value = data.get(field)
+        setattr(entry, field, float(value) if value is not None else None)
+
+    db.session.commit()
+    return jsonify(entry.to_dict()), 200
 
 
 @measurement_bp.delete('/api/measurements/<int:entry_id>')
