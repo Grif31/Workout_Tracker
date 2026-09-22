@@ -72,8 +72,8 @@
 - [ ] Upload screenshots to App Store Connect
 
 ### Day 4: Production Build
-- [ ] Run `eas build --profile production --platform ios`
-- [ ] Submit: `eas submit --platform ios`
+- [x] Run `eas build --profile production --platform ios`
+- [x] Submit: `eas submit --platform ios`
 
 ### Day 5-7: Apple Review
 - [ ] Create a demo account for Apple reviewers
