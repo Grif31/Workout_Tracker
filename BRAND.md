@@ -604,6 +604,7 @@ Photos added later are shot in-house, of real lifters in real gyms.
 |---|---|
 | Domain | `aretefitnessapp.com` |
 | Support email | `support@aretefitnessapp.com` |
+| Instagram | [@aretefitnessapp](https://instagram.com/aretefitnessapp) |
 | iOS bundle ID | `com.aretefitness.app` |
 | Android package | `com.aretefitness.app` |
 | Deep link scheme | `aretefitness://` |
