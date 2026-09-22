@@ -20,31 +20,12 @@ import { apiFetch, isNetworkError } from '../../utils/api';
 import { showToast } from '../../utils/toast';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
+import { buildTemplatePrefill, parseProgramming, type ProgrammingEntry, type TemplateExercise } from '../../utils/templatePrefill';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'TemplateDetail'>;
-type Exercise = {
-  id: number;
-  name: string;
-  muscle_group: string;
-  equipment?: string;
-  exercise_type?: string;
-  image_url?: string;
-};
-type ProgrammingEntry = { exercise_template_id: number; sets: number; reps: string; rpe?: number | null };
+type Exercise = TemplateExercise;
 type Template = { id: number; name: string; exercises: Exercise[]; programming_json?: string | null };
 type RemovedState = { index: number; exercise: Exercise } | null;
-
-const parseRepsMin = (reps: string): string => {
-  const m = (reps ?? '').match(/^(\d+)/);
-  return m ? m[1] : '';
-};
-
-// AI hold prescriptions arrive as seconds strings like "40s" or "30-60s";
-// prefill wants minutes (the unit WorkoutLog converts from)
-const parseHoldMinutes = (reps: string): string => {
-  const m = (reps ?? '').match(/(\d+)/);
-  return m ? String(parseInt(m[1], 10) / 60) : '';
-};
 
 export default function TemplateDetailScreen({ route, navigation }: Props) {
   const { templateId, muscleGroups: targetMuscles } = route.params;
@@ -79,14 +60,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         const data: Template = await tmplRes.json();
         setName(data.name);
         setExercises(data.exercises);
-        const map: Record<number, ProgrammingEntry> = {};
-        if (data.programming_json) {
-          try {
-            const parsed: ProgrammingEntry[] = JSON.parse(data.programming_json);
-            for (const p of parsed) map[p.exercise_template_id] = p;
-          } catch { }
-        }
-        setProgMap(map);
+        setProgMap(parseProgramming(data.programming_json));
       }
     } catch (err) {
       if (!isNetworkError(err)) Alert.alert("Couldn't Load Template", 'Try again in a moment.');
@@ -227,33 +201,9 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
     (navigation as any).navigate('DashboardTab', {
       screen: 'WorkoutLog',
       initial: false,
-      params: {
-        prefill: {
-          name,
-          notes: '',
-          exercises: exercises.map(ex => {
-            const prog = progMap[ex.id];
-            return {
-              name: ex.name,
-              exercise_template_id: ex.id,
-              exercise_type: ex.exercise_type ?? 'strength',
-              muscle_group: ex.muscle_group,
-              equipment: ex.equipment,
-              sets: prog
-                ? Array(prog.sets).fill(null).map(() => (
-                    ex.exercise_type === 'duration'
-                      ? { reps: '', weight: '', cardio_duration: parseHoldMinutes(prog.reps) }
-                      : {
-                          reps: parseRepsMin(prog.reps),
-                          weight: '',
-                          rpe: prog.rpe != null ? String(prog.rpe) : undefined,
-                        }
-                  ))
-                : [{ reps: '', weight: '' }],
-            };
-          }),
-        },
-      },
+      // progMap, not the saved programming_json: unsaved programming edits made
+      // on this screen should carry into the workout being logged.
+      params: { prefill: buildTemplatePrefill(name, exercises, progMap) },
     });
   };
 

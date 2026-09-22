@@ -45,6 +45,12 @@ export type PrefillWorkoutData = {
     exercise_template_id?: number;
     exercise_type?: string;
     equipment?: string;
+    muscle_group?: string;
+    // Drives the exercise GIF in WorkoutLog. Optional, but callers that have
+    // it must pass it: a .map() result is checked for assignability, not for
+    // excess properties, so an omitted field here fails silently.
+    image_url?: string;
+    bodyweight_load_factor?: number | null;
     notes?: string;
     sets: {
       id?: number;
@@ -135,6 +141,9 @@ export default function WorkoutDetailsScreen({
         exercise_template_id: e.exercise_template_id,
         exercise_type: e.exercise_type,
         equipment: e.equipment,
+        muscle_group: e.muscle_group,
+        image_url: e.image_url,
+        bodyweight_load_factor: e.bodyweight_load_factor,
         notes: mode === 'edit' ? (e.notes ?? '') : undefined,
         sets: e.sets.map(s => ({
           id: mode === 'edit' ? s.id : undefined,

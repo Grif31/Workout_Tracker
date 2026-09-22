@@ -19,6 +19,7 @@ import { toLocalDateStr } from '../../utils/date';
 import { COACH_INSIGHTS_KEY } from '../../constants/storageKeys';
 import { apiFetch, isNetworkError } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
+import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../../utils/templatePrefill';
 import { TrainingStackParamsList } from '../../navigation/types';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
@@ -43,7 +44,7 @@ type Props = NativeStackScreenProps<TrainingStackParamsList, 'TrainingHome'>;
 type ProgressBucket = { label: string; volume: number; sets: number; count: number };
 type ChartRange = '30d' | '6m' | '1y';
 type ChartMetric = 'volume' | 'sets' | 'workouts';
-type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; exercise_type?: string };
+type Exercise = TemplateExercise;
 type MuscleVolumeData = {
   muscle_sets: Record<string, number>;
   last_trained: Record<string, string>;
@@ -58,7 +59,7 @@ type WeeklySummaryPreview = {
   distance_km?: number;
   weight_unit: string;
 };
-type WorkoutTemplate = { id: number; name: string; exercises: Exercise[] };
+type WorkoutTemplate = { id: number; name: string; exercises: Exercise[]; programming_json?: string | null };
 type RoutineDay = {
   id: number; day_order: number; label: string;
   workout_template: { id: number; name: string; exercises: Exercise[] };
@@ -308,6 +309,9 @@ export default function CoachScreen({ navigation }: Props) {
     if (prog) setProgressData(prog.buckets ?? []);
     if (score?.overall != null) setStrengthPercentile(score.overall);
     if (score?.overall_rank?.label) setStrengthRankLabel(score.overall_rank.label);
+    const endurance = appCache.get<any>('endurance_score');
+    if (endurance?.overall != null) setEndurancePercentile(endurance.overall);
+    if (endurance?.overall_rank?.label) setEnduranceRankLabel(endurance.overall_rank.label);
     const greek = appCache.get<GreekRankData>('greek_rank');
     if (greek?.greek_rank) setGreekRank(greek.greek_rank);
     if (me?.active_routine_id) fetchActiveRoutine();
@@ -866,17 +870,7 @@ export default function CoachScreen({ navigation }: Props) {
                       screen: 'WorkoutLog',
                       initial: false,
                       params: {
-                        prefill: {
-                          name: t.name, notes: '',
-                          exercises: t.exercises.map(ex => ({
-                            name: ex.name,
-                            exercise_template_id: ex.id,
-                            exercise_type: ex.exercise_type ?? 'strength',
-                            muscle_group: ex.muscle_group,
-                            equipment: ex.equipment,
-                            sets: [{ reps: '', weight: '' }],
-                          })),
-                        },
+                        prefill: buildTemplatePrefill(t.name, t.exercises, parseProgramming(t.programming_json)),
                       },
                     })}
                   >

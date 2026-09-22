@@ -177,6 +177,55 @@ class TestGetWorkoutDetails:
         assert data['exercises'][0]['name'] == 'Squat'
         assert len(data['exercises'][0]['sets']) == 2
 
+    def test_exercise_carries_template_display_fields(self, client, auth_token, app):
+        """Perform Again / Edit rebuild a WorkoutLog prefill straight from this
+        payload, so it has to carry everything the log screen shows -- the GIF
+        included."""
+        from models import db, ExerciseTemplate, ExerciseMuscleMapping
+        with app.app_context():
+            tmpl = ExerciseTemplate(
+                name='Push-Up', equipment='Bodyweight',
+                image_url='/media/push-up.gif', bodyweight_load_factor=0.6,
+            )
+            db.session.add(tmpl)
+            db.session.commit()
+            # muscle_group is derived from the mapping join table, not a column
+            db.session.add(ExerciseMuscleMapping(
+                exercise_template_id=tmpl.id, muscle_group='Chest', is_primary=True,
+            ))
+            db.session.commit()
+            tmpl_id = tmpl.id
+
+        create_workout(client, auth_token, {
+            'workoutName': 'Push Day',
+            'exercises': [{
+                'name': 'Push-Up',
+                'exercise_template_id': tmpl_id,
+                'sets': [{'reps': 20, 'weight': 0}],
+            }],
+        })
+        workout_id = get_workout_id(client, auth_token)
+
+        res = client.get(
+            f'/api/workouts/{workout_id}',
+            headers={'Authorization': f'Bearer {auth_token}'},
+        )
+        assert res.status_code == 200
+        ex = res.get_json()['exercises'][0]
+        assert ex['image_url'] == '/media/push-up.gif'
+        assert ex['muscle_group'] == 'Chest'
+        assert ex['equipment'] == 'Bodyweight'
+        assert ex['bodyweight_load_factor'] == 0.6
+
+    def test_exercise_display_fields_none_without_a_template(self, client, auth_token):
+        create_workout(client, auth_token)
+        workout_id = get_workout_id(client, auth_token)
+        res = client.get(
+            f'/api/workouts/{workout_id}',
+            headers={'Authorization': f'Bearer {auth_token}'},
+        )
+        assert res.get_json()['exercises'][0]['image_url'] is None
+
     def test_requires_auth(self, client, auth_token):
         create_workout(client, auth_token)
         workout_id = get_workout_id(client, auth_token)

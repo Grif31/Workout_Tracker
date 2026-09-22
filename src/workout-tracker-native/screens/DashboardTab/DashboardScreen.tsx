@@ -29,6 +29,7 @@ import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import { activeDayFilter, defaultLayout, loadDashboardLayout, saveDashboardLayout, visibleCards, type DashboardLayout } from '../../utils/dashboardLayout';
 import { DASHBOARD_CARDS, type DashboardCardId } from '../../constants/dashboardCards';
 import DraggableList from '../../components/DraggableList';
+import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../../utils/templatePrefill';
 
 const GREETINGS = [
   'Ready to workout', 'Welcome', 'Ready to Train', "Let's Workout",
@@ -60,10 +61,9 @@ type Workout = {
   num_exercises?: number; muscles?: string[]; pr_count?: number;
   workout_type?: string; cardio_duration?: number; distance?: number; distance_unit?: string;
 };
-type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; exercise_type?: string };
 type RoutineDay = {
   id: number; day_order: number; label: string;
-  workout_template: { id: number; name: string; exercises: Exercise[] };
+  workout_template: { id: number; name: string; exercises: TemplateExercise[]; programming_json?: string | null };
 };
 type ActiveRoutine = { id: number; name: string; days: RoutineDay[] };
 
@@ -297,18 +297,11 @@ export default function DashboardScreen({ navigation }: Props) {
   );
 
   const logRoutineDay = (day: RoutineDay) => navigation.navigate('WorkoutLog', {
-    prefill: {
-      name: day.label,
-      notes: '',
-      exercises: day.workout_template.exercises.map(ex => ({
-        name: ex.name,
-        exercise_template_id: ex.id,
-        exercise_type: ex.exercise_type ?? 'strength',
-        muscle_group: ex.muscle_group,
-        equipment: ex.equipment,
-        sets: [{ reps: '', weight: '' }],
-      })),
-    },
+    prefill: buildTemplatePrefill(
+      day.label,
+      day.workout_template.exercises,
+      parseProgramming(day.workout_template.programming_json),
+    ),
     editMode: false,
   });
 

@@ -134,6 +134,7 @@ class Exercise(db.Model):
             "notes": self.notes,
             "equipment": tmpl.equipment if tmpl else None,
             "muscle_group": tmpl.muscle_group if tmpl else None,
+            "image_url": tmpl.image_url if tmpl else None,
             "bodyweight_load_factor": tmpl.bodyweight_load_factor if tmpl else None,
         }
         if include_sets:

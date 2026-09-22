@@ -22,6 +22,8 @@ export type Exercise = {
   route_polyline?: string
   equipment?: string
   muscle_group?: string
+  image_url?: string
+  bodyweight_load_factor?: number | null
   notes?: string
   sets: Set[]
 };

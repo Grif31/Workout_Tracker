@@ -17,17 +17,12 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from 'theme/spacing';
 import { typography } from 'theme/typography';
 import { apiFetch, isNetworkError } from '../../utils/api';
+import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../../utils/templatePrefill';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'RoutineDetail'>;
 
-type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; exercise_type?: string };
+type Exercise = TemplateExercise;
 
-const parseRepsMin = (reps: string): string => {
-  const m = (reps ?? '').match(/^(\d+)/);
-  return m ? m[1] : '';
-};
-
-type ProgrammingEntry = { exercise_template_id: number; sets: number; reps: string; rpe?: number | null };
 type RoutineDay = {
   id: number;
   day_order: number;
@@ -186,38 +181,15 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
               <TouchableOpacity
                 style={styles.logBtn}
                 onPress={() => {
-                  let progMap = new Map<number, ProgrammingEntry>();
-                  if (item.workout_template.programming_json) {
-                    try {
-                      const parsed: ProgrammingEntry[] = JSON.parse(item.workout_template.programming_json);
-                      for (const p of parsed) progMap.set(p.exercise_template_id, p);
-                    } catch { }
-                  }
                   (navigation as any).navigate('DashboardTab', {
                     screen: 'WorkoutLog',
                     initial: false,
                     params: {
-                      prefill: {
-                        name: item.label,
-                        notes: '',
-                        exercises: item.workout_template.exercises.map(ex => {
-                          const prog = progMap.get(ex.id);
-                          return {
-                            name: ex.name,
-                            exercise_template_id: ex.id,
-                            exercise_type: ex.exercise_type ?? 'strength',
-                            muscle_group: ex.muscle_group,
-                            equipment: ex.equipment,
-                            sets: prog
-                              ? Array(prog.sets).fill(null).map(() => ({
-                                  reps: parseRepsMin(prog.reps),
-                                  weight: '',
-                                  rpe: prog.rpe != null ? String(prog.rpe) : undefined,
-                                }))
-                              : [{ reps: '', weight: '' }],
-                          };
-                        }),
-                      },
+                      prefill: buildTemplatePrefill(
+                        item.label,
+                        item.workout_template.exercises,
+                        parseProgramming(item.workout_template.programming_json),
+                      ),
                     },
                   });
                 }}

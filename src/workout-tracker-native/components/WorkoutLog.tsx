@@ -262,6 +262,39 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       return () => clearTimeout(t);
     }
   }, [openMenuIdx, exMenuAnim]);
+
+  // Work queued to run only once the menu Modal's native view controller is
+  // really gone. Presenting a second Modal (or an Alert) while iOS is still
+  // dismissing the first makes UIKit drop the new presentation *and* can
+  // strand the dismissing transparent modal on screen, where it silently eats
+  // every tap — the whole workout goes unresponsive until the app is killed.
+  // A timer can't tell us when the dismissal finished; onDismiss can.
+  const afterMenuDismissRef = useRef<(() => void) | null>(null);
+  const runAfterMenuDismiss = useCallback(() => {
+    const queued = afterMenuDismissRef.current;
+    afterMenuDismissRef.current = null;
+    queued?.();
+  }, []);
+  const queueAfterMenuDismiss = useCallback((fn: () => void) => {
+    afterMenuDismissRef.current = fn;
+    setOpenMenuIdx(null);
+  }, []);
+  // onDismiss is iOS-only, so Android runs the queued work off the unmount
+  // instead. The extra frame also covers the case where the menu Modal was
+  // never mounted to begin with (nothing to wait for).
+  useEffect(() => {
+    if (menuRendered || Platform.OS === 'ios') return;
+    runAfterMenuDismiss();
+  }, [menuRendered, runAfterMenuDismiss]);
+  // Safety net: if onDismiss never arrives the queued action would be stranded
+  // and, worse, replacingExIndex would stay set and turn the next "Add
+  // Exercise" into a silent replace. 500ms is far past any dismissal of an
+  // animationType="none" modal, so running it here can't recreate the race.
+  useEffect(() => {
+    if (menuRendered || Platform.OS !== 'ios') return;
+    const t = setTimeout(runAfterMenuDismiss, 500);
+    return () => clearTimeout(t);
+  }, [menuRendered, runAfterMenuDismiss]);
   // Reorder Mode — a compact drag-to-reorder view swapped in for the normal
   // set-editing list, since ExerciseBlock rows are variable-height (set
   // count, notes, RPE) and DraggableList needs a uniform row height to do
@@ -616,6 +649,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         name: ex.name,
         muscle_group: ex.muscle_group,
         equipment: ex.equipment,
+        image_url: ex.image_url,
         bodyweight_load_factor: ex.bodyweight_load_factor,
         notes: ex.notes ?? undefined,
         sets: ex.sets.map((s: any) => ({
@@ -901,10 +935,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   }, []);
 
   const deleteEx = (exIndex: number) => {
-    setOpenMenuIdx(null);
     const ex = exercises[exIndex];
     const hasLoggedData = !!ex && ex.sets.some(s => s.done || s.reps || s.weight || s.cardio_duration || s.distance);
-    Alert.alert(
+    // Same present-during-dismiss hazard as the picker: an Alert raised while
+    // the menu Modal is still going away gets torn down with it.
+    queueAfterMenuDismiss(() => Alert.alert(
       'Remove Exercise',
       `Remove ${ex?.name ?? 'this exercise'} and all its sets from this workout?${hasLoggedData ? ' Any sets you\'ve logged for it will be lost.' : ''}`,
       [
@@ -915,7 +950,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           onPress: () => setExercises(prev => prev.filter((_, i) => i !== exIndex)),
         },
       ]
-    );
+    ));
   };
 
   const moveExercise = (exIndex: number, direction: 'up' | 'down') => {
@@ -1107,12 +1142,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   };
 
   const startReplaceExercise = (exIndex: number) => {
-    setOpenMenuIdx(null);
     setReplacingExIndex(exIndex);
-    // Let the menu Modal fully unmount before presenting the picker — iOS
-    // only shows one Modal at a time, and mounting the second while the
-    // first animates out can leave the picker stuck behind it.
-    setTimeout(() => setExerciseModalVisible(true), 180);
+    // The picker can only be presented once the menu Modal is truly dismissed
+    // — see queueAfterMenuDismiss.
+    queueAfterMenuDismiss(() => setExerciseModalVisible(true));
   };
 
   // Turn last-session sets into editable set state for this exercise's logging mode
@@ -1726,6 +1759,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         transparent
         animationType="none"
         onRequestClose={() => setOpenMenuIdx(null)}
+        // iOS-only, and the whole point: nothing queued by a menu item may be
+        // presented until UIKit says this view controller is gone.
+        onDismiss={runAfterMenuDismiss}
       >
         {/* Gated on openMenuIdx, not menuRendered — a Modal lingering through
             its close animation (or stuck) must never keep a full-screen

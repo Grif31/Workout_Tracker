@@ -95,6 +95,7 @@ function ExerciseBlock({
             <TouchableOpacity
               onPress={e => onOpenMenu(exIndex, e)}
               style={styles.exIconBtn}
+              testID={`exercise-menu-${exIndex}`}
             >
               <Ionicons name="ellipsis-vertical" size={20} color={colors.textSecondary} />
             </TouchableOpacity>

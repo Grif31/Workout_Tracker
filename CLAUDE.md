@@ -107,7 +107,8 @@ src/
 │   │   ├── cardioCalories.ts     # cardio calorie estimation
 │   │   ├── prFormat.ts           # PR value/delta/date formatting, chart y-axis snapping (computeChartYAxisRange), metric priority
 │   │   ├── prPins.ts             # PR Dashboard pin storage — keyed by exercise + PR type + context, not just exercise id
-│   │   └── greekRank.ts          # GET /api/stats/greek-rank type, best-score pick, top-rank gate unlock wording
+│   │   ├── greekRank.ts          # GET /api/stats/greek-rank type, best-score pick, top-rank gate unlock wording
+│   │   └── templatePrefill.ts    # the ONLY way a template/routine day becomes a WorkoutLog prefill (buildTemplatePrefill)
 │   ├── theme/
 │   │   ├── spacing.ts            # xs/sm/md/lg/xl
 │   │   └── typography.ts         # fontSize.sm/md/lg
@@ -191,6 +192,10 @@ Shared keys that cross file boundaries live in `constants/` or are exported from
 
 ### Charts (`react-native-gifted-charts` `LineChart`)
 Don't derive `maxValue`/`yAxisOffset` from raw `min`/`max` + a percentage pad — on a narrow-range series (e.g. a Rep Record spanning 1-2 reps) each tick's *label* rounds independently and adjacent ticks can round to the same displayed number, and the labels can drift out of sync with where points actually plot. Use `computeChartYAxisRange(values, sections)` from `utils/prFormat.ts` (also mirrored inline in `StrengthScoreScreen.tsx`), which snaps the whole range to whole-number, evenly-divisible steps up front.
+
+### WorkoutLog prefill — build it with `buildTemplatePrefill`
+
+Anything that sends a template or routine day to WorkoutLog goes through `buildTemplatePrefill` in `utils/templatePrefill.ts` (Home's routine card, Coach's template Log, RoutineDetail, TemplateDetail). Four screens used to hand-roll this object and each dropped a different field, so the same template logged from different places gave different workouts (no exercise GIFs from some, no programmed sets/reps/RPE from others). Adding a field WorkoutLog reads means adding it to `PrefillWorkoutData`, to the mapper in `WorkoutLog.tsx`, and to `buildTemplatePrefill` — a `.map()` result is only checked for assignability, so a missing optional field fails silently rather than at compile time. `WorkoutDetails.buildPrefill` is the separate path for Edit / Perform Again, off a logged workout rather than a template.
 
 ### Navigation — new screens
 1. Create file in `screens/<Tab>/`
