@@ -137,6 +137,24 @@ describe('PRDashboardScreen', () => {
     expect(getByText('Most Reps')).toBeTruthy();
   });
 
+  it('opens a running PR in Cardio Details, not the strength workout screen', async () => {
+    mockFetch({
+      ...dashboardPayload,
+      recent_events: [{
+        id: 9, exercise_template_id: 30, workout_id: 77,
+        pr_type: 'best_time', value: 25.5, weight_context: 5,
+        previous_value: 26, improved_by: 0.5,
+        achieved_at: '2026-08-10T00:00:00',
+        exercise_name: 'Running', pr_label: 'Best Time',
+        workout_name: 'Morning Run', workout_date: '2026-08-10T00:00:00',
+      }],
+    });
+    const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Running')).toBeTruthy());
+    fireEvent.press(getByText('Running'));
+    expect(nav.navigate).toHaveBeenCalledWith('CardioDetails', { workoutId: 77 });
+  });
+
   it('navigates to WorkoutDetails when a feed card is tapped', async () => {
     const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());

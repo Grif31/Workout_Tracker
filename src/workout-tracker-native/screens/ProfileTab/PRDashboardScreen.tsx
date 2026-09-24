@@ -23,7 +23,7 @@ import { captureAndShare } from '../../utils/shareCapture';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
 import {
   fmtPrValue, fmtPrContext, fmtPrDelta, fmtRelativeDate, fmtChartDate, formatChartYLabel, computeChartYAxisRange,
-  computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH,
+  computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH, prWorkoutScreen,
   prTypeIcon, stalledUrgency, stalledCategoryToPrType, pickDefaultPrSeries, PR_METRIC_OPTIONS,
   type PREventItem, type StalledCategory,
 } from '../../utils/prFormat';
@@ -679,7 +679,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
     return (
       <TouchableOpacity
         style={[styles.eventCard, { backgroundColor: colors.surface }]}
-        onPress={() => openWorkout(item.workout_id)}
+        onPress={() => navigation.navigate(prWorkoutScreen(item.pr_type), { workoutId: item.workout_id })}
         activeOpacity={0.7}
       >
         <View style={[styles.eventIconBadge, { backgroundColor: PR_GOLD_BG }]}>

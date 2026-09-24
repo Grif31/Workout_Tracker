@@ -1,4 +1,5 @@
 import {
+  prWorkoutScreen,
   fmtPrValue, fmtPrDelta, fmtPrContext, fmtMinSec, nearPrHint,
   fmtRelativeDate, fmtChartDate, formatChartYLabel, computeChartYAxisRange, computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH, prTypeIcon, stalledUrgency,
   stalledCategoryToPrType, pickDefaultPrSeries,
@@ -351,5 +352,18 @@ describe('showChartXLabel', () => {
     expect(showChartXLabel(8, 10, 4)).toBe(false);
     const shown = Array.from({ length: 10 }, (_, i) => i).filter(i => showChartXLabel(i, 10, 4));
     expect(shown).toEqual([0, 4, 9]);
+  });
+});
+
+describe('prWorkoutScreen', () => {
+  it('opens cardio PRs in Cardio Details', () => {
+    expect(prWorkoutScreen('best_time')).toBe('CardioDetails');
+    expect(prWorkoutScreen('best_distance')).toBe('CardioDetails');
+  });
+
+  it('keeps lifts and timed holds in Workout Details', () => {
+    for (const t of ['max_weight', 'max_reps', 'estimated_1rm', 'max_duration'] as const) {
+      expect(prWorkoutScreen(t)).toBe('WorkoutDetails');
+    }
   });
 });

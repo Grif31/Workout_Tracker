@@ -80,6 +80,21 @@ describe('PRProgressionScreen', () => {
     expect(queryAllByText('245 lbs').length).toBe(0);
   });
 
+  it('opens a running PR row in Cardio Details', async () => {
+    mockFetch([{
+      id: 20, exercise_template_id: 30, workout_id: 77,
+      pr_type: 'best_distance', value: 6.2, weight_context: 30,
+      previous_value: null, improved_by: null,
+      achieved_at: '2026-08-10T00:00:00',
+      pr_label: 'Best Distance', workout_name: 'Long Run',
+    }]);
+    const runRoute = createMockRoute('PRProgression', { exerciseTemplateId: 30, exerciseName: 'Running' });
+    const { getByText } = render(<PRProgressionScreen navigation={nav as any} route={runRoute as any} />);
+    await waitFor(() => expect(getByText('Long Run')).toBeTruthy());
+    fireEvent.press(getByText('Long Run'));
+    expect(nav.navigate).toHaveBeenCalledWith('CardioDetails', { workoutId: 77 });
+  });
+
   it('navigates to WorkoutDetails when a table row is tapped', async () => {
     const { getAllByText } = render(<PRProgressionScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getAllByText('245 lbs').length).toBe(2));

@@ -18,7 +18,7 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
-import { fmtPrValue, fmtPrDelta, fmtChartDate, formatChartYLabel, computeChartYAxisRange, PR_METRIC_OPTIONS, type PREventItem } from '../../utils/prFormat';
+import { fmtPrValue, fmtPrDelta, fmtChartDate, formatChartYLabel, computeChartYAxisRange, PR_METRIC_OPTIONS, prWorkoutScreen, type PREventItem } from '../../utils/prFormat';
 import { loadPrPins, togglePrPin, pinMatches, MAX_PR_PINS } from '../../utils/prPins';
 import { showToast } from '../../utils/toast';
 
@@ -361,7 +361,7 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
                 <TouchableOpacity
                   key={e.id}
                   style={[styles.tableRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
-                  onPress={() => navigation.navigate('WorkoutDetails', { workoutId: e.workout_id })}
+                  onPress={() => navigation.navigate(prWorkoutScreen(e.pr_type), { workoutId: e.workout_id })}
                   activeOpacity={0.7}
                 >
                   <View style={[styles.thDate, styles.dateCell]}>
