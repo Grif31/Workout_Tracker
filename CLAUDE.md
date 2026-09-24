@@ -119,6 +119,8 @@ src/
 │   │   ├── healthConnect.ts      # Android Health Connect sync (EAS build only)
 │   │   ├── heartRate.ts          # pure bpm aggregation (avg/max, implausible-sample filter) — no native import, runs in Jest
 │   │   ├── heartRateSync.ts      # reads HR post-save and PATCHes it onto the workout
+│   │   ├── progressMetrics.ts    # which Coach Progress chart tabs to show, from the endpoint's all-time metrics_logged
+│   │   ├── weeklyDistanceGoal.ts # weekly distance goal math: km storage, +/-1/5 steps, typed input, card fill
 │   │   ├── plateCalc.ts          # plate calculator math
 │   │   ├── offlineQueue.ts       # offline workout queue (AsyncStorage)
 │   │   ├── exerciseCache.ts      # exercise list cache
@@ -264,6 +266,7 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 | `default_rest_timer_${uid}` | '90' | Default rest timer duration in seconds |
 | `gps_distance_unit_${uid}` | 'mi' | Distance unit for GPS cardio activities ('km' or 'mi') |
 | `workout_weekly_goal_${uid}` | '3' | Weekly workout target (integer string) |
+| `workout_weekly_distance_goal_${uid}` | — | Optional weekly distance target, stored in **km** (display converts to the GPS distance unit, so a mi/km switch never changes it). Absent = no goal. Set in Coach's Weekly Goal modal, shown as a fill line on the Weekly Goal card and as the Distance chart's goal line. Display only: no streak or summary reads it |
 | `workout_auto_rest_${uid}` | true | Auto-start rest timer after a set |
 | `workout_vibrate_${uid}` | true | Vibrate when rest timer completes |
 | `workout_show_rpe_${uid}` | false | Show RPE input per set |

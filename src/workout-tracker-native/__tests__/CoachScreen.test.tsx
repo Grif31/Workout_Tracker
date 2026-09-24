@@ -13,10 +13,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createMockNavigation, createMockRoute, mockUser } from './testUtils';
 import CoachScreen from '../screens/TrainingTab/CoachScreen';
 import { appCache } from '../utils/appCache';
-import { COACH_INSIGHTS_KEY } from '../constants/storageKeys';
+import { COACH_INSIGHTS_KEY, WEEKLY_DISTANCE_GOAL_KEY } from '../constants/storageKeys';
 
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
+
+// Records what the chart was asked to draw; the real chart can't render here.
+const mockBarChart = jest.fn();
+jest.mock('react-native-gifted-charts', () => ({
+  BarChart: (props: any) => { mockBarChart(props); return null; },
+}));
 
 const route = createMockRoute('CoachHome');
 
@@ -141,6 +147,117 @@ describe('CoachScreen', () => {
       await openTraining(r);
       fireEvent.press(r.getByText('Push Day'));
       expect(r.nav.navigate).toHaveBeenCalledWith('TemplateDetail', { templateId: 7 });
+    });
+  });
+
+  describe('progress chart', () => {
+    const KM_PER_MI = 1.60934;
+    const ALL = { volume: true, sets: true, workouts: true, distance: true };
+    // Four empty weeks and this week: 2 workouts, 5 mi.
+    const bucket = (label: string, over: object = {}) =>
+      ({ label, volume: 0, sets: 0, count: 0, distance_km: 0, ...over });
+    const progress = (metrics_logged: object | undefined, thisWeek: object = {}) => ({
+      buckets: [bucket('8/25'), bucket('9/1'), bucket('9/8'), bucket('9/15'),
+        bucket('9/22', { volume: 5000, sets: 12, count: 2, distance_km: 5 * KM_PER_MI, ...thisWeek })],
+      ...(metrics_logged ? { metrics_logged } : {}),
+    });
+    const lastChart = () => mockBarChart.mock.calls[mockBarChart.mock.calls.length - 1][0];
+
+    it('shows a new user an empty chart with no tabs or range to pick', async () => {
+      installServer({ '/api/stats/progress': progress({ volume: false, sets: false, workouts: false, distance: false }) });
+      const r = await renderScreen();
+      await waitFor(() => expect(r.getByText('Start logging to track your progress')).toBeTruthy());
+      for (const tab of ['Volume', 'Sets', 'Workouts', 'Distance']) expect(r.queryByText(tab)).toBeNull();
+      expect(r.queryByLabelText(/Chart range/)).toBeNull();
+    });
+
+    it('gives a cardio-only user Workouts and Distance, and no lifting tabs', async () => {
+      installServer({ '/api/stats/progress': progress({ volume: false, sets: false, workouts: true, distance: true }) });
+      const r = await renderScreen();
+      await waitFor(() => expect(r.getByText('Distance')).toBeTruthy());
+      expect(r.queryByText('Volume')).toBeNull();
+      expect(r.queryByText('Sets')).toBeNull();
+      // Their default Volume pick falls back to the first tab they have, so
+      // "Workouts" is both a tab and the chart title.
+      expect(r.getAllByText('Workouts')).toHaveLength(2);
+      expect(r.queryByText(/^Volume \(/)).toBeNull();
+    });
+
+    it('charts distance in the user unit on the Distance tab', async () => {
+      installServer({ '/api/stats/progress': progress(ALL) });
+      const r = await renderScreen();
+      await waitFor(() => expect(r.getByText('Distance')).toBeTruthy());
+      fireEvent.press(r.getByText('Distance'));
+      await waitFor(() => expect(r.getByText('Distance (mi)')).toBeTruthy());
+      const values = lastChart().data.map((d: any) => d.value);
+      expect(values).toEqual([0, 0, 0, 0, 5]);
+    });
+
+    it('keeps the original three tabs against a backend without metrics_logged', async () => {
+      installServer({ '/api/stats/progress': progress(undefined) });
+      const r = await renderScreen();
+      await waitFor(() => expect(r.getByText('Volume')).toBeTruthy());
+      expect(r.getByText('Sets')).toBeTruthy();
+      expect(r.queryByText('Distance')).toBeNull();
+      expect(r.queryByText('Start logging to track your progress')).toBeNull();
+    });
+
+    it('asks for 3 months when the 3M range is picked', async () => {
+      installServer({ '/api/stats/progress': progress(ALL) });
+      const r = await renderScreen();
+      await waitFor(() => expect(r.getByLabelText('Chart range, 30D')).toBeTruthy());
+      fireEvent.press(r.getByLabelText('Chart range, 30D'));
+      fireEvent.press(r.getByText('Last 3 Months'));
+      await waitFor(() => expect(urlsCalled().some(u => u.includes('/api/stats/progress?range=3m'))).toBe(true));
+    });
+  });
+
+  describe('weekly distance goal', () => {
+    const KM_PER_MI = 1.60934;
+    const goalKey = `${WEEKLY_DISTANCE_GOAL_KEY}_${mockUser.id}`;
+    const withFiveMilesThisWeek = () => installServer({
+      '/api/stats/progress': {
+        buckets: [{ label: '9/22', volume: 0, sets: 0, count: 1, distance_km: 5 * KM_PER_MI }],
+        metrics_logged: { volume: false, sets: false, workouts: true, distance: true },
+      },
+    });
+    const storedMiles = async () => Number(await AsyncStorage.getItem(goalKey)) / KM_PER_MI;
+
+    it('has no distance line until the user turns a goal on', async () => {
+      withFiveMilesThisWeek();
+      const r = await renderScreen();
+      await waitFor(() => expect(r.getByText('Weekly Goal')).toBeTruthy());
+      expect(r.queryByTestId('distance-goal-fill')).toBeNull();
+    });
+
+    it('fills the line toward a saved goal', async () => {
+      withFiveMilesThisWeek();
+      await AsyncStorage.setItem(goalKey, String(10 * KM_PER_MI));
+      const r = await renderScreen();
+      await waitFor(() => expect(r.getByText('5 / 10 mi')).toBeTruthy());
+      expect(r.getByTestId('distance-goal-fill').props.style).toEqual(
+        expect.arrayContaining([expect.objectContaining({ width: '50%' })]),
+      );
+    });
+
+    it('saves the goal in km from the switch, the +5 button and typed input', async () => {
+      withFiveMilesThisWeek();
+      const r = await renderScreen();
+      await waitFor(() => expect(r.getByText('Weekly Goal')).toBeTruthy());
+      fireEvent.press(r.getByText('Weekly Goal'));
+
+      fireEvent(r.getByTestId('distance-goal-switch'), 'valueChange', true);
+      await waitFor(async () => expect(await storedMiles()).toBeCloseTo(10, 5));
+
+      fireEvent.press(r.getByLabelText('Increase distance goal by 5'));
+      await waitFor(async () => expect(await storedMiles()).toBeCloseTo(15, 5));
+
+      fireEvent.changeText(r.getByTestId('distance-goal-input'), '12.5');
+      fireEvent(r.getByTestId('distance-goal-input'), 'endEditing');
+      await waitFor(async () => expect(await storedMiles()).toBeCloseTo(12.5, 5));
+
+      fireEvent(r.getByTestId('distance-goal-switch'), 'valueChange', false);
+      await waitFor(async () => expect(await AsyncStorage.getItem(goalKey)).toBeNull());
     });
   });
 

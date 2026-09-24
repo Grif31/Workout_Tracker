@@ -960,6 +960,14 @@ Check off items as you complete them.
 
 > **As built** (2026-09-23): the scan is client-side in `utils/bestEfforts.ts` and runs over the in-memory GPS points at save, since the encoded polyline drops per-point timing. Results persist as `cardio_best_efforts` rows on the Exercise — not recomputed — because `_recompute_prs_for_templates` rebuilds PRs from what's stored on the Exercise, so efforts living only in the POST body would be wiped by the next edit of any workout for that exercise. Each effort is fed to `_compute_and_upsert_cardio_prs` as one more bout, so no new PR logic was needed. Duration milestones were included as well as distance (furthest covered in 10/20/30/60 min → `best_distance` PRs). Windows are pause-aware (a `resumed` flag on each point, set where the live distance counter already skips the gap), interpolated at the exact milestone boundary, and gated on a plausibility floor plus a minimum point count so GPS noise can't bank an unclearable all-time PR. Editing a run's distance/duration by hand clears its efforts.
 
+### Phase 5 — Cardio on the Coach Progress tab ✅ DONE
+- [x] Distance metric on the Progress chart (`distance_km` per bucket, same counting rule as `_cardio_totals`), shown in the GPS distance unit
+- [x] 3M range (13 weekly buckets) between 30D and 6M; every other week labelled so the narrow bars' dates don't collide
+- [x] Range menu anchored to its button (`measureInWindow`), flipping above when there's no room below; previously fixed at `top: 120`
+- [x] Metric tabs only for what the user has ever logged (all-time `metrics_logged` from the endpoint); nothing logged shows "Start logging to track your progress" with no tabs or range
+- [x] Optional weekly distance goal (`workout_weekly_distance_goal_${uid}`, km): switch, -5/-1/+1/+5 and a typed value in the Weekly Goal modal; fill line on the card; goal line on the Distance chart. Display only, no streaks
+- [ ] Verify on device: 3M label centring, the menu position on Android (edge-to-edge + `statusBarTranslucent`), and the modal's keyboard avoidance
+
 ---
 
 ## 📲 19. Home Screen Widgets
@@ -984,7 +992,7 @@ Check off items as you complete them.
 - [ ] Record the resulting setup steps in CLAUDE.md (new plugin, `targets/` folder, how to run a widget build) before building for real
 
 ### Phase 1 — Data bridge
-- [ ] **Snapshot schema** (versioned, one JSON blob, only what widgets render): `version`, `updatedAt`, `userId`, weekly goal (`target`, completed day dates this week, current streak), Greek Rank (`rank`, `score`, `nextRank`, points to next, gate text from `utils/greekRank.ts`), scores (strength/endurance percentile + rank label, nullable), active routine (`name`, next day label + index for the deep link), units (`weight_unit`, GPS distance unit), accent color
+- [ ] **Snapshot schema** (versioned, one JSON blob, only what widgets render): `version`, `updatedAt`, `userId`, weekly goal (`target`, completed day dates this week, current streak, optional distance goal in km plus this week's distance in km, and the GPS distance unit to show them in), Greek Rank (`rank`, `score`, `nextRank`, points to next, gate text from `utils/greekRank.ts`), scores (strength/endurance percentile + rank label, nullable), active routine (`name`, next day label + index for the deep link), units (`weight_unit`, GPS distance unit), accent color
 - [ ] **`utils/widgetData.ts`**: `writeWidgetSnapshot(partial)` merges and writes the blob, then asks the OS to refresh widgets. iOS needs a native write into App Group `UserDefaults` (a small local Expo module, or a maintained shared-preferences library if one supports the New Architecture); Android goes through the widget library's update API
 - [ ] **Write points** (reuse data already fetched, no new requests): after `PreloadScreen` finishes, after a workout save or delete (weekly goal, streak, rank), after `greek-rank` / score fetches, on active-routine change, on weekly-goal or unit change
 - [ ] **Week rollover without opening the app**: store completed dates, not a count, and have the widget compute "this week" itself, so Monday morning shows 0/3 instead of last week's 3/3. iOS: add a timeline entry at next Monday 00:00 local
@@ -993,6 +1001,7 @@ Check off items as you complete them.
 
 ### Phase 2 — iOS widgets
 - [ ] **Weekly Goal** (small): ring or dots for this week's workouts vs. goal, streak count, rank-colored accent. Tap opens Dashboard
+  - When a weekly distance goal is set (`workout_weekly_distance_goal_${uid}`), a fill line under the dots as on the Coach card, reusing `distanceGoalProgress` from `utils/weeklyDistanceGoal.ts` so "15 / 15 mi" reads complete the same way in both. Medium size shows the numbers; small may show the line alone
 - [ ] **Greek Rank** (small + medium): rank name in its `GREEK_RANK_COLORS` color and icon, progress bar to the next rank; when held by a top-rank gate, show the gate requirement instead of points (same wording as the app). Tap opens the Greek Rank screen
 - [ ] **Lock screen** accessory widgets: circular (weekly goal ring), rectangular (rank + progress)
 - [ ] Light/dark follow the system; use the stored accent for highlights; Dynamic Type safe

@@ -126,7 +126,7 @@ All routes are Flask endpoints under the backend (`src/routes/`). Unless noted o
 | `GET /api/stats/exercise/last-session` | 🔒 | The most recent logged sets for one exercise, used to pre-fill "perform again"-style flows. |
 | `GET /api/stats/muscle-volume` | 🔒 | Weekly working-set volume per muscle group, with MEV/MAV/MRV zone classification (premium). |
 | `GET /api/stats/profile` | 🔒 | Profile-tab stats: total workouts/volume, current & longest streaks (daily/weekly/monthly), cardio totals (all-time and `week_cardio_*` since Monday, distances in km). |
-| `GET /api/stats/progress` | 🔒 | Bucketed volume/sets/workout-count history for the Progress tab chart (`?range=30d\|6m\|1y`). |
+| `GET /api/stats/progress` | 🔒 | Bucketed volume/sets/workout-count/distance history for the Progress tab chart (`?range=30d\|3m\|6m\|1y`; 30d and 3m are weekly buckets, 6m and 1y monthly). Each bucket has `distance_km` (cardio exercises only, miles converted, same rule as the profile stats' cardio totals). Also returns all-time `metrics_logged` (`volume`/`sets`/`workouts`/`distance` booleans), which decides the chart's tabs. An unknown range falls back to 1y. |
 | `GET /api/stats/recent-exercises` | 🔒 | The user's 10 most recently logged exercises, for quick-add pickers. |
 
 ---

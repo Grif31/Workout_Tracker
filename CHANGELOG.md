@@ -9,6 +9,16 @@
 - If you edit a tracked activity's distance or time by hand, its best efforts are removed, since they came from the GPS recording you corrected.
 - Best efforts apply to activities tracked from this update on. Earlier ones don't have the timing data needed.
 
+### New: Distance on the Coach tab
+- The Progress chart has a Distance tab, in miles or kilometers to match your GPS distance setting.
+- A new 3 month range sits between 30 days and 6 months, showing week by week.
+- You can set a weekly distance goal from the Weekly Goal card. A line on the card fills as you go, and the goal shows as a line on the Distance chart. It doesn't affect your streaks.
+- Type an exact goal, or use the +1 and +5 buttons.
+- The chart only shows tabs for things you've logged, so a runner won't see empty Volume and Sets tabs. If you haven't logged anything yet, it asks you to start logging.
+
+### Fixed: Coach tab
+- The chart's range menu now opens next to its button instead of near the top of the screen.
+
 ### New: Cardio This Week
 - If you log cardio, Home shows your distance, time and number of activities since Monday. Distance follows your GPS distance setting, in miles or kilometers.
 - Cardio logged as time without distance, like a bike or rower session, shows your total time instead.

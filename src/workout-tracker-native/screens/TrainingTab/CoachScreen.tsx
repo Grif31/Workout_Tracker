@@ -14,9 +14,9 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { usePurchase } from '../../context/PurchaseContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
+import { WeightUnit, GPS_DISTANCE_UNIT_KEY, roundTenth, toDisplayDistance } from '../../utils/units';
 import { toLocalDateStr } from '../../utils/date';
-import { COACH_INSIGHTS_KEY, WEEKLY_GOAL_KEY } from '../../constants/storageKeys';
+import { COACH_INSIGHTS_KEY, WEEKLY_DISTANCE_GOAL_KEY, WEEKLY_GOAL_KEY } from '../../constants/storageKeys';
 import { apiFetch, isNetworkError } from '../../utils/api';
 import { appCache, useRefetchGate } from '../../utils/appCache';
 import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../../utils/templatePrefill';
@@ -30,7 +30,11 @@ import { GREEK_RANK_COLORS, GREEK_RANKS } from '../../constants/greekRanks';
 import type { GreekRankData } from '../../utils/greekRank';
 import WeeklyGoalModal from '../../components/coach/WeeklyGoalModal';
 import WorkingSetsInfoModal from '../../components/coach/WorkingSetsInfoModal';
-import RangePickerModal from '../../components/coach/RangePickerModal';
+import RangePickerModal, { type ChartRange, type MenuAnchor } from '../../components/coach/RangePickerModal';
+import { hasLoggedNothing, visibleChartMetrics, type ChartMetric, type MetricsLogged } from '../../utils/progressMetrics';
+import {
+  displayToGoalKm, distanceGoalProgress, formatDistanceValue, goalKmToDisplay,
+} from '../../utils/weeklyDistanceGoal';
 import RoutinePickerModal from '../../components/coach/RoutinePickerModal';
 import MusclePickerModal from '../../components/coach/MusclePickerModal';
 
@@ -41,9 +45,8 @@ const MINI_RING_CIRCUMFERENCE = 2 * Math.PI * MINI_RING_R;
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'TrainingHome'>;
 
-type ProgressBucket = { label: string; volume: number; sets: number; count: number };
-type ChartRange = '30d' | '6m' | '1y';
-type ChartMetric = 'volume' | 'sets' | 'workouts';
+type ProgressBucket = { label: string; volume: number; sets: number; count: number; distance_km?: number };
+type ProgressResponse = { buckets?: ProgressBucket[]; metrics_logged?: MetricsLogged };
 type Exercise = TemplateExercise;
 type MuscleVolumeData = {
   muscle_sets: Record<string, number>;
@@ -148,10 +151,9 @@ export default function CoachScreen({ navigation }: Props) {
     });
   }, [user?.id]);
 
-  const METRICS: ChartMetric[] = ['volume', 'sets', 'workouts'];
   const metricAnimRef = useRef(new Animated.Value(0)).current;
   const { width: SCREEN_WIDTH } = Dimensions.get('window');
-  const METRIC_SLIDE_WIDTH = (SCREEN_WIDTH - spacing.lg * 2 - spacing.md * 2) / 3;
+  const METRIC_BAR_WIDTH = SCREEN_WIDTH - spacing.lg * 2 - spacing.md * 2;
 
   // ── Tab animations ──────────────────────────────────────────────────────────
   const TAB_NAMES = ['training', 'progress', 'coach'] as const;
@@ -210,7 +212,7 @@ export default function CoachScreen({ navigation }: Props) {
   handleTabChangeRef.current = handleTabChange;
 
   const handleMetricChange = (m: ChartMetric) => {
-    const idx = METRICS.indexOf(m);
+    const idx = visibleMetrics.indexOf(m);
     Animated.timing(metricAnimRef, { toValue: idx, duration: 200, useNativeDriver: true }).start();
     setChartMetric(m);
     setSelectedBarIndex(null);
@@ -222,6 +224,12 @@ export default function CoachScreen({ navigation }: Props) {
   const [chartMetric, setChartMetric] = useState<ChartMetric>('volume');
   const [weeklyGoal, setWeeklyGoal] = useState(3);
   const [thisWeekCount, setThisWeekCount] = useState(0);
+  // Optional, in km; null until the user turns a distance goal on.
+  const [weeklyDistanceGoalKm, setWeeklyDistanceGoalKm] = useState<number | null>(null);
+  const [thisWeekDistanceKm, setThisWeekDistanceKm] = useState(0);
+  // All-time, from the progress endpoint; null until it answers (or from a
+  // backend that predates it). Decides which metric tabs the chart offers.
+  const [metricsLogged, setMetricsLogged] = useState<MetricsLogged | null>(null);
   const [strengthPercentile, setStrengthPercentile] = useState<number | null>(null);
   const [strengthRankLabel, setStrengthRankLabel] = useState<string | null>(null);
   const [endurancePercentile, setEndurancePercentile] = useState<number | null>(null);
@@ -229,6 +237,8 @@ export default function CoachScreen({ navigation }: Props) {
   const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeData | null>(null);
   const [weeklySummaryPreview, setWeeklySummaryPreview] = useState<WeeklySummaryPreview | null>(null);
   const [rangePickerVisible, setRangePickerVisible] = useState(false);
+  const [rangeAnchor, setRangeAnchor] = useState<MenuAnchor | null>(null);
+  const rangeButtonRef = useRef<View>(null);
   const [goalModalVisible, setGoalModalVisible] = useState(false);
   const [workingSetsInfoVisible, setWorkingSetsInfoVisible] = useState(false);
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
@@ -261,11 +271,15 @@ export default function CoachScreen({ navigation }: Props) {
   // and a `_undefined` key would just read back the defaults.
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.multiGet([`${COACH_PROFILE_KEY}_${user.id}`, `${WEEKLY_GOAL_KEY}_${user.id}`]).then(([profileRaw, goalRaw]) => {
+    AsyncStorage.multiGet([
+      `${COACH_PROFILE_KEY}_${user.id}`, `${WEEKLY_GOAL_KEY}_${user.id}`, `${WEEKLY_DISTANCE_GOAL_KEY}_${user.id}`,
+    ]).then(([profileRaw, goalRaw, distanceGoalRaw]) => {
       if (profileRaw[1]) {
         try { setCoachProfile({ ...DEFAULT_PROFILE, ...JSON.parse(profileRaw[1]) }); } catch { }
       }
       if (goalRaw[1]) setWeeklyGoal(parseInt(goalRaw[1], 10) || 3);
+      const goalKm = distanceGoalRaw[1] ? parseFloat(distanceGoalRaw[1]) : NaN;
+      setWeeklyDistanceGoalKm(goalKm > 0 ? goalKm : null);
     });
   }, [user?.id]);
 
@@ -285,6 +299,28 @@ export default function CoachScreen({ navigation }: Props) {
     const next = Math.max(1, Math.min(7, weeklyGoal + delta));
     setWeeklyGoal(next);
     AsyncStorage.setItem(`${WEEKLY_GOAL_KEY}_${user?.id}`, String(next));
+  };
+
+  // `value` is in the display unit; null turns the goal off.
+  const updateWeeklyDistanceGoal = (value: number | null) => {
+    const key = `${WEEKLY_DISTANCE_GOAL_KEY}_${user?.id}`;
+    if (value == null) {
+      setWeeklyDistanceGoalKm(null);
+      AsyncStorage.removeItem(key);
+      return;
+    }
+    const km = displayToGoalKm(value, distanceUnit);
+    setWeeklyDistanceGoalKm(km);
+    AsyncStorage.setItem(key, String(km));
+  };
+
+  // This week is the newest 30d bucket, the same source as thisWeekCount.
+  const applyThisWeek = (data: ProgressResponse) => {
+    const buckets = data.buckets ?? [];
+    const thisWeek = buckets[buckets.length - 1];
+    setThisWeekCount(thisWeek?.count ?? 0);
+    setThisWeekDistanceKm(thisWeek?.distance_km ?? 0);
+    if (data.metrics_logged) setMetricsLogged(data.metrics_logged);
   };
 
   // ── Data fetching ───────────────────────────────────────────────────────────
@@ -307,8 +343,8 @@ export default function CoachScreen({ navigation }: Props) {
     if (mv) setMuscleVolume(mv);
     const wsp = appCache.get<WeeklySummaryPreview>('weekly_summary_preview');
     if (wsp) setWeeklySummaryPreview(wsp);
-    const prog30 = appCache.get<{ buckets: ProgressBucket[] }>('progress');
-    if (prog30?.buckets?.length) setThisWeekCount(prog30.buckets[prog30.buckets.length - 1]?.count ?? 0);
+    const prog30 = appCache.get<ProgressResponse>('progress');
+    if (prog30) applyThisWeek(prog30);
   }, []);
 
   useEffect(() => {
@@ -326,7 +362,11 @@ export default function CoachScreen({ navigation }: Props) {
   const fetchProgressData = async (range: ChartRange) => {
     try {
       const res = await apiFetch(`/api/stats/progress?range=${range}`);
-      if (res.ok) setProgressData((await res.json()).buckets ?? []);
+      if (res.ok) {
+        const data: ProgressResponse = await res.json();
+        setProgressData(data.buckets ?? []);
+        if (data.metrics_logged) setMetricsLogged(data.metrics_logged);
+      }
     } catch { }
   };
 
@@ -390,10 +430,7 @@ export default function CoachScreen({ navigation }: Props) {
   const fetchThisWeekCount = async () => {
     try {
       const res = await apiFetch('/api/stats/progress?range=30d');
-      if (res.ok) {
-        const buckets: ProgressBucket[] = (await res.json()).buckets ?? [];
-        setThisWeekCount(buckets[buckets.length - 1]?.count ?? 0);
-      }
+      if (res.ok) applyThisWeek(await res.json());
     } catch { }
   };
 
@@ -599,6 +636,30 @@ export default function CoachScreen({ navigation }: Props) {
     // backing out without saving doesn't leave an empty template behind.
     navigation.navigate('TemplateDetail', {
       muscleGroups: selectedMuscles.length > 0 ? selectedMuscles : undefined,
+    });
+  };
+
+  const visibleMetrics = useMemo(() => visibleChartMetrics(metricsLogged), [metricsLogged]);
+  // Falling back here rather than resetting state keeps the user's pick for
+  // when that metric's tab comes back.
+  const activeMetric: ChartMetric = visibleMetrics.includes(chartMetric)
+    ? chartMetric
+    : (visibleMetrics[0] ?? 'workouts');
+  const metricSlideWidth = METRIC_BAR_WIDTH / Math.max(1, visibleMetrics.length);
+  const visibleMetricsKey = visibleMetrics.join(',');
+  useEffect(() => {
+    // Tabs were added or removed under the slider; put it back on the active one.
+    metricAnimRef.setValue(Math.max(0, visibleMetrics.indexOf(activeMetric)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleMetricsKey]);
+
+  // Opens straight away; the menu stays invisible for the frame until the
+  // button's position comes back, so the tap never waits on the measurement.
+  const openRangePicker = () => {
+    setRangeAnchor(null);
+    setRangePickerVisible(true);
+    rangeButtonRef.current?.measureInWindow((x, y, width, height) => {
+      setRangeAnchor({ x, y, width, height });
     });
   };
 
@@ -1090,13 +1151,16 @@ export default function CoachScreen({ navigation }: Props) {
       {activeTab === 'progress' && (
         <ScrollView contentContainerStyle={styles.content}>
           {(() => {
-            const hasData = progressData.some(b =>
-              chartMetric === 'volume' ? b.volume > 0 : chartMetric === 'sets' ? b.sets > 0 : b.count > 0
-            );
             const getValue = (b: ProgressBucket) =>
-              chartMetric === 'volume' ? b.volume : chartMetric === 'sets' ? b.sets : b.count;
-            const metricLabel = chartMetric === 'volume'
-              ? `Volume (${weightUnit})` : chartMetric === 'sets' ? 'Sets' : 'Workouts';
+              activeMetric === 'volume' ? b.volume
+                : activeMetric === 'sets' ? b.sets
+                : activeMetric === 'distance' ? roundTenth(toDisplayDistance(b.distance_km ?? 0, distanceUnit))
+                : b.count;
+            const hasData = progressData.some(b => getValue(b) > 0);
+            const metricLabel = activeMetric === 'volume' ? `Volume (${weightUnit})`
+              : activeMetric === 'sets' ? 'Sets'
+              : activeMetric === 'distance' ? `Distance (${distanceUnit})`
+              : 'Workouts';
 
             const BAR_GAP = 6;
             const N = progressData.length || 1;
@@ -1105,9 +1169,18 @@ export default function CoachScreen({ navigation }: Props) {
             const maxVal = Math.max(...progressData.map(getValue), 1);
 
             const formatTopLabel = (val: number) => {
-              if (chartMetric === 'volume' && val >= 1000) return `${(val / 1000).toFixed(val % 1000 === 0 ? 0 : 1)}K`;
+              if (activeMetric === 'volume' && val >= 1000) return `${(val / 1000).toFixed(val % 1000 === 0 ? 0 : 1)}K`;
+              if (activeMetric === 'distance') return formatDistanceValue(val);
               return String(val);
             };
+
+            // 3M packs 13 weekly bars into the width 30D gives 5, about 12px
+            // each, and the library sizes a label to its bar, so "9/22" won't
+            // fit. Every other week gets a label, drawn wider and recentred
+            // over its bar; the newest week always keeps one.
+            const THIN_LABELS = chartRange === '3m';
+            const X_LABEL_WIDTH = 36;
+            const lastIndex = progressData.length - 1;
 
             // gifted-charts sizes the top-label container to exactly barWidth,
             // which on the 6m/1y ranges (many narrow bars) is far too narrow
@@ -1117,7 +1190,21 @@ export default function CoachScreen({ navigation }: Props) {
             const TOP_LABEL_WIDTH = 50;
             const barData = progressData.map((b, i) => ({
               value: getValue(b),
-              label: b.label,
+              label: THIN_LABELS ? undefined : b.label,
+              labelComponent: THIN_LABELS
+                ? () => (
+                    <Text
+                      numberOfLines={1}
+                      style={[styles.axisLabel, {
+                        width: X_LABEL_WIDTH,
+                        marginLeft: (barWidth + BAR_GAP - X_LABEL_WIDTH) / 2,
+                        textAlign: 'center',
+                      }]}
+                    >
+                      {(lastIndex - i) % 2 === 0 ? b.label : ''}
+                    </Text>
+                  )
+                : undefined,
               frontColor: i === selectedBarIndex ? colors.accent : colors.accent + '99',
               onPress: () => setSelectedBarIndex(prev => prev === i ? null : i),
               topLabelComponent: i === selectedBarIndex
@@ -1133,13 +1220,21 @@ export default function CoachScreen({ navigation }: Props) {
               topLabelContainerStyle: { width: TOP_LABEL_WIDTH, left: -(TOP_LABEL_WIDTH - barWidth) / 2 },
             }));
 
+            // Goal line: the weekly goal on weekly bars (30D, 3M), four weeks'
+            // worth on monthly bars (6M, 1Y). Distance only has one once the
+            // user has set a distance goal.
             const isMonthlyRange = chartRange === '6m' || chartRange === '1y';
-            const referenceLinePos = isMonthlyRange ? weeklyGoal * 4 : weeklyGoal;
-            const referenceLineLabel = chartMetric === 'workouts'
-              ? (isMonthlyRange ? `Goal: ${weeklyGoal * 4}/mo` : `Goal: ${weeklyGoal}/wk`)
+            const weeklyTarget = activeMetric === 'workouts' ? weeklyGoal
+              : activeMetric === 'distance' && weeklyDistanceGoalKm != null
+                ? goalKmToDisplay(weeklyDistanceGoalKm, distanceUnit)
+                : null;
+            const referenceLinePos = weeklyTarget != null ? roundTenth(isMonthlyRange ? weeklyTarget * 4 : weeklyTarget) : 0;
+            const unitSuffix = activeMetric === 'distance' ? ` ${distanceUnit}` : '';
+            const referenceLineLabel = weeklyTarget != null
+              ? `Goal: ${formatDistanceValue(referenceLinePos)}${unitSuffix}/${isMonthlyRange ? 'mo' : 'wk'}`
               : '';
 
-            const RANGE_SHORT: Record<ChartRange, string> = { '30d': '30D', '6m': '6M', '1y': '1Y' };
+            const RANGE_SHORT: Record<ChartRange, string> = { '30d': '30D', '3m': '3M', '6m': '6M', '1y': '1Y' };
             const scoreRingColor = strengthRankLabel
               ? (SCORE_RANK_COLORS[strengthRankLabel] ?? colors.accent)
               : colors.border;
@@ -1199,6 +1294,26 @@ export default function CoachScreen({ navigation }: Props) {
                         );
                       })}
                     </View>
+                    {weeklyDistanceGoalKm != null && (() => {
+                      const dg = distanceGoalProgress(thisWeekDistanceKm, weeklyDistanceGoalKm, distanceUnit);
+                      return (
+                        <View
+                          style={styles.distanceGoalWrap}
+                          accessible
+                          accessibilityLabel={`${formatDistanceValue(dg.done)} of ${formatDistanceValue(dg.goal)} ${distanceUnit === 'mi' ? 'miles' : 'kilometers'} this week`}
+                        >
+                          <View style={styles.distanceGoalTrack}>
+                            <View testID="distance-goal-fill" style={[styles.distanceGoalFill, { width: `${dg.fill * 100}%` }]} />
+                          </View>
+                          <View style={styles.distanceGoalLabelRow}>
+                            {dg.complete && <Ionicons name="checkmark-circle" size={12} color={colors.accent} />}
+                            <Text style={styles.distanceGoalLabel}>
+                              {formatDistanceValue(dg.done)} / {formatDistanceValue(dg.goal)} {distanceUnit}
+                            </Text>
+                          </View>
+                        </View>
+                      );
+                    })()}
                     <Text style={styles.goalSideSub}>
                       {Math.min(thisWeekCount, weeklyGoal)}/{weeklyGoal} this week · Tap to edit
                     </Text>
@@ -1267,11 +1382,24 @@ export default function CoachScreen({ navigation }: Props) {
                   <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
                 </TouchableOpacity>
 
-                {/* Chart card */}
+                {/* Chart card. Someone who hasn't logged anything gets the card
+                    with no tabs or range to pick, since there's nothing to chart. */}
+                {hasLoggedNothing(metricsLogged) ? (
+                  <View style={styles.chartCard}>
+                    <View style={styles.chartEmpty}>
+                      <Text style={styles.emptyText}>Start logging to track your progress</Text>
+                    </View>
+                  </View>
+                ) : (
                 <View style={styles.chartCard}>
                   <View style={styles.chartHeader}>
                     <Text style={styles.chartTitle}>{metricLabel}</Text>
-                    <TouchableOpacity style={styles.rangeDropdown} onPress={() => setRangePickerVisible(true)}>
+                    <TouchableOpacity
+                      ref={rangeButtonRef}
+                      style={styles.rangeDropdown}
+                      onPress={openRangePicker}
+                      accessibilityLabel={`Chart range, ${RANGE_SHORT[chartRange]}`}
+                    >
                       <Text style={styles.rangeDropdownText}>{RANGE_SHORT[chartRange]}</Text>
                       <Ionicons name="chevron-down" size={12} color={colors.textSecondary} />
                     </TouchableOpacity>
@@ -1279,7 +1407,7 @@ export default function CoachScreen({ navigation }: Props) {
 
                   {hasData ? (
                     <BarChart
-                      key={`${chartRange}-${chartMetric}`}
+                      key={`${chartRange}-${activeMetric}`}
                       data={barData}
                       barWidth={barWidth}
                       spacing={BAR_GAP}
@@ -1288,7 +1416,12 @@ export default function CoachScreen({ navigation }: Props) {
                       xAxisLabelTextStyle={styles.axisLabel}
                       yAxisTextStyle={styles.axisLabel}
                       noOfSections={4}
-                      maxValue={Math.max(maxVal * 1.2, chartMetric === 'workouts' ? referenceLinePos + 1 : 1)}
+                      maxValue={Math.max(
+                        maxVal * 1.2,
+                        activeMetric === 'workouts' && weeklyTarget != null ? referenceLinePos + 1
+                          : weeklyTarget != null ? referenceLinePos * 1.1
+                          : 1,
+                      )}
                       height={150}
                       barBorderRadius={3}
                       xAxisThickness={1}
@@ -1297,11 +1430,14 @@ export default function CoachScreen({ navigation }: Props) {
                       yAxisColor={colors.border}
                       formatYLabel={(v) => {
                         const n = parseFloat(v);
-                        if (chartMetric === 'volume' && n >= 1000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}K`;
+                        if (activeMetric === 'volume' && n >= 1000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}K`;
+                        // Axis steps on a short run land on values like 1.25; a
+                        // tenth is as fine as the bars themselves go.
+                        if (activeMetric === 'distance') return formatDistanceValue(n >= 10 ? Math.round(n) : roundTenth(n));
                         return v;
                       }}
                       isAnimated
-                      showReferenceLine1={chartMetric === 'workouts'}
+                      showReferenceLine1={weeklyTarget != null}
                       referenceLine1Position={referenceLinePos}
                       referenceLine1Config={{
                         color: colors.accent, thickness: 1.5, type: 'dashed',
@@ -1313,13 +1449,13 @@ export default function CoachScreen({ navigation }: Props) {
                     />
                   ) : (
                     <View style={styles.chartEmpty}>
-                      <Text style={styles.emptyText}>No data yet. Log a few workouts to fill this in.</Text>
+                      <Text style={styles.emptyText}>Nothing logged in this range yet.</Text>
                     </View>
                   )}
 
                   {/* Metric selector */}
                   <View style={styles.metricBar}>
-                    {METRICS.map((m, idx) => (
+                    {visibleMetrics.map((m, idx) => (
                       <React.Fragment key={m}>
                         {idx > 0 && <View style={styles.metricDivider} />}
                         <TouchableOpacity
@@ -1327,7 +1463,7 @@ export default function CoachScreen({ navigation }: Props) {
                           onPress={() => handleMetricChange(m)}
                           activeOpacity={0.7}
                         >
-                          <Text style={[styles.metricText, chartMetric === m && { color: colors.accent, fontWeight: '700' }]}>
+                          <Text style={[styles.metricText, activeMetric === m && { color: colors.accent, fontWeight: '700' }]}>
                             {m.charAt(0).toUpperCase() + m.slice(1)}
                           </Text>
                         </TouchableOpacity>
@@ -1335,15 +1471,15 @@ export default function CoachScreen({ navigation }: Props) {
                     ))}
                     <Animated.View
                       style={[styles.metricSlider, {
-                        width: METRIC_SLIDE_WIDTH,
-                        transform: [{ translateX: metricAnimRef.interpolate({
-                          inputRange: [0, 1, 2],
-                          outputRange: [0, METRIC_SLIDE_WIDTH, METRIC_SLIDE_WIDTH * 2],
-                        }) }],
+                        width: metricSlideWidth,
+                        // multiply, not interpolate: interpolate needs at least
+                        // two points and a user can have a single tab.
+                        transform: [{ translateX: Animated.multiply(metricAnimRef, metricSlideWidth) }],
                       }]}
                     />
                   </View>
                 </View>
+                )}
 
                 {renderMuscleVolumeCard()}
               </>
@@ -1360,6 +1496,9 @@ export default function CoachScreen({ navigation }: Props) {
         visible={goalModalVisible}
         weeklyGoal={weeklyGoal}
         onChangeGoal={updateWeeklyGoal}
+        distanceGoal={weeklyDistanceGoalKm != null ? goalKmToDisplay(weeklyDistanceGoalKm, distanceUnit) : null}
+        distanceUnit={distanceUnit}
+        onChangeDistanceGoal={updateWeeklyDistanceGoal}
         onClose={() => setGoalModalVisible(false)}
       />
 
@@ -1372,6 +1511,7 @@ export default function CoachScreen({ navigation }: Props) {
       <RangePickerModal
         visible={rangePickerVisible}
         chartRange={chartRange}
+        anchor={rangeAnchor}
         onSelect={handleRangeChange}
         onClose={() => setRangePickerVisible(false)}
       />
@@ -1459,6 +1599,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   goalCirclesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: spacing.sm },
   goalCircle: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   goalSideSub: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
+  distanceGoalWrap: { marginBottom: spacing.sm },
+  distanceGoalTrack: { height: 6, borderRadius: 3, backgroundColor: colors.border, overflow: 'hidden' },
+  distanceGoalFill: { height: '100%', borderRadius: 3, backgroundColor: colors.accent },
+  distanceGoalLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  distanceGoalLabel: { fontSize: typography.fontSize.xs, color: colors.textPrimary, fontWeight: '600' },
   enduranceRing: { width: MINI_RING_SIZE, height: MINI_RING_SIZE, alignItems: 'center', justifyContent: 'center' },
   enduranceRingCenter: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   enduranceRingNum: { fontSize: typography.fontSize.sm, fontWeight: '800' },

@@ -2451,3 +2451,92 @@ class TestProfileCardioTotals:
         assert data['week_cardio_distance_km'] == 0
         assert data['week_cardio_minutes'] == 0
         assert data['cardio_activities'] == 1
+
+
+# ---------------------------------------------------------------------------
+# GET /api/stats/progress: 3m range, distance, metrics_logged
+# ---------------------------------------------------------------------------
+
+class TestProgressDistanceAndRanges:
+    TODAY = date.today()
+
+    def _get(self, client, token, range_param='30d'):
+        res = client.get(
+            f'/api/stats/progress?range={range_param}',
+            headers={**auth_headers(token), 'X-Local-Date': self.TODAY.isoformat()},
+        )
+        assert res.status_code == 200
+        return res.get_json()
+
+    def _post(self, client, token, exercises):
+        res = client.post('/api/workouts', json={'workoutName': 'W', 'exercises': exercises},
+                          headers=auth_headers(token))
+        assert res.status_code == 201, res.get_json()
+        return res.get_json()['id']
+
+    def _run(self, distance, unit='km', exercise_type='cardio'):
+        return [{'name': 'Run', 'exercise_type': exercise_type,
+                 'sets': [{'cardio_duration': 30, 'distance': distance, 'distance_unit': unit}]}]
+
+    def test_3m_is_13_weekly_buckets_ending_this_week(self, client, auth_token):
+        buckets = self._get(client, auth_token, '3m')['buckets']
+        assert len(buckets) == 13
+        this_monday = self.TODAY - timedelta(days=self.TODAY.weekday())
+        first_monday = this_monday - timedelta(weeks=12)
+        assert buckets[-1]['label'] == f'{this_monday.month}/{this_monday.day}'
+        assert buckets[0]['label'] == f'{first_monday.month}/{first_monday.day}'
+
+    def test_3m_counts_a_workout_12_weeks_back_but_not_13(self, client, auth_token, app):
+        this_monday = self.TODAY - timedelta(days=self.TODAY.weekday())
+        inside = self._post(client, auth_token, self._run(5))
+        _backdate(app, inside, this_monday - timedelta(weeks=12))
+        outside = self._post(client, auth_token, self._run(5))
+        _backdate(app, outside, this_monday - timedelta(weeks=12, days=1))
+        buckets = self._get(client, auth_token, '3m')['buckets']
+        assert buckets[0]['count'] == 1
+        assert sum(b['count'] for b in buckets) == 1
+
+    def test_distance_sums_km_and_miles_into_km(self, client, auth_token):
+        self._post(client, auth_token, self._run(5, 'km'))
+        self._post(client, auth_token, self._run(2, 'mi'))
+        this_week = self._get(client, auth_token)['buckets'][-1]
+        assert this_week['distance_km'] == pytest.approx(5 + 2 * 1.60934, abs=0.001)
+
+    def test_distance_ignores_non_cardio_exercises(self, client, auth_token):
+        # A timed hold also fills cardio_duration; a distance on it isn't a run.
+        self._post(client, auth_token, self._run(3, exercise_type='duration'))
+        assert self._get(client, auth_token)['buckets'][-1]['distance_km'] == 0
+
+    def test_every_range_has_distance_on_every_bucket(self, client, auth_token):
+        for r in ('30d', '3m', '6m', '1y'):
+            assert all('distance_km' in b for b in self._get(client, auth_token, r)['buckets']), r
+
+    def test_metrics_logged_all_false_for_new_user(self, client, auth_token):
+        assert self._get(client, auth_token)['metrics_logged'] == {
+            'workouts': False, 'volume': False, 'sets': False, 'distance': False,
+        }
+
+    def test_metrics_logged_for_cardio_only_user(self, client, auth_token):
+        # Cardio sets have no reps, so they aren't "sets" on this chart.
+        self._post(client, auth_token, self._run(5))
+        assert self._get(client, auth_token)['metrics_logged'] == {
+            'workouts': True, 'volume': False, 'sets': False, 'distance': True,
+        }
+
+    def test_metrics_logged_for_strength_only_user(self, client, auth_token):
+        self._post(client, auth_token, WORKOUT_PAYLOAD['exercises'])
+        assert self._get(client, auth_token)['metrics_logged'] == {
+            'workouts': True, 'volume': True, 'sets': True, 'distance': False,
+        }
+
+    def test_metrics_logged_spans_all_time_not_the_range(self, client, auth_token, app):
+        # Logged two years ago: nothing in the 1y buckets, but the tab stays.
+        wid = self._post(client, auth_token, self._run(5))
+        _backdate(app, wid, self.TODAY - timedelta(days=730))
+        data = self._get(client, auth_token, '1y')
+        assert sum(b['count'] for b in data['buckets']) == 0
+        assert data['metrics_logged']['distance'] is True
+
+    def test_metrics_logged_ignores_other_users(self, client, auth_token, auth_token2):
+        self._post(client, auth_token2, self._run(5))
+        assert self._get(client, auth_token)['metrics_logged']['workouts'] is False

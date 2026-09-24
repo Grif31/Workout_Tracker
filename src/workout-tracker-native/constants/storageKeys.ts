@@ -24,5 +24,9 @@ export const LIVE_WORKOUT_NOTIF_KEY = 'live_workout_notif_enabled';
 export const REST_ALERTS_KEY = 'rest_timer_alerts_enabled';
 // Per user: `${WEEKLY_GOAL_KEY}_${userId}`.
 export const WEEKLY_GOAL_KEY = 'workout_weekly_goal';
+// Per user: `${WEEKLY_DISTANCE_GOAL_KEY}_${userId}`. Optional weekly distance
+// target, stored in km so a mi/km switch in Settings never changes it. No key
+// means the user hasn't turned one on. Display only: it feeds no streaks.
+export const WEEKLY_DISTANCE_GOAL_KEY = 'workout_weekly_distance_goal';
 // Per user: `${PROFILE_FRAME_RANK_KEY}_${userId}`, the avatar frame picked on Greek Rank.
 export const PROFILE_FRAME_RANK_KEY = 'profile_frame_rank';

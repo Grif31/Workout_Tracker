@@ -462,16 +462,20 @@ def progress_stats():
     range_param = request.args.get('range', '30d')
     today = user_today()
 
-    if range_param == '30d':
-        start_of_week = today - timedelta(days=today.weekday())
-        thirty_days_ago = today - timedelta(days=29)
-        start_monday = thirty_days_ago - timedelta(days=thirty_days_ago.weekday())
-        num_weeks = ((start_of_week - start_monday).days // 7) + 1
+    if range_param in ('30d', '3m'):
+        this_monday = today - timedelta(days=today.weekday())
+        if range_param == '30d':
+            thirty_days_ago = today - timedelta(days=29)
+            start_monday = thirty_days_ago - timedelta(days=thirty_days_ago.weekday())
+        else:
+            # 13 weeks: this one plus the 12 before it.
+            start_monday = this_monday - timedelta(weeks=12)
+        num_weeks = ((this_monday - start_monday).days // 7) + 1
         buckets = []
         for i in range(num_weeks):
             ws = start_monday + timedelta(weeks=i)
             we = ws + timedelta(days=6)
-            buckets.append({'start': ws, 'end': we, 'label': f"{ws.month}/{ws.day}", 'volume': 0.0, 'sets': 0, 'count': 0})
+            buckets.append({'start': ws, 'end': we, 'label': f"{ws.month}/{ws.day}", 'volume': 0.0, 'sets': 0, 'count': 0, 'distance_km': 0.0})
         start = start_monday
         def assign(w, w_date):
             for b in buckets:
@@ -486,7 +490,7 @@ def progress_stats():
             while m <= 0: m += 12; y -= 1
             _, last_day = cal.monthrange(y, m)
             buckets.append({'start': date(y, m, 1), 'end': date(y, m, last_day),
-                            'label': MONTHS[m - 1], 'volume': 0.0, 'sets': 0, 'count': 0})
+                            'label': MONTHS[m - 1], 'volume': 0.0, 'sets': 0, 'count': 0, 'distance_km': 0.0})
         start = buckets[0]['start']
         def assign(w, w_date):
             for b in buckets:
@@ -501,7 +505,7 @@ def progress_stats():
             while m <= 0: m += 12; y -= 1
             _, last_day = cal.monthrange(y, m)
             buckets.append({'start': date(y, m, 1), 'end': date(y, m, last_day),
-                            'label': MONTHS[m - 1], 'volume': 0.0, 'sets': 0, 'count': 0})
+                            'label': MONTHS[m - 1], 'volume': 0.0, 'sets': 0, 'count': 0, 'distance_km': 0.0})
         start = buckets[0]['start']
         def assign(w, w_date):
             for b in buckets:
@@ -516,19 +520,54 @@ def progress_stats():
         w_date = w.date.date() if hasattr(w.date, 'date') else w.date
         assign(w, w_date)
 
-    return jsonify({'buckets': [
-        {'label': b['label'], 'volume': round(b['volume']), 'sets': b['sets'], 'count': b['count']}
-        for b in buckets
-    ]})
+    return jsonify({
+        'buckets': [
+            {'label': b['label'], 'volume': round(b['volume']), 'sets': b['sets'], 'count': b['count'],
+             'distance_km': round(b['distance_km'], 3)}
+            for b in buckets
+        ],
+        'metrics_logged': _metrics_logged(user_id),
+    })
+
+
+def _metrics_logged(user_id):
+    """Which chart metrics the user has ever logged, across all time.
+
+    The app shows a metric's tab only once there's something to chart, and the
+    buckets can't answer that: they only cover the selected range, so a lift
+    logged two years ago would look like "never" on the 1y view. Each rule
+    matches what the buckets count, so a tab never opens onto a metric the
+    chart can't fill.
+    """
+    own = Workout.query.filter(Workout.user_id == user_id)
+    own_sets = (
+        db.session.query(Set.id)
+        .join(Exercise, Set.exercise_id == Exercise.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .filter(Workout.user_id == user_id)
+    )
+    is_cardio = db.func.lower(db.func.coalesce(Exercise.exercise_type, 'strength')) == 'cardio'
+    return {
+        'workouts': db.session.query(own.exists()).scalar(),
+        'volume': db.session.query(own.filter(Workout.volume > 0).exists()).scalar(),
+        'sets': db.session.query(own_sets.filter(Set.reps.isnot(None), Set.reps != 0).exists()).scalar(),
+        'distance': db.session.query(own_sets.filter(is_cardio, Set.distance > 0).exists()).scalar(),
+    }
 
 
 def _add_workout(bucket, workout):
     bucket['count'] += 1
     bucket['volume'] += workout.volume or 0.0
     for ex in workout.exercises:
+        # Same rule as _cardio_totals, so this chart and Home's Cardio This Week
+        # agree: cardio exercises only, logged distance normalised to km.
+        is_cardio = (ex.exercise_type or 'strength').lower() == 'cardio'
         for s in ex.sets:
             if s.reps:
                 bucket['sets'] += 1
+            if is_cardio and s.distance:
+                is_miles = (s.distance_unit or 'km').lower() == 'mi'
+                bucket['distance_km'] += s.distance * 1.60934 if is_miles else s.distance
 
 
 @stats_bp.get('/api/stats/recent-exercises')
