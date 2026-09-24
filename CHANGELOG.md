@@ -16,8 +16,18 @@
 - Type an exact goal, or use the +1 and +5 buttons.
 - The chart only shows tabs for things you've logged, so a runner won't see empty Volume and Sets tabs. If you haven't logged anything yet, it asks you to start logging.
 
-### Fixed: Coach tab
+### Improved: Coach tab
 - The chart's range menu now opens next to its button instead of near the top of the screen.
+- Show All on your templates opens and closes smoothly.
+- The muscle sets info explains that an exercise's secondary muscles count as half a set. One set of bench press counts as a full set for chest and half a set each for triceps and shoulders.
+
+### Improved: Home
+- Your profile photo sits beside your greeting, in the frame you've equipped on Greek Rank. Tap it to open your Profile.
+- On the week calendar, days you trained are marked with a dot under the date.
+- A minimized workout's bar at the bottom of the screen is a little taller.
+
+### Improved: Weekly Summary
+- When you pick a week, the calendar highlights every day you worked out and shades the week you're viewing. It works the same on iPhone and Android.
 
 ### New: Cardio This Week
 - If you log cardio, Home shows your distance, time and number of activities since Monday. Distance follows your GPS distance setting, in miles or kilometers.
@@ -36,6 +46,9 @@
 - Tap the info button for a new explanation of how Greek Rank works.
 - Pull down to refresh. If your rank can't load, you'll see a message and a Try Again button instead of an empty screen.
 - The Aretē frame now has a laurel wreath.
+
+### Improved: Workouts
+- Removing an exercise from a workout slides the exercises below it up smoothly, like removing a set.
 
 ### Improved: Measurements
 - Measurements now show their unit: inches if you use lbs, centimeters if you use kg. Switching units converts your measurements along with your weights.
@@ -74,6 +87,10 @@
 - Exercise charts no longer show a workout on the day before it happened in some time zones.
 - Logging a workout the AI Coach generated no longer fails when a rep target is a single number.
 - Workouts the AI Coach generates now only use the exercise library and your own custom exercises.
+- On the Personal Records dashboard, the Time filter under Time Since Last PR now lists your runs and timed holds.
+- Pinned progression charts on the Personal Records dashboard fit inside their card, however many PRs they show.
+- Tapping a running or other cardio PR opens that activity's details, with its map, instead of the strength workout screen.
+- The activity name at the top of an activity's details is readable over the map.
 
 ## 1.1.7 (2026-09-17)
 
