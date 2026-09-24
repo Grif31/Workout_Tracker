@@ -27,6 +27,9 @@ export default function WorkingSetsInfoModal({ visible, onClose, muscleStandards
               A "working set" is a set taken close to failure; warmups don't count. Your weekly working sets per muscle are compared against three volume landmarks from exercise science:
             </Text>
             <Text style={styles.body}>
+              Each working set counts as <Text style={styles.bold}>1 set</Text> for the muscle an exercise mainly targets, and <Text style={styles.bold}>0.5 sets</Text> for the other muscles it works. One set of bench press adds 1 set to chest and 0.5 sets each to triceps and shoulders. A few lifts, like squats and deadlifts, count fully for more than one muscle.
+            </Text>
+            <Text style={styles.body}>
               <Text style={styles.bold}>MEV</Text> (Minimum Effective Volume): the least volume that still grows the muscle.{'\n'}
               <Text style={styles.bold}>MAV</Text> (Maximum Adaptive Volume): the sweet spot for the most growth per set.{'\n'}
               <Text style={styles.bold}>MRV</Text> (Maximum Recoverable Volume): the ceiling before fatigue outpaces recovery.
