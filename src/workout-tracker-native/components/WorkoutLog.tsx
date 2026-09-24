@@ -949,7 +949,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         {
           text: 'Remove',
           style: 'destructive',
-          onPress: () => setExercises(prev => prev.filter((_, i) => i !== exIndex)),
+          onPress: () => {
+            // Same row fade and sibling slide as removing a set.
+            animateNextRowChange();
+            setExercises(prev => prev.filter((_, i) => i !== exIndex));
+          },
         },
       ]
     ));

@@ -1,4 +1,6 @@
 /**
+ * The exercise menu's actions: Replace Exercise, and Remove at the end.
+ *
  * Regression cover for the workout going unresponsive after "Replace Exercise".
  *
  * The menu is a Modal and the exercise picker is another one. Opening the
@@ -12,10 +14,11 @@
  * keep working when the callback goes missing.
  */
 import React from 'react';
-import { Modal } from 'react-native';
+import { Alert, Modal } from 'react-native';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { mockFetch } from './testUtils';
 import WorkoutLog from '../components/WorkoutLog';
+import { animateNextRowChange } from '../utils/layoutAnimation';
 
 let mockPickerProps: any = null;
 jest.mock('../components/ExerciseList', () => {
@@ -41,6 +44,7 @@ jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => {
 });
 jest.mock('@react-native-community/datetimepicker', () => 'DateTimePicker');
 jest.mock('../components/NewExerciseForm', () => () => null);
+jest.mock('../utils/layoutAnimation', () => ({ animateNextRowChange: jest.fn(), animateNextLayout: jest.fn() }));
 jest.mock('constants/muscleGroups', () => ({ muscleGroups: ['Chest', 'Back', 'Quads'] }), { virtual: true });
 jest.mock('../theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 jest.mock('../theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));
@@ -162,5 +166,51 @@ describe('WorkoutLog — Replace Exercise', () => {
 
     expect(queryByTestId('exercise-picker')).not.toBeNull();
     expect(mockPickerProps.multiSelect).toBe(true);
+  });
+});
+
+describe('WorkoutLog — Remove Exercise', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    mockFetch([]);
+    (animateNextRowChange as jest.Mock).mockClear();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('animates the exercise out, the same way removing a set does', () => {
+    const alert = jest.spyOn(Alert, 'alert');
+    const { getByTestId, getByText, queryByText } = render(
+      <WorkoutLog prefill={prefill as any} onSubmit={jest.fn()} onCancel={jest.fn()} />,
+    );
+    expect(getByText('Bench Press')).toBeTruthy();
+
+    pressMenu(getByTestId);
+    fireEvent.press(getByText('Remove'));
+    settleMenuDismiss();
+
+    const buttons = alert.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    act(() => { buttons.find(b => b.text === 'Remove')!.onPress!(); });
+
+    expect(animateNextRowChange).toHaveBeenCalledTimes(1);
+    expect(queryByText('Bench Press')).toBeNull();
+  });
+
+  it('does not animate or remove anything when cancelled', () => {
+    const alert = jest.spyOn(Alert, 'alert');
+    const { getByTestId, getByText } = render(
+      <WorkoutLog prefill={prefill as any} onSubmit={jest.fn()} onCancel={jest.fn()} />,
+    );
+    pressMenu(getByTestId);
+    fireEvent.press(getByText('Remove'));
+    settleMenuDismiss();
+
+    const buttons = alert.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    act(() => { buttons.find(b => b.text === 'Cancel')?.onPress?.(); });
+
+    expect(animateNextRowChange).not.toHaveBeenCalled();
+    expect(getByText('Bench Press')).toBeTruthy();
   });
 });
