@@ -748,7 +748,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
         onRequestClose={() => setMenuEvent(null)}
       >
         <TouchableOpacity
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
           activeOpacity={1}
           onPress={() => setMenuEvent(null)}
         />

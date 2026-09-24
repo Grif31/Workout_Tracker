@@ -1,14 +1,15 @@
 {
   "cli": {
-    "version": ">= 16.17.4",
+    "version": ">= 24.7.0",
     "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "node": "20.18.0",
+      "node": "22.14.0",
       "env": {
+        "EXPO_PUBLIC_USE_RN_FETCH": "1",
         "npm_config_legacy_peer_deps": "true",
         "APP_VARIANT": "development",
         "EXPO_PUBLIC_BETA_PREMIUM": "true"
@@ -17,8 +18,9 @@
     "preview": {
       "distribution": "internal",
       "autoIncrement": true,
-      "node": "20.18.0",
+      "node": "22.14.0",
       "env": {
+        "EXPO_PUBLIC_USE_RN_FETCH": "1",
         "EXPO_PUBLIC_API_URL": "https://workouttracker-production-601f.up.railway.app",
         "EXPO_PUBLIC_REVENUECAT_IOS_KEY": "appl_BocohNqMylioBFqmnkVBwwCpHGg",
         "EXPO_PUBLIC_BETA_PREMIUM": "true",
@@ -27,8 +29,9 @@
     },
     "production": {
       "autoIncrement": true,
-      "node": "20.18.0",
+      "node": "22.14.0",
       "env": {
+        "EXPO_PUBLIC_USE_RN_FETCH": "1",
         "EXPO_PUBLIC_API_URL": "https://workouttracker-production-601f.up.railway.app",
         "EXPO_PUBLIC_REVENUECAT_IOS_KEY": "appl_BocohNqMylioBFqmnkVBwwCpHGg",
         "EXPO_PUBLIC_BETA_PREMIUM": "true",

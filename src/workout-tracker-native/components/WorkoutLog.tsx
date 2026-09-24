@@ -1621,7 +1621,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           which broke DraggableList's PanResponder-based long-press-to-drag
           (it works fine as a normal in-tree view, e.g. TemplateDetailScreen). */}
       {reorderMode && (
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: colors.background, zIndex: 50 }]}>
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background, zIndex: 50 }]}>
           <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
             <View style={styles.headerBtn} />
             <Text style={styles.headerTitle}>Reorder Exercises</Text>
@@ -1776,7 +1776,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             touch-catcher over the screen. */}
         {openMenuIdx !== null && (
           <TouchableOpacity
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
             activeOpacity={1}
             onPress={() => setOpenMenuIdx(null)}
           />
@@ -1909,7 +1909,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         onRequestClose={() => setRpePickerTarget(null)}
       >
         <TouchableOpacity
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
           activeOpacity={1}
           onPress={() => setRpePickerTarget(null)}
         />
@@ -1975,7 +1975,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         onRequestClose={() => setSetTypePickerTarget(null)}
       >
         <TouchableOpacity
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
           activeOpacity={1}
           onPress={() => setSetTypePickerTarget(null)}
         />

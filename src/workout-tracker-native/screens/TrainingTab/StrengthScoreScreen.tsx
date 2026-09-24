@@ -423,7 +423,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
             >
               <LinearGradient
                 colors={[rankColor + '26', colors.surface]}
-                style={StyleSheet.absoluteFillObject}
+                style={StyleSheet.absoluteFill}
               />
               <View style={styles.heroTopRow}>
                 <ScoreRing anim={ringAnim} color={rankColor} trackColor={colors.border} />

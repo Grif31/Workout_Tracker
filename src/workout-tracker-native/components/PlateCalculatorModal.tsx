@@ -126,7 +126,7 @@ export default function PlateCalculatorModal({ visible, targetWeight, weightUnit
       onRequestClose={onClose}
     >
       <TouchableOpacity
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         activeOpacity={1}
         onPress={onClose}
       />

@@ -9,12 +9,6 @@ module.exports = {
     orientation: 'portrait',
     icon: './assets/Arete_icon.png',
     userInterfaceStyle: 'automatic',
-    newArchEnabled: true,
-    splash: {
-      image: './assets/Arete_splash.png',
-      resizeMode: 'contain',
-      backgroundColor: '#141416',
-    },
     ios: {
       supportsTablet: true,
       bundleIdentifier: IS_DEV ? 'com.aretefitness.app.dev' : 'com.aretefitness.app',
@@ -38,7 +32,6 @@ module.exports = {
         foregroundImage: './assets/Arete_icon.png',
         backgroundColor: '#ffffff',
       },
-      edgeToEdgeEnabled: true,
       package: IS_DEV ? 'com.aretefitness.app.dev' : 'com.aretefitness.app',
       versionCode: 3,
       permissions: [
@@ -67,6 +60,21 @@ module.exports = {
     },
     plugins: [
       'expo-dev-client',
+      [
+        // SDK 56 removed the top-level `splash` field. These are its old values
+        // one-for-one: SDK 55 already fed that field through this same plugin,
+        // so the splash renders exactly as before.
+        'expo-splash-screen',
+        {
+          image: './assets/Arete_splash.png',
+          resizeMode: 'contain',
+          backgroundColor: '#141416',
+        },
+      ],
+      'expo-font',
+      'expo-sharing',
+      'expo-status-bar',
+      '@react-native-community/datetimepicker',
       [
         // Auth tokens live in the keychain/keystore. The plugin's default Face ID
         // prompt string is for biometric-gated items, which the app has none of;

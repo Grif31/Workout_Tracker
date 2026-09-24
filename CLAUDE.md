@@ -14,7 +14,7 @@
 
 | Layer | Technology |
 |---|---|
-| Frontend | Expo SDK 55, React Native 0.83, TypeScript, New Architecture enabled |
+| Frontend | Expo SDK 57, React Native 0.86, TypeScript 6, New Architecture (always on since RN 0.82) |
 | Navigation | React Navigation v7 (bottom tabs + native stacks) |
 | State | React Context (AuthContext, ThemeContext, WorkoutSessionContext, PurchaseContext) |
 | Payments | RevenueCat (react-native-purchases) — iOS only, `premium` entitlement |
@@ -44,6 +44,11 @@ npx tsc --noEmit            # type check — covers __tests__/ too (tsconfig "in
 #   nonexistent "src" dir, so the program was only whatever App.tsx transitively imported: tests and
 #   any not-yet-wired file were silently outside the gate)
 npx expo install <pkg>      # install Expo-compatible package version
+#   SDK upgrades: `npx expo install expo@^N --fix` can fail with ERESOLVE, because it updates dependencies and
+#   devDependencies in two separate npm runs and the not-yet-updated jest-expo pins the old @react-native/jest-preset.
+#   Write the versions `expo install --check` lists into package.json and run one `npm install` instead.
+#   @react-native/jest-preset is a required peer of jest-expo and must match react-native exactly; bump them together.
+#   Before pushing, prove EAS can install: `npm_config_legacy_peer_deps=false npm ci` (only the development profile sets legacy peer deps)
 ```
 
 ### Backend (`src/`)
@@ -329,7 +334,7 @@ return jsonify({ 'message': 'error reason' }), 400   # client error
 - **Weight units:** per user — `user.weight_unit` is `'kg'` or `'lbs'`; delta: kg=2.5, lbs=5. Stored set weights, PR values (both `personal_records` and `pr_events`, incl. `previous_value`), and bodyweight logs are always in the user's *current* unit — switching units bulk-converts them (`_convert_stored_weights` in `user_routes.py`). Exception: `Workout.volume` is always lbs. Body measurements (`body_measurements`) have no unit column: they follow the weight unit (lbs → inches, kg → cm, `lengthUnitFor` in `utils/bodyMetrics.ts`) and `_convert_stored_weights` converts them ×/÷2.54 to the tenth on a switch.
 - **Adding a column that stores a weight (or weight-derived value):** it MUST be wired into `_convert_stored_weights` AND classified in `tests/test_unit_conversion_registry.py` (CONVERTED or EXEMPT-with-reason). That test name-scans all models for weight/value/volume columns and fails on unclassified ones — `pr_events` was originally missed this way and drifted out of unit after a kg↔lbs switch.
 - **Heart rate:** `Workout.avg_heart_rate` / `max_heart_rate`, integer bpm, nullable. Read from Apple Health after the workout POST succeeds and attached via PATCH (`utils/heartRateSync.ts`) — never folded into the POST, because a native HealthKit query must not delay a save. NULL is meaningful: it means no wearable or sync off, so never default these to 0. Aggregation lives in `utils/heartRate.ts`, which imports nothing native and so is unit-testable on any platform; it drops samples outside 20-260 bpm, mirroring the `validate.Range` in `schemas.py`. Any wearable that writes to Apple Health works (Apple Watch, chest strap, Whoop) — there is no watchOS target and no `WCSession`
-- **iOS health library:** `@kingstinct/react-native-healthkit` (a Nitro/New-Architecture module), NOT `react-native-health`. The latter is a legacy bridge module (no `codegenConfig`, `s.dependency 'React'`) and RN 0.83 is bridgeless-only, so it never registered and every call threw — that is why `HEALTH_SYNC_ENABLED` was false. Don't reintroduce it or any other old-arch native module
+- **iOS health library:** `@kingstinct/react-native-healthkit` (a Nitro/New-Architecture module), NOT `react-native-health`. The latter is a legacy bridge module (no `codegenConfig`, `s.dependency 'React'`) and RN 0.82+ is bridgeless-only, so it never registered and every call threw — that is why `HEALTH_SYNC_ENABLED` was false. Don't reintroduce it or any other old-arch native module
 - **Custom exercises:** `ExerciseTemplate.user_id` — NULL = global library exercise, set = that user's private custom exercise
 - **RPE:** 1–10 scale, optional per set, only shown when user enables it in workout settings
 - **User gender:** `user.gender` is `'male'` | `'female'` | `None` — used for strength score percentile calculations
@@ -354,6 +359,7 @@ return jsonify({ 'message': 'error reason' }), 400   # client error
 
 - Never hardcode colors outside the approved list above — and never hardcode PR gold hex values; use `PR_GOLD` / `PR_GOLD_TEXT` / `PR_GOLD_BG` from `constants/prColors.ts`
 - Never call `fetch` directly — use `apiFetch`
+- **Don't drop `EXPO_PUBLIC_USE_RN_FETCH=1`** from `eas.json` (all three profiles) or your local `.env`. SDK 56 replaces the global `fetch` with `expo/fetch` unless it's set, and the progress-photo upload in `MeasurementsScreen` sends a React Native `{ uri, name, type }` FormData file, which `expo/fetch` isn't documented to accept. The flag is read at bundle time, so a build without it silently changes networking. Removing it is a deliberate migration: test the photo upload on a device first
 - Never commit `.env` files
 - Don't add features, refactor, or abstract beyond what the task requires
 - Don't add error handling for scenarios that can't happen

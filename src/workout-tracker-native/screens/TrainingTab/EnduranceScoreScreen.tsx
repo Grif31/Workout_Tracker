@@ -407,7 +407,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
               onPress={() => setHeroExpanded(v => !v)}
               style={[styles.heroCard, { borderColor: rankColor }]}
             >
-              <LinearGradient colors={[rankColor + '26', colors.surface]} style={StyleSheet.absoluteFillObject} />
+              <LinearGradient colors={[rankColor + '26', colors.surface]} style={StyleSheet.absoluteFill} />
               <View style={styles.heroTopRow}>
                 <ScoreRing anim={ringAnim} color={rankColor} trackColor={colors.border} />
                 <View style={styles.heroTextCol}>

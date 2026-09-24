@@ -972,8 +972,8 @@ Check off items as you complete them.
 > - Shares native groundwork with the Apple Watch plan (Pre-Launch section 7): an App Group, an extra Apple target, and EAS signing for it. Whichever ships first should set this up so the other reuses it.
 
 ### Decisions to make first
-- [ ] **iOS tooling**: a SwiftUI WidgetKit extension added through a config plugin. Candidates: `@bacons/apple-targets` (generates Apple targets from a `targets/` folder during prebuild), or an official Expo widgets package if one is stable for SDK 55 by then. Confirm SDK 55 / RN 0.83 / New Architecture compatibility and that EAS can sign the extra target
-- [ ] **Android tooling**: `react-native-android-widget` (widgets described in JSX, updated from JS, ships a config plugin) vs. native Glance/RemoteViews. Confirm SDK 55 support
+- [x] **iOS tooling**: `expo-widgets` (widgets written as React components with `@expo/ui`, CNG generates the extension, App Group and SwiftUI glue, no Swift). Stable from SDK 56; the app was upgraded 55 to 57 for it on 2026-09-23/24 (57 rather than 56 because 56 ships a Hermes memory regression). Rejected `@bacons/apple-targets`: hand-written SwiftUI can't be run or iterated on from this Windows machine. Still to confirm in the Phase 0 spike: EAS signs the extension for both bundle IDs
+- [ ] **Android tooling**: `react-native-android-widget` (widgets described in JSX, updated from JS, ships a config plugin) vs. native Glance/RemoteViews. Leaning `react-native-android-widget` (New Architecture support, Expo plugin); confirm it on SDK 56 in the spike
 - [ ] **Premium**: the Weekly Goal and Greek Rank widgets are free; decide whether the Scores widget follows Strength Score's paywall (widget shows a locked state for free users) or is free as a growth hook
 - [ ] **Launch scope**: iOS-first (larger share of users, lock screen widgets are high value) with Android as a fast follow, or both together
 

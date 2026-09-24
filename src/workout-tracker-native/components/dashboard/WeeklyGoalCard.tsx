@@ -102,7 +102,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   bodyHalf: { flexDirection: 'column', alignItems: 'center', gap: spacing.xs },
   ringWrap: { width: RING, height: RING, alignItems: 'center', justifyContent: 'center' },
   ringCenter: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

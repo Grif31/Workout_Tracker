@@ -27,7 +27,7 @@ const styles = StyleSheet.create({
     backgroundColor: SPLASH_BG,
   },
   image: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     width: '100%',
     height: '100%',
   },
