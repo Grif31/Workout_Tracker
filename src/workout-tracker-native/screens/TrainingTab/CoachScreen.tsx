@@ -25,6 +25,7 @@ import { muscleGroups } from '../../constants/muscleGroups';
 import { SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
 import CoachProfileModal, { CoachProfile, COACH_PROFILE_KEY, DEFAULT_PROFILE } from '../../components/coach/CoachProfileModal';
 import SectionRule from '../../components/SectionRule';
+import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import PressableScale from '../../components/PressableScale';
 import { GREEK_RANK_COLORS, GREEK_RANKS } from '../../constants/greekRanks';
 import type { GreekRankData } from '../../utils/greekRank';
@@ -44,6 +45,9 @@ const MINI_RING_R = (MINI_RING_SIZE - MINI_RING_STROKE) / 2;
 const MINI_RING_CIRCUMFERENCE = 2 * Math.PI * MINI_RING_R;
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'TrainingHome'>;
+
+// Templates listed before Show All.
+const VISIBLE_TEMPLATES = 5;
 
 type ProgressBucket = { label: string; volume: number; sets: number; count: number; distance_km?: number };
 type ProgressResponse = { buckets?: ProgressBucket[]; metrics_logged?: MetricsLogged };
@@ -252,6 +256,7 @@ export default function CoachScreen({ navigation }: Props) {
   const [musclePickerVisible, setMusclePickerVisible] = useState(false);
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
   const [showAllTemplates, setShowAllTemplates] = useState(false);
+  const templatesAnim = useCollapseAnim(showAllTemplates);
 
   // ── Coach tab state ─────────────────────────────────────────────────────────
   const [greekRank, setGreekRank] = useState<string>('Neophyte');
@@ -674,6 +679,47 @@ export default function CoachScreen({ navigation }: Props) {
   const rankColor = GREEK_RANK_COLORS[greekRank] ?? colors.accent;
   const rankIcon = GREEK_RANKS.find(r => r.name === greekRank)?.icon ?? greekRank.charAt(0);
 
+  const renderTemplateCard = (t: WorkoutTemplate) => (
+    <TouchableOpacity
+      key={t.id}
+      style={styles.card}
+      onPress={() => navigation.navigate('TemplateDetail', { templateId: t.id })}
+    >
+      <View style={styles.cardRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.cardName}>{t.name}</Text>
+          <Text style={styles.cardSub}>{t.exercises.length} exercise{t.exercises.length !== 1 ? 's' : ''}</Text>
+          {(() => {
+            const muscles = [...new Set(
+              t.exercises.flatMap(ex => ex.muscle_group ? ex.muscle_group.split(',').map(m => m.trim()) : []).filter(Boolean)
+            )].slice(0, 3);
+            return muscles.length > 0 ? (
+              <View style={styles.muscleChipRow}>
+                {muscles.map(m => (
+                  <View key={m} style={styles.templateMuscleChip}>
+                    <Text style={styles.templateMuscleChipText}>{m}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null;
+          })()}
+        </View>
+        <TouchableOpacity
+          style={styles.logInlineBtn}
+          onPress={() => (navigation as any).navigate('DashboardTab', {
+            screen: 'WorkoutLog',
+            initial: false,
+            params: {
+              prefill: buildTemplatePrefill(t.name, t.exercises, parseProgramming(t.programming_json)),
+            },
+          })}
+        >
+          <Text style={styles.logInlineBtnText}>Log</Text>
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
+  );
+
   const renderInsightCard = (ins: Insight, idx: number) => {
     const icon = INSIGHT_ICONS[ins.type] ?? 'bulb-outline';
     const priorityColor = ins.type === 'achievement' ? colors.save : ins.priority === 'high' ? colors.danger : ins.priority === 'medium' ? colors.warmup : colors.accent;
@@ -906,48 +952,18 @@ export default function CoachScreen({ navigation }: Props) {
           {templates.length === 0 ? (
             <Text style={styles.emptyText}>No templates yet. Save a workout as a template to reuse it.</Text>
           ) : (
-            (showAllTemplates ? templates : templates.slice(0, 5)).map(t => (
-              <TouchableOpacity
-                key={t.id}
-                style={styles.card}
-                onPress={() => navigation.navigate('TemplateDetail', { templateId: t.id })}
-              >
-                <View style={styles.cardRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.cardName}>{t.name}</Text>
-                    <Text style={styles.cardSub}>{t.exercises.length} exercise{t.exercises.length !== 1 ? 's' : ''}</Text>
-                    {(() => {
-                      const muscles = [...new Set(
-                        t.exercises.flatMap(ex => ex.muscle_group ? ex.muscle_group.split(',').map(m => m.trim()) : []).filter(Boolean)
-                      )].slice(0, 3);
-                      return muscles.length > 0 ? (
-                        <View style={styles.muscleChipRow}>
-                          {muscles.map(m => (
-                            <View key={m} style={styles.templateMuscleChip}>
-                              <Text style={styles.templateMuscleChipText}>{m}</Text>
-                            </View>
-                          ))}
-                        </View>
-                      ) : null;
-                    })()}
-                  </View>
-                  <TouchableOpacity
-                    style={styles.logInlineBtn}
-                    onPress={() => (navigation as any).navigate('DashboardTab', {
-                      screen: 'WorkoutLog',
-                      initial: false,
-                      params: {
-                        prefill: buildTemplatePrefill(t.name, t.exercises, parseProgramming(t.programming_json)),
-                      },
-                    })}
-                  >
-                    <Text style={styles.logInlineBtnText}>Log</Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
-            ))
+            <>
+              {templates.slice(0, VISIBLE_TEMPLATES).map(renderTemplateCard)}
+              {/* The rest open and close as one block, so height and fade
+                  stay on one timeline (see utils/layoutAnimation.ts). */}
+              {templates.length > VISIBLE_TEMPLATES && (
+                <Collapsible progress={templatesAnim} expanded={showAllTemplates}>
+                  {templates.slice(VISIBLE_TEMPLATES).map(renderTemplateCard)}
+                </Collapsible>
+              )}
+            </>
           )}
-          {templates.length > 5 && (
+          {templates.length > VISIBLE_TEMPLATES && (
             <TouchableOpacity
               style={styles.showAllBtn}
               onPress={() => setShowAllTemplates(v => !v)}
@@ -955,11 +971,11 @@ export default function CoachScreen({ navigation }: Props) {
               <Text style={[styles.showAllBtnText, { color: colors.accent }]}>
                 {showAllTemplates ? 'Show Less' : `Show All (${templates.length})`}
               </Text>
-              <Ionicons
-                name={showAllTemplates ? 'chevron-up' : 'chevron-down'}
-                size={14}
-                color={colors.accent}
-              />
+              <Animated.View
+                style={{ transform: [{ rotate: templatesAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}
+              >
+                <Ionicons name="chevron-down" size={14} color={colors.accent} />
+              </Animated.View>
             </TouchableOpacity>
           )}
 

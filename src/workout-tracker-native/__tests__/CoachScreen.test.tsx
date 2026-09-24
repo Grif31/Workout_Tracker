@@ -13,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createMockNavigation, createMockRoute, mockUser } from './testUtils';
 import CoachScreen from '../screens/TrainingTab/CoachScreen';
 import { appCache } from '../utils/appCache';
+import Collapsible from '../components/Collapsible';
 import { COACH_INSIGHTS_KEY, WEEKLY_DISTANCE_GOAL_KEY } from '../constants/storageKeys';
 
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));
@@ -140,6 +141,34 @@ describe('CoachScreen', () => {
       expect(exercise.image_url).toBe('http://x/bench.gif');   // demo GIF survives the hand-off
       expect(exercise.sets).toHaveLength(4);                   // programmed sets, not a bare row
       expect(exercise.sets[0]).toMatchObject({ reps: '8', rpe: '8' });
+    });
+
+    it('keeps templates past the first five in a collapsible block that Show All opens', async () => {
+      const many = Array.from({ length: 7 }, (_, i) => ({ ...TEMPLATE, id: 100 + i, name: `Template ${i + 1}` }));
+      installServer({ '/api/workout-templates': many });
+      const r = await renderScreen();
+      fireEvent.press(r.getByText('Training'));
+      await waitFor(() => expect(r.getByText('Show All (7)')).toBeTruthy());
+
+      const block = r.UNSAFE_getByType(Collapsible);
+      const inside = (name: string) => block.findAll(n => n.props.children === name).length > 0;
+      // Five always shown, outside it; the other two live inside it, closed.
+      for (let i = 1; i <= 5; i++) expect(inside(`Template ${i}`)).toBe(false);
+      expect(inside('Template 6')).toBe(true);
+      expect(inside('Template 7')).toBe(true);
+      expect(block.props.expanded).toBe(false);
+
+      fireEvent.press(r.getByText('Show All (7)'));
+      expect(r.UNSAFE_getByType(Collapsible).props.expanded).toBe(true);
+      fireEvent.press(r.getByText('Show Less'));
+      expect(r.UNSAFE_getByType(Collapsible).props.expanded).toBe(false);
+    });
+
+    it('has no collapsible block or toggle with five templates or fewer', async () => {
+      const r = await renderScreen();
+      await openTraining(r);
+      expect(r.UNSAFE_queryAllByType(Collapsible)).toHaveLength(0);
+      expect(r.queryByText(/Show All/)).toBeNull();
     });
 
     it('opens a template detail', async () => {
