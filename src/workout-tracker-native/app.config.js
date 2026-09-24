@@ -61,14 +61,21 @@ module.exports = {
     plugins: [
       'expo-dev-client',
       [
-        // SDK 56 removed the top-level `splash` field. These are its old values
-        // one-for-one: SDK 55 already fed that field through this same plugin,
-        // so the splash renders exactly as before.
+        // SDK 56 removed the top-level `splash` field. SDK 55 handled that field
+        // with two defaults this plugin doesn't apply, so both are set here:
+        // without them the full-screen splash image drew as a 100pt thumbnail
+        // in the middle of the screen, before SplashView (which mirrors this
+        // image full screen) took over.
         'expo-splash-screen',
         {
           image: './assets/Arete_splash.png',
           resizeMode: 'contain',
           backgroundColor: '#141416',
+          // iOS: draw the image full screen, as the old top-level field did.
+          enableFullScreenImage_legacy: true,
+          // Android's system splash only shows a centred image; 200 is what
+          // SDK 55 used for the top-level field (the plugin defaults to 100).
+          imageWidth: 200,
         },
       ],
       'expo-font',
