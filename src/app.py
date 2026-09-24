@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import click
 from flask import Flask, jsonify
 from flask_migrate import Migrate
-from models import db
+from models import db, User
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from werkzeug.exceptions import HTTPException
@@ -58,6 +58,11 @@ def create_app(test_config=None):
     app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///workout_tracker.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['JWT_TOKEN_LOCATION'] = ['headers']
+    # Werkzeug buffers a whole body before any route runs, so without a cap one
+    # request can hold arbitrary memory on the single Railway instance. 10 MB
+    # clears the 5 MB avatar/progress-photo limits plus multipart overhead,
+    # and a marathon's GPS polyline by a wide margin.
+    app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
 
     if test_config:
         app.config.update(test_config)
@@ -96,6 +101,23 @@ def create_app(test_config=None):
     @jwt.expired_token_loader
     def expired_token(_header, _payload):
         return jsonify({'message': 'Token has expired'}), 401
+
+    # ── Token revocation: every token carries the user's token_version ──
+    # Tokens issued before this shipped have no `tv` claim and read as 0,
+    # matching the column default, so the deploy logs nobody out.
+    @jwt.additional_claims_loader
+    def add_token_version(identity):
+        user = db.session.get(User, int(identity))
+        return {'tv': user.token_version if user else 0}
+
+    @jwt.token_in_blocklist_loader
+    def token_revoked(_header, payload):
+        user = db.session.get(User, int(payload['sub']))
+        return user is None or payload.get('tv', 0) != user.token_version
+
+    @jwt.revoked_token_loader
+    def revoked_token(_header, _payload):
+        return jsonify({'message': 'Token has been revoked'}), 401
 
     # ── Centralised HTTP + unhandled-exception handler ─────────────────────
     @app.errorhandler(Exception)

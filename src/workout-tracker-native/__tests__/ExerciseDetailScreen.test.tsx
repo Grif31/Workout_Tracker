@@ -1,16 +1,19 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { mockFetchSequence, createMockNavigation, createMockRoute } from './testUtils';
 import ExerciseDetailScreen from '../screens/ExercisesTab/ExerciseDetailScreen';
 
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 jest.mock('theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));
-jest.mock('utils/units', () => ({
+// Mocked by path so it keeps applying however the screen imports it: a
+// virtual mock of a bare specifier silently stops matching when the screen's
+// import changes, and suppresses the "module not found" that would reveal it.
+jest.mock('../utils/units', () => ({
   toDisplayWeight: (v: number) => v,
   toDisplayVolume: (v: number) => v,
   convertWeight: (v: number) => v,
   WeightUnit: {},
-}), { virtual: true });
+}));
 
 const nav = createMockNavigation();
 const route = createMockRoute('ExerciseDetail', {
@@ -65,5 +68,15 @@ describe('ExerciseDetailScreen', () => {
   it('shows Max Vol / Set from the backend-computed max_set_volume, not a client recomputation', async () => {
     const { getByText } = render(<ExerciseDetailScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText(/1,500|1500/)).toBeTruthy());
+  });
+
+  it('dates a history session on its own day, not the day before', async () => {
+    // Jest runs west of UTC (jest.globalSetup.js); parsed as UTC, the
+    // API's bare '2026-01-01' would render as 12/31/2025 here.
+    const { getByText, queryByText } = render(<ExerciseDetailScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('History')).toBeTruthy());
+    fireEvent.press(getByText('History'));
+    await waitFor(() => expect(getByText(new Date(2026, 0, 1).toLocaleDateString())).toBeTruthy());
+    expect(queryByText(new Date(2025, 11, 31).toLocaleDateString())).toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ONBOARDING_COMPLETE_KEY } from '../constants/storageKeys';
 import { AppTabs } from './AppTabs';
 import { AuthStackScreen } from './AuthStack';
 import { WorkoutSessionProvider } from '../context/WorkoutSessionContext';
@@ -45,7 +46,7 @@ export default function RootNavigator() {
       setNeedsOnboarding(false);
       return;
     }
-    AsyncStorage.getItem('onboarding_complete').then(val => {
+    AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY).then(val => {
       setNeedsOnboarding(val !== 'true');
       setOnboardingChecked(true);
     });

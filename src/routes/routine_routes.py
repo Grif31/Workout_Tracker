@@ -1,13 +1,14 @@
 from flask import Blueprint, request, jsonify, g
 from models import db, Routine, RoutineDay, WorkoutTemplate, User
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from schemas import RoutineSchema
+from schemas import RoutineSchema, UpdateRoutineSchema
 from utils.validation import validate_body
 from utils.exercise_access import add_template_exercises
 
 routine_bp = Blueprint('routine_bp', __name__)
 
 _routine_schema = RoutineSchema()
+_update_routine_schema = UpdateRoutineSchema()
 
 
 @routine_bp.post('/api/routines')
@@ -75,13 +76,14 @@ def get_routine(routine_id):
 
 @routine_bp.patch('/api/routines/<int:routine_id>')
 @jwt_required()
+@validate_body(_update_routine_schema)
 def update_routine(routine_id):
     user_id = get_jwt_identity()
     routine = Routine.query.filter_by(id=routine_id, user_id=user_id).first()
     if not routine:
         return jsonify({'message': 'Not found'}), 404
 
-    data = request.get_json()
+    data = g.validated
     if 'name' in data:
         routine.name = data['name'].strip() or routine.name
     if 'description' in data:

@@ -28,9 +28,10 @@ import Collapsible, { useCollapseAnim } from './Collapsible';
 import { captureAndShare } from '../utils/shareCapture';
 import MuscleDiagram from './MuscleDiagram';
 import { fmtHold } from './workout/types';
-import WorkoutShareCard, { type ShareExercise } from './WorkoutShareCard';
+import WorkoutShareCard, { type ShareExercise } from './share/WorkoutShareCard';
 import CardioShareCard from './share/CardioShareCard';
 import { LaurelBranch } from './LaurelWreath';
+import StreakFlame from './StreakFlame';
 
 
 export type PrefillWorkoutData = {
@@ -477,6 +478,30 @@ export default function WorkoutDetailsScreen({
                 <Text style={styles.summaryLabel}>{totalReps === 1 ? 'Rep' : 'Reps'}</Text>
               </View>
             </View>
+
+            {/* Only rendered when a wearable actually recorded the workout. */}
+            {workout.avg_heart_rate || workout.max_heart_rate ? (
+              <>
+                <View style={styles.summaryRowDivider} />
+                <View style={styles.summaryRow}>
+                  <View style={styles.summaryItem}>
+                    <View style={styles.hrValueRow}>
+                      <Ionicons name="heart" size={16} color={colors.danger} />
+                      <Text style={styles.summaryValue}>{workout.avg_heart_rate ?? '--'}</Text>
+                    </View>
+                    <Text style={styles.summaryLabel}>Avg HR (bpm)</Text>
+                  </View>
+                  <View style={styles.summaryDivider} />
+                  <View style={styles.summaryItem}>
+                    <View style={styles.hrValueRow}>
+                      <Ionicons name="heart-outline" size={16} color={colors.danger} />
+                      <Text style={styles.summaryValue}>{workout.max_heart_rate ?? '--'}</Text>
+                    </View>
+                    <Text style={styles.summaryLabel}>Max HR (bpm)</Text>
+                  </View>
+                </View>
+              </>
+            ) : null}
           </View>
 
           {/* PR dropdown */}
@@ -623,8 +648,9 @@ export default function WorkoutDetailsScreen({
               })}
 
               <View style={styles.cardioSummaryBar}>
+                <StreakFlame size={14} />
                 <Text style={styles.cardioSummaryText}>
-                  🔥 ~{kcal} kcal  ·  {totalDur.toFixed(0)} min  ·  {toDisplayDistance(totalDistKm, distanceUnit).toFixed(2)} {distanceUnit}
+                  ~{kcal} kcal  ·  {totalDur.toFixed(0)} min  ·  {toDisplayDistance(totalDistKm, distanceUnit).toFixed(2)} {distanceUnit}
                 </Text>
               </View>
             </View>
@@ -849,6 +875,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginVertical: spacing.sm,
   },
   summaryItem: { flex: 1, alignItems: 'center' },
+  hrValueRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   summaryValue: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },
   summaryLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2, textAlign: 'center' },
   summaryDivider: { width: 1, backgroundColor: colors.border, marginVertical: spacing.xs },
@@ -1058,6 +1085,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '500',
   },
   cardioSummaryBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
     marginTop: spacing.sm,
     paddingTop: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,

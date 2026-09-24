@@ -90,7 +90,8 @@ production, not a new invention:
   gets ("Log strength and cardio workouts, track personal records...")
   before naming the mechanism.
 - **Plain, short sentences over jargon** — except where the app's own
-  invented vocabulary (Greek Rank, Strength Score, Aretē rank) *is* the
+  invented vocabulary (Greek Rank, Strength Score, Endurance Score, Aretē
+  rank) *is* the
   point; those terms are used directly and explained once, not hedged.
 - **Second person, active voice.** "Your Greek Rank is a score from 0–100
   that reflects your overall training excellence..."
@@ -163,6 +164,7 @@ Real strings from the app, rewritten to the rules above.
 | **Est. 1RM** / **Estimated 1RM** | e1RM, 1RM PR | A stat and chart label only, never a PR label. Short form in tight labels, long form in chart titles and info text. |
 | **Greek Rank** | Greek rank, level, tier | Rank names are always capitalized: Neophyte, Athlete, Hero, Demigod, Olympian, Titan, Aretē. |
 | **Strength Score** | strength score, score (on first mention) | |
+| **Endurance Score** | endurance score, running score, score (on first mention) | The runner's counterpart to the Strength Score. |
 | **bodyweight** | body weight, Body Weight | One word. Fix the "Body Weight" tab in Measurements. |
 | **warm-up** (noun), **warm up** (verb) | warmup | |
 | **routine** | plan | A weekly schedule of templates. Marketing copy may say "program" when describing AI-generated routines. |
@@ -196,7 +198,8 @@ request.
   the next step.
 - **No slang, emoji, exclamation marks, or em dashes.** The backend also
   strips em dashes and exclamation marks from Coach text as a safety net.
-- **Use the word list:** workout, PR, Greek Rank, Strength Score, routine,
+- **Use the word list:** workout, PR, Greek Rank, Strength Score, Endurance
+  Score, routine,
   bodyweight, "225 lbs".
 - **Names are short, descriptive, Title Case:** "Upper Body Strength",
   "Push Day". No puns.
@@ -498,6 +501,19 @@ Aretē has two progression ladders:
 |---|---|---|
 | Greek Rank | Neophyte, Athlete, Hero, Demigod, Olympian, Titan, Aretē | Whole-account training excellence |
 | Strength Score | Novice, Beginner, Intermediate, Advanced, Elite, Legend | Per-lift and overall strength percentile |
+| Endurance Score | Same six tiers as the Strength Score | Running pace percentile |
+
+The **Endurance Score** is the Strength Score for runners. It ranks a
+user's best running times against recreational runners of the same sex and
+age, at eight distances: 400 m, 800 m, 1K, 1 mile, 5K, 10K, half marathon
+and marathon. The best result at 5K or longer counts for 70% of the score and
+the best at the shorter distances for 30%, so a runner who only does short
+runs still gets a score. Only running counts. Cycling, rowing and walking
+still log and earn PRs but have no score.
+
+It shares the Strength Score's tiers and colors on purpose, so it isn't a
+third ladder. Neither score adds Greek Rank points, but the higher of the two
+has to reach the 50th percentile for Titan and the 80th for Aretē.
 
 Before naming a new tier, badge, rank, or feature:
 

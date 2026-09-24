@@ -16,14 +16,14 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
 import { toLocalDateStr } from '../../utils/date';
-import { COACH_INSIGHTS_KEY } from '../../constants/storageKeys';
+import { COACH_INSIGHTS_KEY, WEEKLY_GOAL_KEY } from '../../constants/storageKeys';
 import { apiFetch, isNetworkError } from '../../utils/api';
-import { appCache } from '../../utils/appCache';
+import { appCache, useRefetchGate } from '../../utils/appCache';
 import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../../utils/templatePrefill';
 import { TrainingStackParamsList } from '../../navigation/types';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
-import CoachProfileModal, { CoachProfile, COACH_PROFILE_KEY } from './CoachProfileModal';
+import CoachProfileModal, { CoachProfile, COACH_PROFILE_KEY, DEFAULT_PROFILE } from '../../components/coach/CoachProfileModal';
 import SectionRule from '../../components/SectionRule';
 import PressableScale from '../../components/PressableScale';
 import { GREEK_RANK_COLORS, GREEK_RANKS } from '../../constants/greekRanks';
@@ -131,16 +131,6 @@ function weekRangeLabel(weekStart: string): string {
   const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   return `${fmt(start)} – ${fmt(end)}`;
 }
-
-const DEFAULT_PROFILE: CoachProfile = {
-  goal: 'general',
-  experience: 'beginner',
-  equipment: 'full_gym',
-  days_per_week: 3,
-  session_length_min: 60,
-  avoid: [],
-  notes: '',
-};
 
 export default function CoachScreen({ navigation }: Props) {
   const { user, updateUser } = useAuth();
@@ -271,7 +261,7 @@ export default function CoachScreen({ navigation }: Props) {
   // and a `_undefined` key would just read back the defaults.
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.multiGet([`${COACH_PROFILE_KEY}_${user.id}`, `workout_weekly_goal_${user.id}`]).then(([profileRaw, goalRaw]) => {
+    AsyncStorage.multiGet([`${COACH_PROFILE_KEY}_${user.id}`, `${WEEKLY_GOAL_KEY}_${user.id}`]).then(([profileRaw, goalRaw]) => {
       if (profileRaw[1]) {
         try { setCoachProfile({ ...DEFAULT_PROFILE, ...JSON.parse(profileRaw[1]) }); } catch { }
       }
@@ -294,7 +284,7 @@ export default function CoachScreen({ navigation }: Props) {
   const updateWeeklyGoal = (delta: number) => {
     const next = Math.max(1, Math.min(7, weeklyGoal + delta));
     setWeeklyGoal(next);
-    AsyncStorage.setItem(`workout_weekly_goal_${user?.id}`, String(next));
+    AsyncStorage.setItem(`${WEEKLY_GOAL_KEY}_${user?.id}`, String(next));
   };
 
   // ── Data fetching ───────────────────────────────────────────────────────────
@@ -303,7 +293,6 @@ export default function CoachScreen({ navigation }: Props) {
     const rout = appCache.get<Routine[]>('routines');
     const prog = appCache.get<{ buckets: ProgressBucket[] }>('progress');
     const score = appCache.get<any>('strength_score');
-    const me = appCache.get<any>('me');
     if (tmpl) setTemplates(tmpl);
     if (rout) setRoutines(rout);
     if (prog) setProgressData(prog.buckets ?? []);
@@ -314,7 +303,6 @@ export default function CoachScreen({ navigation }: Props) {
     if (endurance?.overall_rank?.label) setEnduranceRankLabel(endurance.overall_rank.label);
     const greek = appCache.get<GreekRankData>('greek_rank');
     if (greek?.greek_rank) setGreekRank(greek.greek_rank);
-    if (me?.active_routine_id) fetchActiveRoutine();
     const mv = appCache.get<MuscleVolumeData>('muscle_volume');
     if (mv) setMuscleVolume(mv);
     const wsp = appCache.get<WeeklySummaryPreview>('weekly_summary_preview');
@@ -322,8 +310,6 @@ export default function CoachScreen({ navigation }: Props) {
     const prog30 = appCache.get<{ buckets: ProgressBucket[] }>('progress');
     if (prog30?.buckets?.length) setThisWeekCount(prog30.buckets[prog30.buckets.length - 1]?.count ?? 0);
   }, []);
-
-  useEffect(() => { fetchProgressData(chartRange); }, [chartRange]);
 
   useEffect(() => {
     if (insights.length === 0) return;
@@ -439,19 +425,38 @@ export default function CoachScreen({ navigation }: Props) {
     } catch { }
   };
 
-  useFocusEffect(useCallback(() => {
-    fetchProgressData(chartRange);
-    fetchTemplates();
-    fetchRoutines();
-    fetchActiveRoutine();
-    fetchStrengthScore();
-    fetchEnduranceScore();
-    fetchGreekRank();
-    fetchMuscleGroupData();
-    fetchThisWeekCount();
-    fetchWeeklySummaryPreview();
+  // Seeded from the preload so the data the mount effect above just painted
+  // counts as fetched. Progress was preloaded at 30d, the initial chartRange.
+  const refetchIfStale = useRefetchGate(() => ({
+    progress: appCache.stampOf('progress'),
+    thisWeek: appCache.stampOf('progress'),
+    templates: appCache.stampOf('templates'),
+    routines: appCache.stampOf('routines'),
+    strength: appCache.stampOf('strength_score'),
+    endurance: appCache.stampOf('endurance_score'),
+    greek: appCache.stampOf('greek_rank'),
+    muscleVolume: appCache.stampOf('muscle_volume'),
+    weeklySummary: appCache.stampOf('weekly_summary_preview'),
+  }));
 
-  }, [user?.active_routine_id, chartRange]));
+  // Read through a ref so a range change doesn't re-run the whole focus
+  // refetch; handleRangeChange fetches the new range itself.
+  const chartRangeRef = useRef(chartRange);
+  chartRangeRef.current = chartRange;
+
+  useFocusEffect(useCallback(() => {
+    refetchIfStale('progress', () => fetchProgressData(chartRangeRef.current));
+    refetchIfStale('templates', fetchTemplates);
+    refetchIfStale('routines', fetchRoutines);
+    // Keyed on the id so switching routines is never answered from the old one
+    refetchIfStale(`routine:${user?.active_routine_id}`, fetchActiveRoutine);
+    refetchIfStale('strength', fetchStrengthScore);
+    refetchIfStale('endurance', fetchEnduranceScore);
+    refetchIfStale('greek', fetchGreekRank);
+    refetchIfStale('muscleVolume', fetchMuscleGroupData);
+    refetchIfStale('thisWeek', fetchThisWeekCount);
+    refetchIfStale('weeklySummary', fetchWeeklySummaryPreview);
+  }, [user?.active_routine_id]));
 
   // ── Coach tab handlers ──────────────────────────────────────────────────────
   const fetchInsights = async () => {
@@ -601,6 +606,7 @@ export default function CoachScreen({ navigation }: Props) {
     setProgressData([]);
     setSelectedBarIndex(null);
     setChartRange(newRange);
+    refetchIfStale('progress', () => fetchProgressData(newRange), true);
   };
 
   // ── Render helpers ──────────────────────────────────────────────────────────
@@ -940,7 +946,10 @@ export default function CoachScreen({ navigation }: Props) {
             <View style={styles.coachHeroTopRow}>
               <TouchableOpacity
                 style={[styles.rankPill, { borderColor: rankColor + '55' }]}
-                onPress={() => navigation.navigate('StrengthScore')}
+                onPress={() => isPremium
+                  ? navigation.navigate('StrengthScore')
+                  : (navigation as any).navigate('Paywall', { source: 'strength_score' })
+                }
               >
                 <View style={[styles.rankPillIcon, { backgroundColor: rankColor }]}>
                   <Text style={[styles.rankPillIconText, { color: onColor(rankColor) }]}>{rankIcon}</Text>

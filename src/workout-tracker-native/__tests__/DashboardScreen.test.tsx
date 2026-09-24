@@ -34,8 +34,8 @@ describe('DashboardScreen', () => {
   });
 
   // Customize Home: the Dashboard renders cards in the saved order, minus hidden
-  const saveLayout = (order: string[], hidden: string[] = []) =>
-    AsyncStorage.setItem('dashboard_layout_1', JSON.stringify({ order, hidden }));
+  const saveLayout = (order: string[], hidden: string[] = [], sizes: Record<string, string> = {}) =>
+    AsyncStorage.setItem('dashboard_layout_1', JSON.stringify({ order, hidden, sizes }));
 
   // Text in render order. toJSON can't be JSON.stringify'd (refreshControl
   // holds a circular fiber reference), so walk it instead.
@@ -47,48 +47,9 @@ describe('DashboardScreen', () => {
     return out;
   };
 
-  it('hides a card the user turned off', async () => {
-    await saveLayout(['activeRoutine', 'weekCalendar', 'workouts'], ['workouts']);
-    const { getByText, queryByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
-    // The layout loads from storage after mount, so wait for it to apply
-    await waitFor(() => expect(queryByText('Recent Workouts')).toBeNull());
-    expect(getByText(/log workout/i)).toBeTruthy();
-    expect(queryByText('Push Day')).toBeNull();
-  });
-
   it('keeps every card when nothing is hidden', async () => {
     const { getByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Recent Workouts')).toBeTruthy());
-  });
-
-  it('renders cards in the saved order', async () => {
-    await saveLayout(['workouts', 'weekCalendar', 'activeRoutine']);
-    const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => expect(r.getByText('Recent Workouts')).toBeTruthy());
-
-    // 'This Week' belongs to the calendar, which this order puts last
-    await waitFor(() => {
-      const texts = textsInOrder(r.toJSON());
-      expect(texts.indexOf('Recent Workouts')).toBeLessThan(texts.indexOf('This Week'));
-    });
-  });
-
-  it('drops the day filter when the calendar is hidden', async () => {
-    // Tapping a day filters the list; with the calendar gone there'd be no way
-    // to clear it, so the list goes back to recent workouts
-    const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => expect(r.getByText('Recent Workouts')).toBeTruthy());
-    const today = new Date();
-    fireEvent.press(r.getByText(String(today.getDate())));
-    await waitFor(() => expect(r.queryByText('Recent Workouts')).toBeNull());
-
-    // Hide the calendar and reopen the screen: the filter must not survive
-    await saveLayout(['activeRoutine', 'weekCalendar', 'workouts'], ['weekCalendar']);
-    cleanup();
-    mockFetchSequence([{ data: mockUser }, { data: mockWorkouts }, { data: mockStats }]);
-    const after = render(<DashboardScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => expect(after.getByText('Recent Workouts')).toBeTruthy());
-    expect(after.getByText('Push Day')).toBeTruthy();
   });
 
   it('shows the streak as plain text with no chip or flame', async () => {
@@ -101,51 +62,6 @@ describe('DashboardScreen', () => {
     // Tapping it still opens the day/week/month picker
     fireEvent.press(getByLabelText('Change streak type'));
     await waitFor(() => expect(getByText('Weekly')).toBeTruthy());
-  });
-
-  describe('arrange mode', () => {
-    const enterArrangeMode = async () => {
-      const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
-      await waitFor(() => expect(r.getByLabelText('Arrange Home')).toBeTruthy());
-      fireEvent.press(r.getByLabelText('Arrange Home'));
-      await waitFor(() => expect(r.getByText('Arrange your Home')).toBeTruthy());
-      return r;
-    };
-
-    it('swaps the cards for chips in place, without leaving Home', async () => {
-      const r = await enterArrangeMode();
-      // Still on Home: the fixed actions stay put
-      expect(r.getAllByText(/log workout/i).length).toBeGreaterThan(0);
-      expect(nav.navigate).not.toHaveBeenCalled();
-      // Cards give way to one chip each
-      expect(r.getByTestId('arrange-row-activeRoutine')).toBeTruthy();
-      expect(r.getByTestId('arrange-row-weekCalendar')).toBeTruthy();
-      expect(r.getByTestId('arrange-row-workouts')).toBeTruthy();
-      expect(r.queryByText('Push Day')).toBeNull();
-    });
-
-    it('hides a card and brings the rest back on Done', async () => {
-      const r = await enterArrangeMode();
-      fireEvent.press(r.getByLabelText('Hide Recent Workouts on Home'));
-      fireEvent.press(r.getByLabelText('Done arranging Home'));
-
-      await waitFor(() => expect(r.getByText(/log workout/i)).toBeTruthy());
-      expect(r.queryByText('Recent Workouts')).toBeNull();
-      expect(r.queryByText('Push Day')).toBeNull();
-      expect(JSON.parse((await AsyncStorage.getItem('dashboard_layout_1'))!).hidden).toEqual(['workouts']);
-    });
-
-    it('restores the default layout from Reset', async () => {
-      await saveLayout(['workouts', 'weekCalendar', 'activeRoutine'], ['workouts']);
-      const r = await enterArrangeMode();
-      fireEvent.press(r.getByText('Reset'));
-
-      await waitFor(async () =>
-        expect(JSON.parse((await AsyncStorage.getItem('dashboard_layout_1'))!)).toEqual({
-          order: ['activeRoutine', 'weekCalendar', 'workouts'],
-          hidden: [],
-        }));
-    });
   });
 
   it('renders without crashing', () => {
@@ -255,6 +171,132 @@ describe('DashboardScreen', () => {
         const posts = (global.fetch as jest.Mock).mock.calls.filter(([u, i]) => String(u).endsWith('/api/workouts') && i?.method === 'POST');
         expect(posts).toHaveLength(1);
       });
+    });
+  });
+  describe('cardio this week', () => {
+    // Positional mocks can't place the profile response reliably here: the
+    // streak fetch reads AsyncStorage before it calls the API, so it lands
+    // after the others. Route by URL instead.
+    const mockFetchByUrl = (profile: Record<string, unknown>) => {
+      (global.fetch as jest.Mock) = jest.fn((url: string) => {
+        const u = String(url);
+        const data = u.includes('/api/stats/profile') ? profile
+          : u.includes('/api/me') ? mockUser
+          : u.includes('/api/workouts/dates') ? { dates: [] }
+          : u.includes('/api/workouts') ? mockWorkouts
+          : mockStats;
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(data) });
+      });
+    };
+
+    const withCardio = (over: Record<string, unknown> = {}) => ({
+      current_streak: 1, cardio_activities: 12,
+      week_cardio_activities: 3, week_cardio_distance_km: 16.0934, week_cardio_minutes: 95,
+      ...over,
+    });
+
+    it('shows the week distance in the saved unit', async () => {
+      mockFetchByUrl(withCardio());
+      const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(r.getByText('Cardio This Week')).toBeTruthy());
+      expect(r.getByText('10')).toBeTruthy();   // 16.0934 km -> 10 mi, the default
+      expect(r.getByText('miles')).toBeTruthy();
+      expect(r.getByText('1h 35m')).toBeTruthy();
+      expect(r.getByText('3')).toBeTruthy();
+      expect(r.getByText('activities')).toBeTruthy();
+    });
+
+    it('shows km when that is the saved preference', async () => {
+      await AsyncStorage.setItem('gps_distance_unit_1', 'km');
+      mockFetchByUrl(withCardio());
+      const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(r.getByText('km')).toBeTruthy());
+      expect(r.getByText('16.1')).toBeTruthy();
+    });
+
+    it('stays off Home for someone who has never logged cardio', async () => {
+      mockFetchByUrl(withCardio({ cardio_activities: 0, week_cardio_activities: 0, week_cardio_distance_km: 0, week_cardio_minutes: 0 }));
+      const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(r.getByText('Recent Workouts')).toBeTruthy());
+      expect(r.queryByText('Cardio This Week')).toBeNull();
+    });
+
+    it('says nothing is logged yet for a cardio user with a quiet week', async () => {
+      mockFetchByUrl(withCardio({ week_cardio_activities: 0, week_cardio_distance_km: 0, week_cardio_minutes: 0 }));
+      const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(r.getByText('Nothing logged since Monday')).toBeTruthy());
+    });
+
+    it('drops the distance column when the week was all machine time', async () => {
+      mockFetchByUrl(withCardio({ week_cardio_distance_km: 0, week_cardio_activities: 2, week_cardio_minutes: 45 }));
+      const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(r.getByText('Cardio This Week')).toBeTruthy());
+      expect(r.queryByText('miles')).toBeNull();
+      expect(r.getByText('45m 0s')).toBeTruthy();
+    });
+  });
+
+  describe('while Home customization is held back', () => {
+    const profile = {
+      current_streak: 1, this_week_count: 2,
+      cardio_activities: 9, week_cardio_activities: 3,
+      week_cardio_distance_km: 16.0934, week_cardio_minutes: 95,
+    };
+
+    const mockFetchByUrl = () => {
+      (global.fetch as jest.Mock) = jest.fn((url: string) => {
+        const u = String(url);
+        const data = u.includes('/api/stats/profile') ? profile
+          : u.includes('/api/stats/greek-rank') ? { greek_rank: 'Hero', greek_score: 38 }
+          : u.includes('/api/me') ? mockUser
+          : u.includes('/api/workouts/dates') ? { dates: [] }
+          : u.includes('/api/workouts') ? mockWorkouts
+          : mockStats;
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(data) });
+      });
+    };
+
+    beforeEach(mockFetchByUrl);
+
+    it('offers no way into arrange mode', async () => {
+      const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(r.getByText('Recent Workouts')).toBeTruthy());
+      expect(r.queryByLabelText('Customize your dashboard')).toBeNull();
+    });
+
+    it('shows the fixed cards in the fixed order', async () => {
+      const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(r.getByText('Cardio This Week')).toBeTruthy());
+      const texts = textsInOrder(r.toJSON());
+      // 'This Week' is the calendar's header
+      expect(texts.indexOf('Cardio This Week')).toBeLessThan(texts.indexOf('This Week'));
+      expect(texts.indexOf('This Week')).toBeLessThan(texts.indexOf('Recent Workouts'));
+    });
+
+    it('leaves out the held-back widgets and never fetches the rank for them', async () => {
+      const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(r.getByText('Cardio This Week')).toBeTruthy());
+      expect(r.queryByText('Weekly Goal')).toBeNull();
+      expect(r.queryByText('Greek Rank')).toBeNull();
+      const rankCalls = (global.fetch as jest.Mock).mock.calls
+        .filter(([u]) => String(u).includes('/api/stats/greek-rank'));
+      expect(rankCalls).toHaveLength(0);
+    });
+
+    it('ignores a saved layout, so a card hidden earlier cannot get stuck hidden', async () => {
+      // Arrange mode existed before this build: someone may have hidden a card
+      // or narrowed one. With no button left to undo that, it must not apply.
+      const saved = { order: ['workouts', 'weekCalendar', 'weekCardio'], hidden: ['workouts', 'weekCalendar'], sizes: { weekCardio: 'half' } };
+      await AsyncStorage.setItem('dashboard_layout_1', JSON.stringify(saved));
+
+      const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(r.getByText('Recent Workouts')).toBeTruthy());
+      expect(r.getByText('This Week')).toBeTruthy();
+      // Full width: the three-column breakdown, not the compact subline
+      expect(r.getByText('time')).toBeTruthy();
+      expect(r.queryByText('3 activities · 1h 35m')).toBeNull();
+      // Left in storage, so it comes back when customization does
+      expect(JSON.parse((await AsyncStorage.getItem('dashboard_layout_1'))!)).toEqual(saved);
     });
   });
 });

@@ -9,10 +9,11 @@ import {
   ShareCardStatsRow,
   ShareCardFooter,
   type ShareCardStatItem,
-} from './share/ShareCardParts';
-import { spacing } from '../theme/spacing';
-import { typography } from '../theme/typography';
-import { SHARE_TEXT } from '../constants/shareCardTheme';
+} from './ShareCardParts';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
+import { SHARE_TEXT } from '../../constants/shareCardTheme';
+import { PR_TYPE_LABELS } from '../../utils/prFormat';
 
 export type ShareExercise = {
   name: string;
@@ -31,13 +32,6 @@ type WorkoutShareCardProps = {
   exercises: ShareExercise[];
   prs: { exercise_name: string; pr_type: string }[];
   accentColor: string;
-};
-
-const PR_TYPE_LABELS: Record<string, string> = {
-  max_weight: 'Max Weight',
-  max_reps: 'Rep Record',
-  best_time: 'Best Time',
-  best_distance: 'Best Distance',
 };
 
 function fmtDurationMin(min: number): string {

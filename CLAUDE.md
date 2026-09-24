@@ -24,7 +24,7 @@
 | Push | expo-notifications + Expo Push Service |
 | Auth | JWT access + refresh tokens; Apple Sign-In; Google OAuth |
 | Notifications | APScheduler for re-engagement cron job |
-| Health Sync | react-native-health (iOS HealthKit) + react-native-health-connect (Android) — **requires EAS build, not Expo Go** |
+| Health Sync | @kingstinct/react-native-healthkit (iOS) + react-native-health-connect (Android) — **requires EAS build, not Expo Go** |
 
 ---
 
@@ -40,6 +40,9 @@ npx jest --maxWorkers=2     # run all frontend tests (default parallelism causes
 #   file's one-time render/module init (~3s locally for GPSCardioScreen, more on CI's 2 workers), so the
 #   default made whichever test ran first flake on CI while the same test passed alone
 npx jest __tests__/Foo.test.tsx --verbose   # run single test file
+npx tsc --noEmit            # type check — covers __tests__/ too (tsconfig "include" used to name a
+#   nonexistent "src" dir, so the program was only whatever App.tsx transitively imported: tests and
+#   any not-yet-wired file were silently outside the gate)
 npx expo install <pkg>      # install Expo-compatible package version
 ```
 
@@ -67,6 +70,12 @@ src/
 │   │   ├── ExerciseList.tsx      # exercise picker modal (multi-select)
 │   │   ├── GoldSectionRule.tsx   # gold icon + uppercase label section header — PR screens
 │   │   ├── SegmentedControl.tsx  # generic segmented picker (options/value/onChange) — PR filters + metric selectors
+│   │   ├── ScoreRing.tsx         # hero percentile ring + AnimatedPercentText — shared by both score screens
+│   │   ├── PercentileBar.tsx     # animated percentile bar (minPercent/easing props) — both score screens
+│   │   ├── share/                # ALL share cards live here, with ShareCardParts (their shared chrome)
+│   │   ├── dashboard/            # half/full Home widgets (WeeklyGoalCard, GreekRankCard)
+│   │   ├── coach/                # modals whose only caller is CoachScreen, incl. CoachProfileModal
+│   │   ├── workout/              # WorkoutLog's extracted pieces (RestTimer, types.ts, ...)
 │   │   └── ...
 │   ├── screens/
 │   │   ├── DashboardTab/         # home, workout log entry, details, summary
@@ -77,8 +86,7 @@ src/
 │   │   │   ├── CoachScreen.tsx           # tab home: insights + training overview (character removed)
 │   │   │   ├── CoachCharacter.tsx        # UNUSED — SVG character, no longer rendered anywhere
 │   │   │   ├── StrengthScoreScreen.tsx   # percentile ranks — uses SCORE_RANK_COLORS, NOT Greek colors
-│   │   │   ├── EnduranceScoreScreen.tsx  # running pace percentiles — same tiers/colors as Strength Score
-│   │   │   └── CoachProfileModal.tsx     # coach personalization (goal/equipment/schedule/injuries)
+│   │   │   └── EnduranceScoreScreen.tsx  # running pace percentiles — same tiers/colors as Strength Score
 │   │   ├── ProfileTab/           # profile, settings, bodyweight, measurements
 │   │   │   ├── PRDashboardScreen.tsx     # PR dashboard — recent PRs, streaks, stalled lifts, pinned progression
 │   │   │   ├── PRProgressionScreen.tsx   # per-exercise PR history chart + table, metric/context pickers, pin toggle
@@ -97,8 +105,10 @@ src/
 │   ├── utils/
 │   │   ├── api.ts                # apiFetch wrapper (attaches JWT, base URL)
 │   │   ├── notifications.ts      # all notification helpers
-│   │   ├── healthKit.ts          # iOS HealthKit sync (EAS build only)
+│   │   ├── healthKit.ts          # iOS HealthKit: workout write + heart-rate read (EAS build only)
 │   │   ├── healthConnect.ts      # Android Health Connect sync (EAS build only)
+│   │   ├── heartRate.ts          # pure bpm aggregation (avg/max, implausible-sample filter) — no native import, runs in Jest
+│   │   ├── heartRateSync.ts      # reads HR post-save and PATCHes it onto the workout
 │   │   ├── plateCalc.ts          # plate calculator math
 │   │   ├── offlineQueue.ts       # offline workout queue (AsyncStorage)
 │   │   ├── exerciseCache.ts      # exercise list cache
@@ -107,6 +117,7 @@ src/
 │   │   ├── cardioCalories.ts     # cardio calorie estimation
 │   │   ├── prFormat.ts           # PR value/delta/date formatting, chart y-axis snapping (computeChartYAxisRange), metric priority
 │   │   ├── prPins.ts             # PR Dashboard pin storage — keyed by exercise + PR type + context, not just exercise id
+│   │   ├── bestEfforts.ts        # GPS best-efforts scan (pure; pause-aware, interpolated, noise-gated)
 │   │   ├── greekRank.ts          # GET /api/stats/greek-rank type, best-score pick, top-rank gate unlock wording
 │   │   └── templatePrefill.ts    # the ONLY way a template/routine day becomes a WorkoutLog prefill (buildTemplatePrefill)
 │   ├── theme/
@@ -115,6 +126,7 @@ src/
 │   └── constants/
 │       ├── muscleGroups.tsx      # muscle group name list
 │       ├── equipmentTypes.ts     # equipment type list
+│       ├── cardioMilestones.ts   # distance/duration milestone floats — mirrors endurance_standards.py
 │       ├── greekRanks.ts         # GREEK_RANK_COLORS map, GREEK_RANKS array (name/color/range/icon)
 │       ├── strengthRanks.ts      # STRENGTH_TIERS array, SCORE_RANK_COLORS map (percentile tiers)
 │       └── prColors.ts           # PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG — import instead of hardcoding
@@ -133,13 +145,14 @@ src/
 │   ├── workout_template_routes.py
 │   ├── routine_routes.py
 │   ├── ai_routes.py              # AI workout/routine generation (Anthropic API)
-│   ├── legal_routes.py           # public homepage, privacy policy, terms pages
+│   ├── legal_routes.py           # public homepage, privacy policy, terms — bodies live in src/templates/
 │   ├── admin_routes.py           # /admin/exercises image review page (HTTP Basic Auth via ADMIN_PASSWORD; ExerciseDB suggest needs RAPIDAPI_KEY)
 │   └── health_routes.py          # GET /health — public liveness probe (200 + DB ping, 503 if DB down)
 ├── models.py                     # all SQLAlchemy models
 ├── schemas.py                    # marshmallow request validation schemas
 ├── app.py                        # app factory, blueprint registration, APScheduler
 ├── migrations/versions/          # Alembic migration files
+├── templates/                    # Jinja pages for legal_routes (homepage/privacy/terms + _legal_style.css)
 ├── utils/
 │   ├── push_service.py           # Expo push HTTP helper (batches of 100)
 │   ├── strength_standards.py     # percentile standards, ranks, Greek score
@@ -188,7 +201,7 @@ const res = await apiFetch('/api/workouts', { method: 'POST', ... });
 ```typescript
 const MY_KEY = 'my_feature_key';
 ```
-Shared keys that cross file boundaries live in `constants/` or are exported from the file that owns them (e.g. `COACH_PROFILE_KEY` exported from `CoachProfileModal.tsx`, `REST_TIMER_KEY` exported from `components/workout/types.ts`). Never use the same key string as a bare literal in two different files.
+Shared keys that cross file boundaries live in `constants/` or are exported from the file that owns them (e.g. `COACH_PROFILE_KEY` exported from `components/coach/CoachProfileModal.tsx`, `REST_TIMER_KEY` exported from `components/workout/types.ts`). Never use the same key string as a bare literal in two different files.
 
 ### Charts (`react-native-gifted-charts` `LineChart`)
 Don't derive `maxValue`/`yAxisOffset` from raw `min`/`max` + a percentage pad — on a narrow-range series (e.g. a Rep Record spanning 1-2 reps) each tick's *label* rounds independently and adjacent ticks can round to the same displayed number, and the labels can drift out of sync with where points actually plot. Use `computeChartYAxisRange(values, sections)` from `utils/prFormat.ts` (also mirrored inline in `StrengthScoreScreen.tsx`), which snaps the whole range to whole-number, evenly-divisible steps up front.
@@ -202,6 +215,14 @@ Anything that sends a template or routine day to WorkoutLog goes through `buildT
 2. Add to the matching stack in `navigation/<Tab>Stack.tsx`
 3. Add type to `navigation/types.ts`
 4. Navigate via `navigation.navigate('ScreenName', { params })`
+
+### Home card sizes — a width is a rendering, not a style
+
+> **Currently held back.** `HOME_CUSTOMIZATION_ENABLED` in `constants/dashboardCards.ts` is `false` until arrange mode is rebuilt as press-and-hold drag on the real cards (TODO.md section 20, Part B). While off: no customize button, Home renders `FIXED_HOME_ORDER` (Active Routine, Cardio This Week, Week Calendar, Recent Workouts) at full width, the Weekly Goal and Greek Rank widgets don't render, and `/api/stats/greek-rank` isn't fetched. A saved `dashboard_layout_${uid}` is **ignored, not deleted**: the earlier arrange mode could hide a card, and with no button to unhide it that card would be stranded. Everything below is built and tested (`__tests__/DashboardCustomization.test.tsx` mocks the flag on), so flipping it restores working code.
+
+`DASHBOARD_CARDS` entries declare `sizes: CardSize[]` (`'full' | 'half'`), best-first, and the head is the card's default. **Only list `'half'` for a card that has a compact variant written for it** — narrowing is never just a width change, and the arrange-mode size toggle only appears for cards with more than one size, so an undeclared size can't be picked. Week Calendar (seven day columns) and Recent Workouts (a list) are full-only on purpose.
+
+`packRows(layout)` turns the visible cards into rows: a `half` pairs with the next `half`, everything else takes its own row, and a trailing unpaired `half` stays half width rather than stretching. A card's compact branch reads `cardSize(layout, id) === 'half'`.
 
 ### Navigation — cross-tab navigation MUST pass `initial: false`
 ```typescript
@@ -242,7 +263,7 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 | `@pr_pins_${uid}` | — | JSON array of 3 pinned PR slots on Profile (Pin\|null)[] |
 | `pr_dashboard_pins_${uid}` | — | Exercises (optionally a specific PR type + context) pinned to PR Dashboard's Pinned Progression section — JSON `{id, name, prType?, weightContext?}[]`, max 6 slots total; an exercise can have more than one pin for different PR types (keyed by exercise+type+context, not exercise id alone). Toggled from PRProgressionScreen. Legacy pins with no `prType` loosely match any type on that exercise |
 | `coach_profile_${uid}` | — | Coach personalization JSON (goal/equipment/schedule/injuries) |
-| `dashboard_layout_${uid}` | — | Home card order + hidden ids (`utils/dashboardLayout.ts`), edited in Home's arrange mode (the options button in the Dashboard top bar swaps the cards for draggable chips in place; there is no separate screen). `normalizeLayout` repairs a stored layout against `constants/dashboardCards.ts`: unknown ids are dropped and cards added in later releases slot back at their default position, so a saved layout never hides a new card |
+| `dashboard_layout_${uid}` | — | Home card order, hidden ids and per-card widths (`utils/dashboardLayout.ts`). **Not read while `HOME_CUSTOMIZATION_ENABLED` is off** (see Home card sizes). Edited in Home's arrange mode (the options button in the Dashboard top bar swaps the cards for draggable chips in place; there is no separate screen). `normalizeLayout` repairs a stored layout against `constants/dashboardCards.ts`: unknown ids are dropped, cards added in later releases slot back at their default position (so a saved layout never hides a new card), and a stored size the card no longer renders falls back to one it does |
 | `strength_score_last_tier_${uid}` | — | Last celebrated overall Strength Score tier index (`STRENGTH_TIERS` ordinal), used to detect rank-up moments across app opens |
 | `endurance_score_last_tier_${uid}` | — | Same thing for the Endurance Score — its own slot, so ranking up as a runner and as a lifter are separate moments |
 | `weekly_summary_last_shown_${uid}` | — | Monday date-string of the last week the Weekly Summary auto-popup was checked/shown for, so it only appears once per week |
@@ -291,14 +312,17 @@ return jsonify({ 'message': 'error reason' }), 400   # client error
 - **PR history:** `PersonalRecord` rows are upserted in place (current bests only). `PREvent` is the append-only history — one row per PR moment with `previous_value` and `workout_id`; written by every upsert branch in `workout_routes.py` and rebuilt by `_recompute_prs_for_templates`'s chronological replay on workout edit/delete. `improved_by` is sign-normalized (positive = better; `best_time` improves downward). Backfill for pre-existing data: `flask backfill-pr-events --apply`.
 - **Cardio sets** have: `cardio_duration` (minutes), `distance`, `distance_unit` ('km'|'mi'), `intensity`
 - **GPS cardio exercises** also store: `route_polyline` (encoded Google polyline string), decoded with `@mapbox/polyline`
+- **GPS best efforts:** `cardio_best_efforts` rows hang off an `Exercise` — the fastest window covering each distance milestone and the furthest reached inside each duration milestone, scanned on the phone at save time by `utils/bestEfforts.ts` and sent as the exercise payload's `best_efforts`. `_compute_and_upsert_cardio_prs` treats each as one more bout, so a measured 5K beats the whole-run extrapolation through the upsert that already keeps the best. They are **stored** rather than recomputed for two reasons: `route_polyline` encodes latitude/longitude only, so per-point timing is gone after the save (no backfill is possible for runs recorded before this shipped), and `_recompute_prs_for_templates` rebuilds PRs from what sits on the Exercise — an effort that lived only in the request would be wiped by the next edit of any workout for that exercise. Editing a GPS run's distance or duration by hand clears its efforts, since the user is saying the trace was wrong. The milestone floats are mirrored in `constants/cardioMilestones.ts` and a test fails if the two lists drift
 - **`workout_type`** — computed field in `Workout.to_dict()`, derived from `exercise_type` on exercises; no DB column. Cardio workouts also get `cardio_duration`, `distance`, `distance_unit` in the dict.
 - **Bodyweight volume:** for `Bodyweight`/`Weighted` equipment, volume adds the user's bodyweight-at-the-time scaled by `ExerciseTemplate.bodyweight_load_factor` (fraction of bodyweight the movement shifts — push-up ~0.6, sit-up ~0.35, pull-up ~1.0; `NULL` → 1.0). All volume math goes through `compute_effective_weight(weight, equipment, bodyweight, load_factor)` in `utils/volume.py`. New library/custom exercises get a factor from the name heuristic `derive_bodyweight_load_factor`. After adding the column or retuning any factor, run `flask backfill-workout-volume --apply` to recompute stored `Workout.volume`. Never use effective weight for PR/strength-score logic — those read raw `Set.weight`.
 - **Weight units:** per user — `user.weight_unit` is `'kg'` or `'lbs'`; delta: kg=2.5, lbs=5. Stored set weights, PR values (both `personal_records` and `pr_events`, incl. `previous_value`), and bodyweight logs are always in the user's *current* unit — switching units bulk-converts them (`_convert_stored_weights` in `user_routes.py`). Exception: `Workout.volume` is always lbs. Body measurements (`body_measurements`) have no unit column: they follow the weight unit (lbs → inches, kg → cm, `lengthUnitFor` in `utils/bodyMetrics.ts`) and `_convert_stored_weights` converts them ×/÷2.54 to the tenth on a switch.
 - **Adding a column that stores a weight (or weight-derived value):** it MUST be wired into `_convert_stored_weights` AND classified in `tests/test_unit_conversion_registry.py` (CONVERTED or EXEMPT-with-reason). That test name-scans all models for weight/value/volume columns and fails on unclassified ones — `pr_events` was originally missed this way and drifted out of unit after a kg↔lbs switch.
+- **Heart rate:** `Workout.avg_heart_rate` / `max_heart_rate`, integer bpm, nullable. Read from Apple Health after the workout POST succeeds and attached via PATCH (`utils/heartRateSync.ts`) — never folded into the POST, because a native HealthKit query must not delay a save. NULL is meaningful: it means no wearable or sync off, so never default these to 0. Aggregation lives in `utils/heartRate.ts`, which imports nothing native and so is unit-testable on any platform; it drops samples outside 20-260 bpm, mirroring the `validate.Range` in `schemas.py`. Any wearable that writes to Apple Health works (Apple Watch, chest strap, Whoop) — there is no watchOS target and no `WCSession`
+- **iOS health library:** `@kingstinct/react-native-healthkit` (a Nitro/New-Architecture module), NOT `react-native-health`. The latter is a legacy bridge module (no `codegenConfig`, `s.dependency 'React'`) and RN 0.83 is bridgeless-only, so it never registered and every call threw — that is why `HEALTH_SYNC_ENABLED` was false. Don't reintroduce it or any other old-arch native module
 - **Custom exercises:** `ExerciseTemplate.user_id` — NULL = global library exercise, set = that user's private custom exercise
 - **RPE:** 1–10 scale, optional per set, only shown when user enables it in workout settings
 - **User gender:** `user.gender` is `'male'` | `'female'` | `None` — used for strength score percentile calculations
-- **Scores:** Strength Score (lift percentiles vs bodyweight) and Endurance Score (running pace percentiles, best-within-tier: core 5K+ 70% / speed 400m-1mi 30%) share the `STRENGTH_TIERS` percentile tiers and both write to `strength_score_snapshots`, separated by `score_type` (`'strength'` | `'endurance'`) — every snapshot read must filter on it. Neither score adds Greek Rank points; the higher one only gates the top two ranks (see Greek Rank below)
+- **Scores:** Strength Score (lift percentiles vs bodyweight) and Endurance Score (running pace percentiles, best-within-tier: core 5K+ 70% / speed 400m-1mi 30%) share the `STRENGTH_TIERS` percentile tiers and both write to `strength_score_snapshots`, separated by `score_type` (`'strength'` | `'endurance'`) — every snapshot read must filter on it. They also share their hero ring (`components/ScoreRing.tsx`) and percentile bars (`components/PercentileBar.tsx`), since the two screens are meant to read as one screen for two metrics — a presentation change belongs in those components, never in one screen. Neither score adds Greek Rank points; the higher one only gates the top two ranks (see Greek Rank below)
 - **Greek Rank Volume (30%)** is weekly training load, not workout count (Consistency and Dedication already count workouts): working sets (warm-ups and rows with no reps excluded; a timed-hold set counts as 1) plus cardio minutes / 3, capped at 40 per workout, averaged over 8 weeks, scored by `compute_training_load_score` in `utils/strength_standards.py`
 - **Greek Rank:** the score is effort only, `consistency*0.40 + dedication*0.30 + volume*0.30` (`compute_greek_score`), so every user gets a rank with no gender or bodyweight. Titan also needs the higher of the Strength/Endurance Scores at >= 50th percentile and Aretē >= 80th (`GREEK_RANK_PERFORMANCE_GATES`, applied by `apply_greek_rank_gates`); a user who misses a gate is held one rank below it. Read the rank from `GET /api/stats/greek-rank` (no gender required, returns `next_gate`, `gates`, `held_by_gate`, `profile_missing`) via `_greek_rank_data()` in `strength_score_routes.py`. `strength-score` still returns `greek_rank`/`greek_score`/`greek_score_components` from the same helper only for app builds 1.1.6 and earlier; new code must not read the rank from there, since it returns 422 without gender. Frame unlocks and rank-circle state follow the rank held, never the raw score, because a gated score can sit inside a band the user hasn't unlocked
 
@@ -326,6 +350,8 @@ return jsonify({ 'message': 'error reason' }), 400   # client error
 - Schema changes without a migration will break production
 - **Never pass a bare function to `FlatList`'s `ListHeaderComponent`** (`ListHeaderComponent={renderHeader}`) when the header contains stateful or expensive children (charts, forms) — a fresh function identity every render makes FlatList treat it as a new component type and remount the whole subtree instead of re-rendering it, discarding child state/memoization and replaying entrance animations. Call it and pass the built element instead: `ListHeaderComponent={renderHeader()}`.
 - **Never use `date.toISOString()` to build a date string for the backend** — it outputs UTC and shifts the date in US timezones. Always use local methods: `` `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` ``
+- **Never `new Date(x)` a bare `"YYYY-MM-DD"` from the API** (e.g. `/api/stats/exercise` history dates) — it parses as UTC midnight, the day before in the Americas. Use `parseApiDate` from `utils/date.ts`. Jest runs in `America/Los_Angeles` (`jest.globalSetup.js`) so this class of bug fails in tests, not just for users.
+- **Guardrail tests scan the whole codebase:** `src/tests/test_route_guardrails.py` walks the Flask url_map (auth on every non-public route, no 500s for a fresh user, malformed bodies or garbage query params), and `__tests__/codeGuardrails.test.ts` scans the app source (no raw `fetch`, `initial: false` on cross-tab navigates, listeners and intervals cleaned up, no AsyncStorage key literal in two files; shared keys live in `constants/storageKeys.ts`). A new public route goes in that test's `PUBLIC` set.
 
 ---
 

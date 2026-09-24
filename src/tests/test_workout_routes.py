@@ -714,3 +714,173 @@ class TestBodyweightVolume:
         res = client.get('/api/workouts/export', headers={'Authorization': f'Bearer {auth_token}'})
         assert res.status_code == 200
         assert '1800' in res.get_data(as_text=True)
+
+
+# ---------------------------------------------------------------------------
+# GPS best efforts — segments the phone extracts from a tracked run, fed
+# through the same PR pipeline as logged sets.
+# ---------------------------------------------------------------------------
+
+def _h(token):
+    return {'Authorization': f'Bearer {token}'}
+
+
+class TestCardioBestEfforts:
+
+    def _template(self, client, token):
+        res = client.post('/api/exercises',
+                          json={'name': 'Running', 'muscle_group': 'Core', 'exercise_type': 'cardio'},
+                          headers=_h(token))
+        return res.get_json()['id']
+
+    def _log_run(self, client, token, tid, distance_km, duration_min, best_efforts=None, name='Morning Run'):
+        exercise = {
+            'name': 'Running', 'exercise_template_id': tid, 'exercise_type': 'cardio',
+            'sets': [{'cardio_duration': duration_min, 'distance': distance_km, 'distance_unit': 'km'}],
+        }
+        if best_efforts is not None:
+            exercise['best_efforts'] = best_efforts
+        res = client.post('/api/workouts',
+                          json={'workoutName': name, 'exercises': [exercise]},
+                          headers=_h(token))
+        assert res.status_code == 201
+        return res.get_json()['id']
+
+    def _pr(self, client, token, tid, pr_type, context):
+        # Read the row directly: /api/personal-records returns every PR the
+        # user has, and these assertions are about one milestone at a time.
+        from models import PersonalRecord
+        for r in PersonalRecord.query.filter_by(exercise_template_id=tid, pr_type=pr_type).all():
+            if abs((r.weight_context or 0) - context) < 1e-6:
+                return r.value
+        return None
+
+    def _detail(self, client, token, wid):
+        return client.get(f'/api/workouts/{wid}', headers=_h(token)).get_json()
+
+    def test_a_scanned_split_beats_the_whole_run_extrapolation(self, client, auth_token):
+        # A 10 km run in 60 min extrapolates to a 30:00 5K. The scan found the
+        # runner's real best 5K inside it: 26:00.
+        tid = self._template(client, auth_token)
+        self._log_run(client, auth_token, tid, 10, 60, best_efforts=[
+            {'milestone_type': 'distance', 'distance_km': 5.0, 'duration_min': 26.0},
+        ])
+        assert self._pr(client, auth_token, tid, 'best_time', 5.0) == pytest.approx(26.0)
+
+    def test_a_slower_scanned_effort_never_replaces_a_better_pr(self, client, auth_token):
+        tid = self._template(client, auth_token)
+        self._log_run(client, auth_token, tid, 5, 22, name='Fast 5K')
+        self._log_run(client, auth_token, tid, 10, 60, name='Long Run', best_efforts=[
+            {'milestone_type': 'distance', 'distance_km': 5.0, 'duration_min': 29.0},
+        ])
+        assert self._pr(client, auth_token, tid, 'best_time', 5.0) == pytest.approx(22.0)
+
+    def test_duration_efforts_produce_best_distance_prs(self, client, auth_token):
+        # The whole-run average over 60 min is 10 km, so 10 minutes extrapolates
+        # to 1.67 km; the scan's best 10-minute window covered 2.4 km.
+        tid = self._template(client, auth_token)
+        self._log_run(client, auth_token, tid, 10, 60, best_efforts=[
+            {'milestone_type': 'duration', 'distance_km': 2.4, 'duration_min': 10.0},
+        ])
+        assert self._pr(client, auth_token, tid, 'best_distance', 10.0) == pytest.approx(2.4, abs=0.01)
+
+    def test_efforts_survive_an_edit_to_another_workout(self, client, auth_token):
+        # The regression this design exists to prevent: editing any workout for
+        # this exercise replays PRs from scratch off what is stored on the
+        # Exercise, so efforts living only in the original request would vanish.
+        tid = self._template(client, auth_token)
+        self._log_run(client, auth_token, tid, 10, 60, name='Intervals', best_efforts=[
+            {'milestone_type': 'distance', 'distance_km': 5.0, 'duration_min': 26.0},
+        ])
+        other = self._log_run(client, auth_token, tid, 6, 36, name='Easy Run')
+
+        res = client.patch(f'/api/workouts/{other}', json={'notes': 'felt easy'}, headers=_h(auth_token))
+        assert res.status_code == 200
+        assert self._pr(client, auth_token, tid, 'best_time', 5.0) == pytest.approx(26.0)
+
+    def test_editing_the_run_by_hand_clears_its_efforts(self, client, auth_token):
+        # Correcting the distance says the trace was wrong, so splits derived
+        # from it cannot stand as all-time PRs.
+        tid = self._template(client, auth_token)
+        wid = self._log_run(client, auth_token, tid, 10, 60, best_efforts=[
+            {'milestone_type': 'distance', 'distance_km': 5.0, 'duration_min': 26.0},
+        ])
+        ex = self._detail(client, auth_token, wid)['exercises'][0]
+        assert ex['best_efforts']
+
+        ex['sets'][0]['distance'] = 8.0
+        res = client.patch(f'/api/workouts/{wid}', json={'exercises': [ex]}, headers=_h(auth_token))
+        assert res.status_code == 200
+
+        after = self._detail(client, auth_token, wid)
+        assert not after['exercises'][0].get('best_efforts')
+        # PRs fall back to the corrected whole-run extrapolation: 8 km in 60 min
+        assert self._pr(client, auth_token, tid, 'best_time', 5.0) == pytest.approx(60 * 5 / 8)
+
+    def test_an_untouched_exercise_keeps_its_efforts_when_a_sibling_is_edited(self, client, auth_token):
+        tid = self._template(client, auth_token)
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Brick',
+            'exercises': [
+                {'name': 'Running', 'exercise_template_id': tid, 'exercise_type': 'cardio',
+                 'sets': [{'cardio_duration': 60, 'distance': 10, 'distance_unit': 'km'}],
+                 'best_efforts': [{'milestone_type': 'distance', 'distance_km': 5.0, 'duration_min': 26.0}]},
+                {'name': 'Squat', 'sets': [{'reps': 5, 'weight': 225}]},
+            ],
+        }, headers=_h(auth_token))
+        assert res.status_code == 201
+        wid = res.get_json()['id']
+
+        exercises = self._detail(client, auth_token, wid)['exercises']
+        squat = next(e for e in exercises if e['name'] == 'Squat')
+        squat['sets'][0]['reps'] = 8
+
+        res = client.patch(f'/api/workouts/{wid}', json={'exercises': exercises}, headers=_h(auth_token))
+        assert res.status_code == 200
+
+        run = next(e for e in self._detail(client, auth_token, wid)['exercises'] if e['name'] == 'Running')
+        assert run['best_efforts']
+        assert self._pr(client, auth_token, tid, 'best_time', 5.0) == pytest.approx(26.0)
+
+    def test_a_round_tripped_set_value_is_not_treated_as_an_edit(self, client, auth_token):
+        # The app sends set values back as strings; that alone must not count as
+        # the user correcting the trace.
+        tid = self._template(client, auth_token)
+        wid = self._log_run(client, auth_token, tid, 10, 60, best_efforts=[
+            {'milestone_type': 'distance', 'distance_km': 5.0, 'duration_min': 26.0},
+        ])
+        ex = self._detail(client, auth_token, wid)['exercises'][0]
+        ex['sets'][0]['distance'] = '10.0'
+        ex['sets'][0]['cardio_duration'] = '60'
+
+        res = client.patch(f'/api/workouts/{wid}', json={'exercises': [ex]}, headers=_h(auth_token))
+        assert res.status_code == 200
+        assert self._detail(client, auth_token, wid)['exercises'][0]['best_efforts']
+
+    @pytest.mark.parametrize('payload', [
+        'not-a-list',
+        [{'milestone_type': 'bogus', 'distance_km': 5.0, 'duration_min': 26.0}],
+        [{'milestone_type': 'distance', 'distance_km': 'abc', 'duration_min': 26.0}],
+        [{'milestone_type': 'distance', 'duration_min': 26.0}],
+        [{'milestone_type': 'distance', 'distance_km': 0, 'duration_min': 26.0}],
+        [{'milestone_type': 'distance', 'distance_km': 5.0, 'duration_min': -3}],
+        ['nonsense'],
+    ])
+    def test_malformed_efforts_are_dropped_without_losing_the_run(self, client, auth_token, payload):
+        # A queued offline run must never be rejected outright over a scan
+        # artifact, and garbage must never reach the PR upsert.
+        tid = self._template(client, auth_token)
+        wid = self._log_run(client, auth_token, tid, 10, 60, best_efforts=payload)
+        assert not self._detail(client, auth_token, wid)['exercises'][0].get('best_efforts')
+        # The run itself still produced its ordinary extrapolated PR
+        assert self._pr(client, auth_token, tid, 'best_time', 5.0) == pytest.approx(30.0)
+
+    def test_deleting_the_workout_removes_its_efforts(self, client, auth_token):
+        from models import CardioBestEffort
+        tid = self._template(client, auth_token)
+        wid = self._log_run(client, auth_token, tid, 10, 60, best_efforts=[
+            {'milestone_type': 'distance', 'distance_km': 5.0, 'duration_min': 26.0},
+        ])
+        assert CardioBestEffort.query.count() == 1
+        assert client.delete(f'/api/workouts/{wid}', headers=_h(auth_token)).status_code == 200
+        assert CardioBestEffort.query.count() == 0

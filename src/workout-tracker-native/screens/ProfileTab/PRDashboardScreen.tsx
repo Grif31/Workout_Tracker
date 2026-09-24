@@ -9,7 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { LineChart } from 'react-native-gifted-charts';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import GoldSectionRule from '../../components/GoldSectionRule';
-import PRShareCard from '../../components/PRShareCard';
+import PRShareCard from '../../components/share/PRShareCard';
 import SegmentedControl from '../../components/SegmentedControl';
 import { loadPrPins, pinSlotKey, type PRPin } from '../../utils/prPins';
 import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';

@@ -141,6 +141,17 @@ HTML = f"""<!DOCTYPE html>
   .ladder {{ display: flex; gap: 6px; flex-wrap: wrap; }}
   .step {{ font-family:'Archivo',sans-serif; font-weight: 600; font-size: 8pt;
           padding: 5px 10px; border: 1px solid #2C2C2E; border-radius: 40px; color: #C7C7CC; }}
+  .price {{ background: #141416; border: 1px solid #2C2C2E; border-radius: 10px; padding: 14px 16px; }}
+  .price.best {{ border-color: #30D158; }}
+  .price-lab {{ font-family:'Archivo',sans-serif; font-weight: 600; font-size: 7.5pt; letter-spacing: 0.14em;
+               text-transform: uppercase; color: #8E8E93; }}
+  .price-num {{ font-family:'Archivo',sans-serif; font-weight: 800; font-stretch: 75%; font-size: 24pt;
+               color: #F2F2F7; line-height: 1.1; margin-top: 4px; }}
+  .price-num small {{ font-size: 11pt; }}
+  .price-sub {{ font-size: 8.4pt; color: #8E8E93; margin-top: 2px; }}
+  .grid3 {{ display: grid; grid-template-columns: repeat(3,1fr); gap: 13px; }}
+  .fp td {{ font-size: 8.8pt; }}
+  .yes {{ color: #30D158; font-weight: 600; }}
   .contact td {{ border-bottom: 1px solid #1C1C1E; }}
 </style>
 </head>
@@ -155,10 +166,63 @@ HTML = f"""<!DOCTYPE html>
   <div class="cover-foot">aretefitnessapp.com</div>
 </section>
 
-<!-- 2. NAME + SLOGAN -->
+<!-- 2. PRODUCT -->
+<section class="page">
+  <div class="rh"><span>Aret\u0113 Brand Guide</span><span>The product</span></div>
+  <p class="kicker">01 / The product</p>
+  <h2>What we're selling</h2>
+  <p class="lede">Aret\u0113 is a workout tracker for lifting and cardio that turns training into a rank.
+  Log every set and every run in one app, then see where you stand: against your own records,
+  against other lifters and runners, and on a seven-rank ladder earned by showing up.</p>
+
+  <div class="two block">
+    <div>
+      <h3>Who it's for</h3>
+      <p>Anyone who exercises. The core audience is people who strength train and people who do
+      cardio, and the many who do both. It suits a first-year lifter as well as someone chasing a
+      400 lb deadlift, because scores are measured against lifters of the same bodyweight.</p>
+    </div>
+    <div>
+      <h3>Why it stands out</h3>
+      <p>Most fitness trackers are a logbook for lifting or a GPS app for running. Aret\u0113 does both
+      in one place and measures the result, so progress feels like climbing something rather
+      than filling in a spreadsheet.</p>
+    </div>
+  </div>
+
+  <h3>The hooks</h3>
+  <table class="block" style="margin-top:8px">
+    <tr><td class="k" style="width:1.6in">Greek Rank</td><td>Seven ranks from Neophyte to Aret\u0113, earned by consistency and training volume. Free for everyone.</td></tr>
+    <tr><td class="k">Strength Score</td><td>Ranks each lift against lifters of the same sex, bodyweight and age, then rolls them into one overall percentile.</td></tr>
+    <tr><td class="k">Endurance Score</td><td>The Strength Score for runners. Ranks your best running times, from 400 m to the marathon, against runners of the same sex and age.</td></tr>
+    <tr><td class="k">PRs and share cards</td><td>Every personal record is caught automatically and becomes a card users post themselves.</td></tr>
+    <tr><td class="k">AI Coach</td><td>Builds a workout or a full multi-week routine in seconds, and reads recent training to say when to push and when to deload.</td></tr>
+    <tr><td class="k">GPS cardio</td><td>Runs, walks and rides tracked on a map, in the same app as the lifting log.</td></tr>
+  </table>
+
+  <h3>Aretē Premium pricing</h3>
+  <p class="muted" style="font-size:8.8pt;margin-bottom:2px">The app itself is free to download and use. These prices are for Premium only.</p>
+  <div class="grid3" style="margin-top:9px;margin-bottom:10px">
+    <div class="price best"><div class="price-lab">Annual &middot; lead with this</div>
+      <div class="price-num">$29.99<small>/yr</small></div>
+      <div class="price-sub">One-week free trial, then $2.50 a month. Half the monthly price</div></div>
+    <div class="price"><div class="price-lab">Monthly</div>
+      <div class="price-num">$4.99<small>/mo</small></div>
+      <div class="price-sub">Cancel anytime</div></div>
+    <div class="price"><div class="price-lab">Lifetime</div>
+      <div class="price-num">$60</div>
+      <div class="price-sub">One-time. May be retired, so don't feature it</div></div>
+  </div>
+  <p class="muted" style="font-size:8.8pt">Only the annual plan has the <strong style="color:#F2F2F7">one-week free trial</strong>.
+  Launching on both iPhone and Android.</p>
+
+  <div class="folio"><span>Aret\u0113</span><span>2</span></div>
+</section>
+
+<!-- 3. NAME + SLOGAN -->
 <section class="page">
   <div class="rh"><span>Aret\u0113 Brand Guide</span><span>Name and slogan</span></div>
-  <p class="kicker">01 / The name</p>
+  <p class="kicker">02 / The name</p>
   <h2>Aret\u0113</h2>
   <p class="lede">From the Greek \u1f00\u03c1\u03b5\u03c4\u03ae: excellence realized through struggle and pursuit,
   rather than excellence handed to you. That is the whole positioning. The app does not just log
@@ -184,7 +248,7 @@ HTML = f"""<!DOCTYPE html>
 
   <div class="rule"></div>
 
-  <p class="kicker">02 / The slogan</p>
+  <p class="kicker">03 / The slogan</p>
   <h2 style="font-size:21pt">Pursue Excellence</h2>
   <p class="lede" style="margin-bottom:18px">The name translated into an instruction. It stands on its own
   without the app beside it and does not go stale as features change.</p>
@@ -212,13 +276,13 @@ HTML = f"""<!DOCTYPE html>
     </table>
   </div>
 
-  <div class="folio"><span>Aret\u0113</span><span>2</span></div>
+  <div class="folio"><span>Aret\u0113</span><span>3</span></div>
 </section>
 
-<!-- 3. LOGO -->
+<!-- 4. LOGO -->
 <section class="page">
   <div class="rh"><span>Aret\u0113 Brand Guide</span><span>Logo</span></div>
-  <p class="kicker">03 / Logo</p>
+  <p class="kicker">04 / Logo</p>
   <h2>The mark</h2>
   <p class="lede">The "A" crossbar is a literal barbell, with weight plates as the crossbar ends.
   The monogram <em>is</em> the equipment, not a barbell icon placed beside a letter. Keep that
@@ -262,13 +326,13 @@ HTML = f"""<!DOCTYPE html>
     </div>
   </div>
 
-  <div class="folio"><span>Aret\u0113</span><span>3</span></div>
+  <div class="folio"><span>Aret\u0113</span><span>4</span></div>
 </section>
 
-<!-- 4. COLOR -->
+<!-- 5. COLOR -->
 <section class="page">
   <div class="rh"><span>Aret\u0113 Brand Guide</span><span>Color</span></div>
-  <p class="kicker">04 / Color</p>
+  <p class="kicker">05 / Color</p>
   <h2>Green is the constant</h2>
   <p class="lede">Inside the app, users pick their own accent from eight presets and the whole UI
   re-themes around it. Anywhere outside the app, where one fixed color is needed, Green is canonical.</p>
@@ -304,13 +368,13 @@ HTML = f"""<!DOCTYPE html>
     <div><div class="sw" style="background:#8E8E93"></div><div class="sw-lab">Text secondary</div><div class="sw-hex">#8E8E93</div></div>
   </div>
 
-  <div class="folio"><span>Aret\u0113</span><span>4</span></div>
+  <div class="folio"><span>Aret\u0113</span><span>5</span></div>
 </section>
 
-<!-- 5. TYPE -->
+<!-- 6. TYPE -->
 <section class="page">
   <div class="rh"><span>Aret\u0113 Brand Guide</span><span>Typography</span></div>
-  <p class="kicker">05 / Typography</p>
+  <p class="kicker">06 / Typography</p>
   <h2>One family for marketing</h2>
   <p class="lede">Archivo carries every marketing surface. The product UI uses the operating system
   font, so the app loads no custom typeface at all.</p>
@@ -354,13 +418,13 @@ HTML = f"""<!DOCTYPE html>
     </div>
   </div>
 
-  <div class="folio"><span>Aret\u0113</span><span>5</span></div>
+  <div class="folio"><span>Aret\u0113</span><span>6</span></div>
 </section>
 
-<!-- 6. VOICE -->
+<!-- 7. VOICE -->
 <section class="page">
   <div class="rh"><span>Aret\u0113 Brand Guide</span><span>Voice</span></div>
-  <p class="kicker">06 / Voice</p>
+  <p class="kicker">07 / Voice</p>
   <h2>Confident, never hyped</h2>
   <p class="lede">The achievement is the excitement. Aret\u0113 states what happened and what it means,
   and lets the number carry the weight.</p>
@@ -406,13 +470,63 @@ HTML = f"""<!DOCTYPE html>
   <strong style="color:#C7C7CC">PR</strong> (not personal best), <strong style="color:#C7C7CC">bodyweight</strong>
   (one word), <strong style="color:#C7C7CC">225 lbs</strong> (lowercase, with a space).</p>
 
-  <div class="folio"><span>Aret\u0113</span><span>6</span></div>
+  <div class="folio"><span>Aret\u0113</span><span>7</span></div>
 </section>
 
-<!-- 7. RANKS + CONTACT -->
+<!-- 8. MARKETING -->
+<section class="page">
+  <div class="rh"><span>Aret\u0113 Brand Guide</span><span>Marketing</span></div>
+  <p class="kicker">08 / Marketing</p>
+  <h2>Free to start, Premium to go further</h2>
+  <p class="lede">The free app is a complete tracker, and that is worth saying out loud. Premium
+  is pitched as the coach and the ranking, never as unlocking the basics.</p>
+
+  <table class="fp block">
+    <tr><th>Feature</th><th style="width:1.35in">Free</th><th style="width:1.35in">Premium</th></tr>
+    <tr><td class="k">Strength, cardio and GPS logging, PRs, Greek Rank, share cards</td><td class="yes">Included</td><td class="yes">Included</td></tr>
+    <tr><td class="k">Workout templates</td><td>Up to 5</td><td class="yes">Unlimited</td></tr>
+    <tr><td class="k">Routines</td><td>Up to 2</td><td class="yes">Unlimited</td></tr>
+    <tr><td class="k">Strength Score and Endurance Score</td><td class="muted">Headline score</td><td class="yes">Full breakdown</td></tr>
+    <tr><td class="k">AI Coach workouts, routines and insights</td><td class="muted">Not included</td><td class="yes">Included</td></tr>
+    <tr><td class="k">Weekly muscle volume</td><td class="muted">Sets per muscle</td><td class="yes">MEV, MAV, MRV zones</td></tr>
+  </table>
+
+  <div class="two block">
+    <div>
+      <h3>Imagery</h3>
+      <p>At launch, marketing shows the product itself: real app screens with realistic data (a new
+      PR, a Strength Score, a routine), Archivo headlines and the wordmark on a dark background.
+      No stock fitness photography. Gold appears only on PRs and rank ups.</p>
+      <p style="margin-top:8px">Later photography is shot in-house: real lifters in real gyms, low
+      directional light, black and white by default, candid effort rather than posing.</p>
+    </div>
+    <div>
+      <h3>Share cards</h3>
+      <p>Users share five cards straight from the app: PR, workout, weekly summary, Strength Score and
+      cardio. Each is dark, carries the wordmark and <span class="mono">aretefitnessapp.com</span>, and leads
+      with one large number. Reposting them is the easiest social proof there is.</p>
+    </div>
+  </div>
+
+  <h3>Sample copy</h3>
+  <table class="vt" style="margin-top:8px">
+    <tr><th style="width:1.5in">Where</th><th>How it reads</th></tr>
+    <tr><td class="k">App Store subtitle</td><td class="on">Lifting and cardio, ranked</td></tr>
+    <tr><td class="k">Ad headline</td><td class="on">See where your lifts rank.</td></tr>
+    <tr><td class="k">Instagram caption</td><td class="on">Your squat has a percentile. Find out what it is.</td></tr>
+    <tr><td class="k">Trial offer</td><td class="on">Try Premium free for a week with the annual plan.</td></tr>
+    <tr><td class="k">Free tier</td><td class="on">Every workout, every run, every PR. Free.</td></tr>
+  </table>
+  <p class="muted" style="margin-top:12px;font-size:8.6pt">Any number quoted in public copy must be a real
+  result from the app, never an invented one.</p>
+
+  <div class="folio"><span>Aret\u0113</span><span>8</span></div>
+</section>
+
+<!-- 9. RANKS + CONTACT -->
 <section class="page">
   <div class="rh"><span>Aret\u0113 Brand Guide</span><span>Ranks</span></div>
-  <p class="kicker">07 / Progression</p>
+  <p class="kicker">09 / Progression</p>
   <h2>Two ladders</h2>
   <p class="lede">The naming rises from mortal to hero to divine, and finally to the abstract virtue
   itself. Nothing goes above Aret\u0113. Greek vocabulary is for ranks only. Features keep plain names:
@@ -424,10 +538,18 @@ HTML = f"""<!DOCTYPE html>
       <div style="margin-top:8px">{rank_rows}</div>
     </div>
     <div>
-      <h3>Strength Score <span class="muted" style="font-weight:400">&middot; per lift</span></h3>
+      <h3>Strength and Endurance Score <span class="muted" style="font-weight:400">&middot; percentile</span></h3>
       <div class="ladder" style="margin-top:10px">
         {"".join(f'<span class="step">{s}</span>' for s in STRENGTH)}
       </div>
+      <p style="margin-top:10px;font-size:8.8pt">Both scores share these six tiers. The Strength Score
+      ranks lifts and the Endurance Score ranks running pace. A score of 70 means stronger or faster than
+      70% of comparable lifters or runners.</p>
+      <p style="margin-top:6px;font-size:8.8pt">The Endurance Score reads running only, at eight distances
+      from 400 m to the marathon. The best result at 5K or longer counts for 70% and the best short
+      distance for 30%.</p>
+      <p style="margin-top:6px;font-size:8.8pt">Neither adds to Greek Rank, but the higher of the two
+      must be strong enough to reach Titan and Aret\u0113.</p>
       <h3 style="margin-top:20px">Naming rules</h3>
       <ul>
         <li>Extend an existing ladder rather than inventing a third</li>
@@ -438,20 +560,18 @@ HTML = f"""<!DOCTYPE html>
     </div>
   </div>
 
-  <div class="rule" style="margin:26px 0 20px"></div>
+  <div class="rule" style="margin:14px 0 14px"></div>
 
   <h3>Contact</h3>
   <table class="contact" style="margin-top:8px;max-width:4.6in">
     <tr><td class="k" style="width:1.3in">Web</td><td class="mono">aretefitnessapp.com</td></tr>
     <tr><td class="k">Support</td><td class="mono">support@aretefitnessapp.com</td></tr>
     <tr><td class="k">Instagram</td><td class="mono">@aretefitnessapp</td></tr>
+    <tr><td class="k">App Store</td><td class="mono">apps.apple.com/app/id6744030558</td></tr>
   </table>
 
-  <div style="margin-top:auto;text-align:center;padding-top:26px">
-    <img src="{MARK_WHITE}" style="width:1.5in;opacity:0.5" alt="">
-  </div>
 
-  <div class="folio"><span>Aret\u0113</span><span>7</span></div>
+  <div class="folio"><span>Aret\u0113</span><span>9</span></div>
 </section>
 
 </body>

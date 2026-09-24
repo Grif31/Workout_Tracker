@@ -19,15 +19,16 @@ import { apiFetch } from '../../utils/api';
 import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
 import { GREEK_RANKS } from '../../constants/greekRanks';
 import MuscleDiagram from '../../components/MuscleDiagram';
-import WorkoutShareCard from '../../components/WorkoutShareCard';
+import WorkoutShareCard from '../../components/share/WorkoutShareCard';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { PR_GOLD } from '../../constants/prColors';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import { DashboardStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { GREEK_RANK_CACHED_KEY } from '../../constants/storageKeys';
+import { GREEK_RANK_CACHED_KEY, PROFILE_FRAME_RANK_KEY } from '../../constants/storageKeys';
 import { type GreekRankData, gateRequirementText } from '../../utils/greekRank';
+import { PR_TYPE_LABELS, PR_TYPE_ORDER } from '../../utils/prFormat';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WorkoutSummary'>;
 
@@ -56,11 +57,6 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const greekScore = rankData?.greek_score ?? null;
   const [selectedFrame, setSelectedFrame] = useState('Neophyte');
 
-  const PR_TYPE_ORDER: Record<string, number> = { max_weight: 0, max_reps: 1, max_duration: 2, best_distance: 3, best_time: 4 };
-  const PR_TYPE_LABELS: Record<string, string> = {
-    max_weight: 'Max Weight', max_reps: 'Rep Record', max_duration: 'Longest Hold',
-    best_time: 'Best Time', best_distance: 'Best Distance',
-  };
   const filteredPrs = prs
     .filter(pr => pr.pr_type !== 'estimated_1rm')
     .sort((a, b) => {
@@ -83,7 +79,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   }, [filteredPrs]);
 
   useEffect(() => {
-    AsyncStorage.multiGet([GREEK_RANK_CACHED_KEY, `profile_frame_rank_${user?.id}`]).then(pairs => {
+    AsyncStorage.multiGet([GREEK_RANK_CACHED_KEY, `${PROFILE_FRAME_RANK_KEY}_${user?.id}`]).then(pairs => {
       const [rankRaw, frameRaw] = pairs.map(p => p[1]);
       if (rankRaw) setGreekRank(rankRaw);
       if (frameRaw) setSelectedFrame(frameRaw);
@@ -199,7 +195,11 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
       )}
 
       <View style={s.header}>
-        <TouchableOpacity style={s.closeBtn} onPress={() => navigation.navigate(isFirstWorkout ? 'GreekRankIntro' : 'DashboardHome')}>
+        <TouchableOpacity style={s.closeBtn} onPress={() => isFirstWorkout
+          // replace, not navigate: the intro's back arrow should reach the
+          // dashboard, not the summary the user just closed
+          ? navigation.replace('GreekRankIntro')
+          : navigation.navigate('DashboardHome')}>
           <Text style={s.closeText}>✕</Text>
         </TouchableOpacity>
       </View>
@@ -293,6 +293,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
               <View style={[s.rankBadgeCard, { backgroundColor: rankColor + '15', borderColor: rankColor + '44' }]}>
                 <View style={s.rankBadgeLeft}>
                   <View style={s.rankAvatarWrap}>
+                    <View style={s.rankAvatarDisc} />
                     <ProfileAvatarFrame rankName={selectedFrame} size={44} avatarSize={36} />
                   </View>
                   <View>
@@ -435,7 +436,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   setBadgeText: { fontSize: 12, color: colors.textSecondary },
   rankBadgeCard: { borderRadius: radius.md, padding: 14, borderWidth: 1 },
   rankBadgeLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  rankAvatarWrap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.surface },
+  rankAvatarWrap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  // own layer so the rounded disc never clips the Aretē frame's wreath, which bleeds past 44px
+  rankAvatarDisc: { position: 'absolute', width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface },
   rankBadgeName: { fontSize: typography.fontSize.md, fontWeight: '800', letterSpacing: 0.5 },
   rankBadgeSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   rankProgressWrap: { marginTop: spacing.sm },

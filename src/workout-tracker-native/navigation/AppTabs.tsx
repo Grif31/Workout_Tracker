@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, AppState, Animated } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LIVE_WORKOUT_NOTIF_KEY } from '../constants/storageKeys';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { postLiveWorkoutNotification, cancelLiveWorkoutNotification } from '../utils/notifications';
 import { onPendingCountChange, initPendingCount, flushQueue, announceFlushResult } from '../utils/offlineQueue';
@@ -107,7 +108,7 @@ function MiniWorkoutBar() {
       if (nextState === 'background') {
         // WorkoutLog posts with fresher state when it's open — never both
         if (workoutOpenRef.current) return;
-        const liveOff = await AsyncStorage.getItem('live_workout_notif_enabled');
+        const liveOff = await AsyncStorage.getItem(LIVE_WORKOUT_NOTIF_KEY);
         if (liveOff === 'false') return;
         const done = session.exercises.flatMap(e => e.sets).filter(s => s.done).length;
         const total = session.exercises.flatMap(e => e.sets).length;

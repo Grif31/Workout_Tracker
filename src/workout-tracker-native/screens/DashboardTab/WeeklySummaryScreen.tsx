@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { PieChart } from 'react-native-gifted-charts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { WEEKLY_GOAL_KEY } from '../../constants/storageKeys';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
@@ -22,7 +23,9 @@ import { fmtHold, RPE_KEY } from '../../components/workout/types';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
 import { toLocalDateStr } from '../../utils/date';
 import { LaurelBranch } from '../../components/LaurelWreath';
-import WeeklySummaryShareCard from '../../components/WeeklySummaryShareCard';
+import StreakFlame from '../../components/StreakFlame';
+import WeeklySummaryShareCard from '../../components/share/WeeklySummaryShareCard';
+import { PR_TYPE_LABELS, PR_TYPE_ORDER } from '../../utils/prFormat';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WeeklySummary'>;
 
@@ -30,16 +33,6 @@ type Props = NativeStackScreenProps<DashboardStackParamsList, 'WeeklySummary'>;
 // convention (see COACH_PROFILE_KEY in CoachProfileModal.tsx).
 export const WEEKLY_SUMMARY_LAST_SHOWN_KEY = 'weekly_summary_last_shown';
 
-const PR_TYPE_LABELS: Record<string, string> = {
-  max_weight: 'Max Weight', max_reps: 'Rep Record', max_duration: 'Longest Hold',
-  best_time: 'Best Time', best_distance: 'Best Distance',
-};
-
-// Same priority order as WorkoutSummaryScreen's PR_TYPE_ORDER — surfaces the
-// most notable PR types first so the cap below keeps the best ones.
-const PR_TYPE_ORDER: Record<string, number> = {
-  max_weight: 0, max_reps: 1, max_duration: 2, best_distance: 3, best_time: 4,
-};
 const MAX_PRS_SHOWN = 5;
 
 // The "weight" behind a PR, for sorting heaviest-first within a type — only
@@ -179,7 +172,7 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.multiGet([`workout_weekly_goal_${user.id}`, `${RPE_KEY}_${user.id}`, `${GPS_DISTANCE_UNIT_KEY}_${user.id}`]).then(pairs => {
+    AsyncStorage.multiGet([`${WEEKLY_GOAL_KEY}_${user.id}`, `${RPE_KEY}_${user.id}`, `${GPS_DISTANCE_UNIT_KEY}_${user.id}`]).then(pairs => {
       const [goalRaw, rpeRaw, distUnitRaw] = pairs.map(p => p[1]);
       const goal = goalRaw ? parseInt(goalRaw, 10) : 3;
       setWeeklyGoal(Number.isFinite(goal) && goal > 0 ? goal : 3);
@@ -436,7 +429,8 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
             <>
               {streak != null && streak >= 1 && (
                 <Animated.View entering={FadeInDown.duration(400)} style={styles.streakRow}>
-                  <Text style={styles.streakText}>🔥 {streak} week streak</Text>
+                  <StreakFlame size={16} />
+                  <Text style={styles.streakText}>{streak} week streak</Text>
                 </Animated.View>
               )}
 
@@ -746,7 +740,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary,
     textTransform: 'uppercase', letterSpacing: 0.8,
   },
-  streakRow: { alignItems: 'center' },
+  streakRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs },
   streakText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
   statsRow: { flexDirection: 'row', gap: 10 },
   statsRowWrap: { flexWrap: 'wrap' },

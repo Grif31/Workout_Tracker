@@ -10,7 +10,7 @@ from models import (
     User, Exercise, Set, Workout, PersonalRecord, ExerciseMuscleMapping,
     BodyweightLog, PREvent,
 )
-from schemas import AiGenerateSchema, AiInsightsSchema
+from schemas import AiGenerateSchema, AiInsightsSchema, AiSaveSchema
 from utils.validation import validate_body
 from utils.lift_progress import compute_most_improved_lift
 from utils.exercise_access import add_template_exercises
@@ -314,13 +314,26 @@ def _routine_rotation_context(user_id: int, routine_id: int) -> dict | None:
     }
 
 
-def _match_exercises(exercise_items: list) -> list[dict]:
+def _match_exercises(exercise_items: list, user_id) -> list[dict]:
     """Match AI exercise names to DB records.
     Accepts strings or {"exercise": str, "sets": int, "reps": str, "rpe": int|None}.
     Returns [{id, name, muscle_group, equipment, prescribed_sets, prescribed_reps, prescribed_rpe}].
+
+    Only the global library plus this user's own customs are matchable: matching
+    against every row let a custom exercise whose name collides with a library
+    one shadow it for everyone else, returning its owner's private row in the
+    preview. Ordering makes that collision deterministic in the other
+    direction — library first, then the user's own, first write wins.
     """
-    all_templates = ExerciseTemplate.query.all()
-    name_map = {t.name.lower(): t for t in all_templates}
+    all_templates = (
+        ExerciseTemplate.query
+        .filter(db.or_(ExerciseTemplate.user_id.is_(None), ExerciseTemplate.user_id == int(user_id)))
+        .order_by(ExerciseTemplate.user_id.is_(None).desc(), ExerciseTemplate.id)
+        .all()
+    )
+    name_map = {}
+    for t in all_templates:
+        name_map.setdefault(t.name.lower(), t)
     result = []
     seen_ids: set[int] = set()
     for item in exercise_items:
@@ -329,7 +342,12 @@ def _match_exercises(exercise_items: list) -> list[dict]:
         else:
             ex_name  = item.get('exercise', '')
             p_sets   = item.get('sets')
+            # Asked for as a string ("6-8"), but models often answer with a
+            # bare number; stored unconverted it later breaks the app's
+            # reps parsing when the template is logged.
             p_reps   = item.get('reps')
+            if p_reps is not None and not isinstance(p_reps, str):
+                p_reps = str(p_reps)
             p_rpe    = item.get('rpe')
         low = ex_name.lower()
         tmpl = name_map.get(low)
@@ -1059,7 +1077,7 @@ def generate_workout():
         if generate_type == 'routine':
             days_preview = []
             for day in result.get('days', []):
-                exercises = _match_exercises(day.get('exercises', []))
+                exercises = _match_exercises(day.get('exercises', []), user_id)
                 days_preview.append({'label': _brand_copy(day['label'], heading=True), 'exercises': exercises})
             return jsonify({
                 'type': 'routine',
@@ -1068,7 +1086,7 @@ def generate_workout():
                 'days': days_preview,
             }), 200
         else:
-            exercises = _match_exercises(result.get('exercises', []))
+            exercises = _match_exercises(result.get('exercises', []), user_id)
             return jsonify({
                 'type': 'template',
                 'name': _brand_copy(result['name'], heading=True),
@@ -1130,16 +1148,21 @@ def get_ai_insights():
 
 @ai_bp.post('/api/ai/save')
 @jwt_required()
+# Save is cheap per call but writes a routine, a template per day and a row
+# per exercise; generate allows 10 previews a day, so 20 saves is headroom
+# for retries, not a limit a real user reaches.
+@limiter.limit('20 per day', key_func=lambda: f"ai_save:{get_jwt_identity()}")
+@validate_body(AiSaveSchema())
 def save_generated_workout():
     """Persist a previewed (and potentially edited) AI workout to the database."""
     user_id = get_jwt_identity()
-    data = request.get_json(silent=True) or {}
-    gen_type = data.get('type')
+    data = g.validated
+    gen_type = data['type']
 
     if gen_type == 'routine':
         routine = Routine(
             user_id=user_id,
-            name=data.get('name', 'My Routine'),
+            name=data.get('name') or 'My Routine',
             description=data.get('description') or None,
         )
         db.session.add(routine)
@@ -1169,7 +1192,7 @@ def save_generated_workout():
         tmpl_prog = data.get('programming')
         template = WorkoutTemplate(
             user_id=user_id,
-            name=data.get('name', 'My Workout'),
+            name=data.get('name') or 'My Workout',
             programming_json=json.dumps(tmpl_prog) if tmpl_prog else None,
         )
         db.session.add(template)

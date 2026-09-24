@@ -1,4 +1,4 @@
-import { PrefillWorkoutData } from "components/WorkoutDetails";
+import { PrefillWorkoutData } from "../components/WorkoutDetails";
 
 export type ExerciseDetailParams = {
   exerciseId: number;
@@ -137,6 +137,7 @@ export type ProfileStackParamsList = {
         weightContext?: number | null;
     };
     GreekRank: undefined;
+    GreekRankIntro: undefined;
 };
 
 export type AppStack = {

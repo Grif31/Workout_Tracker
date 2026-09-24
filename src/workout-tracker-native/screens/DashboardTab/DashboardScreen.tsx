@@ -11,14 +11,16 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { toDisplayVolume, WeightUnit } from 'utils/units';
-import { toLocalDateStr } from 'utils/date';
+import { toDisplayVolume, WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance, roundTenth, type DistanceUnit } from '../../utils/units';
+import { fmtDuration } from '../../utils/cardioFormat';
+import { toLocalDateStr } from '../../utils/date';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { WEEKLY_GOAL_KEY } from '../../constants/storageKeys';
 import { apiFetch, isNetworkError } from '../../utils/api';
 import { announceFlushResult, flushQueue, getPendingCount, onPendingCountChange } from '../../utils/offlineQueue';
 import { showToast } from '../../utils/toast';
-import { appCache } from '../../utils/appCache';
+import { appCache, useRefetchGate } from '../../utils/appCache';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { PR_GOLD_TEXT } from '../../constants/prColors';
 import { WEEKLY_SUMMARY_LAST_SHOWN_KEY } from './WeeklySummaryScreen';
@@ -26,8 +28,12 @@ import SectionRule from '../../components/SectionRule';
 import PressableScale from '../../components/PressableScale';
 import StreakFlame from '../../components/StreakFlame';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
-import { activeDayFilter, defaultLayout, loadDashboardLayout, saveDashboardLayout, visibleCards, type DashboardLayout } from '../../utils/dashboardLayout';
-import { DASHBOARD_CARDS, type DashboardCardId } from '../../constants/dashboardCards';
+import { activeDayFilter, cardSize, defaultLayout, fixedHomeLayout, loadDashboardLayout, packRows, saveDashboardLayout, type DashboardLayout } from '../../utils/dashboardLayout';
+import { CARD_SIZES, DASHBOARD_CARDS, HOME_CUSTOMIZATION_ENABLED, type CardSize, type DashboardCardId } from '../../constants/dashboardCards';
+import WeeklyGoalCard from '../../components/dashboard/WeeklyGoalCard';
+import GreekRankCard from '../../components/dashboard/GreekRankCard';
+import { GREEK_RANK_CACHED_KEY } from '../../constants/storageKeys';
+import type { GreekRankData } from '../../utils/greekRank';
 import DraggableList from '../../components/DraggableList';
 import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../../utils/templatePrefill';
 
@@ -264,10 +270,23 @@ export default function DashboardScreen({ navigation }: Props) {
   const [dailyStreak, setDailyStreak] = useState(0);
   const [longestDailyStreak, setLongestDailyStreak] = useState(0);
   const [streakType, setStreakType] = useState<'weekly' | 'monthly' | 'daily'>('weekly');
+  // Cardio: totals since Monday, plus the all-time activity count. The card is
+  // only worth a slot for someone who actually logs cardio, so the all-time
+  // count is what decides whether it renders at all.
+  const [weekCardio, setWeekCardio] = useState({ activities: 0, distanceKm: 0, minutes: 0 });
+  const [totalCardioActivities, setTotalCardioActivities] = useState(0);
+  const [weeklyGoal, setWeeklyGoal] = useState(3);
+  const [thisWeekCount, setThisWeekCount] = useState(0);
+  const [greekRank, setGreekRank] = useState<{ rank: string | null; score: number | null; heldByGate: boolean }>(
+    { rank: null, score: null, heldByGate: false },
+  );
+  const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>('mi');
   const [streakModalVisible, setStreakModalVisible] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
-  const [layout, setLayout] = useState<DashboardLayout>(defaultLayout);
+  const [layout, setLayout] = useState<DashboardLayout>(
+    () => (HOME_CUSTOMIZATION_ENABLED ? defaultLayout() : fixedHomeLayout()),
+  );
   // Arrange mode swaps the cards for equal-height chips in place, rather than
   // sending the user to a separate screen to arrange a copy of their Home
   const [arranging, setArranging] = useState(false);
@@ -313,6 +332,7 @@ export default function DashboardScreen({ navigation }: Props) {
     const wd = appCache.get<{ dates: string[] }>('workout_dates');
     const ps = appCache.get<any>('profile_stats');
     const me = appCache.get<any>('me');
+    const gr = appCache.get<GreekRankData>('greek_rank');
     if (rw) setWorkouts(rw);
     if (wd) setAllWorkoutDates(wd.dates ?? []);
     if (ps) {
@@ -321,6 +341,7 @@ export default function DashboardScreen({ navigation }: Props) {
       setDailyStreak(ps.current_daily_streak ?? 0);
       setLongestDailyStreak(ps.longest_daily_streak ?? 0);
     }
+    if (gr) setGreekRank({ rank: gr.greek_rank ?? null, score: gr.greek_score ?? null, heldByGate: !!gr.held_by_gate });
     if (me?.active_routine_id) fetchActiveRoutine(me.active_routine_id);
     if (rw || me) {
       setLoading(false);
@@ -355,22 +376,47 @@ export default function DashboardScreen({ navigation }: Props) {
     } catch { /* silently fail — this is a nice-to-have, not critical */ }
   };
 
+  // Seeded from the preload so the first focus, a moment after it, doesn't
+  // repeat the requests the mount effect above just painted from.
+  const refetchIfStale = useRefetchGate(() => ({
+    me: appCache.stampOf('me'),
+    recent: appCache.stampOf('recent_workouts'),
+    dates: appCache.stampOf('workout_dates'),
+    greek: appCache.stampOf('greek_rank'),
+  }));
+
+  // fetchStreak is never gated: its query carries the weekly goal, which lives
+  // in AsyncStorage and changes without a write that would mark data stale.
+  const refreshHome = (force: boolean) => Promise.all([
+    refetchIfStale('me', fetchUser, force),
+    refetchIfStale('recent', fetchRecentWorkouts, force),
+    refetchIfStale('week', fetchWeekWorkouts, force),
+    refetchIfStale('dates', fetchAllWorkoutDates, force),
+    fetchStreak(),
+    ...(HOME_CUSTOMIZATION_ENABLED ? [refetchIfStale('greek', fetchGreekRank, force)] : []),
+  ]);
+
   useFocusEffect(useCallback(() => {
     const firstLoad = !hasLoaded.current;
     if (firstLoad) setLoading(true);
-    Promise.all([fetchUser(), fetchRecentWorkouts(), fetchWeekWorkouts(), fetchAllWorkoutDates(), fetchStreak()]).finally(() => {
+    refreshHome(false).finally(() => {
       setLoading(false);
       hasLoaded.current = true;
     });
     checkWeeklySummaryPopup();
-    // Re-read on focus: the Customize screen saves as the user drags.
+    // Re-read on focus: arrange mode saves as the user drags.
     // authUser, not the /api/me copy below, which is undefined on first render
-    loadDashboardLayout(authUser?.id).then(setLayout);
+    if (HOME_CUSTOMIZATION_ENABLED) loadDashboardLayout(authUser?.id).then(setLayout);
+    if (authUser?.id != null) {
+      AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${authUser.id}`)
+        .then(v => { if (v === 'km' || v === 'mi') setDistanceUnit(v); })
+        .catch(() => { /* keep the default */ });
+    }
   }, [authUser?.id]));
 
   const handleRefresh = () => {
     setRefreshing(true);
-    Promise.all([fetchUser(), fetchRecentWorkouts(), fetchWeekWorkouts(), fetchAllWorkoutDates(), fetchStreak()]).finally(() => setRefreshing(false));
+    refreshHome(true).finally(() => setRefreshing(false));
   };
 
   const fetchUser = async () => {
@@ -449,10 +495,27 @@ export default function DashboardScreen({ navigation }: Props) {
     } catch { /* silently fail */ }
   };
 
+  const fetchGreekRank = async () => {
+    try {
+      const cached = await AsyncStorage.getItem(GREEK_RANK_CACHED_KEY);
+      if (cached) setGreekRank(prev => (prev.rank ? prev : { rank: cached, score: null, heldByGate: false }));
+      const res = await apiFetch('/api/stats/greek-rank');
+      if (!res.ok) return;
+      const data: GreekRankData = await res.json();
+      setGreekRank({
+        rank: data.greek_rank ?? null,
+        score: data.greek_score ?? null,
+        heldByGate: !!data.held_by_gate,
+      });
+      if (data.greek_rank) AsyncStorage.setItem(GREEK_RANK_CACHED_KEY, data.greek_rank).catch(() => {});
+    } catch { /* silently fail — the card shows its cached or empty state */ }
+  };
+
   const fetchStreak = async () => {
     try {
-      const goalRaw = await AsyncStorage.getItem(`workout_weekly_goal_${authUser?.id}`);
+      const goalRaw = await AsyncStorage.getItem(`${WEEKLY_GOAL_KEY}_${authUser?.id}`);
       const weeklyGoal = goalRaw ? (parseInt(goalRaw, 10) || 3) : 3;
+      setWeeklyGoal(weeklyGoal);
       const res = await apiFetch(`/api/stats/profile?weekly_goal=${weeklyGoal}`);
       if (res.ok) {
         const data = await res.json();
@@ -461,6 +524,13 @@ export default function DashboardScreen({ navigation }: Props) {
         setMonthlyStreak(data.current_monthly_streak ?? 0);
         setDailyStreak(data.current_daily_streak ?? 0);
         setLongestDailyStreak(data.longest_daily_streak ?? 0);
+        setThisWeekCount(data.this_week_count ?? 0);
+        setTotalCardioActivities(data.cardio_activities ?? 0);
+        setWeekCardio({
+          activities: data.week_cardio_activities ?? 0,
+          distanceKm: data.week_cardio_distance_km ?? 0,
+          minutes: data.week_cardio_minutes ?? 0,
+        });
       }
     } catch { /* silently fail */ }
   };
@@ -482,13 +552,13 @@ export default function DashboardScreen({ navigation }: Props) {
               ? { value: monthlyStreak, unit: 'mo' }
               : { value: dailyStreak, unit: 'd' };
             return (
+              <>
+              {/* The streak sits on its own row above the greeting: sharing a
+                  row squeezed the greeting into the width left over and cut
+                  off longer names. Equal flex spacers either side keep it
+                  dead centre. */}
               <View style={styles.topbar}>
-                {/* Both sides flex equally, so the streak lands dead centre
-                    however long the greeting or the Done label is */}
-                <View style={styles.topbarSide}>
-                  <Text style={styles.greetingText} numberOfLines={1}>{getDailyGreeting()},</Text>
-                  <Text style={styles.greetingName} numberOfLines={1}>{displayName}</Text>
-                </View>
+                <View style={styles.topbarSide} />
                 <TouchableOpacity
                   onPress={() => setStreakModalVisible(true)}
                   style={styles.streakBadge}
@@ -504,19 +574,30 @@ export default function DashboardScreen({ navigation }: Props) {
                   <Text style={styles.streakCount}>{streakDisplay.value}{streakDisplay.unit}</Text>
                   <Text style={styles.streakLabel}>Streak</Text>
                 </TouchableOpacity>
-                <View style={[styles.topbarSide, styles.topbarSideRight]}>
+                <View style={styles.topbarSide} />
+              </View>
+
+              <View style={styles.greetingBlock}>
+                {/* The name flexes and truncates so a long one shortens itself
+                    rather than pushing the button off the row. */}
+                <View style={styles.greetingTextBlock}>
+                  <Text style={styles.greetingText} numberOfLines={1}>{getDailyGreeting()},</Text>
+                  <Text style={styles.greetingName} numberOfLines={1}>{displayName}</Text>
+                </View>
+                {HOME_CUSTOMIZATION_ENABLED && (
                   <TouchableOpacity
                     onPress={() => setArranging(v => !v)}
                     style={styles.customizeButton}
                     accessibilityRole="button"
-                    accessibilityLabel={arranging ? 'Done arranging Home' : 'Arrange Home'}
+                    accessibilityLabel={arranging ? 'Done customizing dashboard' : 'Customize your dashboard'}
                   >
                     {arranging
                       ? <Text style={[styles.doneText, { color: colors.accent }]}>Done</Text>
                       : <Ionicons name="options-outline" size={20} color={colors.textSecondary} />}
                   </TouchableOpacity>
-                </View>
+                )}
               </View>
+              </>
             );
           })()}
 
@@ -567,16 +648,16 @@ export default function DashboardScreen({ navigation }: Props) {
           {/* Cards render in the user's saved order, hidden ones dropped
               (Customize Home). Everything above stays put. */}
           {(() => {
-            const visible = visibleCards(layout);
             const activeDate = activeDayFilter(layout, selectedCalDate);
+            const routineCompact = cardSize(layout, 'activeRoutine') === 'half';
             const cardNodes: Record<DashboardCardId, React.ReactNode> = {
               activeRoutine: (
                 <>
           {/* Active Routine */}
           {activeRoutine && (
             <PressableScale
-              style={styles.activeBlock}
-              onPress={toggleDaysVisible}
+              style={[styles.activeBlock, routineCompact && styles.cardHalf]}
+              onPress={routineCompact ? undefined : toggleDaysVisible}
             >
               <View style={styles.activeRoutineNameRow}>
                 <Text style={styles.activeRoutineName} numberOfLines={1}>{activeRoutine.name}</Text>
@@ -584,7 +665,7 @@ export default function DashboardScreen({ navigation }: Props) {
                     toggles via PressableScale, and nesting a touchable inside
                     it left the label stuck at its pressed opacity because the
                     outer responder swallowed the press-out. */}
-                <View style={styles.toggleDaysBtn}>
+                <View style={[styles.toggleDaysBtn, routineCompact && styles.hiddenControl]}>
                   <Text style={[styles.toggleDaysBtnText, { color: colors.accent }]}>
                     {routineDays.length} Day{routineDays.length !== 1 ? 's' : ''}
                   </Text>
@@ -605,18 +686,23 @@ export default function DashboardScreen({ navigation }: Props) {
 
               {/* Up next — the day to train, with a one-tap Log */}
               {nextDay ? (
-                <View style={styles.upNextRow}>
-                  <View style={{ flex: 1 }}>
+                <View style={[styles.upNextRow, routineCompact && styles.upNextRowCompact]}>
+                  <View style={routineCompact ? undefined : { flex: 1 }}>
                     <Text style={styles.upNextLabel}>Up Next</Text>
                     {/* Name and exercise count share a line to keep the card short */}
                     <View style={styles.upNextNameRow}>
                       <Text style={styles.upNextName} numberOfLines={1}>{nextDay.label}</Text>
-                      <Text style={styles.upNextMeta}>
-                        {nextDay.workout_template.exercises.length} ex
-                      </Text>
+                      {!routineCompact && (
+                        <Text style={styles.upNextMeta}>
+                          {nextDay.workout_template.exercises.length} ex
+                        </Text>
+                      )}
                     </View>
                   </View>
-                  <TouchableOpacity style={styles.logNextBtn} onPress={() => logRoutineDay(nextDay)}>
+                  <TouchableOpacity
+                    style={[styles.logNextBtn, routineCompact && styles.logNextBtnCompact]}
+                    onPress={() => logRoutineDay(nextDay)}
+                  >
                     <Text style={styles.logDayBtnText}>Log</Text>
                   </TouchableOpacity>
                 </View>
@@ -629,7 +715,7 @@ export default function DashboardScreen({ navigation }: Props) {
                 </View>
               )}
 
-              <Collapsible progress={expandAnim} expanded={daysVisible}>
+              <Collapsible progress={expandAnim} expanded={daysVisible && !routineCompact}>
                 <View style={styles.daysList}>
                   {routineDays.map(day => {
                     const done = isDayDone(day);
@@ -660,6 +746,74 @@ export default function DashboardScreen({ navigation }: Props) {
                 </View>
               </Collapsible>
             </PressableScale>
+          )}
+                </>
+              ),
+              weeklyGoal: (
+                <WeeklyGoalCard done={thisWeekCount} goal={weeklyGoal} size={cardSize(layout, 'weeklyGoal')} />
+              ),
+              greekRank: (
+                <GreekRankCard
+                  rank={greekRank.rank}
+                  score={greekRank.score}
+                  heldByGate={greekRank.heldByGate}
+                  size={cardSize(layout, 'greekRank')}
+                />
+              ),
+              weekCardio: (
+                <>
+          {/* Cardio This Week — only for people who log cardio at all, so it
+              doesn't sit empty on a pure lifter's Home. */}
+          {totalCardioActivities > 0 && (
+            <View style={[styles.weekCardioCard, cardSize(layout, 'weekCardio') === 'half' && styles.cardHalf]}>
+              <View style={styles.weekCardioHeader}>
+                <Ionicons name="pulse" size={14} color={colors.accent} />
+                <Text style={styles.weekCardioTitle}>Cardio This Week</Text>
+              </View>
+              {weekCardio.activities === 0 ? (
+                <Text style={styles.weekCardioEmpty}>Nothing logged since Monday</Text>
+              ) : cardSize(layout, 'weekCardio') === 'half' ? (
+                /* Half width can't carry three columns: lead with the number
+                   that matters and demote the rest to one line. */
+                <View>
+                  <Text style={styles.weekCardioValue}>
+                    {weekCardio.distanceKm > 0
+                      ? roundTenth(toDisplayDistance(weekCardio.distanceKm, distanceUnit)).toLocaleString()
+                      : fmtDuration(weekCardio.minutes)}
+                  </Text>
+                  <Text style={styles.weekCardioLabel}>
+                    {weekCardio.distanceKm > 0 ? (distanceUnit === 'mi' ? 'miles' : 'km') : 'total time'}
+                  </Text>
+                  <Text style={styles.weekCardioSub} numberOfLines={1}>
+                    {weekCardio.activities} {weekCardio.activities === 1 ? 'activity' : 'activities'}
+                    {weekCardio.distanceKm > 0 ? ` · ${fmtDuration(weekCardio.minutes)}` : ''}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.weekCardioStats}>
+                  {/* Machine cardio is often logged as time with no distance,
+                      so distance only earns its column when there is some. */}
+                  {weekCardio.distanceKm > 0 && (
+                    <View style={styles.weekCardioStat}>
+                      <Text style={styles.weekCardioValue}>
+                        {roundTenth(toDisplayDistance(weekCardio.distanceKm, distanceUnit)).toLocaleString()}
+                      </Text>
+                      <Text style={styles.weekCardioLabel}>{distanceUnit === 'mi' ? 'miles' : 'km'}</Text>
+                    </View>
+                  )}
+                  <View style={styles.weekCardioStat}>
+                    <Text style={styles.weekCardioValue}>{fmtDuration(weekCardio.minutes)}</Text>
+                    <Text style={styles.weekCardioLabel}>time</Text>
+                  </View>
+                  <View style={styles.weekCardioStat}>
+                    <Text style={styles.weekCardioValue}>{weekCardio.activities}</Text>
+                    <Text style={styles.weekCardioLabel}>
+                      {weekCardio.activities === 1 ? 'activity' : 'activities'}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
           )}
                 </>
               ),
@@ -764,8 +918,19 @@ export default function DashboardScreen({ navigation }: Props) {
               ),
             };
             if (!arranging) {
-              return visible.map(id => (
-                <React.Fragment key={id}>{cardNodes[id]}</React.Fragment>
+              // Two adjacent half cards share a row; a lone half keeps its
+              // width and leaves the other slot empty rather than stretching.
+              return packRows(layout).map(row => (
+                row.size === 'full' ? (
+                  <React.Fragment key={row.ids[0]}>{cardNodes[row.ids[0]]}</React.Fragment>
+                ) : (
+                  <View key={row.ids.join('+')} style={styles.halfRow}>
+                    {row.ids.map(id => (
+                      <React.Fragment key={id}>{cardNodes[id]}</React.Fragment>
+                    ))}
+                    {row.ids.length === 1 && <View style={styles.halfSpacer} />}
+                  </View>
+                )
               ));
             }
 
@@ -780,7 +945,7 @@ export default function DashboardScreen({ navigation }: Props) {
             return (
               <View style={styles.arrangePanel}>
                 <View style={styles.arrangeHeader}>
-                  <Text style={styles.arrangeTitle}>Arrange your Home</Text>
+                  <Text style={styles.arrangeTitle}>Customize your dashboard</Text>
                   <TouchableOpacity onPress={() => persistLayout(defaultLayout())}>
                     <Text style={[styles.arrangeReset, { color: colors.accent }]}>Reset</Text>
                   </TouchableOpacity>
@@ -799,6 +964,8 @@ export default function DashboardScreen({ navigation }: Props) {
                   }}
                   renderItem={card => {
                     const isHidden = layout.hidden.includes(card.id);
+                    const allowed = CARD_SIZES[card.id] ?? ['full'];
+                    const current = cardSize(layout, card.id);
                     return (
                       <View
                         style={[styles.arrangeRow, isHidden && styles.arrangeRowHidden]}
@@ -809,6 +976,35 @@ export default function DashboardScreen({ navigation }: Props) {
                           <Text style={styles.arrangeRowTitle}>{card.title}</Text>
                           <Text style={styles.arrangeRowDescription} numberOfLines={1}>{card.description}</Text>
                         </View>
+                        {/* Only cards with a compact variant offer a width;
+                            the rest would render badly in half a phone. */}
+                        {allowed.length > 1 && (
+                          <View style={styles.sizeToggle}>
+                            {(['full', 'half'] as CardSize[]).filter(sz => allowed.includes(sz)).map(sz => {
+                              const on = current === sz;
+                              return (
+                                <TouchableOpacity
+                                  key={sz}
+                                  onPress={() => persistLayout({
+                                    ...layout,
+                                    sizes: { ...layout.sizes, [card.id]: sz },
+                                  })}
+                                  style={[styles.sizeOption, on && { backgroundColor: colors.accent }]}
+                                  testID={`arrange-size-${card.id}-${sz}`}
+                                  accessibilityRole="button"
+                                  accessibilityState={{ selected: on }}
+                                  accessibilityLabel={`Show ${card.title} at ${sz === 'full' ? 'full' : 'half'} width`}
+                                >
+                                  <Ionicons
+                                    name={sz === 'full' ? 'square-outline' : 'tablet-portrait-outline'}
+                                    size={14}
+                                    color={on ? colors.accentText : colors.textSecondary}
+                                  />
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        )}
                         <TouchableOpacity
                           onPress={() => persistLayout({
                             ...layout,
@@ -844,7 +1040,7 @@ export default function DashboardScreen({ navigation }: Props) {
           <View style={styles.streakModalBox}>
             <Text style={styles.streakModalTitle}>Streak Type</Text>
             {([
-              { key: 'weekly' as const, emoji: '🔥', label: 'Weekly', value: weeklyStreak, unit: 'wk', sub: null },
+              { key: 'weekly' as const, emoji: null, label: 'Weekly', value: weeklyStreak, unit: 'wk', sub: null },
               { key: 'monthly' as const, emoji: '📅', label: 'Monthly', value: monthlyStreak, unit: 'mo', sub: null },
               { key: 'daily' as const, emoji: '⚡', label: 'Daily', value: dailyStreak, unit: 'd', sub: `longest: ${longestDailyStreak}d` },
             ] as const).map(row => (
@@ -853,7 +1049,11 @@ export default function DashboardScreen({ navigation }: Props) {
                 style={[styles.streakRow, streakType === row.key && styles.streakRowActive]}
                 onPress={() => setStreakType(row.key)}
               >
-                <Text style={styles.streakRowEmoji}>{row.emoji}</Text>
+                {/* Weekly is the streak the flame stands for elsewhere, so it
+                    gets the drawn flame; the other two keep their emoji. */}
+                {row.emoji
+                  ? <Text style={styles.streakRowEmoji}>{row.emoji}</Text>
+                  : <View style={styles.streakRowIcon}><StreakFlame size={20} active={row.value > 0} inactiveColor={colors.textSecondary} /></View>}
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.streakRowLabel, streakType === row.key && { color: colors.accent }]}>{row.label}</Text>
                   {row.sub && <Text style={styles.streakRowSub}>{row.sub}</Text>}
@@ -878,7 +1078,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
 
   content: { padding: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xl },
   topbarSide: { flex: 1 },
-  topbarSideRight: { alignItems: 'flex-end' },
   doneText: { fontSize: typography.fontSize.md, fontWeight: '700' },
   arrangePanel: { gap: spacing.sm, marginBottom: spacing.md },
   arrangeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -896,9 +1095,24 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   arrangeRowTitle: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
   arrangeRowDescription: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
   arrangeToggle: { height: '100%', justifyContent: 'center', paddingLeft: spacing.sm },
+  sizeToggle: {
+    flexDirection: 'row',
+    borderRadius: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  sizeOption: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
   arrangeHint: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
   customizeButton: { padding: spacing.xs },
-  topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
+  greetingBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  greetingTextBlock: { flex: 1 },
   greetingText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
   greetingName: { fontSize: typography.fontSize.xl, fontWeight: '800', color: colors.textPrimary, marginTop: 1 },
 
@@ -972,6 +1186,36 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderBottomColor: colors.border,
     borderLeftColor: colors.accent,
   },
+  halfRow: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm },
+  hiddenControl: { display: 'none' },
+  upNextRowCompact: { flexDirection: 'column', alignItems: 'stretch', gap: spacing.xs },
+  logNextBtnCompact: { alignItems: 'center' },
+  halfSpacer: { flex: 1 },
+  cardHalf: { flex: 1 },
+  weekCardioSub: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: spacing.xs },
+  weekCardioCard: {
+    backgroundColor: colors.surface,
+    borderRadius: spacing.sm,
+    padding: spacing.sm + spacing.xs,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  weekCardioHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  weekCardioTitle: {
+    fontSize: 10, fontWeight: '700', color: colors.accent,
+    textTransform: 'uppercase', letterSpacing: 0.8,
+  },
+  weekCardioStats: { flexDirection: 'row' },
+  weekCardioStat: { flex: 1 },
+  weekCardioValue: {
+    fontSize: typography.fontSize.lg, fontWeight: '800', color: colors.textPrimary,
+  },
+  weekCardioLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 1 },
+  weekCardioEmpty: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
   activeRoutineNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1071,7 +1315,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   // two-line block, which left it floating low in the row
   // Pulled above the greeting's first line; centre-aligned so the flame sits
   // with the number rather than on the text baseline
-  streakBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: -6 },
+  streakBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   streakCount: { fontSize: typography.fontSize.md, fontWeight: '800', color: colors.textPrimary },
   streakLabel: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
 
@@ -1090,6 +1334,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   streakRowActive: { backgroundColor: colors.accent + '18' },
   streakRowEmoji: { fontSize: typography.fontSize.lg, width: 28, textAlign: 'center' },
+  streakRowIcon: { width: 28, alignItems: 'center' },
   streakRowLabel: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
   streakRowSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 1 },
   streakRowValue: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textSecondary, minWidth: 40, textAlign: 'right' },

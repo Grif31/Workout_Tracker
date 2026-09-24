@@ -63,26 +63,49 @@ class ExerciseSchema(_Base):
     exercise_type = fields.Str(load_default='strength', validate=validate.OneOf(['strength', 'cardio', 'duration']))
 
 # ── Workout ───────────────────────────────────────────────────
+def _validate_exercises(exercises):
+    # The routes index ex['name'] and iterate ex['sets'] directly, so a
+    # malformed exercise has to fail here as a 400 rather than there as a 500.
+    for i, ex in enumerate(exercises):
+        if not isinstance(ex.get('name'), str) or not ex['name'].strip():
+            raise ValidationError(f'exercise {i + 1} needs a name')
+        sets = ex.get('sets', [])
+        if not isinstance(sets, list) or not all(isinstance(s, dict) for s in sets):
+            raise ValidationError(f'exercise {i + 1} sets must be a list of objects')
+
+
 class WorkoutSchema(_Base):
     workoutName = fields.Str(required=True, validate=validate.Length(min=1))
-    exercises   = fields.List(fields.Dict(), required=True)
+    exercises   = fields.List(fields.Dict(), required=True, validate=_validate_exercises)
     notes       = fields.Str(load_default=None)
     duration    = fields.Int(load_default=None)
     date        = fields.Str(load_default=None)
+    # Bounds are a plausibility gate on wearable data, not a medical range --
+    # HealthKit will hand back stray samples from a loose strap.
+    avg_heart_rate = fields.Int(load_default=None, allow_none=True, validate=validate.Range(min=20, max=260))
+    max_heart_rate = fields.Int(load_default=None, allow_none=True, validate=validate.Range(min=20, max=260))
 
 # No load_default — missing fields excluded to preserve 'if field in data' PATCH semantics.
 class UpdateWorkoutSchema(_Base):
     workoutName = fields.Str()
-    exercises   = fields.List(fields.Dict())
+    exercises   = fields.List(fields.Dict(), validate=_validate_exercises)
     notes       = fields.Str()
     duration    = fields.Int()
     date        = fields.Str()
+    avg_heart_rate = fields.Int(allow_none=True, validate=validate.Range(min=20, max=260))
+    max_heart_rate = fields.Int(allow_none=True, validate=validate.Range(min=20, max=260))
 
 # ── Routine ───────────────────────────────────────────────────
 class RoutineSchema(_Base):
     name        = fields.Str(required=True, validate=validate.Length(min=1))
     days        = fields.List(fields.Dict(), required=True)
     description = fields.Str(load_default=None)
+
+# No load_default, so 'if field in data' PATCH semantics hold.
+class UpdateRoutineSchema(_Base):
+    name        = fields.Str()
+    days        = fields.List(fields.Dict())
+    description = fields.Str(allow_none=True)
 
 # ── Workout Template ──────────────────────────────────────────
 class WorkoutTemplateSchema(_Base):
@@ -92,6 +115,11 @@ class WorkoutTemplateSchema(_Base):
     # template on its first save, so programming entered beforehand has to
     # arrive with the POST rather than a later PATCH.
     programming           = fields.List(fields.Dict(), load_default=None)
+
+class UpdateWorkoutTemplateSchema(_Base):
+    name                  = fields.Str()
+    exercise_template_ids = fields.List(fields.Int())
+    programming           = fields.List(fields.Dict(), allow_none=True)
 
 # ── Bodyweight ────────────────────────────────────────────────
 class BodyweightSchema(_Base):
@@ -124,6 +152,31 @@ class AiGenerateSchema(_Base):
     avoid              = fields.Str(load_default='none')
     muscles            = fields.List(fields.Str(), load_default=[])
     notes              = fields.Str(load_default=None)
+
+# Bounds for persisting an AI preview. Generation caps a routine at 7 days
+# (days_per_week) and the preview screen can't add any, and no real day holds
+# anywhere near 50 exercises; the limits exist so one request can't write
+# thousands of rows, not to encode a product rule.
+AI_SAVE_MAX_DAYS      = 7
+AI_SAVE_MAX_EXERCISES = 50
+
+class _AiSaveDaySchema(_Base):
+    label        = fields.Str(required=True, validate=validate.Length(min=1, max=100))
+    exercise_ids = fields.List(fields.Int(), load_default=list,
+                               validate=validate.Length(max=AI_SAVE_MAX_EXERCISES))
+    programming  = fields.List(fields.Dict(), load_default=None, allow_none=True,
+                               validate=validate.Length(max=AI_SAVE_MAX_EXERCISES))
+
+class AiSaveSchema(_Base):
+    type         = fields.Str(required=True, validate=validate.OneOf(['routine', 'template']))
+    name         = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=100))
+    description  = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=1000))
+    days         = fields.List(fields.Nested(_AiSaveDaySchema), load_default=list,
+                               validate=validate.Length(max=AI_SAVE_MAX_DAYS))
+    exercise_ids = fields.List(fields.Int(), load_default=list,
+                               validate=validate.Length(max=AI_SAVE_MAX_EXERCISES))
+    programming  = fields.List(fields.Dict(), load_default=None, allow_none=True,
+                               validate=validate.Length(max=AI_SAVE_MAX_EXERCISES))
 
 class AiInsightsSchema(_Base):
     experience = fields.Str(load_default=None)

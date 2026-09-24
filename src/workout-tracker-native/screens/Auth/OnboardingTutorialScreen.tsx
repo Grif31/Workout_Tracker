@@ -51,7 +51,9 @@ type Slide = ScreenshotSlide | PremiumSlide;
 
 const PREMIUM_FEATURES = [
   'AI Coach: personalized programs in seconds',
-  'Strength Score',
+  'Personalized training insights',
+  'Strength Score & Endurance Score',
+  'Muscle volume zones',
   'Unlimited templates & routines',
   ...(APP_ICONS_ENABLED ? ['Custom app icons'] : []),
 ];

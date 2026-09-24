@@ -12,10 +12,10 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
-import { TrainingStackParamsList } from 'navigation/types';
+import { TrainingStackParamsList } from '../../navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
-import { spacing } from 'theme/spacing';
-import { typography } from 'theme/typography';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { apiFetch, isNetworkError } from '../../utils/api';
 import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../../utils/templatePrefill';
 

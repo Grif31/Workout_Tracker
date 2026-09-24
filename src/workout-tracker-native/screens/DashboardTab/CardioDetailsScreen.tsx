@@ -14,8 +14,9 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { apiFetch, isNetworkError } from '../../utils/api';
 import { estimateCalories } from '../../utils/cardioCalories';
-import { fmtDuration, fmtPace } from '../../utils/cardioFormat';
-import { GPS_DISTANCE_UNIT_KEY, toKm } from '../../utils/units';
+import { fmtDuration, fmtPace, fmtRaceTime } from '../../utils/cardioFormat';
+import { bestEffortLabel, type BestEffort } from '../../utils/bestEfforts';
+import { GPS_DISTANCE_UNIT_KEY, toKm, toDisplayDistance, roundTenth } from '../../utils/units';
 import { captureAndShare } from '../../utils/shareCapture';
 import CardioShareCard from '../../components/share/CardioShareCard';
 import { spacing, radius } from '../../theme/spacing';
@@ -45,6 +46,10 @@ interface CardioExercise {
   exercise_type: string;
   route_polyline: string | null;
   sets: CardioSet[];
+  // Present only on activities recorded after best-efforts scanning shipped:
+  // the encoded polyline keeps no per-point timing, so older runs can't be
+  // rescanned and simply have none.
+  best_efforts?: BestEffort[];
 }
 
 interface CardioWorkout {
@@ -80,8 +85,9 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
   useFocusEffect(useCallback(() => {
     setLoading(true);
     apiFetch(`/api/workouts/${workoutId}`)
-      .then(r => r.json())
-      .then(data => { setWorkout(data); setLoading(false); })
+      // An error body is still JSON, so without the status check a deleted
+      // activity renders as an empty shell instead of "Activity not found".
+      .then(async r => { setWorkout(r.ok ? await r.json() : null); setLoading(false); })
       .catch(() => setLoading(false));
   }, [workoutId]));
 
@@ -91,8 +97,8 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
     return (user as any).weight_unit === 'lbs' ? bw / 2.205 : bw;
   }, [user]);
 
-  const { exercise, coords, mapRegion, durationMin, distanceKm, elevationGainM, calories } = useMemo(() => {
-    if (!workout) return { exercise: null, coords: [], mapRegion: null, durationMin: 0, distanceKm: 0, elevationGainM: null, calories: 0 };
+  const { exercise, coords, mapRegion, durationMin, distanceKm, elevationGainM, calories, bestEfforts } = useMemo(() => {
+    if (!workout) return { exercise: null, coords: [], mapRegion: null, durationMin: 0, distanceKm: 0, elevationGainM: null, calories: 0, bestEfforts: [] as BestEffort[] };
 
     const ex = workout.exercises?.[0] ?? null;
     const set = ex?.sets?.[0] ?? null;
@@ -130,7 +136,16 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
       } catch {}
     }
 
-    return { exercise: ex, coords: decodedCoords, mapRegion: region, durationMin: dur, distanceKm: dist, elevationGainM: elev, calories: kcal };
+    // Shortest first within each kind, so the chips read as a natural ladder
+    // (400m, 1K, 1 Mile...) rather than in whatever order the scan emitted.
+    const efforts = [...(ex?.best_efforts ?? [])].sort((a, b) => {
+      if (a.milestone_type !== b.milestone_type) return a.milestone_type === 'distance' ? -1 : 1;
+      return a.milestone_type === 'distance'
+        ? a.distance_km - b.distance_km
+        : a.duration_min - b.duration_min;
+    });
+
+    return { exercise: ex, coords: decodedCoords, mapRegion: region, durationMin: dur, distanceKm: dist, elevationGainM: elev, calories: kcal, bestEfforts: efforts };
   }, [workout, weightKg]);
 
   // This screen renders the route twice at once — the static map below, and
@@ -331,6 +346,24 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
           </View>
         )}
 
+        {bestEfforts.length > 0 && (
+          <View style={styles.bestEffortsBlock}>
+            <Text style={styles.bestEffortsLabel}>Best Efforts</Text>
+            <View style={styles.bestEffortsRow}>
+              {bestEfforts.map(effort => (
+                <View key={`${effort.milestone_type}-${effort.distance_km}-${effort.duration_min}`} style={styles.bestEffortChip}>
+                  <Text style={styles.bestEffortName}>{bestEffortLabel(effort)}</Text>
+                  <Text style={styles.bestEffortValue}>
+                    {effort.milestone_type === 'distance'
+                      ? fmtRaceTime(effort.duration_min)
+                      : `${roundTenth(toDisplayDistance(effort.distance_km, distanceUnit))} ${distanceUnit}`}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
         {!!workout.notes && (
           <View style={styles.notesCard}>
             <Text style={styles.notesLabel}>Notes</Text>
@@ -433,6 +466,30 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textSecondary,
     fontWeight: '500',
   },
+
+  bestEffortsBlock: { marginTop: spacing.md },
+  bestEffortsLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.accent,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: spacing.xs,
+  },
+  bestEffortsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  bestEffortChip: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.xs,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  bestEffortName: { fontSize: typography.fontSize.xs, color: colors.textSecondary, fontWeight: '600' },
+  bestEffortValue: { fontSize: typography.fontSize.sm, color: colors.textPrimary, fontWeight: '700' },
 
   notesCard: {
     backgroundColor: colors.surface,

@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY } from '../constants/storageKeys';
 import { showToast } from './toast';
 import { toLocalDateStr } from './date';
+import { markDataChanged } from './appCache';
 
 const BASE = process.env.EXPO_PUBLIC_API_URL ?? '';
 
@@ -40,6 +42,14 @@ let _onUnauthenticated: (() => void) | null = null;
 export function setTokens(access: string, refresh: string) {
   _access = access;
   _refresh = refresh;
+}
+
+// For a mid-session token swap (change-password revokes every older token,
+// then returns a fresh pair): persisted too, or the next cold start would
+// restore the revoked pair and sign the user out.
+export async function saveTokens(access: string, refresh: string) {
+  setTokens(access, refresh);
+  await AsyncStorage.multiSet([[TOKEN_KEY, access], [REFRESH_TOKEN_KEY, refresh]]);
 }
 
 // Called by AuthContext on logout.
@@ -83,10 +93,10 @@ async function doRefresh(): Promise<RefreshOutcome> {
     const data = await res.json();
     const newAccess = data.access_token as string;
     _access = newAccess;
-    await AsyncStorage.setItem('token', newAccess);
+    await AsyncStorage.setItem(TOKEN_KEY, newAccess);
     if (data.refresh_token) {
       _refresh = data.refresh_token as string;
-      await AsyncStorage.setItem('refresh_token', data.refresh_token);
+      await AsyncStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
     }
     return { ok: true, token: newAccess };
   } catch {
@@ -130,7 +140,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
       // Refresh token is expired or invalid — session is unrecoverable.
       // Wipe everything and send the user back to the login screen.
       clearTokens();
-      await AsyncStorage.multiRemove(['token', 'refresh_token', 'user']);
+      await AsyncStorage.multiRemove([TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY]);
       _onUnauthenticated?.();
     }
     // else: refresh failed for a transient reason (network/server trouble) —
@@ -138,6 +148,9 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     // caller's normal error handling applies. The user stays logged in and can
     // retry once connectivity is back.
   }
+
+  const method = (init.method ?? 'GET').toUpperCase();
+  if (res.ok && method !== 'GET' && method !== 'HEAD') markDataChanged();
 
   return res;
 }

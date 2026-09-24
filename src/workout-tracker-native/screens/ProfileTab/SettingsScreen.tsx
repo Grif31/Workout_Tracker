@@ -13,11 +13,12 @@ import {
 } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LIVE_WORKOUT_NOTIF_KEY, REST_ALERTS_KEY } from '../../constants/storageKeys';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme, ACCENT_PRESETS, type Colors } from '../../context/ThemeContext';
+import { useTheme, ACCENT_PRESETS, KEY_ACCENT, type Colors } from '../../context/ThemeContext';
 import { usePurchase } from '../../context/PurchaseContext';
 import { ProfileStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
@@ -39,8 +40,6 @@ import { openExternalLink } from '../../utils/links';
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 const REST_TIMER_PRESETS = [30, 45, 60, 90, 120, 150, 180, 240, 300];
 const REMINDERS_KEY = 'workout_reminders_enabled';
-const REST_ALERTS_KEY = 'rest_timer_alerts_enabled';
-const LIVE_NOTIF_KEY = 'live_workout_notif_enabled';
 const REMINDER_HOUR_KEY = 'workout_reminder_hour';
 const REMINDER_MIN_KEY = 'workout_reminder_minute';
 
@@ -54,9 +53,9 @@ export default function SettingsScreen({ navigation }: Props) {
   const perUserRestTimerKey    = `${REST_TIMER_KEY}_${uid}`;
   const perUserHealthSyncKey   = `${HEALTH_SYNC_KEY}_${uid}`;
   const perUserGpsKey          = `${GPS_DISTANCE_UNIT_KEY}_${uid}`;
-  const perUserRemindersKey    = `workout_reminders_enabled_${uid}`;
-  const perUserReminderHourKey = `workout_reminder_hour_${uid}`;
-  const perUserReminderMinKey  = `workout_reminder_minute_${uid}`;
+  const perUserRemindersKey    = `${REMINDERS_KEY}_${uid}`;
+  const perUserReminderHourKey = `${REMINDER_HOUR_KEY}_${uid}`;
+  const perUserReminderMinKey  = `${REMINDER_MIN_KEY}_${uid}`;
 
   const [unitIsKg, setUnitIsKg]             = useState(user?.weight_unit === 'kg');
   const [distanceIsKm, setDistanceIsKm]     = useState(false);
@@ -81,14 +80,14 @@ export default function SettingsScreen({ navigation }: Props) {
 
   useEffect(() => {
     AsyncStorage.multiGet([
-      perUserRestTimerKey, perUserRemindersKey, REST_ALERTS_KEY, LIVE_NOTIF_KEY,
+      perUserRestTimerKey, perUserRemindersKey, REST_ALERTS_KEY, LIVE_WORKOUT_NOTIF_KEY,
       perUserReminderHourKey, perUserReminderMinKey, perUserHealthSyncKey, perUserGpsKey,
     ]).then(pairs => {
       const map = Object.fromEntries(pairs.map(([k, v]) => [k, v]));
       if (map[perUserRestTimerKey]) setRestTimerSeconds(map[perUserRestTimerKey]!);
       if (map[perUserRemindersKey] !== null) setRemindersOn(map[perUserRemindersKey] === 'true');
       if (map[REST_ALERTS_KEY] !== null) setRestAlertsOn(map[REST_ALERTS_KEY] !== 'false');
-      if (map[LIVE_NOTIF_KEY] !== null) setLiveNotifOn(map[LIVE_NOTIF_KEY] !== 'false');
+      if (map[LIVE_WORKOUT_NOTIF_KEY] !== null) setLiveNotifOn(map[LIVE_WORKOUT_NOTIF_KEY] !== 'false');
       if (map[perUserReminderHourKey]) setReminderHour(map[perUserReminderHourKey]!);
       if (map[perUserReminderMinKey]) setReminderMin(map[perUserReminderMinKey]!);
       if (map[perUserHealthSyncKey] !== null) setHealthSyncOn(map[perUserHealthSyncKey] === 'true');
@@ -280,18 +279,18 @@ export default function SettingsScreen({ navigation }: Props) {
             <Text style={styles.rowLabel}>Distance Unit</Text>
           </View>
           <View style={styles.unitToggle}>
-            <Text style={[styles.unitLabel, distanceIsKm && styles.unitActive]}>km</Text>
+            <Text style={[styles.unitLabel, !distanceIsKm && styles.unitActive]}>mi</Text>
             <Switch
-              value={!distanceIsKm}
-              onValueChange={async (isMi) => {
-                const unit = isMi ? 'mi' : 'km';
-                setDistanceIsKm(!isMi);
+              value={distanceIsKm}
+              onValueChange={async (isKm) => {
+                const unit = isKm ? 'km' : 'mi';
+                setDistanceIsKm(isKm);
                 await AsyncStorage.setItem(perUserGpsKey, unit);
               }}
               trackColor={{ false: colors.border, true: colors.accent }}
               thumbColor="#fff"
             />
-            <Text style={[styles.unitLabel, !distanceIsKm && styles.unitActive]}>mi</Text>
+            <Text style={[styles.unitLabel, distanceIsKm && styles.unitActive]}>km</Text>
           </View>
         </View>
 
@@ -392,7 +391,7 @@ export default function SettingsScreen({ navigation }: Props) {
             onValueChange={async (v) => {
               if (v && !(await ensurePermission())) return;
               setLiveNotifOn(v);
-              await AsyncStorage.setItem(LIVE_NOTIF_KEY, String(v));
+              await AsyncStorage.setItem(LIVE_WORKOUT_NOTIF_KEY, String(v));
             }}
             trackColor={{ false: colors.border, true: colors.accent }}
             thumbColor="#fff"
@@ -509,7 +508,7 @@ export default function SettingsScreen({ navigation }: Props) {
                   style={styles.accentGridItem}
                   onPress={() => {
                     setAccentPreset(preset);
-                    if (user?.id) AsyncStorage.setItem(`@theme_accent_${user.id}`, preset.name);
+                    if (user?.id) AsyncStorage.setItem(`${KEY_ACCENT}_${user.id}`, preset.name);
                     setAccentModalVisible(false);
                   }}
                   activeOpacity={0.8}

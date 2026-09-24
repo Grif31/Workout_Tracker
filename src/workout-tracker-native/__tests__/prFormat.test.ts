@@ -2,6 +2,7 @@ import {
   fmtPrValue, fmtPrDelta, fmtPrContext, fmtMinSec, nearPrHint,
   fmtRelativeDate, fmtChartDate, formatChartYLabel, computeChartYAxisRange, computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH, prTypeIcon, stalledUrgency,
   stalledCategoryToPrType, pickDefaultPrSeries,
+  PR_METRIC_OPTIONS, PR_TYPE_LABELS, PR_TYPE_ORDER,
   type PREventItem,
 } from '../utils/prFormat';
 
@@ -125,6 +126,7 @@ describe('fmtRelativeDate', () => {
     // @ts-expect-error partial Date mock
     global.Date = class extends RealDate {
       constructor(...args: any[]) {
+        super();
         // @ts-expect-error spread into Date constructor
         return args.length ? new RealDate(...args) : new RealDate(iso);
       }
@@ -214,6 +216,31 @@ describe('computeChartYAxisRange', () => {
 
   it('handles an empty series without dividing by zero', () => {
     expect(computeChartYAxisRange([], 4)).toEqual({ maxValue: 4, yAxisOffset: 0 });
+  });
+});
+
+describe('PR_TYPE_LABELS', () => {
+  // Three screens each kept their own copy of this map and one of them was
+  // missing max_duration, so a Longest Hold PR shared a card labelled with the
+  // raw 'max_duration' enum. Assert coverage against PR_METRIC_OPTIONS rather
+  // than a hand-listed set, so a pr_type added later fails here too.
+  it('labels every pr_type except estimated_1rm', () => {
+    for (const { key, label } of PR_METRIC_OPTIONS) {
+      if (key === 'estimated_1rm') continue;
+      expect(PR_TYPE_LABELS[key]).toBe(label);
+    }
+    expect(PR_TYPE_LABELS.max_duration).toBe('Longest Hold');
+  });
+
+  it('omits estimated_1rm so it can never be surfaced as a PR label', () => {
+    expect(PR_TYPE_LABELS.estimated_1rm).toBeUndefined();
+  });
+
+  it('ranks every labelled type, most notable first', () => {
+    for (const key of Object.keys(PR_TYPE_LABELS)) {
+      expect(PR_TYPE_ORDER[key]).toBeDefined();
+    }
+    expect(PR_TYPE_ORDER.max_weight).toBeLessThan(PR_TYPE_ORDER.best_time);
   });
 });
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
   ActivityIndicator, SafeAreaView,
@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { type PurchasesPackage } from 'react-native-purchases';
+import Purchases, { INTRO_ELIGIBILITY_STATUS, type PurchasesPackage } from 'react-native-purchases';
 import { usePurchase } from '../context/PurchaseContext';
 import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -25,14 +25,32 @@ const PW_CARD     = '#14100A';
 const PW_BORDER   = '#2A1F08';
 
 const FEATURES: { icon: string; label: string }[] = [
-  { icon: 'trophy-outline', label: 'Strength Score & lifter ranking' },
-  { icon: 'sparkles',       label: 'AI Coach: generate routines & templates' },
-  { icon: 'list-outline',   label: 'Unlimited templates & routines' },
+  { icon: 'sparkles',            label: 'AI Coach: generate workouts & routines' },
+  { icon: 'bulb-outline',        label: 'Personalized training insights' },
+  { icon: 'trophy-outline',      label: 'Strength Score & lifter ranking' },
+  { icon: 'speedometer-outline', label: 'Endurance Score & runner ranking' },
+  { icon: 'bar-chart-outline',   label: 'Muscle volume zones: MEV · MAV · MRV' },
+  { icon: 'list-outline',        label: 'Unlimited templates & routines' },
   ...(APP_ICONS_ENABLED ? [{ icon: 'apps-outline', label: 'Custom app icons' }] : []),
 ];
 
-const TIER_LABELS = ['Annual', 'Monthly', 'Lifetime'];
-const TIER_BADGES = ['Best Value', '', 'One-time'];
+const TIERS = [
+  { type: 'ANNUAL',   label: 'Annual',   badge: 'Best Value' },
+  { type: 'MONTHLY',  label: 'Monthly',  badge: '' },
+  { type: 'LIFETIME', label: 'Lifetime', badge: 'One-time' },
+];
+
+const PERIOD_UNITS: Record<string, string> = { DAY: 'day', WEEK: 'week', MONTH: 'month', YEAR: 'year' };
+
+// "1 week free" for a free intro offer, null for a paid intro or none
+function freeTrialText(pkg: PurchasesPackage): string | null {
+  const intro = pkg.product.introPrice;
+  if (!intro || intro.price !== 0) return null;
+  const unit = PERIOD_UNITS[intro.periodUnit];
+  if (!unit) return null;
+  const n = intro.periodNumberOfUnits;
+  return `${n} ${unit}${n === 1 ? '' : 's'} free`;
+}
 
 export default function PaywallScreen({ navigation }: Props) {
   const { offerings, purchasePackage, restorePurchases } = usePurchase();
@@ -40,21 +58,46 @@ export default function PaywallScreen({ navigation }: Props) {
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
 
-  const packages: PurchasesPackage[] = useMemo(() => {
+  const tierPackages = useMemo(() => {
     const allOfferings = Object.values(offerings?.all ?? {});
     const offering =
       offerings?.current ??
       allOfferings.find(o => o.availablePackages.length > 0) ??
       null;
     const all = offering?.availablePackages ?? [];
-    const annual   = all.find(p => p.packageType === 'ANNUAL');
-    const monthly  = all.find(p => p.packageType === 'MONTHLY');
-    const lifetime = all.find(p => p.packageType === 'LIFETIME');
-    return [annual, monthly, lifetime].filter(Boolean) as PurchasesPackage[];
+    const withPkg = TIERS.map(t => ({ ...t, pkg: all.find(p => p.packageType === t.type) }));
+    // Before offerings load every tier shows a spinner; after, only tiers
+    // configured in RevenueCat render, so dropping a plan leaves no dead row
+    return offering ? withPkg.filter(t => t.pkg) : withPkg;
   }, [offerings]);
+  const packages = tierPackages.map(t => t.pkg).filter(Boolean) as PurchasesPackage[];
+
+  // Apple only honors an intro offer once per subscription group, so the trial
+  // is advertised only to users StoreKit confirms are still eligible
+  const [trialEligible, setTrialEligible] = useState<Record<string, boolean>>({});
+  const productIds = packages.map(p => p.product.identifier).join(',');
+  useEffect(() => {
+    if (!productIds) return;
+    let cancelled = false;
+    Purchases.checkTrialOrIntroductoryPriceEligibility(productIds.split(','))
+      .then(res => {
+        if (cancelled) return;
+        const map: Record<string, boolean> = {};
+        for (const [id, e] of Object.entries(res ?? {})) {
+          map[id] = e.status === INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE;
+        }
+        setTrialEligible(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [productIds]);
+
+  const trialFor = (pkg?: PurchasesPackage) =>
+    pkg && trialEligible[pkg.product.identifier] ? freeTrialText(pkg) : null;
+  const selectedTrial = trialFor(tierPackages[selectedIndex]?.pkg);
 
   const handlePurchase = async () => {
-    const pkg = packages[selectedIndex];
+    const pkg = tierPackages[selectedIndex]?.pkg;
     if (!pkg) return;
     setPurchasing(true);
     const success = await purchasePackage(pkg);
@@ -116,12 +159,12 @@ export default function PaywallScreen({ navigation }: Props) {
         </View>
 
         {/* Pricing tiers */}
-        {TIER_LABELS.map((label, i) => {
-          const pkg = packages[i];
+        {tierPackages.map(({ type, label, badge, pkg }, i) => {
           const selected = selectedIndex === i;
+          const trial = trialFor(pkg);
           return (
             <TouchableOpacity
-              key={i}
+              key={type}
               style={[styles.tierCard, selected && styles.tierCardSelected]}
               onPress={() => setSelectedIndex(i)}
               activeOpacity={0.8}
@@ -135,15 +178,17 @@ export default function PaywallScreen({ navigation }: Props) {
                     {label}
                   </Text>
                   {pkg ? (
-                    <Text style={styles.tierPrice}>{pkg.product.priceString}</Text>
+                    <Text style={styles.tierPrice}>
+                      {trial ? `${trial}, then ${pkg.product.priceString}` : pkg.product.priceString}
+                    </Text>
                   ) : (
                     <ActivityIndicator size="small" color={GOLD_DIM} style={{ marginTop: 2 }} />
                   )}
                 </View>
               </View>
-              {TIER_BADGES[i] ? (
+              {badge ? (
                 <View style={styles.tierBadge}>
-                  <Text style={styles.tierBadgeText}>{TIER_BADGES[i]}</Text>
+                  <Text style={styles.tierBadgeText}>{badge}</Text>
                 </View>
               ) : null}
             </TouchableOpacity>
@@ -158,7 +203,7 @@ export default function PaywallScreen({ navigation }: Props) {
         >
           {purchasing
             ? <ActivityIndicator color={PW_BG} />
-            : <Text style={styles.ctaBtnText}>Get Premium</Text>}
+            : <Text style={styles.ctaBtnText}>{selectedTrial ? 'Start Free Trial' : 'Get Premium'}</Text>}
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.restoreBtn} onPress={handleRestore} disabled={restoring}>
@@ -166,7 +211,10 @@ export default function PaywallScreen({ navigation }: Props) {
         </TouchableOpacity>
 
         <Text style={styles.legalText}>
-          Payment charged to your Apple ID at confirmation of purchase. Subscriptions automatically renew unless cancelled at least 24 hours before the end of the current period.
+          {selectedTrial
+            ? 'Payment is charged to your Apple ID when the free trial ends unless you cancel at least 24 hours before. '
+            : 'Payment charged to your Apple ID at confirmation of purchase. '}
+          Subscriptions automatically renew unless cancelled at least 24 hours before the end of the current period.
         </Text>
       </ScrollView>
     </View>

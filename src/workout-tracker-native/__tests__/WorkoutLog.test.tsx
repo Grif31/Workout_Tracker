@@ -19,7 +19,7 @@ jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => {
 jest.mock('@react-native-community/datetimepicker', () => 'DateTimePicker');
 jest.mock('../components/ExerciseList', () => () => null);
 jest.mock('../components/NewExerciseForm', () => () => null);
-jest.mock('constants/muscleGroups', () => ({ muscleGroups: ['Chest', 'Back', 'Quads'] }), { virtual: true });
+jest.mock('../constants/muscleGroups', () => ({ muscleGroups: ['Chest', 'Back', 'Quads'] }));
 jest.mock('../theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 jest.mock('../theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));
 
@@ -163,10 +163,10 @@ describe('WorkoutLog', () => {
 
   it('calls onCancel when cancel button pressed', () => {
     const { Alert } = require('react-native');
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title: string, _msg: string, buttons: any[]) => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(((_title: string, _msg: string, buttons: any[]) => {
       const discard = buttons?.find((b: any) => b.style === 'destructive');
       discard?.onPress?.();
-    });
+    }) as any);
     const onCancel = jest.fn();
     const { getByText } = render(<WorkoutLog onSubmit={jest.fn()} onCancel={onCancel} />);
     fireEvent.press(getByText(/discard/i));

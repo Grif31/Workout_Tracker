@@ -2409,3 +2409,45 @@ class TestProfileCardioTotals:
         other = self._stats(client, auth_headers(auth_token2))
         assert other['cardio_activities'] == 0
         assert other['cardio_distance_km'] == 0
+
+    # -- This week's cardio, for the Home card ------------------------------
+
+    def _log_cardio_on(self, client, h, when, sets, name='Running'):
+        res = client.post('/api/workouts', json={
+            'workoutName': name, 'date': when.isoformat(),
+            'exercises': [{'name': name, 'exercise_type': 'cardio', 'sets': sets}],
+        }, headers=h)
+        assert res.status_code == 201
+
+    def test_week_totals_count_only_this_week(self, client, auth_token):
+        h = auth_headers(auth_token)
+        monday = _this_week_monday()
+        self._log_cardio_on(client, h, monday,
+                            [{'cardio_duration': 30, 'distance': 5, 'distance_unit': 'km'}])
+        self._log_cardio_on(client, h, monday - timedelta(days=1),  # last week's Sunday
+                            [{'cardio_duration': 60, 'distance': 10, 'distance_unit': 'km'}])
+
+        data = self._stats(client, h)
+        assert data['week_cardio_activities'] == 1
+        assert data['week_cardio_distance_km'] == pytest.approx(5, abs=0.01)
+        assert data['week_cardio_minutes'] == pytest.approx(30)
+        # All-time still sees both
+        assert data['cardio_activities'] == 2
+        assert data['cardio_distance_km'] == pytest.approx(15, abs=0.01)
+
+    def test_week_totals_convert_miles(self, client, auth_token):
+        h = auth_headers(auth_token)
+        self._log_cardio_on(client, h, _this_week_monday(),
+                            [{'cardio_duration': 40, 'distance': 3, 'distance_unit': 'mi'}])
+        data = self._stats(client, h)
+        assert data['week_cardio_distance_km'] == pytest.approx(3 * 1.60934, abs=0.01)
+
+    def test_week_totals_zero_when_only_older_cardio(self, client, auth_token):
+        h = auth_headers(auth_token)
+        self._log_cardio_on(client, h, _this_week_monday() - timedelta(weeks=3),
+                            [{'cardio_duration': 30, 'distance': 5, 'distance_unit': 'km'}])
+        data = self._stats(client, h)
+        assert data['week_cardio_activities'] == 0
+        assert data['week_cardio_distance_km'] == 0
+        assert data['week_cardio_minutes'] == 0
+        assert data['cardio_activities'] == 1

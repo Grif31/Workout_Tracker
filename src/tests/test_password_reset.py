@@ -323,3 +323,88 @@ class TestRefresh:
             'confirm_password': 'newpassword456',
         }, headers={'Authorization': f'Bearer {new_access}'})
         assert res.status_code == 200
+
+
+class TestTokenRevocation:
+    """Refresh tokens live 30 days and /api/refresh re-mints them on every call,
+    so before token_version a stolen one outlived any password change: the
+    victim had no way to lock the attacker out."""
+
+    NEW_PW = 'newpassword456'
+
+    def _login(self, client):
+        res = client.post('/api/login', json={'email': 'test@example.com', 'password': 'password123'})
+        assert res.status_code == 200
+        return res.get_json()
+
+    def _change_password(self, client, access):
+        res = client.post('/api/me/change-password', json={
+            'current_password': 'password123',
+            'new_password': self.NEW_PW,
+            'confirm_password': self.NEW_PW,
+        }, headers={'Authorization': f'Bearer {access}'})
+        assert res.status_code == 200
+        return res.get_json()
+
+    def _me(self, client, access):
+        return client.get('/api/me', headers={'Authorization': f'Bearer {access}'})
+
+    def _refresh(self, client, refresh):
+        return client.post('/api/refresh', headers={'Authorization': f'Bearer {refresh}'})
+
+    def test_change_password_revokes_a_stolen_refresh_token(self, client, registered_user):
+        stolen = self._login(client)                # the attacker's copy
+        mine = self._login(client)
+        self._change_password(client, mine['access_token'])
+
+        res = self._refresh(client, stolen['refresh_token'])
+        assert res.status_code == 401
+        assert 'access_token' not in (res.get_json() or {})
+
+    def test_change_password_revokes_outstanding_access_tokens(self, client, registered_user):
+        stolen = self._login(client)
+        mine = self._login(client)
+        self._change_password(client, mine['access_token'])
+        assert self._me(client, stolen['access_token']).status_code == 401
+
+    def test_change_password_keeps_the_caller_signed_in(self, client, registered_user):
+        mine = self._login(client)
+        data = self._change_password(client, mine['access_token'])
+
+        assert self._me(client, data['access_token']).status_code == 200
+        refreshed = self._refresh(client, data['refresh_token'])
+        assert refreshed.status_code == 200
+        assert self._me(client, refreshed.get_json()['access_token']).status_code == 200
+
+    def test_reset_password_revokes_existing_tokens(self, client, registered_user):
+        stolen = self._login(client)
+        otp = _get_otp_for(client, 'test@example.com')
+        res = client.post('/api/reset-password', json={
+            'email': 'test@example.com', 'otp': otp, 'new_password': self.NEW_PW,
+        })
+        assert res.status_code == 200
+
+        assert self._refresh(client, stolen['refresh_token']).status_code == 401
+        assert self._me(client, stolen['access_token']).status_code == 401
+
+    def test_tokens_issued_after_a_reset_work(self, client, registered_user):
+        otp = _get_otp_for(client, 'test@example.com')
+        client.post('/api/reset-password', json={
+            'email': 'test@example.com', 'otp': otp, 'new_password': self.NEW_PW,
+        })
+        login = client.post('/api/login', json={'email': 'test@example.com', 'password': self.NEW_PW})
+        assert login.status_code == 200
+        assert self._me(client, login.get_json()['access_token']).status_code == 200
+        assert self._refresh(client, login.get_json()['refresh_token']).status_code == 200
+
+    def test_pre_deploy_token_without_a_version_claim_still_works(self, client, app, registered_user):
+        """Tokens minted before token_version shipped carry no `tv` claim. They
+        must read as version 0, or the deploy signs every user out."""
+        import jwt as pyjwt
+        access = self._login(client)['access_token']
+        secret = app.config['JWT_SECRET_KEY']
+        claims = pyjwt.decode(access, secret, algorithms=['HS256'])
+        claims.pop('tv')
+        legacy = pyjwt.encode(claims, secret, algorithm='HS256')
+
+        assert self._me(client, legacy).status_code == 200

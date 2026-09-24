@@ -20,15 +20,18 @@ export type ProgrammingEntry = {
   rpe?: number | null;
 };
 
+// Reps are a prescription string ("6-8", "12", "40s"), but an AI-generated
+// plan can arrive with a bare number (the model answers "reps": 8), which is
+// stored as-is. String() keeps that from throwing on .match when logged.
 export const parseRepsMin = (reps: string): string => {
-  const m = (reps ?? '').match(/^(\d+)/);
+  const m = String(reps ?? '').match(/^(\d+)/);
   return m ? m[1] : '';
 };
 
 // AI hold prescriptions arrive as seconds strings like "40s" or "30-60s";
 // prefill wants minutes (the unit WorkoutLog converts from).
 export const parseHoldMinutes = (reps: string): string => {
-  const m = (reps ?? '').match(/(\d+)/);
+  const m = String(reps ?? '').match(/(\d+)/);
   return m ? String(parseInt(m[1], 10) / 60) : '';
 };
 

@@ -44,7 +44,7 @@ All routes are Flask endpoints under the backend (`src/routes/`). Unless noted o
 | `GET /api/workouts/dates` | 🔒 | Distinct dates the user has logged a workout (used for calendar views). |
 | `GET /api/workouts/export` | 🔒 | Downloads the user's entire workout history as CSV (one row per set). |
 | `GET /api/workouts/recent` | 🔒 | Most recent workouts (lightweight list, used for quick "perform again" style flows). |
-| `POST /api/workouts` | 🔒 | Creates a new workout with exercises/sets; computes and upserts strength, cardio, and duration PRs for what was just logged. |
+| `POST /api/workouts` | 🔒 | Creates a new workout with exercises/sets; computes and upserts strength, cardio, and duration PRs for what was just logged. A cardio exercise may carry `best_efforts` (segments the phone scanned out of a GPS track), which are stored and fed to the cardio PR upsert as extra bouts. |
 | `PUT/PATCH /api/workouts/<id>` | 🔒 | Edits an existing workout's exercises/sets/notes; recomputes PRs for any affected exercise templates. |
 
 ---
@@ -125,7 +125,7 @@ All routes are Flask endpoints under the backend (`src/routes/`). Unless noted o
 | `GET /api/stats/exercise` | 🔒 | Full stats + session history for one exercise by name (+ optional `exercise_template_id` to disambiguate) — personal bests, totals, and per-session history; branches to distance/pace stats for cardio. |
 | `GET /api/stats/exercise/last-session` | 🔒 | The most recent logged sets for one exercise, used to pre-fill "perform again"-style flows. |
 | `GET /api/stats/muscle-volume` | 🔒 | Weekly working-set volume per muscle group, with MEV/MAV/MRV zone classification (premium). |
-| `GET /api/stats/profile` | 🔒 | Profile-tab stats: total workouts/volume, current & longest streaks (daily/weekly/monthly). |
+| `GET /api/stats/profile` | 🔒 | Profile-tab stats: total workouts/volume, current & longest streaks (daily/weekly/monthly), cardio totals (all-time and `week_cardio_*` since Monday, distances in km). |
 | `GET /api/stats/progress` | 🔒 | Bucketed volume/sets/workout-count history for the Progress tab chart (`?range=30d\|6m\|1y`). |
 | `GET /api/stats/recent-exercises` | 🔒 | The user's 10 most recently logged exercises, for quick-add pickers. |
 

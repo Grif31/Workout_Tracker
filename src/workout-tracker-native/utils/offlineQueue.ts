@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { USER_KEY } from '../constants/storageKeys';
 import { apiFetch } from './api';
 import { syncWorkoutToHealthKit } from './healthKit';
 import { syncWorkoutToHealthConnect } from './healthConnect';
@@ -53,7 +54,7 @@ export function onPendingCountChange(cb: (n: number) => void): () => void {
 // record AuthContext restores sessions from). Null when logged out.
 async function _currentUserId(): Promise<number | string | null> {
   try {
-    const raw = await AsyncStorage.getItem('user');
+    const raw = await AsyncStorage.getItem(USER_KEY);
     if (!raw) return null;
     const id = JSON.parse(raw)?.id;
     return id != null ? id : null;

@@ -38,13 +38,22 @@ import { estimateCalories } from '../../utils/cardioCalories';
 import { fmtPaceValue } from '../../utils/cardioFormat';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
 import { toLocalDateStr } from '../../utils/date';
+import { extractBestEfforts } from '../../utils/bestEfforts';
 
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'GPSCardio'>;
 
-// timestamp (epoch ms) is unused today but enables per-km splits and
-// pace-over-time later — it can't be backfilled after the run.
-type Coord = { latitude: number; longitude: number; altitude: number | null; timestamp: number };
+// timestamp (epoch ms) is what the best-efforts scan reads at save time; it
+// can't be backfilled, since route_polyline encodes latitude/longitude only.
+// `resumed` marks the first fix after a pause or a crash-restore: neither
+// distance nor elapsed time accrues across that gap.
+type Coord = {
+  latitude: number;
+  longitude: number;
+  altitude: number | null;
+  timestamp: number;
+  resumed?: boolean;
+};
 
 type TrackingState = 'idle' | 'running' | 'paused';
 
@@ -295,11 +304,13 @@ export default function GPSCardioScreen({ navigation }: Props) {
   const onLocationUpdate = (loc: Location.LocationObject) => {
     const accuracy = loc.coords.accuracy;
     if (accuracy != null && accuracy > MAX_ACCURACY_M) return;
+    const resumed = skipNextDistanceRef.current;
     const newCoord: Coord = {
       latitude: loc.coords.latitude,
       longitude: loc.coords.longitude,
       altitude: loc.coords.altitude ?? null,
       timestamp: loc.timestamp,
+      ...(resumed ? { resumed: true } : {}),
     };
     const alt = newCoord.altitude;
     if (alt !== null && lastAltRef.current !== null) {
@@ -308,7 +319,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
     }
     if (alt !== null) lastAltRef.current = alt;
     setCoords(prev => {
-      if (prev.length > 0 && !skipNextDistanceRef.current) {
+      if (prev.length > 0 && !resumed) {
         setDistanceKm(d => d + haversineKm(prev[prev.length - 1], newCoord));
       }
       skipNextDistanceRef.current = false;
@@ -412,6 +423,12 @@ export default function GPSCardioScreen({ navigation }: Props) {
     // shown on screen whenever the user's unit preference is miles.
     const avgPace = displayDistance > 0 ? durationMin / displayDistance : null;
 
+    // The whole-run bout the backend derives PRs from averages a track
+    // session's fast reps in with its recovery jogs, so scan the raw points
+    // for the genuine efforts. Timing lives only in this array: the encoded
+    // polyline drops it, so this can never be done after the fact.
+    const bestEfforts = extractBestEfforts(coords);
+
     const now = new Date();
     const dateStr = toLocalDateStr(now);
     const exerciseTemplateId = await resolveCardioTemplateId(activity, user?.id);
@@ -425,6 +442,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
         exercise_template_id: exerciseTemplateId,
         exercise_type: 'cardio',
         route_polyline: encodedPolyline,
+        ...(bestEfforts.length > 0 ? { best_efforts: bestEfforts } : {}),
         sets: [{
           cardio_duration: durationMin,
           distance: displayDistance,

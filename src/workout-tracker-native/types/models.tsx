@@ -10,6 +10,10 @@ export type Workout = {
   date: string
   duration?: number
   volume?: number
+  // Beats per minute from Apple Health / Health Connect. Absent when the user
+  // has no wearable or health sync is off -- never 0.
+  avg_heart_rate?: number | null
+  max_heart_rate?: number | null
   exercises: Exercise[]
 };
 

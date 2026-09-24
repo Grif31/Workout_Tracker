@@ -1,7 +1,8 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Dimensions, FlatList,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Image,
+  ActivityIndicator, Dimensions, FlatList, RefreshControl,
+  NativeSyntheticEvent, NativeScrollEvent,
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,18 +11,27 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { usePurchase } from '../../context/PurchaseContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { ProfileStackParamsList } from '../../navigation/types';
 import { GREEK_RANK_COLORS, GREEK_RANKS } from '../../constants/greekRanks';
-import ProfileAvatarFrame from '../../components/ProfileAvatarFrame';
-import { GREEK_RANK_CACHED_KEY } from '../../constants/storageKeys';
+import ProfileAvatarFrame, { frameOverflow } from '../../components/ProfileAvatarFrame';
+import { GREEK_RANK_CACHED_KEY, PROFILE_FRAME_RANK_KEY } from '../../constants/storageKeys';
 import { appCache } from '../../utils/appCache';
+import { contrastTextColor } from '../../utils/contrast';
+import { resolveMediaUrl } from '../../utils/api';
 import { type GreekRankData, bestPerformanceLeg, gateRequirementText } from '../../utils/greekRank';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'GreekRank'>;
 
+const ARETE_RANK = 'Aretē';
+// Both breakdown screens are premium; locked, these open the paywall instead
+const SCORE_LINKS = [
+  { label: 'Strength Score',  screen: 'StrengthScore',  source: 'strength_score' },
+  { label: 'Endurance Score', screen: 'EnduranceScore', source: 'endurance_score' },
+] as const;
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CIRCLE_SIZE = 88;
 const CIRCLE_GAP = 16;
@@ -29,23 +39,31 @@ const ITEM_WIDTH = CIRCLE_SIZE + CIRCLE_GAP;
 
 
 const CIRCLE_INNER = CIRCLE_SIZE - 20;
+// The Aretē frame's wreath draws below the circle, so every label clears it.
+// Applied to all ranks so the labels keep a common baseline.
+const LABEL_GAP = frameOverflow(ARETE_RANK, CIRCLE_SIZE) + spacing.xs;
+
+const HERO_FRAME = 116;
+const HERO_AVATAR = 104;
+// Same clearance for the hero: its wreath is bigger, so the name sits lower
+const HERO_LABEL_GAP = frameOverflow(ARETE_RANK, HERO_FRAME) + spacing.xs;
 
 const circleStyles = StyleSheet.create({
   touchable:   { alignItems: 'center', width: ITEM_WIDTH },
   svgWrapper:  { width: CIRCLE_SIZE, height: CIRCLE_SIZE, alignItems: 'center', justifyContent: 'center' },
   innerCircle: { width: CIRCLE_INNER, height: CIRCLE_INNER, borderRadius: CIRCLE_INNER / 2, alignItems: 'center', justifyContent: 'center' },
   equippedDot: { position: 'absolute', top: 2, right: 2, borderRadius: radius.sm, width: 16, height: 16, alignItems: 'center', justifyContent: 'center' },
-  rankName:    { fontSize: typography.fontSize.xs, fontWeight: '600', marginTop: spacing.xs - 2, textAlign: 'center' },
+  rankName:    { fontSize: typography.fontSize.xs, fontWeight: '600', marginTop: LABEL_GAP, textAlign: 'center' },
   rankRange:   { fontSize: typography.fontSize.xs, marginTop: 2 },
   iconText:    { fontSize: typography.fontSize.lg, fontWeight: '800' as const },
 });
 
 function RankCircle({
-  rank, rankIdx, currentIdx, greekScore, isSelected, selectedFrame, onSelect,
+  rank, rankIdx, heldIdx, greekScore, isSelected, selectedFrame, onSelect,
 }: {
   rank: typeof GREEK_RANKS[number];
   rankIdx: number;
-  currentIdx: number;
+  heldIdx: number;
   greekScore: number;
   isSelected: boolean;
   selectedFrame: string;
@@ -55,9 +73,9 @@ function RankCircle({
 
   // Position comes from the rank held, not the raw score: a score held back by
   // a top-rank gate sits inside a band the user hasn't actually unlocked.
-  const isCompleted = rankIdx < currentIdx;
-  const isCurrent   = rankIdx === currentIdx;
-  const isLocked    = rankIdx > currentIdx;
+  const isCompleted = rankIdx < heldIdx;
+  const isCurrent   = rankIdx === heldIdx;
+  const isLocked    = rankIdx > heldIdx;
   const isEquipped  = selectedFrame === rank.name;
 
   const r            = CIRCLE_SIZE / 2 - 6;
@@ -122,7 +140,7 @@ function RankCircle({
       <Text style={[circleStyles.rankName, { color: isLocked ? colors.textSecondary : rank.color }]}>
         {rank.name}
       </Text>
-      {isSelected && !isLocked && (
+      {isSelected && (
         <Text style={[circleStyles.rankRange, { color: colors.textSecondary }]}>
           {rank.low}–{rank.high}
         </Text>
@@ -134,11 +152,14 @@ function RankCircle({
 export default function GreekRankScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const { user } = useAuth();
+  const { isPremium } = usePurchase();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const frameKey = `profile_frame_rank_${user?.id}`;
+  const frameKey = `${PROFILE_FRAME_RANK_KEY}_${user?.id}`;
 
   const [rankData, setRankData] = useState<GreekRankData | null>(null);
   const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [selectedFrame, setSelectedFrame] = useState('Neophyte');
 
@@ -147,37 +168,66 @@ export default function GreekRankScreen({ navigation }: Props) {
   // list is laid out
   const [listWidth, setListWidth] = useState(SCREEN_WIDTH);
 
+  const applyData = (data: GreekRankData) => {
+    setRankData(data);
+    const idx = GREEK_RANKS.findIndex(r => r.name === data.greek_rank);
+    setSelectedIdx(idx >= 0 ? idx : 0);
+  };
+
   const fetchData = async () => {
     const [frameVal] = await AsyncStorage.multiGet([frameKey]);
     if (frameVal[1]) setSelectedFrame(frameVal[1]);
 
     try {
       const res = await apiFetch('/api/stats/greek-rank');
-      if (res.ok) {
-        const data: GreekRankData = await res.json();
-        setRankData(data);
-        appCache.set('greek_rank', data);
-        const idx = GREEK_RANKS.findIndex(r => r.name === data.greek_rank);
-        setSelectedIdx(idx >= 0 ? idx : 0);
-        await AsyncStorage.setItem(GREEK_RANK_CACHED_KEY, data.greek_rank);
-      }
-    } catch {}
+      if (!res.ok) { setError(true); return; }
+      const data: GreekRankData = await res.json();
+      applyData(data);
+      setError(false);
+      appCache.set('greek_rank', data);
+      await AsyncStorage.setItem(GREEK_RANK_CACHED_KEY, data.greek_rank);
+    } catch { setError(true); }
+  };
+
+  // PreloadScreen already warms this key at login, so the spinner is for a
+  // genuinely cold cache only, not for every return to the screen.
+  useFocusEffect(useCallback(() => {
+    const cached = appCache.get<GreekRankData>('greek_rank');
+    if (cached) {
+      applyData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+    fetchData().finally(() => setLoading(false));
+  }, []));
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
+  };
+
+  const handleRetry = async () => {
+    setLoading(true);
+    await fetchData();
     setLoading(false);
   };
 
-  useFocusEffect(useCallback(() => {
-    setLoading(true);
-    fetchData();
-  }, []));
-
   const greekScore = rankData?.greek_score ?? 0;
-  const heldIdx     = GREEK_RANKS.findIndex(r => r.name === rankData?.greek_rank);
-  const currentIdx  = heldIdx >= 0 ? heldIdx : 0;
-  const currentRank = GREEK_RANKS[selectedIdx];
-  const nextRank    = GREEK_RANKS[selectedIdx + 1];
-  const progress    = greekScore >= currentRank.low && greekScore < currentRank.high
-    ? (greekScore - currentRank.low) / (currentRank.high - currentRank.low)
-    : greekScore >= currentRank.high ? 1 : 0;
+  const foundIdx = GREEK_RANKS.findIndex(r => r.name === rankData?.greek_rank);
+  // heldRank is where the user actually is; viewedRank is the circle they
+  // tapped. Everything that reports progress reads heldRank, everything about
+  // the frame picker reads viewedRank. Conflating the two made the hero name
+  // take the tapped rank's color and the progress card describe ranks the
+  // user had already passed.
+  const heldIdx    = foundIdx >= 0 ? foundIdx : 0;
+  const heldRank   = GREEK_RANKS[heldIdx];
+  const viewedRank = GREEK_RANKS[selectedIdx];
+  const nextRank   = GREEK_RANKS[heldIdx + 1];
+  const progress    = greekScore >= heldRank.low && greekScore < heldRank.high
+    ? (greekScore - heldRank.low) / (heldRank.high - heldRank.low)
+    : greekScore >= heldRank.high ? 1 : 0;
   const ptsToNext   = nextRank ? Math.max(0, Math.ceil(nextRank.low - greekScore)) : 0;
   const nextGateText = rankData && nextRank ? gateRequirementText(rankData, nextRank.name) : null;
 
@@ -193,13 +243,26 @@ export default function GreekRankScreen({ navigation }: Props) {
   // before the first layout, so it landed somewhere different each time.
   const centerOnHeldRank = () => {
     if (!rankData) return;
-    listRef.current?.scrollToOffset({ offset: ITEM_WIDTH * currentIdx, animated: false });
+    listRef.current?.scrollToOffset({ offset: ITEM_WIDTH * heldIdx, animated: false });
+  };
+
+  // The list snaps a circle to the center, so the centered circle is the
+  // selection. Without this the card below could describe one rank while a
+  // different one sat centered.
+  const syncSelectionToScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / ITEM_WIDTH);
+    setSelectedIdx(Math.max(0, Math.min(GREEK_RANKS.length - 1, idx)));
+  };
+
+  const selectIndex = (index: number) => {
+    setSelectedIdx(index);
+    listRef.current?.scrollToOffset({ offset: ITEM_WIDTH * index, animated: true });
   };
 
   // Frames follow the rank held, not the score (see RankCircle)
   const isUnlocked = (rankName: string) => {
     const idx = GREEK_RANKS.findIndex(x => x.name === rankName);
-    return idx >= 0 && idx <= currentIdx;
+    return idx >= 0 && idx <= heldIdx;
   };
 
   const handleEquip = async (rankName: string) => {
@@ -208,6 +271,7 @@ export default function GreekRankScreen({ navigation }: Props) {
     await AsyncStorage.setItem(frameKey, rankName);
   };
 
+  const isEquipped = selectedFrame === viewedRank.name;
   const components = rankData?.components;
   const performance = rankData?.performance;
   const bestLeg = performance ? bestPerformanceLeg(performance) : null;
@@ -215,6 +279,47 @@ export default function GreekRankScreen({ navigation }: Props) {
   // label above already says it
   const lockedGate = rankData ? Object.keys(rankData.gates).find(r => gateRequirementText(rankData, r)) : undefined;
   const lockedGateText = rankData && lockedGate ? gateRequirementText(rankData, lockedGate) : null;
+  // The score earned a higher rank than the user holds, so a gate is the only
+  // thing in the way. Worth stating outright rather than leaving in the
+  // gate list at the bottom of the card.
+  const heldBackText = rankData?.held_by_gate
+    ? gateRequirementText(rankData, rankData.score_rank)
+    : null;
+  // At 0 points the score already earns the next rank, so a top-rank gate is
+  // what's holding it back. When the banner above is already saying which gate
+  // and what it needs, this line would only repeat it, so it drops out.
+  const progressLabel = !nextRank
+    ? "You've reached the highest rank."
+    : ptsToNext > 0
+      ? `${ptsToNext} more point${ptsToNext !== 1 ? 's' : ''} to reach ${nextRank.name}`
+      : heldBackText
+        ? null
+        : nextGateText ?? `Keep training to reach ${nextRank.name}`;
+
+  // Which ranks the gates apply to, straight from the response so the screen
+  // follows the backend if a gate ever moves.
+  const gatedRanks = rankData ? Object.keys(rankData.gates) : [];
+  const firstGatedIdx = GREEK_RANKS.findIndex(r => gatedRanks.includes(r.name));
+  // The section only matters to someone at or next to the gated ranks, or
+  // browsing one. Everyone else is far enough away that it is just noise.
+  const showTopRanks = !!rankData && firstGatedIdx >= 0 && (
+    heldIdx >= firstGatedIdx - 1 || gatedRanks.includes(viewedRank.name)
+  );
+  // No score on either leg yet. The profile fields come first: without gender
+  // neither leg can be computed at all, and the strength leg needs bodyweight.
+  const noPerformanceYet = !!performance && performance.best == null;
+  const needsGender = rankData?.profile_missing.includes('gender') ?? false;
+  const needsBodyweight = rankData?.profile_missing.includes('bodyweight') ?? false;
+
+  // Gate order follows the ranks, not whatever order the JSON arrived in
+  const gateEntries = rankData
+    ? Object.entries(rankData.gates)
+        .sort((a, b) => GREEK_RANKS.findIndex(r => r.name === a[0]) - GREEK_RANKS.findIndex(r => r.name === b[0]))
+    : [];
+
+  const avatarSource = user?.profile_pic_url
+    ? { uri: resolveMediaUrl(user.profile_pic_url) }
+    : require('../../assets/profile-placeholder.png');
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -223,28 +328,63 @@ export default function GreekRankScreen({ navigation }: Props) {
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Your Journey</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity
+          onPress={() => navigation.navigate('GreekRankIntro')}
+          accessibilityRole="button"
+          accessibilityLabel="How Greek Rank works"
+        >
+          <Ionicons name="information-circle-outline" size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
       </View>
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.accent} /></View>
+      ) : error && !rankData ? (
+        <View style={styles.center}>
+          <Ionicons name="cloud-offline-outline" size={48} color={colors.textSecondary} />
+          <Text style={styles.errorTitle}>Couldn't load your rank</Text>
+          <Text style={styles.errorSubtitle}>Check your connection and try again.</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={handleRetry}>
+            <Text style={styles.retryBtnText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} />
+          }
+        >
 
-          {/* Hero */}
+          {/* Hero — the equipped frame at full size, on the real avatar */}
           <View style={styles.heroSection}>
-            <Text style={[styles.rankNameLarge, { color: currentRank.color }]}>
+            <View style={styles.heroAvatarWrap}>
+              <Image source={avatarSource} style={styles.heroAvatar} />
+              <ProfileAvatarFrame rankName={selectedFrame} size={HERO_FRAME} avatarSize={HERO_AVATAR} />
+            </View>
+            <Text style={[styles.rankNameLarge, { color: heldRank.color }]}>
               {rankData?.greek_rank ?? 'Neophyte'}
             </Text>
-            {greekScore > 0 && (
-              <Text style={styles.scoreSubtitle}>Score: {greekScore.toFixed(0)} / 100</Text>
-            )}
+            <Text style={styles.scoreSubtitle}>Score: {greekScore.toFixed(0)} / 100</Text>
           </View>
+
+          {/* The score earned more than the rank held */}
+          {heldBackText && rankData && (
+            <View style={[styles.heldBackBanner, { borderColor: heldRank.color + '55', backgroundColor: heldRank.color + '14' }]}>
+              <Ionicons name="lock-closed" size={16} color={heldRank.color} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.heldBackTitle}>
+                  Your score has earned {rankData.score_rank}
+                </Text>
+                <Text style={styles.heldBackText}>{heldBackText}</Text>
+              </View>
+            </View>
+          )}
 
           {/* Horizontal rank circles */}
           <FlatList
             ref={listRef}
-            data={GREEK_RANKS as unknown as typeof GREEK_RANKS[number][]}
+            data={GREEK_RANKS}
             keyExtractor={item => item.name}
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -253,15 +393,17 @@ export default function GreekRankScreen({ navigation }: Props) {
             contentContainerStyle={{ paddingHorizontal: sidePadding }}
             onLayout={e => setListWidth(e.nativeEvent.layout.width)}
             onContentSizeChange={centerOnHeldRank}
+            onMomentumScrollEnd={syncSelectionToScroll}
+            onScrollEndDrag={syncSelectionToScroll}
             renderItem={({ item, index }) => (
               <RankCircle
                 rank={item}
                 rankIdx={index}
-                currentIdx={currentIdx}
+                heldIdx={heldIdx}
                 greekScore={greekScore}
                 isSelected={index === selectedIdx}
                 selectedFrame={selectedFrame}
-                onSelect={() => setSelectedIdx(index)}
+                onSelect={() => selectIndex(index)}
               />
             )}
             style={{ marginVertical: spacing.md }}
@@ -269,22 +411,21 @@ export default function GreekRankScreen({ navigation }: Props) {
           />
 
           {/* Equip button for selected rank — locked ranks show the unlock hint */}
-          {isUnlocked(currentRank.name) ? (
+          {isUnlocked(viewedRank.name) ? (
             <TouchableOpacity
               style={[styles.equipBtn, {
-                backgroundColor: selectedFrame === currentRank.name ? currentRank.color + '22' : currentRank.color,
-                borderWidth: selectedFrame === currentRank.name ? 1.5 : 0,
-                borderColor: currentRank.color,
+                backgroundColor: isEquipped ? viewedRank.color + '22' : viewedRank.color,
+                borderColor: viewedRank.color,
               }]}
-              onPress={() => handleEquip(currentRank.name)}
+              onPress={() => handleEquip(viewedRank.name)}
             >
               <Text style={[styles.equipBtnText, {
-                color: selectedFrame === currentRank.name ? currentRank.color : '#fff',
+                color: isEquipped ? viewedRank.color : contrastTextColor(viewedRank.color),
               }]}>
-                {selectedFrame === currentRank.name ? 'Frame Equipped' : 'Use This Frame'}
+                {isEquipped ? 'Frame Equipped' : 'Use This Frame'}
               </Text>
-              {selectedFrame === currentRank.name && (
-                <Ionicons name="star" size={14} color={currentRank.color} style={{ marginLeft: 6 }} />
+              {isEquipped && (
+                <Ionicons name="star" size={14} color={viewedRank.color} style={{ marginLeft: 6 }} />
               )}
             </TouchableOpacity>
           ) : (
@@ -295,24 +436,16 @@ export default function GreekRankScreen({ navigation }: Props) {
           )}
 
           {/* Progress detail */}
-          {greekScore > 0 && (
+          {rankData && (
             <View style={[styles.card, { marginHorizontal: spacing.md }]}>
               <Text style={styles.cardTitle}>Progress to {nextRank?.name ?? 'Max Rank'}</Text>
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, {
                   width: `${Math.round(progress * 100)}%` as any,
-                  backgroundColor: currentRank.color,
+                  backgroundColor: heldRank.color,
                 }]} />
               </View>
-              <Text style={styles.progressLabel}>
-                {/* At 0 points the score already earns the next rank, so a
-                    top-rank gate is what's holding it back */}
-                {!nextRank
-                  ? "You've reached the highest rank."
-                  : ptsToNext > 0
-                    ? `${ptsToNext} more point${ptsToNext !== 1 ? 's' : ''} to reach ${nextRank.name}`
-                    : nextGateText ?? `Keep training to reach ${nextRank.name}`}
-              </Text>
+              {progressLabel && <Text style={styles.progressLabel}>{progressLabel}</Text>}
 
               {components && (
                 <>
@@ -329,14 +462,14 @@ export default function GreekRankScreen({ navigation }: Props) {
                         <Text style={styles.compLabel}>{comp.label}</Text>
                       </View>
                       <View style={styles.compBarTrack}>
-                        <View style={[styles.compBarFill, { width: `${comp.value}%` as any, backgroundColor: currentRank.color }]} />
+                        <View style={[styles.compBarFill, { width: `${comp.value}%` as any, backgroundColor: heldRank.color }]} />
                       </View>
                       <Text style={styles.compValue}>{Math.round(comp.value)}</Text>
                     </View>
                   ))}
 
                   {/* Performance adds no points; the higher score unlocks the top ranks */}
-                  {performance && rankData && (
+                  {performance && rankData && showTopRanks && (
                     <>
                       <View style={styles.divider} />
                       <Text style={styles.componentTitle}>Unlock Top Ranks</Text>
@@ -349,7 +482,7 @@ export default function GreekRankScreen({ navigation }: Props) {
                           <View
                             key={leg.key}
                             testID={`greek-leg-${leg.key}${counts ? '-counts' : ''}`}
-                            style={[styles.compRow, styles.legRow, counts && { backgroundColor: currentRank.color + '1F' }]}
+                            style={[styles.compRow, styles.legRow, counts && { backgroundColor: heldRank.color + '1F' }]}
                           >
                             <View style={styles.compLeft}>
                               <Text style={[styles.legLabel, counts && styles.legTextCounts]}>{leg.label}</Text>
@@ -359,7 +492,7 @@ export default function GreekRankScreen({ navigation }: Props) {
                                 <View
                                   style={[
                                     styles.compBarFill,
-                                    { width: `${leg.value}%` as any, backgroundColor: counts ? currentRank.color : colors.textSecondary },
+                                    { width: `${leg.value}%` as any, backgroundColor: counts ? heldRank.color : colors.textSecondary },
                                   ]}
                                 />
                               )}
@@ -370,20 +503,51 @@ export default function GreekRankScreen({ navigation }: Props) {
                           </View>
                         );
                       })}
-                      {Object.entries(rankData.gates).map(([gateRank, required]) => {
+                      {gateEntries.map(([gateRank, required]) => {
                         const met = performance.best != null && performance.best >= required;
-                        const gateColor = GREEK_RANK_COLORS[gateRank] ?? currentRank.color;
+                        const gateColor = GREEK_RANK_COLORS[gateRank] ?? heldRank.color;
                         return (
                           <View key={gateRank} testID={`greek-gate-${gateRank}-${met ? 'met' : 'locked'}`} style={styles.gateRow}>
                             <Ionicons name={met ? 'checkmark-circle' : 'lock-closed'} size={16} color={met ? gateColor : colors.textSecondary} />
                             <Text style={[styles.gateRank, { color: met ? gateColor : colors.textPrimary }]}>{gateRank}</Text>
-                            <Text style={styles.gateRequirement}>{Math.round(required)}th percentile</Text>
+                            <Text style={styles.gateRequirement}>
+                              {Math.round(required)}th percentile
+                              {performance.best != null && !met && ` · you're at ${Math.round(performance.best)}th`}
+                            </Text>
                           </View>
                         );
                       })}
-                      {lockedGateText && lockedGateText !== nextGateText && (
+                      {noPerformanceYet ? (
+                        <View style={styles.unlockCta}>
+                          <Text style={styles.gateHint}>
+                            {needsGender
+                              ? 'Both scores are measured against your age and gender, so add those to your profile to start scoring.'
+                              : needsBodyweight
+                                ? 'Strength percentiles are bodyweight ratios, so log your bodyweight to score your lifts. A logged run scores on its own.'
+                                : 'Log a lift that counts toward your Strength Score, or a run, and a score will appear here.'}
+                          </Text>
+                          <View style={styles.unlockBtnRow}>
+                            {needsGender && (
+                              <TouchableOpacity
+                                style={[styles.unlockBtn, { backgroundColor: colors.accent }]}
+                                onPress={() => navigation.navigate('EditProfile')}
+                              >
+                                <Text style={[styles.unlockBtnText, { color: colors.accentText }]}>Complete Profile</Text>
+                              </TouchableOpacity>
+                            )}
+                            {needsBodyweight && (
+                              <TouchableOpacity
+                                style={[styles.unlockBtn, { borderWidth: 1.5, borderColor: colors.accent }]}
+                                onPress={() => navigation.navigate('Measurements')}
+                              >
+                                <Text style={[styles.unlockBtnText, { color: colors.accent }]}>Log Bodyweight</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        </View>
+                      ) : lockedGateText && lockedGateText !== nextGateText ? (
                         <Text style={styles.gateHint}>{lockedGateText}</Text>
-                      )}
+                      ) : null}
                     </>
                   )}
                 </>
@@ -391,22 +555,32 @@ export default function GreekRankScreen({ navigation }: Props) {
             </View>
           )}
 
-          {/* Full score breakdowns */}
+          {/* Full score breakdowns — both screens are premium */}
           <View style={styles.scoreLinksRow}>
-            <TouchableOpacity
-              style={[styles.scoreLinkBtn, { borderColor: colors.accent }]}
-              onPress={() => (navigation as any).navigate('TrainingTab', { screen: 'StrengthScore', initial: false })}
-            >
-              <Text style={[styles.fullBreakdownText, { color: colors.accent }]}>Strength Score</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.accent} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.scoreLinkBtn, { borderColor: colors.accent }]}
-              onPress={() => (navigation as any).navigate('TrainingTab', { screen: 'EnduranceScore', initial: false })}
-            >
-              <Text style={[styles.fullBreakdownText, { color: colors.accent }]}>Endurance Score</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.accent} />
-            </TouchableOpacity>
+            {SCORE_LINKS.map(link => (
+              <TouchableOpacity
+                key={link.screen}
+                style={[styles.scoreLinkBtn, { borderColor: isPremium ? colors.accent : colors.border }]}
+                accessibilityRole="button"
+                accessibilityLabel={isPremium ? link.label : `${link.label}, premium`}
+                onPress={() => isPremium
+                  ? (navigation as any).navigate('TrainingTab', { screen: link.screen, initial: false })
+                  : (navigation as any).navigate('Paywall', { source: link.source })
+                }
+              >
+                <Text
+                  style={[styles.fullBreakdownText, { color: isPremium ? colors.accent : colors.textPrimary }]}
+                  numberOfLines={1}
+                >
+                  {link.label}
+                </Text>
+                <Ionicons
+                  name={isPremium ? 'chevron-forward' : 'lock-closed'}
+                  size={16}
+                  color={colors.accent}
+                />
+              </TouchableOpacity>
+            ))}
           </View>
 
           <View style={{ height: spacing.xl * 2 }} />
@@ -424,11 +598,31 @@ const createStyles = (colors: Colors) =>
       borderBottomWidth: 1, borderBottomColor: colors.border,
     },
     headerTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },
-    center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
+    errorTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
+    errorSubtitle: { fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center' },
+    retryBtn: {
+      marginTop: spacing.xs, borderWidth: 1, borderColor: colors.accent,
+      borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
+    },
+    retryBtnText: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.accent },
     scroll: { paddingTop: spacing.lg, gap: spacing.md },
     heroSection: { alignItems: 'center', gap: spacing.xs },
+    heroAvatarWrap: {
+      width: HERO_FRAME, height: HERO_FRAME,
+      alignItems: 'center', justifyContent: 'center',
+      marginBottom: HERO_LABEL_GAP,
+    },
+    heroAvatar: { width: HERO_AVATAR, height: HERO_AVATAR, borderRadius: HERO_AVATAR / 2 },
     rankNameLarge: { fontSize: 36, fontWeight: '900', letterSpacing: 1 },
     scoreSubtitle: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+    heldBackBanner: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+      marginHorizontal: spacing.md, padding: spacing.md,
+      borderWidth: 1, borderRadius: radius.md,
+    },
+    heldBackTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
+    heldBackText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
     card: {
       backgroundColor: colors.surface, borderRadius: 14,
       padding: spacing.md, gap: spacing.sm,
@@ -448,6 +642,7 @@ const createStyles = (colors: Colors) =>
     equipBtn: {
       alignSelf: 'center', flexDirection: 'row', alignItems: 'center',
       borderRadius: 20, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
+      borderWidth: 1.5,
     },
     equipBtnText: { fontSize: typography.fontSize.md, fontWeight: '700' },
     lockedHint: {
@@ -467,6 +662,10 @@ const createStyles = (colors: Colors) =>
     gateRank: { fontSize: typography.fontSize.sm, fontWeight: '700', width: 72 },
     gateRequirement: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
     gateHint: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+    unlockCta: { gap: spacing.sm },
+    unlockBtnRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+    unlockBtn: { borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+    unlockBtnText: { fontSize: typography.fontSize.sm, fontWeight: '700' },
     scoreLinksRow: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.md },
     scoreLinkBtn: {
       flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

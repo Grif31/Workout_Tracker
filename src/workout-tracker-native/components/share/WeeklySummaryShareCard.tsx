@@ -9,9 +9,10 @@ import {
   ShareCardStatsRow,
   ShareCardFooter,
   type ShareCardStatItem,
-} from './share/ShareCardParts';
-import { typography } from '../theme/typography';
-import { SHARE_TEXT } from '../constants/shareCardTheme';
+} from './ShareCardParts';
+import { typography } from '../../theme/typography';
+import { SHARE_TEXT } from '../../constants/shareCardTheme';
+import StreakFlame from '../StreakFlame';
 
 type WeeklySummaryShareCardProps = {
   dateRange: string;
@@ -44,12 +45,14 @@ const WeeklySummaryShareCard = forwardRef<View, WeeklySummaryShareCardProps>(
     const heroValue = totalVolume > 0 ? totalVolume.toLocaleString() : totalReps.toLocaleString();
     const heroLabel = totalVolume > 0 ? `Total Volume (${weightUnit})` : 'Total Reps';
 
+    // `flame` draws the app's own streak flame in place of an emoji, which
+    // renders at the mercy of the platform font in a captured image.
     const highlights = [
-      streak != null && streak >= 1 ? `🔥 ${streak} week streak` : null,
-      topMuscle ? `${topMuscle} was the focus` : null,
-      mostImprovedLift ? `Most Improved: ${mostImprovedLift.exercise_name}` : null,
-      mostImprovedCardio ? `Most Improved Cardio: ${mostImprovedCardio.exercise_name}` : null,
-    ].filter((s): s is string => !!s);
+      streak != null && streak >= 1 ? { text: `${streak} week streak`, flame: true } : null,
+      topMuscle ? { text: `${topMuscle} was the focus` } : null,
+      mostImprovedLift ? { text: `Most Improved: ${mostImprovedLift.exercise_name}` } : null,
+      mostImprovedCardio ? { text: `Most Improved Cardio: ${mostImprovedCardio.exercise_name}` } : null,
+    ].filter((h): h is { text: string; flame?: boolean } => !!h);
 
     const statItems: ShareCardStatItem[] = [
       { value: workouts, label: 'Workouts' },
@@ -74,7 +77,10 @@ const WeeklySummaryShareCard = forwardRef<View, WeeklySummaryShareCardProps>(
         {highlights.length > 0 && (
           <View style={styles.highlights}>
             {highlights.map((h, i) => (
-              <Text key={i} style={styles.highlightText}>{h}</Text>
+              <View key={i} style={styles.highlightRow}>
+                {h.flame && <StreakFlame size={15} />}
+                <Text style={styles.highlightText}>{h.text}</Text>
+              </View>
             ))}
           </View>
         )}
@@ -100,6 +106,11 @@ const styles = StyleSheet.create({
   highlights: {
     gap: 6,
     marginBottom: 18,
+  },
+  highlightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   highlightText: {
     fontSize: typography.fontSize.sm,

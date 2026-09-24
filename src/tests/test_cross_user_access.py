@@ -246,6 +246,64 @@ class TestPrivateCustomExercises:
         assert self.SECRET not in tmpl.get_data(as_text=True)
         assert self._names(tmpl.get_json()) == ['Bob Curl']
 
+    def test_workout_create_does_not_leak(self, client, bob, ids):
+        """The workout write path takes exercise_template_id straight off the
+        body, and the PR queries join ExerciseTemplate without a visibility
+        filter, so an unchecked id came back out through the PR routes."""
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Probe',
+            'exercises': [{'name': 'Probe Lift', 'exercise_template_id': ids['alice_custom'],
+                           'sets': [{'reps': 5, 'weight': 225}]}],
+        }, headers=hdrs(bob))
+        assert res.status_code in (200, 201), res.get_json()
+        wid = res.get_json()['id']
+
+        detail = client.get(f'/api/workouts/{wid}', headers=hdrs(bob))
+        assert self.SECRET not in detail.get_data(as_text=True)
+        assert detail.get_json()['exercises'][0]['exercise_template_id'] is None
+
+        for path in ('/api/personal-records', '/api/personal-records/dashboard'):
+            leak = client.get(path, headers=hdrs(bob))
+            assert self.SECRET not in leak.get_data(as_text=True), path
+
+    def test_workout_update_does_not_leak(self, client, bob, ids):
+        wid = make_workout(client, bob, name='Probe')
+        detail = client.get(f'/api/workouts/{wid}', headers=hdrs(bob)).get_json()
+        ex_id = detail['exercises'][0]['id']
+
+        res = client.put(f'/api/workouts/{wid}', json={
+            'exercises': [{'id': ex_id, 'name': 'Squat',
+                           'exercise_template_id': ids['alice_custom'],
+                           'sets': [{'reps': 5, 'weight': 225}]}],
+        }, headers=hdrs(bob))
+        assert res.status_code == 200, res.get_json()
+
+        after = client.get(f'/api/workouts/{wid}', headers=hdrs(bob))
+        assert self.SECRET not in after.get_data(as_text=True)
+        assert after.get_json()['exercises'][0]['exercise_template_id'] is None
+
+    def test_workout_update_does_not_leak_via_new_exercise(self, client, bob, ids):
+        wid = make_workout(client, bob, name='Probe')
+        res = client.put(f'/api/workouts/{wid}', json={
+            'exercises': [{'name': 'Added Lift', 'exercise_template_id': ids['alice_custom'],
+                           'sets': [{'reps': 5, 'weight': 135}]}],
+        }, headers=hdrs(bob))
+        assert res.status_code == 200, res.get_json()
+
+        after = client.get(f'/api/workouts/{wid}', headers=hdrs(bob))
+        assert self.SECRET not in after.get_data(as_text=True)
+        assert all(e['exercise_template_id'] is None for e in after.get_json()['exercises'])
+
+    def test_owner_can_log_their_custom_exercise(self, client, alice, ids):
+        res = client.post('/api/workouts', json={
+            'workoutName': 'Real',
+            'exercises': [{'name': self.SECRET, 'exercise_template_id': ids['alice_custom'],
+                           'sets': [{'reps': 5, 'weight': 225}]}],
+        }, headers=hdrs(alice))
+        assert res.status_code in (200, 201), res.get_json()
+        detail = client.get(f"/api/workouts/{res.get_json()['id']}", headers=hdrs(alice)).get_json()
+        assert detail['exercises'][0]['exercise_template_id'] == ids['alice_custom']
+
     def test_owner_can_still_use_their_custom_exercise(self, client, alice, ids):
         tid = make_template(client, alice, ex_ids=[ids['alice_custom']])
         tmpl = client.get(f'/api/workout-templates/{tid}', headers=hdrs(alice)).get_json()
@@ -300,3 +358,20 @@ class TestTemplateExerciseOrder:
         assert self._ids(days[0]['workout_template']) == ids
         assert self._ids(days[1]['workout_template']) == second
 
+
+
+class TestListsAndExports:
+
+    def test_private_custom_exercise_not_in_other_users_library(self, client, alice, bob):
+        make_custom_exercise(client, alice, 'Alice Secret Curl')
+        names = [e['name'] for e in client.get('/api/exercises', headers=hdrs(bob)).get_json()]
+        assert 'Alice Secret Curl' not in names
+        mine = [e['name'] for e in client.get('/api/exercises', headers=hdrs(alice)).get_json()]
+        assert 'Alice Secret Curl' in mine
+
+    def test_export_contains_only_own_workouts(self, client, alice, bob):
+        make_workout(client, alice, name='Alice Leg Day')
+        make_workout(client, bob, name='Bob Push Day')
+        export = client.get('/api/workouts/export', headers=hdrs(bob)).get_data(as_text=True)
+        assert 'Bob Push Day' in export
+        assert 'Alice Leg Day' not in export

@@ -2,12 +2,13 @@ import csv
 from datetime import datetime
 from io import StringIO
 from flask import Blueprint, request, jsonify, current_app, g, make_response
-from models import db, Workout, Set, Exercise, PersonalRecord, PREvent, ExerciseTemplate, User
+from models import db, Workout, Set, Exercise, PersonalRecord, PREvent, ExerciseTemplate, User, CardioBestEffort
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 from flask_jwt_extended import  jwt_required, get_jwt_identity
 from schemas import WorkoutSchema, UpdateWorkoutSchema
 from utils.validation import validate_body
+from utils.exercise_access import visible_exercise_ids
 from utils.strength_standards import epley_1rm
 from utils.volume import get_bodyweight_at
 # Milestone tables moved to utils/endurance_standards.py so the Endurance
@@ -53,6 +54,52 @@ def _record_pr_event(user_id, exercise, pr_type, value, previous_value, weight_c
     ))
 
 
+def _differs(stored, incoming):
+    """Whether an incoming set value actually changes a stored one.
+
+    JSON gives numbers as int, float or string depending on the caller, so a
+    plain != flags an edit every time the app round-trips 5.0 as "5".
+    """
+    if stored is None and incoming is None:
+        return False
+    try:
+        return float(stored) != float(incoming)
+    except (TypeError, ValueError):
+        return stored != incoming
+
+
+def _build_best_efforts(ex_data):
+    """CardioBestEffort rows from an exercise payload's `best_efforts`.
+
+    The phone scans its GPS track at save time and sends what it found. This is
+    client-supplied input feeding PR math, so anything malformed is dropped
+    rather than trusted: a bad pair would otherwise land as an all-time PR the
+    user has no way to clear.
+    """
+    raw = ex_data.get('best_efforts')
+    if not isinstance(raw, list):
+        return []
+    rows = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        if item.get('milestone_type') not in ('distance', 'duration'):
+            continue
+        try:
+            distance_km = float(item['distance_km'])
+            duration_min = float(item['duration_min'])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if distance_km <= 0 or duration_min <= 0:
+            continue
+        rows.append(CardioBestEffort(
+            milestone_type=item['milestone_type'],
+            distance_km=distance_km,
+            duration_min=duration_min,
+        ))
+    return rows
+
+
 def _compute_and_upsert_cardio_prs(user_id, exercise_set_pairs, workout_date):
     """Compute best_time and best_distance PRs for cardio exercises.
 
@@ -68,6 +115,13 @@ def _compute_and_upsert_cardio_prs(user_id, exercise_set_pairs, workout_date):
             if s.distance and s.cardio_duration and s.distance > 0 and s.cardio_duration > 0:
                 dist_km = s.distance if (s.distance_unit or 'km') == 'km' else s.distance * 1.60934
                 bouts.append((dist_km, s.cardio_duration))
+        # A best effort extracted from a GPS track is just another bout, one
+        # whose distance (or duration) lands exactly on a milestone. Feeding
+        # them through the same loop means a measured 5K beats the whole-run
+        # extrapolation on merit, via the upsert that already keeps the best.
+        for effort in (exercise.best_efforts or []):
+            if effort.distance_km > 0 and effort.duration_min > 0:
+                bouts.append((effort.distance_km, effort.duration_min))
         if not bouts:
             continue
 
@@ -362,8 +416,6 @@ def _workout_card_payload(workouts, include_exercises=False):
     """to_dict plus the fields a dashboard workout card renders: rep and
     exercise counts, muscles worked, rounded volume, and PR count. Shared by
     /recent and the date-filtered list so both produce identical cards.
-
-    Runs a PR count per workout, so only use it on a bounded set.
     """
     template_ids = {
         ex.exercise_template_id
@@ -374,11 +426,22 @@ def _workout_card_payload(workouts, include_exercises=False):
         t.id: t for t in ExerciseTemplate.query.filter(ExerciseTemplate.id.in_(template_ids)).all()
     } if template_ids else {}
 
+    # One grouped count for the whole card set. A count per workout scanned
+    # personal_records once per card on a path the Dashboard hits every focus.
+    workout_ids = [w.id for w in workouts]
+    pr_counts = dict(
+        db.session.query(Exercise.workout_id, func.count(PersonalRecord.id))
+        .join(Set, Set.exercise_id == Exercise.id)
+        .join(PersonalRecord, PersonalRecord.set_id == Set.id)
+        .filter(Exercise.workout_id.in_(workout_ids))
+        .group_by(Exercise.workout_id)
+        .all()
+    ) if workout_ids else {}
+
     result = []
     for w in workouts:
         total_reps = 0
         muscles = []
-        set_ids = []
 
         for ex in w.exercises:
             if ex.exercise_template_id:
@@ -389,20 +452,15 @@ def _workout_card_payload(workouts, include_exercises=False):
                         if m and m not in muscles:
                             muscles.append(m)
             for s in ex.sets:
-                set_ids.append(s.id)
                 if s.reps:
                     total_reps += s.reps
-
-        pr_count = PersonalRecord.query.filter(
-            PersonalRecord.set_id.in_(set_ids)
-        ).count() if set_ids else 0
 
         data = w.to_dict(include_exercises=include_exercises)
         data['total_reps'] = total_reps
         data['volume'] = round(w.volume or 0.0)
         data['num_exercises'] = len(w.exercises)
         data['muscles'] = muscles
-        data['pr_count'] = pr_count
+        data['pr_count'] = pr_counts.get(w.id, 0)
         result.append(data)
 
     return result
@@ -537,6 +595,20 @@ def get_workout_details(workout_id):
 
 # CREATE WORKOUT 
 
+def _allowed_template_ids(user_id, exercises):
+    """The exercise_template_ids in a request payload this user may reference.
+
+    Ids come straight off the body, and the PR queries join ExerciseTemplate
+    without a visibility filter, so an id the user can't see would hand back
+    another user's private custom exercise (name, equipment, muscle group,
+    image) through their own workout. Ids not in the returned set are stored
+    as NULL rather than rejected, which also repairs a stale id left behind by
+    a deleted custom exercise.
+    """
+    ids = [ex.get('exercise_template_id') for ex in exercises if ex.get('exercise_template_id')]
+    return set(visible_exercise_ids(user_id, ids))
+
+
 @workout_bp.post('/api/workouts')
 @jwt_required()
 @validate_body(_workout_schema)
@@ -560,21 +632,30 @@ def add_workout():
             except ValueError:
                 return jsonify({'message': 'Invalid date format, use YYYY-MM-DD'}), 400
 
-        new_workout = Workout(user_id=current_user_id, name=name, notes=notes, date=workout_date, duration=duration)
+        new_workout = Workout(
+            user_id=current_user_id, name=name, notes=notes, date=workout_date, duration=duration,
+            avg_heart_rate=data.get('avg_heart_rate'), max_heart_rate=data.get('max_heart_rate'),
+        )
         db.session.add(new_workout)
         db.session.flush()
         
+        allowed_template_ids = _allowed_template_ids(current_user_id, exercises)
+
         exercise_set_pairs = []
         for ex_index, ex in enumerate(exercises):
             new_ex = Exercise(
                 workout_id=new_workout.id,
                 name=ex['name'],
-                exercise_template_id=ex.get('exercise_template_id'),
+                exercise_template_id=(
+                    ex.get('exercise_template_id')
+                    if ex.get('exercise_template_id') in allowed_template_ids else None
+                ),
                 order=ex.get('order', ex_index),
                 exercise_type=ex.get('exercise_type', 'strength'),
                 route_polyline=ex.get('route_polyline'),
                 notes=ex.get('notes'),
             )
+            new_ex.best_efforts = _build_best_efforts(ex)
             db.session.add(new_ex)
             db.session.flush()
 
@@ -708,12 +789,16 @@ def update_workout(workout_id):
         workout.notes = data['notes']
     if "duration" in data:
         workout.duration = data["duration"]
+    for hr_field in ('avg_heart_rate', 'max_heart_rate'):
+        if hr_field in data:
+            setattr(workout, hr_field, data[hr_field])
 
 
     
     if 'exercises' in data:
         exIds = {ex.id for ex in workout.exercises}
         newExIds = {ex.get('id') for ex in data['exercises'] if ex.get('id')}
+        allowed_template_ids = _allowed_template_ids(current_user_id, data['exercises'])
         
         for ex in workout.exercises[:]:
             if ex.id not in newExIds:
@@ -726,7 +811,14 @@ def update_workout(workout_id):
                 if "name" in exData:
                     ex.name = exData["name"]
                 if "exercise_template_id" in exData:
-                    ex.exercise_template_id = exData["exercise_template_id"]
+                    new_tmpl_id = exData["exercise_template_id"]
+                    # An id already on the row stays put: it was vetted when the
+                    # workout was written, and re-checking would wipe the link
+                    # if the template has since been deleted.
+                    if new_tmpl_id != ex.exercise_template_id:
+                        ex.exercise_template_id = (
+                            new_tmpl_id if new_tmpl_id in allowed_template_ids else None
+                        )
                 if "exercise_type" in exData:
                     ex.exercise_type = exData["exercise_type"]
                 if "route_polyline" in exData:
@@ -738,9 +830,18 @@ def update_workout(workout_id):
                 setIds = {s.id for s in ex.sets}
                 newSetIds = {s.get('id') for s in exData.get('sets', []) if s.get('id')}
 
+                # Stored best efforts describe the GPS trace as recorded. Once
+                # the user corrects the distance or duration by hand they are
+                # telling us that trace was wrong, so the splits derived from
+                # it can't stand as all-time PRs. Only an actual change counts:
+                # editing one exercise in a mixed workout resubmits the others
+                # untouched, and those must keep what they found.
+                cardio_edited = False
+
                 for s in ex.sets[:]:
                     if s.id not in newSetIds:
                         db.session.delete(s)
+                        cardio_edited = True
 
                 for set_index, s_data in enumerate(exData.get("sets", [])):
                     s_id = s_data.get("id")
@@ -753,10 +854,13 @@ def update_workout(workout_id):
                         if "set_type" in s_data:
                             s.set_type = s_data["set_type"]
                         if "cardio_duration" in s_data:
+                            cardio_edited |= _differs(s.cardio_duration, s_data["cardio_duration"])
                             s.cardio_duration = s_data["cardio_duration"]
                         if "distance" in s_data:
+                            cardio_edited |= _differs(s.distance, s_data["distance"])
                             s.distance = s_data["distance"]
                         if "distance_unit" in s_data:
+                            cardio_edited |= (s.distance_unit or 'km') != (s_data["distance_unit"] or 'km')
                             s.distance_unit = s_data["distance_unit"]
                         if "intensity" in s_data:
                             s.intensity = s_data["intensity"]
@@ -766,6 +870,7 @@ def update_workout(workout_id):
                             s.elevation_gain = s_data["elevation_gain"]
                         s.order = s_data.get('order', set_index)
                     else:
+                        cardio_edited = True
                         ex.sets.append(Set(
                             reps=_coerce_reps(s_data.get("reps")),
                             weight=s_data.get("weight"),
@@ -778,16 +883,23 @@ def update_workout(workout_id):
                             rpe=s_data.get('rpe'),
                             elevation_gain=s_data.get('elevation_gain'),
                         ))
+
+                if cardio_edited and ex.best_efforts:
+                    ex.best_efforts = []
             else:
                 new_ex = Exercise(
                     name=exData["name"],
                     workout_id=workout_id,
-                    exercise_template_id=exData.get('exercise_template_id'),
+                    exercise_template_id=(
+                        exData.get('exercise_template_id')
+                        if exData.get('exercise_template_id') in allowed_template_ids else None
+                    ),
                     order=exData.get('order', ex_index),
                     exercise_type=exData.get('exercise_type', 'strength'),
                     route_polyline=exData.get('route_polyline'),
                     notes=exData.get('notes'),
                 )
+                new_ex.best_efforts = _build_best_efforts(exData)
                 for set_index, s in enumerate(exData.get("sets", [])):
                     new_ex.sets.append(Set(
                         reps=_coerce_reps(s.get("reps")),

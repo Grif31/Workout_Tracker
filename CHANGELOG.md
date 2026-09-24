@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.1.8 (Unreleased)
+
+### New: Best Efforts
+- Activities you track with GPS now find your fastest 400m, 800m, 1K, mile, 5K and longer distances inside the activity, plus the farthest you went in 10, 20, 30 and 60 minutes. They show on the activity's details screen.
+- Your personal records use these real times, and so does your Endurance Score for runs. A fast mile in the middle of a longer run now counts as a mile PR. Before, every distance was worked out from the whole run's average pace, which undercounted interval sessions.
+- Time spent paused doesn't count toward a best effort.
+- If you edit a tracked activity's distance or time by hand, its best efforts are removed, since they came from the GPS recording you corrected.
+- Best efforts apply to activities tracked from this update on. Earlier ones don't have the timing data needed.
+
+### New: Cardio This Week
+- If you log cardio, Home shows your distance, time and number of activities since Monday. Distance follows your GPS distance setting, in miles or kilometers.
+- Cardio logged as time without distance, like a bike or rower session, shows your total time instead.
+
+### Improved: Measurements
+- Measurements now show their unit: inches if you use lbs, centimeters if you use kg. Switching units converts your measurements along with your weights.
+- Each measurement shows how much it has changed since your last entry and since your first.
+- Tap any bodyweight or measurement entry to edit it, and pick a date to log an entry for an earlier day.
+- Bodyweight shows your 7-day average on the Current card and as a line on the chart.
+- Add a note when you upload a progress photo, and use Compare to see two photos side by side, with the days between them.
+- The measurement form fits above the keyboard, and tapping outside a field or the arrow next to the title closes the keyboard.
+
+### Improved: Profile
+- If you log cardio, your Profile shows your total activities and distance, or total time for cardio logged without distance.
+
+### Improved: Streak
+- The streak sits at the top of Home, centered above your greeting, with a new flame that dims when your streak is at zero.
+- The streak number shows straight away instead of counting up each time Home opens.
+
+### Bug Fixes
+- The keyboard no longer gets stuck open when logging bodyweight or measurements, and fields no longer hide behind it.
+- Replacing an exercise during a workout no longer leaves the workout unresponsive until the app is restarted.
+- Starting a workout from a template or routine now gives the same workout from Home, Coach, and the routine or template screen, with exercise demos and your programmed sets, reps and RPE every time.
+
 ## 1.1.7 (2026-09-17)
 
 ### New: Endurance Score

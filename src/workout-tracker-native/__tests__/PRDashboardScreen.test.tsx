@@ -12,7 +12,7 @@ jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl:
 // Overrides jest.setup.ts's plain `() => null` mock with a spy, so tests can
 // verify the pinned progression chart doesn't re-render (and replay its
 // entrance animation) on unrelated dashboard state changes.
-const mockLineChartRender = jest.fn(() => null);
+const mockLineChartRender = jest.fn((_props: any) => null);
 jest.mock('react-native-gifted-charts', () => ({
   BarChart: () => null,
   LineChart: (props: any) => mockLineChartRender(props),

@@ -20,6 +20,10 @@ class User(db.Model):
     reset_otp_expiry   = db.Column(db.DateTime,   nullable=True)
     reset_otp_attempts = db.Column(db.Integer,    default=0, nullable=False, server_default='0')
     is_social_only     = db.Column(db.Boolean,    default=False, nullable=False)
+    # Stamped into every JWT as the `tv` claim and compared on each request;
+    # bumping it revokes every token issued before, which is the only way a
+    # password change can lock out someone holding a stolen 30-day refresh token.
+    token_version      = db.Column(db.Integer,    default=0, nullable=False, server_default='0')
     gender            = db.Column(db.String(10),  nullable=True)   # 'male' | 'female' | None
     birth_date        = db.Column(db.Date,          nullable=True)
     workouts = db.relationship('Workout', backref='user', lazy=True)
@@ -50,6 +54,11 @@ class Workout(db.Model):
     notes = db.Column(db.Text)
     duration = db.Column(db.Integer)
     volume = db.Column(db.Float)  # always stored in lbs; convert on display
+    # Beats per minute, read back from Apple Health / Health Connect after the
+    # workout is saved. NULL when the user has no wearable or health sync is
+    # off -- never defaulted to 0, since 0 bpm would read as a real measurement.
+    avg_heart_rate = db.Column(db.Integer)
+    max_heart_rate = db.Column(db.Integer)
     exercises = db.relationship('Exercise', backref='workouts', cascade="all, delete-orphan", lazy=True)
 
     __table_args__ = (
@@ -67,6 +76,8 @@ class Workout(db.Model):
             "duration": self.duration,
             "volume": self.volume,
             "workout_type": "cardio" if is_cardio else "strength",
+            "avg_heart_rate": self.avg_heart_rate,
+            "max_heart_rate": self.max_heart_rate,
         }
         if is_cardio and self.exercises:
             first_set = self.exercises[0].sets[0] if self.exercises[0].sets else None
@@ -114,12 +125,13 @@ class Exercise(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     workout_id = db.Column(db.Integer, db.ForeignKey('workouts.id'), nullable=False, index=True)
     name = db.Column(db.String(250), nullable=False)
-    exercise_template_id = db.Column(db.Integer, db.ForeignKey('exerciseTemplates.id', ondelete='SET NULL'), nullable=True)
+    exercise_template_id = db.Column(db.Integer, db.ForeignKey('exerciseTemplates.id', ondelete='SET NULL'), nullable=True, index=True)
     order = db.Column(db.Integer, nullable=True)
     exercise_type = db.Column(db.String(10), nullable=False, server_default='strength')
     route_polyline = db.Column(db.Text, nullable=True)
     notes = db.Column(db.Text, nullable=True)
     sets = db.relationship('Set', backref='exercises', cascade="all, delete-orphan", lazy=True, order_by='Set.order')
+    best_efforts = db.relationship('CardioBestEffort', backref='exercise', cascade="all, delete-orphan", lazy=True)
 
     def to_dict(self, include_sets=False):
         tmpl = db.session.get(ExerciseTemplate, self.exercise_template_id) if self.exercise_template_id else None
@@ -139,6 +151,8 @@ class Exercise(db.Model):
         }
         if include_sets:
             data["sets"] = [s.to_dict() for s in self.sets]
+        if self.best_efforts:
+            data["best_efforts"] = [b.to_dict() for b in self.best_efforts]
         return data
 
 # ── WorkoutTemplate ─────────────────────────────────────────
@@ -330,6 +344,30 @@ class Set(db.Model):
             "elevation_gain": self.elevation_gain,
         }
 
+# ── CardioBestEffort ────────────────────────────────────────────────────
+# Segments pulled out of a GPS track at save time: the fastest window covering
+# each distance milestone, and the furthest reached inside each duration
+# milestone. Stored rather than recomputed because the encoded route_polyline
+# keeps no per-point timing, and because _recompute_prs_for_templates rebuilds
+# PRs from what is on the Exercise — an effort that lived only in the original
+# request would be wiped the first time any workout for that exercise was
+# edited. Exactly one of the two columns lands on a milestone value: the other
+# is what was measured.
+class CardioBestEffort(db.Model):
+    __tablename__ = "cardio_best_efforts"
+    id = db.Column(db.Integer, primary_key=True)
+    exercise_id = db.Column(db.Integer, db.ForeignKey('exercises.id', ondelete='CASCADE'), nullable=False, index=True)
+    milestone_type = db.Column(db.String(10), nullable=False)  # 'distance' | 'duration'
+    distance_km = db.Column(db.Float, nullable=False)
+    duration_min = db.Column(db.Float, nullable=False)
+
+    def to_dict(self):
+        return {
+            "milestone_type": self.milestone_type,
+            "distance_km": self.distance_km,
+            "duration_min": self.duration_min,
+        }
+
 # ── DeviceToken ─────────────────────────────────────────────
 class DeviceToken(db.Model):
     __tablename__ = "device_tokens"
@@ -432,7 +470,7 @@ class PersonalRecord(db.Model):
     # For max_weight / estimated_1rm: -1.0 (sentinel, no weight context needed).
     weight_context = db.Column(db.Float, nullable=False, default=-1.0)
     achieved_at = db.Column(db.DateTime, nullable=False)
-    set_id = db.Column(db.Integer, db.ForeignKey('sets.id', ondelete='SET NULL'), nullable=True)
+    set_id = db.Column(db.Integer, db.ForeignKey('sets.id', ondelete='SET NULL'), nullable=True, index=True)
 
     __table_args__ = (
         db.UniqueConstraint(

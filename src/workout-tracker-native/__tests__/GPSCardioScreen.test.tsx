@@ -162,6 +162,53 @@ describe('GPSCardioScreen', () => {
       expect(await AsyncStorage.getItem(CHECKPOINT_KEY)).toBeNull();
     });
 
+    it('sends the best efforts scanned out of the track', async () => {
+      // Six fixes 111 m and 30 s apart: 555 m at 4:30/km, so the run covers
+      // the 400m milestone. The backend can only extrapolate from the whole
+      // bout; this is the measured window.
+      const r = await renderReady();
+      await runAndStop(r, [0, 1, 2, 3, 4, 5].map(i => point(i)));
+      await act(async () => { fireEvent.press(r.getByText('Save')); });
+
+      await waitFor(() => expect(posts()).toHaveLength(1));
+      const efforts = JSON.parse(posts()[0][1].body).exercises[0].best_efforts;
+      const four = efforts.find((e: any) => e.milestone_type === 'distance' && e.distance_km === 0.4);
+      expect(four.duration_min).toBeCloseTo(1.8, 1);
+      // Nothing longer than the run was covered
+      expect(efforts.some((e: any) => e.distance_km === 1.0 && e.milestone_type === 'distance')).toBe(false);
+    });
+
+    it('omits best efforts entirely when the run covered no milestone', async () => {
+      const r = await renderReady();
+      await runAndStop(r, [point(0), point(1), point(2)]);
+      await act(async () => { fireEvent.press(r.getByText('Save')); });
+
+      await waitFor(() => expect(posts()).toHaveLength(1));
+      expect(JSON.parse(posts()[0][1].body).exercises[0]).not.toHaveProperty('best_efforts');
+    });
+
+    it('leaves paused time out of a scanned effort', async () => {
+      // 400 m of running either side of a 20-minute break. Counting the break
+      // would make the 400m split read as twenty-odd minutes.
+      const r = await renderReady();
+      await act(async () => { fireEvent.press(r.getByText('Start')); });
+      await waitFor(() => expect(mockGpsListener).not.toBeNull());
+      await feed(point(0), point(1), point(2));
+      await act(async () => { fireEvent.press(r.getByText('Pause')); });
+      await act(async () => { fireEvent.press(r.getByText('Resume')); });
+      await waitFor(() => expect(mockGpsListener).not.toBeNull());
+      // Resumes 40 points away and 20 minutes later; neither gap may count
+      await feed(point(40), point(41), point(42), point(43));
+      await act(async () => { fireEvent.press(r.getByText('Stop')); });
+      await act(async () => { fireEvent.press(r.getByText('Save')); });
+
+      await waitFor(() => expect(posts()).toHaveLength(1));
+      const efforts = JSON.parse(posts()[0][1].body).exercises[0].best_efforts ?? [];
+      const four = efforts.find((e: any) => e.milestone_type === 'distance' && e.distance_km === 0.4);
+      // Six 30-second legs of actual running, not the 20-minute break
+      expect(four.duration_min).toBeLessThan(3);
+    });
+
     it('saves in km when that is the preferred unit', async () => {
       await AsyncStorage.setItem(`gps_distance_unit_${USER_ID}`, 'km');
       const r = await renderReady();

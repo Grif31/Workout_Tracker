@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ONBOARDING_COMPLETE_KEY, WEEKLY_GOAL_KEY } from '../../constants/storageKeys';
 import { useAuth } from '../../context/AuthContext';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OnboardingStackParamsList } from '../../navigation/types';
@@ -20,7 +21,7 @@ import { apiFetch } from '../../utils/api';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { navigationRef } from '../../navigation/navigationRef';
-import { COACH_PROFILE_KEY, CoachProfile } from '../TrainingTab/CoachProfileModal';
+import { COACH_PROFILE_KEY, CoachProfile } from '../../components/coach/CoachProfileModal';
 
 type Props = NativeStackScreenProps<OnboardingStackParamsList, 'Onboarding'> & { onComplete: () => void };
 
@@ -199,8 +200,8 @@ export default function OnboardingScreen({ onComplete }: Props) {
       ['user_goal', a.goal],
       ['user_experience', a.exp],
       ['user_days_per_week', String(a.days)],
-      [`workout_weekly_goal_${user?.id}`, String(a.days)],
-      ['onboarding_complete', 'true'],
+      [`${WEEKLY_GOAL_KEY}_${user?.id}`, String(a.days)],
+      [ONBOARDING_COMPLETE_KEY, 'true'],
     ]);
   };
 
@@ -306,7 +307,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
           text: 'Skip',
           style: 'destructive',
           onPress: async () => {
-            await AsyncStorage.setItem('onboarding_complete', 'true');
+            await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
             onComplete();
           },
         },

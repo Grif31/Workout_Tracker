@@ -143,9 +143,20 @@ jest.mock('react-native-worklets', () => ({
 jest.mock('react-native-reanimated', () => {
   const RN = require('react-native');
   const shared = (v: any) => ({ value: v });
+  // Entering/exiting animations are builders: FadeInDown.delay(200).duration(400).
+  // Every method returns the builder, so any chain the screens use resolves.
+  const entering = () => {
+    const builder: any = new Proxy({}, { get: () => () => builder });
+    return builder;
+  };
   return {
     __esModule: true,
-    default: { createAnimatedComponent: (c: any) => c },
+    // Screens render <Animated.View entering={FadeInDown}> off the default export.
+    default: {
+      createAnimatedComponent: (c: any) => c,
+      View: RN.View, Text: RN.Text, Image: RN.Image,
+      ScrollView: RN.ScrollView, FlatList: RN.FlatList,
+    },
     createAnimatedComponent: (c: any) => c,
     useSharedValue: shared,
     useDerivedValue: (fn: any) => shared(fn()),
@@ -169,6 +180,14 @@ jest.mock('react-native-reanimated', () => {
     getUseOfValueInStyleWarning: jest.fn(),
     addWhitelistedNativeProps: jest.fn(),
     addWhitelistedUIProps: jest.fn(),
+    FadeIn: entering(),
+    FadeInDown: entering(),
+    FadeInUp: entering(),
+    FadeOut: entering(),
+    ZoomIn: entering(),
+    ZoomOut: entering(),
+    Layout: entering(),
+    LinearTransition: entering(),
     View: RN.View,
     Text: RN.Text,
     Image: RN.Image,
@@ -194,7 +213,9 @@ jest.mock('react-native-purchases', () => ({
     getOfferings: jest.fn(() => Promise.resolve({ current: null })),
     purchasePackage: jest.fn(),
     restorePurchases: jest.fn(() => Promise.resolve({ entitlements: { active: {} } })),
+    checkTrialOrIntroductoryPriceEligibility: jest.fn(() => Promise.resolve({})),
   },
+  INTRO_ELIGIBILITY_STATUS: { INTRO_ELIGIBILITY_STATUS_ELIGIBLE: 2 },
 }));
 
 jest.mock('./context/PurchaseContext', () => ({

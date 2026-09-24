@@ -117,3 +117,36 @@ class TestWeekBoundaryEndpoints:
         # By UTC it's Monday, which summarized the unfinished week.
         server = client.get('/api/stats/weekly-summary', headers=hdrs(auth_token)).get_json()
         assert server['week_start'] == '2026-09-14'
+
+
+
+class TestAgeUsesLocalDate:
+    """Age feeds the strength/endurance percentile scaling. On the UTC server,
+    an evening in the Americas is already tomorrow; age must follow the
+    user's own date, or a birthday counts a day early."""
+
+    def test_age_rolls_over_on_the_users_birthday_not_the_servers(self, app, monkeypatch):
+        from datetime import date, datetime, timezone
+        from types import SimpleNamespace
+        import utils.local_date as ld
+        from routes.strength_score_routes import _user_age
+
+        # 03:00 UTC on the 22nd is still the evening of the 21st in the US
+        class _Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime(2026, 9, 22, 3, 0, tzinfo=timezone.utc)
+
+        class _ServerDate(date):
+            @classmethod
+            def today(cls):
+                return date(2026, 9, 22)
+
+        monkeypatch.setattr(ld, 'datetime', _Clock)
+        monkeypatch.setattr(ld, 'date', _ServerDate)
+        user = SimpleNamespace(birth_date=date(2000, 9, 22))
+
+        with app.test_request_context(headers={'X-Local-Date': '2026-09-21'}):
+            assert _user_age(user) == 25
+        with app.test_request_context(headers={'X-Local-Date': '2026-09-22'}):
+            assert _user_age(user) == 26

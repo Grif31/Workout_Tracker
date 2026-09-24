@@ -104,6 +104,57 @@ class TestGenerateMissingApiKey:
 
 
 # ---------------------------------------------------------------------------
+# Private custom exercises must not reach another user's preview
+# ---------------------------------------------------------------------------
+
+class TestGeneratePrivateExercises:
+    """_match_exercises used to scan every user's templates, so a custom
+    exercise could shadow a library one in someone else's generated preview."""
+
+    SECRET = 'Alice Rehab Press'
+
+    def _generate(self, client, token, response_json):
+        mock_ant = _make_anthropic_mock(response_json)
+        with patch.dict(sys.modules, {'anthropic': mock_ant}):
+            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+                return client.post('/api/ai/generate', json={
+                    'days_per_week': 3, 'goal': 'general',
+                    'experience': 'beginner', 'generate_type': 'template',
+                }, headers=auth_headers(token))
+
+    def test_name_collision_resolves_to_the_library_row(self, client, auth_token, auth_token2):
+        global_id = seed_exercise_template('Bench Press')
+        mine = client.post('/api/exercises', json={'name': 'Bench Press', 'muscle_group': 'Chest'},
+                           headers=auth_headers(auth_token))
+        assert mine.status_code == 201
+
+        res = self._generate(client, auth_token2, {'name': 'Probe', 'exercises': ['Bench Press']})
+        assert res.status_code == 200
+        matched = res.get_json()['exercises']
+        assert [e['id'] for e in matched] == [global_id]
+
+    def test_another_users_private_exercise_never_matches(self, client, auth_token, auth_token2):
+        seed_exercise_template('Bench Press')
+        secret = client.post('/api/exercises', json={'name': self.SECRET, 'muscle_group': 'Chest'},
+                             headers=auth_headers(auth_token))
+        assert secret.status_code == 201
+
+        for probe in (self.SECRET, 'rehab'):
+            res = self._generate(client, auth_token2, {'name': 'Probe', 'exercises': [probe]})
+            assert res.status_code == 200
+            assert self.SECRET not in res.get_data(as_text=True), probe
+
+    def test_owner_still_matches_their_own_custom_exercise(self, client, auth_token):
+        secret = client.post('/api/exercises', json={'name': self.SECRET, 'muscle_group': 'Chest'},
+                             headers=auth_headers(auth_token))
+        assert secret.status_code == 201
+
+        res = self._generate(client, auth_token, {'name': 'Probe', 'exercises': [self.SECRET]})
+        assert res.status_code == 200
+        assert [e['id'] for e in res.get_json()['exercises']] == [secret.get_json()['id']]
+
+
+# ---------------------------------------------------------------------------
 # Routine generation — 200 preview, nothing persisted
 # ---------------------------------------------------------------------------
 
@@ -203,6 +254,96 @@ class TestGenerateTemplate:
 # ---------------------------------------------------------------------------
 # POST /api/ai/save — persistence
 # ---------------------------------------------------------------------------
+
+class TestSaveBounds:
+    """/api/ai/save had no schema, size bound or rate limit: one request wrote
+    3,000 routine days in about a second."""
+
+    def _routine(self, days):
+        return {'type': 'routine', 'name': 'Probe', 'days': days}
+
+    def _counts(self):
+        from models import Routine, WorkoutTemplate
+        return Routine.query.count(), WorkoutTemplate.query.count()
+
+    def test_real_client_payload_is_accepted(self, client, auth_token):
+        """Exactly what AIWorkoutPreviewScreen and OnboardingScreen send, so the
+        schema can't quietly start rejecting the app."""
+        tmpl_id = seed_exercise_template('Squat')
+        prog = [{'exercise_template_id': tmpl_id, 'sets': 3, 'reps': '6-8', 'rpe': None}]
+        res = client.post('/api/ai/save', json={
+            'type': 'routine', 'name': 'PPL', 'description': None,
+            'days': [{'label': f'Day {i}', 'exercise_ids': [tmpl_id], 'programming': prog} for i in range(7)],
+        }, headers=auth_headers(auth_token))
+        assert res.status_code == 201, res.get_json()
+
+        res = client.post('/api/ai/save', json={
+            'type': 'template', 'name': 'Upper', 'exercise_ids': [tmpl_id], 'programming': prog,
+        }, headers=auth_headers(auth_token))
+        assert res.status_code == 201, res.get_json()
+
+    def test_too_many_days_rejected_and_nothing_written(self, client, auth_token):
+        before = self._counts()
+        res = client.post('/api/ai/save', json=self._routine(
+            [{'label': f'D{i}', 'exercise_ids': []} for i in range(3000)]
+        ), headers=auth_headers(auth_token))
+        assert res.status_code == 400
+        assert self._counts() == before
+
+    def test_too_many_exercises_in_a_day_rejected(self, client, auth_token):
+        res = client.post('/api/ai/save', json=self._routine(
+            [{'label': 'A', 'exercise_ids': list(range(1, 1001))}]
+        ), headers=auth_headers(auth_token))
+        assert res.status_code == 400
+
+    def test_too_many_template_exercises_rejected(self, client, auth_token):
+        res = client.post('/api/ai/save', json={
+            'type': 'template', 'name': 'Probe', 'exercise_ids': list(range(1, 1001)),
+        }, headers=auth_headers(auth_token))
+        assert res.status_code == 400
+
+    def test_oversized_name_rejected(self, client, auth_token):
+        res = client.post('/api/ai/save', json={
+            'type': 'template', 'name': 'x' * 10_000, 'exercise_ids': [],
+        }, headers=auth_headers(auth_token))
+        assert res.status_code == 400
+
+    def test_day_without_label_is_a_400_not_a_500(self, client, auth_token):
+        res = client.post('/api/ai/save', json=self._routine([{'exercise_ids': []}]),
+                          headers=auth_headers(auth_token))
+        assert res.status_code == 400
+
+    def test_unknown_type_rejected(self, client, auth_token):
+        res = client.post('/api/ai/save', json={'type': 'essay', 'name': 'x'},
+                          headers=auth_headers(auth_token))
+        assert res.status_code == 400
+
+    def test_is_rate_limited_per_user(self, client, app, auth_token, auth_token2):
+        from limiter import limiter
+        limiter.reset()
+        limiter.enabled = True
+        try:
+            body = {'type': 'template', 'name': 'x', 'exercise_ids': []}
+            codes = [client.post('/api/ai/save', json=body, headers=auth_headers(auth_token)).status_code
+                     for _ in range(21)]
+            assert codes[:20] == [201] * 20
+            assert codes[20] == 429
+            # Keyed on the JWT identity, so one user hitting it doesn't lock out another.
+            other = client.post('/api/ai/save', json=body, headers=auth_headers(auth_token2))
+            assert other.status_code == 201
+        finally:
+            limiter.enabled = False
+            limiter.reset()
+
+
+class TestRequestBodyCap:
+
+    def test_body_over_the_cap_is_rejected_before_the_route(self, client, auth_token):
+        res = client.post('/api/ai/save', data=b'{"type":"template","name":"' + b'x' * (11 * 1024 * 1024) + b'"}',
+                          content_type='application/json', headers=auth_headers(auth_token))
+        assert res.status_code == 413
+        assert 'message' in res.get_json()
+
 
 class TestSaveRoutine:
 
@@ -632,3 +773,39 @@ class TestInsightFacts:
         assert '  Bench Press, Max Weight: 225 lbs → 235 lbs (3 days ago)' in prompt
         assert '  Overhead Press: no max weight PR in 45 days' in prompt
         assert 'Good: {' in prompt and 'Bad: {' in prompt
+
+
+# ---------------------------------------------------------------------------
+# Prescribed reps normalisation
+# ---------------------------------------------------------------------------
+
+class TestPrescribedRepsAreStrings:
+    """The prompt asks for "reps": "6-8", but models answer with a bare number
+    often enough that it has to be normalised here. Stored as a number, the app
+    threw when the saved template was later logged."""
+
+    def _generate(self, client, token, reps):
+        seed_exercise_template('Bench Press')
+        plan = {'name': 'AI Upper', 'exercises': [{'exercise': 'Bench Press', 'sets': 4, 'reps': reps, 'rpe': 8}]}
+        mock_ant = _make_anthropic_mock(plan)
+        with patch.dict(sys.modules, {'anthropic': mock_ant}):
+            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+                return client.post('/api/ai/generate', json={
+                    'days_per_week': 3, 'goal': 'hypertrophy',
+                    'experience': 'beginner', 'generate_type': 'template',
+                }, headers=auth_headers(token))
+
+    def test_numeric_reps_become_a_string(self, client, auth_token):
+        data = self._generate(client, auth_token, 8).get_json()
+        bench = next(e for e in data['exercises'] if e['name'] == 'Bench Press')
+        assert bench['prescribed_reps'] == '8'
+
+    def test_range_string_is_left_alone(self, client, auth_token):
+        data = self._generate(client, auth_token, '6-8').get_json()
+        bench = next(e for e in data['exercises'] if e['name'] == 'Bench Press')
+        assert bench['prescribed_reps'] == '6-8'
+
+    def test_missing_reps_stays_none(self, client, auth_token):
+        data = self._generate(client, auth_token, None).get_json()
+        bench = next(e for e in data['exercises'] if e['name'] == 'Bench Press')
+        assert bench['prescribed_reps'] is None

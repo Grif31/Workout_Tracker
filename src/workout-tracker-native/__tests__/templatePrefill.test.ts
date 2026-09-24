@@ -120,3 +120,18 @@ describe('rep parsing', () => {
     expect(parseHoldMinutes('')).toBe('');
   });
 });
+
+describe('numeric reps from an AI plan', () => {
+  it('prefills a template whose programming stored reps as a number', () => {
+    // The AI is asked for "reps": "6-8" but often answers "reps": 8, and that
+    // is stored as-is. Logging such a template used to throw on .match.
+    const programming = parseProgramming(JSON.stringify([
+      { exercise_template_id: 3, sets: 2, reps: 8 as any, rpe: 7 },
+    ]));
+    const prefill = buildTemplatePrefill('AI Push', [
+      { id: 3, name: 'Bench Press', muscle_group: 'Chest' },
+    ], programming);
+    expect(prefill.exercises[0].sets).toHaveLength(2);
+    expect(prefill.exercises[0].sets[0]).toMatchObject({ reps: '8' });
+  });
+});

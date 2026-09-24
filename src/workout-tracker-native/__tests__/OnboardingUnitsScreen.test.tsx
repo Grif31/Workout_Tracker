@@ -71,12 +71,21 @@ describe('OnboardingUnitsScreen', () => {
     const RNSwitch = require('react-native').Switch;
     const switches = UNSAFE_getAllByType(RNSwitch);
     const distanceSwitch = switches[1];
-    fireEvent(distanceSwitch, 'valueChange', false); // mi -> km
+    fireEvent(distanceSwitch, 'valueChange', true); // mi -> km
     fireEvent.press(getByText('Continue'));
 
     await waitFor(() =>
       expect(AsyncStorage.setItem).toHaveBeenCalledWith('gps_distance_unit_1', 'km'),
     );
+  });
+
+  it('puts lbs and mi on the same side of their toggles', async () => {
+    const { UNSAFE_getAllByType } = renderScreen();
+    const RNSwitch = require('react-native').Switch;
+    const [weightSwitch, distanceSwitch] = UNSAFE_getAllByType(RNSwitch);
+    // Both default to imperial, so both start off: lbs and mi share the left
+    expect(weightSwitch.props.value).toBe(false);
+    expect(distanceSwitch.props.value).toBe(false);
   });
 
   it('defaults distance to mi (stores mi) when left untouched', async () => {

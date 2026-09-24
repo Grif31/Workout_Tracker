@@ -46,7 +46,7 @@ describe('PaywallScreen', () => {
   it('shows the feature list', () => {
     const { getByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
     expect(getByText('Strength Score & lifter ranking')).toBeTruthy();
-    expect(getByText('AI Coach: generate routines & templates')).toBeTruthy();
+    expect(getByText('AI Coach: generate workouts & routines')).toBeTruthy();
     expect(getByText('Unlimited templates & routines')).toBeTruthy();
   });
 
@@ -120,6 +120,48 @@ describe('PaywallScreen', () => {
       await waitFor(() => expect(purchasePackage).toHaveBeenCalled());
       expect(showToast).not.toHaveBeenCalledWith('Premium is active.');
       expect(nav.goBack).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('plans and free trial', () => {
+    const Purchases = require('react-native-purchases').default;
+    const withTrial = (pkg: any, id: string) => ({
+      ...pkg,
+      product: { ...pkg.product, identifier: id,
+        introPrice: { price: 0, periodUnit: 'WEEK', periodNumberOfUnits: 1 } },
+    });
+
+    it('renders only the plans configured in RevenueCat once offerings load', () => {
+      mockUsePurchase.mockReturnValue({
+        offerings: withOfferings(THREE_PACKAGES.slice(0, 2)),
+        purchasePackage: jest.fn(), restorePurchases: jest.fn(),
+      });
+      const { queryByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
+      expect(queryByText('Annual')).toBeTruthy();
+      expect(queryByText('Lifetime')).toBeNull();
+    });
+
+    it('advertises the free trial to an eligible user', async () => {
+      const annual = withTrial(THREE_PACKAGES[0], 'annual');
+      Purchases.checkTrialOrIntroductoryPriceEligibility.mockResolvedValueOnce({ annual: { status: 2 } });
+      mockUsePurchase.mockReturnValue({
+        offerings: withOfferings([annual]), purchasePackage: jest.fn(), restorePurchases: jest.fn(),
+      });
+      const { findByText, getByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
+      expect(await findByText('1 week free, then $59.99/yr')).toBeTruthy();
+      expect(getByText('Start Free Trial')).toBeTruthy();
+    });
+
+    it('does not advertise the trial to a user who already used it', async () => {
+      const annual = withTrial(THREE_PACKAGES[0], 'annual');
+      Purchases.checkTrialOrIntroductoryPriceEligibility.mockResolvedValueOnce({ annual: { status: 1 } });
+      mockUsePurchase.mockReturnValue({
+        offerings: withOfferings([annual]), purchasePackage: jest.fn(), restorePurchases: jest.fn(),
+      });
+      const { getByText, queryByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(Purchases.checkTrialOrIntroductoryPriceEligibility).toHaveBeenCalled());
+      expect(getByText('$59.99/yr')).toBeTruthy();
+      expect(queryByText('Start Free Trial')).toBeNull();
     });
   });
 

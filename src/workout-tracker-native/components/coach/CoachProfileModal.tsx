@@ -24,7 +24,11 @@ export type CoachProfile = {
 export const COACH_PROFILE_KEY = 'coach_profile';
 const LEGACY_KEY = 'coach_settings';
 
-const DEFAULT_PROFILE: CoachProfile = {
+// The profile a user who has never opened this modal is treated as having.
+// CoachScreen seeds its own state from the same object and sends it to the AI
+// endpoints, so a second copy would mean generation defaults that depend on
+// which screen started the request.
+export const DEFAULT_PROFILE: CoachProfile = {
   goal: 'general',
   experience: 'beginner',
   equipment: 'full_gym',

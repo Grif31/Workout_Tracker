@@ -5,11 +5,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ProfileStackParamsList } from 'navigation/types';
+import { ProfileStackParamsList } from '../../navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
-import { spacing } from 'theme/spacing';
-import { typography } from 'theme/typography';
-import { apiFetch } from '../../utils/api';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
+import { apiFetch, saveTokens } from '../../utils/api';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'ChangePassword'>;
 
@@ -53,6 +53,9 @@ export default function ChangePasswordScreen({ navigation }: Props) {
       });
       const data = await res.json();
       if (res.ok) {
+        if (data.access_token && data.refresh_token) {
+          await saveTokens(data.access_token, data.refresh_token);
+        }
         Alert.alert('Success', 'Password changed successfully.', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);

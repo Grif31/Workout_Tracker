@@ -118,13 +118,14 @@ module.exports = {
         },
       ],
       [
-        'react-native-health',
+        // Replaced react-native-health, which is an old-architecture bridge
+        // module and therefore dead under RN 0.83's bridgeless-only runtime.
+        // This plugin takes the raw Info.plist key names, unlike the old one.
+        '@kingstinct/react-native-healthkit',
         {
-          // The plugin's config keys are healthSharePermission/healthUpdatePermission,
-          // NOT the raw NSHealth*UsageDescription Info.plist key names — passing the
-          // wrong keys here silently falls back to the plugin's generic defaults.
-          healthSharePermission: 'Aretē reads health data to display workout metrics.',
-          healthUpdatePermission: 'Aretē writes workout sessions to Apple Health.',
+          NSHealthShareUsageDescription:
+            'Aretē reads your heart rate from Apple Health to show heart rate on your workouts.',
+          NSHealthUpdateUsageDescription: 'Aretē writes workout sessions to Apple Health.',
         },
       ],
       'react-native-health-connect',

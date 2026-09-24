@@ -6,77 +6,116 @@ from models import db, Exercise, Set, Workout, User, ExerciseTemplate, PersonalR
 strength_score_bp = Blueprint('strength_score_bp', __name__)
 
 
-def _exercise_percentile_data(user_id, standards_key, template_ids, gender, unit_to_lbs, bw_lbs, age_factor):
-    """Best-1RM + percentile for one standards_key, shared by strength_score()
-    and the single-exercise lookup so both stay in sync. Returns None if the
-    user has no qualifying data for this lift (untracked, not an error)."""
+def _percentile_data_by_key(user_id, templates_by_key, gender, unit_to_lbs, bw_lbs, age_factor):
+    """Best-1RM + percentile for every standards_key in templates_by_key.
+
+    Three grouped queries no matter how many lifts are asked for. Doing it per
+    lift meant ~90 round trips for the full standards table, and /strength-score
+    and /greek-rank each pay for it on the same cold start.
+
+    Keys the user has no qualifying data for are absent from the result
+    (untracked, not an error)."""
     from utils.strength_standards import compute_percentile
 
-    true_1rm_row = (
-        db.session.query(db.func.max(Set.weight))
-        .join(Exercise, Set.exercise_id == Exercise.id)
+    all_ids = [tid for ids in templates_by_key.values() for tid in ids]
+    if not all_ids:
+        return {}
+
+    true_1rm_by_template = dict(
+        db.session.query(Exercise.exercise_template_id, db.func.max(Set.weight))
+        .join(Set, Set.exercise_id == Exercise.id)
         .join(Workout, Exercise.workout_id == Workout.id)
         .filter(
             Workout.user_id == user_id,
-            Exercise.exercise_template_id.in_(template_ids),
+            Exercise.exercise_template_id.in_(all_ids),
             Set.reps == 1,
             Set.weight.isnot(None),
         )
-        .scalar()
+        .group_by(Exercise.exercise_template_id)
+        .all()
     )
-    true_1rm = float(true_1rm_row) * unit_to_lbs if true_1rm_row else 0.0
-
-    est_1rm_row = (
-        db.session.query(db.func.max(PersonalRecord.value))
+    est_1rm_by_template = dict(
+        db.session.query(PersonalRecord.exercise_template_id, db.func.max(PersonalRecord.value))
         .filter(
             PersonalRecord.user_id == user_id,
-            PersonalRecord.exercise_template_id.in_(template_ids),
+            PersonalRecord.exercise_template_id.in_(all_ids),
             PersonalRecord.pr_type == 'estimated_1rm',
         )
-        .scalar()
+        .group_by(PersonalRecord.exercise_template_id)
+        .all()
     )
-    est_1rm = float(est_1rm_row) * unit_to_lbs if est_1rm_row else 0.0
 
-    # A logged true 1RM (an actual single-rep set) is more trustworthy than
-    # an Epley estimate from a different, submaximal set — the formula can
-    # overshoot at higher rep ranges and claim a user is stronger than their
-    # real, achieved single. Prefer the true 1RM whenever one exists; only
-    # fall back to the estimate when no true 1RM has been logged at all.
-    best_1rm = true_1rm if true_1rm > 0 else est_1rm
+    def _best_for(by_template, template_ids):
+        """Best across the name variants that share one standards_key."""
+        values = [by_template[tid] for tid in template_ids if by_template.get(tid) is not None]
+        return float(max(values)) * unit_to_lbs if values else 0.0
+
+    true_1rms = {}
+    best_1rms = {}
+    for standards_key, template_ids in templates_by_key.items():
+        true_1rm = _best_for(true_1rm_by_template, template_ids)
+        est_1rm = _best_for(est_1rm_by_template, template_ids)
+        true_1rms[standards_key] = true_1rm
+        # A logged true 1RM (an actual single-rep set) is more trustworthy than
+        # an Epley estimate from a different, submaximal set — the formula can
+        # overshoot at higher rep ranges and claim a user is stronger than their
+        # real, achieved single. Prefer the true 1RM whenever one exists; only
+        # fall back to the estimate when no true 1RM has been logged at all.
+        best_1rms[standards_key] = true_1rm if true_1rm > 0 else est_1rm
 
     # Pull-up / Dip bodyweight fallback: standards (and logged weighted sets)
     # are on the ADDED-weight scale, so estimate added 1RM as Epley total
     # minus bodyweight: bw*(1 + r/30) - bw = bw*r/30.
-    if best_1rm == 0.0 and standards_key in ('Pull-up', 'Dips'):
-        max_reps_row = (
-            db.session.query(db.func.max(Set.reps))
-            .join(Exercise, Set.exercise_id == Exercise.id)
+    fallback_keys = [k for k in ('Pull-up', 'Dips') if best_1rms.get(k) == 0.0]
+    if fallback_keys:
+        fallback_ids = [tid for k in fallback_keys for tid in templates_by_key[k]]
+        max_reps_by_template = dict(
+            db.session.query(Exercise.exercise_template_id, db.func.max(Set.reps))
+            .join(Set, Set.exercise_id == Exercise.id)
             .join(Workout, Exercise.workout_id == Workout.id)
             .filter(
                 Workout.user_id == user_id,
-                Exercise.exercise_template_id.in_(template_ids),
+                Exercise.exercise_template_id.in_(fallback_ids),
                 Set.weight == 0,
                 Set.reps.isnot(None),
                 Set.reps <= 15,
             )
-            .scalar()
+            .group_by(Exercise.exercise_template_id)
+            .all()
         )
-        if max_reps_row and max_reps_row > 0:
-            best_1rm = bw_lbs * max_reps_row / 30
+        for standards_key in fallback_keys:
+            reps = [
+                max_reps_by_template[tid]
+                for tid in templates_by_key[standards_key]
+                if max_reps_by_template.get(tid)
+            ]
+            if reps:
+                best_1rms[standards_key] = bw_lbs * max(reps) / 30
 
-    if best_1rm <= 0:
-        return None
+    results = {}
+    for standards_key, best_1rm in best_1rms.items():
+        if best_1rm <= 0:
+            continue
+        bw_ratio = (best_1rm / bw_lbs) * age_factor
+        pct = compute_percentile(standards_key, gender, bw_ratio)
+        if pct is None:
+            continue
+        true_1rm = true_1rms[standards_key]
+        results[standards_key] = {
+            'percentile': pct,
+            'best_1rm': round(best_1rm / unit_to_lbs, 1),
+            'true_1rm': round(true_1rm / unit_to_lbs, 1) if true_1rm > 0 else None,
+        }
+    return results
 
-    bw_ratio = (best_1rm / bw_lbs) * age_factor
-    pct = compute_percentile(standards_key, gender, bw_ratio)
-    if pct is None:
-        return None
 
-    return {
-        'percentile': pct,
-        'best_1rm': round(best_1rm / unit_to_lbs, 1),
-        'true_1rm': round(true_1rm / unit_to_lbs, 1) if true_1rm > 0 else None,
-    }
+def _exercise_percentile_data(user_id, standards_key, template_ids, gender, unit_to_lbs, bw_lbs, age_factor):
+    """One lift's percentile data, for the single-exercise lookup. Goes through
+    the batch helper so it and strength_score() stay in sync. Returns None if
+    the user has no qualifying data for this lift (untracked, not an error)."""
+    return _percentile_data_by_key(
+        user_id, {standards_key: template_ids}, gender, unit_to_lbs, bw_lbs, age_factor
+    ).get(standards_key)
 
 
 # Both screens render the credit as a whole percent ("Age-adjusted +3%"), so a
@@ -168,8 +207,9 @@ def _endurance_data(user_id, gender, user_age):
 def _user_age(user):
     if not user.birth_date:
         return None
-    from datetime import date as _date
-    today = _date.today()
+    # The user's date, not the UTC server's, or an evening on their birthday
+    # still scores them at last year's age.
+    today = user_today()
     return today.year - user.birth_date.year - (
         (today.month, today.day) < (user.birth_date.month, user.birth_date.day)
     )
@@ -207,13 +247,14 @@ def _strength_data(user, user_age):
     best_1rms: dict[str, float] = {}
     true_1rms: dict[str, float] = {}
     if has_bodyweight:
-        for exercise_name, template_ids in templates_by_key.items():
-            result = _exercise_percentile_data(user.id, exercise_name, template_ids, user.gender, unit_to_lbs, bw_lbs, age_factor)
-            if result is not None:
-                percentiles[exercise_name] = result['percentile']
-                best_1rms[exercise_name] = result['best_1rm']
-                if result['true_1rm'] is not None:
-                    true_1rms[exercise_name] = result['true_1rm']
+        by_key = _percentile_data_by_key(
+            user.id, templates_by_key, user.gender, unit_to_lbs, bw_lbs, age_factor
+        )
+        for exercise_name, result in by_key.items():
+            percentiles[exercise_name] = result['percentile']
+            best_1rms[exercise_name] = result['best_1rm']
+            if result['true_1rm'] is not None:
+                true_1rms[exercise_name] = result['true_1rm']
 
     return {
         'has_bodyweight': has_bodyweight,
@@ -611,7 +652,6 @@ def strength_score_for_exercise():
     Score badge on ExerciseDetailScreen without paying for the full strength_score()
     computation (overall score, Greek rank, muscle groups, snapshot writes) on
     every exercise-detail visit."""
-    from datetime import date as _date
     from utils.strength_standards import STANDARDS, percentile_to_strength_rank, age_scaling_factor
 
     user_id = get_jwt_identity()
@@ -638,12 +678,7 @@ def strength_score_for_exercise():
     unit_to_lbs = kg_to_lbs if (user.weight_unit or 'lbs') == 'kg' else 1.0
     bw_lbs = user.bodyweight * unit_to_lbs
 
-    today = _date.today()
-    user_age = None
-    if user.birth_date:
-        user_age = today.year - user.birth_date.year - (
-            (today.month, today.day) < (user.birth_date.month, user.birth_date.day)
-        )
+    user_age = _user_age(user)
     age_factor = age_scaling_factor(user_age) if user_age else 1.0
 
     # Other templates sharing this standards_key (name variants map to the same lift)
@@ -673,7 +708,7 @@ def endurance_score():
     """Running counterpart to strength_score(): per-distance pace percentiles,
     the tier-weighted overall, and its own snapshot history. Gender gates it
     because the pace tables are gendered; bodyweight is irrelevant to pace."""
-    from datetime import datetime, date as _date
+    from datetime import datetime
     from utils.strength_standards import percentile_to_strength_rank
     from utils.endurance_standards import (
         CORE_DISTANCES, CORE_WEIGHT, SPEED_WEIGHT, DISTANCE_LABELS,
@@ -685,12 +720,7 @@ def endurance_score():
     if not user.gender:
         return jsonify({'missing': ['gender']}), 422
 
-    today = _date.today()
-    user_age = None
-    if user.birth_date:
-        user_age = today.year - user.birth_date.year - (
-            (today.month, today.day) < (user.birth_date.month, user.birth_date.day)
-        )
+    user_age = _user_age(user)
 
     data = _endurance_data(user_id, user.gender, user_age)
     percentiles, paces, overall = data['percentiles'], data['paces'], data['overall']

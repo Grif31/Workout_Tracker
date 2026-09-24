@@ -11,7 +11,6 @@ import { LineChart } from 'react-native-gifted-charts';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Circle } from 'react-native-svg';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { spacing, radius } from '../../theme/spacing';
@@ -19,36 +18,23 @@ import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import { captureAndShare } from '../../utils/shareCapture';
-import { computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH } from '../../utils/prFormat';
+import { computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH, CHART_Y_AXIS_WIDTH, CHART_EDGE_SPACING } from '../../utils/prFormat';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import { TrainingStackParamsList } from '../../navigation/types';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import { STRENGTH_TIERS, SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
 import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModal';
-import StrengthScoreShareCard from '../../components/StrengthScoreShareCard';
-import { toLocalDateStr } from '../../utils/date';
+import StrengthScoreShareCard from '../../components/share/StrengthScoreShareCard';
+import { toLocalDateStr, timeAgo } from '../../utils/date';
+import ScoreRing, { AnimatedPercentText } from '../../components/ScoreRing';
+import PercentileBar from '../../components/PercentileBar';
 import SectionRule from '../../components/SectionRule';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'StrengthScore'>;
 
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const CHART_Y_AXIS_WIDTH = 32;
-const CHART_EDGE_SPACING = 24;
-const RING_SIZE = 108;
-const RING_STROKE = 10;
-const RING_R = (RING_SIZE - RING_STROKE) / 2;
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_R;
 
 const LAST_TIER_KEY = 'strength_score_last_tier';
 
-function timeAgo(isoStr: string): string {
-  const mins = Math.floor((Date.now() - new Date(isoStr).getTime()) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
 
 
 interface ScoreData {
@@ -440,28 +426,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                 style={StyleSheet.absoluteFillObject}
               />
               <View style={styles.heroTopRow}>
-                <View style={styles.ringWrap}>
-                  <Svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}>
-                    <Circle
-                      cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_R}
-                      stroke={colors.border} strokeWidth={RING_STROKE} fill="none"
-                    />
-                    <AnimatedCircle
-                      cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_R}
-                      stroke={rankColor} strokeWidth={RING_STROKE} fill="none"
-                      strokeDasharray={`${RING_CIRCUMFERENCE}`}
-                      strokeDashoffset={ringAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [RING_CIRCUMFERENCE, 0],
-                      })}
-                      strokeLinecap="round"
-                      transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
-                    />
-                  </Svg>
-                  <View style={styles.ringCenter}>
-                    <AnimatedPercentText anim={ringAnim} style={[styles.ringNum, { color: rankColor }]} />
-                  </View>
-                </View>
+                <ScoreRing anim={ringAnim} color={rankColor} trackColor={colors.border} />
                 <View style={styles.heroTextCol}>
                   <View style={[styles.rankBadge, { backgroundColor: rankColor + '22', borderColor: rankColor }]}>
                     <Ionicons name={SCORE_RANK_ICONS[scoreData.overall_rank.label] ?? 'ellipse-outline'} size={13} color={rankColor} />
@@ -554,7 +519,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                       >
                         <View style={styles.mgLeft}>
                           <Text style={styles.mgName}>{mg.name}</Text>
-                          <AnimatedBar percent={mg.score} color={mgColor} trackColor={colors.border} delay={i * 40} />
+                          <PercentileBar percent={mg.score} color={mgColor} trackColor={colors.border} delay={i * 40} />
                         </View>
                         <View style={{ alignItems: 'flex-end', gap: 2 }}>
                           <View style={[styles.miniRankBadge, { backgroundColor: mgColor + '22', borderColor: mgColor }]}>
@@ -597,7 +562,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                             )}
                           </View>
                           {ex.has_data ? (
-                            <AnimatedBar percent={Math.max(ex.percentile ?? 0, 8)} color={exColor} trackColor={colors.border} delay={i * 40} />
+                            <PercentileBar percent={Math.max(ex.percentile ?? 0, 8)} color={exColor} trackColor={colors.border} delay={i * 40} />
                           ) : (
                             <Text style={styles.noDataText}>No data logged</Text>
                           )}
@@ -653,7 +618,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                             )}
                           </View>
                           {ex.has_data ? (
-                            <AnimatedBar percent={Math.max(ex.percentile ?? 0, 8)} color={exColor} trackColor={colors.border} delay={i * 40} />
+                            <PercentileBar percent={Math.max(ex.percentile ?? 0, 8)} color={exColor} trackColor={colors.border} delay={i * 40} />
                           ) : (
                             <Text style={styles.noDataText}>No data logged</Text>
                           )}
@@ -941,50 +906,12 @@ export default function StrengthScoreScreen({ navigation }: Props) {
 // only re-renders this one small Text, not the whole screen — that cascading
 // re-render (muscle diagram, every lift row, the chart) was what made the
 // hero sweep look janky when the state lived on the parent instead.
-function AnimatedPercentText({ anim, style }: { anim: Animated.Value; style: any }) {
-  const [display, setDisplay] = useState(0);
-  useEffect(() => {
-    const id = anim.addListener(({ value }) => setDisplay(Math.round(value * 100)));
-    return () => anim.removeListener(id);
-  }, [anim]);
-  return <Text style={style}>{display}</Text>;
-}
 
 // Self-contained animated percentile bar — each row owns its own Animated.Value
 // so it animates in on mount/update without the parent needing to manage a
 // shared array of refs (and naturally resets correctly if the row list changes,
 // since each row is already keyed by exercise/muscle-group name at the call site).
-function AnimatedBar({ percent, color, trackColor, delay = 0 }: { percent: number; color: string; trackColor: string; delay?: number }) {
-  const anim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(anim, {
-      toValue: percent,
-      duration: 700,
-      delay,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false, // width can't use the native driver
-    }).start();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [percent]);
-  return (
-    <View style={[barStyles.track, { backgroundColor: trackColor }]}>
-      <Animated.View
-        style={[
-          barStyles.fill,
-          {
-            backgroundColor: color,
-            width: anim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'], extrapolate: 'clamp' }),
-          },
-        ]}
-      />
-    </View>
-  );
-}
 
-const barStyles = StyleSheet.create({
-  track: { height: 4, borderRadius: 2, overflow: 'hidden' },
-  fill: { height: '100%', borderRadius: 2 },
-});
 
 function GateCard({ missingFields, navigation, colors, styles }: any) {
   const needsGender = missingFields.includes('gender');
@@ -1047,9 +974,6 @@ const createStyles = (colors: Colors) =>
       padding: spacing.md, borderWidth: 1.5, gap: spacing.sm,
     },
     heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-    ringWrap: { width: RING_SIZE, height: RING_SIZE, alignItems: 'center', justifyContent: 'center' },
-    ringCenter: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-    ringNum: { fontSize: typography.fontSize.xxl, fontWeight: '800' },
     heroTextCol: { flex: 1, gap: spacing.xs },
     rankBadge: {
       alignSelf: 'flex-start', borderRadius: radius.sm, borderWidth: 1,

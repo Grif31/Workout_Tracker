@@ -11,34 +11,28 @@ import { LineChart } from 'react-native-gifted-charts';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Circle } from 'react-native-svg';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { captureAndShare } from '../../utils/shareCapture';
-import { computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH } from '../../utils/prFormat';
+import { computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH, CHART_Y_AXIS_WIDTH, CHART_EDGE_SPACING } from '../../utils/prFormat';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
-import EnduranceScoreShareCard from '../../components/EnduranceScoreShareCard';
+import EnduranceScoreShareCard from '../../components/share/EnduranceScoreShareCard';
 import DistanceDetailModal from '../../components/DistanceDetailModal';
 import { appCache } from '../../utils/appCache';
 import { GPS_DISTANCE_UNIT_KEY, type DistanceUnit } from '../../utils/units';
 import { fmtPaceForUnit, fmtRaceTime } from '../../utils/cardioFormat';
 import { TrainingStackParamsList } from '../../navigation/types';
 import { STRENGTH_TIERS, SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
-import { toLocalDateStr } from '../../utils/date';
+import { toLocalDateStr, timeAgo } from '../../utils/date';
+import ScoreRing, { AnimatedPercentText } from '../../components/ScoreRing';
+import PercentileBar from '../../components/PercentileBar';
 import SectionRule from '../../components/SectionRule';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'EnduranceScore'>;
 
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const CHART_Y_AXIS_WIDTH = 32;
-const CHART_EDGE_SPACING = 24;
-const RING_SIZE = 108;
-const RING_STROKE = 10;
-const RING_R = (RING_SIZE - RING_STROKE) / 2;
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_R;
 
 // Endurance keeps its own last-celebrated tier: ranking up as a runner is a
 // separate event from ranking up as a lifter.
@@ -75,14 +69,6 @@ interface EnduranceData {
   last_updated?: string;
 }
 
-function timeAgo(isoStr: string): string {
-  const mins = Math.floor((Date.now() - new Date(isoStr).getTime()) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
 
 export default function EnduranceScoreScreen({ navigation }: Props) {
   const { colors } = useTheme();
@@ -299,7 +285,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
                 </Text>
               )}
             </View>
-            <AnimatedBar percent={row.percentile} color={rowColor} trackColor={colors.border} delay={i * 40} />
+            <PercentileBar minPercent={MIN_BAR_PERCENT} percent={row.percentile} color={rowColor} trackColor={colors.border} delay={i * 40} />
             {next && (
               <Text style={styles.nextText}>
                 {next.rank} at {fmtRaceTime(next.pace_min_per_km * row.distance_km)}
@@ -423,28 +409,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
             >
               <LinearGradient colors={[rankColor + '26', colors.surface]} style={StyleSheet.absoluteFillObject} />
               <View style={styles.heroTopRow}>
-                <View style={styles.ringWrap}>
-                  <Svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}>
-                    <Circle
-                      cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_R}
-                      stroke={colors.border} strokeWidth={RING_STROKE} fill="none"
-                    />
-                    <AnimatedCircle
-                      cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_R}
-                      stroke={rankColor} strokeWidth={RING_STROKE} fill="none"
-                      strokeDasharray={`${RING_CIRCUMFERENCE}`}
-                      strokeDashoffset={ringAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [RING_CIRCUMFERENCE, 0],
-                      })}
-                      strokeLinecap="round"
-                      transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
-                    />
-                  </Svg>
-                  <View style={styles.ringCenter}>
-                    <AnimatedPercentText anim={ringAnim} style={[styles.ringNum, { color: rankColor }]} />
-                  </View>
-                </View>
+                <ScoreRing anim={ringAnim} color={rankColor} trackColor={colors.border} />
                 <View style={styles.heroTextCol}>
                   {data.overall_rank && (
                     <View style={[styles.rankBadge, { backgroundColor: rankColor + '22', borderColor: rankColor }]}>
@@ -508,7 +473,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
                         <Text style={styles.tierName}>
                           {tier.label} <Text style={styles.tierWeight}>{Math.round(info.weight * 100)}%</Text>
                         </Text>
-                        <AnimatedBar percent={info.best ?? 0} color={color} trackColor={colors.border} delay={i * 60} />
+                        <PercentileBar minPercent={MIN_BAR_PERCENT} percent={info.best ?? 0} color={color} trackColor={colors.border} delay={i * 60} />
                         <Text style={styles.tierCaption}>
                           {info.best == null ? `No ${tier.caption} times yet` : `Best: ${Math.round(info.best)} · ${tier.caption}`}
                         </Text>
@@ -678,52 +643,13 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
 
 // Count-up number from an Animated.Value (0-1, scaled to 0-100). Kept as its
 // own leaf so the ~60fps setState only re-renders this Text, not the screen.
-function AnimatedPercentText({ anim, style }: { anim: Animated.Value; style: any }) {
-  const [display, setDisplay] = useState(0);
-  useEffect(() => {
-    const id = anim.addListener(({ value }) => setDisplay(Math.round(value * 100)));
-    return () => anim.removeListener(id);
-  }, [anim]);
-  return <Text style={style}>{display}</Text>;
-}
 
 // Each row owns its Animated.Value so it animates on mount without the parent
 // juggling an array of refs.
-function AnimatedBar({ percent, color, trackColor, delay = 0 }: { percent: number; color: string; trackColor: string; delay?: number }) {
-  const anim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    // A real but tiny percentile still gets a visible sliver; a missing one
-    // (0) stays empty, so "no times yet" doesn't look like a bad score.
-    Animated.timing(anim, {
-      toValue: percent > 0 ? Math.max(percent, MIN_BAR_PERCENT) : 0,
-      duration: 700,
-      delay,
-      useNativeDriver: false, // width can't use the native driver
-    }).start();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [percent]);
-  return (
-    <View style={[barStyles.track, { backgroundColor: trackColor }]}>
-      <Animated.View
-        style={[
-          barStyles.fill,
-          {
-            backgroundColor: color,
-            width: anim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'], extrapolate: 'clamp' }),
-          },
-        ]}
-      />
-    </View>
-  );
-}
 
 // Below this a bar reads as empty rather than as a low score.
 const MIN_BAR_PERCENT = 8;
 
-const barStyles = StyleSheet.create({
-  track: { height: 4, borderRadius: 2, overflow: 'hidden' },
-  fill: { height: '100%', borderRadius: 2 },
-});
 
 const createStyles = (colors: Colors) =>
   StyleSheet.create({
@@ -747,9 +673,6 @@ const createStyles = (colors: Colors) =>
       padding: spacing.md, borderWidth: 1.5, gap: spacing.sm,
     },
     heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-    ringWrap: { width: RING_SIZE, height: RING_SIZE, alignItems: 'center', justifyContent: 'center' },
-    ringCenter: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-    ringNum: { fontSize: typography.fontSize.xxl, fontWeight: '800' },
     heroTextCol: { flex: 1, gap: spacing.xs },
     rankBadge: {
       alignSelf: 'flex-start', borderRadius: radius.sm, borderWidth: 1,

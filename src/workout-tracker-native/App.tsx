@@ -8,9 +8,9 @@ import NetInfo from '@react-native-community/netinfo';
 import { setUpLiveWorkoutCategory } from './utils/notifications';
 import { announceFlushResult, flushQueue, initPendingCount } from './utils/offlineQueue';
 import  RootNav  from '../workout-tracker-native/navigation/RootNav'
-import { AuthProvider } from 'context/AuthContext';
-import { ThemeProvider } from 'context/ThemeContext';
-import { PurchaseProvider } from 'context/PurchaseContext';
+import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { PurchaseProvider } from './context/PurchaseContext';
 import { ActionSheetProvider } from '@expo/react-native-action-sheet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastBanner } from './components/ToastBanner';

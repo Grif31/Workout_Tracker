@@ -3,13 +3,14 @@ import json
 from flask import Blueprint, request, jsonify, g
 from models import db, WorkoutTemplate, WorkoutTemplateExercise
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from schemas import WorkoutTemplateSchema
+from schemas import WorkoutTemplateSchema, UpdateWorkoutTemplateSchema
 from utils.validation import validate_body
 from utils.exercise_access import add_template_exercises
 
 workout_template_bp = Blueprint('workout_template_bp', __name__)
 
 _workout_template_schema = WorkoutTemplateSchema()
+_update_workout_template_schema = UpdateWorkoutTemplateSchema()
 
 
 @workout_template_bp.post('/api/workout-templates')
@@ -54,13 +55,14 @@ def get_workout_template(template_id):
 
 @workout_template_bp.patch('/api/workout-templates/<int:template_id>')
 @jwt_required()
+@validate_body(_update_workout_template_schema)
 def update_workout_template(template_id):
     user_id = get_jwt_identity()
     template = WorkoutTemplate.query.filter_by(id=template_id, user_id=user_id).first()
     if not template:
         return jsonify({'message': 'Not found'}), 404
 
-    data = request.get_json()
+    data = g.validated
     if 'name' in data:
         template.name = data['name'].strip() or template.name
     if 'exercise_template_ids' in data:

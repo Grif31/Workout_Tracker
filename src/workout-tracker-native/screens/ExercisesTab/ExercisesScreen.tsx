@@ -15,10 +15,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { ExercisesStackParamsList } from 'navigation/types';
+import { ExercisesStackParamsList } from '../../navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
-import { spacing, radius } from 'theme/spacing';
-import { typography } from 'theme/typography';
+import { spacing, radius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { equipmentTypes } from '../../constants/equipmentTypes';
 import NewExerciseForm from '../../components/NewExerciseForm';

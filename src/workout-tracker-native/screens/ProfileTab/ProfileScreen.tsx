@@ -18,14 +18,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { ProfileStackParamsList } from '../../navigation/types';
 import { useFocusEffect } from '@react-navigation/native';
-import { typography } from 'theme/typography';
+import { typography } from '../../theme/typography';
 import { useTheme, type Colors } from '../../context/ThemeContext';
-import { spacing } from 'theme/spacing';
+import { spacing } from '../../theme/spacing';
 import type { PR } from './PersonalRecordsScreen';
-import { toDisplayVolume, roundTenth, type WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from 'utils/units';
+import { toDisplayVolume, roundTenth, type WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
 import { fmtDuration } from '../../utils/cardioFormat';
-import { toLocalDateStr } from 'utils/date';
-import { GREEK_RANK_CACHED_KEY } from '../../constants/storageKeys';
+import { toLocalDateStr } from '../../utils/date';
+import { GREEK_RANK_CACHED_KEY, WEEKLY_GOAL_KEY, PROFILE_FRAME_RANK_KEY } from '../../constants/storageKeys';
 import type { GreekRankData } from '../../utils/greekRank';
 import { apiFetch, resolveMediaUrl } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
@@ -77,7 +77,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const unit = user?.weight_unit || 'lbs';
   const prPinsKey = `${PR_PINS_BASE}_${user?.id}`;
-  const weeklyGoalKey = `workout_weekly_goal_${user?.id}`;
+  const weeklyGoalKey = `${WEEKLY_GOAL_KEY}_${user?.id}`;
 
   const [selectedFrame, setSelectedFrame] = useState('Neophyte');
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
@@ -154,7 +154,7 @@ export default function ProfileScreen({ navigation }: Props) {
 
   // Load saved pins + profile frame + cached Greek rank from AsyncStorage once on mount
   useEffect(() => {
-    AsyncStorage.multiGet([prPinsKey, `profile_frame_rank_${user?.id}`, GREEK_RANK_CACHED_KEY]).then(pairs => {
+    AsyncStorage.multiGet([prPinsKey, `${PROFILE_FRAME_RANK_KEY}_${user?.id}`, GREEK_RANK_CACHED_KEY]).then(pairs => {
       const [pinsRaw, frameRaw, rankRaw] = pairs.map(p => p[1]);
       if (pinsRaw) {
         try {
@@ -251,7 +251,7 @@ export default function ProfileScreen({ navigation }: Props) {
   useFocusEffect(useCallback(() => {
 
     fetchAll();
-    AsyncStorage.getItem(`profile_frame_rank_${user?.id}`).then(val => {
+    AsyncStorage.getItem(`${PROFILE_FRAME_RANK_KEY}_${user?.id}`).then(val => {
       if (val) setSelectedFrame(val);
     });
   }, []));

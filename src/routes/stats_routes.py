@@ -222,6 +222,38 @@ def _cardio_exercise_stats(name, rows, description=None):
     })
 
 
+def _cardio_totals(user_id, since=None):
+    """(distance_km, minutes, activity_count) over the user's cardio sets.
+
+    Only exercise_type 'cardio' counts: a 'duration' hold (plank) also fills
+    cardio_duration but has no distance and isn't an activity. Distances are
+    stored in whatever unit the set was logged in, so they're normalised to km
+    here and converted for display on the phone, which owns the user's distance
+    preference. `since` limits it to workouts on or after that date.
+    """
+    q = (
+        db.session.query(
+            db.func.sum(
+                db.case(
+                    (db.func.lower(db.func.coalesce(Set.distance_unit, 'km')) == 'mi', Set.distance * 1.60934),
+                    else_=Set.distance,
+                )
+            ),
+            db.func.sum(db.func.coalesce(Set.cardio_duration, 0)),
+            db.func.count(db.func.distinct(Workout.id)),
+        )
+        .join(Exercise, Set.exercise_id == Exercise.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .filter(
+            Workout.user_id == user_id,
+            db.func.lower(db.func.coalesce(Exercise.exercise_type, 'strength')) == 'cardio',
+        )
+    )
+    if since is not None:
+        q = q.filter(Workout.date >= since)
+    return q.first() or (None, None, 0)
+
+
 @stats_bp.get('/api/stats/profile')
 @jwt_required()
 def profile_stats():
@@ -239,32 +271,7 @@ def profile_stats():
         .scalar()
     ) or 0.0
 
-    # Cardio totals, for the Profile card runners get instead of volume alone.
-    # Only exercise_type 'cardio' counts: a 'duration' hold (plank) also fills
-    # cardio_duration but has no distance and isn't an activity. Distances are
-    # stored in whatever unit the set was logged in, so they're normalised to
-    # km here and converted for display on the phone, which owns the user's
-    # distance preference.
-    cardio_sets = (
-        db.session.query(
-            db.func.sum(
-                db.case(
-                    (db.func.lower(db.func.coalesce(Set.distance_unit, 'km')) == 'mi', Set.distance * 1.60934),
-                    else_=Set.distance,
-                )
-            ),
-            db.func.sum(db.func.coalesce(Set.cardio_duration, 0)),
-            db.func.count(db.func.distinct(Workout.id)),
-        )
-        .join(Exercise, Set.exercise_id == Exercise.id)
-        .join(Workout, Exercise.workout_id == Workout.id)
-        .filter(
-            Workout.user_id == user_id,
-            db.func.lower(db.func.coalesce(Exercise.exercise_type, 'strength')) == 'cardio',
-        )
-        .first()
-    )
-    cardio_distance_km, cardio_minutes, cardio_activities = cardio_sets or (None, None, 0)
+    cardio_distance_km, cardio_minutes, cardio_activities = _cardio_totals(user_id)
 
     # Fetch only dates for streak calculations — no exercises or sets needed
     workout_dates = [
@@ -285,6 +292,8 @@ def profile_stats():
 
     today = user_today()
     current_monday = today - timedelta(days=today.weekday())
+
+    week_distance_km, week_minutes, week_activities = _cardio_totals(user_id, since=current_monday)
 
     # Longest streak: longest run of consecutive weeks each meeting the goal
     longest = 0
@@ -371,6 +380,9 @@ def profile_stats():
         'cardio_activities': cardio_activities or 0,
         'cardio_distance_km': round(cardio_distance_km or 0.0, 3),
         'cardio_minutes': round(cardio_minutes or 0.0, 1),
+        'week_cardio_activities': week_activities or 0,
+        'week_cardio_distance_km': round(week_distance_km or 0.0, 3),
+        'week_cardio_minutes': round(week_minutes or 0.0, 1),
     })
 
 

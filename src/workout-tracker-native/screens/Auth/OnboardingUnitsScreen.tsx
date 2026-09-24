@@ -83,14 +83,14 @@ export default function OnboardingUnitsScreen({ navigation }: Props) {
               <Text style={styles.rowLabel}>Distance Unit</Text>
             </View>
             <View style={styles.unitToggle}>
-              <Text style={[styles.unitLabel, !distanceIsMi && styles.unitActive]}>km</Text>
+              <Text style={[styles.unitLabel, distanceIsMi && styles.unitActive]}>mi</Text>
               <Switch
-                value={distanceIsMi}
-                onValueChange={setDistanceIsMi}
+                value={!distanceIsMi}
+                onValueChange={(isKm) => setDistanceIsMi(!isKm)}
                 trackColor={{ false: AUTH.border, true: AUTH.accent }}
                 thumbColor="#fff"
               />
-              <Text style={[styles.unitLabel, distanceIsMi && styles.unitActive]}>mi</Text>
+              <Text style={[styles.unitLabel, !distanceIsMi && styles.unitActive]}>km</Text>
             </View>
           </View>
         </View>

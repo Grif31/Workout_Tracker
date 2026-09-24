@@ -6,15 +6,15 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { TrainingStackParamsList } from 'navigation/types';
+import { TrainingStackParamsList } from '../../navigation/types';
 import ExerciseListModal from '../../components/ExerciseList';
 import ExerciseEditRow, { EXERCISE_ROW_HEIGHT } from '../../components/ExerciseEditRow';
 import DraggableList from '../../components/DraggableList';
 import ExerciseProgrammingModal, { ProgrammingValue } from '../../components/ExerciseProgrammingModal';
 import UndoBar from '../../components/UndoBar';
 import { useTheme, type Colors } from '../../context/ThemeContext';
-import { spacing } from 'theme/spacing';
-import { typography } from 'theme/typography';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { apiFetch, isNetworkError } from '../../utils/api';
 import { showToast } from '../../utils/toast';

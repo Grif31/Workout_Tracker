@@ -1,6 +1,6 @@
 ---
 name: repo-structure-auditor
-description: Checks the project against the organizational conventions documented in CLAUDE.md — screens in the correct tab folder and registered in navigation/types, AsyncStorage keys matching the documented table, shared logic duplicated across files instead of living in utils/, and files that have grown large enough to warrant splitting. Read-only. Run periodically or after a burst of feature work to catch structural drift before it compounds.
+description: Checks the project against the organizational conventions documented in CLAUDE.md — screens in the correct tab folder and registered in navigation/types, AsyncStorage keys matching the documented table, shared logic duplicated across files instead of living in utils/, files that have grown large enough to warrant splitting, and file names or directory groupings that have drifted from the conventions their siblings follow. Read-only. Run periodically or after a burst of feature work to catch structural drift before it compounds.
 tools: Read, Grep, Glob, Bash
 ---
 
@@ -35,6 +35,15 @@ Every blueprint defined in `routes/*.py` must be registered in `app.py`. Flag an
 ### 7. Migration chain integrity
 Walk `migrations/versions/`: confirm each file's `down_revision` points to an existing `revision` in the set, there's exactly one file with no other file pointing to it as `down_revision` (the head), and no two files share the same `down_revision` (a fork/branch that Alembic would choke on).
 
+### 8. File naming and directory cohesion
+Two questions here, both about where a file sits and what it is called. Propose, do not assume a name is wrong just because it is unusual.
+
+**Naming consistency.** Derive the dominant convention per directory from what is already there (PascalCase in `components/` and `screens/`, camelCase in `utils/` and `constants/`, and suffixes like `Screen` / `Modal` / `Stack` where siblings use them), then flag only the outliers against it. Also flag a name that no longer matches what the file does — read the exports and the file's actual responsibility, do not judge from the name alone. Do not propose a rename for a name that is merely terse; only for one that breaks its directory's convention or actively misleads.
+
+**Directory cohesion.** For each directory, count top-level files and compare against the subfolders that already exist in it. Where a directory has grown well past its siblings and a natural grouping is visible, propose that grouping — but derive it from evidence rather than from names: cluster by who imports the file (files only ever imported by one screen or one feature area group together), and follow any subfolder precedent already set in that same directory. Where a file is imported widely across unrelated areas, say so and leave it at the top level.
+
+For every rename or move you propose, state the blast radius: how many import sites change, plus any jest mock path, `navigation/types.ts` entry, navigator registration, or `constants/storageKeys.ts` reference that names the file. A move with a wide blast radius and a weak grouping rationale is not worth proposing — say so under "considered and rejected" instead of listing it as a finding.
+
 ## Known-intentional — do not flag
 - `CoachCharacter.tsx` unused (documented in CLAUDE.md)
 - `coach_settings` / `coach_settings_${uid}` legacy keys kept for migration
@@ -62,6 +71,11 @@ Walk `migrations/versions/`: confirm each file's `down_revision` points to an ex
 
 ### 🔌 Backend registration / migration chain
 - <finding, or "clean">
+
+### 🏷️ Naming and directory cohesion
+- Rename: <file> → <proposed> — <convention broken or mismatch> — N import sites
+- Group: <dir>/<proposed subfolder>/ ← <files> — <import evidence> — N import sites
+- Considered and rejected: <dir or file> — <why leaving it as-is is right>
 
 ### 📊 Summary
 Counts by category, ranked by how much drift risk each poses if left alone.

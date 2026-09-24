@@ -158,7 +158,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loadAccentForUser = useCallback(async (userId: number | string) => {
-    const saved = await AsyncStorage.getItem(`@theme_accent_${userId}`);
+    const saved = await AsyncStorage.getItem(`${KEY_ACCENT}_${userId}`);
     if (saved) {
       const found = ACCENT_PRESETS.find(p => p.name === saved);
       if (found) {

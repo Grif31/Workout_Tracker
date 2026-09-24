@@ -22,13 +22,22 @@ _reset_password_schema  = ResetPasswordSchema()
 _change_password_schema = ChangePasswordSchema()
 
 
+def _str_field(data, key):
+    # Public endpoints: a wrong-typed field is treated as missing rather than
+    # reaching .strip() and turning into a 500.
+    value = data.get(key) if isinstance(data, dict) else None
+    return value if isinstance(value, str) else ''
+
+
 @auth_bp.route('/api/login', methods=['POST'])
 @limiter.limit('10 per minute')
 def login():
-    data = request.get_json()
+    data = request.get_json(silent=True)
     # Accept either 'identifier' (new clients) or 'email' (backwards compat)
-    identifier = data.get('identifier') or data.get('email', '')
-    password = data.get('password', '')
+    identifier = _str_field(data, 'identifier') or _str_field(data, 'email')
+    password = _str_field(data, 'password')
+    if not identifier or not password:
+        return jsonify({'message': 'Invalid credentials'}), 401
 
     user = User.query.filter(
         (User.email == identifier) | (User.username == identifier)
@@ -90,8 +99,8 @@ def refresh():
 @auth_bp.post('/api/forgot-password')
 @limiter.limit('5 per hour')
 def forgot_password():
-    data  = request.get_json(silent=True) or {}
-    email = data.get('email', '').strip().lower()
+    data  = request.get_json(silent=True)
+    email = _str_field(data, 'email').strip().lower()
     # Always return the same message to prevent email enumeration
     SAFE  = jsonify({'message': 'If that email is registered, a code has been sent.'}), 200
     if not email:
@@ -112,9 +121,9 @@ def forgot_password():
 @limiter.limit('10 per hour')
 def verify_otp():
     """Check an OTP is valid without consuming it or changing the password."""
-    data  = request.get_json(silent=True) or {}
-    email = data.get('email', '').strip().lower()
-    otp   = str(data.get('otp', '')).strip()
+    data  = request.get_json(silent=True)
+    email = _str_field(data, 'email').strip().lower()
+    otp   = _str_field(data, 'otp').strip()
     if not email or not otp:
         return jsonify({'message': 'Email and code are required.'}), 400
     user    = User.query.filter_by(email=email).first()
@@ -174,6 +183,7 @@ def reset_password():
         return INVALID
     user.password       = generate_password_hash(new_password, method='pbkdf2:sha256')
     user.is_social_only = False
+    user.token_version  = (user.token_version or 0) + 1
     _clear_otp()
     return jsonify({'message': 'Password reset successfully.'}), 200
 
@@ -204,8 +214,15 @@ def change_password():
     if current_pw == new_pw:
         return jsonify({'message': 'New password must differ from your current password.'}), 400
     user.password = generate_password_hash(new_pw, method='pbkdf2:sha256')
+    user.token_version = (user.token_version or 0) + 1
     db.session.commit()
-    return jsonify({'message': 'Password changed successfully.'}), 200
+    # The bump just revoked the caller's own tokens along with everyone
+    # else's, so hand this device a fresh pair to stay signed in on.
+    return jsonify({
+        'message': 'Password changed successfully.',
+        'access_token': create_access_token(identity=str(user.id)),
+        'refresh_token': create_refresh_token(identity=str(user.id)),
+    }), 200
 
 
 @auth_bp.post('/api/auth/social')

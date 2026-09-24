@@ -18,6 +18,7 @@ import { showToast } from '../utils/toast';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LIVE_WORKOUT_NOTIF_KEY, REST_ALERTS_KEY } from '../constants/storageKeys';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, isNetworkError } from '../utils/api';
 import { toLocalDateStr } from '../utils/date';
@@ -27,7 +28,7 @@ import { typography } from '../theme/typography';
 import ExerciseListModal from '../components/ExerciseList';
 import NewExerciseForm from '../components/NewExerciseForm';
 import { PrefillWorkoutData } from './WorkoutDetails';
-import { muscleGroups } from 'constants/muscleGroups';
+import { muscleGroups } from '../constants/muscleGroups';
 import { useWorkoutSession, sessionElapsedSeconds } from '../context/WorkoutSessionContext';
 import { PR_GOLD } from '../constants/prColors';
 import { nearPrHint } from '../utils/prFormat';
@@ -60,6 +61,7 @@ import ExerciseReorderRow, { EXERCISE_REORDER_ROW_HEIGHT } from './workout/Exerc
 import RestTimer from './workout/RestTimer';
 import PlateCalculatorModal from './PlateCalculatorModal';
 import { syncWorkoutToHealthKit } from '../utils/healthKit';
+import { attachHeartRateToWorkout } from '../utils/heartRateSync';
 import { syncWorkoutToHealthConnect } from '../utils/healthConnect';
 
 type EditableSetField = 'reps' | 'weight';
@@ -506,7 +508,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     setRestPaused(false);
     restEndsAtRef.current = Date.now() + duration * 1000;
     _runRestInterval();
-    const alertsOff = await AsyncStorage.getItem('rest_timer_alerts_enabled');
+    const alertsOff = await AsyncStorage.getItem(REST_ALERTS_KEY);
     if (alertsOff !== 'false') scheduleRestTimerAlert(duration);
   }, [defaultRest, _runRestInterval]);
 
@@ -523,7 +525,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     setRestPaused(false);
     restEndsAtRef.current = Date.now() + restRemaining * 1000;
     _runRestInterval();
-    const alertsOff = await AsyncStorage.getItem('rest_timer_alerts_enabled');
+    const alertsOff = await AsyncStorage.getItem(REST_ALERTS_KEY);
     if (alertsOff !== 'false') scheduleRestTimerAlert(restRemaining);
   };
 
@@ -537,7 +539,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     // no alert scheduled; resumeRest handles them)
     if (!restPaused) {
       restEndsAtRef.current = Date.now() + next * 1000;
-      const alertsOff = await AsyncStorage.getItem('rest_timer_alerts_enabled');
+      const alertsOff = await AsyncStorage.getItem(REST_ALERTS_KEY);
       if (alertsOff !== 'false') scheduleRestTimerAlert(next);
     }
   };
@@ -575,7 +577,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           selectedDate: selectedDateRef.current.toISOString(),
         }));
 
-        const liveOff = await AsyncStorage.getItem('live_workout_notif_enabled');
+        const liveOff = await AsyncStorage.getItem(LIVE_WORKOUT_NOTIF_KEY);
         if (liveOff === 'false') return;
         const setsDone = exercises.flatMap(e => e.sets).filter(s => s.done).length;
         const setsTotal = exercises.flatMap(e => e.sets).length;
@@ -1454,6 +1456,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       const workoutType = exercisesToSave.some(ex => (ex.exercise_type || 'strength') !== 'cardio') ? 'strength' : 'cardio';
       if (Platform.OS === 'ios') {
         syncWorkoutToHealthKit({ type: workoutType, startDate, endDate, userId: uid });
+        // Not awaited: enriching the saved workout with heart rate must not
+        // hold up the summary screen.
+        attachHeartRateToWorkout({
+          workoutId: isEditing ? workoutId : data.id,
+          startDate, endDate, userId: uid,
+        });
       } else if (Platform.OS === 'android') {
         syncWorkoutToHealthConnect({ type: workoutType, startDate, endDate, userId: uid });
       }

@@ -6,10 +6,10 @@ import {
   ShareCardBanner,
   ShareCardHero,
   ShareCardFooter,
-} from './share/ShareCardParts';
-import { spacing } from '../theme/spacing';
-import { PR_GOLD } from '../constants/prColors';
-import { SHARE_TEXT } from '../constants/shareCardTheme';
+} from './ShareCardParts';
+import { spacing } from '../../theme/spacing';
+import { PR_GOLD } from '../../constants/prColors';
+import { SHARE_TEXT } from '../../constants/shareCardTheme';
 
 type PRShareCardProps = {
   exerciseName: string;

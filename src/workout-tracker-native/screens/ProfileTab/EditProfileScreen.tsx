@@ -18,10 +18,10 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
-import { ProfileStackParamsList } from 'navigation/types';
+import { ProfileStackParamsList } from '../../navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
-import { spacing } from 'theme/spacing';
-import { typography } from 'theme/typography';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { apiFetch, resolveMediaUrl, isNetworkError } from '../../utils/api';
 import { toLocalDateStr } from '../../utils/date';
 

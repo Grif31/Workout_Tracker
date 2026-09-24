@@ -10,7 +10,7 @@ const nav = createMockNavigation();
 const route = createMockRoute('ResetPassword', { email: 'test@example.com' });
 
 // Advances through step 1 into step 2 (real setTimeout(900) drives the transition).
-async function getToStep2(getByText, getByPlaceholderText) {
+async function getToStep2(getByText: any, getByPlaceholderText: any) {
   mockFetch({ message: 'Code verified.' }, true);
   fireEvent.changeText(getByPlaceholderText('6-digit code'), '123456');
   fireEvent.press(getByText('Verify Code'));

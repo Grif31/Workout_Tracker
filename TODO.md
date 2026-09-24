@@ -293,6 +293,18 @@ Check off items as you complete them.
 ### 7. Apple Watch Connectivity
 > Native watchOS companion app for logging and tracking workouts from the wrist, synced live with the iPhone app. Requires a separate watchOS target and EAS build — not available in Expo Go.
 
+**Phase 1 — heart rate via HealthKit (done, needs device verification).** No watchOS target, no Swift, no `WCSession`: the Watch records via its own Workout app and writes to Apple Health, and Aretē reads avg/max bpm back at save time. Any wearable that writes to Health works, not just an Apple Watch.
+
+- [x] Replace `react-native-health` with `@kingstinct/react-native-healthkit` — the old library is an old-arch bridge module, dead under RN 0.83's bridgeless-only runtime, which is why `HEALTH_SYNC_ENABLED` was false
+- [x] `Workout.avg_heart_rate` / `max_heart_rate` columns + migration `o3p4q5r6s7t8`, schema validation, POST/PATCH wiring
+- [x] `utils/heartRate.ts` pure aggregation + `utils/heartRateSync.ts` post-save PATCH
+- [x] Heart rate row on the workout detail summary card
+- [ ] **Verify on device** — EAS build → TestFlight → confirm the Settings Health toggle grants permission and a watch-recorded workout shows bpm. Nothing below this line is worth starting until this passes
+- [ ] Android heart rate: Health Connect exposes it too; mirror `heartRateSync.ts` in `healthConnect.ts`
+- [ ] Show HR on the workout summary + share card, and consider an HR zone breakdown
+
+**Phase 2 — native watch app (not started).** Everything below needs a Mac (Xcode + watchOS simulator) or a very slow blind EAS loop, plus a real Watch for `HKWorkoutSession` behaviour the simulator can't reproduce.
+
 - [ ] **Watch app scaffolding**
   - [ ] Add a watchOS target (evaluate RN watch-connectivity libraries vs. a native SwiftUI watch app) via EAS build config
   - [ ] Minimal watch UI: current exercise name, current set (weight/reps), rest timer, Complete Set button
@@ -937,14 +949,16 @@ Check off items as you complete them.
 - [x] Info-modal copy on both score screens explaining the `max()` blend + endurance methodology (best-within-tier, extrapolation caveat)
 - [x] CLAUDE.md updates (new util file, new route, new screen, `score_type` column, 45%-slot formula) + CHANGELOG entry
 
-### Phase 4 — GPS best-efforts extraction (fixes the interval-training gap)
+### Phase 4 — GPS best-efforts extraction (fixes the interval-training gap) ✅ DONE
 > **The gap**: `GPSCardioScreen` saves a session as one continuous recording — a track workout's fast 400m reps get averaged away with warmup/recovery jogs into one slow bout, so GPS-tracked interval training never produces true short-distance PRs (manual multi-set logging does — `_compute_and_upsert_cardio_prs` treats each set as its own bout). A Strava-style best-efforts scan makes speed-tier data honest for everyone, not just manual loggers.
 
-- [ ] **Best-efforts scan on GPS save**: from the recorded GPS points (timestamped route data already captured for `route_polyline`), find the fastest rolling window covering each milestone distance ≤ total run distance (400m / 800m / 1K / 1 Mile at minimum; longer milestones benefit too — a negative-split 10K contains a faster 5K than the run's average)
-- [ ] Feed extracted segment times into the existing PR pipeline (`best_time` upsert per milestone) alongside the whole-bout computation — upsert keeps the fastest, so this only ever improves PRs
-- [ ] Decide where the scan runs: client-side before save (has raw points + timestamps in memory; polyline encoding is lossy on timing) vs. backend (needs timestamped points persisted, not just the encoded polyline — likely a schema addition). Leaning client-side — no migration, data's already in hand at save time
-- [ ] Surface extracted best efforts on `CardioDetailsScreen` ("Best 1K: 4:32" chips) so users see what the scan found
-- [ ] Backfill consideration: historical GPS runs only have the lossy polyline (no per-point timestamps) — best efforts apply to new runs only; document that
+- [x] **Best-efforts scan on GPS save**: from the recorded GPS points (timestamped route data already captured for `route_polyline`), find the fastest rolling window covering each milestone distance ≤ total run distance (400m / 800m / 1K / 1 Mile at minimum; longer milestones benefit too — a negative-split 10K contains a faster 5K than the run's average)
+- [x] Feed extracted segment times into the existing PR pipeline (`best_time` upsert per milestone) alongside the whole-bout computation — upsert keeps the fastest, so this only ever improves PRs
+- [x] Decide where the scan runs: client-side before save (has raw points + timestamps in memory; polyline encoding is lossy on timing) vs. backend (needs timestamped points persisted, not just the encoded polyline — likely a schema addition). Leaning client-side — no migration, data's already in hand at save time
+- [x] Surface extracted best efforts on `CardioDetailsScreen` ("Best 1K: 4:32" chips) so users see what the scan found
+- [x] Backfill consideration: historical GPS runs only have the lossy polyline (no per-point timestamps) — best efforts apply to new runs only; documented in CLAUDE.md and the migration
+
+> **As built** (2026-09-23): the scan is client-side in `utils/bestEfforts.ts` and runs over the in-memory GPS points at save, since the encoded polyline drops per-point timing. Results persist as `cardio_best_efforts` rows on the Exercise — not recomputed — because `_recompute_prs_for_templates` rebuilds PRs from what's stored on the Exercise, so efforts living only in the POST body would be wiped by the next edit of any workout for that exercise. Each effort is fed to `_compute_and_upsert_cardio_prs` as one more bout, so no new PR logic was needed. Duration milestones were included as well as distance (furthest covered in 10/20/30/60 min → `best_distance` PRs). Windows are pause-aware (a `resumed` flag on each point, set where the live distance counter already skips the gap), interpolated at the exact milestone boundary, and gated on a plausibility floor plus a minimum point count so GPS noise can't bank an unclearable all-time PR. Editing a run's distance/duration by hand clears its efforts.
 
 ---
 
@@ -1020,6 +1034,8 @@ Check off items as you complete them.
 - [ ] **Drop animation**: the dragged row currently jumps to its new slot the instant the array reorders. Animate it home instead
 - [ ] **Autoscroll** when the finger nears the top/bottom of the enclosing ScrollView, so long lists (WorkoutLog's exercise reorder) stop being capped by what fits on screen
 - [ ] Verify each of the four call sites still behaves, especially `WorkoutLog` (the memo/stable-props note in the component header) and the swipe-to-delete rows in `TemplateDetailScreen`
+
+> **Status 2026-09-23 — customization is shipped dark.** `HOME_CUSTOMIZATION_ENABLED = false` (`constants/dashboardCards.ts`) hides the customize button and pins Home to Active Routine, Cardio This Week, Week Calendar, Recent Workouts at full width, because the chip-based arrange mode isn't the interaction we want to ship. Built, tested and waiting behind the flag: per-card widths with two halves sharing a row (`sizes` in the layout, `packRows`), compact variants for Active Routine and Cardio This Week, and the Weekly Goal and Greek Rank widgets (`components/dashboard/`). Part B below is what unblocks the flag. When it lands, the size toggle has to move off the chips too: a width control on each lifted card, or a long-press menu.
 
 ### Part B — Drag Home's real cards
 > Home's arrange mode swaps each card for an equal-height chip because the cards range from a fixed-height calendar to a workouts list hundreds of points tall, which `DraggableList` can't take. Dragging the cards themselves needs variable-height support.

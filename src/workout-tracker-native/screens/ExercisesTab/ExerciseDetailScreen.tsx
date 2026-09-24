@@ -21,8 +21,9 @@ import { ExerciseDetailParams } from '../../navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { toDisplayWeight, toDisplayVolume, convertWeight, WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayPace } from 'utils/units';
+import { toDisplayWeight, toDisplayVolume, convertWeight, WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayPace } from '../../utils/units';
 import { fmtPaceValue } from '../../utils/cardioFormat';
+import { parseApiDate } from '../../utils/date';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import { SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
 import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModal';
@@ -306,13 +307,13 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
       return d;
     })();
     const chrono = [...historySessions].reverse();
-    const inRange = chrono.filter(s => !cutoff || new Date(s.date) >= cutoff);
+    const inRange = chrono.filter(s => !cutoff || parseApiDate(s.date) >= cutoff);
 
     const buildPoints = (items: HistorySession[], getter: (s: HistorySession) => number): ChartPoint[] => {
       const pts = items
         .filter(s => getter(s) > 0)
         .map(s => {
-          const d = new Date(s.date);
+          const d = parseApiDate(s.date);
           const val = parseFloat(convertWeight(getter(s), weightUnit).toFixed(1));
           return { value: val, date: `${d.getMonth() + 1}/${d.getDate()}` };
         });
@@ -586,7 +587,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           <View style={styles.historySession}>
             <View style={styles.historyMeta}>
               <Text style={styles.historyLabel}>{session.workout_name}</Text>
-              <Text style={styles.historyDate}>{new Date(session.date).toLocaleDateString()}</Text>
+              <Text style={styles.historyDate}>{parseApiDate(session.date).toLocaleDateString()}</Text>
             </View>
             {session.bouts.map((bout, j) => {
               const parts: string[] = [];
@@ -805,7 +806,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           <View style={styles.historySession}>
             <View style={styles.historyMeta}>
               <Text style={styles.historyLabel}>{session.workoutName}</Text>
-              <Text style={styles.historyDate}>{new Date(session.date).toLocaleDateString()}</Text>
+              <Text style={styles.historyDate}>{parseApiDate(session.date).toLocaleDateString()}</Text>
             </View>
             {session.notes ? (
               <Text style={styles.historyNotes}>{session.notes}</Text>

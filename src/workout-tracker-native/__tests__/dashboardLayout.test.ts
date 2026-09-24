@@ -5,6 +5,8 @@ import {
   defaultLayout,
   loadDashboardLayout,
   normalizeLayout,
+  packRows,
+  cardSize,
   saveDashboardLayout,
   visibleCards,
 } from '../utils/dashboardLayout';
@@ -18,7 +20,7 @@ describe('normalizeLayout', () => {
   });
 
   it('keeps a saved order', () => {
-    const order = ['workouts', 'weekCalendar', 'activeRoutine'] as const;
+    const order = ['workouts', 'weekCalendar', 'weekCardio', 'greekRank', 'weeklyGoal', 'activeRoutine'] as const;
     expect(normalizeLayout({ order, hidden: [] }).order).toEqual([...order]);
   });
 
@@ -30,10 +32,12 @@ describe('normalizeLayout', () => {
   });
 
   it('slots a newly added card into its default position, not the bottom', () => {
-    // A layout saved before 'weekCalendar' existed: it belongs between the
-    // other two, which is where a user would expect to find it
+    // A layout saved before the middle cards existed: each belongs at its own
+    // default position, which is where a user would look for it
     const layout = normalizeLayout({ order: ['activeRoutine', 'workouts'], hidden: [] });
-    expect(layout.order).toEqual(['activeRoutine', 'weekCalendar', 'workouts']);
+    expect(layout.order).toEqual([
+      'activeRoutine', 'weeklyGoal', 'greekRank', 'weekCardio', 'weekCalendar', 'workouts',
+    ]);
     expect(layout.hidden).toEqual([]);
   });
 
@@ -46,7 +50,7 @@ describe('normalizeLayout', () => {
 
 describe('visibleCards', () => {
   it('returns the order with hidden cards removed', () => {
-    expect(visibleCards({ order: ['activeRoutine', 'weekCalendar', 'workouts'], hidden: ['weekCalendar'] }))
+    expect(visibleCards({ order: ['activeRoutine', 'weekCalendar', 'workouts'], hidden: ['weekCalendar'], sizes: {} }))
       .toEqual(['activeRoutine', 'workouts']);
   });
 });
@@ -55,7 +59,11 @@ describe('loadDashboardLayout / saveDashboardLayout', () => {
   beforeEach(async () => { await AsyncStorage.clear(); });
 
   it('round-trips through per-user storage', async () => {
-    const layout = { order: ['workouts', 'activeRoutine', 'weekCalendar'] as const, hidden: ['weekCalendar'] as const };
+    const layout = {
+      order: ['workouts', 'activeRoutine', 'weeklyGoal', 'greekRank', 'weekCardio', 'weekCalendar'] as const,
+      hidden: ['weekCalendar'] as const,
+      sizes: { weekCardio: 'half' } as const,
+    };
     await saveDashboardLayout(1, layout as any);
     expect(await loadDashboardLayout(1)).toEqual(layout);
     // Another account keeps its own layout
@@ -90,5 +98,116 @@ describe('activeDayFilter', () => {
   it('passes through no selection', () => {
     expect(activeDayFilter(layout(), null)).toBeNull();
     expect(activeDayFilter(layout(['weekCalendar']), null)).toBeNull();
+  });
+});
+
+
+describe('card sizes', () => {
+  const base = () => defaultLayout();
+
+  it('falls back to each card default when nothing is stored', () => {
+    // Week Calendar has no compact variant; Weekly Goal was designed for one
+    expect(cardSize(base(), 'weekCalendar')).toBe('full');
+    expect(cardSize(base(), 'weeklyGoal')).toBe('half');
+  });
+
+  it('keeps a stored size the card actually supports', () => {
+    const layout = normalizeLayout({ ...base(), sizes: { weekCardio: 'half' } });
+    expect(cardSize(layout, 'weekCardio')).toBe('half');
+  });
+
+  it('drops a size the card has no rendering for', () => {
+    // Someone hand-edited storage, or the card lost its compact variant in a
+    // release — either way it must fall back to a width that draws.
+    const layout = normalizeLayout({ ...base(), sizes: { weekCalendar: 'half', workouts: 'half' } });
+    expect(layout.sizes.weekCalendar).toBeUndefined();
+    expect(cardSize(layout, 'weekCalendar')).toBe('full');
+  });
+
+  it('ignores sizes for cards the app no longer has', () => {
+    const layout = normalizeLayout({ ...base(), sizes: { legacyCard: 'half' } });
+    expect(Object.keys(layout.sizes)).not.toContain('legacyCard');
+  });
+
+  it('survives junk in the sizes slot', () => {
+    expect(normalizeLayout({ order: [...DEFAULT_DASHBOARD_ORDER], hidden: [], sizes: 'nope' }))
+      .toEqual(defaultLayout());
+  });
+});
+
+describe('packRows', () => {
+  const layout = (over: Partial<ReturnType<typeof defaultLayout>> = {}) =>
+    ({ ...defaultLayout(), ...over });
+
+  it('pairs two adjacent half cards into one row', () => {
+    const rows = packRows(layout({
+      order: ['weeklyGoal', 'greekRank', 'workouts'],
+      sizes: { weeklyGoal: 'half', greekRank: 'half' },
+    }));
+    expect(rows).toEqual([
+      { ids: ['weeklyGoal', 'greekRank'], size: 'half' },
+      { ids: ['workouts'], size: 'full' },
+    ]);
+  });
+
+  it('gives every full card its own row', () => {
+    const rows = packRows(layout({
+      order: ['weekCalendar', 'workouts'],
+      sizes: {},
+    }));
+    expect(rows).toEqual([
+      { ids: ['weekCalendar'], size: 'full' },
+      { ids: ['workouts'], size: 'full' },
+    ]);
+  });
+
+  it('leaves a lone half at half width rather than stretching it', () => {
+    const rows = packRows(layout({
+      order: ['weeklyGoal', 'workouts'],
+      sizes: { weeklyGoal: 'half' },
+    }));
+    expect(rows[0]).toEqual({ ids: ['weeklyGoal'], size: 'half' });
+  });
+
+  it('does not pair halves separated by a full card', () => {
+    const rows = packRows(layout({
+      order: ['weeklyGoal', 'weekCalendar', 'greekRank'],
+      sizes: { weeklyGoal: 'half', greekRank: 'half' },
+    }));
+    expect(rows).toEqual([
+      { ids: ['weeklyGoal'], size: 'half' },
+      { ids: ['weekCalendar'], size: 'full' },
+      { ids: ['greekRank'], size: 'half' },
+    ]);
+  });
+
+  it('pairs across a hidden card, since hidden cards never render', () => {
+    const rows = packRows(layout({
+      order: ['weeklyGoal', 'weekCalendar', 'greekRank'],
+      hidden: ['weekCalendar'],
+      sizes: { weeklyGoal: 'half', greekRank: 'half' },
+    }));
+    expect(rows).toEqual([{ ids: ['weeklyGoal', 'greekRank'], size: 'half' }]);
+  });
+
+  it('pairs three halves as two plus a lone one', () => {
+    const rows = packRows(layout({
+      order: ['weeklyGoal', 'greekRank', 'weekCardio'],
+      sizes: { weeklyGoal: 'half', greekRank: 'half', weekCardio: 'half' },
+    }));
+    expect(rows).toEqual([
+      { ids: ['weeklyGoal', 'greekRank'], size: 'half' },
+      { ids: ['weekCardio'], size: 'half' },
+    ]);
+  });
+
+  it('renders every visible card exactly once', () => {
+    const rows = packRows(defaultLayout());
+    const rendered = rows.flatMap(r => r.ids);
+    expect([...rendered].sort()).toEqual([...visibleCards(defaultLayout())].sort());
+  });
+
+  it('returns nothing when everything is hidden', () => {
+    expect(packRows(layout({ hidden: [...DEFAULT_DASHBOARD_ORDER] }))).toEqual([]);
   });
 });

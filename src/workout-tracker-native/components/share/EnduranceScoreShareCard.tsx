@@ -9,8 +9,8 @@ import {
   ShareCardStatsRow,
   ShareCardFooter,
   type ShareCardStatItem,
-} from './share/ShareCardParts';
-import { SHARE_TEXT } from '../constants/shareCardTheme';
+} from './ShareCardParts';
+import { SHARE_TEXT } from '../../constants/shareCardTheme';
 
 type EnduranceScoreShareCardProps = {
   score: number;

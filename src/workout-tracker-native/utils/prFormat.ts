@@ -31,6 +31,27 @@ export const PR_METRIC_OPTIONS: { key: PREventItem['pr_type']; label: string }[]
 ];
 
 /**
+ * User-facing labels for PR types, keyed by pr_type. Derived from
+ * PR_METRIC_OPTIONS so the label strings have exactly one source, minus
+ * estimated_1rm: it is a trend metric that must never be labeled a PR to
+ * users (project rule), so it deliberately has no entry and callers fall back
+ * to their own generic wording if one ever reaches them.
+ */
+export const PR_TYPE_LABELS: Record<string, string> = Object.fromEntries(
+  PR_METRIC_OPTIONS.filter(o => o.key !== 'estimated_1rm').map(o => [o.key, o.label]),
+);
+
+/**
+ * Display priority for PR summary lists — most notable types first, so a
+ * capped list keeps the best ones and a single-PR headline picks the most
+ * impressive. Separate from PR_METRIC_OPTIONS' order, which drives chart
+ * metric selection rather than summary ranking.
+ */
+export const PR_TYPE_ORDER: Record<string, number> = {
+  max_weight: 0, max_reps: 1, max_duration: 2, best_distance: 3, best_time: 4,
+};
+
+/**
  * Picks a sensible default series to chart for an exercise's full event
  * history: the highest-priority metric type that has any events, and — for
  * types with multiple weight/milestone contexts (rep records, cardio bests)
@@ -116,6 +137,11 @@ export function computeChartYAxisRange(values: number[], sections: number): { ma
 
 /** Width an "M/D" x-axis date needs on one line at the charts' 10px axis font. */
 export const CHART_X_LABEL_WIDTH = 36;
+
+/** Gutter the score-history charts reserve for y-axis labels. */
+export const CHART_Y_AXIS_WIDTH = 32;
+/** Inset at both ends of a score-history plot, so the first and last points aren't flush to the edge. */
+export const CHART_EDGE_SPACING = 24;
 
 /**
  * Horizontal sizing that keeps a gifted-charts LineChart inside its card with

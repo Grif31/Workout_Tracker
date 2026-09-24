@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing } from 'react-native';
-import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, G, LinearGradient, Stop } from 'react-native-svg';
 import { GREEK_RANK_COLORS } from '../constants/greekRanks';
+import { LaurelRing } from './LaurelWreath';
 
 export { GREEK_RANK_COLORS };
 
@@ -9,6 +10,7 @@ const RANK_FRAMES: Record<string, {
   strokeWidth: number;
   animated: boolean;
   dashed?: boolean;
+  wreath?: boolean;
 }> = {
   Neophyte: { strokeWidth: 3,  animated: false },
   Athlete:  { strokeWidth: 4,  animated: false },
@@ -16,8 +18,18 @@ const RANK_FRAMES: Record<string, {
   Demigod:  { strokeWidth: 5,  animated: false, dashed: true },
   Olympian: { strokeWidth: 6,  animated: true  },
   Titan:    { strokeWidth: 7,  animated: true  },
-  'Aretē':  { strokeWidth: 7,  animated: true  },
+  'Aretē':  { strokeWidth: 7,  animated: true, wreath: true },
 };
+
+// The wreath sits outside the ring, so its SVG is drawn larger than `size` and
+// pulled back by the same amount — the ring stays exactly where it was.
+const WREATH_BLEED = 0.13;
+
+/** How far a rank's frame draws outside `size`, so callers can leave room for
+ *  it. Only the wreathed frame overflows; every other rank returns 0. */
+export function frameOverflow(rankName: string, size: number): number {
+  return RANK_FRAMES[rankName]?.wreath ? Math.round(size * WREATH_BLEED) : 0;
+}
 
 interface Props {
   rankName: string;
@@ -43,11 +55,14 @@ export default function ProfileAvatarFrame({ rankName, size, avatarSize }: Props
     ).start();
   }, [frame.animated]);
 
+  const bleed  = frameOverflow(rankName, size);
+  const box    = size + bleed * 2;
   const radius = size / 2 - frame.strokeWidth / 2;
-  const cx = size / 2;
-  const cy = size / 2;
+  const cx = box / 2;
+  const cy = box / 2;
 
   const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+  const AnimatedG = Animated.createAnimatedComponent(G);
 
   const opacity = frame.animated
     ? animRef.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0.4, 1] })
@@ -58,7 +73,7 @@ export default function ProfileAvatarFrame({ rankName, size, avatarSize }: Props
     : undefined;
 
   return (
-    <Svg width={size} height={size} style={{ position: 'absolute', top: 0, left: 0 }}>
+    <Svg width={box} height={box} style={{ position: 'absolute', top: -bleed, left: -bleed }}>
       {rankName === 'Aretē' && (
         <Defs>
           <LinearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1">
@@ -78,6 +93,17 @@ export default function ProfileAvatarFrame({ rankName, size, avatarSize }: Props
         strokeDasharray={dashArray}
         opacity={opacity as any}
       />
+      {frame.wreath && (
+        <AnimatedG opacity={opacity as any}>
+          <LaurelRing
+            cx={cx}
+            cy={cy}
+            radius={radius + frame.strokeWidth / 2 + size * 0.02}
+            leafLength={size * 0.115}
+            color={color}
+          />
+        </AnimatedG>
+      )}
     </Svg>
   );
 }

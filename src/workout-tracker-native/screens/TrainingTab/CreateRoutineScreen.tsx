@@ -5,10 +5,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { TrainingStackParamsList } from 'navigation/types';
+import { TrainingStackParamsList } from '../../navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
-import { spacing } from 'theme/spacing';
-import { typography } from 'theme/typography';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
 import ExerciseListModal from '../../components/ExerciseList';
 import { makeUid } from '../../components/workout/types';
