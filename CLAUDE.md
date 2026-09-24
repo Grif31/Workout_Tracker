@@ -51,7 +51,12 @@ npx expo install <pkg>      # install Expo-compatible package version
 ./venv/Scripts/flask.exe run --debug          # start Flask dev server
 ./venv/Scripts/flask.exe db migrate -m "msg" # generate migration
 ./venv/Scripts/flask.exe db upgrade           # apply migrations
-./venv/Scripts/pip.exe install <pkg>          # install Python package
+./venv/Scripts/pip.exe install <pkg>          # install Python package — then pin it in requirements.txt
+#   requirements.txt pins every version (direct and transitive) and src/.python-version pins Python 3.13 for
+#   Nixpacks. Both used to be unpinned: each Railway deploy installed that day's newest packages on Nixpacks'
+#   default Python 3.11, while CI and local ran 3.13, so tests never covered what production ran. Upgrade by
+#   bumping pins, installing into a fresh venv, running the suite, then refreezing the transitive section.
+#   colorama/tzdata carry Windows-only markers; keep them, or Linux installs pick up packages they don't need
 ./venv/Scripts/python.exe -m pytest tests/ -q --tb=short   # run all backend tests (~30s; conftest swaps in cheap password hashing, the prod 1M-iteration pbkdf2 made this ~14 min)
 python -m pytest tests/test_foo.py -v        # run single test file
 ```
