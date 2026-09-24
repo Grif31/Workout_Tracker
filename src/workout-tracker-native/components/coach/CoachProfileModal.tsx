@@ -230,6 +230,8 @@ export default function CoachProfileModal({ visible, onClose, onSave }: Props) {
             style={styles.notesInput}
             value={profile.notes}
             onChangeText={v => set('notes', v)}
+            // Mirrors AI_NOTES_MAX_LEN in schemas.py; past it every generation 400s.
+            maxLength={1000}
             placeholder="Goals, preferences, anything your coach should know…"
             placeholderTextColor={colors.textSecondary}
             multiline

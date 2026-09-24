@@ -69,6 +69,11 @@ def create_app(test_config=None):
 
     # Disable rate limiting during tests so fixtures don't hit limits
     app.config.setdefault('RATELIMIT_ENABLED', not app.config.get('TESTING', False))
+    # In-process counters reset on every deploy, so login limits start fresh
+    # each release. A shared store (RATELIMIT_STORAGE_URI=redis://..., plus the
+    # `redis` package) survives restarts and extra workers. The OTP lockout
+    # doesn't depend on this: it counts attempts in the DB.
+    app.config.setdefault('RATELIMIT_STORAGE_URI', os.environ.get('RATELIMIT_STORAGE_URI', 'memory://'))
 
     _raw_origins = os.environ.get('CORS_ORIGINS', '*')
     _origins = [o.strip() for o in _raw_origins.split(',')] if _raw_origins != '*' else '*'

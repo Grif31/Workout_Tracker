@@ -159,11 +159,34 @@ class TestUploadAvatar:
         me_id = client.get('/api/me', headers=auth_headers(auth_token)).get_json()['id']
         res = self._upload(client, auth_token)
         assert res.status_code == 200
-        assert res.get_json()['avatar_url'].endswith(f'/static/avatars/{me_id}.jpg')
         # the stored path shows up on the profile
         me = client.get('/api/me', headers=auth_headers(auth_token)).get_json()
-        assert me['profile_pic_url'] == f'/static/avatars/{me_id}.jpg'
-        assert os.path.isfile(tmp_static / 'avatars' / f'{me_id}.jpg')
+        path = me['profile_pic_url']
+        assert res.get_json()['avatar_url'].endswith(path)
+        filename = path.rsplit('/', 1)[1]
+        assert path == f'/static/avatars/{filename}'
+        assert os.path.isfile(tmp_static / 'avatars' / filename)
+
+    def test_filename_is_not_guessable_from_the_user_id(self, client, auth_token, tmp_static):
+        """/static is public; `{id}.jpg` let anyone fetch every user's photo by counting."""
+        me_id = client.get('/api/me', headers=auth_headers(auth_token)).get_json()['id']
+        self._upload(client, auth_token)
+        self._upload(client, auth_token)
+        (filename,) = os.listdir(tmp_static / 'avatars')
+        assert filename != f'{me_id}.jpg'
+        stem = filename.rsplit('.', 1)[0]
+        assert stem.startswith(f'{me_id}_') and len(stem) >= len(f'{me_id}_') + 20
+
+    def test_a_forged_profile_pic_url_cannot_delete_another_users_avatar(
+            self, client, auth_token, auth_token2, tmp_static):
+        """profile_pic_url is client-writable, so it must never pick the file to delete."""
+        self._upload(client, auth_token2)
+        (theirs,) = os.listdir(tmp_static / 'avatars')
+        client.patch('/api/me', json={'profile_pic_url': f'/static/avatars/{theirs}'},
+                     headers=auth_headers(auth_token))
+        self._upload(client, auth_token)
+        client.delete('/api/me', headers=auth_headers(auth_token))
+        assert (tmp_static / 'avatars' / theirs).exists()
 
     def test_missing_file_returns_400(self, client, auth_token, tmp_static):
         res = client.post('/api/me/avatar', data={}, content_type='multipart/form-data',
@@ -185,8 +208,15 @@ class TestUploadAvatar:
         me_id = client.get('/api/me', headers=auth_headers(auth_token)).get_json()['id']
         self._upload(client, auth_token, filename='first.jpg')
         self._upload(client, auth_token, filename='second.png')
-        avatars = os.listdir(tmp_static / 'avatars')
-        assert avatars == [f'{me_id}.png']  # the .jpg was removed
+        (avatar,) = os.listdir(tmp_static / 'avatars')  # the .jpg was removed
+        assert avatar.startswith(f'{me_id}_') and avatar.endswith('.png')
+
+    def test_legacy_predictable_avatar_is_cleaned_up(self, client, auth_token, tmp_static):
+        me_id = client.get('/api/me', headers=auth_headers(auth_token)).get_json()['id']
+        (tmp_static / 'avatars').mkdir(exist_ok=True)
+        (tmp_static / 'avatars' / f'{me_id}.jpg').write_bytes(b'old')
+        self._upload(client, auth_token)
+        assert not (tmp_static / 'avatars' / f'{me_id}.jpg').exists()
 
     def test_avatar_is_per_user(self, client, auth_token, auth_token2, tmp_static):
         self._upload(client, auth_token)

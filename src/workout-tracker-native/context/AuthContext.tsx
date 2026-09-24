@@ -6,7 +6,8 @@ import { appCache } from '../utils/appCache';
 import { registerPushToken, deregisterPushToken } from '../utils/notifications';
 import { useTheme, KEY_ACCENT } from './ThemeContext';
 import { SESSION_KEY } from './WorkoutSessionContext';
-import { GREEK_RANK_CACHED_KEY, COACH_INSIGHTS_KEY, TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY } from '../constants/storageKeys';
+import { GREEK_RANK_CACHED_KEY, COACH_INSIGHTS_KEY, USER_KEY } from '../constants/storageKeys';
+import { loadTokens, saveTokenPair, clearStoredTokens } from '../utils/tokenStorage';
 
 type AuthContextType = {
     user: any;
@@ -37,8 +38,9 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
         setToken(null);
         clearTokens();
         appCache.clear();
+        await clearStoredTokens();
         await AsyncStorage.multiRemove([
-            TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY,
+            USER_KEY,
             GREEK_RANK_CACHED_KEY, KEY_ACCENT,
             COACH_INSIGHTS_KEY, SESSION_KEY,
         ]);
@@ -52,7 +54,7 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
         });
 
         (async () => {
-            const [[, savedAccess], [, savedRefresh]] = await AsyncStorage.multiGet([TOKEN_KEY, REFRESH_TOKEN_KEY]);
+            const { access: savedAccess, refresh: savedRefresh } = await loadTokens();
             if (savedAccess) {
                 setTokens(savedAccess, savedRefresh ?? '');
                 // Offline or server-error launch: keep the session and show the
@@ -77,7 +79,7 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
                         setUser(data);
                         await AsyncStorage.setItem(USER_KEY, JSON.stringify(data));
                         // Read whatever token is current (may have been refreshed)
-                        const currentAccess = await AsyncStorage.getItem(TOKEN_KEY);
+                        const currentAccess = (await loadTokens()).access;
                         setToken(currentAccess);
                     } else if (res.status === 401) {
                         // Refresh already failed inside apiFetch — session is dead
@@ -107,8 +109,7 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
         // logged-in UI, and mount-time effects (offline queue flush) resolve
         // the current user from AsyncStorage — it must already be this user.
         setTokens(accessToken, refreshToken);
-        await AsyncStorage.setItem(TOKEN_KEY, accessToken);
-        await AsyncStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+        await saveTokenPair(accessToken, refreshToken);
         await AsyncStorage.setItem(USER_KEY, JSON.stringify(userData));
         // id only — no email/name, keep PII out of crash reports
         Sentry.setUser({ id: String(userData.id) });

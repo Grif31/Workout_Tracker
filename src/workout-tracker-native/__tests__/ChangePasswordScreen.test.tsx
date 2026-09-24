@@ -7,6 +7,8 @@ import ChangePasswordScreen from '../screens/ProfileTab/ChangePasswordScreen';
 import { apiFetch } from '../utils/api';
 import { TOKEN_KEY, REFRESH_TOKEN_KEY } from '../constants/storageKeys';
 
+const secure: Map<string, string> = require('expo-secure-store').__store;
+
 jest.mock('navigation/types', () => ({}), { virtual: true });
 // saveTokens stays real: the point is that the new pair reaches storage.
 jest.mock('../utils/api', () => ({
@@ -29,6 +31,7 @@ describe('ChangePasswordScreen', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     await AsyncStorage.clear();
+    secure.clear();
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   });
 
@@ -40,7 +43,8 @@ describe('ChangePasswordScreen', () => {
   // device's included. If the replacement pair isn't stored, the next request
   // (or the next cold start) runs on a revoked token and signs the user out.
   it('stores the fresh token pair the server returns', async () => {
-    await AsyncStorage.multiSet([[TOKEN_KEY, 'old-access'], [REFRESH_TOKEN_KEY, 'old-refresh']]);
+    secure.set(TOKEN_KEY, 'old-access');
+    secure.set(REFRESH_TOKEN_KEY, 'old-refresh');
     mockApiFetch.mockResolvedValue({
       ok: true,
       json: async () => ({ message: 'ok', access_token: 'new-access', refresh_token: 'new-refresh' }),
@@ -50,12 +54,13 @@ describe('ChangePasswordScreen', () => {
     fillAndSave(screen);
 
     await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
-    expect(await AsyncStorage.getItem(TOKEN_KEY)).toBe('new-access');
-    expect(await AsyncStorage.getItem(REFRESH_TOKEN_KEY)).toBe('new-refresh');
+    expect(secure.get(TOKEN_KEY)).toBe('new-access');
+    expect(secure.get(REFRESH_TOKEN_KEY)).toBe('new-refresh');
   });
 
   it('leaves stored tokens alone when the change fails', async () => {
-    await AsyncStorage.multiSet([[TOKEN_KEY, 'old-access'], [REFRESH_TOKEN_KEY, 'old-refresh']]);
+    secure.set(TOKEN_KEY, 'old-access');
+    secure.set(REFRESH_TOKEN_KEY, 'old-refresh');
     mockApiFetch.mockResolvedValue({
       ok: false,
       json: async () => ({ message: 'Current password is incorrect.' }),
@@ -65,7 +70,7 @@ describe('ChangePasswordScreen', () => {
     fillAndSave(screen);
 
     await waitFor(() => expect(screen.getByText('Current password is incorrect.')).toBeTruthy());
-    expect(await AsyncStorage.getItem(TOKEN_KEY)).toBe('old-access');
-    expect(await AsyncStorage.getItem(REFRESH_TOKEN_KEY)).toBe('old-refresh');
+    expect(secure.get(TOKEN_KEY)).toBe('old-access');
+    expect(secure.get(REFRESH_TOKEN_KEY)).toBe('old-refresh');
   });
 });

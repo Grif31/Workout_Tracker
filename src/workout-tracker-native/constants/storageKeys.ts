@@ -6,11 +6,16 @@
 export const GREEK_RANK_CACHED_KEY = 'greek_rank_cached';
 export const COACH_INSIGHTS_KEY = 'coach_insights_cache';
 
-// Session keys: written by AuthContext, read and rotated by api.ts on token
-// refresh, and read by the offline queue to find whose queue to flush.
+// Session keys. The two token keys name SecureStore (keychain/keystore) items,
+// read and written only through utils/tokenStorage.ts; they were AsyncStorage
+// slots in earlier builds, which tokenStorage migrates from once. USER_KEY is
+// still AsyncStorage: the offline queue reads it to find whose queue to flush.
 export const TOKEN_KEY = 'token';
 export const REFRESH_TOKEN_KEY = 'refresh_token';
 export const USER_KEY = 'user';
+// AsyncStorage marker that this install has set up its SecureStore tokens.
+// Device-level, never cleared on logout: see loadTokens in utils/tokenStorage.ts.
+export const TOKEN_STORE_READY_KEY = 'secure_token_store_ready';
 
 export const ONBOARDING_COMPLETE_KEY = 'onboarding_complete';
 export const LIVE_WORKOUT_NOTIF_KEY = 'live_workout_notif_enabled';

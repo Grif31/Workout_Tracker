@@ -1,4 +1,5 @@
 import os
+import secrets
 from flask import Blueprint, jsonify, request, current_app, g
 from werkzeug.utils import secure_filename
 from datetime import datetime
@@ -20,6 +21,22 @@ _device_token_schema   = DeviceTokenSchema()
 
 def _allowed(filename: str) -> bool:
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def _remove_user_avatars(avatars_dir, user_id):
+    """Delete every avatar file this user owns, found by filename prefix.
+
+    Never by the stored profile_pic_url: PATCH /api/me lets the client set that
+    to any string, so trusting it would let one user delete another's file.
+    Also clears the pre-token `{id}.{ext}` names.
+    """
+    if not os.path.isdir(avatars_dir):
+        return
+    prefix = f'{user_id}_'
+    legacy = {f'{user_id}.{ext}' for ext in ALLOWED_EXTENSIONS}
+    for name in os.listdir(avatars_dir):
+        if name.startswith(prefix) or name in legacy:
+            os.remove(os.path.join(avatars_dir, name))
 
 user_bp = Blueprint('user_bp', __name__)
 
@@ -186,14 +203,12 @@ def upload_avatar():
     os.makedirs(avatars_dir, exist_ok=True)
 
     ext = secure_filename(file.filename).rsplit('.', 1)[1].lower()
-    filename = f'{user_id}.{ext}'
+    # /static is public, so `{id}.{ext}` let anyone walk every user's photo by
+    # counting. The random part makes the URL unguessable; the id prefix is
+    # only there so _remove_user_avatars can find this user's own files.
+    filename = f'{user_id}_{secrets.token_urlsafe(16)}.{ext}'
 
-    # Remove any old avatar with a different extension
-    for old_ext in ALLOWED_EXTENSIONS - {ext}:
-        old_path = os.path.join(avatars_dir, f'{user_id}.{old_ext}')
-        if os.path.exists(old_path):
-            os.remove(old_path)
-
+    _remove_user_avatars(avatars_dir, user_id)
     file.save(os.path.join(avatars_dir, filename))
 
     relative_path = f'/static/avatars/{filename}'
@@ -305,11 +320,7 @@ def delete_account():
         current_app.logger.exception('Account deletion failed for user %s', user_id)
         return jsonify({'message': 'Internal server error'}), 500
 
-    avatars_dir = os.path.join(current_app.static_folder, 'avatars')
-    for ext in ALLOWED_EXTENSIONS:
-        path = os.path.join(avatars_dir, f'{user_id}.{ext}')
-        if os.path.exists(path):
-            os.remove(path)
+    _remove_user_avatars(os.path.join(current_app.static_folder, 'avatars'), user_id)
 
     photos_dir = os.path.join(current_app.static_folder, 'progress_photos')
     for filename in photo_filenames:

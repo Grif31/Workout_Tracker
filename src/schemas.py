@@ -142,16 +142,25 @@ for _f in _MEASUREMENT_FIELDS:
     MeasurementSchema._declared_fields[_f] = fields.Float(load_default=None)
 
 # ── AI ────────────────────────────────────────────────────────
+# Every string here is interpolated into a prompt billed per token. The app
+# sends short option keys for all but `notes`, whose input caps at
+# AI_NOTES_MAX_LEN, so these only stop hand-built requests from inflating it.
+AI_OPTION_MAX_LEN = 100
+AI_NOTES_MAX_LEN  = 1000
+_ai_option = validate.Length(max=AI_OPTION_MAX_LEN)
+
 class AiGenerateSchema(_Base):
     days_per_week      = fields.Int(required=True, validate=validate.Range(min=1, max=7))
-    goal               = fields.Str(required=True)
-    experience         = fields.Str(required=True)
+    goal               = fields.Str(required=True, validate=_ai_option)
+    experience         = fields.Str(required=True, validate=_ai_option)
     generate_type      = fields.Str(required=True, validate=validate.OneOf(['routine', 'workout', 'template']))
-    equipment          = fields.Str(load_default='full_gym')
-    session_length_min = fields.Int(load_default=60)
-    avoid              = fields.Str(load_default='none')
-    muscles            = fields.List(fields.Str(), load_default=[])
-    notes              = fields.Str(load_default=None)
+    equipment          = fields.Str(load_default='full_gym', validate=_ai_option)
+    session_length_min = fields.Int(load_default=60, validate=validate.Range(min=1, max=600))
+    avoid              = fields.Str(load_default='none', validate=_ai_option)
+    muscles            = fields.List(fields.Str(validate=_ai_option), load_default=[],
+                                     validate=validate.Length(max=30))
+    notes              = fields.Str(load_default=None, allow_none=True,
+                                    validate=validate.Length(max=AI_NOTES_MAX_LEN))
 
 # Bounds for persisting an AI preview. Generation caps a routine at 7 days
 # (days_per_week) and the preview screen can't add any, and no real day holds
@@ -179,6 +188,6 @@ class AiSaveSchema(_Base):
                                validate=validate.Length(max=AI_SAVE_MAX_EXERCISES))
 
 class AiInsightsSchema(_Base):
-    experience = fields.Str(load_default=None)
-    goal       = fields.Str(load_default=None)
-    avoid      = fields.Str(load_default=None)
+    experience = fields.Str(load_default=None, validate=_ai_option)
+    goal       = fields.Str(load_default=None, validate=_ai_option)
+    avoid      = fields.Str(load_default=None, validate=_ai_option)

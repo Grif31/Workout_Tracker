@@ -42,10 +42,13 @@ class TestForgotPassword:
 
     def test_known_email_sets_hashed_otp_and_expiry(self, client, app, registered_user):
         import hashlib
+        from routes.auth_routes import _hash_otp
         otp = _get_otp_for(client, 'test@example.com')
         with app.app_context():
             user = User.query.filter_by(email='test@example.com').first()
-            assert user.reset_otp_hash == hashlib.sha256(otp.encode()).hexdigest()
+            assert user.reset_otp_hash == _hash_otp(otp)
+            # A bare SHA-256 of 6 digits reverses from a DB snapshot alone.
+            assert user.reset_otp_hash != hashlib.sha256(otp.encode()).hexdigest()
             assert user.reset_otp_attempts == 0
             assert user.reset_otp_expiry is not None
 

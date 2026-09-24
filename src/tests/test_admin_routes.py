@@ -183,6 +183,21 @@ class TestSuggestExerciseImage:
         called_url = mock_get.call_args[0][0]
         assert 'incline' in called_url
 
+    def test_slash_in_query_cannot_walk_the_upstream_path(self, app, client, monkeypatch):
+        monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
+        monkeypatch.setenv('RAPIDAPI_KEY', 'rk')
+        ex_id = _make_exercise(app)
+
+        fake_response = MagicMock()
+        fake_response.raise_for_status = MagicMock()
+        fake_response.json.return_value = []
+        with patch('routes.admin_routes.http_requests.get', return_value=fake_response) as mock_get:
+            client.get(f'/admin/exercises/{ex_id}/suggest?q=../../status', headers=_basic_auth('pw'))
+
+        called_url = mock_get.call_args[0][0]
+        assert called_url.startswith('https://exercisedb.p.rapidapi.com/exercises/name/')
+        assert '/../' not in called_url and '..%2F..%2Fstatus' in called_url
+
     def test_limits_results_to_20(self, app, client, monkeypatch):
         monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
         monkeypatch.setenv('RAPIDAPI_KEY', 'rk')

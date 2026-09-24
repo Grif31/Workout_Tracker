@@ -488,7 +488,8 @@ def suggest_exercise_image(exercise_id):
     query = (request.args.get('q') or ex.name).strip().lower()
     if not query:
         return jsonify({'message': 'Search query required'}), 400
-    name_encoded = urllib.parse.quote(query)
+    # safe='' so a '/' in the query can't walk the upstream path.
+    name_encoded = urllib.parse.quote(query, safe='')
     url = f'https://exercisedb.p.rapidapi.com/exercises/name/{name_encoded}?limit=30'
     try:
         resp = http_requests.get(url, headers=_rapidapi_headers(api_key), timeout=15)

@@ -8,6 +8,21 @@ jest.mock('@react-native-community/netinfo', () =>
   require('@react-native-community/netinfo/jest/netinfo-mock')
 );
 
+// Keychain/keystore stand-in. Exposed as __store so a test can inspect what
+// was persisted or seed it; utils/tokenStorage wipes it on a fresh install
+// (no AsyncStorage marker), so tests that clear AsyncStorage start clean.
+jest.mock('expo-secure-store', () => {
+  const store = new Map<string, string>();
+  return {
+    __store: store,
+    AFTER_FIRST_UNLOCK: 0,
+    WHEN_UNLOCKED: 5,
+    getItemAsync: jest.fn(async (k: string) => (store.has(k) ? store.get(k)! : null)),
+    setItemAsync: jest.fn(async (k: string, v: string) => { store.set(k, v); }),
+    deleteItemAsync: jest.fn(async (k: string) => { store.delete(k); }),
+  };
+});
+
 jest.mock('@expo/vector-icons', () => ({
   Ionicons: 'Ionicons',
   MaterialIcons: 'MaterialIcons',

@@ -136,6 +136,9 @@ celerybeat.pid
 
 # Environments
 .env
+# .env.production, .env.local etc. hold real values too; only the example is safe.
+.env.*
+!.env.example
 .envrc
 src/exercisedb_cache.json
 .venv

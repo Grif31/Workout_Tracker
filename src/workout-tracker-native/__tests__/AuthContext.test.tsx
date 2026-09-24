@@ -156,8 +156,10 @@ describe('AuthContext', () => {
       expect(result.current.user).toEqual({ id: 3, username: 'alice' });
       expect(result.current.token).toBe('acc');
       expect(mockSetTokens).toHaveBeenCalledWith('acc', 'ref');
-      expect(await AsyncStorage.getItem('token')).toBe('acc');
-      expect(await AsyncStorage.getItem('refresh_token')).toBe('ref');
+      const secure: Map<string, string> = require('expo-secure-store').__store;
+      expect(secure.get('token')).toBe('acc');
+      expect(secure.get('refresh_token')).toBe('ref');
+      expect(await AsyncStorage.getItem('token')).toBeNull();
       expect(await AsyncStorage.getItem('user')).toBe(JSON.stringify({ id: 3, username: 'alice' }));
       expect(Sentry.setUser).toHaveBeenCalledWith({ id: '3' });
       expect(mockRegisterPushToken).toHaveBeenCalled();

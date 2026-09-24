@@ -18,7 +18,7 @@
 | Navigation | React Navigation v7 (bottom tabs + native stacks) |
 | State | React Context (AuthContext, ThemeContext, WorkoutSessionContext, PurchaseContext) |
 | Payments | RevenueCat (react-native-purchases) — iOS only, `premium` entitlement |
-| Storage | AsyncStorage for local preferences |
+| Storage | AsyncStorage for local preferences; expo-secure-store (keychain/keystore) for the auth tokens only, via `utils/tokenStorage.ts` |
 | Backend | Flask + SQLAlchemy + Flask-JWT-Extended + Flask-Migrate (Alembic) |
 | Database | PostgreSQL (psycopg2-binary) |
 | Push | expo-notifications + Expo Push Service |
@@ -240,6 +240,7 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 | `minimized_workout_session` | — | Serialized minimized workout state (WorkoutSessionContext) |
 | `greek_rank_cached` | — | Cached current Greek rank name (avoids fetch on cold open) |
 | `coach_insights_cache` | — | Cached AI coach insights JSON |
+| `secure_token_store_ready` | — | Marks that this install set up its SecureStore tokens. Never cleared on logout: iOS keeps keychain items across an uninstall and AsyncStorage doesn't, so a missing marker is how `loadTokens` recognises a fresh install and drops a previous install's tokens. Its first absence on an updated install is also when the pre-SecureStore AsyncStorage tokens get migrated |
 
 **Per-user (key includes user ID suffix `_${userId}`):**
 | Key pattern | Default | Controls |
@@ -274,7 +275,7 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 | `coach_insights_cache` | — | Cached AI coaching insights JSON + fetchedAt timestamp |
 | `coach_settings` | — | Legacy key — migrated to `coach_profile` on first CoachProfileModal open |
 
-**On logout**, `AuthContext.tsx` clears via `AsyncStorage.multiRemove`: `token`, `refresh_token`, `user`, `greek_rank_cached`, `@theme_accent`, `coach_insights_cache`, `minimized_workout_session`. **On login**, the same four cache keys (`greek_rank_cached`, `@theme_accent`, `coach_insights_cache`, `minimized_workout_session`) are cleared before the new session starts, so a freshly logged-in user never sees the previous account's cached data. Per-user-suffixed keys (`coach_profile_${uid}`, `workout_weekly_goal_${uid}`, `@pr_pins_${uid}`, etc.) don't need clearing — each account already has its own slot.
+**On logout**, `AuthContext.tsx` deletes the `token`/`refresh_token` SecureStore items (`clearStoredTokens`) and clears via `AsyncStorage.multiRemove`: `user`, `greek_rank_cached`, `@theme_accent`, `coach_insights_cache`, `minimized_workout_session`. **On login**, the same four cache keys (`greek_rank_cached`, `@theme_accent`, `coach_insights_cache`, `minimized_workout_session`) are cleared before the new session starts, so a freshly logged-in user never sees the previous account's cached data. Per-user-suffixed keys (`coach_profile_${uid}`, `workout_weekly_goal_${uid}`, `@pr_pins_${uid}`, etc.) don't need clearing — each account already has its own slot.
 
 ---
 
@@ -294,6 +295,11 @@ Each migration's `down_revision` must point to the previous migration's `revisio
 
 ### "Today" and week boundaries — never `date.today()` in request code
 The server runs on UTC. Use `user_today()` from `utils/local_date.py`, which reads the app's `X-Local-Date` header (sent by `apiFetch`) and only trusts it within a day of UTC. `date.today()` rolls "this week" over on Sunday afternoon in the Americas.
+
+### Auth tokens: anything that changes a credential bumps `token_version`
+Every JWT carries the user's `token_version` as a `tv` claim (added by `additional_claims_loader` in `app.py`, so every token-minting path gets it for free), and `token_in_blocklist_loader` rejects a mismatch on every request. Bumping it is the only way to revoke outstanding tokens: password change, password reset, and a verified social sign-in taking over an unverified password account all do. A new route that changes a credential must bump it too, and if the caller should stay signed in, return a fresh pair the way `change_password` does. A token with no `tv` reads as 0.
+
+`User.email_verified` is set by Apple/Google sign-in and by a completed password reset, never by signup. `social_auth` links by email, so when it lands on an unverified password account it wipes that password and bumps `token_version`: an unproven account for someone else's address must not outlive the address's real owner signing in.
 
 ### Response shape convention
 ```python

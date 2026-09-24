@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY } from '../constants/storageKeys';
+import { USER_KEY } from '../constants/storageKeys';
+import { saveTokenPair, saveAccessToken, clearStoredTokens } from './tokenStorage';
 import { showToast } from './toast';
 import { toLocalDateStr } from './date';
 import { markDataChanged } from './appCache';
@@ -38,7 +39,7 @@ let _refresh = '';
 // or invalid so the context can clear user state and show the login screen.
 let _onUnauthenticated: (() => void) | null = null;
 
-// Called by AuthContext after login or on app start (restoring from AsyncStorage).
+// Called by AuthContext after login or on app start (restoring from secure storage).
 export function setTokens(access: string, refresh: string) {
   _access = access;
   _refresh = refresh;
@@ -49,7 +50,7 @@ export function setTokens(access: string, refresh: string) {
 // restore the revoked pair and sign the user out.
 export async function saveTokens(access: string, refresh: string) {
   setTokens(access, refresh);
-  await AsyncStorage.multiSet([[TOKEN_KEY, access], [REFRESH_TOKEN_KEY, refresh]]);
+  await saveTokenPair(access, refresh);
 }
 
 // Called by AuthContext on logout.
@@ -65,7 +66,7 @@ export function registerUnauthCallback(cb: () => void) {
 }
 
 // Exchanges the refresh token for a new access token, updates the module store
-// and AsyncStorage. `invalid: true` means the server itself rejected the
+// and secure storage. `invalid: true` means the server itself rejected the
 // refresh token (401/422 — genuinely expired or malformed), which is the only
 // case that should force a logout. A thrown network error or a server-side
 // failure (5xx) doesn't tell us anything about whether the token is still
@@ -93,10 +94,11 @@ async function doRefresh(): Promise<RefreshOutcome> {
     const data = await res.json();
     const newAccess = data.access_token as string;
     _access = newAccess;
-    await AsyncStorage.setItem(TOKEN_KEY, newAccess);
     if (data.refresh_token) {
       _refresh = data.refresh_token as string;
-      await AsyncStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
+      await saveTokenPair(newAccess, _refresh);
+    } else {
+      await saveAccessToken(newAccess);
     }
     return { ok: true, token: newAccess };
   } catch {
@@ -140,7 +142,8 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
       // Refresh token is expired or invalid — session is unrecoverable.
       // Wipe everything and send the user back to the login screen.
       clearTokens();
-      await AsyncStorage.multiRemove([TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY]);
+      await clearStoredTokens();
+      await AsyncStorage.removeItem(USER_KEY);
       _onUnauthenticated?.();
     }
     // else: refresh failed for a transient reason (network/server trouble) —

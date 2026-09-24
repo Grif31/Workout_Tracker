@@ -13,6 +13,20 @@
 - If you log cardio, Home shows your distance, time and number of activities since Monday. Distance follows your GPS distance setting, in miles or kilometers.
 - Cardio logged as time without distance, like a bike or rower session, shows your total time instead.
 
+### New: Apple Health and Health Connect
+- Turn on Sync to Apple Health on iPhone, or Sync to Health Connect on Android, in Settings to save your workouts there.
+- On iPhone, with sync on, a workout shows your average and max heart rate when an Apple Watch or another heart rate monitor recorded it to Apple Health.
+
+### Improved: Greek Rank
+- Your Greek Rank screen shows your own photo in your equipped frame.
+- When your score has earned Titan or Aretē but you haven't reached the Strength or Endurance Score it needs, the screen says so and shows what unlocks it.
+- Each top rank shows the percentile it needs and where you are now.
+- If you don't have a Strength or Endurance Score yet, the screen explains what's missing, with a shortcut to add your age and gender or log your bodyweight.
+- Your progress to the next rank now shows before you've earned your first point.
+- Tap the info button for a new explanation of how Greek Rank works.
+- Pull down to refresh. If your rank can't load, you'll see a message and a Try Again button instead of an empty screen.
+- The Aretē frame now has a laurel wreath.
+
 ### Improved: Measurements
 - Measurements now show their unit: inches if you use lbs, centimeters if you use kg. Switching units converts your measurements along with your weights.
 - Each measurement shows how much it has changed since your last entry and since your first.
@@ -28,10 +42,28 @@
 - The streak sits at the top of Home, centered above your greeting, with a new flame that dims when your streak is at zero.
 - The streak number shows straight away instead of counting up each time Home opens.
 
+### Improved: Premium
+- The Premium screen lists everything Premium includes, now with the Endurance Score, personalized training insights and muscle volume zones.
+- If you're not on Premium, the Strength and Endurance Score links on the Greek Rank and Coach screens show a lock and open the Premium screen.
+
+### Improved: Speed
+- The Coach tab no longer reloads everything each time you open it.
+- Greek Rank opens straight away instead of waiting on a spinner, and your Strength Score and Greek Rank load faster.
+
+### Improved: Security
+- Changing your password signs you out on your other devices and keeps you signed in on this one. Resetting a forgotten password signs out every device.
+- Your sign-in is now kept in your phone's secure storage instead of regular app storage.
+
 ### Bug Fixes
 - The keyboard no longer gets stuck open when logging bodyweight or measurements, and fields no longer hide behind it.
 - Replacing an exercise during a workout no longer leaves the workout unresponsive until the app is restarted.
 - Starting a workout from a template or routine now gives the same workout from Home, Coach, and the routine or template screen, with exercise demos and your programmed sets, reps and RPE every time.
+- On Greek Rank, swiping through the rank circles now selects the one in the center, and your progress always describes the rank you hold rather than the one you tapped.
+- The Use This Frame button is readable on every rank's color.
+- After your first workout, going back from the Greek Rank introduction returns you to Home.
+- Exercise charts no longer show a workout on the day before it happened in some time zones.
+- Logging a workout the AI Coach generated no longer fails when a rep target is a single number.
+- Workouts the AI Coach generates now only use the exercise library and your own custom exercises.
 
 ## 1.1.7 (2026-09-17)
 

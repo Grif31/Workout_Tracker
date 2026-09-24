@@ -255,6 +255,45 @@ class TestGenerateTemplate:
 # POST /api/ai/save — persistence
 # ---------------------------------------------------------------------------
 
+class TestGenerateInputBounds:
+    """Every generate field lands in a per-token-billed prompt; nothing capped
+    its length, so one call could carry an arbitrarily large prompt."""
+
+    BASE = {'days_per_week': 3, 'goal': 'general', 'experience': 'beginner', 'generate_type': 'routine'}
+
+    def _post(self, client, token, **overrides):
+        mock_ant = MagicMock()
+        mock_ant.Anthropic.side_effect = AssertionError('oversized input reached the model')
+        with patch.dict(sys.modules, {'anthropic': mock_ant}):
+            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+                return client.post('/api/ai/generate', json={**self.BASE, **overrides},
+                                   headers=auth_headers(token))
+
+    def test_oversized_notes_rejected(self, client, auth_token):
+        assert self._post(client, auth_token, notes='x' * 1001).status_code == 400
+
+    def test_oversized_option_fields_rejected(self, client, auth_token):
+        for field in ('goal', 'experience', 'equipment', 'avoid'):
+            assert self._post(client, auth_token, **{field: 'x' * 101}).status_code == 400, field
+
+    def test_too_many_muscles_rejected(self, client, auth_token):
+        assert self._post(client, auth_token, muscles=['chest'] * 31).status_code == 400
+
+    def test_insights_fields_bounded(self, client, auth_token):
+        res = client.post('/api/ai/insights', json={'goal': 'x' * 101}, headers=auth_headers(auth_token))
+        assert res.status_code == 400
+
+    def test_values_at_the_limit_still_accepted(self, client, auth_token):
+        mock_ant = _make_anthropic_mock(TEMPLATE_JSON)
+        with patch.dict(sys.modules, {'anthropic': mock_ant}):
+            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+                res = client.post('/api/ai/generate', json={
+                    **self.BASE, 'generate_type': 'template',
+                    'notes': 'x' * 1000, 'muscles': ['chest'] * 30,
+                }, headers=auth_headers(auth_token))
+        assert res.status_code == 200, res.get_json()
+
+
 class TestSaveBounds:
     """/api/ai/save had no schema, size bound or rate limit: one request wrote
     3,000 routine days in about a second."""

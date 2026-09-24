@@ -247,6 +247,84 @@ class TestGoogleSocialAuth:
         assert res.status_code == 401
 
 
+class TestSocialPreHijack:
+    """Signup never proved the address, and social login links by email. An
+    attacker could register the victim's email with a password of their own,
+    wait for the victim to sign in with Google/Apple, and log in afterward."""
+
+    def _google(self, client, email='test@example.com'):
+        with patch.dict(os.environ, {'GOOGLE_CLIENT_IDS': GOOGLE_CLIENT}):
+            with patch('routes.auth_routes.http_requests.get', _google_responses({
+                'aud': GOOGLE_CLIENT, 'email': email, 'email_verified': 'true',
+            })):
+                return client.post('/api/auth/social', json={'provider': 'google', 'token': 't'})
+
+    def _password_login(self, client, pw='password123'):
+        return client.post('/api/login', json={'email': 'test@example.com', 'password': pw})
+
+    def test_squatters_password_stops_working(self, client, registered_user):
+        # registered_user is the squatter: signed up with the victim's address.
+        res = self._google(client)
+        assert res.status_code == 200
+        assert res.get_json()['id'] == registered_user['user']['id']
+        assert self._password_login(client).status_code == 401
+
+    def test_squatters_existing_session_is_revoked(self, client, registered_user):
+        squatter = self._password_login(client).get_json()
+        self._google(client)
+        me = client.get('/api/me', headers={'Authorization': f"Bearer {squatter['access_token']}"})
+        assert me.status_code == 401
+        refresh = client.post('/api/refresh',
+                              headers={'Authorization': f"Bearer {squatter['refresh_token']}"})
+        assert refresh.status_code == 401
+
+    def test_verified_owner_can_sign_in_again_with_social(self, client, registered_user):
+        first = self._google(client).get_json()
+        second = self._google(client)
+        assert second.status_code == 200
+        assert second.get_json()['id'] == first['id']
+        me = client.get('/api/me', headers={'Authorization': f"Bearer {first['access_token']}"})
+        assert me.status_code == 200  # a later social sign-in revokes nothing
+
+    def test_password_proven_by_reset_survives_social_sign_in(self, client, registered_user):
+        with patch('routes.auth_routes._send_otp_email') as send:
+            client.post('/api/forgot-password', json={'email': 'test@example.com'})
+        otp = send.call_args[0][1]
+        client.post('/api/reset-password', json={
+            'email': 'test@example.com', 'otp': otp, 'new_password': 'proven456',
+        })
+        assert self._google(client).status_code == 200
+        assert self._password_login(client, 'proven456').status_code == 200
+
+    def test_new_social_account_is_verified(self, client, app):
+        self._google(client, email='fresh@example.com')
+        from models import User
+        assert User.query.filter_by(email='fresh@example.com').first().email_verified
+
+
+class TestAppleEmailVerified:
+
+    def _apple(self, client, payload):
+        import jwt as pyjwt
+        with patch.dict(os.environ, {'APPLE_BUNDLE_ID': 'com.aretefitness.app'}), \
+             patch('routes.auth_routes.http_requests.get',
+                   return_value=_FakeResp({'keys': [{'kid': 'k1'}]})), \
+             patch.object(pyjwt, 'get_unverified_header', return_value={'kid': 'k1'}), \
+             patch('jwt.algorithms.RSAAlgorithm.from_jwk', return_value='public-key'), \
+             patch.object(pyjwt, 'decode', return_value=payload):
+            return client.post('/api/auth/social', json={'provider': 'apple', 'token': 'id-token'})
+
+    def test_unverified_email_cannot_sign_into_existing_account(self, client, registered_user):
+        res = self._apple(client, {'email': 'test@example.com', 'email_verified': 'false'})
+        assert res.status_code == 401
+        assert 'access_token' not in res.get_json()
+
+    def test_verified_email_accepted_as_bool_or_string(self, client):
+        for i, flag in enumerate((True, 'true')):
+            res = self._apple(client, {'email': f'apple{i}@example.com', 'email_verified': flag})
+            assert res.status_code == 200, (flag, res.get_json())
+
+
 class TestRefresh:
 
     def _refresh_token(self, client, registered_user):

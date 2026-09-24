@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -109,7 +110,7 @@ def forgot_password():
     if not user:
         return SAFE
     raw_otp = str(secrets.randbelow(900000) + 100000)  # always 6 digits: 100000–999999
-    user.reset_otp_hash     = hashlib.sha256(raw_otp.encode()).hexdigest()
+    user.reset_otp_hash     = _hash_otp(raw_otp)
     user.reset_otp_expiry   = datetime.now(timezone.utc) + timedelta(minutes=15)
     user.reset_otp_attempts = 0
     db.session.commit()
@@ -140,7 +141,7 @@ def verify_otp():
         user.reset_otp_attempts = 0
         db.session.commit()
         return INVALID
-    if not secrets.compare_digest(hashlib.sha256(otp.encode()).hexdigest(), user.reset_otp_hash):
+    if not secrets.compare_digest(_hash_otp(otp), user.reset_otp_hash):
         user.reset_otp_attempts = (user.reset_otp_attempts or 0) + 1
         db.session.commit()
         return INVALID
@@ -177,12 +178,13 @@ def reset_password():
     if (user.reset_otp_attempts or 0) >= 5:
         _clear_otp()
         return INVALID
-    if not secrets.compare_digest(hashlib.sha256(otp.encode()).hexdigest(), user.reset_otp_hash):
+    if not secrets.compare_digest(_hash_otp(otp), user.reset_otp_hash):
         user.reset_otp_attempts = (user.reset_otp_attempts or 0) + 1
         db.session.commit()
         return INVALID
     user.password       = generate_password_hash(new_password, method='pbkdf2:sha256')
     user.is_social_only = False
+    user.email_verified = True
     user.token_version  = (user.token_version or 0) + 1
     _clear_otp()
     return jsonify({'message': 'Password reset successfully.'}), 200
@@ -252,8 +254,21 @@ def social_auth():
         base = email.split('@')[0]
         username = _unique_username(base)
         hashed = generate_password_hash(secrets.token_hex(32), method='pbkdf2:sha256')
-        user = User(email=email, username=username, password=hashed, name=display_name, is_social_only=True)
+        user = User(email=email, username=username, password=hashed, name=display_name,
+                    is_social_only=True, email_verified=True)
         db.session.add(user)
+        db.session.commit()
+    elif not user.email_verified:
+        # Signup never proved this address, and the provider just did. If the
+        # password account was registered by someone squatting on the address,
+        # the password and any sessions are theirs: drop both so the verified
+        # owner is the only one who can get in. A genuine owner who also had a
+        # password keeps this sign-in and can set a new one via Forgot Password.
+        if not user.is_social_only:
+            user.password = generate_password_hash(secrets.token_hex(32), method='pbkdf2:sha256')
+            user.is_social_only = True
+            user.token_version = (user.token_version or 0) + 1
+        user.email_verified = True
         db.session.commit()
 
     access  = create_access_token(identity=str(user.id))
@@ -262,6 +277,15 @@ def social_auth():
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
+def _hash_otp(otp: str) -> str:
+    """Keyed hash for the stored reset code. A 6-digit code has only 900,000
+    values, so a bare SHA-256 reverses instantly for anyone holding a DB
+    snapshot; keying it with a server secret means the snapshot alone isn't
+    enough. Changing JWT_SECRET_KEY invalidates codes still in flight."""
+    key = ('otp:' + current_app.config['JWT_SECRET_KEY']).encode()
+    return hmac.new(key, otp.encode(), hashlib.sha256).hexdigest()
+
 
 def _send_otp_email(recipient: str, otp: str) -> None:
     # Sent via Resend's HTTPS API — Railway blocks outbound SMTP ports, so
@@ -400,9 +424,14 @@ def _verify_apple_token(identity_token: str):
             audience=bundle_id,
             issuer='https://appleid.apple.com',
         )
-        return payload.get('email'), None
     except Exception as exc:
         raise ValueError(f'Apple token verification failed: {exc}') from exc
+    # Accounts are matched by email, same as the Google path. Apple documents
+    # this claim as always true (as bool or "true"), so this only rejects a
+    # token that contradicts that.
+    if payload.get('email') and str(payload.get('email_verified')).lower() != 'true':
+        raise ValueError('Apple email is not verified')
+    return payload.get('email'), None
 
 
 def _unique_username(base: str) -> str:

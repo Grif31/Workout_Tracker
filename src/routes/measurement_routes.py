@@ -1,5 +1,5 @@
 import os
-import time
+import secrets
 from datetime import datetime
 from flask import Blueprint, jsonify, request, current_app, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -135,7 +135,10 @@ def upload_progress_photo():
     os.makedirs(photos_dir, exist_ok=True)
 
     ext = secure_filename(file.filename).rsplit('.', 1)[1].lower()
-    filename = f'{user_id}_{int(time.time() * 1000)}.{ext}'
+    # Served from public /static, so the URL is the only thing guarding a body
+    # photo. A random part keeps it from being guessable from the user id and
+    # an upload time.
+    filename = f'{user_id}_{secrets.token_urlsafe(16)}.{ext}'
     file.save(os.path.join(photos_dir, filename))
 
     host = request.host_url.rstrip('/')

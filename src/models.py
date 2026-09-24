@@ -24,6 +24,11 @@ class User(db.Model):
     # bumping it revokes every token issued before, which is the only way a
     # password change can lock out someone holding a stolen 30-day refresh token.
     token_version      = db.Column(db.Integer,    default=0, nullable=False, server_default='0')
+    # Signup never proves the address is theirs; an Apple/Google sign-in or a
+    # completed password reset does. Social login links by email, so an
+    # unproven password account for someone else's address must not survive
+    # that address's real owner signing in (see social_auth).
+    email_verified     = db.Column(db.Boolean,    default=False, nullable=False, server_default=db.false())
     gender            = db.Column(db.String(10),  nullable=True)   # 'male' | 'female' | None
     birth_date        = db.Column(db.Date,          nullable=True)
     workouts = db.relationship('Workout', backref='user', lazy=True)

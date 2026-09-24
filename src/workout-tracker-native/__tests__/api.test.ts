@@ -5,6 +5,8 @@ import {
 
 jest.mock('../utils/toast', () => ({ showToast: jest.fn() }));
 const { showToast } = require('../utils/toast');
+// Tokens persist to SecureStore (see utils/tokenStorage); this is the mock's backing map.
+const secure: Map<string, string> = require('expo-secure-store').__store;
 
 type Resp = { status: number; body?: any } | Error;
 
@@ -32,6 +34,7 @@ describe('apiFetch', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     await AsyncStorage.clear();
+    secure.clear();
     setTokens('old-access', 'old-refresh');
     registerUnauthCallback(onUnauth);
   });
@@ -75,8 +78,11 @@ describe('apiFetch', () => {
     expect(refreshInit.headers.Authorization).toBe('Bearer old-refresh');
     expect(fetchMock.mock.calls[2][1].method).toBe('POST');
     expect(authHeader(fetchMock.mock.calls[2])).toBe('Bearer new-access');
-    expect(await AsyncStorage.getItem('token')).toBe('new-access');
-    expect(await AsyncStorage.getItem('refresh_token')).toBe('new-refresh');
+    expect(secure.get('token')).toBe('new-access');
+    expect(secure.get('refresh_token')).toBe('new-refresh');
+    // Never back in plaintext AsyncStorage.
+    expect(await AsyncStorage.getItem('token')).toBeNull();
+    expect(await AsyncStorage.getItem('refresh_token')).toBeNull();
     expect(onUnauth).not.toHaveBeenCalled();
 
     // The rotated refresh token is used for the next refresh.
@@ -97,16 +103,18 @@ describe('apiFetch', () => {
   });
 
   it.each([401, 422])('logs out when the refresh token is rejected with %i', async status => {
-    await AsyncStorage.multiSet([['token', 'old-access'], ['refresh_token', 'old-refresh'], ['user', '{"id":1}']]);
+    secure.set('token', 'old-access');
+    secure.set('refresh_token', 'old-refresh');
+    await AsyncStorage.setItem('user', '{"id":1}');
     queueFetch({ status: 401 }, { status });
 
     const r = await apiFetch('/api/workouts');
 
     expect(r.status).toBe(401);
     expect(onUnauth).toHaveBeenCalledTimes(1);
-    expect(await AsyncStorage.multiGet(['token', 'refresh_token', 'user'])).toEqual([
-      ['token', null], ['refresh_token', null], ['user', null],
-    ]);
+    expect(secure.has('token')).toBe(false);
+    expect(secure.has('refresh_token')).toBe(false);
+    expect(await AsyncStorage.getItem('user')).toBeNull();
     // Tokens were wiped in memory too: the next request goes out without auth.
     const after = queueFetch({ status: 200 });
     await apiFetch('/api/workouts');
@@ -117,14 +125,15 @@ describe('apiFetch', () => {
     ['a server error', { status: 503 }],
     ['a network failure', new TypeError('Network request failed')],
   ])('keeps the session when refresh fails with %s', async (_label, refreshResult) => {
-    await AsyncStorage.multiSet([['token', 'old-access'], ['refresh_token', 'old-refresh']]);
+    secure.set('token', 'old-access');
+    secure.set('refresh_token', 'old-refresh');
     queueFetch({ status: 401 }, refreshResult as Resp);
 
     const r = await apiFetch('/api/workouts');
 
     expect(r.status).toBe(401);
     expect(onUnauth).not.toHaveBeenCalled();
-    expect(await AsyncStorage.getItem('refresh_token')).toBe('old-refresh');
+    expect(secure.get('refresh_token')).toBe('old-refresh');
     const after = queueFetch({ status: 200 });
     await apiFetch('/api/workouts');
     expect(authHeader(after.mock.calls[0])).toBe('Bearer old-access');

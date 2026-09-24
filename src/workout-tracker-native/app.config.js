@@ -51,8 +51,11 @@ module.exports = {
         'android.permission.POST_NOTIFICATIONS',
         'android.permission.RECEIVE_BOOT_COMPLETED',
         'android.permission.VIBRATE',
-        'android.permission.RECORD_AUDIO',
       ],
+      // Nothing records audio (image picker is photos-only), and App Review and
+      // the Play listing both surface a mic permission. Blocked rather than just
+      // omitted so a library's config plugin can't merge it back in.
+      blockedPermissions: ['android.permission.RECORD_AUDIO'],
     },
     web: {
       favicon: './assets/favicon.png',
@@ -64,6 +67,14 @@ module.exports = {
     },
     plugins: [
       'expo-dev-client',
+      [
+        // Auth tokens live in the keychain/keystore. The plugin's default Face ID
+        // prompt string is for biometric-gated items, which the app has none of;
+        // its Android backup rules stay on, since restored keystore ciphertext
+        // can't be decrypted on a new device anyway.
+        'expo-secure-store',
+        { faceIDPermission: false },
+      ],
       'expo-asset',
       'expo-web-browser',
       [
@@ -92,6 +103,8 @@ module.exports = {
         {
           photosPermission:
             'Aretē accesses your photos to set a profile picture and add progress photos.',
+          // The plugin adds RECORD_AUDIO and an iOS mic prompt by default, for video.
+          microphonePermission: false,
         },
       ],
       [

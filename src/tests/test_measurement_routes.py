@@ -230,6 +230,19 @@ class TestUploadProgressPhoto:
         files = os.listdir(tmp_static / 'progress_photos')
         assert len(files) == 1
 
+    def test_filename_has_an_unguessable_part(self, client, auth_token, tmp_static):
+        """Served from public /static, so the URL is the only guard on a body photo.
+        `{id}_{ms}` could be walked by anyone who knew roughly when it was taken."""
+        me_id = client.get('/api/me', headers=auth_headers(auth_token)).get_json()['id']
+        names = {os.path.basename(self._upload(client, auth_token, tmp_static).get_json()['photo_url'])
+                 for _ in range(2)}
+        assert len(names) == 2
+        for name in names:
+            stem = name.rsplit('.', 1)[0]
+            suffix = stem.split('_', 1)[1]
+            assert stem.startswith(f'{me_id}_')
+            assert not suffix.isdigit() and len(suffix) >= 20
+
     def test_upload_appears_in_list(self, client, auth_token, tmp_static):
         self._upload(client, auth_token, tmp_static)
         rows = client.get('/api/progress-photos', headers=auth_headers(auth_token)).get_json()
