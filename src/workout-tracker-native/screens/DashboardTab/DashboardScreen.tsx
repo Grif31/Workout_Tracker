@@ -159,14 +159,13 @@ function WeekCalendar({
               style={[
                 calStyles.cell,
                 isToday && calStyles.cellToday,
-                hasWorkout && calStyles.cellWorkout,
                 isSelected && calStyles.cellSelected,
               ]}
             >
-              <Text style={[calStyles.letter, isToday && calStyles.letterToday, hasWorkout && calStyles.letterWorkout, isSelected && calStyles.letterSelected]}>
+              <Text style={[calStyles.letter, isToday && calStyles.letterToday, isSelected && calStyles.letterSelected]}>
                 {letter}
               </Text>
-              <Text style={[calStyles.num, isToday && calStyles.numToday, hasWorkout && calStyles.numWorkout, isSelected && calStyles.numSelected]}>
+              <Text style={[calStyles.num, isToday && calStyles.numToday, isSelected && calStyles.numSelected]}>
                 {d.getDate()}
               </Text>
               {hasWorkout && <View style={[calStyles.dot, isSelected && calStyles.dotSelected]} />}
@@ -208,13 +207,10 @@ const createCalStyles = (colors: Colors) => StyleSheet.create({
     justifyContent: 'center',
   },
   cellToday: { backgroundColor: colors.save + '18', borderWidth: 1, borderColor: colors.save },
-  cellWorkout: { backgroundColor: colors.accent + '22' },
   letter: { fontSize: typography.fontSize.xs, fontWeight: '600', color: colors.textSecondary },
   letterToday: { color: colors.save },
-  letterWorkout: { color: colors.accent },
   num: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
   numToday: { color: colors.save },
-  numWorkout: { color: colors.accent },
   dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.accent, marginTop: 1 },
   cellSelected: { backgroundColor: colors.save, borderWidth: 1, borderColor: colors.save },
   letterSelected: { color: colors.accentText },
