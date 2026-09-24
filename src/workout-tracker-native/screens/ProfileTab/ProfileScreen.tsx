@@ -434,42 +434,47 @@ export default function ProfileScreen({ navigation }: Props) {
         </View>
       </TouchableOpacity>
 
-      {/* Stats boxes */}
-      <View style={[styles.statsRow, { borderTopColor: GREEK_RANK_COLORS[greekRank ?? 'Neophyte'] ?? GREEK_RANK_COLORS.Neophyte }]}>
-        <View style={styles.statBox}>
-          <Text style={styles.statLabel}>Workouts</Text>
-          <Text style={styles.statValue}>{stats?.total_workouts ?? '—'}</Text>
-        </View>
-        <View style={[styles.statBox, styles.statBoxDivider]}>
-          <Text style={styles.statLabel}>Longest Streak</Text>
-          <Text style={styles.statValue}>{stats ? `${stats.longest_streak}w` : '—'}</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statLabel}>Total Volume</Text>
-          <Text style={styles.statValue}>{stats ? `${fmtVolume(stats.total_volume)} ${unit}` : '—'}</Text>
-        </View>
-      </View>
-
-      {/* Cardio totals, the runner's counterpart to Total Volume. Hidden for
-          lifters: nothing to show until an activity is logged. */}
-      {!!stats?.cardio_activities && (
-        <View style={styles.cardioStatsRow}>
+      {/* Stats: one card, with the cardio totals as a second row when there are any */}
+      <View
+        testID="profile-stats-card"
+        style={[styles.statsCard, { borderTopColor: GREEK_RANK_COLORS[greekRank ?? 'Neophyte'] ?? GREEK_RANK_COLORS.Neophyte }]}
+      >
+        <View style={styles.statsRow}>
           <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Activities</Text>
-            <Text style={styles.statValue}>{stats.cardio_activities}</Text>
+            <Text style={styles.statLabel}>Workouts</Text>
+            <Text style={styles.statValue}>{stats?.total_workouts ?? '—'}</Text>
           </View>
           <View style={[styles.statBox, styles.statBoxDivider]}>
-            {/* Machine cardio is often logged as time with no distance, which
-                would read "0 mi" — show what they actually logged */}
-            <Text style={styles.statLabel}>{stats.cardio_distance_km > 0 ? 'Total Distance' : 'Total Time'}</Text>
-            <Text style={styles.statValue}>
-              {stats.cardio_distance_km > 0
-                ? `${roundTenth(toDisplayDistance(stats.cardio_distance_km, distanceUnit)).toLocaleString()} ${distanceUnit}`
-                : fmtDuration(stats.cardio_minutes)}
-            </Text>
+            <Text style={styles.statLabel}>Longest Streak</Text>
+            <Text style={styles.statValue}>{stats ? `${stats.longest_streak}w` : '—'}</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>Total Volume</Text>
+            <Text style={styles.statValue}>{stats ? `${fmtVolume(stats.total_volume)} ${unit}` : '—'}</Text>
           </View>
         </View>
-      )}
+
+        {/* Cardio totals, the runner's counterpart to Total Volume. Hidden for
+            lifters: nothing to show until an activity is logged. */}
+        {!!stats?.cardio_activities && (
+          <View style={[styles.statsRow, styles.statsRowDivider]}>
+            <View style={styles.statBox}>
+              <Text style={styles.statLabel}>Activities</Text>
+              <Text style={styles.statValue}>{stats.cardio_activities}</Text>
+            </View>
+            <View style={[styles.statBox, styles.statBoxDivider]}>
+              {/* Machine cardio is often logged as time with no distance, which
+                  would read "0 mi" — show what they actually logged */}
+              <Text style={styles.statLabel}>{stats.cardio_distance_km > 0 ? 'Total Distance' : 'Total Time'}</Text>
+              <Text style={styles.statValue}>
+                {stats.cardio_distance_km > 0
+                  ? `${roundTenth(toDisplayDistance(stats.cardio_distance_km, distanceUnit)).toLocaleString()} ${distanceUnit}`
+                  : fmtDuration(stats.cardio_minutes)}
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
 
       <TouchableOpacity
         style={styles.weightRow}
@@ -806,8 +811,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '600',
     color: colors.textPrimary,
   },
-  statsRow: {
-    flexDirection: 'row',
+  statsCard: {
     marginHorizontal: spacing.md,
     marginBottom: spacing.sm,
     backgroundColor: colors.surface,
@@ -816,16 +820,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderTopWidth: 2,
     borderTopColor: colors.border,
   },
-  // Same card as statsRow, minus the rank-colored top border that belongs to
-  // the row above it
-  cardioStatsRow: {
-    flexDirection: 'row',
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-    backgroundColor: colors.surface,
-    borderRadius: spacing.sm,
-    overflow: 'hidden',
-  },
+  statsRow: { flexDirection: 'row' },
+  // Between the lifting row and the cardio row, matching the column dividers.
+  statsRowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   statBox: {
     flex: 1,
     paddingVertical: spacing.sm + 2,

@@ -58,6 +58,17 @@ describe('ProfileScreen', () => {
     expect(getByText('50 mi')).toBeTruthy();
   });
 
+  it('keeps the cardio totals in the same card as the lifting stats', async () => {
+    withCardio();
+    const { getByText, getByTestId } = render(<ProfileScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Total Distance')).toBeTruthy());
+    const card = getByTestId('profile-stats-card');
+    const inCard = (label: string) => card.findAll(n => n.props.children === label).length > 0;
+    for (const label of ['Workouts', 'Longest Streak', 'Total Volume', 'Activities', 'Total Distance']) {
+      expect(inCard(label)).toBe(true);
+    }
+  });
+
   it('shows total distance in km when that is the preference', async () => {
     await AsyncStorage.setItem('gps_distance_unit_1', 'km');
     withCardio();
