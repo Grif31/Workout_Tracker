@@ -89,6 +89,15 @@ describe('CardioDetailsScreen', () => {
     expect(getAllByText('Duration').length).toBeGreaterThan(0);
   });
 
+  it('shows the activity name over the map in readable text, not the accent text colour', async () => {
+    // accentText is for text on an accent fill (black here, as with a light
+    // accent); on bare map tiles it disappeared.
+    const r = await renderScreen();
+    const badge = await r.findByText('Running');
+    const style = require('react-native').StyleSheet.flatten(badge.props.style);
+    expect(style.color).toBe('#FFF');
+  });
+
   it('labels the distance in the unit the user prefers', async () => {
     await AsyncStorage.setItem(UNIT_KEY, 'km');
     const { getAllByText } = await renderScreen();

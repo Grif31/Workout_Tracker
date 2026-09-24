@@ -303,8 +303,10 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
         </TouchableOpacity>
 
         {/* Activity badge */}
-        <View style={[styles.activityBadge, { top: insets.top + spacing.sm }]}>
-          <Text style={styles.activityBadgeText}>{activityName}</Text>
+        <View style={[styles.activityBadge, { top: insets.top + spacing.sm }]} pointerEvents="none">
+          <View style={styles.activityPill}>
+            <Text style={styles.activityBadgeText} numberOfLines={1}>{activityName}</Text>
+          </View>
         </View>
       </View>
 
@@ -431,13 +433,20 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'transparent',
   },
+  // A pill like the overlay buttons beside it. Bare text over the map took
+  // accentText, which is dark for light accents and vanished on the tiles.
+  activityPill: {
+    height: 36,
+    maxWidth: '50%',
+    paddingHorizontal: spacing.md,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+  },
   activityBadgeText: {
     fontSize: typography.fontSize.sm,
     fontWeight: '700',
-    color: colors.accentText,
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    color: colors.textPrimary,
   },
 
   panel: { flex: 1 },
