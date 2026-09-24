@@ -6,6 +6,7 @@ import { registerToastCallback } from '../utils/toast';
 import { mockFetchSequence, createMockNavigation, createMockRoute } from './testUtils';
 import DashboardScreen from '../screens/DashboardTab/DashboardScreen';
 import { appCache } from '../utils/appCache';
+import ProfileAvatarFrame from '../components/ProfileAvatarFrame';
 
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 jest.mock('theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));
@@ -98,6 +99,39 @@ describe('DashboardScreen', () => {
       ));
       const { getByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
       await waitFor(() => expect(getByText(/Test.User/)).toBeTruthy());
+    });
+  });
+
+  describe('profile photo beside the greeting', () => {
+    it('wears the frame equipped on Greek Rank', async () => {
+      await AsyncStorage.setItem('profile_frame_rank_1', 'Titan');
+      const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(r.UNSAFE_getByType(ProfileAvatarFrame).props.rankName).toBe('Titan'));
+    });
+
+    it('starts on the Neophyte frame before one is equipped', async () => {
+      const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(r.getByTestId('home-avatar')).toBeTruthy());
+      expect(r.UNSAFE_getByType(ProfileAvatarFrame).props.rankName).toBe('Neophyte');
+    });
+
+    it('shows the profile photo, and the placeholder without one', async () => {
+      mockFetchSequence([
+        { data: { ...mockUser, profile_pic_url: '/static/uploads/me.jpg' } },
+        { data: mockWorkouts },
+        { data: mockStats },
+      ]);
+      const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      const photo = () => r.getByTestId('home-avatar').findByType(require('react-native').Image);
+      await waitFor(() => expect(photo().props.source.uri).toMatch(/\/static\/uploads\/me\.jpg$/));
+    });
+
+    it('opens the Profile tab', async () => {
+      nav.navigate.mockClear();
+      const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(r.getByLabelText('Open your profile')).toBeTruthy());
+      fireEvent.press(r.getByLabelText('Open your profile'));
+      expect(nav.navigate).toHaveBeenCalledWith('ProfileTab');
     });
   });
 

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Alert,
+  View, Text, TouchableOpacity, StyleSheet, Alert, Image,
   ActivityIndicator, Animated, ScrollView, PanResponder, Modal, RefreshControl, Easing,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,8 +16,8 @@ import { fmtDuration } from '../../utils/cardioFormat';
 import { toLocalDateStr } from '../../utils/date';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { WEEKLY_GOAL_KEY } from '../../constants/storageKeys';
-import { apiFetch, isNetworkError } from '../../utils/api';
+import { PROFILE_FRAME_RANK_KEY, WEEKLY_GOAL_KEY } from '../../constants/storageKeys';
+import { apiFetch, isNetworkError, resolveMediaUrl } from '../../utils/api';
 import { announceFlushResult, flushQueue, getPendingCount, onPendingCountChange } from '../../utils/offlineQueue';
 import { showToast } from '../../utils/toast';
 import { appCache, useRefetchGate } from '../../utils/appCache';
@@ -27,6 +27,7 @@ import { WEEKLY_SUMMARY_LAST_SHOWN_KEY } from './WeeklySummaryScreen';
 import SectionRule from '../../components/SectionRule';
 import PressableScale from '../../components/PressableScale';
 import StreakFlame from '../../components/StreakFlame';
+import ProfileAvatarFrame, { frameOverflow } from '../../components/ProfileAvatarFrame';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import { activeDayFilter, cardSize, defaultLayout, fixedHomeLayout, loadDashboardLayout, packRows, saveDashboardLayout, type DashboardLayout } from '../../utils/dashboardLayout';
 import { CARD_SIZES, DASHBOARD_CARDS, HOME_CUSTOMIZATION_ENABLED, type CardSize, type DashboardCardId } from '../../constants/dashboardCards';
@@ -60,7 +61,10 @@ function getDailyGreeting() {
 }
 
 
-type User = { id: number; username: string; email: string; name?: string | null; active_routine_id?: number | null };
+type User = {
+  id: number; username: string; email: string; name?: string | null;
+  active_routine_id?: number | null; profile_pic_url?: string | null;
+};
 type Workout = {
   id: number; name: string; notes: string; date: Date;
   duration?: number; volume?: number; total_reps?: number;
@@ -218,6 +222,10 @@ const createCalStyles = (colors: Colors) => StyleSheet.create({
   dotSelected: { backgroundColor: colors.accentText },
 });
 
+// Home's framed avatar: sized to the two-line greeting beside it.
+const AVATAR_FRAME_SIZE = 44;
+const AVATAR_SIZE = 38;
+
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function DashboardScreen({ navigation }: Props) {
   const { user: authUser } = useAuth();
@@ -236,6 +244,15 @@ export default function DashboardScreen({ navigation }: Props) {
   // The logged-in user covers an empty cache: login already returned the name.
   const displayName = (user?.name || user?.username || authUser?.name || authUser?.username || '')
     .replace(/ /g, ' ');
+  // Same photo and frame as the Profile card. The frame is whichever one the
+  // user equipped on Greek Rank, re-read on focus since they change it there.
+  const profilePicUrl = user?.profile_pic_url ?? authUser?.profile_pic_url;
+  const avatarSource = useMemo(() =>
+    profilePicUrl
+      ? { uri: resolveMediaUrl(profilePicUrl) }
+      : require('../../assets/profile-placeholder.png'),
+  [profilePicUrl]);
+  const [frameRank, setFrameRank] = useState('Neophyte');
   const [activeRoutine, setActiveRoutine] = useState<ActiveRoutine | null>(null);
   const [pendingSyncCount, setPendingSyncCount] = useState(getPendingCount);
   useEffect(() => onPendingCountChange(setPendingSyncCount), []);
@@ -413,6 +430,9 @@ export default function DashboardScreen({ navigation }: Props) {
       AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${authUser.id}`)
         .then(v => { if (v === 'km' || v === 'mi') setDistanceUnit(v); })
         .catch(() => { /* keep the default */ });
+      AsyncStorage.getItem(`${PROFILE_FRAME_RANK_KEY}_${authUser.id}`)
+        .then(v => { if (v) setFrameRank(v); })
+        .catch(() => { /* keep Neophyte */ });
     }
   }, [authUser?.id]));
 
@@ -586,6 +606,19 @@ export default function DashboardScreen({ navigation }: Props) {
                   <Text style={styles.greetingText} numberOfLines={1}>{getDailyGreeting()},</Text>
                   <Text style={styles.greetingName} numberOfLines={1}>{displayName}</Text>
                 </View>
+                {/* Opens the Profile tab as a tab-bar tap would. Naming its root
+                    screen with initial: false would stack Profile on itself. */}
+                <TouchableOpacity
+                  onPress={() => (navigation as any).navigate('ProfileTab')}
+                  // Only the Aretē wreath draws outside the ring; keep it off the edge.
+                  style={[styles.avatarButton, { marginRight: frameOverflow(frameRank, AVATAR_FRAME_SIZE) }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open your profile"
+                  testID="home-avatar"
+                >
+                  <Image source={avatarSource} style={styles.avatarImage} />
+                  <ProfileAvatarFrame rankName={frameRank} size={AVATAR_FRAME_SIZE} avatarSize={AVATAR_SIZE} />
+                </TouchableOpacity>
                 {HOME_CUSTOMIZATION_ENABLED && (
                   <TouchableOpacity
                     onPress={() => setArranging(v => !v)}
@@ -1115,6 +1148,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.md,
   },
   greetingTextBlock: { flex: 1 },
+  avatarButton: {
+    width: AVATAR_FRAME_SIZE, height: AVATAR_FRAME_SIZE, alignItems: 'center', justifyContent: 'center',
+  },
+  avatarImage: { width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2, backgroundColor: colors.border },
   greetingText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
   greetingName: { fontSize: typography.fontSize.xl, fontWeight: '800', color: colors.textPrimary, marginTop: 1 },
 
