@@ -68,10 +68,21 @@ FEED_PR_TYPES = [t for types in FEED_TYPE_FILTERS.values() for t in types]
 RECENT_FEED_WINDOW_DAYS = 7
 
 
-def compute_days_since_last_pr(user_id, now):
-    """Days since the last PR per exercise for the user's 10 most-trained
-    exercises, longest gap first. Shared by the PR Dashboard and the AI Coach."""
-    most_trained = (
+MOST_TRAINED_LIMIT = 10
+
+
+def compute_days_since_last_pr(user_id, now, per_category=False):
+    """Days since the last PR per exercise, longest gap first, for the user's
+    10 most-trained exercises. Shared by the PR Dashboard and the AI Coach.
+
+    per_category (the Dashboard) also adds each category's own 10 most-trained
+    exercises with a PR of that kind. The Dashboard's Weight/Reps/Time/Distance
+    filters pick from these rows, and a lifter's runs and holds rarely make the
+    overall top 10, so capping every category there left Time empty despite
+    real time PRs. Every row carries most_trained, so the unfiltered view can
+    stay the overall top 10. The Coach leaves it off and gets that top 10 only.
+    """
+    trained = (
         db.session.query(
             Exercise.exercise_template_id,
             ExerciseTemplate.name,
@@ -82,9 +93,9 @@ def compute_days_since_last_pr(user_id, now):
         .filter(Workout.user_id == user_id, Exercise.exercise_template_id.isnot(None))
         .group_by(Exercise.exercise_template_id, ExerciseTemplate.name)
         .order_by(func.count(func.distinct(Exercise.workout_id)).desc())
-        .limit(10)
-        .all()
     )
+    trained = trained.all() if per_category else trained.limit(MOST_TRAINED_LIMIT).all()
+    most_trained_ids = {t for t, _, _ in trained[:MOST_TRAINED_LIMIT]}
     # Grouped by (exercise, pr_type, weight_context) rather than just exercise,
     # so the frontend can let users switch "Time Since Last PR" between
     # Weight/Reps/Time/Distance without a second round trip — see by_type
@@ -99,7 +110,7 @@ def compute_days_since_last_pr(user_id, now):
         .filter(
             PREvent.user_id == user_id,
             PREvent.pr_type.in_(FEED_PR_TYPES),
-            PREvent.exercise_template_id.in_([t for t, _, _ in most_trained] or [-1]),
+            PREvent.exercise_template_id.in_([t for t, _, _ in trained] or [-1]),
         )
         .group_by(PREvent.exercise_template_id, PREvent.pr_type, PREvent.weight_context)
         .all()
@@ -129,8 +140,21 @@ def compute_days_since_last_pr(user_id, now):
             'weight_context': None if weight_context < 0 else weight_context,
         }
 
+    # The overall top 10, plus (per_category) each category's own top 10 among
+    # exercises that have a PR of that kind, in most-trained order.
+    included = set(most_trained_ids)
+    if per_category:
+        for category, pr_types in FEED_TYPE_FILTERS.items():
+            with_category = [
+                t for t, _, _ in trained
+                if any(last_by_template_and_type.get(t, {}).get(pt) for pt in pr_types)
+            ]
+            included.update(with_category[:MOST_TRAINED_LIMIT])
+
     days_since_last_pr = []
-    for template_id, name, workout_count in most_trained:
+    for template_id, name, workout_count in trained:
+        if template_id not in included:
+            continue
         by_type = {
             category: _category_summary(template_id, category)
             for category in FEED_TYPE_FILTERS
@@ -152,6 +176,7 @@ def compute_days_since_last_pr(user_id, now):
             'last_pr_at': stalest_summary['last_pr_at'],
             'stalest_category': stalest_category,
             'by_type': by_type,
+            'most_trained': template_id in most_trained_ids,
         })
     days_since_last_pr.sort(key=lambda r: r['days_since_last_pr'], reverse=True)
     return days_since_last_pr
@@ -326,7 +351,7 @@ def get_pr_dashboard():
         sum(value - previous_value for pr_type, value, previous_value in weekly_pr_rows if pr_type == 'max_reps')
     )
 
-    days_since_last_pr = compute_days_since_last_pr(user_id, now)
+    days_since_last_pr = compute_days_since_last_pr(user_id, now, per_category=True)
 
     return jsonify({
         'recent_events': recent_events,

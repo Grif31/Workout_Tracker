@@ -381,6 +381,42 @@ class TestDashboardEndpoint:
         row = next(r for r in data['stats']['days_since_last_pr'] if r['exercise_name'] == 'Running')
         assert row['by_type']['time']['days_since_last_pr'] == 5
 
+    def _ten_busier_lifts_and_one_run(self, client, auth_token):
+        """Ten lifts each trained in two workouts, and one run logged once:
+        the run falls outside the top 10 most-trained exercises."""
+        for i in range(10):
+            tid = create_template(client, auth_token, name=f'Lift {i}')
+            for d in (20, 12):
+                post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 100 + d}],
+                                      date_str=iso(date.today() - timedelta(days=d)))
+        run = create_template(client, auth_token, name='Running', muscle_group='Core')
+        post_cardio_workout(client, auth_token, run, duration_min=30, distance_km=5,
+                            date_str=iso(date.today() - timedelta(days=4)))
+
+    def test_time_filter_reaches_past_the_ten_most_trained_exercises(self, client, auth_token):
+        # A lifter's runs rarely make the top 10 most-trained, so capping
+        # every category at those 10 left Time empty despite real time PRs.
+        self._ten_busier_lifts_and_one_run(client, auth_token)
+        data = client.get('/api/personal-records/dashboard', headers=auth_headers(auth_token)).get_json()
+        rows = data['stats']['days_since_last_pr']
+        running = next((r for r in rows if r['exercise_name'] == 'Running'), None)
+        assert running is not None
+        assert running['by_type']['time']['days_since_last_pr'] == 4
+        # "All" stays the ten most-trained: the run is there for its category only.
+        assert running['most_trained'] is False
+        assert sum(1 for r in rows if r['most_trained']) == 10
+
+    def test_ai_coach_stalled_list_still_only_sees_most_trained(self, client, auth_token, app):
+        from datetime import datetime
+        from routes.personal_record_routes import compute_days_since_last_pr
+        self._ten_busier_lifts_and_one_run(client, auth_token)
+        with app.app_context():
+            from flask_jwt_extended import decode_token
+            user_id = decode_token(auth_token)['sub']
+            rows = compute_days_since_last_pr(user_id, datetime.now())
+        assert len(rows) == 10
+        assert all(r['exercise_name'] != 'Running' for r in rows)
+
     def test_other_users_events_not_visible(self, client, auth_token, auth_token2):
         tid = create_template(client, auth_token, name='Squat', muscle_group='Quads')
         post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 315}])
