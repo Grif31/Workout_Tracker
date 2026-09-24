@@ -5,6 +5,7 @@ import { enqueueWorkout, flushQueue, initPendingCount } from '../utils/offlineQu
 import { registerToastCallback } from '../utils/toast';
 import { mockFetchSequence, createMockNavigation, createMockRoute } from './testUtils';
 import DashboardScreen from '../screens/DashboardTab/DashboardScreen';
+import { appCache } from '../utils/appCache';
 
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 jest.mock('theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));
@@ -71,6 +72,33 @@ describe('DashboardScreen', () => {
   it('shows a greeting with username', async () => {
     const { getByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText(/testuser/i)).toBeTruthy());
+  });
+
+  describe('greeting name right after login', () => {
+    // Every request hangs, so anything on screen came from what was already in
+    // hand at mount, not from the Dashboard's own /api/me.
+    beforeEach(() => {
+      (global.fetch as jest.Mock) = jest.fn(() => new Promise(() => {}));
+    });
+    afterEach(() => appCache.clear());
+
+    it('shows the name from the preloaded profile without waiting on its own request', () => {
+      appCache.set('me', { id: 1, username: 'preloaded', email: 'p@example.com', name: 'Preloaded Person' });
+      const { getByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      // Name spaces render as non-breaking, so match any single character.
+      expect(getByText(/Preloaded.Person/)).toBeTruthy();
+    });
+
+    it('falls back to the logged-in user when its profile request fails', async () => {
+      // Nothing preloaded, and /api/me errors: login already returned the name.
+      (global.fetch as jest.Mock) = jest.fn((url: string) => Promise.resolve(
+        String(url).includes('/api/me')
+          ? { ok: false, status: 500, json: () => Promise.resolve({}) }
+          : { ok: true, status: 200, json: () => Promise.resolve([]) },
+      ));
+      const { getByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(getByText(/Test.User/)).toBeTruthy());
+    });
   });
 
   it('shows the Log Workout button', async () => {

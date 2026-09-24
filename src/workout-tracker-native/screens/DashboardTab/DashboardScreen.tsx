@@ -228,12 +228,18 @@ export default function DashboardScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
-  const [user, setUser] = useState<User>();
+  // Starts from the profile PreloadScreen just fetched. The refetch gate below
+  // counts that preload as this screen's first /api/me, so without this seed
+  // the greeting name and weight unit stayed empty until the cache went stale
+  // (a minute, or the next save) and Home was revisited.
+  const [user, setUser] = useState<User | undefined>(() => appCache.get<User>('me') ?? undefined);
   const weightUnit: WeightUnit = (user as any)?.weight_unit === 'kg' ? 'kg' : 'lbs';
   // Non-breaking spaces inside the name mean a wrap can only happen between
   // the greeting and the name -- never mid-name -- so a long name moves to
   // the second line as a whole instead of splitting across both lines.
-  const displayName = (user?.name || user?.username || '').replace(/ /g, ' ');
+  // The logged-in user covers an empty cache: login already returned the name.
+  const displayName = (user?.name || user?.username || authUser?.name || authUser?.username || '')
+    .replace(/ /g, ' ');
   const [activeRoutine, setActiveRoutine] = useState<ActiveRoutine | null>(null);
   const [pendingSyncCount, setPendingSyncCount] = useState(getPendingCount);
   useEffect(() => onPendingCountChange(setPendingSyncCount), []);
