@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, Pressable,
-  Animated as RNAnimated, Platform,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal,
+  Animated as RNAnimated,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +24,7 @@ import { toLocalDateStr } from '../../utils/date';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import StreakFlame from '../../components/StreakFlame';
 import WeeklySummaryShareCard from '../../components/share/WeeklySummaryShareCard';
+import WeekPickerModal from '../../components/WeekPickerModal';
 import { PR_TYPE_LABELS, PR_TYPE_ORDER } from '../../utils/prFormat';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WeeklySummary'>;
@@ -644,46 +644,16 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
         </ScrollView>
       ) : null}
 
-      {/* Android's DateTimePicker has no inline UI — mounting it pops the
-          system's own calendar dialog, so it needs no wrapping Modal/overlay
-          at all (matches WorkoutHeader.tsx's platform handling). */}
-      {pickerVisible && Platform.OS === 'android' && (
-        <DateTimePicker
-          value={data ? parseLocalDate(data.week_start) : new Date()}
-          mode="date"
-          display="default"
-          maximumDate={new Date()}
-          onChange={(_event: any, date?: Date) => {
-            setPickerVisible(false);
-            if (date) goToWeek(toLocalDateStr(date));
-          }}
+      {/* Our own calendar rather than the system date picker, which can't
+          mark the days a workout was logged on either platform. */}
+      {data && (
+        <WeekPickerModal
+          visible={pickerVisible}
+          weekStart={data.week_start}
+          onSelectDate={goToWeek}
+          onClose={() => setPickerVisible(false)}
         />
       )}
-
-      <Modal
-        visible={pickerVisible && Platform.OS === 'ios'}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPickerVisible(false)}
-      >
-        <Pressable style={styles.pickerOverlay} onPress={() => setPickerVisible(false)}>
-          <Pressable style={[styles.pickerCard, { marginTop: insets.top + 96 }]} onPress={() => {}}>
-            <Text style={styles.pickerTitle}>Pick a Week</Text>
-            <DateTimePicker
-              value={data ? parseLocalDate(data.week_start) : new Date()}
-              mode="date"
-              display="inline"
-              maximumDate={new Date()}
-              themeVariant={mode === 'dark' ? 'dark' : 'light'}
-              textColor={colors.textPrimary}
-              accentColor={colors.accent}
-              onChange={(_event: any, date?: Date) => {
-                if (date) { goToWeek(toLocalDateStr(date)); setPickerVisible(false); }
-              }}
-            />
-          </Pressable>
-        </Pressable>
-      </Modal>
 
       <Modal
         visible={prsModalVisible}
@@ -803,13 +773,4 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   prMoreText: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
-  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center' },
-  pickerCard: {
-    width: '88%', maxWidth: 420, backgroundColor: colors.surface, borderRadius: radius.md,
-    padding: spacing.md, gap: spacing.sm,
-  },
-  pickerTitle: {
-    fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary,
-    textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: spacing.xs,
-  },
 });

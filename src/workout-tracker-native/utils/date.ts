@@ -13,6 +13,22 @@ export function parseApiDate(value: string): Date {
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
 }
 
+// One month as calendar rows starting on Monday, the week the app's weekly
+// stats use, so each row is exactly one Weekly Summary week. Cells are local
+// "YYYY-MM-DD" strings, with null padding before the 1st and after the last day.
+export function mondayFirstMonthGrid(year: number, month: number): (string | null)[][] {
+  const leading = (new Date(year, month, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (string | null)[] = [
+    ...Array<null>(leading).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => toLocalDateStr(new Date(year, month, i + 1))),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+  const rows: (string | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+  return rows;
+}
+
 // Coarse "how long since" for a last-updated stamp, where recency reads better
 // than a timestamp. Minute resolution below an hour, then hours, then days.
 export function timeAgo(isoStr: string): string {

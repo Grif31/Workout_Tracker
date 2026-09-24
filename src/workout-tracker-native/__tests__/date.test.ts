@@ -1,4 +1,4 @@
-import { parseApiDate, toLocalDateStr, timeAgo } from '../utils/date';
+import { mondayFirstMonthGrid, parseApiDate, toLocalDateStr, timeAgo } from '../utils/date';
 
 describe('toLocalDateStr', () => {
   it('formats as YYYY-MM-DD with zero padding', () => {
@@ -63,5 +63,29 @@ describe('timeAgo', () => {
     expect(timeAgo(at(23 * 60 * 60 * 1000))).toBe('23h ago');
     expect(timeAgo(at(24 * 60 * 60 * 1000))).toBe('1d ago');
     expect(timeAgo(at(9 * 24 * 60 * 60 * 1000))).toBe('9d ago');
+  });
+});
+
+describe('mondayFirstMonthGrid', () => {
+  it('starts each row on Monday, padding before the 1st and after the last day', () => {
+    // September 2026 starts on a Tuesday and ends on a Wednesday.
+    const rows = mondayFirstMonthGrid(2026, 8);
+    expect(rows).toHaveLength(5);
+    expect(rows[0]).toEqual([null, '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05', '2026-09-06']);
+    expect(rows[2][0]).toBe('2026-09-14');
+    expect(rows[4]).toEqual(['2026-09-28', '2026-09-29', '2026-09-30', null, null, null, null]);
+  });
+
+  it('takes a sixth row when the month needs it', () => {
+    // August 2026: starts Saturday, 31 days, so the 31st (a Monday) wraps.
+    const rows = mondayFirstMonthGrid(2026, 7);
+    expect(rows).toHaveLength(6);
+    expect(rows[0].slice(0, 5)).toEqual([null, null, null, null, null]);
+    expect(rows[5]).toEqual(['2026-08-31', null, null, null, null, null, null]);
+  });
+
+  it('uses local dates, not UTC, so no day shifts in the Americas', () => {
+    // Jest runs in America/Los_Angeles; a UTC-built string would start a day early.
+    expect(mondayFirstMonthGrid(2026, 0).flat().filter(Boolean)[0]).toBe('2026-01-01');
   });
 });
