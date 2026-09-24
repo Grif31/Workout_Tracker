@@ -196,6 +196,30 @@ describe('PRDashboardScreen', () => {
     expect(getByText('@ 185 lbs')).toBeTruthy();
   });
 
+  it('keeps "All" to the most-trained lifts but lists a run under Time', async () => {
+    // A lifter's run sits outside their top 10 most-trained exercises; the
+    // API includes it for the Time filter only, flagged most_trained: false.
+    const run = {
+      exercise_template_id: 30, exercise_name: 'Running', workout_count: 1,
+      days_since_last_pr: 4, last_pr_at: '2026-08-07T00:00:00', stalest_category: 'time' as const,
+      most_trained: false,
+      by_type: { weight: null, reps: null, time: { days_since_last_pr: 4, last_pr_at: '2026-08-07T00:00:00', weight_context: null }, distance: null },
+    };
+    mockFetch({
+      ...dashboardPayload,
+      stats: {
+        ...dashboardPayload.stats,
+        days_since_last_pr: [{ ...dashboardPayload.stats.days_since_last_pr[0], most_trained: true }, run],
+      },
+    });
+    const { getByText, queryByText, getAllByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Squat')).toBeTruthy());
+    expect(queryByText('Running')).toBeNull();
+    fireEvent.press(getAllByText('Time')[0]); // the stalled section's own picker
+    await waitFor(() => expect(getByText('Running')).toBeTruthy());
+    expect(queryByText('Squat')).toBeNull();
+  });
+
   it('switches the stalled section to a per-type day count without refetching', async () => {
     const { getByText, getAllByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('32d ago')).toBeTruthy());
@@ -403,6 +427,50 @@ describe('PRDashboardScreen', () => {
     const screenWidth = Dimensions.get('window').width;
     const cardAvailableWidth = screenWidth - 16 * 5; // spacing.md is mocked to 16 above
     expect(props.width + props.yAxisLabelWidth).toBe(cardAvailableWidth);
+  });
+
+  describe('pinned progression chart fits its card', () => {
+    const history = (n: number) => Array.from({ length: n }, (_, i) => ({
+      id: 500 + i, exercise_template_id: 12, workout_id: i + 1, pr_type: 'max_weight',
+      value: 300 + i * 5, weight_context: null, previous_value: i ? 295 + i * 5 : null, improved_by: 5,
+      achieved_at: `2026-${String(1 + Math.floor(i / 28)).padStart(2, '0')}-${String(1 + (i % 28)).padStart(2, '0')}T00:00:00`,
+    }));
+    const renderWith = async (n: number) => {
+      mockLineChartRender.mockClear();
+      await AsyncStorage.setItem('pr_dashboard_pins_1', JSON.stringify([{ id: 12, name: 'Deadlift' }]));
+      (global.fetch as jest.Mock) = jest.fn((url: any) => Promise.resolve({
+        ok: true, status: 200,
+        json: () => Promise.resolve(String(url).includes('/api/personal-records/history') ? history(n) : dashboardPayload),
+      }));
+      render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(mockLineChartRender.mock.calls.length).toBeGreaterThan(0));
+      return mockLineChartRender.mock.calls[mockLineChartRender.mock.calls.length - 1][0];
+    };
+    // What the points take up inside the plot area, which must not exceed `width`.
+    const footprint = (props: any) =>
+      props.initialSpacing + props.spacing * (props.data.length - 1) + props.endSpacing;
+
+    it('fits a short series, edge spacing included, without scrolling', async () => {
+      const props = await renderWith(2);
+      expect(footprint(props)).toBeLessThanOrEqual(props.width + 0.001);
+      expect(props.disableScroll).toBe(true);
+    });
+
+    it('shrinks the spacing for a long series instead of running past the card', async () => {
+      const props = await renderWith(40);
+      expect(props.data).toHaveLength(40);
+      expect(footprint(props)).toBeLessThanOrEqual(props.width + 0.001);
+      expect(footprint(props)).toBeGreaterThan(props.width - 1);   // uses the width it has
+    });
+
+    it('thins the dates on a crowded chart and keeps the newest one', async () => {
+      const props = await renderWith(40);
+      const texts = props.data.map((d: any) => (d.labelComponent ? d.labelComponent().props.children : ''));
+      const shown = texts.filter((t: string) => t !== '');
+      expect(shown.length).toBeGreaterThan(1);
+      expect(shown.length).toBeLessThan(40);
+      expect(texts[texts.length - 1]).not.toBe('');
+    });
   });
 
   it('shows the weekly title and no fallback note under the normal week scope', async () => {

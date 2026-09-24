@@ -23,6 +23,7 @@ import { captureAndShare } from '../../utils/shareCapture';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
 import {
   fmtPrValue, fmtPrContext, fmtPrDelta, fmtRelativeDate, fmtChartDate, formatChartYLabel, computeChartYAxisRange,
+  computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH,
   prTypeIcon, stalledUrgency, stalledCategoryToPrType, pickDefaultPrSeries, PR_METRIC_OPTIONS,
   type PREventItem, type StalledCategory,
 } from '../../utils/prFormat';
@@ -62,6 +63,10 @@ type DashboardData = {
       // Per-category breakdown (same categories as the feed's filter chips),
       // null when the exercise has never earned a PR of that type.
       by_type: Record<StalledCategory, { days_since_last_pr: number; last_pr_at: string; weight_context: number | null } | null>;
+      // One of the user's 10 most-trained exercises. The rest are only here
+      // for a category filter (a lifter's runs, for Time), so "All" skips
+      // them. Absent on an older API, where every row was most-trained.
+      most_trained?: boolean;
     }[];
   };
 };
@@ -115,11 +120,10 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PIN_CHART_W = SCREEN_WIDTH - spacing.md * 5;
 // gifted-charts renders yAxisLabelWidth *in addition to* the `width` prop
 // (it's the reserved column for y-axis labels, drawn to the left of the
-// plot area) — so the plot area itself must be narrower than PIN_CHART_W by
-// that amount, or the chart's total footprint overflows the card.
+// plot area); computeChartXFit takes it off PIN_CHART_W to get the plot width.
 const PIN_CHART_Y_LABEL_W = 28;
-const PIN_CHART_PLOT_W = PIN_CHART_W - PIN_CHART_Y_LABEL_W;
 const PIN_CHART_Y_SECTIONS = 2;
+const PIN_CHART_EDGE_SPACING = 12;
 
 type PinnedProgressionSectionProps = {
   pins: PRPin[];
@@ -191,12 +195,36 @@ const PinnedProgressionSection = React.memo(function PinnedProgressionSection({
                   )}
                   <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
                 </View>
-                {canChart ? (
+                {canChart ? (() => {
+                  // Every point fits inside the card, so a long history
+                  // compresses instead of scrolling (same fit as the score charts).
+                  const chartFit = computeChartXFit(series.length, PIN_CHART_W, PIN_CHART_Y_LABEL_W, PIN_CHART_EDGE_SPACING);
+                  return (
                   <LineChart
-                    data={series.map(e => ({ value: e.value, label: fmtChartDate(e.achieved_at) }))}
-                    width={PIN_CHART_PLOT_W}
+                    data={series.map((e, i) => {
+                      const dateLabel = fmtChartDate(e.achieved_at);
+                      return {
+                        value: e.value,
+                        // Drawn wider than the library's spacing-wide label box
+                        // and centred on the point, so a date stays on one line.
+                        labelComponent: showChartXLabel(i, series.length, chartFit.labelEvery)
+                          ? () => (
+                            <Text
+                              numberOfLines={1}
+                              style={[styles.chartAxisLabel, styles.pinChartDate, {
+                                marginLeft: (chartFit.spacing - CHART_X_LABEL_WIDTH) / 2,
+                              }]}
+                            >
+                              {dateLabel}
+                            </Text>
+                          )
+                          : undefined,
+                      };
+                    })}
+                    width={chartFit.plotWidth}
                     height={70}
-                    spacing={Math.max(24, Math.floor(PIN_CHART_PLOT_W / Math.max(series.length - 1, 1)))}
+                    spacing={chartFit.spacing}
+                    disableScroll
                     color={colors.accent}
                     thickness={2}
                     hideDataPoints
@@ -223,10 +251,11 @@ const PinnedProgressionSection = React.memo(function PinnedProgressionSection({
                     yAxisOffset={pinChartYAxisOffset}
                     roundToDigits={0}
                     formatYLabel={formatChartYLabel}
-                    initialSpacing={12}
-                    endSpacing={12}
+                    initialSpacing={PIN_CHART_EDGE_SPACING}
+                    endSpacing={PIN_CHART_EDGE_SPACING}
                   />
-                ) : (
+                  );
+                })() : (
                   <Text style={styles.pinCardEmpty}>
                     {pinSeriesLoading ? 'Loading…' : series.length === 1 ? 'Log another PR to see a trend' : 'No PR history yet'}
                   </Text>
@@ -452,7 +481,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
   const bests = data?.workout_bests;
   const stalled = useMemo(() => {
     const rows = stats?.days_since_last_pr ?? [];
-    if (!stalledFilter) return rows.slice(0, STALLED_SHOWN);
+    if (!stalledFilter) return rows.filter(r => r.most_trained !== false).slice(0, STALLED_SHOWN);
     // Re-derive from each row's own by_type entry — exercises that have
     // never earned a PR of this type drop out rather than showing a
     // misleading "stalled since forever". `by_type` may be absent if the API
@@ -548,7 +577,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
     hasStalledData ? (
         <View>
           <GoldSectionRule icon="hourglass-outline" label="Time Since Last PR" style={styles.sectionHeaderRow} />
-          <SegmentedControl options={FILTERS} value={stalledFilter} onChange={setStalledFilter} style={styles.segmentedSpacing} />
+          <SegmentedControl options={FILTERS} value={stalledFilter} onChange={setStalledFilter} style={styles.stalledFilterSpacing} />
           {stalled.length > 0 ? (
             <View style={[styles.trophyCard, { backgroundColor: colors.surface }]}>
               {stalled.map((row, i) => {
@@ -914,8 +943,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   pinCardEmpty: { fontSize: typography.fontSize.xs, color: colors.textSecondary, paddingVertical: spacing.sm },
   pinDeltaPill: { alignSelf: 'flex-start', marginTop: spacing.xs },
   chartAxisLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
+  pinChartDate: { width: CHART_X_LABEL_WIDTH, textAlign: 'center' },
 
   segmentedSpacing: { marginBottom: spacing.xs },
+  // The stalled list is one card straight under its selector, so it needs a
+  // clearer gap than the feed's separate event cards do.
+  stalledFilterSpacing: { marginBottom: spacing.md },
 
   eventCard: {
     flexDirection: 'row',
