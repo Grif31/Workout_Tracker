@@ -987,10 +987,10 @@ Check off items as you complete them.
 
 ### Phase 0 — Spike (half a day, throwaway branch)
 iOS spike on branch `spike/ios-widget` (2026-09-25): a small Streak widget (`widgets/StreakWidget.tsx`) showing the weekly streak Home already fetches, written through `utils/widgets.ts` from `DashboardScreen`'s `fetchStreak`. Setup found: `expo-widgets` generates an `ExpoWidgetsTarget` extension (bundle ID `<app>.widgets`) and the App Group; `Widget.updateSnapshot(props)` writes the props into the App Group and reloads the timeline itself, so no native `UserDefaults` module is needed. The widget layout is a function with a `'widget'` directive that babel ships as a string and the extension evaluates with the `@expo/ui/swift-ui` components as globals, so it can't use anything else from the app.
-- [ ] iOS: EAS `development` build installs, the widget can be added, and it shows the streak after Home loads
-- [ ] iOS: EAS credentials create the extension's bundle ID, App Group and provisioning profile (dev bundle ID first; production when Phase 2 ships)
+- [x] iOS: EAS `development` build installs, the widget can be added, and it shows the streak after Home loads (verified on an iPhone 2026-09-25)
+- [ ] iOS: EAS credentials create the extension's bundle ID, App Group and provisioning profile. Dev bundle ID done 2026-09-25; production still to do on the first production build that includes the widget
 - [ ] Android: same spike through the Android tooling picked above
-- [ ] Record the resulting setup steps in CLAUDE.md (plugin config, `widgets/` folder, lazy load, how to run a widget build) before building for real
+- [x] Record the resulting setup steps in CLAUDE.md (plugin config, `widgets/` folder, lazy load, how to run a widget build) before building for real
 
 ### Phase 1 — Data bridge
 - [ ] **Snapshot schema** (versioned, one JSON blob, only what widgets render): `version`, `updatedAt`, `userId`, weekly goal (`target`, completed day dates this week, current streak, optional distance goal in km plus this week's distance in km, and the GPS distance unit to show them in), Greek Rank (`rank`, `score`, `nextRank`, points to next, gate text from `utils/greekRank.ts`), scores (strength/endurance percentile + rank label, nullable), active routine (`name`, next day label + index for the deep link), units (`weight_unit`, GPS distance unit), accent color

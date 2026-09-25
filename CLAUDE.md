@@ -112,8 +112,10 @@ src/
 │   │   ├── ThemeContext.tsx       # dark/light/system mode, color tokens
 │   │   ├── WorkoutSessionContext.tsx  # minimized workout state
 │   │   └── PurchaseContext.tsx    # RevenueCat isPremium/offerings/purchase
+│   ├── widgets/                  # iOS home screen widgets (expo-widgets): layout functions only, see Home screen widgets
 │   ├── utils/
 │   │   ├── api.ts                # apiFetch wrapper (attaches JWT, base URL)
+│   │   ├── widgets.ts            # lazy-loads widgets/ and hands them data (updateSnapshot)
 │   │   ├── notifications.ts      # all notification helpers
 │   │   ├── healthKit.ts          # iOS HealthKit: workout write + heart-rate read (EAS build only)
 │   │   ├── healthConnect.ts      # Android Health Connect sync (EAS build only)
@@ -235,6 +237,15 @@ Anything that sends a template or routine day to WorkoutLog goes through `buildT
 `DASHBOARD_CARDS` entries declare `sizes: CardSize[]` (`'full' | 'half'`), best-first, and the head is the card's default. **Only list `'half'` for a card that has a compact variant written for it** — narrowing is never just a width change, and the arrange-mode size toggle only appears for cards with more than one size, so an undeclared size can't be picked. Week Calendar (seven day columns) and Recent Workouts (a list) are full-only on purpose.
 
 `packRows(layout)` turns the visible cards into rows: a `half` pairs with the next `half`, everything else takes its own row, and a trailing unpaired `half` stays half width rather than stretching. A card's compact branch reads `cardSize(layout, id) === 'half'`.
+
+### Home screen widgets (iOS) — `expo-widgets`
+
+Proven on a device 2026-09-25 (TODO.md section 19). Widgets live in `widgets/`, one file per widget, and are declared in the `expo-widgets` plugin entry in `app.config.js`, whose `name` must match `createWidget`'s first argument. The plugin generates an `ExpoWidgetsTarget` extension (bundle ID `<app bundle id>.widgets`) and App Group `group.<app bundle id>`, so dev and production builds never share widget data. Widgets exist only in EAS builds, and iOS can't be prebuilt on Windows: the first test of any widget change is `eas build --profile development --platform ios`. A new widget or App Group needs EAS to create its identifier and profile, which it prompts for during the build.
+
+- **The layout function is not app code.** Its `'widget'` directive makes babel ship the function as a string that the extension evaluates in its own runtime, where the `@expo/ui/swift-ui` components and modifiers are globals. It can read only its props and environment: no helpers, constants, theme hooks or `StyleSheet`. Anything computed (labels, percentages, colors) is computed in the app and passed in as props. The file's imports exist only for types.
+- **Data only flows in from the app.** The widget can't reach the JWT, so it shows whatever the app last passed to `updateSnapshot(props)`, which writes the App Group and reloads the widget. Calls go through `utils/widgets.ts`.
+- **Never import a widget file statically.** `createWidget` builds its native object on import, which throws in Expo Go or a binary built before the widget. `utils/widgets.ts` requires it inside a `try`, like `utils/healthKit.ts`.
+- The plugin also sets `NSSupportsLiveActivities` in Info.plist unconditionally.
 
 ### Navigation — cross-tab navigation MUST pass `initial: false`
 ```typescript
