@@ -112,7 +112,7 @@ src/
 │   │   ├── ThemeContext.tsx       # dark/light/system mode, color tokens
 │   │   ├── WorkoutSessionContext.tsx  # minimized workout state
 │   │   └── PurchaseContext.tsx    # RevenueCat isPremium/offerings/purchase
-│   ├── widgets/                  # iOS home screen widgets (expo-widgets): layout functions only, see Home screen widgets
+│   ├── widgets/                  # home screen widgets: iOS layout functions + Android layouts/task handler, see Home screen widgets
 │   ├── utils/
 │   │   ├── api.ts                # apiFetch wrapper (attaches JWT, base URL)
 │   │   ├── widgets.ts            # lazy-loads widgets/ and hands them data (updateSnapshot)
@@ -238,7 +238,7 @@ Anything that sends a template or routine day to WorkoutLog goes through `buildT
 
 `packRows(layout)` turns the visible cards into rows: a `half` pairs with the next `half`, everything else takes its own row, and a trailing unpaired `half` stays half width rather than stretching. A card's compact branch reads `cardSize(layout, id) === 'half'`.
 
-### Home screen widgets (iOS) — `expo-widgets`
+### Home screen widgets — `expo-widgets` (iOS), `react-native-android-widget` (Android)
 
 Proven on a device 2026-09-25 (TODO.md section 19). Widgets live in `widgets/`, one file per widget, and are declared in the `expo-widgets` plugin entry in `app.config.js`, whose `name` must match `createWidget`'s first argument. The plugin generates an `ExpoWidgetsTarget` extension (bundle ID `<app bundle id>.widgets`) and App Group `group.<app bundle id>`, so dev and production builds never share widget data. Widgets exist only in EAS builds, and iOS can't be prebuilt on Windows: the first test of any widget change is `eas build --profile development --platform ios`. A new widget or App Group needs EAS to create its identifier and profile, which it prompts for during the build.
 
@@ -246,6 +246,13 @@ Proven on a device 2026-09-25 (TODO.md section 19). Widgets live in `widgets/`, 
 - **Data only flows in from the app.** The widget can't reach the JWT, so it shows whatever the app last passed to `updateSnapshot(props)`, which writes the App Group and reloads the widget. Calls go through `utils/widgets.ts`.
 - **Never import a widget file statically.** `createWidget` builds its native object on import, which throws in Expo Go or a binary built before the widget. `utils/widgets.ts` requires it inside a `try`, like `utils/healthKit.ts`.
 - The plugin also sets `NSSupportsLiveActivities` in Info.plist unconditionally.
+
+**Android** uses `react-native-android-widget` (expo-widgets 57's Android side is a placeholder; revisit on SDK 58). Declared in that library's plugin entry in `app.config.js`, whose `name` must match the `widgetName` `utils/widgets.ts` passes to `requestWidgetUpdate`. It works differently from iOS:
+- The layout (`widgets/AndroidStreakWidget.tsx`) is ordinary app JS, built from the library's `FlexWidget`/`TextWidget`, not React Native views. It renders outside any React tree, so no hooks or `useTheme()`: it takes `LIGHT_BASE`/`DARK_BASE` from `ThemeContext` and returns a `{ light, dark }` pair.
+- Android asks for a drawing (widget added, resized, updated) often with the app closed, by starting the JS runtime headless without mounting `App`. That's why `registerAndroidWidgets()` runs in `index.js`, before `registerRootComponent`. The task handler (`widgets/androidWidgetTaskHandler.tsx`) runs in the app's process, so it reads what the app saved to AsyncStorage (`STREAK_WIDGET_KEY`); `requestWidgetUpdate` redraws a placed widget immediately.
+- Importing the library calls `TurboModuleRegistry.getEnforcing`, so it is lazy-loaded in `utils/widgets.ts` for the same reason as iOS.
+- Unlike iOS, Android can be prebuilt and compiled on Windows: `npx expo prebuild --platform android --no-install`, then `./gradlew :react-native-android-widget:compileDebugJavaWithJavac` from `android/` with `JAVA_HOME` set to Android Studio's `jbr`. Delete the generated `android/` folder afterwards; it isn't gitignored and EAS generates its own.
+- `@expo/ui` pulls in `react-dom` as a peer, which npm resolves to the newest version (needing a newer React) unless `react-dom` is pinned to SDK 57's version in `package.json`. The dev profile's legacy peer deps hide that; a production build's `npm ci` doesn't.
 
 ### Navigation — cross-tab navigation MUST pass `initial: false`
 ```typescript
@@ -263,6 +270,7 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 | `minimized_workout_session` | — | Serialized minimized workout state (WorkoutSessionContext) |
 | `greek_rank_cached` | — | Cached current Greek rank name (avoids fetch on cold open) |
 | `coach_insights_cache` | — | Cached AI coach insights JSON |
+| `widget_streak_weeks` | — | Weekly streak the Android Streak widget draws when Android redraws it with the app closed (`STREAK_WIDGET_KEY`). Phase 0 spike: Phase 1's widget snapshot replaces it and adds clearing on logout |
 | `secure_token_store_ready` | — | Marks that this install set up its SecureStore tokens. Never cleared on logout: iOS keeps keychain items across an uninstall and AsyncStorage doesn't, so a missing marker is how `loadTokens` recognises a fresh install and drops a previous install's tokens. Its first absence on an updated install is also when the pre-SecureStore AsyncStorage tokens get migrated |
 
 **Per-user (key includes user ID suffix `_${userId}`):**

@@ -178,6 +178,25 @@ module.exports = {
           ],
         },
       ],
+      [
+        // Android home screen widget, the twin of the iOS one above. Its name
+        // must match the widgetName utils/widgets.ts passes to
+        // requestWidgetUpdate. 2x2 cells, the size of an iOS small widget.
+        'react-native-android-widget',
+        {
+          widgets: [
+            {
+              name: 'StreakWidget',
+              label: 'Streak',
+              description: 'Your current weekly workout streak.',
+              minWidth: '110dp',
+              minHeight: '110dp',
+              targetCellWidth: 2,
+              targetCellHeight: 2,
+            },
+          ],
+        },
+      ],
       // Sentry source-map upload — only active once SENTRY_ORG/SENTRY_PROJECT
       // are set (EAS env or .env). Runtime crash reporting works without it,
       // but stack traces stay minified until this is configured along with

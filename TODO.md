@@ -981,7 +981,7 @@ Check off items as you complete them.
 
 ### Decisions to make first
 - [x] **iOS tooling**: `expo-widgets` (widgets written as React components with `@expo/ui`, CNG generates the extension, App Group and SwiftUI glue, no Swift). Stable from SDK 56; the app was upgraded 55 to 57 for it on 2026-09-23/24 (57 rather than 56 because 56 ships a Hermes memory regression). Rejected `@bacons/apple-targets`: hand-written SwiftUI can't be run or iterated on from this Windows machine. Still to confirm in the Phase 0 spike: EAS signs the extension for both bundle IDs
-- [ ] **Android tooling**: `expo-widgets` itself now has an opt-in Android side (`enableAndroid: true`, Glance under the hood, found 2026-09-25 while setting up the iOS spike), which would let both platforms share one widget definition and one `updateSnapshot` call. Evaluate it first; `react-native-android-widget` is the fallback if its Android support is too thin
+- [x] **Android tooling**: `react-native-android-widget` (2026-09-25). `expo-widgets` 57's Android side is a placeholder (its widget only draws its own name, with no data methods); real Android support lands in expo-widgets 58, so revisit once the app is on SDK 58 and one widget definition could serve both platforms. `react-native-android-widget` 0.22.1 has a codegen TurboModule and bridgeless `ReactHost` headless tasks, and its Android module compiled locally against RN 0.86
 - [ ] **Premium**: the Weekly Goal and Greek Rank widgets are free; decide whether the Scores widget follows Strength Score's paywall (widget shows a locked state for free users) or is free as a growth hook
 - [x] **Launch scope**: iOS first, Android after (decided 2026-09-25)
 
@@ -989,7 +989,7 @@ Check off items as you complete them.
 iOS spike on branch `spike/ios-widget` (2026-09-25): a small Streak widget (`widgets/StreakWidget.tsx`) showing the weekly streak Home already fetches, written through `utils/widgets.ts` from `DashboardScreen`'s `fetchStreak`. Setup found: `expo-widgets` generates an `ExpoWidgetsTarget` extension (bundle ID `<app>.widgets`) and the App Group; `Widget.updateSnapshot(props)` writes the props into the App Group and reloads the timeline itself, so no native `UserDefaults` module is needed. The widget layout is a function with a `'widget'` directive that babel ships as a string and the extension evaluates with the `@expo/ui/swift-ui` components as globals, so it can't use anything else from the app.
 - [x] iOS: EAS `development` build installs, the widget can be added, and it shows the streak after Home loads (verified on an iPhone 2026-09-25)
 - [ ] iOS: EAS credentials create the extension's bundle ID, App Group and provisioning profile. Dev bundle ID done 2026-09-25; production still to do on the first production build that includes the widget
-- [ ] Android: same spike through the Android tooling picked above
+- [ ] Android: same Streak widget (`widgets/AndroidStreakWidget.tsx`, drawn by `widgets/androidWidgetTaskHandler.tsx`, registered in `index.js`). Built and tested in Jest; needs an EAS `development` build on a device: add it, check light/dark, tap opens the app, and it still draws the streak when re-added with the app closed
 - [x] Record the resulting setup steps in CLAUDE.md (plugin config, `widgets/` folder, lazy load, how to run a widget build) before building for real
 
 ### Phase 1 — Data bridge
