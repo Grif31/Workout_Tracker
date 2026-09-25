@@ -1,4 +1,5 @@
 const IS_DEV = process.env.APP_VARIANT === 'development';
+const IOS_BUNDLE_ID = IS_DEV ? 'com.aretefitness.app.dev' : 'com.aretefitness.app';
 
 module.exports = {
   expo: {
@@ -11,7 +12,7 @@ module.exports = {
     userInterfaceStyle: 'automatic',
     ios: {
       supportsTablet: true,
-      bundleIdentifier: IS_DEV ? 'com.aretefitness.app.dev' : 'com.aretefitness.app',
+      bundleIdentifier: IOS_BUNDLE_ID,
       buildNumber: '3',
       entitlements: {
         'com.apple.developer.usernotifications.time-sensitive': true,
@@ -158,6 +159,25 @@ module.exports = {
       ],
       'react-native-health-connect',
       'expo-apple-authentication',
+      [
+        // iOS home screen widget (TODO.md section 19). Both identifiers follow
+        // the app's, so the dev build's widget reads the dev app's App Group and
+        // never the store app's. enableAndroid stays off until the iOS widget
+        // is proven on a device.
+        'expo-widgets',
+        {
+          bundleIdentifier: `${IOS_BUNDLE_ID}.widgets`,
+          groupIdentifier: `group.${IOS_BUNDLE_ID}`,
+          widgets: [
+            {
+              name: 'StreakWidget',
+              displayName: 'Streak',
+              description: 'Your current weekly workout streak.',
+              supportedFamilies: ['systemSmall'],
+            },
+          ],
+        },
+      ],
       // Sentry source-map upload — only active once SENTRY_ORG/SENTRY_PROJECT
       // are set (EAS env or .env). Runtime crash reporting works without it,
       // but stack traces stay minified until this is configured along with

@@ -975,25 +975,26 @@ Check off items as you complete them.
 >
 > **Constraints found while planning** (verify before building, since library support moves fast):
 > - The app is managed/CNG: there are no committed `ios/` or `android/` folders, so widget targets must come from Expo config plugins and only exist in EAS builds (never Expo Go, same as HealthKit and GPS).
-> - A widget can't call the API: the JWT lives in the app's AsyncStorage, which extensions can't read. The app has to push a small data snapshot out to storage the widget can read, and the widget renders from that.
+> - A widget can't call the API: the JWT lives in the app's SecureStore keychain item, which extensions can't read. The app has to push a small data snapshot out to storage the widget can read, and the widget renders from that.
 > - `app.config.js` switches `bundleIdentifier` on `IS_DEV` (`com.aretefitness.app` vs `.dev`), so the iOS App Group and the widget extension's bundle ID must switch with it (`group.com.aretefitness.app` / `group.com.aretefitness.app.dev`), or dev builds write to a container the widget never sees.
 > - Shares native groundwork with the Apple Watch plan (Pre-Launch section 7): an App Group, an extra Apple target, and EAS signing for it. Whichever ships first should set this up so the other reuses it.
 
 ### Decisions to make first
 - [x] **iOS tooling**: `expo-widgets` (widgets written as React components with `@expo/ui`, CNG generates the extension, App Group and SwiftUI glue, no Swift). Stable from SDK 56; the app was upgraded 55 to 57 for it on 2026-09-23/24 (57 rather than 56 because 56 ships a Hermes memory regression). Rejected `@bacons/apple-targets`: hand-written SwiftUI can't be run or iterated on from this Windows machine. Still to confirm in the Phase 0 spike: EAS signs the extension for both bundle IDs
-- [ ] **Android tooling**: `react-native-android-widget` (widgets described in JSX, updated from JS, ships a config plugin) vs. native Glance/RemoteViews. Leaning `react-native-android-widget` (New Architecture support, Expo plugin); confirm it on SDK 56 in the spike
+- [ ] **Android tooling**: `expo-widgets` itself now has an opt-in Android side (`enableAndroid: true`, Glance under the hood, found 2026-09-25 while setting up the iOS spike), which would let both platforms share one widget definition and one `updateSnapshot` call. Evaluate it first; `react-native-android-widget` is the fallback if its Android support is too thin
 - [ ] **Premium**: the Weekly Goal and Greek Rank widgets are free; decide whether the Scores widget follows Strength Score's paywall (widget shows a locked state for free users) or is free as a growth hook
-- [ ] **Launch scope**: iOS-first (larger share of users, lock screen widgets are high value) with Android as a fast follow, or both together
+- [x] **Launch scope**: iOS first, Android after (decided 2026-09-25)
 
 ### Phase 0 — Spike (half a day, throwaway branch)
-- [ ] Hello-world widget on each platform through the chosen plugin, built with EAS `development` profile, installed on a real device
-- [ ] Prove the data path end to end: JS writes a value, widget displays it after `reloadAllTimelines` (iOS) / an update request (Android)
-- [ ] Confirm EAS credentials handle the App Group entitlement and the extension's provisioning profile for both bundle IDs
-- [ ] Record the resulting setup steps in CLAUDE.md (new plugin, `targets/` folder, how to run a widget build) before building for real
+iOS spike on branch `spike/ios-widget` (2026-09-25): a small Streak widget (`widgets/StreakWidget.tsx`) showing the weekly streak Home already fetches, written through `utils/widgets.ts` from `DashboardScreen`'s `fetchStreak`. Setup found: `expo-widgets` generates an `ExpoWidgetsTarget` extension (bundle ID `<app>.widgets`) and the App Group; `Widget.updateSnapshot(props)` writes the props into the App Group and reloads the timeline itself, so no native `UserDefaults` module is needed. The widget layout is a function with a `'widget'` directive that babel ships as a string and the extension evaluates with the `@expo/ui/swift-ui` components as globals, so it can't use anything else from the app.
+- [ ] iOS: EAS `development` build installs, the widget can be added, and it shows the streak after Home loads
+- [ ] iOS: EAS credentials create the extension's bundle ID, App Group and provisioning profile (dev bundle ID first; production when Phase 2 ships)
+- [ ] Android: same spike through the Android tooling picked above
+- [ ] Record the resulting setup steps in CLAUDE.md (plugin config, `widgets/` folder, lazy load, how to run a widget build) before building for real
 
 ### Phase 1 — Data bridge
 - [ ] **Snapshot schema** (versioned, one JSON blob, only what widgets render): `version`, `updatedAt`, `userId`, weekly goal (`target`, completed day dates this week, current streak, optional distance goal in km plus this week's distance in km, and the GPS distance unit to show them in), Greek Rank (`rank`, `score`, `nextRank`, points to next, gate text from `utils/greekRank.ts`), scores (strength/endurance percentile + rank label, nullable), active routine (`name`, next day label + index for the deep link), units (`weight_unit`, GPS distance unit), accent color
-- [ ] **`utils/widgetData.ts`**: `writeWidgetSnapshot(partial)` merges and writes the blob, then asks the OS to refresh widgets. iOS needs a native write into App Group `UserDefaults` (a small local Expo module, or a maintained shared-preferences library if one supports the New Architecture); Android goes through the widget library's update API
+- [ ] **`utils/widgetData.ts`**: `writeWidgetSnapshot(partial)` merges the blob and hands it to each widget's `updateSnapshot` (iOS; which also refreshes it), or the Android library's update API. Grows out of the spike's `utils/widgets.ts`
 - [ ] **Write points** (reuse data already fetched, no new requests): after `PreloadScreen` finishes, after a workout save or delete (weekly goal, streak, rank), after `greek-rank` / score fetches, on active-routine change, on weekly-goal or unit change
 - [ ] **Week rollover without opening the app**: store completed dates, not a count, and have the widget compute "this week" itself, so Monday morning shows 0/3 instead of last week's 3/3. iOS: add a timeline entry at next Monday 00:00 local
 - [ ] **Logout / account switch**: clear the snapshot in `AuthContext`'s logout and login paths alongside the existing `multiRemove`, and refresh widgets, so the next account never sees the previous user's rank. Widgets render a "Log in to Aretē" state when the snapshot is empty

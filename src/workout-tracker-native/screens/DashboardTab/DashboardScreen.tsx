@@ -36,6 +36,7 @@ import GreekRankCard from '../../components/dashboard/GreekRankCard';
 import { GREEK_RANK_CACHED_KEY } from '../../constants/storageKeys';
 import type { GreekRankData } from '../../utils/greekRank';
 import DraggableList from '../../components/DraggableList';
+import { updateStreakWidget } from '../../utils/widgets';
 import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../../utils/templatePrefill';
 
 const GREETINGS = [
@@ -543,6 +544,7 @@ export default function DashboardScreen({ navigation }: Props) {
         const data = await res.json();
         const ws = data.current_streak ?? 0;
         setWeeklyStreak(ws);
+        updateStreakWidget(ws);
         setMonthlyStreak(data.current_monthly_streak ?? 0);
         setDailyStreak(data.current_daily_streak ?? 0);
         setLongestDailyStreak(data.longest_daily_streak ?? 0);
