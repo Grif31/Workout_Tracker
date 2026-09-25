@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.8 (Unreleased)
+## 1.1.8 (2026-09-24)
 
 ### New: Best Efforts
 - Activities you track with GPS now find your fastest 400m, 800m, 1K, mile, 5K and longer distances inside the activity, plus the farthest you went in 10, 20, 30 and 60 minutes. They show on the activity's details screen.
