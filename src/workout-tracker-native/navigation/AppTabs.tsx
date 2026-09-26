@@ -16,6 +16,7 @@ import { AppStack } from './types';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { useWorkoutSession, sessionElapsedSeconds } from '../context/WorkoutSessionContext';
 import { navigationRef } from './navigationRef';
+import { useWidgetLinks } from './useWidgetLinks';
 import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -346,6 +347,7 @@ function CustomTabBar(props: BottomTabBarProps) {
 }
 
 export function AppTabs() {
+  useWidgetLinks();
   return (
     <Tab.Navigator
       tabBar={(props) => <CustomTabBar {...props} />}

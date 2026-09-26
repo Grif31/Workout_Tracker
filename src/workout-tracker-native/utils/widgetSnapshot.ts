@@ -41,6 +41,11 @@ export type WidgetRank = {
   heldByGate: boolean;
   /** What unlocks the next rank, in the app's own words, when a gate is in the way. */
   gateText: string | null;
+  /** The rank the score alone earns; above `rank` when a gate holds it back. */
+  earnedRank: string;
+  /** The higher of the Strength and Endurance percentiles, which the gates read. */
+  bestPercentile: number | null;
+  components: { consistency: number; dedication: number; volume: number };
 };
 
 export type WidgetScore = { percentile: number; label: string };
@@ -199,6 +204,13 @@ export function buildGreekRank(data: GreekRankData): WidgetRank {
     bandProgress: data.held_by_gate ? 1 : Math.min(1, Math.max(0, (score - held.low) / span)),
     heldByGate: !!data.held_by_gate,
     gateText: next ? gateRequirementText(data, next.name) : null,
+    earnedRank: data.score_rank ?? held.name,
+    bestPercentile: data.performance?.best != null ? Math.round(data.performance.best) : null,
+    components: {
+      consistency: Math.round(data.components?.consistency ?? 0),
+      dedication: Math.round(data.components?.dedication ?? 0),
+      volume: Math.round(data.components?.volume ?? 0),
+    },
   };
 }
 

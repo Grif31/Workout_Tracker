@@ -172,12 +172,20 @@ module.exports = {
         {
           bundleIdentifier: `${IOS_BUNDLE_ID}.widgets`,
           groupIdentifier: `group.${IOS_BUNDLE_ID}`,
+          // Each name must match its createWidget call in widgets/. The
+          // accessory families are the lock screen widgets.
           widgets: [
             {
-              name: 'StreakWidget',
-              displayName: 'Streak',
-              description: 'Your current weekly workout streak.',
-              supportedFamilies: ['systemSmall'],
+              name: 'WeeklyGoalWidget',
+              displayName: 'Weekly Goal',
+              description: 'Your workouts this week against your goal, and your streak.',
+              supportedFamilies: ['systemSmall', 'systemMedium', 'accessoryCircular', 'accessoryInline'],
+            },
+            {
+              name: 'GreekRankWidget',
+              displayName: 'Greek Rank',
+              description: 'Your Greek Rank and how close you are to the next one.',
+              supportedFamilies: ['systemSmall', 'systemMedium', 'accessoryRectangular'],
             },
           ],
         },

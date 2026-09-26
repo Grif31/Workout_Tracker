@@ -107,6 +107,8 @@ describe('buildGreekRank', () => {
     expect(buildGreekRank(rankData({}))).toEqual({
       rank: 'Hero', score: 41, nextRank: 'Demigod', pointsToNext: 7,
       bandProgress: 0.65, heldByGate: false, gateText: null,
+      earnedRank: 'Hero', bestPercentile: 44,
+      components: { consistency: 52, dedication: 38, volume: 29 },
     });
   });
 

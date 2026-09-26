@@ -1009,12 +1009,15 @@ iOS spike on branch `spike/ios-widget` (2026-09-25): a small Streak widget (`wid
 - Lock screen (iOS): circular (weekly goal ring), rectangular (rank, progress, points to next), inline (workouts this week, beside the date)
 
 ### Phase 2 — iOS widgets
-- [ ] **Weekly Goal** (small): ring or dots for this week's workouts vs. goal, streak count, rank-colored accent. Tap opens Dashboard
+Built 2026-09-26 on `spike/ios-widget` (`widgets/WeeklyGoalWidget.tsx`, `widgets/GreekRankWidget.tsx`, props in `utils/widgetProps.ts`); not yet run on a device.
+- [x] **Weekly Goal** (small, and medium): ring or dots for this week's workouts vs. goal, streak count, rank-colored accent. Tap opens Dashboard
   - When a weekly distance goal is set (`workout_weekly_distance_goal_${uid}`), a fill line under the dots as on the Coach card, reusing `distanceGoalProgress` from `utils/weeklyDistanceGoal.ts` so "15 / 15 mi" reads complete the same way in both. Medium size shows the numbers; small may show the line alone
-- [ ] **Greek Rank** (small + medium): rank name in its `GREEK_RANK_COLORS` color and icon, progress bar to the next rank; when held by a top-rank gate, show the gate requirement instead of points (same wording as the app). Tap opens the Greek Rank screen
-- [ ] **Lock screen** accessory widgets: circular (weekly goal ring), rectangular (rank + progress)
-- [ ] Light/dark follow the system; use the stored accent for highlights; Dynamic Type safe
-- [ ] Stale-data handling: if `updatedAt` is older than ~7 days, dim values and show "Open Aretē to update"
+- [x] **Greek Rank** (small + medium): rank name in its `GREEK_RANK_COLORS` color and icon, progress bar to the next rank; when held by a top-rank gate, show the gate requirement instead of points (same wording as the app). Tap opens the Greek Rank screen
+- [x] **Lock screen** accessory widgets (plus the inline line beside the date): circular (weekly goal ring), rectangular (rank + progress)
+- [x] Light/dark follow the system; use the stored accent for highlights (fixed sizes with `minimumScaleFactor` rather than Dynamic Type: a widget's size doesn't grow with the text)
+- [x] Stale-data handling: if `updatedAt` is older than ~7 days, dim values and show "Open Aretē to update"
+
+- [ ] Device check on the dev build: every size and lock screen widget, light and dark, logos, taps open Home and Greek Rank, and a Monday rollover (set the phone's date forward)
 
 ### Phase 3 — Android widgets
 - [ ] Weekly Goal and Greek Rank equivalents with the same snapshot and tap targets
