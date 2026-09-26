@@ -191,20 +191,37 @@ module.exports = {
         },
       ],
       [
-        // Android home screen widget, the twin of the iOS one above. Its name
-        // must match the widgetName utils/widgets.ts passes to
-        // requestWidgetUpdate. 2x2 cells, the size of an iOS small widget.
+        // Android home screen widgets, the twins of the iOS ones above. Each
+        // name must be a key of ANDROID_WIDGETS in widgets/androidWidgets.tsx.
+        // One resizable widget each, rather than one per size as on iOS: 2x2
+        // draws the small layout, about 4 cells wide the medium one.
+        // Android only redraws a widget on its update period (30 minutes at
+        // the least), and that redraw is what rolls the week over on Monday
+        // with the app closed: hourly keeps it within the hour.
         'react-native-android-widget',
         {
           widgets: [
             {
-              name: 'StreakWidget',
-              label: 'Streak',
-              description: 'Your current weekly workout streak.',
+              name: 'WeeklyGoal',
+              label: 'Weekly Goal',
+              description: 'Your workouts this week against your goal, and your streak.',
               minWidth: '110dp',
               minHeight: '110dp',
               targetCellWidth: 2,
               targetCellHeight: 2,
+              resizeMode: 'horizontal|vertical',
+              updatePeriodMillis: 60 * 60 * 1000,
+            },
+            {
+              name: 'GreekRank',
+              label: 'Greek Rank',
+              description: 'Your Greek Rank and how close you are to the next one.',
+              minWidth: '110dp',
+              minHeight: '110dp',
+              targetCellWidth: 2,
+              targetCellHeight: 2,
+              resizeMode: 'horizontal|vertical',
+              updatePeriodMillis: 60 * 60 * 1000,
             },
           ],
         },

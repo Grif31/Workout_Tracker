@@ -61,10 +61,13 @@ export function renderWidgets(snapshot: WidgetSnapshot | null) {
     });
   }
   if (androidWidget) {
-    const { renderStreakWidget } = require('../widgets/AndroidStreakWidget');
-    androidWidget.requestWidgetUpdate({
-      widgetName: 'StreakWidget',
-      renderWidget: () => renderStreakWidget(snapshot),
-    }).catch(() => {});
+    const { ANDROID_WIDGETS } = require('../widgets/androidWidgets');
+    for (const widgetName of Object.keys(ANDROID_WIDGETS)) {
+      // Once per placed widget, with its own size
+      androidWidget.requestWidgetUpdate({
+        widgetName,
+        renderWidget: info => ANDROID_WIDGETS[widgetName](snapshot, info),
+      }).catch(() => {});
+    }
   }
 }

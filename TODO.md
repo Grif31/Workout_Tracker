@@ -1020,8 +1020,10 @@ Built 2026-09-26 on `spike/ios-widget` (`widgets/WeeklyGoalWidget.tsx`, `widgets
 - [ ] Device check on the dev build: every size and lock screen widget, light and dark, logos, taps open Home and Greek Rank, and a Monday rollover (set the phone's date forward)
 
 ### Phase 3 — Android widgets
-- [ ] Weekly Goal and Greek Rank equivalents with the same snapshot and tap targets
-- [ ] Resizable layouts (2x2 and 4x2), respecting Android 12+ rounded widget corners and dynamic color
+Built 2026-09-26 on `spike/ios-widget` (`widgets/androidWidgets.tsx`, drawn from the same `utils/widgetProps.ts` as iOS); not yet run on a device.
+- [x] Weekly Goal and Greek Rank equivalents with the same snapshot and tap targets
+- [x] Resizable layouts (2x2 small, medium from about 4 cells wide), with the widgets' own rounded corners. Not Material You dynamic color: the widgets use the app's accent and surfaces, as iOS does
+- [ ] Device check on an Android dev build: both sizes of each, light and dark, taps open Home and Greek Rank, and the hourly redraw rolls the week over on Monday
 
 ### Phase 4 — Up Next routine widget (both platforms)
 - [ ] Medium widget: active routine name, today's "Up Next" day (same selection logic as the Dashboard Active Routine card: first day not completed this week, resetting to Day 1 each week), and a Log button
