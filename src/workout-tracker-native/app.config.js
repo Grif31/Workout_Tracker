@@ -30,8 +30,12 @@ module.exports = {
     },
     android: {
       adaptiveIcon: {
-        foregroundImage: './assets/Arete_icon.png',
-        backgroundColor: '#ffffff',
+        // Not the iOS icon: Android shows only the middle two thirds of this
+        // layer, masked to the launcher's shape, which cut off the plates and
+        // the A's legs. This is the same logo cut out and scaled to 62% so it
+        // fits Android's safe circle, over a flat gray matching the iOS icon's.
+        foregroundImage: './assets/Arete_adaptive_foreground.png',
+        backgroundColor: '#F2F2F2',
       },
       package: IS_DEV ? 'com.aretefitness.app.dev' : 'com.aretefitness.app',
       versionCode: 3,
