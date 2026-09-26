@@ -1002,9 +1002,10 @@ iOS spike on branch `spike/ios-widget` (2026-09-25): a small Streak widget (`wid
 
 ### Design (mock: https://claude.ai/artifact/AD5gF6dtvHxUFDt4moF3SA, revised 2026-09-26)
 - Every widget carries the Aretē logo beside its label: a light version on dark widgets, dark on light. iOS shows it with `Image uiImage` from a file the app copies into `widgetsDirectory`; Android with `ImageWidget`
-- Greek Rank, small, held by a gate: "Unlock by logging Strength or Endurance Score" (medium keeps the full gate text). At Aretē there's no progress line; it says "Excellence"
+- Greek Rank, small, held by a gate: "Unlock by logging a Strength or Endurance Score" (medium keeps the full gate text). At Aretē there's no progress line; it says "Excellence"
 - Up Next comes in small and medium. Small: routine name, day, a small muscle diagram and Start. Every day done: "Great Job! All N Days Complete" (an exclamation mark by request, an exception to the copy rule). Start opens a new workout with the day filled in
 - Up Next's muscle diagram is the app's `MuscleDiagram` (front and back, the day's muscles highlighted), captured to a PNG with `react-native-view-shot` when the routine section is written, since neither widget runtime can draw `react-native-body-highlighter`'s SVG. One file per day, dark and light
+- Scores comes in small and medium. Small shows one score, Strength or Endurance, picked when the widget is added (an expo-widgets `configuration` enum on iOS 17+, `widgetFeatures: 'reconfigurable'` on Android). Free users see a Premium lock in both sizes
 - Lock screen (iOS): circular (weekly goal ring), rectangular (rank, progress, points to next), inline (workouts this week, beside the date)
 
 ### Phase 2 — iOS widgets
@@ -1024,8 +1025,10 @@ iOS spike on branch `spike/ios-widget` (2026-09-25): a small Streak widget (`wid
 - [ ] **Deep link**: `aretefitness://log?routineId=&day=` opens WorkoutLog pre-filled with that day. Add the route to linking config, including the cold-start and logged-out cases (queue the link until auth resolves)
 - [ ] Empty state when there's no active routine: "Pick a routine" linking to the Coach tab
 
-### Phase 5 — Scores widget (medium)
-- [ ] Strength and Endurance Score mini rings side by side (percentile + rank label), each hidden individually when that score has no data; premium state per the decision above
+### Phase 5 — Scores widget (small + medium, Premium)
+- [ ] Medium: Strength and Endurance Score rings side by side (percentile + rank label), each hidden individually when that score has no data
+- [ ] Small: one score, chosen when the widget is added; its own empty state when that score has no data
+- [ ] Locked state for free users in both sizes: needs `isPremium` in the snapshot, written from PurchaseContext
 
 ### Phase 6 — Live Activity for an active workout (stretch, iOS)
 - [ ] Lock screen + Dynamic Island activity while a workout is open or minimized: elapsed time, current exercise, rest timer countdown. Would complement or replace the current live workout notification (`live_workout_notif_enabled`)
