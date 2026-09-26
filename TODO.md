@@ -982,7 +982,7 @@ Check off items as you complete them.
 ### Decisions to make first
 - [x] **iOS tooling**: `expo-widgets` (widgets written as React components with `@expo/ui`, CNG generates the extension, App Group and SwiftUI glue, no Swift). Stable from SDK 56; the app was upgraded 55 to 57 for it on 2026-09-23/24 (57 rather than 56 because 56 ships a Hermes memory regression). Rejected `@bacons/apple-targets`: hand-written SwiftUI can't be run or iterated on from this Windows machine. Still to confirm in the Phase 0 spike: EAS signs the extension for both bundle IDs
 - [x] **Android tooling**: `react-native-android-widget` (2026-09-25). `expo-widgets` 57's Android side is a placeholder (its widget only draws its own name, with no data methods); real Android support lands in expo-widgets 58, so revisit once the app is on SDK 58 and one widget definition could serve both platforms. `react-native-android-widget` 0.22.1 has a codegen TurboModule and bridgeless `ReactHost` headless tasks, and its Android module compiled locally against RN 0.86
-- [ ] **Premium**: the Weekly Goal and Greek Rank widgets are free; decide whether the Scores widget follows Strength Score's paywall (widget shows a locked state for free users) or is free as a growth hook
+- [x] **Premium**: the Scores widget is Premium, with a locked state for free users (decided 2026-09-26). Weekly Goal, Greek Rank and Up Next are free
 - [x] **Launch scope**: iOS first, Android after (decided 2026-09-25)
 
 ### Phase 0 — Spike (half a day, throwaway branch)
@@ -999,6 +999,13 @@ iOS spike on branch `spike/ios-widget` (2026-09-25): a small Streak widget (`wid
 - [x] **Week rollover without opening the app**: store completed dates, not a count, and have the widget compute "this week" itself, so Monday morning shows 0/3 instead of last week's 3/3. iOS: add a timeline entry at next Monday 00:00 local
 - [x] **Logout / account switch**: clear the snapshot in `AuthContext`'s logout and login paths alongside the existing `multiRemove`, and refresh widgets, so the next account never sees the previous user's rank. Widgets render a "Log in to Aretē" state when the snapshot is empty
 - [x] Unit tests for snapshot building (week filtering across a Monday boundary, empty/logged-out state, cardio-only user with no strength score)
+
+### Design (mock: https://claude.ai/artifact/AD5gF6dtvHxUFDt4moF3SA, revised 2026-09-26)
+- Every widget carries the Aretē logo beside its label: a light version on dark widgets, dark on light. iOS shows it with `Image uiImage` from a file the app copies into `widgetsDirectory`; Android with `ImageWidget`
+- Greek Rank, small, held by a gate: "Unlock by logging Strength or Endurance Score" (medium keeps the full gate text). At Aretē there's no progress line; it says "Excellence"
+- Up Next comes in small and medium. Small: routine name, day, a small muscle diagram and Start. Every day done: "Great Job! All N Days Complete" (an exclamation mark by request, an exception to the copy rule). Start opens a new workout with the day filled in
+- Up Next's muscle diagram is the app's `MuscleDiagram` (front and back, the day's muscles highlighted), captured to a PNG with `react-native-view-shot` when the routine section is written, since neither widget runtime can draw `react-native-body-highlighter`'s SVG. One file per day, dark and light
+- Lock screen (iOS): circular (weekly goal ring), rectangular (rank, progress, points to next), inline (workouts this week, beside the date)
 
 ### Phase 2 — iOS widgets
 - [ ] **Weekly Goal** (small): ring or dots for this week's workouts vs. goal, streak count, rank-colored accent. Tap opens Dashboard
