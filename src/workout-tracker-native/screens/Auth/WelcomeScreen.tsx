@@ -33,7 +33,7 @@ export default function WelcomeScreen({ navigation }: Props) {
           style={styles.logo}
           resizeMode="contain"
         />
-        <Text style={styles.tagline}>Strive for Excellence</Text>
+        <Text style={styles.tagline}>Pursue Excellence</Text>
       </View>
 
       {/* ── bottom actions ── */}
