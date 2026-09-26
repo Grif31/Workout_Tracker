@@ -23,7 +23,7 @@ describe('WelcomeScreen', () => {
 
   it('displays the tagline', () => {
     const { getByText } = render(<WelcomeScreen navigation={nav as any} route={route as any} />);
-    expect(getByText('Strive for Excellence')).toBeTruthy();
+    expect(getByText('Pursue Excellence')).toBeTruthy();
   });
 
   it('navigates to Signup when Sign Up is pressed', () => {

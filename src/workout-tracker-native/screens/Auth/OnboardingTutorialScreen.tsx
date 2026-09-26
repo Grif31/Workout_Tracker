@@ -113,7 +113,7 @@ export default function OnboardingTutorialScreen({ navigation }: Props) {
               resizeMode="contain"
             />
             <Text style={styles.welcomePronunciation}>/AH-reh-tay/</Text>
-            <Text style={styles.welcomeTagline}>Strive for Excellence</Text>
+            <Text style={styles.welcomeTagline}>Pursue Excellence</Text>
           </View>
 
           <View style={styles.welcomeButtons}>
