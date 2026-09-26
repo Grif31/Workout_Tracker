@@ -29,6 +29,7 @@ import { typography } from '../../theme/typography';
 import { GREEK_RANK_CACHED_KEY, PROFILE_FRAME_RANK_KEY } from '../../constants/storageKeys';
 import { type GreekRankData, gateRequirementText } from '../../utils/greekRank';
 import { PR_TYPE_LABELS, PR_TYPE_ORDER } from '../../utils/prFormat';
+import { writeWidgetGreekRank } from '../../utils/widgetData';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WorkoutSummary'>;
 
@@ -93,6 +94,8 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
         if (!data) return;
         setRankData(data);
         setGreekRank(data.greek_rank);
+        // Right after a save is when the rank most often moves
+        writeWidgetGreekRank(user?.id, data);
       })
       .catch(() => {});
   }, []);

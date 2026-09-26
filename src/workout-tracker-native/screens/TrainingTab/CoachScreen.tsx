@@ -38,6 +38,7 @@ import {
 } from '../../utils/weeklyDistanceGoal';
 import RoutinePickerModal from '../../components/coach/RoutinePickerModal';
 import MusclePickerModal from '../../components/coach/MusclePickerModal';
+import { writeWidgetGreekRank, writeWidgetScore } from '../../utils/widgetData';
 
 const MINI_RING_SIZE = 44;
 const MINI_RING_STROKE = 4;
@@ -404,6 +405,7 @@ export default function CoachScreen({ navigation }: Props) {
         const data = await res.json();
         setStrengthPercentile(data.overall ?? null);
         if (data.overall_rank?.label) setStrengthRankLabel(data.overall_rank.label);
+        writeWidgetScore(user?.id, 'strength', data);
       }
     } catch { }
   };
@@ -416,6 +418,7 @@ export default function CoachScreen({ navigation }: Props) {
         const data: GreekRankData = await res.json();
         setGreekRank(data.greek_rank);
         appCache.set('greek_rank', data);
+        writeWidgetGreekRank(user?.id, data);
       }
     } catch { }
   };
@@ -428,6 +431,7 @@ export default function CoachScreen({ navigation }: Props) {
         setEndurancePercentile(data.overall ?? null);
         setEnduranceRankLabel(data.overall_rank?.label ?? null);
         appCache.set('endurance_score', data);
+        writeWidgetScore(user?.id, 'endurance', data);
       }
     } catch { }
   };

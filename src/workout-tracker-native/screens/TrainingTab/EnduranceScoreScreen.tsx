@@ -30,6 +30,7 @@ import { toLocalDateStr, timeAgo } from '../../utils/date';
 import ScoreRing, { AnimatedPercentText } from '../../components/ScoreRing';
 import PercentileBar from '../../components/PercentileBar';
 import SectionRule from '../../components/SectionRule';
+import { writeWidgetScore } from '../../utils/widgetData';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'EnduranceScore'>;
 
@@ -142,6 +143,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
       setMissingGender(false);
       setError(false);
       appCache.set('endurance_score', next);
+      writeWidgetScore(user?.id, 'endurance', next);
       checkRankUp(next);
     } catch (e) {
       if (__DEV__) console.warn('[EnduranceScore] fetch failed', e);

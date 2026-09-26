@@ -31,7 +31,8 @@ export const WEEKLY_DISTANCE_GOAL_KEY = 'workout_weekly_distance_goal';
 // Per user: `${PROFILE_FRAME_RANK_KEY}_${userId}`, the avatar frame picked on Greek Rank.
 export const PROFILE_FRAME_RANK_KEY = 'profile_frame_rank';
 
-// Device-level: the weekly streak the Android home screen widget last drew.
-// utils/widgets.ts writes it; widgets/androidWidgetTaskHandler.tsx reads it
-// when Android redraws the widget with the app closed. (Phase 0 spike.)
-export const STREAK_WIDGET_KEY = 'widget_streak_weeks';
+// Device-level, one blob: everything the home screen widgets show, for
+// whoever is logged in (utils/widgetSnapshot.ts). Written only through
+// utils/widgetData.ts; Android's widget task reads it with the app closed.
+// Cleared on logout and login, and a write for any other user starts empty.
+export const WIDGET_SNAPSHOT_KEY = 'widget_snapshot';

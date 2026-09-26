@@ -8,6 +8,7 @@ import { useTheme, KEY_ACCENT } from './ThemeContext';
 import { SESSION_KEY } from './WorkoutSessionContext';
 import { GREEK_RANK_CACHED_KEY, COACH_INSIGHTS_KEY, USER_KEY } from '../constants/storageKeys';
 import { loadTokens, saveTokenPair, clearStoredTokens } from '../utils/tokenStorage';
+import { clearWidgetSnapshot } from '../utils/widgetData';
 
 type AuthContextType = {
     user: any;
@@ -44,6 +45,8 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
             GREEK_RANK_CACHED_KEY, KEY_ACCENT,
             COACH_INSIGHTS_KEY, SESSION_KEY,
         ]);
+        // Widgets stay on the home screen after a logout and redraw from this
+        await clearWidgetSnapshot();
     };
 
     useEffect(() => {
@@ -103,6 +106,7 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
             GREEK_RANK_CACHED_KEY, KEY_ACCENT,
             COACH_INSIGHTS_KEY, SESSION_KEY,
         ]);
+        await clearWidgetSnapshot();
         // Restore this user's saved accent (or default if they've never set one)
         await themeCtx.loadAccentForUser(userData.id);
         // Persist to storage BEFORE flipping React state: setUser mounts the

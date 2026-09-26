@@ -6,6 +6,8 @@ import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
 import { appCache } from '../utils/appCache';
 import { toLocalDateStr } from '../utils/date';
+import { writeWidgetGreekRank, writeWidgetSnapshot, writeWidgetWeek } from '../utils/widgetData';
+import { buildScores } from '../utils/widgetSnapshot';
 import SplashView from '../components/SplashView';
 
 type Props = { onComplete: () => void };
@@ -27,6 +29,23 @@ function buildCalls() {
     { key: 'progress',         url: '/api/stats/progress?range=30d' },
     { key: 'muscle_volume',    url: `/api/stats/muscle-volume?local_date=${localDate}` },
   ];
+}
+
+// Every app open fetches what the widgets show, so this is the write that
+// keeps them current. A call that failed leaves its section as it was rather
+// than blanking it: a widget showing yesterday's rank beats one showing none.
+function writeWidgetsFromPreload(userId: number | undefined) {
+  writeWidgetWeek(userId, {
+    profileStats: appCache.get('profile_stats'),
+    allWorkoutDates: appCache.get<{ dates: string[] }>('workout_dates')?.dates ?? null,
+  });
+  writeWidgetGreekRank(userId, appCache.get('greek_rank'));
+  // strength-score answers 422 without a gender, which is a real "no score"
+  if (appCache.has('strength_score') || appCache.has('endurance_score')) {
+    writeWidgetSnapshot(userId, {
+      scores: buildScores(appCache.get('strength_score'), appCache.get('endurance_score')),
+    });
+  }
 }
 
 export default function PreloadScreen({ onComplete }: Props) {
@@ -67,6 +86,7 @@ export default function PreloadScreen({ onComplete }: Props) {
         ...CALLS.map(({ key, url }) => fetchOne(key, url)),
         fetchOne('profile_stats', `/api/stats/profile?weekly_goal=${weeklyGoal}`),
       ]);
+      writeWidgetsFromPreload(user?.id);
     };
     run();
   }, []);

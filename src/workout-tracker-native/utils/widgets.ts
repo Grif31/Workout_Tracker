@@ -1,14 +1,14 @@
 import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { StreakWidgetProps } from '../widgets/StreakWidget';
-import { STREAK_WIDGET_KEY } from '../constants/storageKeys';
+import { nextMondayStart, type WidgetSnapshot } from './widgetSnapshot';
 
 // Lazy-load both widget libraries: each touches its native module on import
 // (expo-widgets builds its native object, react-native-android-widget calls
 // TurboModuleRegistry.getEnforcing), and neither module exists in Expo Go or a
 // binary built before the widgets were added. A static import would crash the
 // app there.
-let streakWidget: { updateSnapshot(props: StreakWidgetProps): void } | null = null;
+type IosWidget<P> = { updateTimeline(entries: { date: Date; props: P }[]): void };
+let streakWidget: IosWidget<StreakWidgetProps> | null = null;
 let androidWidget: typeof import('react-native-android-widget') | null = null;
 if (Platform.OS === 'ios') {
   try { streakWidget = require('../widgets/StreakWidget').default; } catch {}
@@ -24,19 +24,27 @@ export function registerAndroidWidgets() {
   androidWidget.registerWidgetTaskHandler(androidWidgetTaskHandler);
 }
 
-// Neither widget can call the API (neither has the JWT), so each only ever
-// shows what the app last handed it. iOS: updateSnapshot writes the props to
-// the App Group and reloads the widget. Android: the saved value is what the
-// widget draws when Android redraws it later, and requestWidgetUpdate redraws
-// any widget already on the home screen now.
-export function updateStreakWidget(weeks: number) {
-  try { streakWidget?.updateSnapshot({ weeks }); } catch {}
+/**
+ * Redraws every widget from `snapshot`, or in its logged-out state for null.
+ * Only utils/widgetData.ts calls this, straight after saving the snapshot, so
+ * what a widget shows now and what it redraws from later never disagree.
+ *
+ * iOS gets a second timeline entry at midnight next Monday with the same
+ * props: the layout works out the week from the entry's date, so that's the
+ * redraw that rolls it over when the app isn't opened. Android redraws on its
+ * own and its task handler does the same from the stored snapshot.
+ */
+export function renderWidgets(snapshot: WidgetSnapshot | null) {
+  const now = new Date();
+  const props: StreakWidgetProps = { weeks: snapshot?.week?.streakWeeks ?? null };
+  try {
+    streakWidget?.updateTimeline([{ date: now, props }, { date: nextMondayStart(now), props }]);
+  } catch {}
   if (androidWidget) {
     const { renderStreakWidget } = require('../widgets/AndroidStreakWidget');
-    AsyncStorage.setItem(STREAK_WIDGET_KEY, String(weeks)).catch(() => {});
     androidWidget.requestWidgetUpdate({
       widgetName: 'StreakWidget',
-      renderWidget: () => renderStreakWidget(weeks),
+      renderWidget: () => renderStreakWidget(snapshot),
     }).catch(() => {});
   }
 }

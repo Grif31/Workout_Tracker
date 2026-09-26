@@ -7,10 +7,21 @@ import { createWidget, type WidgetEnvironment } from 'expo-widgets';
 // that the widget extension evaluates on its own, so it can't close over
 // anything in this file: the SwiftUI components are globals in that runtime,
 // and the imports above are only here for types.
-export type StreakWidgetProps = { weeks: number };
+// weeks is null when nobody is logged in.
+export type StreakWidgetProps = { weeks: number | null };
 
 const StreakWidget = (props: StreakWidgetProps, _env: WidgetEnvironment) => {
   'widget';
+  if (props.weeks == null) {
+    return (
+      <VStack spacing={4}>
+        <Text modifiers={[font({ textStyle: 'headline' })]}>Log in to Aretē</Text>
+        <Text modifiers={[font({ textStyle: 'caption' }), foregroundStyle({ type: 'hierarchical', style: 'secondary' })]}>
+          Your streak shows here once you do.
+        </Text>
+      </VStack>
+    );
+  }
   return (
     <VStack spacing={4}>
       <Text modifiers={[font({ size: 44, weight: 'bold', design: 'rounded' })]}>{String(props.weeks)}</Text>
