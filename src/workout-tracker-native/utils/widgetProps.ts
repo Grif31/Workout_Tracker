@@ -166,6 +166,23 @@ export function greekRankProps(snapshot: WidgetSnapshot | null, date: Date, imag
   };
 }
 
+/**
+ * `props` with every null or undefined value left out, at any depth.
+ * expo-widgets saves an iOS timeline to UserDefaults, which takes only
+ * property-list values: a JS null arrives as NSNull, and one anywhere in the
+ * props makes iOS refuse the whole timeline, so the widget never gets past its
+ * greyed-out placeholder. The layouts read a missing field the same as null.
+ */
+export function withoutNulls<T>(props: T): T {
+  if (Array.isArray(props)) return props.filter(v => v != null).map(withoutNulls) as T;
+  if (props && typeof props === 'object') {
+    return Object.fromEntries(
+      Object.entries(props).filter(([, v]) => v != null).map(([k, v]) => [k, withoutNulls(v)]),
+    ) as T;
+  }
+  return props;
+}
+
 export function ordinal(n: number): string {
   const tens = n % 100;
   if (tens >= 11 && tens <= 13) return `${n}th`;

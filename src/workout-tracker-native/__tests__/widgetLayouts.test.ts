@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { transformFileSync } from '@babel/core';
-import { greekRankProps, weeklyGoalProps, type WidgetImages } from '../utils/widgetProps';
+import { greekRankProps, weeklyGoalProps, withoutNulls, type WidgetImages } from '../utils/widgetProps';
 import { buildGreekRank, buildWeek, mergeSnapshot, WIDGET_STALE_AFTER_MS } from '../utils/widgetSnapshot';
 import type { GreekRankData } from '../utils/greekRank';
 
@@ -80,6 +80,20 @@ function expectOnlyWidgetGlobals({ used, elements }: ReturnType<typeof render>) 
   expect([...elements].filter(e => !COMPONENTS.has(e))).toEqual([]);
 }
 
+// What iOS receives. expo-widgets saves the timeline to UserDefaults, which
+// refuses the whole timeline over one value that isn't a property list (a JS
+// null arrives as NSNull): the widget then never leaves its placeholder.
+function iosProps(props: object) {
+  const sent = withoutNulls(props);
+  (function check(v: unknown, at: string) {
+    if (v === null || v === undefined) throw new Error(`${at} is ${v}: not a property-list value`);
+    if (Array.isArray(v)) return v.forEach((x, i) => check(x, `${at}[${i}]`));
+    if (typeof v === 'object') return Object.entries(v as object).forEach(([k, x]) => check(x, `${at}.${k}`));
+    if (!['string', 'number', 'boolean'].includes(typeof v)) throw new Error(`${at} is a ${typeof v}: not a property-list value`);
+  })(sent, 'props');
+  return sent;
+}
+
 const IMAGES: WidgetImages = { logoDark: 'file:///group/ExpoWidgets/logo_on_dark.png', logoLight: 'file:///group/ExpoWidgets/logo_on_light.png' };
 const NOW = new Date(2026, 8, 24, 21, 30);
 const week = buildWeek({
@@ -113,17 +127,25 @@ describe.each([
     for (const colorScheme of ['dark', 'light']) {
       for (const [state, snapshot] of Object.entries(SNAPSHOTS)) {
         it(`${family}, ${colorScheme}, ${state}: uses only what the widget runtime has`, () => {
-          const props = (buildProps as typeof weeklyGoalProps)(snapshot, NOW, IMAGES);
+          const props = iosProps((buildProps as typeof weeklyGoalProps)(snapshot, NOW, IMAGES));
           expectOnlyWidgetGlobals(render(src, props, { widgetFamily: family, colorScheme, date: NOW }));
         });
       }
       it(`${family}, ${colorScheme}, stale: uses only what the widget runtime has`, () => {
-        const props = (buildProps as typeof weeklyGoalProps)(fresh, staleAt, IMAGES);
+        const props = iosProps((buildProps as typeof weeklyGoalProps)(fresh, staleAt, IMAGES));
         expect(props.stale).toBe(true);
         expectOnlyWidgetGlobals(render(src, props, { widgetFamily: family, colorScheme, date: staleAt }));
       });
     }
   }
+
+  it('draws without logos, a gate or a distance goal: fields iOS never receives', () => {
+    for (const family of FAMILIES[name]) {
+      const props = iosProps((buildProps as typeof weeklyGoalProps)(fresh, NOW, { logoDark: null, logoLight: null }));
+      expect(props).not.toHaveProperty('logoDark');
+      expectOnlyWidgetGlobals(render(src, props, { widgetFamily: family, colorScheme: 'dark', date: NOW }));
+    }
+  });
 
   it('taps open the app on the widget\'s own link', () => {
     const props = (buildProps as typeof weeklyGoalProps)(fresh, NOW, IMAGES);

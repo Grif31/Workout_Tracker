@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import type { WidgetSnapshot } from './widgetSnapshot';
 import {
-  greekRankProps, weeklyGoalProps, widgetTimelineDates,
+  greekRankProps, weeklyGoalProps, widgetTimelineDates, withoutNulls,
   type GreekRankProps, type WeeklyGoalProps, type WidgetImages,
 } from './widgetProps';
 import { prepareWidgetImages } from './widgetImages';
@@ -56,8 +56,9 @@ export function renderWidgets(snapshot: WidgetSnapshot | null) {
     const widgets = ios;
     (images ??= prepareWidgetImages(widgets.directory)).then(imgs => {
       const dates = widgetTimelineDates(snapshot, new Date());
-      try { widgets.weeklyGoal.updateTimeline(dates.map(date => ({ date, props: weeklyGoalProps(snapshot, date, imgs) }))); } catch {}
-      try { widgets.greekRank.updateTimeline(dates.map(date => ({ date, props: greekRankProps(snapshot, date, imgs) }))); } catch {}
+      // withoutNulls: UserDefaults drops a whole timeline over one null
+      try { widgets.weeklyGoal.updateTimeline(dates.map(date => ({ date, props: withoutNulls(weeklyGoalProps(snapshot, date, imgs)) }))); } catch {}
+      try { widgets.greekRank.updateTimeline(dates.map(date => ({ date, props: withoutNulls(greekRankProps(snapshot, date, imgs)) }))); } catch {}
     });
   }
   if (androidWidget) {
