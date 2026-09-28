@@ -46,7 +46,7 @@ const WeeklyGoalWidget = (p: WeeklyGoalProps, env: WidgetEnvironment) => {
 
   const Header = () => (
     <HStack spacing={5}>
-      {logo ? <Image uiImage={logo} modifiers={[resizable(), aspectRatio({ contentMode: 'fit' }), frame({ width: 14, height: 14 })]} /> : null}
+      {logo ? <Image uiImage={logo} modifiers={[resizable(), aspectRatio({ contentMode: 'fit' }), frame({ width: 18, height: 18 })]} /> : null}
       <Text modifiers={[font({ size: 10, weight: 'bold' }), kerning(0.8), foregroundStyle(p.stale ? secondary : accent)]}>
         {p.goalMet ? 'GOAL MET' : 'WEEKLY GOAL'}
       </Text>

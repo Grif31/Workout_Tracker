@@ -70,7 +70,7 @@ export function Card({ uri, palette, row, children }: { uri: string; palette: Pa
 export function Header({ label, color, scheme }: { label: string; color: HexColor | `rgba(${number}, ${number}, ${number}, ${number})`; scheme: Scheme }) {
   return (
     <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 5 }}>
-      <ImageWidget image={LOGOS[scheme]} imageWidth={14} imageHeight={14} resizeMode="contain" />
+      <ImageWidget image={LOGOS[scheme]} imageWidth={18} imageHeight={18} resizeMode="contain" />
       <TextWidget text={label.toUpperCase()} style={{ fontSize: 10, fontWeight: 'bold', letterSpacing: 0.08, color }} />
     </FlexWidget>
   );

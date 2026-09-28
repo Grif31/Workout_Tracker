@@ -8,7 +8,7 @@ import type { WidgetImages } from './widgetProps';
 // The version is in the file name: a changed logo is a new file, never a stale
 // copy an earlier release left behind.
 const LOGOS = [
-  { key: 'logoDark', file: 'logo_on_dark_v1.png', module: require('../assets/widgets/logo_on_dark.png') },
+  { key: 'logoDark', file: 'logo_on_dark_v2.png', module: require('../assets/widgets/logo_on_dark.png') },
   { key: 'logoLight', file: 'logo_on_light_v1.png', module: require('../assets/widgets/logo_on_light.png') },
 ] as const;
 
