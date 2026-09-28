@@ -83,7 +83,7 @@ function expectOnlyWidgetGlobals({ used, elements }: ReturnType<typeof render>) 
 // What iOS receives. expo-widgets saves the timeline to UserDefaults, which
 // refuses the whole timeline over one value that isn't a property list (a JS
 // null arrives as NSNull): the widget then never leaves its placeholder.
-function iosProps(props: object) {
+function iosProps<T extends object>(props: T): T {
   const sent = withoutNulls(props);
   (function check(v: unknown, at: string) {
     if (v === null || v === undefined) throw new Error(`${at} is ${v}: not a property-list value`);
