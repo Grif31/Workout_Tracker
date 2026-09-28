@@ -57,9 +57,7 @@ function WeeklyGoal({ p, scheme, size }: { p: WeeklyGoalProps; scheme: Scheme; s
               </FlexWidget>
               <Bar width={rightWidth} fill={p.distance.fill} height={5} color={accent} track={palette.faint} />
             </FlexWidget>
-          ) : (
-            <TextWidget text="No distance goal set" style={{ fontSize: 12, fontWeight: '600', color: palette.secondary }} />
-          )}
+          ) : null}
         </FlexWidget>
       </Card>
     );

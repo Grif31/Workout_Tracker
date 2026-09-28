@@ -94,9 +94,7 @@ const WeeklyGoalWidget = (p: WeeklyGoalProps, env: WidgetEnvironment) => {
       </HStack>
       <ProgressView value={p.distance.fill} modifiers={[progressViewStyle('linear'), tint(accent)]} />
     </VStack>
-  ) : (
-    <Text modifiers={[font({ size: 12, weight: 'semibold' }), foregroundStyle(secondary)]}>No distance goal set</Text>
-  ));
+  ) : null);
 
   if (!p.loggedIn || !p.hasWeek) {
     return (
