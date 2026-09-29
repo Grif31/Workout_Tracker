@@ -1017,7 +1017,7 @@ Built 2026-09-26 on `spike/ios-widget` (`widgets/WeeklyGoalWidget.tsx`, `widgets
 - [x] Light/dark follow the system; use the stored accent for highlights (fixed sizes with `minimumScaleFactor` rather than Dynamic Type: a widget's size doesn't grow with the text)
 - [x] Stale-data handling: if `updatedAt` is older than ~7 days, dim values and show "Open Aretē to update"
 
-- [ ] Device check on the dev build: every size and lock screen widget, light and dark, logos, taps open Home and Greek Rank, and a Monday rollover (set the phone's date forward)
+- [ ] Device check on the dev build. Done 2026-09-29: medium Weekly Goal, and Greek Rank in light and dark. Still to check: small Weekly Goal, the three lock screen widgets, taps open Home and Greek Rank, log out and in, and a Monday rollover (set the phone's date forward)
 
 ### Phase 3 — Android widgets
 Built 2026-09-26 on `spike/ios-widget` (`widgets/androidWidgets.tsx`, drawn from the same `utils/widgetProps.ts` as iOS); not yet run on a device.
