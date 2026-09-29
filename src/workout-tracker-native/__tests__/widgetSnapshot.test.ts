@@ -142,15 +142,15 @@ describe('buildRoutine and viewRoutine', () => {
     id: 3,
     name: 'Push Pull Legs',
     days: [
-      { day_order: 2, label: 'Pull', workout_template: { exercises: [{ name: 'Deadlift' }] } },
-      { day_order: 1, label: 'Push', workout_template: { exercises: [{ name: 'Bench Press' }] } },
+      { day_order: 2, label: 'Pull', workout_template: { exercises: [{ name: 'Deadlift', muscle_group: 'Back' }, { name: 'Curl', muscle_group: 'Biceps' }, { name: 'Row', muscle_group: 'Back' }] } },
+      { day_order: 1, label: 'Push', workout_template: { exercises: [{ name: 'Bench Press', muscle_group: 'Chest' }] } },
       { day_order: 3, label: 'Legs', workout_template: { exercises: [{ name: 'Squat' }] } },
     ],
   };
 
   it('picks the first day in order not logged this week', () => {
     const view = viewRoutine(buildRoutine(routine, ['  push '], THU), THU);
-    expect(view.next).toEqual({ index: 1, label: 'Pull', exercises: ['Deadlift'] });
+    expect(view.next).toEqual({ index: 1, label: 'Pull', exercises: ['Deadlift', 'Curl', 'Row'], muscles: ['Back', 'Biceps'] });
     expect(view.dayCount).toBe(3);
   });
 

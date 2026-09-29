@@ -1,10 +1,11 @@
 import { Platform } from 'react-native';
 import type { WidgetSnapshot } from './widgetSnapshot';
 import {
-  greekRankProps, weeklyGoalProps, widgetTimelineDates, withoutNulls,
-  type GreekRankProps, type WeeklyGoalProps, type WidgetImages,
+  greekRankProps, upNextProps, weeklyGoalProps, widgetAccent, widgetTimelineDates, withoutNulls,
+  type GreekRankProps, type UpNextProps, type WeeklyGoalProps, type WidgetImages,
 } from './widgetProps';
 import { prepareWidgetImages } from './widgetImages';
+import { onDiagramsRendered, widgetDiagrams } from './widgetDiagrams';
 
 // Lazy-load both widget libraries: each touches its native module on import
 // (expo-widgets builds its native objects, react-native-android-widget calls
@@ -15,6 +16,7 @@ type IosWidget<P> = { updateTimeline(entries: { date: Date; props: P }[]): void 
 let ios: {
   weeklyGoal: IosWidget<WeeklyGoalProps>;
   greekRank: IosWidget<GreekRankProps>;
+  upNext: IosWidget<UpNextProps>;
   directory: string | null;
 } | null = null;
 let androidWidget: typeof import('react-native-android-widget') | null = null;
@@ -23,9 +25,14 @@ if (Platform.OS === 'ios') {
     ios = {
       weeklyGoal: require('../widgets/WeeklyGoalWidget').default,
       greekRank: require('../widgets/GreekRankWidget').default,
+      upNext: require('../widgets/UpNextWidget').default,
       directory: require('expo-widgets').widgetsDirectory || null,
     };
   } catch {}
+  // Up Next's diagrams render after the write that asked for them: redraw then
+  onDiagramsRendered(() => {
+    require('./widgetData').readWidgetSnapshot().then(renderWidgets).catch(() => {});
+  });
 } else if (Platform.OS === 'android') {
   try { androidWidget = require('react-native-android-widget'); } catch {}
 }
@@ -54,11 +61,19 @@ export function registerAndroidWidgets() {
 export function renderWidgets(snapshot: WidgetSnapshot | null) {
   if (ios) {
     const widgets = ios;
-    (images ??= prepareWidgetImages(widgets.directory)).then(imgs => {
+    (images ??= prepareWidgetImages(widgets.directory)).then(logos => {
+      // Every day's diagram, not just the next one: on Monday the widget
+      // moves back to day 1 with the app closed
+      const accent = widgetAccent(snapshot);
+      const imgs: WidgetImages = {
+        ...logos,
+        diagrams: widgetDiagrams(widgets.directory, snapshot?.routine?.days ?? [], accent.dark, accent.light),
+      };
       const dates = widgetTimelineDates(snapshot, new Date());
       // withoutNulls: UserDefaults drops a whole timeline over one null
       try { widgets.weeklyGoal.updateTimeline(dates.map(date => ({ date, props: withoutNulls(weeklyGoalProps(snapshot, date, imgs)) }))); } catch {}
       try { widgets.greekRank.updateTimeline(dates.map(date => ({ date, props: withoutNulls(greekRankProps(snapshot, date, imgs)) }))); } catch {}
+      try { widgets.upNext.updateTimeline(dates.map(date => ({ date, props: withoutNulls(upNextProps(snapshot, date, imgs)) }))); } catch {}
     });
   }
   if (androidWidget) {

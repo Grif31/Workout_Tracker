@@ -2,8 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { androidWidgetTaskHandler } from '../widgets/androidWidgetTaskHandler';
 import { ANDROID_WIDGETS } from '../widgets/androidWidgets';
 import { WIDGET_SNAPSHOT_KEY } from '../constants/storageKeys';
-import { buildGreekRank, buildWeek, mergeSnapshot, WIDGET_STALE_AFTER_MS, type WidgetSnapshot } from '../utils/widgetSnapshot';
-import { WIDGET_LINKS } from '../utils/widgetProps';
+import { buildGreekRank, buildRoutine, buildWeek, mergeSnapshot, WIDGET_STALE_AFTER_MS, type WidgetSnapshot } from '../utils/widgetSnapshot';
+import { upNextStartLink, WIDGET_LINKS } from '../utils/widgetProps';
 import type { GreekRankData } from '../utils/greekRank';
 
 // jest.setup.ts mocks ThemeContext for every test; the widgets need its real palettes.
@@ -106,6 +106,40 @@ describe('Android Greek Rank', () => {
 
   it('opens Greek Rank when tapped', () => {
     expect(root(ANDROID_WIDGETS.GreekRank(snapshot(), SMALL, NOW).dark).props.clickActionData).toEqual({ uri: WIDGET_LINKS.greekRank });
+  });
+});
+
+describe('Android Up Next', () => {
+  const ppl = {
+    id: 3, name: 'Push Pull Legs', days: [
+      { day_order: 1, label: 'Push', workout_template: { exercises: [{ name: 'Bench Press', muscle_group: 'Chest' }] } },
+      { day_order: 2, label: 'Pull', workout_template: { exercises: [{ name: 'Deadlift', muscle_group: 'Back' }, { name: 'Curl', muscle_group: 'Biceps' }] } },
+    ],
+  };
+  const svgs = (el: any) => expand(el).filter(e => e.type === 'SvgWidget').map(e => e.props.svg as string);
+
+  it('shows the next day with its muscle diagram, and Start opens it', () => {
+    const s = snapshot({ routine: buildRoutine(ppl, ['push'], NOW) });
+    for (const info of [SMALL, MEDIUM]) {
+      const { dark } = ANDROID_WIDGETS.UpNext(s, info, NOW);
+      expect(texts(dark)).toEqual(expect.arrayContaining(['UP NEXT', 'Push Pull Legs', 'Day 2 · Pull', 'Start']));
+      expect(root(dark).props.clickActionData).toEqual({ uri: upNextStartLink(3, 1) });
+      // The body with the day's muscles lit in the accent
+      expect(svgs(dark).some(svg => svg.includes('viewBox="0 0 1448 1448"') && svg.includes('fill="#30D158"'))).toBe(true);
+    }
+    expect(texts(ANDROID_WIDGETS.UpNext(s, MEDIUM, NOW).dark)).toContain('Deadlift and Curl');
+  });
+
+  it('congratulates when every day is done', () => {
+    const s = snapshot({ routine: buildRoutine(ppl, ['push', 'pull'], NOW) });
+    expect(texts(ANDROID_WIDGETS.UpNext(s, SMALL, NOW).dark)).toEqual(expect.arrayContaining(['Great Job!', 'All 2 Days Complete']));
+    expect(texts(ANDROID_WIDGETS.UpNext(s, MEDIUM, NOW).dark)).toContain('Great Job! All 2 Days Complete');
+  });
+
+  it('asks for a routine, and opens Coach, when there is none', () => {
+    const { light } = ANDROID_WIDGETS.UpNext(snapshot(), SMALL, NOW);
+    expect(texts(light)).toContain('Pick a routine');
+    expect(root(light).props.clickActionData).toEqual({ uri: WIDGET_LINKS.coach });
   });
 });
 

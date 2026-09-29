@@ -1,7 +1,8 @@
 import {
-  greekRankProps, ordinal, weeklyGoalProps, widgetRouteFor, widgetTimelineDates, WIDGET_LINKS,
+  diagramKey, greekRankProps, ordinal, upNextProps, upNextStartLink, weeklyGoalProps, widgetRouteFor,
+  widgetTimelineDates, WIDGET_LINKS,
 } from '../utils/widgetProps';
-import { buildGreekRank, buildWeek, mergeSnapshot, WIDGET_STALE_AFTER_MS } from '../utils/widgetSnapshot';
+import { buildGreekRank, buildRoutine, buildWeek, mergeSnapshot, WIDGET_STALE_AFTER_MS } from '../utils/widgetSnapshot';
 import type { GreekRankData } from '../utils/greekRank';
 
 // jest.setup.ts mocks ThemeContext for every test; the default accent comes from its real presets.
@@ -131,5 +132,80 @@ describe('widgetRouteFor', () => {
   it('ignores links that aren\'t a widget\'s', () => {
     expect(widgetRouteFor('aretefitness://reset-password?token=x')).toBeNull();
     expect(widgetRouteFor(null)).toBeNull();
+  });
+});
+
+describe('upNextProps', () => {
+  const routine = buildRoutine({
+    id: 3,
+    name: 'Push Pull Legs',
+    days: [
+      { day_order: 1, label: 'Push', workout_template: { exercises: [{ name: 'Bench Press', muscle_group: 'Chest' }] } },
+      { day_order: 2, label: 'Pull', workout_template: { exercises: [
+        { name: 'Deadlift', muscle_group: 'Back' }, { name: 'Pull-ups', muscle_group: 'Back' },
+        { name: 'Barbell Row', muscle_group: 'Back' }, { name: 'Curl', muscle_group: 'Biceps' }, { name: 'Face Pull', muscle_group: 'Shoulders' },
+      ] } },
+      { day_order: 3, label: 'Legs', workout_template: { exercises: [{ name: 'Squat', muscle_group: 'Quads' }, { name: 'RDL', muscle_group: 'Hamstrings' }] } },
+    ],
+  }, ['push'], THU);
+
+  it('shows the next day with its exercises, and Start opens that day', () => {
+    const p = upNextProps(snap({ routine }), THU, IMAGES);
+    expect(p).toMatchObject({
+      state: 'next', routineName: 'Push Pull Legs', dayTitle: 'Day 2 · Pull',
+      exercisesLine: 'Deadlift, Pull-ups, Barbell Row and 2 more', muscles: ['Back', 'Biceps', 'Shoulders'],
+      url: upNextStartLink(3, 1),
+    });
+  });
+
+  it('lists a short day in full', () => {
+    const legs = buildRoutine({ id: 3, name: 'PPL', days: [
+      { day_order: 1, label: 'Legs', workout_template: { exercises: [{ name: 'Squat' }, { name: 'RDL' }] } },
+    ] }, [], THU);
+    expect(upNextProps(snap({ routine: legs }), THU, IMAGES).exercisesLine).toBe('Squat and RDL');
+  });
+
+  it('congratulates when every day is done, and names Monday\'s day', () => {
+    const done = buildRoutine({ ...{ id: 3, name: 'PPL' }, days: [
+      { day_order: 1, label: 'Push', workout_template: { exercises: [] } },
+      { day_order: 2, label: 'Pull', workout_template: { exercises: [] } },
+      { day_order: 3, label: 'Legs', workout_template: { exercises: [] } },
+    ] }, ['push', 'pull', 'legs'], THU);
+    expect(upNextProps(snap({ routine: done }), THU, IMAGES)).toMatchObject({
+      state: 'allDone', doneLine: 'All 3 Days Complete', mondayLine: 'Day 1 · Push is up on Monday', url: WIDGET_LINKS.home,
+    });
+    // ...and is back to day 1 on Monday without the app
+    expect(upNextProps(snap({ routine: done }), NEXT_MON, IMAGES)).toMatchObject({ state: 'next', dayTitle: 'Day 1 · Push' });
+  });
+
+  it('asks for a routine, and opens Coach, when there is none', () => {
+    expect(upNextProps(snap({}), THU, IMAGES)).toMatchObject({ state: 'noRoutine', url: WIDGET_LINKS.coach });
+  });
+
+  it('uses the rendered diagram for the next day\'s muscles and accent', () => {
+    const key = diagramKey(['Back', 'Biceps', 'Shoulders'], '#30D158', '#1C7F35');
+    const p = upNextProps(snap({ routine }), THU, { ...IMAGES, diagrams: { [key]: { dark: 'file:///dd.png', light: 'file:///dl.png' } } });
+    expect(p).toMatchObject({ diagramDark: 'file:///dd.png', diagramLight: 'file:///dl.png' });
+    // Same muscles in another order is the same file; another accent is not
+    expect(diagramKey(['Shoulders', 'Back', 'Biceps'], '#30D158', '#1C7F35')).toBe(key);
+    expect(diagramKey(['Back', 'Biceps', 'Shoulders'], '#007AFF', '#006BE0')).not.toBe(key);
+  });
+});
+
+describe('widget links for Up Next', () => {
+  it('routes Start to that routine day, and Pick a routine to Coach', () => {
+    expect(widgetRouteFor(upNextStartLink(12, 2))).toEqual({ tab: 'DashboardTab', start: { routineId: 12, dayIndex: 2 } });
+    expect(widgetRouteFor(WIDGET_LINKS.coach)).toEqual({ tab: 'TrainingTab' });
+  });
+
+  it('opens Home for an Up Next link missing its day', () => {
+    expect(widgetRouteFor(`${WIDGET_LINKS.upNext}?routine=12`)).toEqual({ tab: 'DashboardTab' });
+  });
+});
+
+describe('Start text on the accent', () => {
+  it('follows the preset: dark text on the dark-mode green, white on indigo and in light mode', () => {
+    expect(upNextProps(snap({}), THU, IMAGES)).toMatchObject({ onAccentDark: '#000000', onAccentLight: '#FFFFFF' });
+    expect(upNextProps(snap({ accent: { dark: '#5E5CE6', light: '#5E5CE6' } }), THU, IMAGES)).toMatchObject({ onAccentDark: '#FFFFFF' });
   });
 });

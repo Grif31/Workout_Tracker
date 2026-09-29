@@ -56,7 +56,8 @@ export type WidgetRoutine = {
   name: string;
   /** Monday of the week doneLabels belongs to. */
   weekStart: string;
-  days: { label: string; exercises: string[] }[];
+  /** In day order, with the muscle groups each day's exercises work, for the muscle diagram. */
+  days: { label: string; exercises: string[]; muscles: string[] }[];
   /** Lower-cased names of workouts logged that week; a day is done when its label is here. */
   doneLabels: string[];
 };
@@ -230,7 +231,7 @@ export function buildScores(strength: ScoreResponse, endurance: ScoreResponse): 
 type RoutineInput = {
   id: number;
   name: string;
-  days: { day_order: number; label: string; workout_template: { exercises: { name: string }[] } }[];
+  days: { day_order: number; label: string; workout_template: { exercises: { name: string; muscle_group?: string }[] } }[];
 };
 
 export function buildRoutine(routine: RoutineInput, weekWorkoutNames: string[], today: Date): WidgetRoutine {
@@ -240,7 +241,11 @@ export function buildRoutine(routine: RoutineInput, weekWorkoutNames: string[], 
     weekStart: mondayOf(today),
     days: [...routine.days]
       .sort((a, b) => a.day_order - b.day_order)
-      .map(d => ({ label: d.label, exercises: d.workout_template.exercises.map(e => e.name) })),
+      .map(d => ({
+        label: d.label,
+        exercises: d.workout_template.exercises.map(e => e.name),
+        muscles: [...new Set(d.workout_template.exercises.map(e => e.muscle_group).filter((m): m is string => !!m))],
+      })),
     doneLabels: weekWorkoutNames.map(n => n.trim().toLowerCase()),
   };
 }
@@ -248,7 +253,7 @@ export function buildRoutine(routine: RoutineInput, weekWorkoutNames: string[], 
 export type RoutineView = {
   name: string;
   /** Null when every day is done this week. */
-  next: { index: number; label: string; exercises: string[] } | null;
+  next: { index: number; label: string; exercises: string[]; muscles: string[] } | null;
   dayCount: number;
 };
 

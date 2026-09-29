@@ -1026,9 +1026,10 @@ Built 2026-09-26 on `spike/ios-widget` (`widgets/androidWidgets.tsx`, drawn from
 - [ ] Device check on an Android dev build: both sizes of each, light and dark, taps open Home and Greek Rank, and the hourly redraw rolls the week over on Monday
 
 ### Phase 4 — Up Next routine widget (both platforms)
-- [ ] Medium widget: active routine name, today's "Up Next" day (same selection logic as the Dashboard Active Routine card: first day not completed this week, resetting to Day 1 each week), and a Log button
-- [ ] **Deep link**: `aretefitness://log?routineId=&day=` opens WorkoutLog pre-filled with that day. Add the route to linking config, including the cold-start and logged-out cases (queue the link until auth resolves)
-- [ ] Empty state when there's no active routine: "Pick a routine" linking to the Coach tab
+Built 2026-09-29 on `spike/ios-widget` (`widgets/UpNextWidget.tsx`, `UpNext` in `widgets/androidWidgets.tsx`), small and medium, with the muscle diagram; not yet run on a device. Needs a new dev build on each platform (a new widget).
+- [x] Small and medium widget: active routine name, today's "Up Next" day (same selection logic as the Dashboard Active Routine card: first day not completed this week, resetting to Day 1 each week), and a Log button
+- [x] **Deep link**: `aretefitness://widget/up-next?routine=&day=` opens WorkoutLog pre-filled with that day. Add the route to linking config, including the cold-start and logged-out cases (queue the link until auth resolves)
+- [x] Empty state when there's no active routine: "Pick a routine" linking to the Coach tab
 
 ### Phase 5 — Scores widget (small + medium, Premium)
 - [ ] Medium: Strength and Endurance Score rings side by side (percentile + rank label), each hidden individually when that score has no data

@@ -1,11 +1,13 @@
 import React from 'react';
-import { FlexWidget, TextWidget, type HexColor, type WidgetInfo } from 'react-native-android-widget';
+import { FlexWidget, SvgWidget, TextWidget, type HexColor, type WidgetInfo } from 'react-native-android-widget';
 import {
   Bar, Card, Days, Header, Icon, MEDIUM_MIN_WIDTH, PADDING, PALETTES, Placeholder, Ring, withAlpha, type Scheme,
 } from './androidParts';
 import {
-  greekRankProps, weeklyGoalProps, type GreekRankProps, type WeeklyGoalProps, type WidgetImages,
+  greekRankProps, upNextProps, weeklyGoalProps,
+  type GreekRankProps, type UpNextProps, type WeeklyGoalProps, type WidgetImages,
 } from '../utils/widgetProps';
+import { muscleDiagramSvg, WIDGET_BODY_COLORS } from '../utils/muscleDiagramSvg';
 import type { WidgetSnapshot } from '../utils/widgetSnapshot';
 
 // The Android twins of the iOS widgets, drawn from the same props
@@ -183,6 +185,105 @@ function GreekRank({ p, scheme, size }: { p: GreekRankProps; scheme: Scheme; siz
   );
 }
 
+function UpNext({ p, scheme, size }: { p: UpNextProps; scheme: Scheme; size: Size }) {
+  if (!p.loggedIn) return <Placeholder uri={p.url} scheme={scheme} loggedIn={false} what="next routine day" />;
+  const palette = PALETTES[scheme];
+  const accent = scheme === 'dark' ? p.accentDark : p.accentLight;
+  const onAccent = (scheme === 'dark' ? p.onAccentDark : p.onAccentLight) as HexColor;
+  const header = <Header label="Up Next" color={p.stale ? palette.secondary : accent as HexColor} scheme={scheme} />;
+  const routine = <TextWidget text={p.routineName} style={{ fontSize: size.medium ? 12 : 11, fontWeight: '600', color: palette.secondary }} maxLines={1} />;
+  const diagram = (px: number) => (p.muscles.length > 0
+    ? <SvgWidget svg={muscleDiagramSvg(p.muscles, { body: WIDGET_BODY_COLORS[scheme], highlight: accent }, px)} style={{ width: px, height: px }} />
+    : null);
+  const start = p.stale ? (
+    <TextWidget text={size.medium ? p.staleLabel : 'Open Aretē to update'} style={{ fontSize: 12, fontWeight: '600', color: palette.text }} maxLines={2} />
+  ) : (
+    <FlexWidget style={{
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexGap: 6,
+      paddingVertical: size.medium ? 10 : 8, paddingHorizontal: 16, borderRadius: 20,
+      backgroundColor: accent as HexColor, ...(size.medium ? {} : { width: size.contentWidth }),
+    }}>
+      <SvgWidget svg={`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z" fill="${onAccent}"/></svg>`} style={{ width: 12, height: 12 }} />
+      <TextWidget text="Start" style={{ fontSize: size.medium ? 14 : 13, fontWeight: 'bold', color: onAccent }} />
+    </FlexWidget>
+  );
+  const check = (px: number) => (
+    <FlexWidget style={{ width: px, height: px, borderRadius: px / 2, backgroundColor: accent as HexColor, justifyContent: 'center', alignItems: 'center' }}>
+      <SvgWidget svg={`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="${onAccent}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`} style={{ width: px / 2, height: px / 2 }} />
+    </FlexWidget>
+  );
+
+  if (p.state === 'noRoutine') {
+    return (
+      <Card uri={p.url} palette={palette}>
+        {header}
+        <FlexWidget style={{ flexDirection: 'column', flexGap: 4 }}>
+          <TextWidget text="Pick a routine" style={{ fontSize: size.medium ? 20 : 17, fontWeight: '800', color: palette.text }} />
+          <TextWidget
+            text={size.medium ? 'Choose one on the Coach tab and your next day shows up here.' : 'Choose one on the Coach tab.'}
+            style={{ fontSize: 12, color: palette.secondary }} maxLines={3}
+          />
+        </FlexWidget>
+      </Card>
+    );
+  }
+
+  if (p.state === 'allDone') {
+    return size.medium ? (
+      <Card uri={p.url} palette={palette}>
+        <FlexWidget style={{ flexDirection: 'column', flexGap: 2 }}>{header}{routine}</FlexWidget>
+        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 10 }}>
+          {check(36)}
+          <FlexWidget style={{ flexDirection: 'column', flexGap: 2 }}>
+            <TextWidget text={`Great Job! ${p.doneLine}`} style={{ fontSize: 17, fontWeight: '800', color: palette.text }} maxLines={1} />
+            <TextWidget text={p.mondayLine} style={{ fontSize: 12, color: palette.secondary }} maxLines={1} />
+          </FlexWidget>
+        </FlexWidget>
+        <FlexWidget style={{ height: 1 }} />
+      </Card>
+    ) : (
+      <Card uri={p.url} palette={palette}>
+        {header}
+        {check(34)}
+        <FlexWidget style={{ flexDirection: 'column', flexGap: 2 }}>
+          <TextWidget text="Great Job!" style={{ fontSize: 17, fontWeight: '800', color: palette.text }} />
+          <TextWidget text={p.doneLine} style={{ fontSize: 13, fontWeight: 'bold', color: palette.text }} maxLines={1} />
+        </FlexWidget>
+      </Card>
+    );
+  }
+
+  if (size.medium) {
+    const leftWidth = size.contentWidth - 84 - 12;
+    return (
+      <Card uri={p.url} palette={palette} row>
+        <FlexWidget style={{ width: leftWidth, height: 'match_parent', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <FlexWidget style={{ flexDirection: 'column', flexGap: 2 }}>{header}{routine}</FlexWidget>
+          <FlexWidget style={{ flexDirection: 'column', flexGap: 4 }}>
+            <TextWidget text={p.dayTitle} style={{ fontSize: 22, fontWeight: '800', color: palette.text }} maxLines={1} />
+            <TextWidget text={p.exercisesLine} style={{ fontSize: 12, color: palette.secondary }} maxLines={2} />
+          </FlexWidget>
+        </FlexWidget>
+        <FlexWidget style={{ height: 'match_parent', flexDirection: 'column', justifyContent: 'space-between', alignItems: 'center' }}>
+          {diagram(84)}
+          {start}
+        </FlexWidget>
+      </Card>
+    );
+  }
+
+  return (
+    <Card uri={p.url} palette={palette}>
+      <FlexWidget style={{ width: size.contentWidth, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <FlexWidget style={{ flexDirection: 'column', flexGap: 2 }}>{header}{routine}</FlexWidget>
+        {diagram(50)}
+      </FlexWidget>
+      <TextWidget text={p.dayTitle} style={{ fontSize: 18, fontWeight: '800', color: palette.text }} maxLines={1} />
+      {start}
+    </Card>
+  );
+}
+
 type Renderer = (snapshot: WidgetSnapshot | null, info: Pick<WidgetInfo, 'width'>, now?: Date) => { light: React.JSX.Element; dark: React.JSX.Element };
 
 /** Keyed by each widget's `name` in app.config.js's react-native-android-widget entry. */
@@ -196,5 +297,10 @@ export const ANDROID_WIDGETS: Record<string, Renderer> = {
     const p = greekRankProps(snapshot, now, NO_IMAGES);
     const size = sizeOf(info);
     return { light: <GreekRank p={p} scheme="light" size={size} />, dark: <GreekRank p={p} scheme="dark" size={size} /> };
+  },
+  UpNext: (snapshot, info, now = new Date()) => {
+    const p = upNextProps(snapshot, now, NO_IMAGES);
+    const size = sizeOf(info);
+    return { light: <UpNext p={p} scheme="light" size={size} />, dark: <UpNext p={p} scheme="dark" size={size} /> };
   },
 };

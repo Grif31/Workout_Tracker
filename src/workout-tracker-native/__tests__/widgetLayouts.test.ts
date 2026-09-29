@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { transformFileSync } from '@babel/core';
-import { greekRankProps, weeklyGoalProps, withoutNulls, type WidgetImages } from '../utils/widgetProps';
-import { buildGreekRank, buildWeek, mergeSnapshot, WIDGET_STALE_AFTER_MS } from '../utils/widgetSnapshot';
+import { diagramKey, greekRankProps, upNextProps, weeklyGoalProps, withoutNulls, type WidgetImages } from '../utils/widgetProps';
+import { buildGreekRank, buildRoutine, buildWeek, mergeSnapshot, WIDGET_STALE_AFTER_MS } from '../utils/widgetSnapshot';
 import type { GreekRankData } from '../utils/greekRank';
 
 // An iOS widget layout is shipped as a string and evaluated inside the widget
@@ -106,20 +106,30 @@ const rank = (over: Partial<GreekRankData>) => buildGreekRank({
   weights: { consistency: 0.4, dedication: 0.3, volume: 0.3 },
   performance: { strength: 44, endurance: null, best: 44 }, profile_missing: [], ...over,
 });
-const fresh = mergeSnapshot(null, 7, { week, greekRank: rank({}) }, NOW.getTime());
+const ppl = {
+  id: 3, name: 'Push Pull Legs', days: [
+    { day_order: 1, label: 'Push', workout_template: { exercises: [{ name: 'Bench Press', muscle_group: 'Chest' }] } },
+    { day_order: 2, label: 'Pull', workout_template: { exercises: [{ name: 'Deadlift', muscle_group: 'Back' }, { name: 'Curl', muscle_group: 'Biceps' }] } },
+  ],
+};
+// Held, top and fresh cover Up Next's next-day state; allDone and the others without a routine its other two
+const fresh = mergeSnapshot(null, 7, { week, greekRank: rank({}), routine: buildRoutine(ppl, ['push'], NOW) }, NOW.getTime());
+const allDone = mergeSnapshot(null, 7, { week, greekRank: rank({}), routine: buildRoutine(ppl, ['push', 'pull'], NOW) }, NOW.getTime());
 const held = mergeSnapshot(null, 7, { week, greekRank: rank({ greek_rank: 'Olympian', greek_score: 84, score_rank: 'Titan', held_by_gate: true }) }, NOW.getTime());
 const top = mergeSnapshot(null, 7, { week, greekRank: rank({ greek_rank: 'Aretē', greek_score: 95, performance: { strength: 90, endurance: null, best: 90 } }) }, NOW.getTime());
 const staleAt = new Date(NOW.getTime() + WIDGET_STALE_AFTER_MS + 1);
 
-const SNAPSHOTS = { fresh, held, top, loggedOut: null } as const;
+const SNAPSHOTS = { fresh, held, top, allDone, loggedOut: null } as const;
 const FAMILIES = {
   WeeklyGoalWidget: ['systemSmall', 'systemMedium', 'accessoryCircular', 'accessoryInline'],
   GreekRankWidget: ['systemSmall', 'systemMedium', 'accessoryRectangular'],
+  UpNextWidget: ['systemSmall', 'systemMedium'],
 } as const;
 
 describe.each([
   ['widgets/WeeklyGoalWidget.tsx', 'WeeklyGoalWidget', weeklyGoalProps],
   ['widgets/GreekRankWidget.tsx', 'GreekRankWidget', greekRankProps],
+  ['widgets/UpNextWidget.tsx', 'UpNextWidget', upNextProps],
 ] as const)('%s', (file, name, buildProps) => {
   const src = compileLayout(file);
 
@@ -151,5 +161,28 @@ describe.each([
     const props = (buildProps as typeof weeklyGoalProps)(fresh, NOW, IMAGES);
     const { tree } = render(src, props, { widgetFamily: 'systemSmall', colorScheme: 'dark', date: NOW });
     expect(tree.props.modifiers).toContainEqual({ modifier: 'widgetURL', args: [props.url] });
+  });
+});
+
+describe('widgets/UpNextWidget.tsx with its muscle diagram', () => {
+  const src = compileLayout('widgets/UpNextWidget.tsx');
+  const images: WidgetImages = {
+    ...IMAGES,
+    diagrams: { [diagramKey(['Back', 'Biceps'], '#30D158', '#1C7F35')]: { dark: 'file:///group/d.png', light: 'file:///group/l.png' } },
+  };
+
+  it.each(['systemSmall', 'systemMedium'])('%s draws the rendered diagram for the next day', family => {
+    const props = iosProps(upNextProps(fresh, NOW, images));
+    expect(props.diagramDark).toBe('file:///group/d.png');
+    const result = render(src, props, { widgetFamily: family, colorScheme: 'dark', date: NOW });
+    expectOnlyWidgetGlobals(result);
+    const uris: string[] = [];
+    (function walk(n: any) {
+      if (Array.isArray(n)) return n.forEach(walk);
+      if (!n || typeof n !== 'object') return;
+      if (n.type === 'Image' && n.props.uiImage) uris.push(n.props.uiImage);
+      walk(n.props?.children);
+    })(result.tree);
+    expect(uris).toContain('file:///group/d.png');
   });
 });

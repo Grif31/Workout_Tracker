@@ -1,7 +1,7 @@
 import { ACCENT_PRESETS } from '../context/ThemeContext';
 import { GREEK_RANK_COLORS, GREEK_RANK_TEXT_COLORS, GREEK_RANKS } from '../constants/greekRanks';
 import { distanceGoalProgress, formatDistanceValue } from './weeklyDistanceGoal';
-import { isStale, nextMondayStart, viewWeek, WIDGET_STALE_AFTER_MS, type WidgetSnapshot } from './widgetSnapshot';
+import { isStale, nextMondayStart, viewRoutine, viewWeek, WIDGET_STALE_AFTER_MS, type WidgetSnapshot } from './widgetSnapshot';
 
 // What each iOS widget draws at one moment, worked out in the app. The layout
 // functions in widgets/ run in the widget extension's own JS runtime and can't
@@ -12,22 +12,103 @@ import { isStale, nextMondayStart, viewWeek, WIDGET_STALE_AFTER_MS, type WidgetS
 export const WIDGET_LINKS = {
   home: 'aretefitness://widget/home',
   greekRank: 'aretefitness://widget/greek-rank',
+  coach: 'aretefitness://widget/coach',
+  upNext: 'aretefitness://widget/up-next',
 } as const;
+
+/** Up Next's Start: a new workout with this routine day filled in. */
+export function upNextStartLink(routineId: number, dayIndex: number): string {
+  return `${WIDGET_LINKS.upNext}?routine=${routineId}&day=${dayIndex}`;
+}
 
 export type WidgetRoute =
   | { tab: 'DashboardTab' }
-  | { tab: 'ProfileTab'; screen: 'GreekRank' };
+  | { tab: 'ProfileTab'; screen: 'GreekRank' }
+  | { tab: 'TrainingTab' }
+  | { tab: 'DashboardTab'; start: { routineId: number; dayIndex: number } };
+
+// By hand: React Native's URLSearchParams throws "not implemented" on get()
+function queryNumber(url: string, name: string): number | null {
+  const m = url.match(new RegExp(`[?&]${name}=(\\d+)`));
+  return m ? parseInt(m[1], 10) : null;
+}
 
 /** Where a widget tap lands, or null for a link that isn't a widget's. */
 export function widgetRouteFor(url: string | null | undefined): WidgetRoute | null {
   const link = url?.split(/[?#]/)[0].replace(/\/+$/, '');
   if (link === WIDGET_LINKS.home) return { tab: 'DashboardTab' };
   if (link === WIDGET_LINKS.greekRank) return { tab: 'ProfileTab', screen: 'GreekRank' };
+  if (link === WIDGET_LINKS.coach) return { tab: 'TrainingTab' };
+  if (link === WIDGET_LINKS.upNext) {
+    const routineId = queryNumber(url!, 'routine');
+    const dayIndex = queryNumber(url!, 'day');
+    return routineId != null && dayIndex != null
+      ? { tab: 'DashboardTab', start: { routineId, dayIndex } }
+      : { tab: 'DashboardTab' };
+  }
   return null;
 }
 
 /** Images the app has copied into the App Group for the extension to read. */
-export type WidgetImages = { logoDark: string | null; logoLight: string | null };
+export type WidgetImages = {
+  logoDark: string | null;
+  logoLight: string | null;
+  /** Rendered muscle diagrams by diagramKey, for Up Next on iOS. */
+  diagrams?: Record<string, { dark: string; light: string }>;
+};
+
+/** One file per set of muscles and highlight colors, so a new accent or a changed day renders anew. */
+export function diagramKey(muscles: string[], accentDark: string, accentLight: string): string {
+  const text = [...muscles].sort().join(',') + '|' + accentDark + accentLight;
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
+  return h.toString(16);
+}
+
+export type UpNextProps = Shared & {
+  state: 'next' | 'allDone' | 'noRoutine';
+  routineName: string;
+  /** "Day 2 · Pull" */
+  dayTitle: string;
+  /** "Deadlift, Pull-ups, Barbell Row and 2 more" */
+  exercisesLine: string;
+  /** Every day done: "All 3 Days Complete", under "Great Job!" */
+  doneLine: string;
+  /** "Day 1 · Push is up on Monday" */
+  mondayLine: string;
+  /** The next day's muscle groups; Android draws its own diagram from them. */
+  muscles: string[];
+  /** iOS: the rendered diagram's file, if the app has made it yet. */
+  diagramDark?: string;
+  diagramLight?: string;
+};
+
+function exercisesLine(names: string[]): string {
+  if (names.length <= 3) return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] ?? '';
+  return `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
+}
+
+export function upNextProps(snapshot: WidgetSnapshot | null, date: Date, images: WidgetImages): UpNextProps {
+  const routine = snapshot?.routine ?? null;
+  const view = routine ? viewRoutine(routine, date) : null;
+  const next = view?.next ?? null;
+  const base = shared(snapshot, date, images, !routine ? WIDGET_LINKS.coach
+    : next ? upNextStartLink(routine.id, next.index) : WIDGET_LINKS.home);
+  const diagram = next ? images.diagrams?.[diagramKey(next.muscles, base.accentDark, base.accentLight)] : undefined;
+  const days = view?.dayCount ?? 0;
+  return {
+    ...base,
+    state: !routine ? 'noRoutine' : next ? 'next' : 'allDone',
+    routineName: routine?.name ?? '',
+    dayTitle: next ? `Day ${next.index + 1} · ${next.label}` : '',
+    exercisesLine: next ? exercisesLine(next.exercises) : '',
+    doneLine: `All ${days} Day${days === 1 ? '' : 's'} Complete`,
+    mondayLine: routine?.days[0] ? `Day 1 · ${routine.days[0].label} is up on Monday` : '',
+    muscles: next?.muscles ?? [],
+    diagramDark: diagram?.dark,
+    diagramLight: diagram?.light,
+  };
+}
 
 type Shared = WidgetImages & {
   loggedIn: boolean;
@@ -35,21 +116,35 @@ type Shared = WidgetImages & {
   staleLabel: string;
   accentDark: string;
   accentLight: string;
+  /** Text on an accent fill (a Start button), per background. */
+  onAccentDark: string;
+  onAccentLight: string;
   url: string;
 };
 
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+/** The stored accent, or the default green, with the text color each preset uses on it. */
+export function widgetAccent(snapshot: WidgetSnapshot | null) {
+  const dark = snapshot?.accent?.dark ?? ACCENT_PRESETS[0].value;
+  const light = snapshot?.accent?.light ?? ACCENT_PRESETS[0].light;
+  const preset = ACCENT_PRESETS.find(a => a.value === dark && a.light === light) ?? ACCENT_PRESETS[0];
+  return { dark, light, onDark: preset.text, onLight: preset.lightText };
+}
+
 function shared(snapshot: WidgetSnapshot | null, date: Date, images: WidgetImages, url: string): Shared {
   const updated = snapshot ? new Date(snapshot.updatedAt) : null;
+  const accent = widgetAccent(snapshot);
   return {
     ...images,
     loggedIn: snapshot != null,
     stale: snapshot != null && isStale(snapshot, date.getTime()),
     staleLabel: updated ? `Open Aretē to update. Last updated ${MONTHS[updated.getMonth()]} ${updated.getDate()}.` : '',
-    accentDark: snapshot?.accent?.dark ?? ACCENT_PRESETS[0].value,
-    accentLight: snapshot?.accent?.light ?? ACCENT_PRESETS[0].light,
+    accentDark: accent.dark,
+    accentLight: accent.light,
+    onAccentDark: accent.onDark,
+    onAccentLight: accent.onLight,
     url,
   };
 }

@@ -1,6 +1,7 @@
 ﻿import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import Body, { ExtendedBodyPart, Slug } from 'react-native-body-highlighter';
+import { MUSCLE_SLUGS, muscleKey } from '../utils/muscleDiagramSvg';
 import { useTheme } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 
@@ -12,22 +13,6 @@ type Props = {
   scale?: number;
 };
 
-const MUSCLE_MAP: Record<string, { front: Slug[]; back: Slug[] }> = {
-  Chest:        { front: ['chest'],                    back: [] },
-  Back:         { front: [],                           back: ['upper-back', 'trapezius'] },
-  'Lower Back': { front: [],                           back: ['lower-back'] },
-  Shoulders:    { front: ['deltoids'],                 back: ['deltoids'] },
-  Biceps:       { front: ['biceps'],                   back: [] },
-  Triceps:      { front: [],                           back: ['triceps'] },
-  Forearms:     { front: ['forearm'],                  back: ['forearm'] },
-  Quads:        { front: ['quadriceps'],               back: [] },
-  Quadriceps:   { front: ['quadriceps'],               back: [] },
-  Hamstrings:   { front: [],                           back: ['hamstring'] },
-  Calves:       { front: ['calves'],                   back: ['calves'] },
-  Core:         { front: ['abs', 'obliques'],          back: [] },
-  Abs:          { front: ['abs', 'obliques'],          back: [] },
-  Glutes:       { front: [],                           back: ['gluteal'] },
-};
 
 export default function MuscleDiagram({ muscles, primaryMuscle, muscleColors, scale = 0.65 }: Props) {
   const { colors } = useTheme();
@@ -43,11 +28,11 @@ export default function MuscleDiagram({ muscles, primaryMuscle, muscleColors, sc
   const backMap  = new Map<Slug, string>();
 
   for (const m of activeList) {
-    const key = Object.keys(MUSCLE_MAP).find(k => k.toLowerCase() === m.toLowerCase());
+    const key = muscleKey(m);
     if (!key) continue;
     const highlight = muscleColors?.[m] ?? muscleColors?.[key] ?? colors.accent;
-    MUSCLE_MAP[key].front.forEach(s => frontMap.set(s, highlight));
-    MUSCLE_MAP[key].back.forEach(s  => backMap.set(s, highlight));
+    MUSCLE_SLUGS[key].front.forEach(s => frontMap.set(s, highlight));
+    MUSCLE_SLUGS[key].back.forEach(s  => backMap.set(s, highlight));
   }
 
   const frontData: ExtendedBodyPart[] = Array.from(frontMap.entries()).map(([slug, color]) => ({ slug, color }));
