@@ -399,8 +399,11 @@ def _verify_apple_token(identity_token: str):
     """Decode Apple identityToken JWT and return (email, name)."""
     # Fail closed: without the expected audience we cannot tell our app's
     # tokens from any other app's — never skip the check.
-    bundle_id = os.environ.get('APPLE_BUNDLE_ID', '')
-    if not bundle_id:
+    # Comma-separated, because Apple sets `aud` to the requesting app's bundle
+    # ID: the App Store app (com.aretefitness.app) and the dev build
+    # (com.aretefitness.app.dev) each get tokens for their own.
+    bundle_ids = [b.strip() for b in os.environ.get('APPLE_BUNDLE_ID', '').split(',') if b.strip()]
+    if not bundle_ids:
         raise ValueError('Apple Sign-In is not configured (APPLE_BUNDLE_ID missing)')
 
     try:
@@ -421,7 +424,7 @@ def _verify_apple_token(identity_token: str):
             identity_token,
             public_key,
             algorithms=['RS256'],
-            audience=bundle_id,
+            audience=bundle_ids,
             issuer='https://appleid.apple.com',
         )
     except Exception as exc:

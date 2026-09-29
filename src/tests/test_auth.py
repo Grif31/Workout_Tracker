@@ -1,8 +1,12 @@
 """
 Tests for /api/signup, /api/login, and /api/auth/social
 """
+import json
 import os
+import time
 from unittest.mock import patch
+
+import pytest
 
 
 class TestSignup:
@@ -323,6 +327,48 @@ class TestAppleEmailVerified:
         for i, flag in enumerate((True, 'true')):
             res = self._apple(client, {'email': f'apple{i}@example.com', 'email_verified': flag})
             assert res.status_code == 200, (flag, res.get_json())
+
+
+class TestAppleAudience:
+    """Real signed tokens, so the audience check itself runs: Apple sets
+    `aud` to the bundle ID of the app that asked, so the App Store app and the
+    dev build each need theirs listed."""
+
+    BOTH = 'com.aretefitness.app, com.aretefitness.app.dev'
+
+    @pytest.fixture(scope='class')
+    def signer(self):
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from jwt.algorithms import RSAAlgorithm
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        jwk = json.loads(RSAAlgorithm.to_jwk(key.public_key()))
+        return key, {**jwk, 'kid': 'test-kid'}
+
+    def _sign_in(self, client, signer, aud, bundle_env):
+        import jwt as pyjwt
+        key, jwk = signer
+        token = pyjwt.encode(
+            {'iss': 'https://appleid.apple.com', 'aud': aud, 'exp': int(time.time()) + 600,
+             'email': 'apple-aud@example.com', 'email_verified': 'true'},
+            key, algorithm='RS256', headers={'kid': 'test-kid'},
+        )
+        with patch.dict(os.environ, {'APPLE_BUNDLE_ID': bundle_env}), \
+             patch('routes.auth_routes.http_requests.get', return_value=_FakeResp({'keys': [jwk]})):
+            return client.post('/api/auth/social', json={'provider': 'apple', 'token': token})
+
+    def test_accepts_the_app_store_app_and_the_dev_build(self, client, signer):
+        for aud in ('com.aretefitness.app', 'com.aretefitness.app.dev'):
+            res = self._sign_in(client, signer, aud, self.BOTH)
+            assert res.status_code == 200, (aud, res.get_json())
+
+    def test_rejects_a_token_issued_to_another_app(self, client, signer):
+        res = self._sign_in(client, signer, 'com.someone.else', self.BOTH)
+        assert res.status_code == 401
+        assert 'audience' in res.get_json()['message'].lower()
+
+    def test_a_single_bundle_id_still_works_and_excludes_the_dev_build(self, client, signer):
+        assert self._sign_in(client, signer, 'com.aretefitness.app', 'com.aretefitness.app').status_code == 200
+        assert self._sign_in(client, signer, 'com.aretefitness.app.dev', 'com.aretefitness.app').status_code == 401
 
 
 class TestRefresh:
