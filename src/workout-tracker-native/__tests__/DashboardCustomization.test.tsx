@@ -31,6 +31,23 @@ const mockWorkouts = [
 ];
 
 describe('DashboardScreen customization', () => {
+  // The week calendar prints this week's day numbers, so a getByText('2') or
+  // ('3') for a count collides with them in any week that holds the 2nd or
+  // 3rd of a month (CI failed on Monday 2026-09-28 this way). Pinned to a week
+  // whose days, 14-20, no assertion here looks for. Only Date is faked: real
+  // timers keep waitFor and the renders' promises behaving as before.
+  beforeAll(() => {
+    jest.useFakeTimers({
+      now: new Date(2026, 8, 17, 12),
+      doNotFake: [
+        'hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame',
+        'requestIdleCallback', 'cancelIdleCallback', 'setImmediate', 'clearImmediate',
+        'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout',
+      ],
+    });
+  });
+  afterAll(() => jest.useRealTimers());
+
   beforeEach(async () => {
     // Per-user keys (the saved Home layout) would otherwise leak between tests
     await AsyncStorage.clear();
