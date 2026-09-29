@@ -31,13 +31,14 @@ const WeeklyGoalWidget = (p: WeeklyGoalProps, env: WidgetEnvironment) => {
     return (
       <ZStack modifiers={[containerBackground('clear', 'widget'), widgetURL(p.url)]}>
         <AccessoryWidgetBackground />
-        <Gauge
-          value={Math.min(p.done, p.goal)}
-          min={0}
-          max={p.goal}
-          currentValueLabel={<Text modifiers={[font({ size: 15, weight: 'heavy', design: 'rounded' })]}>{`${p.done}/${p.goal}`}</Text>}
-          modifiers={[gaugeStyle('circularCapacity')]}
-        />
+        <Gauge value={Math.min(p.done, p.goal)} min={0} max={p.goal} modifiers={[gaugeStyle('circularCapacity')]} />
+        {/* Drawn over the gauge rather than as its currentValueLabel, which the
+            lock screen didn't show: at the start of a week that left an empty
+            ring. The icon says what the count is of. */}
+        <VStack spacing={0}>
+          <Image systemName="figure.strengthtraining.traditional" size={11} />
+          <Text modifiers={[font({ size: 14, weight: 'heavy', design: 'rounded' })]}>{`${p.done}/${p.goal}`}</Text>
+        </VStack>
       </ZStack>
     );
   }
@@ -64,14 +65,21 @@ const WeeklyGoalWidget = (p: WeeklyGoalProps, env: WidgetEnvironment) => {
 
   // The system gauge is about 58pt across; scaled rather than framed, since
   // a capacity gauge ignores a frame larger than its own size.
+  // The count sits over the gauge rather than in its currentValueLabel, which
+  // iOS doesn't always draw: a new week's 0/3 must never read as an empty ring.
   const Ring = ({ size }: { size: number }) => (
-    <Gauge
-      value={Math.min(p.done, p.goal)}
-      min={0}
-      max={p.goal}
-      currentValueLabel={<Text modifiers={[font({ size: 17, weight: 'heavy', design: 'rounded' })]}>{`${p.done}/${p.goal}`}</Text>}
-      modifiers={[gaugeStyle('circularCapacity'), tint(accent), scaleEffect(size / 58), frame({ width: size, height: size }), opacity(p.stale ? 0.45 : 1)]}
-    />
+    <ZStack modifiers={[frame({ width: size, height: size }), opacity(p.stale ? 0.45 : 1)]}>
+      <Gauge
+        value={Math.min(p.done, p.goal)}
+        min={0}
+        max={p.goal}
+        modifiers={[gaugeStyle('circularCapacity'), tint(accent), scaleEffect(size / 58)]}
+      />
+      <HStack spacing={0} alignment="firstTextBaseline">
+        <Text modifiers={[font({ size: size * 0.31, weight: 'heavy', design: 'rounded' })]}>{String(p.done)}</Text>
+        <Text modifiers={[font({ size: size * 0.17, weight: 'bold' }), foregroundStyle(secondary)]}>{`/${p.goal}`}</Text>
+      </HStack>
+    </ZStack>
   );
 
   const Days = ({ dot, letter }: { dot: number; letter: number }) => (
