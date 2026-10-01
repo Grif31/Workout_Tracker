@@ -126,16 +126,18 @@ const UpNextWidget = (p: UpNextProps, env: WidgetEnvironment) => {
 
   return (
     <VStack alignment="leading" spacing={0} modifiers={surface}>
-      <HStack alignment="top">
+      {/* The header gets the full width: beside the diagram, the logo and
+          "UP NEXT" were squeezed into about 75pt and cut off */}
+      <Header />
+      <Spacer />
+      <HStack spacing={6}>
         <VStack alignment="leading" spacing={2}>
-          <Header />
           <Text modifiers={[font({ size: 11, weight: 'semibold' }), foregroundStyle(secondary), lineLimit(1)]}>{p.routineName}</Text>
+          <Text modifiers={[font({ size: 17, weight: 'heavy' }), lineLimit(2), minimumScaleFactor(0.7)]}>{p.dayTitle}</Text>
         </VStack>
         <Spacer />
-        <Diagram size={50} />
+        <Diagram size={46} />
       </HStack>
-      <Spacer />
-      <Text modifiers={[font({ size: 18, weight: 'heavy' }), lineLimit(1), minimumScaleFactor(0.7)]}>{p.dayTitle}</Text>
       <Spacer />
       <Start small />
     </VStack>

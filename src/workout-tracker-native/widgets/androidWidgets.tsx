@@ -274,11 +274,15 @@ function UpNext({ p, scheme, size }: { p: UpNextProps; scheme: Scheme; size: Siz
 
   return (
     <Card uri={p.url} palette={palette}>
-      <FlexWidget style={{ width: size.contentWidth, flexDirection: 'row', justifyContent: 'space-between' }}>
-        <FlexWidget style={{ flexDirection: 'column', flexGap: 2 }}>{header}{routine}</FlexWidget>
-        {diagram(50)}
+      {/* The header on its own row, as on iOS: beside the diagram it was cut off */}
+      {header}
+      <FlexWidget style={{ width: size.contentWidth, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <FlexWidget style={{ width: size.contentWidth - 46 - 6, flexDirection: 'column', flexGap: 2 }}>
+          {routine}
+          <TextWidget text={p.dayTitle} style={{ fontSize: 17, fontWeight: '800', color: palette.text }} maxLines={2} />
+        </FlexWidget>
+        {diagram(46)}
       </FlexWidget>
-      <TextWidget text={p.dayTitle} style={{ fontSize: 18, fontWeight: '800', color: palette.text }} maxLines={1} />
       {start}
     </Card>
   );
