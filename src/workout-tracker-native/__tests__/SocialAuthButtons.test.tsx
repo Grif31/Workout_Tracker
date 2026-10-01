@@ -1,4 +1,5 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 import SocialAuthButtons from '../components/SocialAuthButtons';
 
@@ -38,5 +39,20 @@ describe('SocialAuthButtons', () => {
     );
     fireEvent.press(getByText('Apple'));
     expect(onApple).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows nothing on Android, where there is no sign-in button to offer', () => {
+    const os = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'android' });
+    try {
+      const { queryByText } = render(
+        <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} onFacebook={onFacebook} label="or sign up with" />
+      );
+      // Not even the divider: it used to lead to an empty row
+      expect(queryByText('or sign up with')).toBeNull();
+      expect(queryByText('Apple')).toBeNull();
+    } finally {
+      Object.defineProperty(Platform, 'OS', { configurable: true, get: () => os });
+    }
   });
 });

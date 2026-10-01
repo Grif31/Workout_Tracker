@@ -18,6 +18,9 @@ export default function SocialAuthButtons({
   onFacebook,
   label = 'or continue with',
 }: Props) {
+  // Apple is the only sign-in button, and it's iOS-only: without it the
+  // "or sign up with" divider led to nothing on Android
+  if (Platform.OS !== 'ios') return null;
   return (
     <View>
       <View style={styles.dividerRow}>
@@ -27,12 +30,10 @@ export default function SocialAuthButtons({
       </View>
 
       <View style={styles.row}>
-        {Platform.OS === 'ios' && (
-          <TouchableOpacity style={styles.btn} onPress={onApple} activeOpacity={0.75}>
-            <Ionicons name="logo-apple" size={20} color={AUTH.text} />
-            <Text style={styles.btnText}>Apple</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity style={styles.btn} onPress={onApple} activeOpacity={0.75}>
+          <Ionicons name="logo-apple" size={20} color={AUTH.text} />
+          <Text style={styles.btnText}>Apple</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
