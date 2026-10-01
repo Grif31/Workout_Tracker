@@ -1032,6 +1032,7 @@ Built 2026-09-29 on `spike/ios-widget` (`widgets/UpNextWidget.tsx`, `UpNext` in 
 - [x] Empty state when there's no active routine: "Pick a routine" linking to the Coach tab
 
 ### Phase 5 — Scores widget (small + medium, Premium)
+> **After launch** (decided 2026-09-30): the widgets ship with Weekly Goal, Greek Rank and Up Next. The design is settled in the mock; this needs `isPremium` in the snapshot and a native per-widget setting for the small size's score, so a build on each platform.
 - [ ] Medium: Strength and Endurance Score rings side by side (percentile + rank label), each hidden individually when that score has no data
 - [ ] Small: one score, chosen when the widget is added; its own empty state when that score has no data
 - [ ] Locked state for free users in both sizes: needs `isPremium` in the snapshot, written from PurchaseContext
