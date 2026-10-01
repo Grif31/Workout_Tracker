@@ -1,6 +1,19 @@
 const IS_DEV = process.env.APP_VARIANT === 'development';
 const IOS_BUNDLE_ID = IS_DEV ? 'com.aretefitness.app.dev' : 'com.aretefitness.app';
 
+// Google sign-in OAuth clients (Google Cloud console, Credentials). Not
+// secrets: they ship inside the app. One iOS client per bundle ID, so the dev
+// build signs in as itself; the backend's GOOGLE_CLIENT_IDS lists every client.
+// Android's own clients (package plus signing SHA-1) are matched by Google
+// itself and never named here; the app passes the Web client's ID instead.
+const GOOGLE_IOS_CLIENT_ID = IS_DEV
+  ? '722911736139-je9hmktkpeddboafh2acl175il3a1u12.apps.googleusercontent.com'
+  : '722911736139-v5vbpr2a1iu7jgmfchc671nju2707o2m.apps.googleusercontent.com';
+// Google returns to the app through this URL scheme: the client ID reversed
+const GOOGLE_IOS_URL_SCHEME = GOOGLE_IOS_CLIENT_ID.split('.').reverse().join('.');
+// Android asks for tokens with the Web client's ID (one for both builds)
+const GOOGLE_WEB_CLIENT_ID = '722911736139-dl922st1nco0mk1s8vfhiek6dphevme9.apps.googleusercontent.com';
+
 module.exports = {
   expo: {
     name: IS_DEV ? 'Aretē (Dev)' : 'Aretē',
@@ -62,6 +75,8 @@ module.exports = {
       eas: {
         projectId: '356b88e9-4302-43fc-b50a-6d83030b8fa6',
       },
+      // Read by hooks/useSocialAuth.ts through expo-constants
+      googleSignIn: { iosClientId: GOOGLE_IOS_CLIENT_ID, webClientId: GOOGLE_WEB_CLIENT_ID },
     },
     plugins: [
       'expo-dev-client',
@@ -163,6 +178,7 @@ module.exports = {
       ],
       'react-native-health-connect',
       'expo-apple-authentication',
+      ['@react-native-google-signin/google-signin', { iosUrlScheme: GOOGLE_IOS_URL_SCHEME }],
       [
         // iOS home screen widget (TODO.md section 19). Both identifiers follow
         // the app's, so the dev build's widget reads the dev app's App Group and

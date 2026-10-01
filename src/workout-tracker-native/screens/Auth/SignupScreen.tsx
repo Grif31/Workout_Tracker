@@ -27,7 +27,7 @@ type Props = NativeStackScreenProps<AuthStackParamsList, 'Signup'>;
 
 export default function SignupScreen({ navigation }: Props) {
   const { login } = useAuth();
-  const { handleApple, handleGoogle, handleFacebook } = useSocialAuth();
+  const { handleApple, handleGoogle, handleFacebook, googleAvailable } = useSocialAuth();
 
   const [username, setUsername]           = useState('');
   const [email, setEmail]                 = useState('');
@@ -177,6 +177,7 @@ export default function SignupScreen({ navigation }: Props) {
           <SocialAuthButtons
             onApple={handleApple}
             onGoogle={handleGoogle}
+            google={googleAvailable}
             onFacebook={handleFacebook}
             label="or sign up with"
           />

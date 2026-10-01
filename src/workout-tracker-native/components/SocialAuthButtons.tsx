@@ -9,6 +9,8 @@ type Props = {
   onApple:    () => void;
   onGoogle:   () => void;
   onFacebook: () => void;
+  /** Google is set up for this platform (useSocialAuth's googleAvailable). */
+  google?: boolean;
   label?: string;
 };
 
@@ -16,11 +18,13 @@ export default function SocialAuthButtons({
   onApple,
   onGoogle,
   onFacebook,
+  google = false,
   label = 'or continue with',
 }: Props) {
-  // Apple is the only sign-in button, and it's iOS-only: without it the
-  // "or sign up with" divider led to nothing on Android
-  if (Platform.OS !== 'ios') return null;
+  const apple = Platform.OS === 'ios';
+  // No divider over an empty row: Apple is iOS-only, and Google only shows
+  // where its client is set up
+  if (!apple && !google) return null;
   return (
     <View>
       <View style={styles.dividerRow}>
@@ -30,10 +34,18 @@ export default function SocialAuthButtons({
       </View>
 
       <View style={styles.row}>
-        <TouchableOpacity style={styles.btn} onPress={onApple} activeOpacity={0.75}>
-          <Ionicons name="logo-apple" size={20} color={AUTH.text} />
-          <Text style={styles.btnText}>Apple</Text>
-        </TouchableOpacity>
+        {apple && (
+          <TouchableOpacity style={styles.btn} onPress={onApple} activeOpacity={0.75}>
+            <Ionicons name="logo-apple" size={20} color={AUTH.text} />
+            <Text style={styles.btnText}>Apple</Text>
+          </TouchableOpacity>
+        )}
+        {google && (
+          <TouchableOpacity style={styles.btn} onPress={onGoogle} activeOpacity={0.75}>
+            <Ionicons name="logo-google" size={18} color={AUTH.text} />
+            <Text style={styles.btnText}>Google</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
