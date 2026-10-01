@@ -142,7 +142,7 @@ describe('buildRoutine and viewRoutine', () => {
     id: 3,
     name: 'Push Pull Legs',
     days: [
-      { day_order: 2, label: 'Pull', workout_template: { exercises: [{ name: 'Deadlift', muscle_group: 'Back' }, { name: 'Curl', muscle_group: 'Biceps' }, { name: 'Row', muscle_group: 'Back' }] } },
+      { day_order: 2, label: 'Pull', workout_template: { exercises: [{ name: 'Deadlift', muscle_group: 'Back, Hamstrings, Glutes' }, { name: 'Curl', muscle_group: 'Biceps, Forearms' }, { name: 'Row', muscle_group: 'Back, Biceps' }] } },
       { day_order: 1, label: 'Push', workout_template: { exercises: [{ name: 'Bench Press', muscle_group: 'Chest' }] } },
       { day_order: 3, label: 'Legs', workout_template: { exercises: [{ name: 'Squat' }] } },
     ],
@@ -150,7 +150,8 @@ describe('buildRoutine and viewRoutine', () => {
 
   it('picks the first day in order not logged this week', () => {
     const view = viewRoutine(buildRoutine(routine, ['  push '], THU), THU);
-    expect(view.next).toEqual({ index: 1, label: 'Pull', exercises: ['Deadlift', 'Curl', 'Row'], muscles: ['Back', 'Biceps'] });
+    // Every muscle each exercise lists, once, from the API's comma-separated muscle_group
+    expect(view.next).toEqual({ index: 1, label: 'Pull', exercises: ['Deadlift', 'Curl', 'Row'], muscles: ['Back', 'Hamstrings', 'Glutes', 'Biceps', 'Forearms'] });
     expect(view.dayCount).toBe(3);
   });
 

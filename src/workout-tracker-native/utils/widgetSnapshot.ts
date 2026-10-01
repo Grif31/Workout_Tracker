@@ -244,7 +244,10 @@ export function buildRoutine(routine: RoutineInput, weekWorkoutNames: string[], 
       .map(d => ({
         label: d.label,
         exercises: d.workout_template.exercises.map(e => e.name),
-        muscles: [...new Set(d.workout_template.exercises.map(e => e.muscle_group).filter((m): m is string => !!m))],
+        // muscle_group is the API's comma-separated list, primary first
+        // ("Back, Hamstrings, Glutes"); the diagram lights every one, as the
+        // exercise detail screen's does
+        muscles: [...new Set(d.workout_template.exercises.flatMap(e => (e.muscle_group ?? '').split(',').map(m => m.trim()).filter(Boolean)))],
       })),
     doneLabels: weekWorkoutNames.map(n => n.trim().toLowerCase()),
   };
