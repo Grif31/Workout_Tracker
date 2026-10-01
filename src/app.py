@@ -475,6 +475,75 @@ def create_app(test_config=None):
             db.session.rollback()
             click.echo('Re-run with --apply to write these changes.')
 
+    @app.cli.command('grant-beta-premium')
+    @click.option('--max-user-id', required=True, type=int,
+                  help='Highest user id that counts as a beta user (the newest account at launch)')
+    @click.option('--exclude', multiple=True, type=int, help='User id to leave out; repeatable')
+    @click.option('--apply', 'do_apply', is_flag=True, default=False, help='Call RevenueCat (omit for dry run)')
+    def grant_beta_premium(max_user_id, exclude, do_apply):
+        """Give every beta account a lifetime promotional `premium` entitlement
+        in RevenueCat, so testers keep premium once production builds stop
+        setting EXPO_PUBLIC_BETA_PREMIUM. RevenueCat ids are our user ids
+        (PurchaseContext logs in with String(user.id)). User has no created_at,
+        so beta membership is an id cutoff: run this right before releasing,
+        with the newest id at that moment. Safe to re-run: users who already
+        hold an active promotional premium are skipped. Needs
+        REVENUECAT_SECRET_KEY (a v1 secret key, sk_...)."""
+        import time
+        import requests
+
+        users = (User.query
+                 .filter(User.id <= max_user_id, User.id.notin_(exclude or [-1]))
+                 .order_by(User.id).all())
+        click.echo(f'{"[DRY RUN] " if not do_apply else ""}{len(users)} user(s) with id <= {max_user_id}'
+                   f'{f", excluding {list(exclude)}" if exclude else ""}.')
+        if not do_apply:
+            for u in users[:20]:
+                click.echo(f'  user {u.id} ({u.username})')
+            if len(users) > 20:
+                click.echo(f'  ... and {len(users) - 20} more')
+            click.echo('Re-run with --apply to grant.')
+            return
+
+        secret = os.environ.get('REVENUECAT_SECRET_KEY')
+        if not secret:
+            raise click.ClickException('REVENUECAT_SECRET_KEY is not set.')
+        session = requests.Session()
+        session.headers.update({'Authorization': f'Bearer {secret}', 'Content-Type': 'application/json'})
+        base = 'https://api.revenuecat.com/v1/subscribers'
+
+        def call(method, url, **kwargs):
+            for _ in range(5):
+                res = session.request(method, url, timeout=15, **kwargs)
+                if res.status_code != 429:
+                    return res
+                time.sleep(float(res.headers.get('Retry-After', 2)))
+            return res
+
+        granted = skipped = 0
+        failed = []
+        for u in users:
+            sub = call('GET', f'{base}/{u.id}')
+            if sub.ok:
+                ent = sub.json().get('subscriber', {}).get('entitlements', {}).get('premium') or {}
+                expires = ent.get('expires_date')
+                active = expires is None or expires > time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+                if ent and active and (ent.get('product_identifier') or '').startswith('rc_promo'):
+                    skipped += 1
+                    continue
+            res = call('POST', f'{base}/{u.id}/entitlements/premium/promotional', json={'duration': 'lifetime'})
+            if res.ok:
+                granted += 1
+                click.echo(f'  granted user {u.id} ({u.username})')
+            else:
+                failed.append(u.id)
+                click.echo(f'  FAILED user {u.id}: HTTP {res.status_code} {res.text[:200]}')
+
+        click.echo(f'Done. {granted} granted, {skipped} already had it, {len(failed)} failed'
+                   f'{f": {failed}" if failed else ""}.')
+        if failed:
+            raise click.ClickException('Some grants failed; re-run to retry them.')
+
     return app
 
 

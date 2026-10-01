@@ -11,6 +11,7 @@ import { usePurchase } from '../context/PurchaseContext';
 import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { showToast } from '../utils/toast';
+import { openExternalLink } from '../utils/links';
 import { type RootStackParamsList } from '../navigation/types';
 import { APP_ICONS_ENABLED } from '../constants/featureFlags';
 
@@ -216,6 +217,17 @@ export default function PaywallScreen({ navigation }: Props) {
             : 'Payment charged to your Apple ID at confirmation of purchase. '}
           Subscriptions automatically renew unless cancelled at least 24 hours before the end of the current period.
         </Text>
+
+        {/* Apple guideline 3.1.2 requires working Terms and Privacy links in the purchase flow */}
+        <View style={styles.legalLinks}>
+          <Text style={styles.legalLink} onPress={() => openExternalLink('https://aretefitnessapp.com/terms')}>
+            Terms of Use
+          </Text>
+          <Text style={styles.legalLinkSeparator}>·</Text>
+          <Text style={styles.legalLink} onPress={() => openExternalLink('https://aretefitnessapp.com/privacy')}>
+            Privacy Policy
+          </Text>
+        </View>
       </ScrollView>
     </View>
   );
@@ -367,4 +379,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 16,
   },
+  legalLinks: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  legalLink: {
+    fontSize: typography.fontSize.xs,
+    color: GOLD_DIM,
+    textDecorationLine: 'underline',
+    paddingVertical: spacing.xs,
+  },
+  legalLinkSeparator: { fontSize: typography.fontSize.xs, color: GOLD_DIM },
 });

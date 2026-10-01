@@ -5,7 +5,8 @@ import { useAuth } from './AuthContext';
 
 const API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ?? '';
 const PREMIUM_ENTITLEMENT = 'premium';
-// Set EXPO_PUBLIC_BETA_PREMIUM=true in eas.json to grant all testers premium. Remove before public launch.
+// Only the development and preview profiles set EXPO_PUBLIC_BETA_PREMIUM. Production must not:
+// beta testers keep premium through a RevenueCat promotional grant (scripts/grant_beta_premium.py).
 const BETA_PREMIUM = process.env.EXPO_PUBLIC_BETA_PREMIUM === 'true';
 
 type PurchaseContextType = {
