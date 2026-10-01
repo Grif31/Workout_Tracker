@@ -218,11 +218,22 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1rem;
-      color: #30D158;
-      font-weight: 700;
-      line-height: 1;
     }
+    /* Drawn with bars, not the +/− glyphs: a glyph sits on its font's baseline and bearings, so it never lands on the circle's true center */
+    .faq-icon-plus, .faq-icon-minus {
+      position: relative;
+      width: 10px;
+      height: 10px;
+      font-size: 0;
+    }
+    .faq-icon-plus::before, .faq-icon-plus::after, .faq-icon-minus::before {
+      content: '';
+      position: absolute;
+      background: #30D158;
+      border-radius: 1px;
+    }
+    .faq-icon-plus::before, .faq-icon-minus::before { left: 0; right: 0; top: 4px; height: 2px; }
+    .faq-icon-plus::after { top: 0; bottom: 0; left: 4px; width: 2px; }
     details[open] .faq-icon-plus  { display: none; }
     details:not([open]) .faq-icon-minus { display: none; }
     .faq-body {
@@ -272,7 +283,7 @@
   <!-- Features -->
   <div class="section section-wide">
     <p class="section-label">Features</p>
-    <h2 class="section-title">Built for people who train on purpose</h2>
+    <h2 class="section-title">Train with purpose</h2>
     <div class="feature-list">
       <div class="feature-row">
         <div class="feature-copy">
@@ -321,7 +332,7 @@
       <div class="feature-row">
         <div class="feature-copy">
           <p class="feature-eyebrow">AI Coach</p>
-          <h3>A coach that reads your training</h3>
+          <h3>A coach that analyzes your training</h3>
           <p>Generate templates and full weekly routines around your goal, equipment and schedule. The Coach also reviews your recent training and flags what the numbers show, like a split falling out of balance or muscles dropping below threshold.</p>
         </div>
         <div class="feature-shot">
