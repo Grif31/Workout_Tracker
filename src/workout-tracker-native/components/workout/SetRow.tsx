@@ -250,6 +250,9 @@ function SetRow({
         <TouchableOpacity
           style={[colStyles.check, { alignItems: 'center' }]}
           onPress={onToggleDone}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: isDone }}
+          accessibilityLabel={`Set ${setIndex + 1} done`}
         >
           <Ionicons
             name={isDone ? 'checkmark-circle' : 'ellipse-outline'}

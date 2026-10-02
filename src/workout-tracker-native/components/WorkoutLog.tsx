@@ -32,6 +32,7 @@ import { muscleGroups } from '../constants/muscleGroups';
 import { useWorkoutSession, sessionElapsedSeconds } from '../context/WorkoutSessionContext';
 import { PR_GOLD } from '../constants/prColors';
 import { nearPrHint } from '../utils/prFormat';
+import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../utils/templatePrefill';
 
 import {
   REST_TIMER_KEY,
@@ -44,6 +45,7 @@ import {
   SET_TYPES,
   type SetType,
   type WorkoutSet,
+  type PreviousSet,
   type ExerciseEntry,
   makeUid,
   fmtElapsed,
@@ -67,6 +69,45 @@ import { syncWorkoutToHealthConnect } from '../utils/healthConnect';
 type EditableSetField = 'reps' | 'weight';
 
 const SET_TYPE_LABELS: Record<SetType, string> = { N: 'Normal', W: 'Warm-up', D: 'Drop Set', F: 'Failure' };
+
+// A prefill (template, routine day, or a logged workout for Edit / Perform
+// Again) as editable entries
+const prefillToEntries = (prefill: PrefillWorkoutData): ExerciseEntry[] =>
+  prefill.exercises.map((ex: any) => ({
+    uid: makeUid(),
+    id: ex.id,
+    exercise_template_id: ex.exercise_template_id,
+    exercise_type: ex.exercise_type,
+    name: ex.name,
+    muscle_group: ex.muscle_group,
+    equipment: ex.equipment,
+    image_url: ex.image_url,
+    bodyweight_load_factor: ex.bodyweight_load_factor,
+    notes: ex.notes ?? undefined,
+    sets: ex.sets.map((s: any) => ({
+      uid: makeUid(),
+      id: s.id,
+      reps: String(s.reps ?? ''),
+      weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''),
+      set_type: s.set_type ?? 'N',
+      rpe: s.rpe != null ? String(s.rpe) : '',
+      // Duration exercises edit in seconds; the API stores minutes
+      cardio_duration: s.cardio_duration != null
+        ? (ex.exercise_type === 'duration'
+            ? String(Math.round(parseFloat(String(s.cardio_duration)) * 60))
+            : String(s.cardio_duration))
+        : '',
+      distance: s.distance != null ? String(s.distance) : '',
+      distance_unit: s.distance_unit ?? 'km',
+      intensity: s.intensity != null ? String(s.intensity) : '',
+    })),
+  }));
+
+// Has the data toggleSetDone requires before a set can be checked off
+const isSetFilled = (ex: ExerciseEntry, s: WorkoutSet) =>
+  isDuration(ex)
+    ? parseFloat(s.cardio_duration ?? '') > 0
+    : !!s.reps.trim() && (isBodyweight(ex) || !!s.weight.trim());
 
 type Props = {
   prefill?: PrefillWorkoutData;
@@ -144,6 +185,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       const bwContribution = addsBodyweight ? bw! * bodyweightLoadFactor(ex) : 0;
       sets += ex.sets.length;
       for (const set of ex.sets) {
+        // Prefilled-but-unlogged sets aren't volume yet, or a workout would open
+        // showing last session's total. Edits load every set unchecked, so
+        // there a filled set counts.
+        if (!set.done && !editMode) continue;
         const r = parseFloat(set.reps);
         const w = parseFloat(set.weight);
         if (isNaN(r) || isNaN(w)) continue;
@@ -151,7 +196,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       }
     }
     return { totalVolume: volume, totalSets: sets };
-  }, [exercises, user?.bodyweight]);
+  }, [exercises, user?.bodyweight, editMode]);
   const [autoFocusNoteIdx, setAutoFocusNoteIdx] = useState<number | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
 
@@ -230,7 +275,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   const [exerciseList, setExerciseList] = useState<{ id: number; name: string; muscle_group: string; equipment?: string; image_url?: string; exercise_type?: string; is_custom?: boolean }[]>([]);
   const [recentExercises, setRecentExercises] = useState<{ name: string; exercise_template_id: number | null }[]>([]);
-  const [templates, setTemplates] = useState<{ id: number; name: string; exercises: { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string; bodyweight_load_factor?: number | null }[] }[]>([]);
+  const [templates, setTemplates] = useState<{ id: number; name: string; programming_json?: string | null; exercises: TemplateExercise[] }[]>([]);
   const [exerciseModalVisible, setExerciseModalVisible] = useState(false);
   const [newExerciseFormVisible, setNewExerciseFormVisible] = useState(false);
   const [replacingExIndex, setReplacingExIndex] = useState<number | null>(null);
@@ -643,72 +688,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         const d = new Date(prefill.date);
         if (!isNaN(d.getTime())) setSelectedDate(d);
       }
-      const initialExercises: ExerciseEntry[] = prefill.exercises.map((ex: any) => ({
-        uid: makeUid(),
-        id: ex.id,
-        exercise_template_id: ex.exercise_template_id,
-        exercise_type: ex.exercise_type,
-        name: ex.name,
-        muscle_group: ex.muscle_group,
-        equipment: ex.equipment,
-        image_url: ex.image_url,
-        bodyweight_load_factor: ex.bodyweight_load_factor,
-        notes: ex.notes ?? undefined,
-        sets: ex.sets.map((s: any) => ({
-          uid: makeUid(),
-          id: s.id,
-          reps: String(s.reps ?? ''),
-          weight: isBodyweight(ex) ? '0' : String(s.weight ?? ''),
-          set_type: s.set_type ?? 'N',
-          rpe: s.rpe != null ? String(s.rpe) : '',
-          // Duration exercises edit in seconds; the API stores minutes
-          cardio_duration: s.cardio_duration != null
-            ? (ex.exercise_type === 'duration'
-                ? String(Math.round(parseFloat(String(s.cardio_duration)) * 60))
-                : String(s.cardio_duration))
-            : '',
-          distance: s.distance != null ? String(s.distance) : '',
-          distance_unit: s.distance_unit ?? 'km',
-          intensity: s.intensity != null ? String(s.intensity) : '',
-        })),
-      }));
+      const initialExercises = prefillToEntries(prefill);
       setExercises(initialExercises);
-
-      if (!editMode) {
-        (async () => {
-          const enriched = [...initialExercises];
-          await Promise.all(
-            initialExercises.map(async (ex, idx) => {
-              try {
-                const params = new URLSearchParams({ name: ex.name });
-                if (ex.exercise_template_id) params.set('exercise_template_id', String(ex.exercise_template_id));
-                const fetches: Promise<Response>[] = [apiFetch(`/api/stats/exercise/last-session?${params}`)];
-                if (ex.exercise_template_id) fetches.push(apiFetch(`/api/personal-records/${ex.exercise_template_id}`));
-                const [lastRes, prRes] = await Promise.all(fetches);
-                let prData: ExerciseEntry['currentPR'] | undefined;
-                if (prRes?.ok) {
-                  const pr = await prRes.json();
-                  prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps, max_duration: pr.max_duration };
-                }
-                if (lastRes.ok) {
-                  const data = await lastRes.json();
-                  if (data.sets?.length > 0) {
-                    enriched[idx] = {
-                      ...enriched[idx],
-                      ...(prefillPreviousRef.current ? { sets: prevSetsToEditable(ex, data.sets) } : {}),
-                      previousSets: data.sets,
-                      currentPR: prData,
-                    };
-                  } else if (prData) {
-                    enriched[idx] = { ...enriched[idx], currentPR: prData };
-                  }
-                }
-              } catch {}
-            })
-          );
-          setExercises([...enriched]);
-        })();
-      }
+      if (!editMode) enrichWithHistory(initialExercises);
     }
   }, [prefill]);
 
@@ -829,13 +811,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     const ex = exercisesRef.current[exIndex];
     const set = ex?.sets[setIndex];
     if (!ex || !set) return;
-    if (!set.done) {
-      if (isDuration(ex)) {
-        if (!set.cardio_duration?.trim()) return;
-      } else if (!set.reps.trim() || (!isBodyweight(ex) && !set.weight.trim())) {
-        return;
-      }
-    }
+    if (!set.done && !isSetFilled(ex, set)) return;
     const nowDone = !set.done;
     setExercises(prev => {
       const target = prev[exIndex];
@@ -845,14 +821,19 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       return next;
     });
     if (nowDone && autoStartRest && set.set_type !== 'W') startRest();
-    if (nowDone && ex.currentPR && ex.exercise_type !== 'cardio' && !isDuration(ex)) {
+    const loggedReps = parseFloat(set.reps);
+    if (nowDone && ex.currentPR && ex.exercise_type !== 'cardio' && !isDuration(ex) && loggedReps >= 1) {
       const w = parseFloat(set.weight);
-      const r = parseFloat(set.reps);
-      const e1rm = r <= 15 ? w * (1 + r / 30) : 0;
+      const r = loggedReps;
+      // Mirrors the server's PR rules (epley_1rm and the max_reps branch in
+      // workout_routes.py), so the banner never celebrates a PR that isn't saved:
+      // 0-rep sets count for nothing, a single IS the 1RM, and 1-rep sets never
+      // make a rep record.
+      const e1rm = r <= 1 ? w : r <= 15 ? w * (1 + r / 30) : 0;
       const pr = ex.currentPR;
       const perWeightEntry = pr.per_weight_reps?.find(e => Math.abs(e.weight - w) < 0.01);
       const isNewRepsPR =
-        !isNaN(r) && !isNaN(w) &&
+        !isNaN(r) && !isNaN(w) && r >= 2 &&
         pr.per_weight_reps != null &&
         r > (perWeightEntry?.max_reps ?? 0);
       const isNewPR =
@@ -1198,157 +1179,82 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const addExToWorkout = async (exercise: { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string; bodyweight_load_factor?: number | null }) => {
     const initialSet: WorkoutSet = makeInitialSet(exercise);
 
+    const fresh = (uid: string): ExerciseEntry => ({
+      uid, name: exercise.name, exercise_template_id: exercise.id, exercise_type: exercise.exercise_type as ExerciseEntry['exercise_type'],
+      muscle_group: exercise.muscle_group, equipment: exercise.equipment, image_url: exercise.image_url,
+      bodyweight_load_factor: exercise.bodyweight_load_factor, sets: [initialSet],
+    });
+
     if (replacingExIndex !== null) {
       const targetIdx = replacingExIndex;
-      setExercises(prev => prev.map((ex, i) =>
-        i === targetIdx
-          ? { uid: ex.uid, name: exercise.name, exercise_template_id: exercise.id, exercise_type: exercise.exercise_type as ExerciseEntry['exercise_type'], muscle_group: exercise.muscle_group, equipment: exercise.equipment, image_url: exercise.image_url, bodyweight_load_factor: exercise.bodyweight_load_factor, sets: [initialSet] }
-          : ex
-      ));
+      const target = exercisesRef.current[targetIdx];
       setReplacingExIndex(null);
       setExerciseModalVisible(false);
-
-      // Fetch previous session + PR for the replacement exercise after state settles.
-      try {
-        const lastSessionParams = new URLSearchParams({ name: exercise.name });
-        if (exercise.id) lastSessionParams.set('exercise_template_id', String(exercise.id));
-        const fetches: Promise<Response>[] = [
-          apiFetch(`/api/stats/exercise/last-session?${lastSessionParams}`),
-        ];
-        if (exercise.id) {
-          fetches.push(apiFetch(`/api/personal-records/${exercise.id}`));
-        }
-        const [lastRes, prRes] = await Promise.all(fetches);
-        let prData: ExerciseEntry['currentPR'] | undefined;
-        if (prRes?.ok) {
-          const pr = await prRes.json();
-          prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps, max_duration: pr.max_duration };
-        }
-        if (lastRes.ok) {
-          const data = await lastRes.json();
-          setExercises(prev => {
-            const merged = mergeWithSessionPR(exercise.id, prData, prev);
-            return prev.map((ex, i) => {
-              if (i !== targetIdx || ex.name !== exercise.name) return ex;
-              if (data.sets?.length > 0) {
-                return {
-                  ...ex,
-                  ...(prefillPreviousRef.current ? { sets: prevSetsToEditable(exercise, data.sets) } : {}),
-                  previousSets: data.sets,
-                  currentPR: merged,
-                };
-              }
-              return merged ? { ...ex, currentPR: merged } : ex;
-            });
-          });
-        }
-      } catch {}
+      if (!target) return;
+      const replacement = fresh(target.uid);
+      setExercises(prev => prev.map(ex => ex.uid === target.uid ? replacement : ex));
+      enrichWithHistory([replacement]);
       return;
     }
 
-    const newUid = makeUid();
-    setExercises(prev => [
-      ...prev,
-      { uid: newUid, name: exercise.name, exercise_template_id: exercise.id, exercise_type: exercise.exercise_type as ExerciseEntry['exercise_type'], muscle_group: exercise.muscle_group, equipment: exercise.equipment, image_url: exercise.image_url, bodyweight_load_factor: exercise.bodyweight_load_factor, sets: [initialSet] },
-    ]);
+    const added = fresh(makeUid());
+    setExercises(prev => [...prev, added]);
     setExerciseModalVisible(false);
+    enrichWithHistory([added]);
+  };
 
+  // Goes through buildTemplatePrefill like every other way a template is
+  // logged, so the chips keep the programmed sets, reps and RPE instead of
+  // starting each exercise at one blank set.
+  const applyTemplate = (template: typeof templates[0]) => {
+    const prefillData = buildTemplatePrefill(template.name, template.exercises, parseProgramming(template.programming_json));
+    setWorkoutName(prefillData.name);
+    const entries = prefillToEntries(prefillData);
+    setExercises(entries);
+    enrichWithHistory(entries);
+  };
+
+  // Attaches last session's sets and the current PRs to newly added entries.
+  // Each result is merged by uid into whatever state is current when it lands,
+  // and the sets are only swapped for last session's while the user hasn't
+  // touched them, so a slow response can't wipe a set logged in the meantime.
+  const enrichWithHistory = (entries: ExerciseEntry[]) => Promise.all(entries.map(async entry => {
     try {
-      const lastSessionParams = new URLSearchParams({ name: exercise.name });
-      if (exercise.id) lastSessionParams.set('exercise_template_id', String(exercise.id));
-      const fetches: Promise<Response>[] = [
-        apiFetch(`/api/stats/exercise/last-session?${lastSessionParams}`),
-      ];
-      if (exercise.id) {
-        fetches.push(apiFetch(`/api/personal-records/${exercise.id}`));
-      }
-      const [lastRes, prRes] = await Promise.all(fetches);
-
+      const tid = entry.exercise_template_id;
+      const params = new URLSearchParams({ name: entry.name });
+      if (tid) params.set('exercise_template_id', String(tid));
+      const [lastRes, prRes] = await Promise.all([
+        apiFetch(`/api/stats/exercise/last-session?${params}`),
+        tid ? apiFetch(`/api/personal-records/${tid}`) : Promise.resolve(null),
+      ]);
       let prData: ExerciseEntry['currentPR'] | undefined;
       if (prRes?.ok) {
         const pr = await prRes.json();
         prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps, max_duration: pr.max_duration };
       }
-
-      if (lastRes.ok) {
-        const data = await lastRes.json();
-        if (data.sets?.length > 0) {
-          setExercises(prev => {
-            const idx = prev.findIndex(ex => ex.uid === newUid);
-            if (idx === -1) return prev;
-            const updated = [...prev];
-            updated[idx] = {
-              ...updated[idx],
-              ...(prefillPreviousRef.current ? { sets: prevSetsToEditable(exercise, data.sets) } : {}),
-              previousSets: data.sets,
-              currentPR: mergeWithSessionPR(exercise.id, prData, prev),
-            };
-            return updated;
-          });
-        } else if (prData) {
-          setExercises(prev => {
-            const idx = prev.findIndex(ex => ex.uid === newUid);
-            if (idx === -1) return prev;
-            const updated = [...prev];
-            updated[idx] = { ...updated[idx], currentPR: mergeWithSessionPR(exercise.id, prData, prev) };
-            return updated;
-          });
-        }
-      }
-    } catch {}
-  };
-
-  const applyTemplate = async (template: typeof templates[0]) => {
-    setWorkoutName(template.name);
-    const newExercises: ExerciseEntry[] = template.exercises.map(ex => {
-      const initialSet: WorkoutSet = makeInitialSet(ex);
-      return {
-        uid: makeUid(),
-        name: ex.name,
-        exercise_template_id: ex.id,
-        exercise_type: ex.exercise_type as ExerciseEntry['exercise_type'],
-        muscle_group: ex.muscle_group,
-        equipment: ex.equipment,
-        image_url: ex.image_url,
-        bodyweight_load_factor: ex.bodyweight_load_factor,
-        sets: [initialSet],
-      };
-    });
-    setExercises(newExercises);
-
-    // Enrich with previous sets + PRs in parallel
-    const enriched = [...newExercises];
-    await Promise.all(
-      newExercises.map(async (ex, idx) => {
-        try {
-          const params = new URLSearchParams({ name: ex.name });
-          if (ex.exercise_template_id) params.set('exercise_template_id', String(ex.exercise_template_id));
-          const fetches: Promise<Response>[] = [apiFetch(`/api/stats/exercise/last-session?${params}`)];
-          if (ex.exercise_template_id) fetches.push(apiFetch(`/api/personal-records/${ex.exercise_template_id}`));
-          const [lastRes, prRes] = await Promise.all(fetches);
-          let prData: ExerciseEntry['currentPR'] | undefined;
-          if (prRes?.ok) {
-            const pr = await prRes.json();
-            prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps, max_duration: pr.max_duration };
-          }
-          if (lastRes.ok) {
-            const data = await lastRes.json();
-            if (data.sets?.length > 0) {
-              enriched[idx] = {
-                ...enriched[idx],
-                ...(prefillPreviousRef.current ? { sets: prevSetsToEditable(ex, data.sets) } : {}),
-                previousSets: data.sets,
-                currentPR: prData,
-              };
-            } else if (prData) {
-              enriched[idx] = { ...enriched[idx], currentPR: prData };
+      if (!lastRes.ok) return;
+      const data = await lastRes.json();
+      const lastSets: PreviousSet[] | null = data.sets?.length > 0 ? data.sets : null;
+      if (!lastSets && !prData) return;
+      setExercises(prev => {
+        const idx = prev.findIndex(ex => ex.uid === entry.uid);
+        const cur = prev[idx];
+        // Replaced again before this landed: the history belongs to another exercise
+        if (!cur || cur.exercise_template_id !== tid || cur.name !== entry.name) return prev;
+        const currentPR = mergeWithSessionPR(tid, prData, prev);
+        const next = [...prev];
+        next[idx] = lastSets
+          ? {
+              ...cur,
+              ...(prefillPreviousRef.current && cur.sets === entry.sets ? { sets: prevSetsToEditable(cur, lastSets) } : {}),
+              previousSets: lastSets,
+              currentPR,
             }
-          }
-        } catch {}
-      })
-    );
-    setExercises([...enriched]);
-  };
+          : { ...cur, currentPR };
+        return next;
+      });
+    } catch {}
+  }));
 
   const buildPayload = (exercisesToSave: ExerciseEntry[]) => ({
     workoutName,
@@ -1451,10 +1357,14 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       );
       const data = await res.json();
       if (!res.ok) { Alert.alert("Couldn't Save Workout", data.message || 'Try again in a moment.'); return; }
-      cancelLiveWorkoutNotification();
-      clearSession();
-      AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
-      AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
+      // An edit never owns the live session: a workout can be minimized while
+      // an old one is edited, and clearing here deleted it.
+      if (!isEditing) {
+        cancelLiveWorkoutNotification();
+        clearSession();
+        AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
+        AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
+      }
       const endDate = new Date();
       const startDate = new Date(endDate.getTime() - elapsed * 1000);
       const workoutType = exercisesToSave.some(ex => (ex.exercise_type || 'strength') !== 'cardio') ? 'strength' : 'cardio';
@@ -1512,16 +1422,27 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                     : ex.sets.filter(s => s.done),
                 }))
                 .filter(ex => ex.sets.length > 0);
+              if (doneOnly.length === 0) {
+                Alert.alert('Nothing to Save', 'Check off at least one set before saving.');
+                return;
+              }
               doSubmit(doneOnly);
             },
           },
           {
             text: 'Check Off & Save',
             onPress: () => {
-              const allChecked = exercises.map(ex => ({
-                ...ex,
-                sets: ex.sets.map(s => ({ ...s, done: true })),
-              }));
+              // Blank sets are dropped, not checked off: they used to save as
+              // 0 reps x 0 weight and pad history and set counts.
+              const allChecked = exercises
+                .map(ex => (ex.exercise_type || 'strength') === 'cardio'
+                  ? ex
+                  : { ...ex, sets: ex.sets.filter(s => isSetFilled(ex, s)).map(s => ({ ...s, done: true })) })
+                .filter(ex => ex.sets.length > 0);
+              if (allChecked.length === 0) {
+                Alert.alert('Nothing to Save', 'Fill in at least one set before saving.');
+                return;
+              }
               doSubmit(allChecked);
             },
           },
@@ -1734,15 +1655,27 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             <TouchableOpacity
               style={styles.discardBtn}
               onPress={() => Alert.alert(
-                'Discard Workout?',
-                'Your logged sets will be lost.',
+                editMode ? 'Discard Changes?' : 'Discard Workout?',
+                editMode ? 'Your edits will be lost. The saved workout stays as it was.' : 'Your logged sets will be lost.',
                 [
                   { text: 'Cancel', style: 'cancel' },
-                  { text: 'Discard', style: 'destructive', onPress: () => { clearSession(); AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY); AsyncStorage.removeItem(WORKOUT_BACKUP_KEY); onCancel?.(); } },
+                  {
+                    text: 'Discard',
+                    style: 'destructive',
+                    onPress: () => {
+                      // See _doSubmitInner: an edit must not clear a minimized live workout
+                      if (!editMode) {
+                        clearSession();
+                        AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
+                        AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
+                      }
+                      onCancel?.();
+                    },
+                  },
                 ]
               )}
             >
-              <Text style={[styles.discardBtnText, { color: colors.danger }]}>Discard Workout</Text>
+              <Text style={[styles.discardBtnText, { color: colors.danger }]}>{editMode ? 'Discard Changes' : 'Discard Workout'}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -2321,7 +2254,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   prBannerExercise: {
     fontSize: typography.fontSize.md,
     fontWeight: '600',
-    color: '#fff',
+    color: colors.textPrimary,
     marginTop: 1,
   },
   prBannerType: {
