@@ -4,6 +4,7 @@ from utils.local_date import user_today
 from models import db, Workout, Exercise, Set, User, PersonalRecord, ExerciseTemplate, BodyweightLog, ExerciseMuscleMapping
 from utils.lift_progress import compute_most_improved_lift
 from utils.cardio_progress import compute_most_improved_cardio
+from utils.volume import volume_in_user_unit
 
 weekly_summary_bp = Blueprint('weekly_summary_bp', __name__)
 
@@ -113,7 +114,7 @@ def weekly_summary():
         .filter(Workout.user_id == user_id, Workout.date >= week_start, Workout.date < week_end)
         .scalar()
     ) or 0.0
-    resp['total_volume'] = round(total_volume)
+    resp['total_volume'] = round(volume_in_user_unit(total_volume, user.weight_unit))
     resp['total_reps'] = int(reps_row.reps or 0)
 
     # Prior-week workouts/volume, for the ▲/▼ delta shown alongside this
@@ -132,7 +133,7 @@ def weekly_summary():
         .scalar()
     ) or 0.0
     resp['prev_week_workouts'] = prev_workout_count
-    resp['prev_week_volume'] = round(prev_week_volume)
+    resp['prev_week_volume'] = round(volume_in_user_unit(prev_week_volume, user.weight_unit))
 
     # Rolling 4-week average (workouts, volume) — the 4 calendar weeks
     # strictly before the displayed week, always divided by 4 (missing weeks
@@ -261,7 +262,7 @@ def weekly_summary():
     ]
 
     # Bodyweight change — PR values/bodyweight logs are stored in the user's
-    # current unit already (no kg_to_lbs conversion, unlike total_volume
+    # current unit already (unlike Workout.volume, which is lbs and converted
     # above). Omitted entirely if no log entries fall in this week — never
     # fall back to User.bodyweight or a wider range.
     bw_rows = (
@@ -311,6 +312,7 @@ def weekly_summary_history():
     """
     from datetime import date, timedelta
     user_id = get_jwt_identity()
+    weight_unit = (db.session.get(User, int(user_id)).weight_unit or 'lbs')
 
     today = user_today()
     this_week_start = today - timedelta(days=today.weekday())
@@ -354,7 +356,7 @@ def weekly_summary_history():
             'week_start': wk.isoformat(),
             'week_end': (wk + timedelta(weeks=1)).isoformat(),
             'workouts': len(ids),
-            'total_volume': round(volume_per_week.get(wk, 0.0)),
+            'total_volume': round(volume_in_user_unit(volume_per_week.get(wk, 0.0), weight_unit)),
         }
         for wk, ids in sorted(workouts_per_week.items(), reverse=True)
     ]

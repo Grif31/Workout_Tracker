@@ -149,6 +149,19 @@ AI_OPTION_MAX_LEN = 100
 AI_NOTES_MAX_LEN  = 1000
 _ai_option = validate.Length(max=AI_OPTION_MAX_LEN)
 
+
+class _AvoidField(fields.Field):
+    """Areas to avoid, as a list of option keys. The coach profile lets the
+    user pick several, but older app builds send only one as a bare string
+    (and 'none' for nothing), so both shapes load to the same list."""
+
+    def _deserialize(self, value, attr, data, **kwargs):
+        items = [value] if isinstance(value, str) else value
+        if (not isinstance(items, list) or len(items) > 10
+                or not all(isinstance(v, str) and len(v) <= AI_OPTION_MAX_LEN for v in items)):
+            raise ValidationError('Must be an option key or a list of them.')
+        return [v for v in items if v and v != 'none']
+
 class AiGenerateSchema(_Base):
     days_per_week      = fields.Int(required=True, validate=validate.Range(min=1, max=7))
     goal               = fields.Str(required=True, validate=_ai_option)
@@ -156,7 +169,7 @@ class AiGenerateSchema(_Base):
     generate_type      = fields.Str(required=True, validate=validate.OneOf(['routine', 'workout', 'template']))
     equipment          = fields.Str(load_default='full_gym', validate=_ai_option)
     session_length_min = fields.Int(load_default=60, validate=validate.Range(min=1, max=600))
-    avoid              = fields.Str(load_default='none', validate=_ai_option)
+    avoid              = _AvoidField(load_default=list)
     muscles            = fields.List(fields.Str(validate=_ai_option), load_default=[],
                                      validate=validate.Length(max=30))
     notes              = fields.Str(load_default=None, allow_none=True,
@@ -190,4 +203,4 @@ class AiSaveSchema(_Base):
 class AiInsightsSchema(_Base):
     experience = fields.Str(load_default=None, validate=_ai_option)
     goal       = fields.Str(load_default=None, validate=_ai_option)
-    avoid      = fields.Str(load_default=None, validate=_ai_option)
+    avoid      = _AvoidField(load_default=list)

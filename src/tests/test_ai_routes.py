@@ -848,3 +848,67 @@ class TestPrescribedRepsAreStrings:
         data = self._generate(client, auth_token, None).get_json()
         bench = next(e for e in data['exercises'] if e['name'] == 'Bench Press')
         assert bench['prescribed_reps'] is None
+
+
+class TestAvoidAreas:
+    """The coach profile can flag several areas to avoid; every one reaches the prompt."""
+
+    BASE = {'days_per_week': 3, 'goal': 'general', 'experience': 'beginner', 'generate_type': 'routine'}
+
+    def _prompt(self, client, token, url, body, response_json):
+        mock_ant = _make_anthropic_mock(response_json)
+        with patch.dict(sys.modules, {'anthropic': mock_ant}):
+            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+                res = client.post(url, json=body, headers=auth_headers(token))
+        assert res.status_code == 200, res.get_json()
+        kwargs = mock_ant.Anthropic.return_value.messages.create.call_args[1]
+        return str(kwargs.get('system', '')) + str(kwargs['messages'])
+
+    def test_generation_gets_every_area(self, client, auth_token):
+        prompt = self._prompt(client, auth_token, '/api/ai/generate',
+                              {**self.BASE, 'avoid': ['knees', 'lower_back']}, TEMPLATE_JSON)
+        assert 'KNEE ISSUES' in prompt
+        assert 'LOWER BACK ISSUES' in prompt
+
+    def test_insights_get_every_area(self, client, auth_token):
+        prompt = self._prompt(client, auth_token, '/api/ai/insights',
+                              {'avoid': ['shoulders', 'knees']}, INSIGHTS_JSON)
+        assert 'SHOULDER ISSUES' in prompt
+        assert 'KNEE ISSUES' in prompt
+
+    def test_older_builds_sending_one_string_still_work(self, client, auth_token):
+        prompt = self._prompt(client, auth_token, '/api/ai/generate',
+                              {**self.BASE, 'avoid': 'knees'}, TEMPLATE_JSON)
+        assert 'KNEE ISSUES' in prompt
+        assert 'LOWER BACK ISSUES' not in prompt
+
+    def test_none_means_no_constraint(self, client, auth_token):
+        prompt = self._prompt(client, auth_token, '/api/ai/generate',
+                              {**self.BASE, 'avoid': 'none'}, TEMPLATE_JSON)
+        assert 'No injuries' in prompt
+
+    def test_rejects_a_non_list(self, client, auth_token):
+        res = client.post('/api/ai/generate', json={**self.BASE, 'avoid': {'knees': True}},
+                          headers=auth_headers(auth_token))
+        assert res.status_code == 400
+
+
+class TestMrvFlags:
+    """Reaching MRV is the limit; only going past it is overreaching."""
+
+    def _lines(self, sets):
+        from routes.ai_routes import _build_insights_prompt
+        prompt = _build_insights_prompt({'muscle_sets_week': {'Hamstrings': sets}, 'muscle_sets_last_week': {}})
+        return next(l for l in prompt.splitlines() if l.strip().startswith('Hamstrings:'))
+
+    def test_hamstrings_at_17_sets_is_not_flagged_over(self):
+        # The backend once used 16 for hamstrings while the app used 20
+        assert 'MRV' not in self._lines(17)
+
+    def test_exactly_at_mrv_holds(self):
+        line = self._lines(20)
+        assert 'AT MRV' in line
+        assert 'OVER MRV' not in line
+
+    def test_past_mrv_is_a_deload_candidate(self):
+        assert 'OVER MRV' in self._lines(21)

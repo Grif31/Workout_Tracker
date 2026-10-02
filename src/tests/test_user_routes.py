@@ -487,10 +487,12 @@ class TestWeightUnitConversion:
         max_weight = PersonalRecord.query.filter_by(pr_type='max_weight').first()
         assert max_weight.value == 95.5
 
-    def test_total_volume_stat_unchanged_after_switch(self, client, auth_token):
+    def test_total_volume_stat_follows_the_unit_after_switch(self, client, auth_token):
+        # Same tonnage, reported in the new unit: it used to come back as the
+        # same lbs number, which the app then labelled kg
         _setup_lbs_user_with_data(client, auth_token)
         before = client.get('/api/stats/profile', headers=auth_headers(auth_token)).get_json()['total_volume']
         client.patch('/api/me', json={'weight_unit': 'kg'}, headers=auth_headers(auth_token))
         after = client.get('/api/stats/profile', headers=auth_headers(auth_token)).get_json()['total_volume']
         # 0.5 kg snapping shifts per-set weights slightly — stays within ~1%
-        assert after == pytest.approx(before, rel=0.01)
+        assert after == pytest.approx(before * 0.45359237, rel=0.01)

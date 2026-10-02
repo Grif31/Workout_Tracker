@@ -72,7 +72,7 @@ jest.mock('../components/UndoBar', () => (p: any) => {
 
 const COACH = {
   coachDays: 3, coachGoal: 'strength', coachExp: 'intermediate', coachEquipment: 'full gym',
-  coachSessionLength: '60', coachAvoid: '', coachNotes: '',
+  coachSessionLength: '60', coachAvoid: ['knees', 'lower_back'], coachNotes: '',
 };
 const ex = (id: number, extra: Record<string, any> = {}) => {
   const lib = LIBRARY.find(e => e.id === id)!;
@@ -295,7 +295,7 @@ describe('AIWorkoutPreviewScreen', () => {
       const [, init] = (global.fetch as jest.Mock).mock.calls.find(([u]) => String(u).endsWith('/api/ai/generate'));
       expect(JSON.parse(init.body)).toEqual({
         days_per_week: 3, goal: 'strength', experience: 'intermediate', equipment: 'full gym',
-        session_length_min: 60, avoid: '', generate_type: 'template', notes: '',
+        session_length_min: 60, avoid: ['knees', 'lower_back'], generate_type: 'template', notes: '',
       });
       await waitFor(() => expect(r.getByDisplayValue('Fresh Legs')).toBeTruthy());
       expect(r.queryByText('Bench Press')).toBeNull();

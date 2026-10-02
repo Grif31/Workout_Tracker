@@ -38,6 +38,8 @@ import {
 } from '../../utils/weeklyDistanceGoal';
 import RoutinePickerModal from '../../components/coach/RoutinePickerModal';
 import MusclePickerModal from '../../components/coach/MusclePickerModal';
+import { MUSCLE_STANDARDS, volumeZone, type VolumeZone } from '../../constants/volumeLandmarks';
+import { computeBarChartMax } from '../../utils/prFormat';
 
 const MINI_RING_SIZE = 44;
 const MINI_RING_STROKE = 4;
@@ -76,19 +78,6 @@ type ActiveRoutine = { id: number; name: string; days: RoutineDay[] };
 type Insight = { type: string; title: string; body: string; priority: 'high' | 'medium' | 'low' };
 type InsightsCache = { insights: Insight[]; fetchedAt: string };
 
-const MUSCLE_STANDARDS: Record<string, { mev: number; mav: number; mrv: number }> = {
-  Chest:      { mev: 8,  mav: 16, mrv: 20 },
-  Back:       { mev: 10, mav: 22, mrv: 25 },
-  Shoulders:  { mev: 8,  mav: 22, mrv: 26 },
-  Biceps:     { mev: 8,  mav: 20, mrv: 26 },
-  Triceps:    { mev: 6,  mav: 14, mrv: 20 },
-  Forearms:   { mev: 4,  mav: 14, mrv: 20 },
-  Quads:      { mev: 8,  mav: 18, mrv: 20 },
-  Hamstrings: { mev: 6,  mav: 16, mrv: 20 },
-  Glutes:     { mev: 4,  mav: 12, mrv: 16 },
-  Calves:     { mev: 8,  mav: 20, mrv: 30 },
-  Core:       { mev: 6,  mav: 20, mrv: 25 },
-};
 
 
 const INSIGHT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -131,6 +120,14 @@ function daysAgoStr(iso: string | undefined): string {
   return `${days}d ago`;
 }
 
+function fmtUpdatedAgo(iso: string): string {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (!(mins >= 1)) return 'Updated just now';
+  if (mins < 60) return `Updated ${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  return `Updated ${hours} hour${hours !== 1 ? 's' : ''} ago`;
+}
+
 function weekRangeLabel(weekStart: string): string {
   const start = new Date(weekStart + 'T12:00:00');
   const end = new Date(start);
@@ -156,6 +153,11 @@ export default function CoachScreen({ navigation }: Props) {
   }, [user?.id]);
 
   const metricAnimRef = useRef(new Animated.Value(0)).current;
+  const barsAnim = useRef(new Animated.Value(0)).current;
+  const ZONE_COLOR: Record<VolumeZone['kind'], string> = useMemo(() => ({
+    over: colors.danger, atLimit: colors.warmup, high: colors.warmup,
+    onTrack: colors.accent, toGo: colors.textSecondary, below: colors.textSecondary, none: colors.border,
+  }), [colors]);
   const { width: SCREEN_WIDTH } = Dimensions.get('window');
   const METRIC_BAR_WIDTH = SCREEN_WIDTH - spacing.lg * 2 - spacing.md * 2;
 
@@ -263,6 +265,7 @@ export default function CoachScreen({ navigation }: Props) {
   const [coachProfile, setCoachProfile] = useState<CoachProfile>(DEFAULT_PROFILE);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [insights, setInsights] = useState<Insight[]>([]);
+  const [insightsFetchedAt, setInsightsFetchedAt] = useState<string | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
   // AI generate muscle picker
   const [aiMusclePickerVisible, setAiMusclePickerVisible] = useState(false);
@@ -295,7 +298,10 @@ export default function CoachScreen({ navigation }: Props) {
       try {
         const cache: InsightsCache = JSON.parse(raw);
         const ageMs = Date.now() - new Date(cache.fetchedAt).getTime();
-        if (ageMs < 3_600_000 && cache.insights?.length) setInsights(cache.insights);
+        if (ageMs < 3_600_000 && cache.insights?.length) {
+          setInsights(cache.insights);
+          setInsightsFetchedAt(cache.fetchedAt);
+        }
       } catch { }
     });
   }, []);
@@ -327,6 +333,13 @@ export default function CoachScreen({ navigation }: Props) {
     setThisWeekDistanceKm(thisWeek?.distance_km ?? 0);
     if (data.metrics_logged) setMetricsLogged(data.metrics_logged);
   };
+
+  const hasMuscleVolume = muscleVolume != null;
+  useEffect(() => {
+    if (activeTab !== 'progress' || !hasMuscleVolume) return;
+    barsAnim.setValue(0);
+    Animated.timing(barsAnim, { toValue: 1, duration: 900, useNativeDriver: true }).start();
+  }, [activeTab, hasMuscleVolume, barsAnim]);
 
   // ── Data fetching ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -510,16 +523,15 @@ export default function CoachScreen({ navigation }: Props) {
         body: JSON.stringify({
           experience: coachProfile.experience,
           goal: coachProfile.goal,
-          avoid: coachProfile.avoid[0] ?? 'none',
+          avoid: coachProfile.avoid,
         }),
       });
       const data = await res.json();
       if (!res.ok) { Alert.alert("Couldn't Load Insights", data.message || 'Try again in a moment.'); return; }
+      const fetchedAt = data.generated_at || new Date().toISOString();
       setInsights(data.insights ?? []);
-      await AsyncStorage.setItem(COACH_INSIGHTS_KEY, JSON.stringify({
-        insights: data.insights,
-        fetchedAt: data.generated_at || new Date().toISOString(),
-      }));
+      setInsightsFetchedAt(fetchedAt);
+      await AsyncStorage.setItem(COACH_INSIGHTS_KEY, JSON.stringify({ insights: data.insights, fetchedAt }));
     } catch (err) {
       if (!isNetworkError(err)) Alert.alert("Couldn't Load Insights", 'Try again in a moment.');
     } finally {
@@ -541,7 +553,7 @@ export default function CoachScreen({ navigation }: Props) {
           experience: coachProfile.experience,
           equipment: coachProfile.equipment,
           session_length_min: coachProfile.session_length_min,
-          avoid: coachProfile.avoid[0] ?? 'none',
+          avoid: coachProfile.avoid,
           generate_type: 'template',
           muscles,
           notes: coachProfile.notes,
@@ -560,7 +572,7 @@ export default function CoachScreen({ navigation }: Props) {
         coachExp: coachProfile.experience,
         coachEquipment: coachProfile.equipment,
         coachSessionLength: String(coachProfile.session_length_min),
-        coachAvoid: coachProfile.avoid[0] ?? 'none',
+        coachAvoid: coachProfile.avoid,
         coachNotes: coachProfile.notes,
       });
     } catch (err) {
@@ -583,7 +595,7 @@ export default function CoachScreen({ navigation }: Props) {
           experience: coachProfile.experience,
           equipment: coachProfile.equipment,
           session_length_min: coachProfile.session_length_min,
-          avoid: coachProfile.avoid[0] ?? 'none',
+          avoid: coachProfile.avoid,
           generate_type: 'routine',
           notes: coachProfile.notes,
         }),
@@ -601,7 +613,7 @@ export default function CoachScreen({ navigation }: Props) {
         coachExp: coachProfile.experience,
         coachEquipment: coachProfile.equipment,
         coachSessionLength: String(coachProfile.session_length_min),
-        coachAvoid: coachProfile.avoid[0] ?? 'none',
+        coachAvoid: coachProfile.avoid,
         coachNotes: coachProfile.notes,
       });
     } catch (err) {
@@ -680,7 +692,7 @@ export default function CoachScreen({ navigation }: Props) {
   const rankIcon = GREEK_RANKS.find(r => r.name === greekRank)?.icon ?? greekRank.charAt(0);
 
   const renderTemplateCard = (t: WorkoutTemplate) => (
-    <TouchableOpacity
+    <PressableScale
       key={t.id}
       style={styles.card}
       onPress={() => navigation.navigate('TemplateDetail', { templateId: t.id })}
@@ -717,7 +729,7 @@ export default function CoachScreen({ navigation }: Props) {
           <Text style={styles.logInlineBtnText}>Log</Text>
         </TouchableOpacity>
       </View>
-    </TouchableOpacity>
+    </PressableScale>
   );
 
   const renderInsightCard = (ins: Insight, idx: number) => {
@@ -767,38 +779,39 @@ export default function CoachScreen({ navigation }: Props) {
     if (p.total_volume > 0) return `${dateRange} · ${workoutsStr} · ${p.total_volume.toLocaleString()} ${p.weight_unit}`;
     if (p.distance_km != null) {
       const dist = toDisplayDistance(p.distance_km, distanceUnit);
-      return `${dateRange} · ${workoutsStr} · ${dist.toFixed(2)}${distanceUnit}`;
+      return `${dateRange} · ${workoutsStr} · ${dist.toFixed(2)} ${distanceUnit}`;
     }
     return `${dateRange} · ${workoutsStr}`;
   };
 
   const renderMuscleVolumeCard = () => {
     if (!muscleVolume) return null;
+    // Sunday is the week's last day: from then on, a muscle short of MEV gets
+    // its verdict instead of a countdown
+    const weekEnd = new Date(muscleVolume.week_start + 'T12:00:00');
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const weekOver = toLocalDateStr(new Date()) >= toLocalDateStr(weekEnd);
     const allMuscles = Object.keys(MUSCLE_STANDARDS);
     const trained = allMuscles.filter(m => (muscleVolume.muscle_sets[m] ?? 0) > 0)
       .sort((a, b) => (muscleVolume.muscle_sets[b] ?? 0) - (muscleVolume.muscle_sets[a] ?? 0));
     const untrained = allMuscles.filter(m => !(muscleVolume.muscle_sets[m] ?? 0));
     const maxSets = Math.max(1, ...trained.map(m => muscleVolume.muscle_sets[m] ?? 0));
 
-    const renderMvRow = (muscle: string) => {
+    const renderMvRow = (muscle: string, rowIndex: number) => {
       const sets = muscleVolume.muscle_sets[muscle] ?? 0;
       const std = MUSCLE_STANDARDS[muscle];
       const lastDate = muscleVolume.last_trained[muscle];
       const isTrained = sets > 0;
       const freeFillPct = (sets / maxSets) * 100;
-      const zoneColor = sets >= std.mrv ? colors.danger
-        : sets > std.mav ? colors.warmup
-        : sets >= std.mev ? colors.accent
-        : sets > 0 ? colors.textSecondary
-        : colors.border;
+      const zone = volumeZone(sets, std, weekOver);
+      const zoneColor = ZONE_COLOR[zone.kind];
       const premiumFillPct = Math.min((sets / std.mrv) * 100, 100);
       const mevPct = (std.mev / std.mrv) * 100;
       const mavPct = (std.mav / std.mrv) * 100;
-      const zoneLabel = sets > std.mrv ? 'Overreaching'
-        : sets > std.mav ? 'High'
-        : sets >= std.mev ? 'On track'
-        : sets > 0 ? 'Below target'
-        : '';
+      const zoneLabel = zone.label;
+      // Bars grow from the left one after another when the card appears
+      const start = Math.min(rowIndex * 0.04, 0.4);
+      const barGrow = { transform: [{ scaleX: barsAnim.interpolate({ inputRange: [start, start + 0.6], outputRange: [0, 1], extrapolate: 'clamp' }) }], transformOrigin: 'left' as const };
 
       return (
         <View key={muscle} style={styles.mvRow}>
@@ -808,13 +821,13 @@ export default function CoachScreen({ navigation }: Props) {
           <View style={styles.mvBarArea}>
             {isPremium ? (
               <View style={styles.mvPremiumTrack}>
-                <View style={[styles.mvPremiumFill, { width: `${premiumFillPct}%` as any, backgroundColor: zoneColor }]} />
+                <Animated.View style={[styles.mvPremiumFill, { width: `${premiumFillPct}%` as any, backgroundColor: zoneColor }, barGrow]} />
                 <View style={[styles.mvTick, { left: `${mevPct}%` as any }]} />
                 <View style={[styles.mvTick, { left: `${mavPct}%` as any }]} />
               </View>
             ) : (
               <View style={styles.mvFreeTrack}>
-                <View style={[styles.mvFreeFill, { width: `${freeFillPct}%` as any, backgroundColor: isTrained ? colors.accent : colors.border }]} />
+                <Animated.View style={[styles.mvFreeFill, { width: `${freeFillPct}%` as any, backgroundColor: isTrained ? colors.accent : colors.border }, barGrow]} />
               </View>
             )}
           </View>
@@ -856,13 +869,13 @@ export default function CoachScreen({ navigation }: Props) {
           </View>
         )}
 
-        {trained.map(renderMvRow)}
+        {trained.map((m, i) => renderMvRow(m, i))}
         {untrained.length > 0 && (
           <>
             <View style={styles.mvDivider}>
               <Text style={styles.mvDividerText}>Not trained this week</Text>
             </View>
-            {untrained.map(renderMvRow)}
+            {untrained.map((m, i) => renderMvRow(m, trained.length + i))}
           </>
         )}
 
@@ -998,14 +1011,14 @@ export default function CoachScreen({ navigation }: Props) {
           ) : (
             <View style={styles.routineGrid}>
               {routines.map(item => (
-                <TouchableOpacity
+                <PressableScale
                   key={item.id}
                   style={styles.routineCard}
                   onPress={() => navigation.navigate('RoutineDetail', { routineId: item.id, routineName: item.name })}
                 >
                   <Text style={styles.routineCardName} numberOfLines={2}>{item.name}</Text>
                   <Text style={styles.routineCardSub}>{item.day_count} {item.day_count === 1 ? 'day' : 'days'}</Text>
-                </TouchableOpacity>
+                </PressableScale>
               ))}
             </View>
           )}
@@ -1111,6 +1124,9 @@ export default function CoachScreen({ navigation }: Props) {
               )}
             </View>
 
+            {isPremium && insights.length > 0 && insightsFetchedAt && (
+              <Text style={styles.insightsUpdated}>{fmtUpdatedAgo(insightsFetchedAt)}</Text>
+            )}
             <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
               {isPremium ? (
                 insights.length > 0
@@ -1227,7 +1243,7 @@ export default function CoachScreen({ navigation }: Props) {
                 ? () => (
                     <Text
                       numberOfLines={1}
-                      style={{ fontSize: 10, fontWeight: '700', color: colors.textPrimary, marginBottom: 2, width: TOP_LABEL_WIDTH, textAlign: 'center' }}
+                      style={[styles.barTopLabel, { width: TOP_LABEL_WIDTH }]}
                     >
                       {formatTopLabel(getValue(b))}
                     </Text>
@@ -1432,11 +1448,9 @@ export default function CoachScreen({ navigation }: Props) {
                       xAxisLabelTextStyle={styles.axisLabel}
                       yAxisTextStyle={styles.axisLabel}
                       noOfSections={4}
-                      maxValue={Math.max(
-                        maxVal * 1.2,
-                        activeMetric === 'workouts' && weeklyTarget != null ? referenceLinePos + 1
-                          : weeklyTarget != null ? referenceLinePos * 1.1
-                          : 1,
+                      maxValue={computeBarChartMax(
+                        Math.max(maxVal * 1.1, weeklyTarget != null ? referenceLinePos * 1.1 : 0),
+                        4,
                       )}
                       height={150}
                       barBorderRadius={3}
@@ -1673,8 +1687,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   mvPremiumFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 3 },
   mvTick: { position: 'absolute', top: -2, bottom: -2, width: 1.5, backgroundColor: colors.background },
   mvCount: { width: 30, fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, textAlign: 'right' },
-  mvZoneLabel: { width: 78, fontSize: 10, fontWeight: '600', textAlign: 'right' },
-  mvLastTrained: { width: 78, fontSize: 10, color: colors.textSecondary, textAlign: 'right' },
+  mvZoneLabel: { width: 78, fontSize: typography.fontSize.xs, fontWeight: '600', textAlign: 'right' },
+  mvLastTrained: { width: 78, fontSize: typography.fontSize.xs, color: colors.textSecondary, textAlign: 'right' },
+  barTopLabel: { fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textPrimary, marginBottom: 2, textAlign: 'center' },
+  insightsUpdated: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: spacing.xs },
   mvDivider: { paddingVertical: spacing.xs, marginVertical: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   mvDividerText: { fontSize: typography.fontSize.xs, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 },
   mvPremiumTeaser: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },

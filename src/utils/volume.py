@@ -62,6 +62,17 @@ def get_bodyweight_at(user_id, target_date):
     return earliest[0] if earliest else None
 
 
+LBS_TO_KG = 0.45359237
+
+
+def volume_in_user_unit(volume_lbs, weight_unit):
+    """Workout.volume is always stored in lbs; stats endpoints that label a
+    total with the user's weight_unit must send it in that unit. Every such
+    total used to be converted at query time, until the endpoints switched to
+    summing Workout.volume, and kg users then saw pounds labelled kg."""
+    return volume_lbs * LBS_TO_KG if weight_unit == 'kg' else volume_lbs
+
+
 def compute_effective_weight(weight, equipment, bodyweight, load_factor=1.0):
     """Stored weight plus the user's bodyweight (scaled by load_factor), for
     equipment where the stored weight is only part of the true load.

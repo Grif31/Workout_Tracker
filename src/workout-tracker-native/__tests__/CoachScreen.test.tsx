@@ -15,6 +15,8 @@ import CoachScreen from '../screens/TrainingTab/CoachScreen';
 import { appCache } from '../utils/appCache';
 import Collapsible from '../components/Collapsible';
 import { COACH_INSIGHTS_KEY, WEEKLY_DISTANCE_GOAL_KEY } from '../constants/storageKeys';
+import { COACH_PROFILE_KEY } from '../components/coach/CoachProfileModal';
+import { toLocalDateStr } from '../utils/date';
 
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
@@ -302,6 +304,56 @@ describe('CoachScreen', () => {
       fireEvent.press(r.getByText('Coach'));
       await waitFor(() => expect(r.getByText('Bench is climbing')).toBeTruthy());
       expect(urlsCalled().some(u => u.includes('/api/ai/insights'))).toBe(false);
+    });
+
+    it('says how old the insights are', async () => {
+      await AsyncStorage.setItem(COACH_INSIGHTS_KEY, JSON.stringify({ ...cached, fetchedAt: new Date(Date.now() - 25 * 60_000).toISOString() }));
+      const r = await renderScreen();
+      fireEvent.press(r.getByText('Coach'));
+      await waitFor(() => expect(r.getByText('Updated 25 min ago')).toBeTruthy());
+    });
+
+    it('sends every area flagged to avoid, not just the first', async () => {
+      await AsyncStorage.setItem(`${COACH_PROFILE_KEY}_${mockUser.id}`, JSON.stringify({ avoid: ['knees', 'lower_back'] }));
+      installServer({ '/api/ai/insights': { insights: [{ type: 'suggestion', title: 'T', body: 'B', priority: 'low' }] } });
+      const r = await renderScreen();
+      fireEvent.press(r.getByText('Coach'));
+      const button = await r.findByText('Generate Insights');
+      await act(async () => { fireEvent.press(button); });
+
+      const [, init] = (global.fetch as jest.Mock).mock.calls.find(([u]) => String(u).includes('/api/ai/insights'));
+      expect(JSON.parse(init.body).avoid).toEqual(['knees', 'lower_back']);
+    });
+  });
+
+  describe('muscle volume zones (Monday to Sunday)', () => {
+    const daysAgo = (n: number) => {
+      const d = new Date();
+      d.setDate(d.getDate() - n);
+      return toLocalDateStr(d);
+    };
+    const withChest = (sets: number, weekStart: string) => installServer({
+      '/api/stats/muscle-volume': { muscle_sets: { Chest: sets }, last_trained: {}, total_sets: sets, last_week_total: 0, week_start: weekStart },
+    });
+
+    it('counts down to MEV while the week is still going', async () => {
+      withChest(6, daysAgo(0)); // the week started today, so it has six days left
+      const r = await renderScreen();
+      expect(await r.findByText('2 to go')).toBeTruthy();
+      expect(r.queryByText('Below target')).toBeNull();
+    });
+
+    it('gives the verdict on Sunday', async () => {
+      withChest(6, daysAgo(6)); // today is the week's seventh day
+      const r = await renderScreen();
+      expect(await r.findByText('Below target')).toBeTruthy();
+    });
+
+    it('calls reaching MRV the limit, and only past it over', async () => {
+      withChest(20, daysAgo(0));
+      const r = await renderScreen();
+      expect(await r.findByText('At limit')).toBeTruthy();
+      expect(r.queryByText('Over limit')).toBeNull();
     });
   });
 });

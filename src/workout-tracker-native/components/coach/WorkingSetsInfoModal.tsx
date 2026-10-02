@@ -34,6 +34,9 @@ export default function WorkingSetsInfoModal({ visible, onClose, muscleStandards
               <Text style={styles.bold}>MAV</Text> (Maximum Adaptive Volume): the sweet spot for the most growth per set.{'\n'}
               <Text style={styles.bold}>MRV</Text> (Maximum Recoverable Volume): the ceiling before fatigue outpaces recovery.
             </Text>
+            <Text style={styles.body}>
+              The chart counts Monday to Sunday. Until Sunday, a muscle short of its MEV shows how many sets are left to reach it, since one more session can still get it there. On Sunday it gets its verdict. Reaching MRV reads <Text style={styles.bold}>At limit</Text>, and going past it is flagged <Text style={styles.bold}>Over limit</Text> right away.
+            </Text>
 
             <Text style={styles.tableTitle}>Weekly Set Guidelines</Text>
             <View style={styles.table}>

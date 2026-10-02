@@ -70,8 +70,8 @@ INSIGHT_EXAMPLES = (
     'Good: {"type":"suggestion","title":"Overhead Press Has Stalled","body":"No new Overhead Press max weight '
     'PR in 45 days. Switch to 4 sets of 5 at a heavier load for the next 3 weeks.","priority":"high",'
     '"evidence":{"exercise":"Overhead Press","metric":"Max Weight","before":null,"after":null,"window_days":45}}\n'
-    'Good: {"type":"frequency","title":"Back Volume Down This Week","body":"You logged 6 back sets this week, '
-    'down from 12 last week. Add 2 sets of rows to your next pull day.","priority":"medium",'
+    'Good: {"type":"frequency","title":"Back Volume Down","body":"You logged 6 back sets in the last 7 days, '
+    'down from 12 the 7 days before. Add 2 sets of rows to your next pull day.","priority":"medium",'
     '"evidence":{"exercise":null,"metric":null,"before":null,"after":null,"window_days":7}}\n'
     'Bad: {"type":"achievement","title":"Great Progress","body":"You are getting stronger, keep it up.",'
     '"priority":"low","evidence":{"exercise":null,"metric":null,"before":null,"after":null,"window_days":null}} '
@@ -233,9 +233,13 @@ ai_bp = Blueprint('ai_bp', __name__)
 _ai_generate_schema = AiGenerateSchema()
 _ai_insights_schema = AiInsightsSchema()
 
+# Weekly set landmarks (Renaissance Periodization). The app's
+# constants/volumeLandmarks.ts holds the same numbers plus MAV for its zone
+# bars; __tests__/volumeLandmarks.test.ts fails if the two drift apart, as
+# Hamstrings once did (16 here, 20 in the app).
 MUSCLE_MRV = {
     'Chest': 20, 'Back': 25, 'Shoulders': 26, 'Biceps': 26, 'Triceps': 20,
-    'Forearms': 20, 'Quads': 20, 'Hamstrings': 16, 'Glutes': 16, 'Calves': 30, 'Core': 25,
+    'Forearms': 20, 'Quads': 20, 'Hamstrings': 20, 'Glutes': 16, 'Calves': 30, 'Core': 25,
 }
 MUSCLE_MEV = {
     'Chest': 8, 'Back': 10, 'Shoulders': 8, 'Biceps': 8, 'Triceps': 6,
@@ -269,6 +273,13 @@ AVOID_MAP = {
     ),
     'none': 'No injuries — full exercise library available.',
 }
+
+
+def _avoid_directive(avoid: list[str]) -> str:
+    """Every flagged area's constraints, so a client avoiding knees and lower
+    back gets both, not just the first one picked."""
+    known = [AVOID_MAP[a] for a in avoid if a in AVOID_MAP and a != 'none']
+    return ' '.join(known) if known else AVOID_MAP['none']
 
 
 # Mirrors ROTATION_RESTART_DAYS in the app's utils/routineRotation.ts
@@ -533,7 +544,7 @@ def _build_prompt(data: dict, generate_type: str, user_context: dict | None = No
     days_per_week      = data['days_per_week']
     equipment          = data.get('equipment', 'full_gym')
     session_length_min = data.get('session_length_min', 60)
-    avoid              = data.get('avoid', 'none')
+    avoid              = data.get('avoid') or []
     muscles            = data.get('muscles', [])
     notes              = (data.get('notes') or '').strip()
 
@@ -576,7 +587,7 @@ def _build_prompt(data: dict, generate_type: str, user_context: dict | None = No
     else:
         split = 'Push / Pull / Legs × 2 (PPL repeated each half-week)'
 
-    avoid_directive = AVOID_MAP.get(avoid, AVOID_MAP['none'])
+    avoid_directive = _avoid_directive(avoid)
     notes_line = f"• Client notes: {notes}\n" if notes else ''
 
     # Muscle targeting directive (when muscles are specified)
@@ -727,7 +738,7 @@ def _build_prompt(data: dict, generate_type: str, user_context: dict | None = No
     )
 
 
-def _build_insights_context(user_id: int, experience: str | None = None, goal: str | None = None, avoid: str | None = None) -> dict:
+def _build_insights_context(user_id: int, experience: str | None = None, goal: str | None = None, avoid: list[str] | None = None) -> dict:
     user = db.session.get(User, user_id)
     now = datetime.now()
     week_start = now - timedelta(days=7)
@@ -938,8 +949,8 @@ def _build_insights_prompt(ctx: dict) -> str:
     if ctx.get('goal'):
         lines.append(f"Client goal: {GOAL_LABELS.get(ctx['goal'], ctx['goal'])}")
     avoid = ctx.get('avoid')
-    if avoid and avoid != 'none':
-        lines.append(f"Injury constraint: {AVOID_MAP.get(avoid, AVOID_MAP['none'])}")
+    if avoid:
+        lines.append(f"Injury constraint: {_avoid_directive(avoid)}")
 
     avg = ctx.get('avg_workouts_per_week', 0)
     lines.append(f"Average workouts/week (last 4 weeks): {avg}")
@@ -977,15 +988,21 @@ def _build_insights_prompt(ctx: dict) -> str:
     muscle_rpe = ctx.get('muscle_rpe_week', {})
     all_muscles = sorted(set(list(muscle_week.keys()) + list(muscle_last.keys())))
     if all_muscles:
-        lines.append("\nWorking sets per muscle (this week vs last week):")
+        # A rolling 7 days, not the calendar week the app's chart counts: the
+        # flags need a full week of training to judge on any day
+        lines.append("\nWorking sets per muscle (last 7 days vs the 7 days before):")
         for m in all_muscles:
             this_w = muscle_week.get(m, 0)
             last_w_sets = muscle_last.get(m, 0)
             mrv = MUSCLE_MRV.get(m, 20)
             mev = MUSCLE_MEV.get(m, 8)
             flags = []
-            if this_w >= mrv:
+            # MRV is the most that can be recovered from: reaching it is the
+            # limit, only going past it is overreaching
+            if this_w > mrv:
                 flags.append('OVER MRV — deload candidate')
+            elif this_w == mrv:
+                flags.append("AT MRV — hold here, don't add sets")
             elif this_w < mev and (this_w > 0 or last_w_sets > 0):
                 flags.append('below MEV')
             elif this_w == 0 and last_w_sets == 0:
@@ -994,7 +1011,7 @@ def _build_insights_prompt(ctx: dict) -> str:
             if avg_rpe is not None and avg_rpe >= 9:
                 flags.append(f'HIGH FATIGUE — avg RPE {avg_rpe}')
             flag_str = f" [{', '.join(flags)}]" if flags else ''
-            lines.append(f"  {m}: {this_w} sets this week, {last_w_sets} last week{flag_str}")
+            lines.append(f"  {m}: {this_w} sets in the last 7 days, {last_w_sets} the 7 days before{flag_str}")
 
     most_improved = ctx.get('most_improved_lift')
     if most_improved:

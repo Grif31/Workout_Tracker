@@ -4,7 +4,7 @@ from utils.local_date import user_today
 from sqlalchemy.orm import selectinload
 from models import db, Workout, Exercise, Set, User, ExerciseTemplate, ExerciseMuscleMapping
 from utils.strength_standards import epley_1rm
-from utils.volume import compute_effective_weight, get_bodyweight_at, BODYWEIGHT_VOLUME_EQUIPMENT
+from utils.volume import compute_effective_weight, get_bodyweight_at, volume_in_user_unit, BODYWEIGHT_VOLUME_EQUIPMENT
 
 stats_bp = Blueprint('stats_bp', __name__)
 
@@ -371,7 +371,7 @@ def profile_stats():
         'total_workouts': total_workouts,
         'longest_streak': longest,
         'current_streak': current_streak,
-        'total_volume': round(total_volume),
+        'total_volume': round(volume_in_user_unit(total_volume, user.weight_unit)),
         'current_daily_streak': daily_current,
         'longest_daily_streak': daily_longest,
         'current_monthly_streak': monthly_current,
@@ -459,6 +459,7 @@ def progress_stats():
     import calendar as cal
     from datetime import date, timedelta
     user_id = get_jwt_identity()
+    weight_unit = (db.session.get(User, int(user_id)).weight_unit or 'lbs')
     range_param = request.args.get('range', '30d')
     today = user_today()
 
@@ -522,7 +523,7 @@ def progress_stats():
 
     return jsonify({
         'buckets': [
-            {'label': b['label'], 'volume': round(b['volume']), 'sets': b['sets'], 'count': b['count'],
+            {'label': b['label'], 'volume': round(volume_in_user_unit(b['volume'], weight_unit)), 'sets': b['sets'], 'count': b['count'],
              'distance_km': round(b['distance_km'], 3)}
             for b in buckets
         ],

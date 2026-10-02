@@ -144,6 +144,21 @@ export function computeChartYAxisRange(values: number[], sections: number): { ma
   return { maxValue: step * sections, yAxisOffset };
 }
 
+/**
+ * Top of a bar chart's y-axis, chosen so it splits into `sections` round,
+ * whole-number steps (1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6 or 8 × a power of ten). A raw `peak * 1.2`
+ * top gives ticks like 11.1 and 22.2. Bars grow from 0, so unlike
+ * computeChartYAxisRange there's no offset to compute.
+ */
+export function computeBarChartMax(peak: number, sections: number): number {
+  const raw = Math.max(peak, 1) / sections;
+  const pow = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]
+    .map(m => m * pow)
+    .find(s => s >= raw && Number.isInteger(s)) ?? Math.ceil(raw);
+  return step * sections;
+}
+
 /** Width an "M/D" x-axis date needs on one line at the charts' 10px axis font. */
 export const CHART_X_LABEL_WIDTH = 36;
 

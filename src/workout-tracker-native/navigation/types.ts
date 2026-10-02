@@ -107,10 +107,8 @@ export type TrainingStackParamsList = {
         coachExp: string;
         coachEquipment: string;
         coachSessionLength: string;
-        coachAvoid: string;
-        // Optional: not every navigate() call site supplies it yet, and
-        // AIWorkoutPreviewScreen doesn't consume it yet either — an
-        // in-progress "notes to coach" pass-through.
+        // Every area flagged in the coach profile, sent as-is when regenerating
+        coachAvoid: string[];
         coachNotes?: string;
     };
 };
