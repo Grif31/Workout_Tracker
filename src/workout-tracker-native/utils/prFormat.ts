@@ -23,10 +23,8 @@ export type PREventItem = {
 // estimated_1rm is a trend metric here, never labeled a PR (project rule).
 /**
  * Which screen opens the workout a PR came from. best_time and best_distance
- * only come from cardio exercises, and a workout with any cardio exercise is a
- * cardio workout (Workout.to_dict's workout_type), so those open Cardio
- * Details like the workout lists do. A timed hold (max_duration) stays a
- * strength workout.
+ * only come from cardio exercises, so those open Cardio Details. A timed hold
+ * (max_duration) stays a strength workout.
  */
 export function prWorkoutScreen(prType: PREventItem['pr_type']): 'CardioDetails' | 'WorkoutDetails' {
   return prType === 'best_time' || prType === 'best_distance' ? 'CardioDetails' : 'WorkoutDetails';

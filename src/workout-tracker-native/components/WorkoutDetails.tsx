@@ -768,7 +768,7 @@ export default function WorkoutDetailsScreen({
           <WorkoutShareCard
             workoutName={workout.name}
             date={shareData.date}
-            totalVolume={totalVolume}
+            volumeText={totalVolume > 0 ? exactVolume : null}
             totalSets={shareData.setCount}
             totalReps={shareData.totalReps}
             duration={workout.duration ?? null}

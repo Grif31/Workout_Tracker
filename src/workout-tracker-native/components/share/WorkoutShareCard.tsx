@@ -23,7 +23,10 @@ export type ShareExercise = {
 type WorkoutShareCardProps = {
   workoutName: string;
   date: string;
-  totalVolume: number;
+  /** Volume already converted and formatted in weightUnit; null for a session
+   *  with none (all bodyweight), which leads with reps instead. Callers format
+   *  it because only they know whether their figure is the API's lbs total. */
+  volumeText: string | null;
   totalSets: number;
   totalReps: number;
   /** workout duration in minutes */
@@ -42,19 +45,20 @@ function fmtDurationMin(min: number): string {
 
 function bestSetLabel(set: { reps: number; weight: number }, unit: string): string {
   // weight 0 = bodyweight set
-  return set.weight > 0 ? `${set.weight} ${unit} × ${set.reps}` : `${set.reps} reps`;
+  // Reps first, like the workout log's columns
+  return set.weight > 0 ? `${set.reps} × ${set.weight} ${unit}` : `${set.reps} reps`;
 }
 
 const WorkoutShareCard = forwardRef<View, WorkoutShareCardProps>(
-  ({ workoutName, date, totalVolume, totalSets, totalReps, duration, weightUnit, exercises, prs, accentColor }, ref) => {
+  ({ workoutName, date, volumeText, totalSets, totalReps, duration, weightUnit, exercises, prs, accentColor }, ref) => {
     const prLabel =
       prs.length === 1
         ? `New ${prs[0].exercise_name} ${PR_TYPE_LABELS[prs[0].pr_type] ?? 'PR'}`
         : `${prs.length} New PRs`;
 
     // All-bodyweight sessions have 0 volume — reps become the brag number
-    const heroValue = totalVolume > 0 ? totalVolume.toLocaleString() : totalReps.toLocaleString();
-    const heroLabel = totalVolume > 0 ? `Total Volume (${weightUnit})` : 'Total Reps';
+    const heroValue = volumeText ?? totalReps.toLocaleString();
+    const heroLabel = volumeText ? `Total Volume (${weightUnit})` : 'Total Reps';
 
     const statItems: ShareCardStatItem[] = [];
     if (duration != null && duration > 0) {

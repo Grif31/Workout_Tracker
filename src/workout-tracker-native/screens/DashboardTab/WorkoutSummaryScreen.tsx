@@ -3,12 +3,13 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Dimensions, ActivityIndicator,
   // Aliased: `Animated` in this file is Reanimated (for the entering
-  // animations). The PR list's height/opacity collapse uses RN's own Animated.
+  // animations). The count-ups, chevron and rank-up pop use RN's own Animated.
   Animated as RNAnimated, Easing,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import { captureAndShare } from '../../utils/shareCapture';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,34 +29,107 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { GREEK_RANK_CACHED_KEY, PROFILE_FRAME_RANK_KEY } from '../../constants/storageKeys';
 import { type GreekRankData, gateRequirementText } from '../../utils/greekRank';
-import { PR_TYPE_LABELS, PR_TYPE_ORDER } from '../../utils/prFormat';
+import { PR_TYPE_LABELS, PR_TYPE_ORDER, fmtMinSec } from '../../utils/prFormat';
+import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toExactVolume, toKm, type DistanceUnit, type WeightUnit } from '../../utils/units';
+import { fmtHold } from '../../components/workout/types';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WorkoutSummary'>;
+type SummaryPr = Props['route']['params']['prs'][number];
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type SetData = { id: number; reps?: number; weight?: number; set_type: string; cardio_duration?: number; distance?: number; distance_unit?: string };
-type ExerciseData = { id: number; name: string; sets: SetData[] };
+type ExerciseData = { id: number; name: string; exercise_type?: string; sets: SetData[] };
+type WorkoutData = {
+  date?: string;
+  duration?: number | null;
+  workout_type?: string;
+  cardio_duration?: number | null;
+  distance?: number | null;
+  distance_unit?: string;
+  exercises?: ExerciseData[];
+};
+
+// Rep-record and best-time PRs come several to a lift; the rest come one at a time
+const PRS_SHOWN_BEFORE_MORE = 3;
+
+function fmtMinutes(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  return h > 0 ? `${h}h ${m}m` : `${m} min`;
+}
+
+const toDistanceUnitKm = (value: number, unit?: string) => toKm(value, unit === 'mi' ? 'mi' : 'km');
+
+/** One PR's value as the lifter would say it: "8 reps at 185 lbs", "5K in 24:10" */
+function fmtSummaryPr(pr: SummaryPr, unit: string, distanceUnit: DistanceUnit): string {
+  switch (pr.pr_type) {
+    case 'max_weight':
+      return `${pr.value} ${unit}`;
+    case 'max_reps':
+      return pr.weight_context ? `${pr.value} reps at ${pr.weight_context} ${unit}` : `${pr.value} reps`;
+    case 'best_time':
+      return pr.label ? `${pr.label} in ${fmtMinSec(pr.value)}` : fmtMinSec(pr.value);
+    case 'best_distance': {
+      const dist = `${toDisplayDistance(pr.value, distanceUnit).toFixed(2)} ${distanceUnit}`;
+      return pr.label ? `${dist} in ${pr.label}` : dist;
+    }
+    case 'max_duration':
+      return fmtHold(pr.value);
+    default:
+      return String(pr.value);
+  }
+}
+
+/** A number that counts up from 0 when it first renders */
+function CountUpText({ value, format, delay, style }: {
+  value: number;
+  format: (n: number) => string;
+  delay: number;
+  style: any;
+}) {
+  const anim = useRef(new RNAnimated.Value(0)).current;
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    const id = anim.addListener(({ value: v }) => setShown(v));
+    // JS-driven (text can't use the native driver), so it's kept short: on
+    // Fabric every frame commits, and this screen is otherwise idle.
+    RNAnimated.timing(anim, {
+      toValue: value, duration: 700, delay, easing: Easing.out(Easing.cubic), useNativeDriver: false,
+    }).start();
+    return () => { anim.removeListener(id); anim.stopAnimation(); };
+  }, [anim, value, delay]);
+  return <Text style={style}>{format(shown)}</Text>;
+}
 
 export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const { workoutId, workoutName, prs, totalVolume, totalReps, totalSets, muscles, isFirstWorkout, isBestVolume, isBestReps } = route.params;
   const { colors } = useTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const weightUnit = user?.weight_unit ?? 'lbs';
+  const weightUnit: WeightUnit = user?.weight_unit === 'kg' ? 'kg' : 'lbs';
   const confettiRef = useRef<ConfettiCannon>(null);
   const shareCardRef = useRef<View>(null);
 
-  const [exercises, setExercises] = useState<ExerciseData[]>([]);
-  const [duration, setDuration] = useState<number | null>(null);
+  const [workout, setWorkout] = useState<WorkoutData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [prExpanded, setPrExpanded] = useState(false);
-  const prAnim = useCollapseAnim(prExpanded);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [morePrsExpanded, setMorePrsExpanded] = useState(false);
+  const morePrsAnim = useCollapseAnim(morePrsExpanded);
   const [sharing, setSharing] = useState(false);
   const [greekRank, setGreekRank] = useState<string | null>(null);
   const [rankData, setRankData] = useState<GreekRankData | null>(null);
+  const [rankedUp, setRankedUp] = useState(false);
+  const rankPop = useRef(new RNAnimated.Value(1)).current;
   const greekScore = rankData?.greek_score ?? null;
   const [selectedFrame, setSelectedFrame] = useState('Neophyte');
+  const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>('mi');
+
+  const exercises = workout?.exercises ?? [];
+  // Cardio only when every exercise is (Workout.to_dict), so a lifting session
+  // with a warm-up jog keeps its volume/sets/reps
+  const isCardio = workout?.workout_type === 'cardio';
 
   const filteredPrs = prs
     .filter(pr => pr.pr_type !== 'estimated_1rm')
@@ -65,58 +139,85 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
       return (b.value ?? 0) - (a.value ?? 0);
     });
 
-  // Collapse repeats of the same exercise+type (e.g. two rep-record sets at
-  // different weights) into one row with a ×N suffix, matching WorkoutDetails.
+  // One row per exercise + PR type, listing every record in it. Two rep
+  // records at two weights are two PRs, so the header counts PRs and each row
+  // spells out its values for the total to add up.
   const groupedPrs = useMemo(() => {
-    const map = new Map<string, { exercise_name: string; pr_type: string; count: number }>();
+    const map = new Map<string, { exercise_name: string; pr_type: string; values: string[] }>();
     for (const pr of filteredPrs) {
       const key = `${pr.exercise_name}|${pr.pr_type}`;
+      const value = fmtSummaryPr(pr, weightUnit, distanceUnit);
       const entry = map.get(key);
-      if (entry) entry.count += 1;
-      else map.set(key, { exercise_name: pr.exercise_name, pr_type: pr.pr_type, count: 1 });
+      if (entry) entry.values.push(value);
+      else map.set(key, { exercise_name: pr.exercise_name, pr_type: pr.pr_type, values: [value] });
     }
     return [...map.values()];
-  }, [filteredPrs]);
+  }, [filteredPrs, weightUnit, distanceUnit]);
 
   useEffect(() => {
-    AsyncStorage.multiGet([GREEK_RANK_CACHED_KEY, `${PROFILE_FRAME_RANK_KEY}_${user?.id}`]).then(pairs => {
-      const [rankRaw, frameRaw] = pairs.map(p => p[1]);
-      if (rankRaw) setGreekRank(rankRaw);
+    if (user?.id == null) return;
+    AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user.id}`)
+      .then(v => { if (v === 'km' || v === 'mi') setDistanceUnit(v); })
+      .catch(() => {});
+  }, [user?.id]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const pairs = await AsyncStorage.multiGet([GREEK_RANK_CACHED_KEY, `${PROFILE_FRAME_RANK_KEY}_${user?.id}`]).catch(() => null);
+      const [rankBefore, frameRaw] = pairs ? pairs.map(p => p[1]) : [null, null];
+      if (!alive) return;
+      if (rankBefore) setGreekRank(rankBefore);
       if (frameRaw) setSelectedFrame(frameRaw);
-    });
-    // Live score (for the rank-up progress bar) — the cached rank name above
-    // is enough for the badge and renders instantly, but the numeric score
-    // needed to compute progress isn't cached, so fetch it separately.
-    apiFetch('/api/stats/greek-rank')
-      .then(r => (r.ok ? r.json() : null))
-      .then((data: GreekRankData | null) => {
-        if (!data) return;
+      try {
+        // Live score (for the rank-up progress bar): the cached name renders
+        // the badge instantly, but the numeric score isn't cached
+        const res = await apiFetch('/api/stats/greek-rank');
+        const data: GreekRankData | null = res.ok ? await res.json() : null;
+        if (!alive || !data) return;
         setRankData(data);
         setGreekRank(data.greek_rank);
-      })
-      .catch(() => {});
+        // The cache holds the rank from before this workout, unless something
+        // already refreshed it. No cache (fresh login) means nothing to compare.
+        const before = GREEK_RANKS.findIndex(r => r.name === rankBefore);
+        const after = GREEK_RANKS.findIndex(r => r.name === data.greek_rank);
+        if (rankBefore && before >= 0 && after > before) setRankedUp(true);
+        if (data.greek_rank) AsyncStorage.setItem(GREEK_RANK_CACHED_KEY, data.greek_rank).catch(() => {});
+      } catch {}
+    })();
+    return () => { alive = false; };
   }, []);
 
   useEffect(() => {
+    if (!rankedUp) return;
+    rankPop.setValue(0.9);
+    RNAnimated.spring(rankPop, { toValue: 1, friction: 4, tension: 160, useNativeDriver: true }).start();
+    // After the PR haptic (600ms), so the two read as separate moments
+    const t = setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success), 1100);
+    return () => clearTimeout(t);
+  }, [rankedUp, rankPop]);
+
+  const loadWorkout = () => {
+    setLoading(true);
+    setLoadFailed(false);
     apiFetch(`/api/workouts/${workoutId}`)
-      .then(r => r.json())
-      .then(data => {
-        setExercises(data.exercises ?? []);
-        setDuration(data.duration ?? null);
+      .then(async r => {
+        if (!r.ok) throw new Error(String(r.status));
+        setWorkout(await r.json());
       })
-      .catch(() => {})
+      .catch(() => setLoadFailed(true))
       .finally(() => setLoading(false));
-  }, [workoutId]);
+  };
+  useEffect(loadWorkout, [workoutId]);
 
   useEffect(() => {
-    if (isFirstWorkout) {
-      setTimeout(() => confettiRef.current?.start(), 300);
-    }
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    if (isFirstWorkout) timers.push(setTimeout(() => confettiRef.current?.start(), 300));
     if (filteredPrs.length > 0) {
-      setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success), 600);
+      timers.push(setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success), 600));
     }
+    return () => timers.forEach(clearTimeout);
   }, []);
-
 
   function goToDetails() {
     navigation.replace('WorkoutDetails', { workoutId });
@@ -136,31 +237,64 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   // Heaviest working set per exercise for the share card (bodyweight = most reps)
   function bestSetOf(ex: ExerciseData) {
     let best: { reps: number; weight: number } | null = null;
-    for (const s of ex.sets) {
-      if (!s.reps || s.set_type === 'W') continue;
-      const w = s.weight ?? 0;
-      if (!best || w > best.weight || (w === best.weight && s.reps > best.reps)) {
-        best = { reps: s.reps, weight: w };
+    for (const set of ex.sets) {
+      if (!set.reps || set.set_type === 'W') continue;
+      const w = set.weight ?? 0;
+      if (!best || w > best.weight || (w === best.weight && set.reps > best.reps)) {
+        best = { reps: set.reps, weight: w };
       }
     }
     return best;
   }
 
-  function formatSet(set: SetData) {
-    if (set.cardio_duration) {
-      const parts = [];
-      if (set.cardio_duration) parts.push(`${set.cardio_duration}min`);
-      if (set.distance) parts.push(`${set.distance}${set.distance_unit || 'km'}`);
+  function formatSet(ex: ExerciseData, set: SetData) {
+    if (ex.exercise_type === 'duration') {
+      return set.cardio_duration ? fmtHold(set.cardio_duration) : '—';
+    }
+    if (ex.exercise_type === 'cardio') {
+      const parts: string[] = [];
+      if (set.cardio_duration) parts.push(fmtMinutes(set.cardio_duration));
+      if (set.distance) {
+        parts.push(`${toDisplayDistance(toDistanceUnitKm(set.distance, set.distance_unit), distanceUnit).toFixed(2)} ${distanceUnit}`);
+      }
       return parts.join(' · ') || '—';
     }
-    if (set.reps && set.weight) return `${set.reps} × ${set.weight}${weightUnit}`;
+    if (set.reps && set.weight) return `${set.reps} × ${set.weight} ${weightUnit}`;
     if (set.reps) return `${set.reps} reps`;
     return '—';
   }
 
-  const shareDate = new Date().toLocaleDateString('en-US', {
-    month: 'long', day: 'numeric', year: 'numeric',
-  });
+  // The day the workout is dated, not today: a session logged the next morning
+  // shouldn't be shared as today's
+  const workoutDate = workout?.date ? new Date(workout.date) : null;
+  const shareDate = (workoutDate && !isNaN(workoutDate.getTime()) ? workoutDate : new Date())
+    .toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  // Workout.volume is always lbs; everything shown here is in the user's unit
+  const volumeText = toExactVolume(totalVolume, weightUnit);
+  const volumeValue = Number(volumeText.replace(/,/g, ''));
+  const durationMin = workout?.duration ?? null;
+
+  const cardioMinutes = workout?.cardio_duration ?? 0;
+  const cardioKm = workout?.distance ? toDistanceUnitKm(workout.distance, workout.distance_unit) : 0;
+  const cardioDistance = cardioKm > 0 ? toDisplayDistance(cardioKm, distanceUnit) : 0;
+  const pace = cardioMinutes > 0 && cardioDistance > 0 ? cardioMinutes / cardioDistance : null;
+
+  const hasPrs = filteredPrs.length > 0;
+  const shownPrs = groupedPrs.slice(0, PRS_SHOWN_BEFORE_MORE);
+  const morePrs = groupedPrs.slice(PRS_SHOWN_BEFORE_MORE);
+
+  const renderPrRow = (pr: typeof groupedPrs[number], i: number) => (
+    <Animated.View key={`${pr.exercise_name}|${pr.pr_type}`} entering={FadeInDown.delay(150 + i * 80).duration(350)} style={s.prRow}>
+      <Ionicons name="trophy" size={16} color={PR_GOLD} style={s.prRowIcon} />
+      <View style={s.prRowText}>
+        <Text style={s.prRowTitle}>
+          {pr.exercise_name} · {PR_TYPE_LABELS[pr.pr_type] ?? pr.pr_type.replace(/_/g, ' ')}{pr.values.length > 1 ? 's' : ''}
+        </Text>
+        <Text style={s.prRowValues}>{pr.values.join(', ')}</Text>
+      </View>
+    </Animated.View>
+  );
 
   return (
     <View style={s.container}>
@@ -173,10 +307,10 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
         <WorkoutShareCard
           workoutName={workoutName}
           date={shareDate}
-          totalVolume={totalVolume}
+          volumeText={totalVolume > 0 ? volumeText : null}
           totalSets={totalSets}
           totalReps={totalReps}
-          duration={duration}
+          duration={durationMin}
           weightUnit={weightUnit}
           exercises={exercises.slice(0, 3).map(e => ({ name: e.name, bestSet: bestSetOf(e) }))}
           prs={filteredPrs}
@@ -194,19 +328,24 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
         />
       )}
 
-      <View style={s.header}>
-        <TouchableOpacity style={s.closeBtn} onPress={() => isFirstWorkout
-          // replace, not navigate: the intro's back arrow should reach the
-          // dashboard, not the summary the user just closed
-          ? navigation.replace('GreekRankIntro')
-          : navigation.navigate('DashboardHome')}>
-          <Text style={s.closeText}>✕</Text>
+      <View style={[s.header, { paddingTop: insets.top + spacing.sm }]}>
+        <TouchableOpacity
+          style={s.closeBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Close summary"
+          onPress={() => isFirstWorkout
+            // replace, not navigate: the intro's back arrow should reach the
+            // dashboard, not the summary the user just closed
+            ? navigation.replace('GreekRankIntro')
+            : navigation.navigate('DashboardHome')}
+        >
+          <Ionicons name="close" size={26} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <Animated.View entering={FadeInDown.duration(400)} style={s.hero}>
-          <Text style={s.trophy}>🏆</Text>
+          <Ionicons name="trophy" size={52} color={hasPrs ? PR_GOLD : colors.accent} style={s.trophy} />
           <Text style={s.headline}>
             {isFirstWorkout
               ? 'Your first workout. The pursuit starts here.'
@@ -218,62 +357,44 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
               ? 'Your most reps in a workout yet.'
               : 'Workout complete.'}
           </Text>
-          <Text style={s.subline}>"{workoutName}"</Text>
+          <Text style={s.subline}>
+            "{workoutName}"{durationMin ? ` · ${fmtMinutes(durationMin)}` : ''}
+          </Text>
         </Animated.View>
 
-        {groupedPrs.length > 0 && (
+        {hasPrs && (
           <Animated.View entering={FadeInDown.delay(100).duration(400)} style={s.section}>
-            {groupedPrs.length === 1 ? (
-              <View style={s.prDropdownHeader}>
+            <View style={s.prCard}>
+              <View style={s.prHeader}>
                 <LaurelBranch height={20} color={PR_GOLD} />
-                <Text style={s.prText}>
-                  {groupedPrs[0].exercise_name}: new {PR_TYPE_LABELS[groupedPrs[0].pr_type] ?? groupedPrs[0].pr_type.replace(/_/g, ' ')} PR!
-                  {groupedPrs[0].count > 1 ? ` ×${groupedPrs[0].count}` : ''}
+                <Text style={s.prHeaderText}>
+                  {filteredPrs.length === 1 ? 'New Personal Record' : `${filteredPrs.length} Personal Records`}
                 </Text>
                 <LaurelBranch side="right" height={20} color={PR_GOLD} />
               </View>
-            ) : (
-              <>
-                <TouchableOpacity
-                  style={s.prDropdownHeader}
-                  onPress={() => setPrExpanded(v => !v)}
-                  activeOpacity={0.8}
-                >
-                  <LaurelBranch height={20} color={PR_GOLD} />
-                  <Text style={s.prText}>
-                    {filteredPrs.length} Personal Records
-                  </Text>
-                  <RNAnimated.Text
-                    style={[
-                      s.prChevron,
-                      {
-                        transform: [{
-                          rotate: prAnim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: ['0deg', '180deg'],
-                          }),
-                        }],
-                      },
-                    ]}
+              {shownPrs.map(renderPrRow)}
+              {morePrs.length > 0 && (
+                <>
+                  <Collapsible progress={morePrsAnim} expanded={morePrsExpanded}>
+                    {morePrs.map((pr, i) => renderPrRow(pr, i + shownPrs.length))}
+                  </Collapsible>
+                  <TouchableOpacity
+                    style={s.morePrsBtn}
+                    onPress={() => setMorePrsExpanded(v => !v)}
+                    accessibilityRole="button"
                   >
-                    ▼
-                  </RNAnimated.Text>
-                  <LaurelBranch side="right" height={20} color={PR_GOLD} />
-                </TouchableOpacity>
-                <Collapsible progress={prAnim} expanded={prExpanded}>
-                  {groupedPrs.map((pr, i) => (
-                    <View key={i} style={s.prBanner}>
-                      <LaurelBranch height={20} color={PR_GOLD} />
-                      <Text style={s.prBannerText}>
-                        {pr.exercise_name}: new {PR_TYPE_LABELS[pr.pr_type] ?? pr.pr_type.replace(/_/g, ' ')} PR!
-                        {pr.count > 1 ? ` ×${pr.count}` : ''}
-                      </Text>
-                      <LaurelBranch side="right" height={20} color={PR_GOLD} />
-                    </View>
-                  ))}
-                </Collapsible>
-              </>
-            )}
+                    <Text style={s.morePrsText}>
+                      {morePrsExpanded ? 'Show less' : `Show ${morePrs.length} more`}
+                    </Text>
+                    <RNAnimated.View
+                      style={{ transform: [{ rotate: morePrsAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}
+                    >
+                      <Ionicons name="chevron-down" size={14} color={PR_GOLD} />
+                    </RNAnimated.View>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
           </Animated.View>
         )}
 
@@ -290,16 +411,29 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
             : null;
           return (
             <Animated.View entering={FadeInDown.delay(150).duration(400)} style={s.section}>
-              <View style={[s.rankBadgeCard, { backgroundColor: rankColor + '15', borderColor: rankColor + '44' }]}>
+              <RNAnimated.View
+                style={[
+                  s.rankBadgeCard,
+                  { backgroundColor: rankColor + '15', borderColor: rankedUp ? rankColor : rankColor + '44', transform: [{ scale: rankPop }] },
+                ]}
+              >
+                {rankedUp && (
+                  <View style={[s.rankUpPill, { backgroundColor: rankColor + '26' }]}>
+                    <Ionicons name="arrow-up" size={12} color={rankColor} />
+                    <Text style={[s.rankUpText, { color: rankColor }]}>Ranked up</Text>
+                  </View>
+                )}
                 <View style={s.rankBadgeLeft}>
                   <View style={s.rankAvatarWrap}>
                     <View style={s.rankAvatarDisc} />
                     <ProfileAvatarFrame rankName={selectedFrame} size={44} avatarSize={36} />
                   </View>
-                  <View>
+                  <View style={s.rankBadgeText}>
                     <Text style={[s.rankBadgeName, { color: rankColor }]}>{greekRank}</Text>
                     <Text style={s.rankBadgeSub}>
-                      {nextRank
+                      {rankedUp
+                        ? `You reached ${greekRank}. This workout pushed you over.`
+                        : nextRank
                         ? `Keep training to reach ${nextRank.name}`
                         : "You've reached the highest rank."}
                     </Text>
@@ -319,26 +453,50 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
                     </Text>
                   </View>
                 )}
-              </View>
+              </RNAnimated.View>
             </Animated.View>
           );
         })()}
 
         <Animated.View entering={FadeInDown.delay(200).duration(400)} style={s.section}>
-          <View style={s.statsRow}>
-            <View style={s.statBox}>
-              <Text style={s.statValue}>{totalVolume.toLocaleString()}</Text>
-              <Text style={s.statLabel}>Volume ({weightUnit})</Text>
+          {/* Waits for the workout: whether it's cardio decides which stats
+              mean anything, and guessing first would flash "0 lbs · 0 reps"
+              on a run. A failed load falls back to the strength stats. */}
+          {loading ? (
+            <View style={s.statsPlaceholder} />
+          ) : isCardio ? (
+            <View style={s.statsRow}>
+              <View style={s.statBox}>
+                <Text style={s.statValue}>{cardioMinutes > 0 ? fmtMinutes(cardioMinutes) : '—'}</Text>
+                <Text style={s.statLabel}>Time</Text>
+              </View>
+              <View style={s.statBox}>
+                {cardioDistance > 0
+                  ? <CountUpText value={cardioDistance} delay={300} format={n => n.toFixed(2)} style={s.statValue} />
+                  : <Text style={s.statValue}>—</Text>}
+                <Text style={s.statLabel}>Distance ({distanceUnit})</Text>
+              </View>
+              <View style={s.statBox}>
+                <Text style={s.statValue}>{pace != null ? fmtMinSec(pace) : '—'}</Text>
+                <Text style={s.statLabel}>Pace (/{distanceUnit})</Text>
+              </View>
             </View>
-            <View style={s.statBox}>
-              <Text style={s.statValue}>{totalSets}</Text>
-              <Text style={s.statLabel}>Sets</Text>
+          ) : (
+            <View style={s.statsRow}>
+              <View style={s.statBox}>
+                <CountUpText value={volumeValue} delay={300} format={n => Math.round(n).toLocaleString()} style={s.statValue} />
+                <Text style={s.statLabel}>Volume ({weightUnit})</Text>
+              </View>
+              <View style={s.statBox}>
+                <CountUpText value={totalSets} delay={380} format={n => String(Math.round(n))} style={s.statValue} />
+                <Text style={s.statLabel}>Sets</Text>
+              </View>
+              <View style={s.statBox}>
+                <CountUpText value={totalReps} delay={460} format={n => String(Math.round(n))} style={s.statValue} />
+                <Text style={s.statLabel}>Reps</Text>
+              </View>
             </View>
-            <View style={s.statBox}>
-              <Text style={s.statValue}>{totalReps}</Text>
-              <Text style={s.statLabel}>Reps</Text>
-            </View>
-          </View>
+          )}
         </Animated.View>
 
         {muscles.length > 0 && (
@@ -353,16 +511,29 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
         <Animated.View entering={FadeInDown.delay(400).duration(400)} style={s.section}>
           {loading ? (
             <ActivityIndicator color={colors.accent} />
+          ) : loadFailed ? (
+            <View style={s.loadError}>
+              <Text style={s.loadErrorText}>Couldn't load this workout's sets. It's saved, so you can also open it from your history.</Text>
+              <TouchableOpacity style={s.retryBtn} onPress={loadWorkout} accessibilityRole="button">
+                <Text style={s.retryText}>Try Again</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             exercises.map(ex => (
               <View key={ex.id} style={s.exCard}>
                 <Text style={s.exName}>{ex.name}</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                  {ex.sets.map((set, i) => (
-                    <View key={i} style={s.setBadge}>
-                      <Text style={s.setBadgeText}>{formatSet(set)}</Text>
-                    </View>
-                  ))}
+                <View style={s.setBadgeRow}>
+                  {ex.sets.map((set, i) => {
+                    const warmup = set.set_type === 'W';
+                    return (
+                      <View key={set.id ?? i} style={[s.setBadge, warmup && s.setBadgeWarmup]}>
+                        <Text style={s.setBadgeText}>
+                          {warmup && <Text style={s.setBadgeWarmupTag}>W  </Text>}
+                          {formatSet(ex, set)}
+                        </Text>
+                      </View>
+                    );
+                  })}
                 </View>
               </View>
             ))
@@ -377,7 +548,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
 
         <Animated.View entering={FadeInDown.delay(550).duration(400)}>
           <TouchableOpacity
-            style={s.shareBtn}
+            style={[s.shareBtn, { marginBottom: insets.bottom + spacing.md }]}
             onPress={handleShare}
             disabled={sharing || loading}
             activeOpacity={0.85}
@@ -397,55 +568,79 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   );
 }
 
+const SIDE = spacing.md + spacing.xs;
+
 const createStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20, paddingTop: 56, paddingBottom: spacing.sm },
+  header: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: SIDE, paddingBottom: spacing.sm },
   closeBtn: { padding: spacing.sm },
-  closeText: { fontSize: typography.fontSize.xl, color: colors.textSecondary },
-  hero: { alignItems: 'center', paddingHorizontal: spacing.lg, paddingBottom: 20 },
-  trophy: { fontSize: 48, marginBottom: spacing.sm },
+  hero: { alignItems: 'center', paddingHorizontal: spacing.lg, paddingBottom: SIDE },
+  trophy: { marginBottom: spacing.sm },
   headline: { fontSize: typography.fontSize.xl, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
-  subline: { fontSize: 15, color: colors.textSecondary, marginTop: spacing.xs, textAlign: 'center' },
-  section: { paddingHorizontal: 20, marginBottom: 20 },
+  subline: { fontSize: typography.fontSize.md, color: colors.textSecondary, marginTop: spacing.xs, textAlign: 'center' },
+  section: { paddingHorizontal: SIDE, marginBottom: SIDE },
   // Gold outline on a surface fill, matching WorkoutLog's PR banner and the
   // PR Dashboard box — not the old filled-gold blocks.
-  prDropdownHeader: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+  prCard: {
     backgroundColor: colors.surface,
     borderWidth: 1, borderColor: PR_GOLD,
-    borderRadius: 10, padding: 12, marginBottom: spacing.sm,
+    borderRadius: radius.md, padding: spacing.md,
   },
-  prBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1, borderColor: PR_GOLD + '66',
-    borderRadius: 10, padding: 12, marginBottom: spacing.sm,
+  prHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  prHeaderText: { flex: 1, textAlign: 'center', fontSize: typography.fontSize.md, fontWeight: '800', color: PR_GOLD },
+  prRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm,
+    paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border,
   },
-  prText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: PR_GOLD, flex: 1 },
-  prBannerText: { fontSize: typography.fontSize.sm, fontWeight: '500', color: colors.textPrimary, flex: 1 },
-  prChevron: { fontSize: 13, color: PR_GOLD, marginLeft: spacing.xs },
-  statsRow: { flexDirection: 'row', gap: 10 },
-  statBox: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: 14, alignItems: 'center' },
+  prRowIcon: { marginTop: 2 },
+  prRowText: { flex: 1 },
+  prRowTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
+  prRowValues: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
+  morePrsBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
+    paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border,
+  },
+  morePrsText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: PR_GOLD },
+  statsRow: { flexDirection: 'row', gap: spacing.sm },
+  statsPlaceholder: { height: 72, borderRadius: radius.md, backgroundColor: colors.surface },
+  statBox: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
   statValue: { fontSize: typography.fontSize.xl, fontWeight: '700', color: colors.textPrimary },
-  statLabel: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  statLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
   diagramCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
-  diagramTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 12 },
-  exCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: 14, marginBottom: 10 },
-  exName: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: spacing.sm },
-  setBadge: { backgroundColor: colors.background, borderRadius: 6, paddingHorizontal: spacing.sm, paddingVertical: 3 },
-  setBadgeText: { fontSize: 12, color: colors.textSecondary },
-  rankBadgeCard: { borderRadius: radius.md, padding: 14, borderWidth: 1 },
-  rankBadgeLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  diagramTitle: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary, marginBottom: spacing.sm },
+  exCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
+  exName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary, marginBottom: spacing.sm },
+  setBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs + 2 },
+  setBadge: {
+    backgroundColor: colors.background, borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm, paddingVertical: 3,
+    borderWidth: 1, borderColor: 'transparent',
+  },
+  setBadgeWarmup: { borderColor: colors.warmup + '88' },
+  setBadgeText: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
+  setBadgeWarmupTag: { fontWeight: '800', color: colors.warmup },
+  loadError: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md },
+  loadErrorText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center' },
+  retryBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border },
+  retryText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
+  rankBadgeCard: { borderRadius: radius.md, padding: spacing.md, borderWidth: 1 },
+  rankUpPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start',
+    borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 2, marginBottom: spacing.sm,
+  },
+  rankUpText: { fontSize: typography.fontSize.xs, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6 },
+  rankBadgeLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + spacing.xs },
+  rankBadgeText: { flex: 1 },
   rankAvatarWrap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   // own layer so the rounded disc never clips the Aretē frame's wreath, which bleeds past 44px
   rankAvatarDisc: { position: 'absolute', width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface },
   rankBadgeName: { fontSize: typography.fontSize.md, fontWeight: '800', letterSpacing: 0.5 },
-  rankBadgeSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  rankBadgeSub: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
   rankProgressWrap: { marginTop: spacing.sm },
   progressTrack: { height: 8, backgroundColor: colors.border, borderRadius: 4, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: 4 },
-  progressLabel: { fontSize: 12, color: colors.textSecondary, marginTop: spacing.xs },
-  detailsBtn: { backgroundColor: colors.accent, borderRadius: radius.md, margin: 20, marginTop: spacing.xs, padding: spacing.md, alignItems: 'center' },
+  progressLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: spacing.xs },
+  detailsBtn: { backgroundColor: colors.accent, borderRadius: radius.md, marginHorizontal: SIDE, marginBottom: spacing.sm, padding: spacing.md, alignItems: 'center' },
   detailsBtnText: { color: colors.accentText, fontSize: typography.fontSize.md, fontWeight: '600' },
   shareBtn: {
     flexDirection: 'row',
@@ -453,8 +648,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     borderRadius: radius.md,
-    margin: 20,
-    marginTop: 0,
+    marginHorizontal: SIDE,
     padding: spacing.md,
     backgroundColor: colors.surface,
     borderWidth: 1,

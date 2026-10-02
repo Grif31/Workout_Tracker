@@ -79,15 +79,31 @@ describe('share cards', () => {
   it('Workout card lists the workout and its exercises', () => {
     const { getByText } = render(
       <WorkoutShareCard
-        workoutName="Push Day" date="Sep 20, 2026" totalVolume={12000} totalSets={16} totalReps={120}
-        duration={62} weightUnit="lbs"
-        exercises={[{ name: 'Bench Press', sets: 4 } as any]}
+        workoutName="Push Day" date="Sep 20, 2026" volumeText="5,443" totalSets={16} totalReps={120}
+        duration={62} weightUnit="kg"
+        exercises={[{ name: 'Bench Press', bestSet: { reps: 5, weight: 100 } }]}
         prs={[{ exercise_name: 'Bench Press', pr_type: 'max_weight' }]}
         accentColor={ACCENT}
       />,
     );
     expect(getByText('Push Day')).toBeTruthy();
     expect(getByText('Bench Press')).toBeTruthy();
+    // Shown as given: the caller already converted the API's lbs total
+    expect(getByText('5,443')).toBeTruthy();
+    expect(getByText('Total Volume (kg)')).toBeTruthy();
+    // Reps first, like the workout log
+    expect(getByText('5 × 100 kg')).toBeTruthy();
+  });
+
+  it('Workout card leads with reps when there is no volume', () => {
+    const { getByText, queryByText } = render(
+      <WorkoutShareCard
+        workoutName="Calisthenics" date="Sep 20, 2026" volumeText={null} totalSets={6} totalReps={90}
+        weightUnit="lbs" exercises={[]} prs={[]} accentColor={ACCENT}
+      />,
+    );
+    expect(getByText('Total Reps')).toBeTruthy();
+    expect(queryByText(/Total Volume/)).toBeNull();
   });
 
   it('Cardio card shows distance and duration, with no route needed', () => {
