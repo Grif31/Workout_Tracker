@@ -85,6 +85,14 @@ export const bodyweightLoadFactor = (ex: { bodyweight_load_factor?: number | nul
 export const isDuration = (ex: { exercise_type?: string }) =>
   ex.exercise_type === 'duration';
 
+// Previous-session set in the input columns' order, reps first: "8 × 185".
+// parseFloat drops the API's trailing ".0" on whole weights.
+export function fmtPrevSet(prev: PreviousSet, bodyweight: boolean): string {
+  if (bodyweight) return `${prev.reps} reps`;
+  const w = parseFloat(String(prev.weight));
+  return `${prev.reps} × ${isNaN(w) ? prev.weight : w}`;
+}
+
 // "45s" / "1:30" — hold-time display from a minutes value
 export function fmtHold(minutes: number): string {
   const secs = Math.round(minutes * 60);

@@ -205,7 +205,7 @@ describe('WorkoutLog regressions', () => {
     resolveLast({ sets: [{ reps: '3', weight: '100', set_type: 'N' }] });
 
     // History still lands in the Prev column...
-    expect(await findByText('3 x 100')).toBeTruthy();
+    expect(await findByText('3 × 100')).toBeTruthy();
     // ...but doesn't replace what was typed
     expect(getByDisplayValue('7')).toBeTruthy();
     expect(queryByDisplayValue('3')).toBeNull();

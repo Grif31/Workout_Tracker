@@ -32,6 +32,7 @@ type Props = {
   onToggleSetDone: (exIndex: number, setIdx: number) => void;
   onOpenRpePicker: (exIndex: number, setIdx: number) => void;
   onDeleteSet: (exIndex: number, setIdx: number) => void;
+  onCopyPrevious: (exIndex: number, setIdx: number) => void;
   onAddSet: (exIndex: number) => void;
   onStartRest: () => void;
   onOpenMenu: (exIndex: number, e: any) => void;
@@ -57,6 +58,7 @@ function ExerciseBlock({
   onToggleSetDone,
   onOpenRpePicker,
   onDeleteSet,
+  onCopyPrevious,
   onAddSet,
   onStartRest,
   onOpenMenu,
@@ -159,6 +161,7 @@ function ExerciseBlock({
                     onBlur={onBlurInput}
                     onToggleDone={() => onToggleSetDone(exIndex, setIndex)}
                     onDelete={() => onDeleteSet(exIndex, setIndex)}
+                    onCopyPrevious={() => onCopyPrevious(exIndex, setIndex)}
                   />
                 ))}
 
@@ -204,6 +207,7 @@ function ExerciseBlock({
                       onToggleDone={() => onToggleSetDone(exIndex, setIndex)}
                       onOpenRpePicker={() => onOpenRpePicker(exIndex, setIndex)}
                       onDelete={() => onDeleteSet(exIndex, setIndex)}
+                      onCopyPrevious={() => onCopyPrevious(exIndex, setIndex)}
                       registerInputRef={(field, ref) => onRegisterInput?.(exIndex, setIndex, field, ref)}
                       prHint={prHint?.setIdx === setIndex ? prHint.text : null}
                     />

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,17 +18,32 @@ type Props = {
   onBlur?: () => void;
   onToggleDone: () => void;
   onDelete: () => void;
+  /** Copies the Prev column into this set; absent when there's nothing to copy */
+  onCopyPrevious?: () => void;
 };
 
 function DurationSetRow({
-  set, setIndex, prevSet, onChangeSeconds, onFocus, onBlur, onToggleDone, onDelete,
+  set, setIndex, prevSet, onChangeSeconds, onFocus, onBlur, onToggleDone, onDelete, onCopyPrevious,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const isDone = set.done ?? false;
 
   const prevMinutes = prevSet?.cardio_duration ? parseFloat(prevSet.cardio_duration) : NaN;
-  const prevText = !isNaN(prevMinutes) && prevMinutes > 0 ? fmtHold(prevMinutes) : '—';
+  const hasPrev = !isNaN(prevMinutes) && prevMinutes > 0;
+  const prevText = hasPrev ? fmtHold(prevMinutes) : '—';
+  const canCopyPrevious = hasPrev && !isDone && !!onCopyPrevious;
+
+  // Same check-off pop as SetRow
+  const checkScale = useRef(new Animated.Value(1)).current;
+  const wasDone = useRef(isDone);
+  useEffect(() => {
+    if (isDone && !wasDone.current) {
+      checkScale.setValue(0.6);
+      Animated.spring(checkScale, { toValue: 1, friction: 4, tension: 220, useNativeDriver: true }).start();
+    }
+    wasDone.current = isDone;
+  }, [isDone, checkScale]);
 
   return (
     <Swipeable
@@ -51,7 +66,16 @@ function DurationSetRow({
           <Text style={[styles.setBadgeNum, { color: colors.textSecondary }]}>{setIndex + 1}</Text>
         </View>
 
-        <Text style={[styles.prevCellText, colStyles.prev]}>{prevText}</Text>
+        <TouchableOpacity
+          style={colStyles.prev}
+          onPress={onCopyPrevious}
+          disabled={!canCopyPrevious}
+          accessibilityRole={canCopyPrevious ? 'button' : undefined}
+          accessibilityLabel={canCopyPrevious ? `Use previous: ${prevText}` : undefined}
+          hitSlop={4}
+        >
+          <Text style={[styles.prevCellText, canCopyPrevious && styles.prevCellTappable]}>{prevText}</Text>
+        </TouchableOpacity>
 
         <View style={[styles.secondsWrap, colStyles.input]}>
           <TextInput
@@ -68,12 +92,21 @@ function DurationSetRow({
           <Text style={[styles.secondsSuffix, { color: colors.textSecondary }]}>sec</Text>
         </View>
 
-        <TouchableOpacity style={[styles.checkBtn, colStyles.check]} onPress={onToggleDone} hitSlop={4}>
-          <Ionicons
-            name={isDone ? 'checkmark-circle' : 'ellipse-outline'}
-            size={26}
-            color={isDone ? colors.save : colors.border}
-          />
+        <TouchableOpacity
+          style={[styles.checkBtn, colStyles.check]}
+          onPress={onToggleDone}
+          hitSlop={4}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: isDone }}
+          accessibilityLabel={`Set ${setIndex + 1} done`}
+        >
+          <Animated.View style={{ transform: [{ scale: checkScale }] }}>
+            <Ionicons
+              name={isDone ? 'checkmark-circle' : 'ellipse-outline'}
+              size={26}
+              color={isDone ? colors.save : colors.border}
+            />
+          </Animated.View>
         </TouchableOpacity>
       </View>
     </Swipeable>
@@ -96,6 +129,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  prevCellTappable: {
+    color: colors.textPrimary,
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'dotted',
   },
   secondsWrap: {
     flexDirection: 'row',

@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,7 +6,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { PR_GOLD_TEXT } from '../../constants/prColors';
-import { type WorkoutSet, type PreviousSet, type SetType, colStyles } from './types';
+import { type WorkoutSet, type PreviousSet, type SetType, colStyles, fmtPrevSet } from './types';
 
 // Resting width of the revealed Delete button. Swipeable measures the actions
 // container to set the row's drag range, so this has to be a real width.
@@ -39,6 +39,8 @@ type Props = {
   onToggleDone: () => void;
   onOpenRpePicker: () => void;
   onDelete: () => void;
+  /** Copies the Prev column into this set; absent when there's nothing to copy */
+  onCopyPrevious?: () => void;
   /** Lets the keyboard toolbar's Next button focus specific inputs */
   registerInputRef?: (field: 'reps' | 'weight', ref: TextInput | null) => void;
   /** Near-PR hint shown under the row while this set is focused */
@@ -62,6 +64,7 @@ function SetRow({
   onToggleDone,
   onOpenRpePicker,
   onDelete,
+  onCopyPrevious,
   registerInputRef,
   prHint,
 }: Props) {
@@ -99,9 +102,20 @@ function SetRow({
       if (finished) onDelete();
     });
   };
-  const prevText = prevSet
-    ? bodyweight ? `${prevSet.reps} reps` : `${prevSet.reps} x ${prevSet.weight}`
-    : '—';
+  const prevText = prevSet ? fmtPrevSet(prevSet, !!bodyweight) : '—';
+  const canCopyPrevious = !!prevSet && !isDone && !!onCopyPrevious;
+
+  // A short pop on the checkmark when a set is logged. Skips the first render,
+  // so a restored or prefilled done set doesn't animate on open.
+  const checkScale = useRef(new Animated.Value(1)).current;
+  const wasDone = useRef(isDone);
+  useEffect(() => {
+    if (isDone && !wasDone.current) {
+      checkScale.setValue(0.6);
+      Animated.spring(checkScale, { toValue: 1, friction: 4, tension: 220, useNativeDriver: true }).start();
+    }
+    wasDone.current = isDone;
+  }, [isDone, checkScale]);
 
   return (
     <Swipeable
@@ -168,6 +182,8 @@ function SetRow({
                 style={styles.swipeDeleteHit}
                 activeOpacity={1}
                 onPress={onDelete}
+                accessibilityRole="button"
+                accessibilityLabel={`Delete set ${setIndex + 1}`}
               >
                 <Animated.View style={{ transform: [{ scale: iconScale }] }}>
                   <Ionicons name="trash" size={20} color="#fff" />
@@ -201,7 +217,16 @@ function SetRow({
           {setType !== 'N' && <Text style={[styles.setTypeBadgeLabel, { color: typeColor }]}>{setType}</Text>}
         </TouchableOpacity>
 
-        <Text style={[styles.prevCellText, colStyles.prev]}>{prevText}</Text>
+        <TouchableOpacity
+          style={colStyles.prev}
+          onPress={onCopyPrevious}
+          disabled={!canCopyPrevious}
+          accessibilityRole={canCopyPrevious ? 'button' : undefined}
+          accessibilityLabel={canCopyPrevious ? `Use previous: ${prevText}` : undefined}
+          hitSlop={4}
+        >
+          <Text style={[styles.prevCellText, canCopyPrevious && styles.prevCellTappable]}>{prevText}</Text>
+        </TouchableOpacity>
 
         <TextInput
           ref={r => registerInputRef?.('reps', r)}
@@ -254,11 +279,13 @@ function SetRow({
           accessibilityState={{ checked: isDone }}
           accessibilityLabel={`Set ${setIndex + 1} done`}
         >
-          <Ionicons
-            name={isDone ? 'checkmark-circle' : 'ellipse-outline'}
-            size={30}
-            color={isDone ? colors.save : colors.textSecondary}
-          />
+          <Animated.View style={{ transform: [{ scale: checkScale }] }}>
+            <Ionicons
+              name={isDone ? 'checkmark-circle' : 'ellipse-outline'}
+              size={30}
+              color={isDone ? colors.save : colors.textSecondary}
+            />
+          </Animated.View>
         </TouchableOpacity>
       </View>
       {!!prHint && (
@@ -282,7 +309,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingHorizontal: 2,
     borderRadius: spacing.xs,
   },
-  setRowDone: { backgroundColor: 'rgba(52,199,89,0.08)' },
+  setRowDone: { backgroundColor: colors.save + '14' },
 
   setTypeBadge: {
     borderWidth: 1,
@@ -300,6 +327,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     marginHorizontal: spacing.xs,
+  },
+  // Dotted underline marks the cell as tappable without competing with the inputs
+  prevCellTappable: {
+    color: colors.textPrimary,
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'dotted',
   },
 
   setInput: {

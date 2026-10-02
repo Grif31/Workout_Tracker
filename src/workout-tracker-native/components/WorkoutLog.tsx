@@ -12,6 +12,7 @@ import {
   cancelLiveWorkoutNotification,
 } from '../utils/notifications';
 import NetInfo from '@react-native-community/netinfo';
+import * as Haptics from 'expo-haptics';
 import { enqueueWorkout } from '../utils/offlineQueue';
 import { loadExerciseList } from '../utils/exerciseCache';
 import { showToast } from '../utils/toast';
@@ -62,6 +63,7 @@ import { animateNextRowChange } from '../utils/layoutAnimation';
 import ExerciseReorderRow, { EXERCISE_REORDER_ROW_HEIGHT } from './workout/ExerciseReorderRow';
 import RestTimer from './workout/RestTimer';
 import PlateCalculatorModal from './PlateCalculatorModal';
+import UndoBar from './UndoBar';
 import { syncWorkoutToHealthKit } from '../utils/healthKit';
 import { attachHeartRateToWorkout } from '../utils/heartRateSync';
 import { syncWorkoutToHealthConnect } from '../utils/healthConnect';
@@ -658,6 +660,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const showPRBanner = useCallback((exerciseName: string, prType: string) => {
     if (prTimerRef.current) clearTimeout(prTimerRef.current);
     setPrBanner({ name: exerciseName, type: prType });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     prAnim.setValue(0);
     Animated.spring(prAnim, { toValue: 1, useNativeDriver: true, tension: 70, friction: 10 }).start();
     prTimerRef.current = setTimeout(() => {
@@ -811,8 +814,13 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     const ex = exercisesRef.current[exIndex];
     const set = ex?.sets[setIndex];
     if (!ex || !set) return;
-    if (!set.done && !isSetFilled(ex, set)) return;
+    if (!set.done && !isSetFilled(ex, set)) {
+      // Says why the tap did nothing: the set is missing reps, weight or time
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
     const nowDone = !set.done;
+    if (nowDone) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setExercises(prev => {
       const target = prev[exIndex];
       if (!target) return prev;
@@ -906,15 +914,59 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     });
   }, [repeatLastSet]);
 
+  // A swipe deletes without asking, so the set is kept for one Undo
+  const [deletedSet, setDeletedSet] = useState<{ exUid: string; index: number; set: WorkoutSet; message: string } | null>(null);
+
   const deleteSet = useCallback((exIndex: number, setIndex: number) => {
+    const ex = exercisesRef.current[exIndex];
+    const removed = ex?.sets[setIndex];
+    if (!ex || !removed) return;
     animateNextRowChange();
+    setExercises(prev => prev.map(e =>
+      e.uid === ex.uid ? { ...e, sets: e.sets.filter(s => s.uid !== removed.uid) } : e
+    ));
+    setDeletedSet({
+      exUid: ex.uid,
+      index: setIndex,
+      set: removed,
+      message: `${ex.exercise_type === 'cardio' ? 'Bout' : 'Set'} ${setIndex + 1} removed from ${ex.name}`,
+    });
+  }, []);
+
+  const undoDeleteSet = () => {
+    if (!deletedSet) return;
+    const { exUid, index, set } = deletedSet;
+    animateNextRowChange();
+    setExercises(prev => prev.map(e => {
+      if (e.uid !== exUid) return e;
+      const sets = [...e.sets];
+      sets.splice(Math.min(index, sets.length), 0, set);
+      return { ...e, sets };
+    }));
+    setDeletedSet(null);
+  };
+
+  // Fills a set from the Prev column (last session's set in the same position)
+  const copyPreviousToSet = useCallback((exIndex: number, setIndex: number) => {
     setExercises(prev => {
       const ex = prev[exIndex];
-      if (!ex) return prev;
+      const target = ex?.sets[setIndex];
+      const last = ex?.previousSets?.[setIndex];
+      if (!ex || !target || !last || target.done) return prev;
+      let filled: Partial<WorkoutSet>;
+      if (isDuration(ex)) {
+        const mins = parseFloat(last.cardio_duration ?? '');
+        if (!(mins > 0)) return prev;
+        filled = { cardio_duration: String(Math.round(mins * 60)) };
+      } else {
+        const w = parseFloat(String(last.weight));
+        filled = { reps: String(last.reps ?? ''), weight: isBodyweight(ex) ? '0' : isNaN(w) ? '' : String(w) };
+      }
       const next = [...prev];
-      next[exIndex] = { ...ex, sets: ex.sets.filter((_, j) => j !== setIndex) };
+      next[exIndex] = { ...ex, sets: ex.sets.map((s, j) => j === setIndex ? { ...s, ...filled } : s) };
       return next;
     });
+    Haptics.selectionAsync();
   }, []);
 
   const deleteEx = (exIndex: number) => {
@@ -1078,6 +1130,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       onToggleSetDone={toggleSetDone}
       onOpenRpePicker={onOpenRpePicker}
       onDeleteSet={deleteSet}
+      onCopyPrevious={copyPreviousToSet}
       onAddSet={addSetToExercise}
       onRegisterInput={onRegisterSetInput}
       onStartRest={startRest}
@@ -1088,7 +1141,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   ), [
     showRpe, weightUnit, SET_TYPE_COLORS, updateExerciseNotes, autoFocusNoteIdx,
     onOpenSetTypePicker, updateSetField, onFocusSetInput, onBlurSetInput, toggleSetDone,
-    onOpenRpePicker, deleteSet, addSetToExercise, onRegisterSetInput, startRest,
+    onOpenRpePicker, deleteSet, copyPreviousToSet, addSetToExercise, onRegisterSetInput, startRest,
     onOpenExerciseMenu, updateCardioField, prHint,
   ]);
 
@@ -1970,6 +2023,14 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           </View>
         </View>
       </Modal>
+
+      <UndoBar
+        visible={deletedSet !== null}
+        message={deletedSet?.message ?? ''}
+        onUndo={undoDeleteSet}
+        onDismiss={() => setDeletedSet(null)}
+        bottomOffset={insets.bottom}
+      />
 
       {/* PR banner — slides down from top, auto-dismisses */}
       {prBanner && (
