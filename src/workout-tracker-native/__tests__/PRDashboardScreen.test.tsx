@@ -493,15 +493,15 @@ describe('PRDashboardScreen', () => {
 
   it('shows the weekly title and no fallback note under the normal week scope', async () => {
     const { getByText, queryByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
-    await waitFor(() => expect(getByText("This Week's PRs")).toBeTruthy());
-    expect(queryByText(/No new PRs this week/)).toBeNull();
+    await waitFor(() => expect(getByText('Last 7 Days')).toBeTruthy());
+    expect(queryByText(/No new PRs in the last 7 days/)).toBeNull();
   });
 
   it('retitles the feed and shows a note when the week is empty but older PRs are shown', async () => {
     mockFetch({ ...dashboardPayload, recent_events_scope: 'all_time' });
     const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Recent PRs')).toBeTruthy());
-    expect(getByText(/No new PRs this week/)).toBeTruthy();
+    expect(getByText(/No new PRs in the last 7 days/)).toBeTruthy();
     // The fallback item itself still renders normally
     expect(getByText('Bench Press')).toBeTruthy();
   });

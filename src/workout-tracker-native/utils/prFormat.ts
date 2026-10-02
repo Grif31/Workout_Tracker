@@ -112,6 +112,36 @@ export function fmtChartDate(iso: string): string {
 }
 
 /**
+ * A PR's value as plotted on its progression chart, in the same unit its
+ * headline and table show: distances in the user's mi/km (the raw value is
+ * km), times and holds in seconds (raw minutes would round "23:40" to 24 on a
+ * whole-number axis).
+ */
+export function prChartValue(e: PREventItem, distanceUnit: 'km' | 'mi'): number {
+  switch (e.pr_type) {
+    case 'best_distance': return toDisplayDistance(e.value, distanceUnit);
+    case 'best_time':
+    case 'max_duration':  return Math.round(e.value * 60);
+    default:              return e.value;
+  }
+}
+
+/** Y-axis tick label for a PR chart plotted with prChartValue. */
+export function prChartYLabel(prType: PREventItem['pr_type'] | null | undefined): (label: string) => string {
+  if (prType === 'best_time') return label => fmtMinSec(Math.round(Number(label)) / 60);
+  if (prType === 'max_duration') return label => fmtHold(Math.round(Number(label)) / 60);
+  return formatChartYLabel;
+}
+
+/** 1st, 2nd, 3rd, 11th, 72nd */
+export function fmtOrdinal(n: number): string {
+  const r = Math.round(n);
+  const tens = r % 100;
+  const suffix = tens >= 11 && tens <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[r % 10] ?? 'th';
+  return `${r}${suffix}`;
+}
+
+/**
  * Forces whole-number y-axis tick labels on PR progression charts —
  * `roundToDigits={0}` alone can still leave a fractional label on the axis
  * (e.g. the offset-derived bottom tick), so this is the guaranteed backstop.

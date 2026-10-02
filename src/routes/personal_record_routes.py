@@ -1,9 +1,10 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func
 from models import db, PersonalRecord, PREvent, ExerciseTemplate, Exercise, Set, Workout
+from utils.local_date import user_today
 
 pr_bp = Blueprint('pr_bp', __name__)
 
@@ -215,6 +216,9 @@ def get_personal_records():
             'equipment': tmpl.equipment,
             'pr_label': label,
             'muscle_group': primary_muscle,
+            # Matches the lift's entry in /api/stats/strength-score, for the
+            # percentile pill on Personal Records
+            'standards_key': tmpl.standards_key,
         }
         if pr.pr_type == 'max_weight' and set_row:
             d['reps'] = set_row.reps
@@ -228,7 +232,12 @@ def get_pr_dashboard():
     """Aggregate payload for the PR Dashboard screen: recent PR events feed,
     workout-level bests, and momentum stats — one round trip."""
     user_id = get_jwt_identity()
-    now = datetime.now()
+    # The end of the user's own day, not the server's UTC clock: on a US
+    # Sunday evening the server is already in Monday, which made a PR from
+    # that day read "1d ago" and rolled the week and month over early.
+    # PREvent.achieved_at is the workout's date at midnight, so measuring
+    # from the day's end counts calendar days.
+    now = datetime.combine(user_today(), time.max)
 
     # ── Recent PRs feed ────────────────────────────────────────────────────
     page = request.args.get('page', 1, type=int)

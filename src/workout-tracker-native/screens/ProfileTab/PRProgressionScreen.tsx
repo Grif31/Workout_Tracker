@@ -18,7 +18,7 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
-import { fmtPrValue, fmtPrDelta, fmtChartDate, formatChartYLabel, computeChartYAxisRange, PR_METRIC_OPTIONS, prWorkoutScreen, type PREventItem } from '../../utils/prFormat';
+import { fmtPrValue, fmtPrDelta, fmtChartDate, prChartValue, prChartYLabel, computeChartYAxisRange, PR_METRIC_OPTIONS, prWorkoutScreen, type PREventItem } from '../../utils/prFormat';
 import { loadPrPins, togglePrPin, pinMatches, MAX_PR_PINS } from '../../utils/prPins';
 import { showToast } from '../../utils/toast';
 
@@ -170,12 +170,12 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
   );
 
   const chartData = useMemo(
-    () => series.map(e => ({ value: e.value, label: fmtChartDate(e.achieved_at) })),
-    [series],
+    () => series.map(e => ({ value: prChartValue(e, distanceUnit), label: fmtChartDate(e.achieved_at) })),
+    [series, distanceUnit],
   );
   const { maxValue: chartMaxValue, yAxisOffset: chartYAxisOffset } = useMemo(
-    () => computeChartYAxisRange(series.map(e => e.value), CHART_Y_SECTIONS),
-    [series],
+    () => computeChartYAxisRange(chartData.map(d => d.value), CHART_Y_SECTIONS),
+    [chartData],
   );
 
   // Total improvement across the whole visible series, formatted by piggybacking
@@ -322,13 +322,15 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
                 startOpacity={0.16}
                 endOpacity={0}
                 areaChart
-                curved
+                // Straight segments: a PR only changes when a new one is set, and
+                // a curve implies steady gains in between (and can overshoot them)
                 isAnimated
                 rulesType="dashed"
                 rulesColor={colors.border}
                 rulesThickness={1}
                 yAxisTextStyle={styles.chartAxisLabel}
-                yAxisLabelWidth={36}
+                // "23:40" needs more room than a weight
+                yAxisLabelWidth={metric === 'best_time' || metric === 'max_duration' ? 44 : 36}
                 yAxisThickness={1}
                 yAxisColor={colors.border}
                 xAxisLabelTextStyle={styles.chartAxisLabel}
@@ -339,7 +341,7 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
                 maxValue={chartMaxValue}
                 yAxisOffset={chartYAxisOffset}
                 roundToDigits={0}
-                formatYLabel={formatChartYLabel}
+                formatYLabel={prChartYLabel(metric)}
                 initialSpacing={24}
                 endSpacing={24}
               />

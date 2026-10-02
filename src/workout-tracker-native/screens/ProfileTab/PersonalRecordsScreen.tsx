@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, FlatList, SectionList, ScrollView,
+  View, Text, FlatList, SectionList, ScrollView, Animated,
   TouchableOpacity, StyleSheet, ActivityIndicator, TextInput,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -18,6 +18,10 @@ import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { fmtHold } from '../../components/workout/types';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
+import { usePurchase } from '../../context/PurchaseContext';
+import { SCORE_RANK_COLORS } from '../../constants/strengthRanks';
+import { fmtOrdinal } from '../../utils/prFormat';
+import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'PersonalRecords'>;
 
@@ -33,12 +37,16 @@ export type PR = {
   achieved_at: string;
   muscle_group: string;
   reps?: number | null;
+  /** The lift's entry in /api/stats/strength-score; null when it has no standards */
+  standards_key?: string | null;
 };
+
+type LiftScore = { percentile: number; rank: string };
 
 const TABS = [
   { key: 'max_weight' as const, label: 'Max Weight' },
   { key: 'max_reps'   as const, label: 'Max Reps'   },
-  { key: 'cardio'     as const, label: 'Time'        },
+  { key: 'cardio'     as const, label: 'Cardio & Holds' },
 ];
 
 type RepsEntry = { weight: number; reps: number; achieved_at: string };
@@ -57,6 +65,28 @@ type CardioEntry =
 type CardioSection = { title: string; exercise_template_id: number; data: CardioEntry[] };
 
 
+function RepsAccordion({ expanded, onToggle, header, children, styles, colors }: {
+  expanded: boolean;
+  onToggle: () => void;
+  header: React.ReactNode;
+  children: React.ReactNode;
+  styles: ReturnType<typeof createStyles>;
+  colors: Colors;
+}) {
+  const progress = useCollapseAnim(expanded);
+  return (
+    <View style={[styles.accordionCard, { backgroundColor: colors.surface }]}>
+      <TouchableOpacity style={styles.accordionHeader} onPress={onToggle} activeOpacity={0.7}>
+        {header}
+        <Animated.View style={{ transform: [{ rotate: progress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}>
+          <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
+        </Animated.View>
+      </TouchableOpacity>
+      <Collapsible progress={progress} expanded={expanded}>{children}</Collapsible>
+    </View>
+  );
+}
+
 export default function PersonalRecordsScreen({ navigation }: Props) {
   const { user } = useAuth();
   const { colors } = useTheme();
@@ -66,7 +96,14 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
   const [prs, setPrs]             = useState<PR[]>([]);
   const [loading, setLoading]     = useState(true);
   const [activeTab, setActiveTab] = useState<'max_weight' | 'max_reps' | 'cardio'>('max_weight');
-  const [sortBy, setSortBy]       = useState<'default' | 'muscle'>('default');
+  // Max Weight: 'default' = heaviest first; Max Reps: 'default' = A-Z.
+  // 'recent' is Max Weight only.
+  const [sortBy, setSortBy]       = useState<'default' | 'recent' | 'muscle'>('default');
+  const { isPremium } = usePurchase();
+  // Strength Score percentile per lift, keyed by standards_key. Premium only,
+  // like Strength Score itself; empty when the score can't be computed (no
+  // gender or bodyweight on the profile), which just means no pills.
+  const [liftScores, setLiftScores] = useState<Record<string, LiftScore>>({});
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery]           = useState('');
@@ -107,8 +144,24 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
       } catch {}
       if (alive) setLoading(false);
     })();
+    if (isPremium) {
+      (async () => {
+        try {
+          const res = await apiFetch('/api/stats/strength-score');
+          if (!res.ok || !alive) return;
+          const data = await res.json();
+          const map: Record<string, LiftScore> = {};
+          for (const lift of [...(data.big6 ?? []), ...(data.supplemental ?? [])]) {
+            if (lift.percentile != null && lift.rank?.label) {
+              map[lift.exercise] = { percentile: lift.percentile, rank: lift.rank.label };
+            }
+          }
+          if (alive) setLiftScores(map);
+        } catch {}
+      })();
+    }
     return () => { alive = false; };
-  }, []));
+  }, [isPremium]));
 
   // ── Max Weight ─────────────────────────────────────────────────────────────
   const weightRows = useMemo(() =>
@@ -188,14 +241,24 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
           map.get(key)!.data.push({ kind: 'hold', label: 'Longest Hold', time_min: p.value, achieved_at: p.achieved_at, weight_context: p.weight_context });
         }
       });
-    return [...map.values()].sort((a, b) => a.title.localeCompare(b.title));
+    const kindOrder = { time: 0, distance: 1, hold: 2 } as const;
+    return [...map.values()]
+      .sort((a, b) => a.title.localeCompare(b.title))
+      .map(sec => ({
+        ...sec,
+        data: [...sec.data].sort((a, b) =>
+          kindOrder[a.kind] - kindOrder[b.kind] || (a.weight_context ?? 0) - (b.weight_context ?? 0)),
+      }));
   }, [prs]);
 
   const filteredWeightRows = useMemo(() => {
-    if (!query) return weightRows;
+    const rows = sortBy === 'recent'
+      ? [...weightRows].sort((a, b) => b.achieved_at.localeCompare(a.achieved_at))
+      : weightRows;
+    if (!query) return rows;
     const q = query.toLowerCase();
-    return weightRows.filter(p => p.exercise_name.toLowerCase().includes(q));
-  }, [weightRows, query]);
+    return rows.filter(p => p.exercise_name.toLowerCase().includes(q));
+  }, [weightRows, query, sortBy]);
 
   const filteredWeightByMuscle = useMemo(() => {
     if (!query) return weightByMuscle;
@@ -248,15 +311,17 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
   ) => navigation.navigate('PRProgression', { exerciseTemplateId, exerciseName, prType, weightContext });
 
   const renderAccordionExercise = (section: RepsSection) => {
-    const isExpanded = expandedIds.has(section.exercise_template_id);
-    const best = section.data[0];
+    // The heaviest weight with a rep record, not a judgment of which set is
+    // best: this tab is a plain record of max reps at each weight
+    const heaviest = section.data[0];
     return (
-      <View key={section.exercise_template_id} style={[styles.accordionCard, { backgroundColor: colors.surface }]}>
-        <TouchableOpacity
-          style={styles.accordionHeader}
-          onPress={() => toggleExpanded(section.exercise_template_id)}
-          activeOpacity={0.7}
-        >
+      <RepsAccordion
+        key={section.exercise_template_id}
+        expanded={expandedIds.has(section.exercise_template_id)}
+        onToggle={() => toggleExpanded(section.exercise_template_id)}
+        styles={styles}
+        colors={colors}
+        header={
           <View style={styles.rowInfo}>
             <Text style={[styles.rowName, { color: colors.textPrimary }]}>
               {section.title}
@@ -265,16 +330,12 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
               )}
             </Text>
             <Text style={styles.rowDate}>
-              Best: {best.weight === 0 ? 'Bodyweight' : `${best.weight} ${unit}`} × {best.reps} reps
+              Heaviest: {heaviest.weight === 0 ? `${heaviest.reps} reps at bodyweight` : `${heaviest.reps} × ${heaviest.weight} ${unit}`}
             </Text>
           </View>
-          <Ionicons
-            name={isExpanded ? 'chevron-up' : 'chevron-down'}
-            size={18}
-            color={colors.textSecondary}
-          />
-        </TouchableOpacity>
-        {isExpanded && section.data.map((item, index) => {
+        }
+      >
+        {section.data.map((item, index) => {
           const isTop = index === 0;
           return (
             <TouchableOpacity
@@ -303,9 +364,29 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             </TouchableOpacity>
           );
         })}
-      </View>
+      </RepsAccordion>
     );
   };
+
+  // "72nd · Advanced" in the rank's color; opens Strength Score
+  const renderStrengthPill = (item: PR) => {
+    const score = item.standards_key ? liftScores[item.standards_key] : undefined;
+    if (!score) return null;
+    const color = SCORE_RANK_COLORS[score.rank] ?? colors.accent;
+    return (
+      <TouchableOpacity
+        style={[styles.strengthPill, { borderColor: color, backgroundColor: color + '1F' }]}
+        onPress={() => (navigation as any).navigate('TrainingTab', { screen: 'StrengthScore', initial: false })}
+        hitSlop={6}
+        accessibilityRole="button"
+        accessibilityLabel={`Strength Score ${fmtOrdinal(score.percentile)} percentile, ${score.rank}`}
+      >
+        <Text style={[styles.strengthPillText, { color }]}>{fmtOrdinal(score.percentile)} · {score.rank}</Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const noMatches = query ? <Text style={styles.empty}>No PRs match "{query}"</Text> : null;
 
   const showSortToggle = activeTab !== 'cardio';
 
@@ -328,7 +409,10 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             <TouchableOpacity
               key={tab.key}
               style={[styles.tab, active && { borderBottomColor: colors.accent, borderBottomWidth: 2 }]}
-              onPress={() => setActiveTab(tab.key)}
+              onPress={() => {
+                setActiveTab(tab.key);
+                if (tab.key !== 'max_weight') setSortBy(prev => (prev === 'recent' ? 'default' : prev));
+              }}
             >
               <Text style={[styles.tabText, { color: active ? colors.accent : colors.textSecondary }]}>
                 {tab.label}
@@ -347,9 +431,19 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
               onPress={() => setSortBy('default')}
             >
               <Text style={[styles.sortBtnText, { color: sortBy === 'default' ? colors.accent : colors.textSecondary }]}>
-                {activeTab === 'max_weight' ? 'By Value' : 'A–Z'}
+                {activeTab === 'max_weight' ? 'Heaviest' : 'A–Z'}
               </Text>
             </TouchableOpacity>
+            {activeTab === 'max_weight' && (
+              <TouchableOpacity
+                style={[styles.sortBtn, sortBy === 'recent' && { backgroundColor: colors.accent + '20' }]}
+                onPress={() => setSortBy('recent')}
+              >
+                <Text style={[styles.sortBtnText, { color: sortBy === 'recent' ? colors.accent : colors.textSecondary }]}>
+                  Recent
+                </Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={[styles.sortBtn, sortBy === 'muscle' && { backgroundColor: colors.accent + '20' }]}
               onPress={() => setSortBy('muscle')}
@@ -364,6 +458,8 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
         <TouchableOpacity
           style={[styles.searchIconBtn, searchOpen && { backgroundColor: colors.accent + '20' }]}
           onPress={toggleSearch}
+          accessibilityRole="button"
+          accessibilityLabel={searchOpen ? 'Close search' : 'Search PRs'}
         >
           <Ionicons
             name={searchOpen ? 'close' : 'search'}
@@ -404,7 +500,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             sections={filteredWeightByMuscle}
             keyExtractor={item => item.id.toString()}
             contentContainerStyle={styles.list}
-            ListEmptyComponent={<Text style={styles.empty}>No max weight PRs yet. Log a strength workout to set your first.</Text>}
+            ListEmptyComponent={noMatches ?? <Text style={styles.empty}>No max weight PRs yet. Log a strength workout to set your first.</Text>}
             renderSectionHeader={({ section }) => (
               <GoldSectionRule icon="body-outline" label={section.title} style={[styles.sectionHeaderRow, { backgroundColor: colors.background }]} />
             )}
@@ -427,6 +523,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                   {est1rmMap[item.exercise_template_id] != null && (
                     <Text style={styles.est1rm}>Est. 1RM · {est1rmMap[item.exercise_template_id].toFixed(1)} {unit}</Text>
                   )}
+                  {renderStrengthPill(item)}
                 </View>
                 <View style={styles.rowRight}>
                   {index === 0 ? (
@@ -448,14 +545,16 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
             data={filteredWeightRows}
             keyExtractor={item => item.id.toString()}
             contentContainerStyle={styles.list}
-            ListEmptyComponent={<Text style={styles.empty}>No max weight PRs yet. Log a strength workout to set your first.</Text>}
+            ListEmptyComponent={noMatches ?? <Text style={styles.empty}>No max weight PRs yet. Log a strength workout to set your first.</Text>}
             renderItem={({ item, index }) => (
               <TouchableOpacity
                 style={[styles.row, { backgroundColor: colors.surface }]}
                 onPress={() => openProgression(item.exercise_template_id, item.exercise_name, item.pr_type, item.weight_context)}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.rank, index < 3 && { color: colors.accent }]}>#{index + 1}</Text>
+                {sortBy !== 'recent' && (
+                  <Text style={[styles.rank, index < 3 && { color: colors.accent }]}>#{index + 1}</Text>
+                )}
                 <View style={styles.rowInfo}>
                   <Text style={[styles.rowName, { color: colors.textPrimary }]}>
                     {item.exercise_name}
@@ -469,9 +568,10 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                   {est1rmMap[item.exercise_template_id] != null && (
                     <Text style={styles.est1rm}>Est. 1RM · {est1rmMap[item.exercise_template_id].toFixed(1)} {unit}</Text>
                   )}
+                  {renderStrengthPill(item)}
                 </View>
                 <View style={styles.rowRight}>
-                  {index === 0 ? (
+                  {index === 0 && sortBy !== 'recent' ? (
                     <View style={styles.topValueRow}>
                       <LaurelBranch height={18} color={PR_GOLD} />
                       <Text style={[styles.rowValue, { color: PR_GOLD_TEXT }]}>{item.value} {unit}</Text>
@@ -488,9 +588,9 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
       ) : activeTab === 'max_reps' ? (
         /* Max Reps — accordion per exercise, optional muscle grouping */
         <ScrollView contentContainerStyle={styles.list}>
-          {repsSections.length === 0 && (
+          {repsSections.length === 0 ? (
             <Text style={styles.empty}>No per-weight rep records yet.{'\n'}Log some workouts to build your records.</Text>
-          )}
+          ) : filteredRepsSections.length === 0 && noMatches}
           {sortBy === 'muscle'
             ? filteredRepsByMuscle.map(({ muscle, sections }) => (
                 <View key={muscle}>
@@ -507,14 +607,13 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
           sections={filteredCardioSections}
           keyExtractor={(item, i) => `cardio-${i}`}
           contentContainerStyle={styles.list}
-          ListEmptyComponent={
-            <Text style={styles.empty}>No time records yet.{'\n'}Log a run, ride, or timed hold to see your bests.</Text>
-          }
+          ListEmptyComponent={noMatches ?? (
+            <Text style={styles.empty}>No cardio or hold records yet.{'\n'}Log a run, ride, or timed hold to see your bests.</Text>
+          )}
           renderSectionHeader={({ section }) => (
             <GoldSectionRule icon="stopwatch-outline" label={section.title} style={[styles.sectionHeaderRow, { backgroundColor: colors.background }]} />
           )}
           renderItem={({ item, index, section }) => {
-            const isTop = index === 0;
             const isLast = index === section.data.length - 1;
             return (
               <TouchableOpacity
@@ -536,19 +635,9 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                   <Text style={styles.rowDate}>{fmtDate(item.achieved_at)}</Text>
                 </View>
                 <View style={styles.rowRight}>
-                  {isTop ? (
-                    <View style={styles.topValueRow}>
-                      <LaurelBranch height={18} color={PR_GOLD} />
-                      <Text style={[styles.rowValue, { color: PR_GOLD_TEXT }]}>
-                        {item.kind === 'time' ? fmtTime(item.time_min) : item.kind === 'hold' ? fmtHold(item.time_min) : fmtDistance(item.distance_km)}
-                      </Text>
-                      <LaurelBranch side="right" height={18} color={PR_GOLD} />
-                    </View>
-                  ) : (
-                    <Text style={styles.rowValue}>
-                      {item.kind === 'time' ? fmtTime(item.time_min) : item.kind === 'hold' ? fmtHold(item.time_min) : fmtDistance(item.distance_km)}
-                    </Text>
-                  )}
+                  <Text style={[styles.rowValue, { color: PR_GOLD_TEXT }]}>
+                    {item.kind === 'time' ? fmtTime(item.time_min) : item.kind === 'hold' ? fmtHold(item.time_min) : fmtDistance(item.distance_km)}
+                  </Text>
                 </View>
               </TouchableOpacity>
             );
@@ -561,6 +650,15 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
 
 const createStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  strengthPill: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  strengthPillText: { fontSize: typography.fontSize.xs, fontWeight: '700' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -11,6 +11,7 @@ import { LaurelBranch } from '../../components/LaurelWreath';
 import GoldSectionRule from '../../components/GoldSectionRule';
 import PRShareCard from '../../components/share/PRShareCard';
 import SegmentedControl from '../../components/SegmentedControl';
+import PressableScale from '../../components/PressableScale';
 import { loadPrPins, pinSlotKey, type PRPin } from '../../utils/prPins';
 import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
 import { useAuth } from '../../context/AuthContext';
@@ -20,9 +21,9 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { captureAndShare } from '../../utils/shareCapture';
-import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
+import { GPS_DISTANCE_UNIT_KEY, toExactVolume, type WeightUnit } from '../../utils/units';
 import {
-  fmtPrValue, fmtPrContext, fmtPrDelta, fmtRelativeDate, fmtChartDate, formatChartYLabel, computeChartYAxisRange,
+  fmtPrValue, fmtPrContext, fmtPrDelta, fmtRelativeDate, fmtChartDate, prChartValue, prChartYLabel, computeChartYAxisRange,
   computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH, prWorkoutScreen,
   prTypeIcon, stalledUrgency, stalledCategoryToPrType, pickDefaultPrSeries, PR_METRIC_OPTIONS,
   type PREventItem, type StalledCategory,
@@ -171,14 +172,13 @@ const PinnedProgressionSection = React.memo(function PinnedProgressionSection({
               ? ` @ ${p.weightContext === 0 ? 'Bodyweight' : `${p.weightContext} ${unit}`}`
               : '';
             const { maxValue: pinChartMaxValue, yAxisOffset: pinChartYAxisOffset } = canChart
-              ? computeChartYAxisRange(series.map(e => e.value), PIN_CHART_Y_SECTIONS)
+              ? computeChartYAxisRange(series.map(e => prChartValue(e, distanceUnit)), PIN_CHART_Y_SECTIONS)
               : { maxValue: PIN_CHART_Y_SECTIONS, yAxisOffset: 0 };
             return (
-              <TouchableOpacity
+              <PressableScale
                 key={pinSlotKey(p)}
                 style={[styles.pinCard, { backgroundColor: colors.surface }]}
                 onPress={() => onOpen(p, last)}
-                activeOpacity={0.7}
               >
                 <View style={styles.pinCardHeader}>
                   <Ionicons name="pin" size={14} color={colors.accent} />
@@ -204,7 +204,7 @@ const PinnedProgressionSection = React.memo(function PinnedProgressionSection({
                     data={series.map((e, i) => {
                       const dateLabel = fmtChartDate(e.achieved_at);
                       return {
-                        value: e.value,
+                        value: prChartValue(e, distanceUnit),
                         // Drawn wider than the library's spacing-wide label box
                         // and centred on the point, so a date stays on one line.
                         labelComponent: showChartXLabel(i, series.length, chartFit.labelEvery)
@@ -229,7 +229,6 @@ const PinnedProgressionSection = React.memo(function PinnedProgressionSection({
                     thickness={2}
                     hideDataPoints
                     areaChart
-                    curved
                     isAnimated={animate}
                     rulesType="dashed"
                     rulesColor={colors.border}
@@ -250,7 +249,7 @@ const PinnedProgressionSection = React.memo(function PinnedProgressionSection({
                     maxValue={pinChartMaxValue}
                     yAxisOffset={pinChartYAxisOffset}
                     roundToDigits={0}
-                    formatYLabel={formatChartYLabel}
+                    formatYLabel={prChartYLabel(p.prType ?? last?.pr_type)}
                     initialSpacing={PIN_CHART_EDGE_SPACING}
                     endSpacing={PIN_CHART_EDGE_SPACING}
                   />
@@ -266,7 +265,7 @@ const PinnedProgressionSection = React.memo(function PinnedProgressionSection({
                     <Text style={[styles.deltaPillText, { color: PR_GOLD_TEXT }]}>{delta}</Text>
                   </View>
                 )}
-              </TouchableOpacity>
+              </PressableScale>
             );
           })}
         </View>
@@ -418,9 +417,11 @@ export default function PRDashboardScreen({ navigation }: Props) {
   const loadMore = async () => {
     if (!data?.has_more || loadingMore) return;
     setLoadingMore(true);
+    const requested = filter;
     try {
-      const d = await fetchPage(data.page + 1, filter);
-      if (d) {
+      const d = await fetchPage(data.page + 1, requested);
+      // Switching filters mid-request would append the old filter's page
+      if (d && filterRef.current === requested) {
         setData(d);
         setEvents(prev => [...prev, ...d.recent_events]);
       }
@@ -528,28 +529,26 @@ export default function PRDashboardScreen({ navigation }: Props) {
           <GoldSectionRule icon="ribbon-outline" label="Workout Records" style={styles.sectionHeaderRow} />
           <View style={styles.bestsRow}>
             {bests.best_volume && (
-              <TouchableOpacity
+              <PressableScale
                 style={[styles.bestCard, { backgroundColor: colors.surface }]}
                 onPress={() => openWorkout(bests.best_volume!.workout_id)}
-                activeOpacity={0.7}
               >
                 <View style={[styles.bestIconBadge, { backgroundColor: PR_GOLD_BG }]}>
                   <Ionicons name="barbell-outline" size={16} color={PR_GOLD_TEXT} />
                 </View>
                 <Text style={styles.bestLabel}>Most Volume</Text>
                 <Text style={[styles.bestValue, { color: colors.textPrimary }]}>
-                  {bests.best_volume.value.toLocaleString()} lbs
+                  {toExactVolume(bests.best_volume.value, unit as WeightUnit)} {unit}
                 </Text>
                 <Text style={styles.bestMeta} numberOfLines={1}>
                   {bests.best_volume.workout_name} · {fmtRelativeDate(bests.best_volume.date)}
                 </Text>
-              </TouchableOpacity>
+              </PressableScale>
             )}
             {bests.best_total_reps && (
-              <TouchableOpacity
+              <PressableScale
                 style={[styles.bestCard, { backgroundColor: colors.surface }]}
                 onPress={() => openWorkout(bests.best_total_reps!.workout_id)}
-                activeOpacity={0.7}
               >
                 <View style={[styles.bestIconBadge, { backgroundColor: PR_GOLD_BG }]}>
                   <Ionicons name="repeat-outline" size={16} color={PR_GOLD_TEXT} />
@@ -561,7 +560,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
                 <Text style={styles.bestMeta} numberOfLines={1}>
                   {bests.best_total_reps.workout_name} · {fmtRelativeDate(bests.best_total_reps.date)}
                 </Text>
-              </TouchableOpacity>
+              </PressableScale>
             )}
           </View>
         </View>
@@ -656,7 +655,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
       {/* Feed title + filter picker */}
       <GoldSectionRule
         icon="trophy-outline"
-        label={feedScope === 'all_time' ? 'Recent PRs' : "This Week's PRs"}
+        label={feedScope === 'all_time' ? 'Recent PRs' : 'Last 7 Days'}
         right={
           chipLoading ? (
             <ActivityIndicator size="small" color={colors.textSecondary} />
@@ -667,7 +666,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
         style={styles.feedTitleRow}
       />
       {feedScope === 'all_time' && events.length > 0 && (
-        <Text style={styles.feedScopeNote}>No new PRs this week. Here's your most recent</Text>
+        <Text style={styles.feedScopeNote}>No new PRs in the last 7 days. Here are your most recent.</Text>
       )}
       <SegmentedControl options={FILTERS} value={filter} onChange={setFilter} style={styles.segmentedSpacing} />
     </View>
@@ -677,10 +676,9 @@ export default function PRDashboardScreen({ navigation }: Props) {
     const context = fmtPrContext(item, unit);
     const delta = fmtPrDelta(item, unit, distanceUnit);
     return (
-      <TouchableOpacity
+      <PressableScale
         style={[styles.eventCard, { backgroundColor: colors.surface }]}
         onPress={() => navigation.navigate(prWorkoutScreen(item.pr_type), { workoutId: item.workout_id })}
-        activeOpacity={0.7}
       >
         <View style={[styles.eventIconBadge, { backgroundColor: PR_GOLD_BG }]}>
           <Ionicons name={prTypeIcon(item.pr_type) as keyof typeof Ionicons.glyphMap} size={18} color={PR_GOLD_TEXT} />
@@ -711,7 +709,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
         >
           <Ionicons name="ellipsis-vertical" size={18} color={colors.textSecondary} />
         </TouchableOpacity>
-      </TouchableOpacity>
+      </PressableScale>
     );
   };
 

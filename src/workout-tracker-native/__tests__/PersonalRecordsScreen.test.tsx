@@ -42,7 +42,7 @@ describe('PersonalRecordsScreen', () => {
   it('shows a gold per-exercise header on the Time tab', async () => {
     const { getByText } = render(<PersonalRecordsScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
-    fireEvent.press(getByText('Time'));
+    fireEvent.press(getByText('Cardio & Holds'));
     await waitFor(() => expect(getByText('Running')).toBeTruthy());
   });
 
@@ -65,7 +65,7 @@ describe('PersonalRecordsScreen', () => {
   it('navigates to Progression when a Time-tab row is tapped', async () => {
     const { getByText } = render(<PersonalRecordsScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
-    fireEvent.press(getByText('Time'));
+    fireEvent.press(getByText('Cardio & Holds'));
     await waitFor(() => expect(getByText('Running')).toBeTruthy());
     fireEvent.press(getByText('5K')); // the data row itself; "Running" is just the section header
     expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 9, exerciseName: 'Running', prType: 'best_time', weightContext: 5 });
