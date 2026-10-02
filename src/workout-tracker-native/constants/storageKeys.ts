@@ -30,3 +30,6 @@ export const WEEKLY_GOAL_KEY = 'workout_weekly_goal';
 export const WEEKLY_DISTANCE_GOAL_KEY = 'workout_weekly_distance_goal';
 // Per user: `${PROFILE_FRAME_RANK_KEY}_${userId}`, the avatar frame picked on Greek Rank.
 export const PROFILE_FRAME_RANK_KEY = 'profile_frame_rank';
+// Per user: `${HOME_STREAK_TYPE_KEY}_${userId}`, 'weekly' | 'monthly' | 'daily',
+// the streak Home's top bar shows.
+export const HOME_STREAK_TYPE_KEY = 'home_streak_type';

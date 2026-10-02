@@ -12,6 +12,7 @@ from models import (
 )
 from schemas import AiGenerateSchema, AiInsightsSchema, AiSaveSchema
 from utils.validation import validate_body
+from utils.local_date import user_today
 from utils.lift_progress import compute_most_improved_lift
 from utils.exercise_access import add_template_exercises
 from utils.cardio_progress import compute_most_improved_cardio, _MILESTONE_LABELS
@@ -270,16 +271,25 @@ AVOID_MAP = {
 }
 
 
+# Mirrors ROTATION_RESTART_DAYS in the app's utils/routineRotation.ts
+ROTATION_RESTART_DAYS = 14
+
+
 def _routine_rotation_context(user_id: int, routine_id: int) -> dict | None:
     """Where the user sits in their active routine's day rotation.
 
-    RoutineDay has no weekday field — day_order is just an ordered rotation
-    (e.g. Push/Pull/Legs), not pinned to a calendar day — so "next up" means
-    the next day_order after the most recently matched one, not a specific
-    weekday. Matched by Workout.name against RoutineDay.label, since starting
-    a workout from a routine day sets name = day.label verbatim (CoachScreen,
-    DashboardScreen). Returns None with no active routine or no history to
-    match against yet (new routine, never logged from it).
+    RoutineDay has no weekday field, so day_order is a rotation (e.g.
+    Push/Pull/Legs), not a calendar: "next up" is the day after the last one
+    logged, whatever the week, and only a layoff of ROTATION_RESTART_DAYS or
+    more starts it over at day 1. Workouts are matched by name against
+    RoutineDay.label (trimmed, case-insensitive), since starting a workout from
+    a routine day names it after the label. A label used twice (Push/Pull/Legs
+    x2) is matched to the next day with that label after the current position,
+    so the rotation moves through both copies.
+
+    Same algorithm as routineRotation in the app's utils/routineRotation.ts, so
+    the Coach and Home always agree on the next day. Returns None with no
+    active routine or no history to match against yet.
     """
     days = (
         RoutineDay.query
@@ -287,30 +297,48 @@ def _routine_rotation_context(user_id: int, routine_id: int) -> dict | None:
         .order_by(RoutineDay.day_order)
         .all()
     )
-    label_to_order = {d.label: d.day_order for d in days if d.label}
-    if not label_to_order:
+    keys = [(d.label or '').strip().lower() for d in days]
+    if not any(keys):
         return None
 
-    recent_match = (
-        db.session.query(Workout.name, Workout.date)
-        .filter(Workout.user_id == user_id, Workout.name.in_(list(label_to_order.keys())))
-        .order_by(Workout.date.desc())
-        .first()
+    recent = (
+        db.session.query(Workout.id, Workout.name, Workout.date)
+        .filter(Workout.user_id == user_id)
+        .order_by(Workout.date.desc(), Workout.id.desc())
+        .limit(100)
+        .all()
     )
-    if not recent_match:
+    matched = sorted(
+        ((w.date.date(), w.id, (w.name or '').strip().lower()) for w in recent if w.date),
+        key=lambda t: (t[0], t[1]),
+    )
+    matched = [m for m in matched if m[2] and m[2] in keys]
+    if not matched:
         return None
 
-    last_label, _last_date = recent_match
-    day_count = len(days)
-    next_order = (label_to_order[last_label] + 1) % day_count
-    next_day = next((d for d in days if d.day_order == next_order), None)
+    n = len(days)
+    pos = -1
+    last_date = None
+    for day, _id, key in matched:
+        if last_date and (day - last_date).days >= ROTATION_RESTART_DAYS:
+            pos = -1
+        for step in range(1, n + 1):
+            i = (pos + step) % n
+            if keys[i] == key:
+                pos = i
+                break
+        last_date = day
+
+    restarted = (user_today() - last_date).days >= ROTATION_RESTART_DAYS
+    next_index = 0 if restarted else (pos + 1) % n
 
     return {
         'day_labels': [d.label for d in days],
-        'day_count':  day_count,
-        'last_day':   last_label,
-        'next_day':   next_day.label if next_day else None,
-        'next_order': next_order + 1,  # 1-indexed for prompt copy
+        'day_count':  n,
+        'last_day':   days[pos].label,
+        'next_day':   days[next_index].label,
+        'next_order': next_index + 1,  # 1-indexed for prompt copy
+        'restarted':  restarted,
     }
 
 
@@ -589,6 +617,7 @@ def _build_prompt(data: dict, generate_type: str, user_context: dict | None = No
                 lines.append(
                     f'  Split: {", ".join(rotation["day_labels"])}. Last trained: {rotation["last_day"]}. '
                     f'Next up in rotation: {rotation["next_day"]} (day {rotation["next_order"]} of {rotation["day_count"]}).'
+                    + (' Restarting at day 1 after a break of two weeks or more.' if rotation.get('restarted') else '')
                 )
 
         most_improved = user_context.get('most_improved_lift')
@@ -936,6 +965,7 @@ def _build_insights_prompt(ctx: dict) -> str:
             lines.append(
                 f"  Split: {', '.join(rotation['day_labels'])}. Last trained: {rotation['last_day']}. "
                 f"Next up in rotation: {rotation['next_day']} (day {rotation['next_order']} of {rotation['day_count']})."
+                + (" Restarting at day 1 after a break of two weeks or more." if rotation.get('restarted') else "")
             )
             lines.append(
                 "  → Don't flag a muscle as under-trained or 'not trained recently' just because its "

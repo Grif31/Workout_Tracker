@@ -71,7 +71,12 @@ class Workout(db.Model):
     )
 
     def to_dict(self, include_exercises=False):
-        is_cardio = any((e.exercise_type or 'strength').lower() == 'cardio' for e in self.exercises)
+        # Cardio only when every exercise is: a lifting session with a treadmill
+        # warm-up is still a strength workout (and opens WorkoutDetails, not
+        # CardioDetails). Matches the type WorkoutLog syncs to Apple Health.
+        is_cardio = bool(self.exercises) and all(
+            (e.exercise_type or 'strength').lower() == 'cardio' for e in self.exercises
+        )
         data = {
             "id": self.id,
             "user_id": self.user_id,
@@ -85,10 +90,21 @@ class Workout(db.Model):
             "max_heart_rate": self.max_heart_rate,
         }
         if is_cardio and self.exercises:
-            first_set = self.exercises[0].sets[0] if self.exercises[0].sets else None
-            data['cardio_duration'] = float(first_set.cardio_duration) if first_set and first_set.cardio_duration else None
-            data['distance'] = float(first_set.distance) if first_set and first_set.distance else None
-            data['distance_unit'] = first_set.distance_unit if first_set and first_set.distance_unit else 'km'
+            # Totals across every bout of every cardio exercise: intervals, or a
+            # run then a walk, are several sets, and reading only the first set
+            # showed a fraction of the session. Distances add up in the first
+            # bout's unit, so a km bout and a mi bout aren't summed raw.
+            bouts = [s for e in self.exercises if (e.exercise_type or '').lower() == 'cardio' for s in e.sets]
+            unit = next((s.distance_unit for s in bouts if s.distance and s.distance_unit), None) or 'km'
+            to_unit = {('km', 'mi'): 1 / 1.609344, ('mi', 'km'): 1.609344}
+            minutes = sum(float(s.cardio_duration) for s in bouts if s.cardio_duration)
+            distance = sum(
+                float(s.distance) * to_unit.get((s.distance_unit or 'km', unit), 1.0)
+                for s in bouts if s.distance
+            )
+            data['cardio_duration'] = minutes or None
+            data['distance'] = round(distance, 3) if distance else None
+            data['distance_unit'] = unit
         if include_exercises:
             data["exercises"] = [ex.to_dict(include_sets=True) for ex in self.exercises]
         return data

@@ -11,18 +11,18 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { toDisplayVolume, WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance, roundTenth, type DistanceUnit } from '../../utils/units';
+import { toDisplayVolume, WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toKm, roundTenth, type DistanceUnit } from '../../utils/units';
 import { fmtDuration } from '../../utils/cardioFormat';
 import { toLocalDateStr } from '../../utils/date';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PROFILE_FRAME_RANK_KEY, WEEKLY_GOAL_KEY } from '../../constants/storageKeys';
+import { HOME_STREAK_TYPE_KEY, PROFILE_FRAME_RANK_KEY, WEEKLY_GOAL_KEY } from '../../constants/storageKeys';
 import { apiFetch, isNetworkError, resolveMediaUrl } from '../../utils/api';
 import { announceFlushResult, flushQueue, getPendingCount, onPendingCountChange } from '../../utils/offlineQueue';
 import { showToast } from '../../utils/toast';
 import { appCache, useRefetchGate } from '../../utils/appCache';
 import { LaurelBranch } from '../../components/LaurelWreath';
-import { PR_GOLD_TEXT } from '../../constants/prColors';
+import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
 import { WEEKLY_SUMMARY_LAST_SHOWN_KEY } from './WeeklySummaryScreen';
 import SectionRule from '../../components/SectionRule';
 import PressableScale from '../../components/PressableScale';
@@ -37,9 +37,10 @@ import { GREEK_RANK_CACHED_KEY } from '../../constants/storageKeys';
 import type { GreekRankData } from '../../utils/greekRank';
 import DraggableList from '../../components/DraggableList';
 import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../../utils/templatePrefill';
+import { routineRotation, type RotationWorkout } from '../../utils/routineRotation';
 
 const GREETINGS = [
-  'Ready to workout', 'Welcome', 'Ready to Train', "Let's Workout",
+  'Ready to work out', 'Welcome back', 'Ready to train', "Let's work out",
   'Crush it today', 'Train hard today', 'Make today count',
   'Stronger every day', 'Time to sweat', 'Bring your best',
 ];
@@ -76,6 +77,7 @@ type RoutineDay = {
   workout_template: { id: number; name: string; exercises: TemplateExercise[]; programming_json?: string | null };
 };
 type ActiveRoutine = { id: number; name: string; days: RoutineDay[] };
+type StreakType = 'weekly' | 'monthly' | 'daily';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'DashboardHome'>;
 
@@ -155,15 +157,18 @@ function WeekCalendar({
           const isToday = dateStr === todayStr;
           const hasWorkout = workoutSet.has(dateStr);
           const isSelected = dateStr === selectedDate;
+          const isFuture = dateStr > todayStr;
 
           return (
             <TouchableOpacity
               key={i}
               onPress={() => onSelectDate(dateStr)}
+              disabled={isFuture}
               style={[
                 calStyles.cell,
                 isToday && calStyles.cellToday,
                 isSelected && calStyles.cellSelected,
+                isFuture && calStyles.cellFuture,
               ]}
             >
               <Text style={[calStyles.letter, isToday && calStyles.letterToday, isSelected && calStyles.letterSelected]}>
@@ -220,6 +225,49 @@ const createCalStyles = (colors: Colors) => StyleSheet.create({
   letterSelected: { color: colors.accentText },
   numSelected: { color: colors.accentText },
   dotSelected: { backgroundColor: colors.accentText },
+  cellFuture: { opacity: 0.4 },
+});
+
+// Stand-in shapes for Home's top section while the first load runs, so the
+// layout doesn't jump from a lone spinner to a full page.
+function HomeSkeleton() {
+  const { colors } = useTheme();
+  const sk = useMemo(() => createSkeletonStyles(colors), [colors]);
+  const pulse = useRef(new Animated.Value(0.5)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0.5, duration: 700, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  return (
+    <View style={sk.container} accessibilityLabel="Loading Home" testID="home-skeleton">
+      <Animated.View style={{ opacity: pulse }}>
+        <View style={[sk.block, sk.streak]} />
+        <View style={[sk.block, sk.greetingShort]} />
+        <View style={[sk.block, sk.greetingLong]} />
+        <View style={[sk.block, sk.logButton]} />
+        <View style={[sk.block, sk.trackButton]} />
+        <View style={[sk.block, sk.card]} />
+        <View style={[sk.block, sk.calendar]} />
+        <View style={[sk.block, sk.card]} />
+      </Animated.View>
+    </View>
+  );
+}
+
+const createSkeletonStyles = (colors: Colors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background, padding: spacing.lg },
+  block: { backgroundColor: colors.surface, borderRadius: spacing.sm, marginBottom: spacing.md },
+  streak: { width: 90, height: 20, alignSelf: 'center', marginBottom: spacing.sm },
+  greetingShort: { width: 120, height: 14, marginBottom: spacing.xs },
+  greetingLong: { width: 200, height: 26 },
+  logButton: { height: 52 },
+  trackButton: { height: 36 },
+  card: { height: 96 },
+  calendar: { height: 80 },
 });
 
 // Home's framed avatar: sized to the two-line greeting beside it.
@@ -277,9 +325,9 @@ export default function DashboardScreen({ navigation }: Props) {
   // snap shut on its own schedule while the rows were still fading, which is
   // what made the collapse look broken.
   const toggleDaysVisible = () => setDaysVisible(v => !v);
-  // Lowercased labels of workouts logged since Monday — drives which routine
-  // day is "up next" and which rows render as already done.
-  const [weekWorkoutNames, setWeekWorkoutNames] = useState<string[]>([]);
+  // Recent workouts by name and date: routineRotation reads the active
+  // routine's position (up next) and this week's done days from them.
+  const [routineHistory, setRoutineHistory] = useState<RotationWorkout[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null);
   const [dateWorkouts, setDateWorkouts] = useState<Workout[]>([]);
@@ -288,7 +336,11 @@ export default function DashboardScreen({ navigation }: Props) {
   const [monthlyStreak, setMonthlyStreak] = useState(0);
   const [dailyStreak, setDailyStreak] = useState(0);
   const [longestDailyStreak, setLongestDailyStreak] = useState(0);
-  const [streakType, setStreakType] = useState<'weekly' | 'monthly' | 'daily'>('weekly');
+  const [streakType, setStreakTypeState] = useState<StreakType>('weekly');
+  const setStreakType = (t: StreakType) => {
+    setStreakTypeState(t);
+    if (authUser?.id != null) AsyncStorage.setItem(`${HOME_STREAK_TYPE_KEY}_${authUser.id}`, t).catch(() => {});
+  };
   // Cardio: totals since Monday, plus the all-time activity count. The card is
   // only worth a slot for someone who actually logs cardio, so the all-time
   // count is what decides whether it renders at all.
@@ -319,20 +371,17 @@ export default function DashboardScreen({ navigation }: Props) {
     () => [...(activeRoutine?.days ?? [])].sort((a, b) => a.day_order - b.day_order),
     [activeRoutine]
   );
-  const doneLabels = useMemo(() => new Set(weekWorkoutNames), [weekWorkoutNames]);
-  const isDayDone = useCallback(
-    (day: RoutineDay) => doneLabels.has((day.label || '').trim().toLowerCase()),
-    [doneLabels]
+  const rotation = useMemo(
+    () => routineRotation(
+      routineDays.map(d => d.label),
+      routineHistory,
+      toLocalDateStr(new Date()),
+      currentWeekMondayStr(),
+    ),
+    [routineDays, routineHistory]
   );
-  // First day (by day_order) with no matching workout logged since Monday.
-  // That single rule covers all three cases the card needs: a fresh week has
-  // nothing logged so it lands on day 1 regardless of what happened last week;
-  // days completed out of order still resolve to the earliest unfinished one;
-  // and a fully-completed week yields null (rendered as the all-done state).
-  const nextDay = useMemo(
-    () => routineDays.find(d => !isDayDone(d)) ?? null,
-    [routineDays, isDayDone]
-  );
+  const nextDay = routineDays[rotation.nextIndex] ?? null;
+  const allDoneThisWeek = routineDays.length > 0 && rotation.doneThisWeek.size === routineDays.length;
 
   const logRoutineDay = (day: RoutineDay) => navigation.navigate('WorkoutLog', {
     prefill: buildTemplatePrefill(
@@ -409,9 +458,11 @@ export default function DashboardScreen({ navigation }: Props) {
   const refreshHome = (force: boolean) => Promise.all([
     refetchIfStale('me', fetchUser, force),
     refetchIfStale('recent', fetchRecentWorkouts, force),
-    refetchIfStale('week', fetchWeekWorkouts, force),
+    refetchIfStale('week', fetchRoutineHistory, force),
     refetchIfStale('dates', fetchAllWorkoutDates, force),
     fetchStreak(),
+    // Ungated: a workout on this day may have been edited or deleted since it loaded
+    ...(selectedCalDateRef.current ? [fetchDateWorkouts(selectedCalDateRef.current)] : []),
     ...(HOME_CUSTOMIZATION_ENABLED ? [refetchIfStale('greek', fetchGreekRank, force)] : []),
   ]);
 
@@ -430,11 +481,20 @@ export default function DashboardScreen({ navigation }: Props) {
       AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${authUser.id}`)
         .then(v => { if (v === 'km' || v === 'mi') setDistanceUnit(v); })
         .catch(() => { /* keep the default */ });
+      AsyncStorage.getItem(`${HOME_STREAK_TYPE_KEY}_${authUser.id}`)
+        .then(v => { if (v === 'weekly' || v === 'monthly' || v === 'daily') setStreakTypeState(v); })
+        .catch(() => { /* keep weekly */ });
       AsyncStorage.getItem(`${PROFILE_FRAME_RANK_KEY}_${authUser.id}`)
         .then(v => { if (v) setFrameRank(v); })
         .catch(() => { /* keep Neophyte */ });
     }
   }, [authUser?.id]));
+
+  // Home fades in once, when the first load finishes; later refreshes update in place
+  const contentAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!loading) Animated.timing(contentAnim, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [loading, contentAnim]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -470,41 +530,43 @@ export default function DashboardScreen({ navigation }: Props) {
     }
   };
 
-  // Separate from fetchRecentWorkouts: /api/workouts/recent caps at 5 rows,
-  // which can miss days in a heavy training week. 25 comfortably covers any
-  // week, and we only need each workout's name + date.
-  const fetchWeekWorkouts = async () => {
+  // Separate from fetchRecentWorkouts: /api/workouts/recent caps at 5 rows.
+  // The rotation needs enough history to find the last routine day logged
+  // among other workouts, and to see a two-week layoff.
+  const fetchRoutineHistory = async () => {
     try {
-      const res = await apiFetch('/api/workouts?page=1&per_page=25');
+      const res = await apiFetch('/api/workouts?page=1&per_page=50');
       if (!res.ok) return;
       const data = await res.json();
-      const mondayStr = currentWeekMondayStr();
-      setWeekWorkoutNames(
-        (data.workouts ?? [])
-          // Compare as YYYY-MM-DD strings rather than Date objects — the
-          // backend sends an ISO timestamp and lexical compare on the local
-          // date string avoids any timezone drift at the week boundary.
-          .filter((w: Workout) => toLocalDateStr(new Date(w.date)) >= mondayStr)
-          .map((w: Workout) => (w.name || '').trim().toLowerCase())
-      );
+      setRoutineHistory((data.workouts ?? []).map((w: Workout) => ({ id: w.id, name: w.name ?? '', date: String(w.date) })));
     } catch { /* silently fail — the card falls back to day 1 */ }
   };
 
-  const handleCalendarSelect = async (dateStr: string) => {
+  // The latest day asked for. A response for any other day is dropped, so
+  // tapping two days quickly can't land the first day's list under the second.
+  const selectedCalDateRef = useRef<string | null>(null);
+  const fetchDateWorkouts = async (dateStr: string) => {
+    try {
+      const res = await apiFetch(`/api/workouts?date=${dateStr}`);
+      const list = res.ok ? await res.json() : [];
+      if (selectedCalDateRef.current === dateStr) setDateWorkouts(list);
+    } catch {
+      if (selectedCalDateRef.current === dateStr) setDateWorkouts([]);
+    }
+  };
+
+  const handleCalendarSelect = (dateStr: string) => {
     // Tapping the already-selected date deselects it
     if (dateStr === selectedCalDate) {
+      selectedCalDateRef.current = null;
       setSelectedCalDate(null);
       setDateWorkouts([]);
       return;
     }
+    selectedCalDateRef.current = dateStr;
     setSelectedCalDate(dateStr);
-    try {
-      const res = await apiFetch(`/api/workouts?date=${dateStr}`);
-      if (res.ok) setDateWorkouts(await res.json());
-      else setDateWorkouts([]);
-    } catch {
-      setDateWorkouts([]);
-    }
+    setDateWorkouts([]);
+    fetchDateWorkouts(dateStr);
   };
 
   const fetchAllWorkoutDates = async () => {
@@ -558,10 +620,11 @@ export default function DashboardScreen({ navigation }: Props) {
   };
 
 
-  if (loading) return <ActivityIndicator size="large" style={{ flex: 1, marginTop: 50 }} />;
+  if (loading) return <HomeSkeleton />;
 
   return (
     <View style={styles.container}>
+      <Animated.View style={[styles.fill, { opacity: contentAnim, transform: [{ translateY: contentAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}>
       <ScrollView
         scrollEnabled={!dragging}
         contentContainerStyle={styles.content}
@@ -719,11 +782,20 @@ export default function DashboardScreen({ navigation }: Props) {
                 </View>
               </View>
 
+              {allDoneThisWeek && (
+                <View style={styles.allDoneRow}>
+                  <Ionicons name="checkmark-circle" size={18} color={colors.save} />
+                  <Text style={styles.allDoneText}>
+                    All {routineDays.length} day{routineDays.length !== 1 ? 's' : ''} done this week. Rest up, or keep the rotation going.
+                  </Text>
+                </View>
+              )}
+
               {/* Up next — the day to train, with a one-tap Log */}
-              {nextDay ? (
+              {nextDay && (
                 <View style={[styles.upNextRow, routineCompact && styles.upNextRowCompact]}>
                   <View style={routineCompact ? undefined : { flex: 1 }}>
-                    <Text style={styles.upNextLabel}>Up Next</Text>
+                    <Text style={styles.upNextLabel}>{rotation.restarted ? 'Up Next · Fresh start' : 'Up Next'}</Text>
                     {/* Name and exercise count share a line to keep the card short */}
                     <View style={styles.upNextNameRow}>
                       <Text style={styles.upNextName} numberOfLines={1}>{nextDay.label}</Text>
@@ -741,19 +813,12 @@ export default function DashboardScreen({ navigation }: Props) {
                     <Text style={styles.logDayBtnText}>Log</Text>
                   </TouchableOpacity>
                 </View>
-              ) : (
-                <View style={styles.allDoneRow}>
-                  <Ionicons name="checkmark-circle" size={18} color={colors.save} />
-                  <Text style={styles.allDoneText}>
-                    All {routineDays.length} day{routineDays.length !== 1 ? 's' : ''} done this week
-                  </Text>
-                </View>
               )}
 
               <Collapsible progress={expandAnim} expanded={daysVisible && !routineCompact}>
                 <View style={styles.daysList}>
-                  {routineDays.map(day => {
-                    const done = isDayDone(day);
+                  {routineDays.map((day, index) => {
+                    const done = rotation.doneThisWeek.has(index);
                     return (
                       <View key={day.id} style={styles.dayRow}>
                         <View style={{ flex: 1 }}>
@@ -873,14 +938,20 @@ export default function DashboardScreen({ navigation }: Props) {
           />
           {(() => {
             const list = activeDate ? dateWorkouts : workouts;
-            if (list.length === 0) return (
-              <Text style={styles.emptyText}>
-                {activeDate ? 'No workouts on this day' : 'No recent workouts'}
-              </Text>
+            if (list.length === 0) return activeDate ? (
+              <Text style={styles.emptyText}>No workouts on this day</Text>
+            ) : (
+              <View style={styles.emptyCard}>
+                <Ionicons name="barbell-outline" size={28} color={colors.textSecondary} />
+                <Text style={styles.emptyTitle}>No workouts yet</Text>
+                <Text style={styles.emptyBody}>
+                  Tap Log Workout to record your first session, or Track Activity for a run, walk or ride.
+                </Text>
+              </View>
             );
             return list.map((item) => {
               return (
-              <TouchableOpacity
+              <PressableScale
                 key={item.id}
                 style={styles.workoutCard}
                 onPress={() =>
@@ -899,9 +970,9 @@ export default function DashboardScreen({ navigation }: Props) {
                   <Text style={styles.workoutName}>{item.name || 'Workout'}</Text>
                   {!!item.pr_count && (
                     <View style={styles.prRow}>
-                      <LaurelBranch height={16} color="#FFD700" />
+                      <LaurelBranch height={16} color={PR_GOLD} />
                       <Text style={styles.prText}>{item.pr_count} PR{item.pr_count > 1 ? 's' : ''}</Text>
-                      <LaurelBranch side="right" height={16} color="#FFD700" />
+                      <LaurelBranch side="right" height={16} color={PR_GOLD} />
                     </View>
                   )}
                 </View>
@@ -910,14 +981,18 @@ export default function DashboardScreen({ navigation }: Props) {
                 </Text>
                 {item.workout_type === 'cardio' ? (
                   <View style={styles.statPills}>
-                    {item.duration != null && (
+                    {/* cardio_duration is the time logged; duration is only the
+                        logging screen's timer, ~0 for a run entered afterwards */}
+                    {(item.cardio_duration ?? item.duration) != null && (
                       <View style={styles.pill}>
-                        <Text style={styles.pillText}>{item.duration} min</Text>
+                        <Text style={styles.pillText}>{Math.round(item.cardio_duration ?? item.duration ?? 0)} min</Text>
                       </View>
                     )}
                     {item.distance != null && item.distance > 0 && (
                       <View style={styles.pill}>
-                        <Text style={styles.pillText}>{item.distance.toFixed(2)} {item.distance_unit || 'km'}</Text>
+                        <Text style={styles.pillText}>
+                          {toDisplayDistance(toKm(item.distance, item.distance_unit === 'mi' ? 'mi' : 'km'), distanceUnit).toFixed(2)} {distanceUnit}
+                        </Text>
                       </View>
                     )}
                   </View>
@@ -945,7 +1020,7 @@ export default function DashboardScreen({ navigation }: Props) {
                     )}
                   </>
                 )}
-              </TouchableOpacity>
+              </PressableScale>
               );
             });
           })()}
@@ -1069,15 +1144,16 @@ export default function DashboardScreen({ navigation }: Props) {
           })()}
 
         </ScrollView>
+      </Animated.View>
       {/* Streak selector modal */}
       <Modal visible={streakModalVisible} transparent animationType="fade">
         <TouchableOpacity style={styles.streakOverlay} activeOpacity={1} onPress={() => setStreakModalVisible(false)}>
           <View style={styles.streakModalBox}>
             <Text style={styles.streakModalTitle}>Streak Type</Text>
             {([
-              { key: 'weekly' as const, emoji: null, label: 'Weekly', value: weeklyStreak, unit: 'wk', sub: null },
-              { key: 'monthly' as const, emoji: '📅', label: 'Monthly', value: monthlyStreak, unit: 'mo', sub: null },
-              { key: 'daily' as const, emoji: '⚡', label: 'Daily', value: dailyStreak, unit: 'd', sub: `longest: ${longestDailyStreak}d` },
+              { key: 'weekly' as const, icon: null, label: 'Weekly', value: weeklyStreak, unit: 'wk', sub: null },
+              { key: 'monthly' as const, icon: 'calendar-outline' as const, label: 'Monthly', value: monthlyStreak, unit: 'mo', sub: null },
+              { key: 'daily' as const, icon: 'flash-outline' as const, label: 'Daily', value: dailyStreak, unit: 'd', sub: `Longest: ${longestDailyStreak} ${longestDailyStreak === 1 ? 'day' : 'days'}` },
             ] as const).map(row => (
               <TouchableOpacity
                 key={row.key}
@@ -1085,10 +1161,12 @@ export default function DashboardScreen({ navigation }: Props) {
                 onPress={() => setStreakType(row.key)}
               >
                 {/* Weekly is the streak the flame stands for elsewhere, so it
-                    gets the drawn flame; the other two keep their emoji. */}
-                {row.emoji
-                  ? <Text style={styles.streakRowEmoji}>{row.emoji}</Text>
-                  : <View style={styles.streakRowIcon}><StreakFlame size={20} active={row.value > 0} inactiveColor={colors.textSecondary} /></View>}
+                    gets the drawn flame; the other two get plain icons. */}
+                <View style={styles.streakRowIcon}>
+                  {row.icon
+                    ? <Ionicons name={row.icon} size={20} color={row.value > 0 ? colors.accent : colors.textSecondary} />
+                    : <StreakFlame size={20} active={row.value > 0} inactiveColor={colors.textSecondary} />}
+                </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.streakRowLabel, streakType === row.key && { color: colors.accent }]}>{row.label}</Text>
                   {row.sub && <Text style={styles.streakRowSub}>{row.sub}</Text>}
@@ -1110,6 +1188,7 @@ export default function DashboardScreen({ navigation }: Props) {
 
 const createStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  fill: { flex: 1 },
 
   content: { padding: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xl },
   topbarSide: { flex: 1 },
@@ -1245,7 +1324,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.sm,
   },
   weekCardioTitle: {
-    fontSize: 10, fontWeight: '700', color: colors.accent,
+    fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.accent,
     textTransform: 'uppercase', letterSpacing: 0.8,
   },
   weekCardioStats: { flexDirection: 'row' },
@@ -1283,7 +1362,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingVertical: spacing.xs + 2,
   },
   upNextLabel: {
-    fontSize: 10,
+    fontSize: typography.fontSize.xs,
     fontWeight: '700',
     color: colors.accent,
     textTransform: 'uppercase',
@@ -1300,11 +1379,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   allDoneRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    marginBottom: spacing.xs,
     backgroundColor: colors.save + '14',
     borderRadius: spacing.xs,
     paddingHorizontal: spacing.sm, paddingVertical: spacing.xs + 2,
   },
-  allDoneText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
+  allDoneText: { flex: 1, fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
   dayRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: spacing.xs, borderTopWidth: 1, borderTopColor: colors.border,
@@ -1347,6 +1427,18 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   pillText: { fontSize: 12, fontWeight: '500', color: colors.textSecondary },
   muscles: { fontSize: 12, color: colors.textSecondary, marginTop: 2, fontStyle: 'italic' },
   emptyText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontStyle: 'italic' },
+  emptyCard: {
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+  },
+  emptyTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
+  emptyBody: { fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center', lineHeight: 19 },
 
   // Plain text, not a chip: the surface card and flame read as another
   // action competing with Log Workout
@@ -1372,7 +1464,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingHorizontal: spacing.xs,
   },
   streakRowActive: { backgroundColor: colors.accent + '18' },
-  streakRowEmoji: { fontSize: typography.fontSize.lg, width: 28, textAlign: 'center' },
   streakRowIcon: { width: 28, alignItems: 'center' },
   streakRowLabel: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
   streakRowSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 1 },
