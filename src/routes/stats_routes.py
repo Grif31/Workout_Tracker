@@ -51,6 +51,8 @@ def exercise_stats():
 
     if exercise_type == 'cardio':
         return _cardio_exercise_stats(name, rows, description)
+    if exercise_type == 'duration':
+        return _duration_exercise_stats(name, rows, description)
 
     templates_cache = {}
 
@@ -178,7 +180,10 @@ def _cardio_exercise_stats(name, rows, description=None):
     history = []
     total_distance = 0.0
     total_duration = 0.0
-    pace_points = []
+    # Pace is time over distance for the bouts that have both: a warm-up walk
+    # logged with time only would otherwise slow every pace it's averaged into
+    paced_minutes = 0.0
+    paced_km = 0.0
 
     for wid, data in sorted(workout_map.items(), key=lambda x: x[1]['workout'].date):
         workout = data['workout']
@@ -187,14 +192,18 @@ def _cardio_exercise_stats(name, rows, description=None):
             continue
         session_dist = sum(b['dist_km'] for b in bouts if b['dist_km'])
         session_dur = sum(b['cardio_duration'] for b in bouts)
+        session_paced_min = sum(b['cardio_duration'] for b in bouts if b['dist_km'])
         total_distance += session_dist
         total_duration += session_dur
-        if session_dist > 0:
-            pace_points.append(session_dur / session_dist)
+        paced_minutes += session_paced_min
+        paced_km += session_dist
 
         history.append({
             'date': workout.date.strftime('%Y-%m-%d'),
             'workout_name': workout.name or '',
+            # True km and min/km per session, for the app's Distance and Pace charts
+            'distance_km': round(session_dist, 3) if session_dist > 0 else None,
+            'pace': round(session_paced_min / session_dist, 4) if session_dist > 0 else None,
             'bouts': [
                 {
                     'cardio_duration': b['cardio_duration'],
@@ -206,7 +215,9 @@ def _cardio_exercise_stats(name, rows, description=None):
             ],
         })
 
-    avg_pace = round(sum(pace_points) / len(pace_points), 4) if pace_points else None
+    # Total time over total distance: a mean of per-session paces would weigh a
+    # 1 km jog the same as a 20 km run
+    avg_pace = round(paced_minutes / paced_km, 4) if paced_km > 0 else None
 
     return jsonify({
         'exercise_type': 'cardio',
@@ -218,6 +229,51 @@ def _cardio_exercise_stats(name, rows, description=None):
             'session_count': len(workout_map),
         },
         'avg_pace': avg_pace,
+        'history': list(reversed(history)),
+    })
+
+
+def _duration_exercise_stats(name, rows, description=None):
+    """Timed holds (planks, wall sits): each set is a hold in cardio_duration
+    minutes, with no reps or weight, so none of the strength stats apply."""
+    from collections import defaultdict
+    workout_map = defaultdict(lambda: {'workout': None, 'sets': []})
+    for exercise, workout in rows:
+        workout_map[workout.id]['workout'] = workout
+        for st in exercise.sets:
+            workout_map[workout.id]['sets'].append({
+                'cardio_duration': st.cardio_duration,
+                'set_type': st.set_type or 'N',
+            })
+
+    history = []
+    longest = 0.0
+    total_minutes = 0.0
+    total_sets = 0
+    for wid, data in sorted(workout_map.items(), key=lambda x: x[1]['workout'].date):
+        holds = [st['cardio_duration'] for st in data['sets'] if st['cardio_duration'] and st['set_type'] != 'W']
+        if not data['sets']:
+            continue
+        longest = max([longest, *holds])
+        total_minutes += sum(holds)
+        total_sets += len(holds)
+        history.append({
+            'date': data['workout'].date.strftime('%Y-%m-%d'),
+            'workout_name': data['workout'].name or '',
+            'sets': data['sets'],
+            'best_hold': max(holds) if holds else None,
+        })
+
+    return jsonify({
+        'exercise_type': 'duration',
+        'exercise_name': name,
+        'description': description,
+        'personal_bests': {'longest_hold': round(longest, 4) if longest else 0},
+        'totals': {
+            'total_workouts': len(history),
+            'total_sets': total_sets,
+            'total_duration': round(total_minutes, 2),
+        },
         'history': list(reversed(history)),
     })
 

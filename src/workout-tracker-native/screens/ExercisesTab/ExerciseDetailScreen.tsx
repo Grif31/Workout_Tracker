@@ -21,7 +21,9 @@ import { ExerciseDetailParams } from '../../navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { toDisplayWeight, toDisplayVolume, convertWeight, WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayPace } from '../../utils/units';
+import { toDisplayWeight, toDisplayVolume, convertWeight, WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayPace, toKm } from '../../utils/units';
+import { computeChartYAxisRange, computeBarChartMax, fmtMinSec } from '../../utils/prFormat';
+import { fmtHold } from '../../components/workout/types';
 import { fmtPaceValue } from '../../utils/cardioFormat';
 import { parseApiDate } from '../../utils/date';
 import MuscleDiagram from '../../components/MuscleDiagram';
@@ -61,7 +63,7 @@ type ExerciseStats = {
 type HistorySession = {
   date: string;
   workoutName: string;
-  sets: { reps: number; weight: number }[];
+  sets: { reps: number; weight: number; set_type?: string }[];
   best1rm: number;
   bestWeight: number;
   volume: number;
@@ -88,7 +90,22 @@ type CardioSession = {
   date: string;
   workout_name: string;
   bouts: CardioBout[];
+  /** Session totals for the charts: true km, and min/km over the bouts with a distance */
+  distance_km?: number | null;
+  pace?: number | null;
 };
+
+type HoldStats = { longestHold: number; totalMinutes: number; totalSets: number; workouts: number };
+type HoldSession = { date: string; workout_name: string; sets: { cardio_duration: number | null; set_type: string }[] };
+
+/** How a chart writes its values: axis/tooltip text, unit, and which way is better */
+type ChartSpec = { suffix: string; fmt: (v: number) => string; lowerIsBetter?: boolean };
+
+function fmtMinutes(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  return h > 0 ? `${h}h ${m}m` : `${m} min`;
+}
 
 const exerciseDescriptions: Record<string, string> = {
   Chest:
@@ -139,7 +156,9 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   // fade-to-black-then-back-in.
   const [prevTab, setPrevTab] = useState<TabKey | null>(null);
   const [loading, setLoading] = useState(true);
-  const [exerciseType, setExerciseType] = useState<'strength' | 'cardio'>('strength');
+  const [exerciseType, setExerciseType] = useState<'strength' | 'cardio' | 'duration'>('strength');
+  const [holdStats, setHoldStats] = useState<HoldStats | null>(null);
+  const [holdHistory, setHoldHistory] = useState<HoldSession[]>([]);
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
   const [stats, setStats] = useState<ExerciseStats>({
     estimatedOneRepMax: 0,
@@ -156,7 +175,10 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const [chart1RM, setChart1RM] = useState<ChartPoint[]>([]);
   const [chartMaxWeight, setChartMaxWeight] = useState<ChartPoint[]>([]);
   const [chartVolume, setChartVolume] = useState<ChartPoint[]>([]);
+  const [chartDistance, setChartDistance] = useState<ChartPoint[]>([]);
+  const [chartPace, setChartPace] = useState<ChartPoint[]>([]);
   const [hasChartData, setHasChartData] = useState({ oneRm: false, maxW: false, vol: false });
+  const [hasCardioCharts, setHasCardioCharts] = useState({ distance: false, pace: false });
   const [chartRange, setChartRange] = useState<'1M' | '3M' | '6M' | 'All'>('3M');
   const [templateDescription, setTemplateDescription] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -199,14 +221,15 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const statAnims = useRef(Array.from({ length: 7 }, () => new Animated.Value(0))).current;
   const histAnims = useRef<Animated.Value[]>([]);
 
-  // Charts tab only exists once there's actually enough data for at least one
-  // chart — cardio has no charts at all today, so it never gets this tab.
-  const hasAnyChart = hasChartData.oneRm || hasChartData.maxW || hasChartData.vol;
+  // Charts tab only exists once there's enough data for at least one chart
+  const hasAnyChart = exerciseType === 'cardio'
+    ? hasCardioCharts.distance || hasCardioCharts.pace
+    : exerciseType === 'strength' && (hasChartData.oneRm || hasChartData.maxW || hasChartData.vol);
   const visibleTabs = useMemo(() => {
     const tabs: Array<{ key: TabKey; label: string }> = [
       { key: 'overview', label: 'Overview' },
     ];
-    if (exerciseType === 'strength' && hasAnyChart) tabs.push({ key: 'charts', label: 'Charts' });
+    if (hasAnyChart) tabs.push({ key: 'charts', label: 'Charts' });
     tabs.push({ key: 'history', label: 'History' });
     return tabs;
   }, [exerciseType, hasAnyChart]);
@@ -271,6 +294,18 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         return;
       }
 
+      if (data.exercise_type === 'duration') {
+        setExerciseType('duration');
+        setHoldStats({
+          longestHold: data.personal_bests?.longest_hold ?? 0,
+          totalMinutes: data.totals?.total_duration ?? 0,
+          totalSets: data.totals?.total_sets ?? 0,
+          workouts: data.totals?.total_workouts ?? 0,
+        });
+        setHoldHistory(data.history ?? []);
+        return;
+      }
+
       setExerciseType('strength');
       const sessions: HistorySession[] = (data.history ?? []).map((item: any) => ({
         date: item.date,
@@ -298,35 +333,40 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     }
   }, [exerciseId, exerciseName, weightUnit]);
 
+  const rangeCutoff = useMemo(() => {
+    if (chartRange === 'All') return null;
+    const d = new Date();
+    d.setMonth(d.getMonth() - (chartRange === '1M' ? 1 : chartRange === '3M' ? 3 : 6));
+    return d;
+  }, [chartRange]);
+
+  // Oldest-first points for a series; x labels thinned to ~4, and only the
+  // peak and latest points carry a value label
+  const toPoints = (rows: { date: string; value: number }[], fmt: (v: number) => string, lowerIsBetter = false): ChartPoint[] => {
+    const pts = rows.map(r => {
+      const d = parseApiDate(r.date);
+      return { value: r.value, date: `${d.getMonth() + 1}/${d.getDate()}` };
+    });
+    const step = Math.max(1, Math.ceil(pts.length / 4));
+    let bestIdx = 0;
+    pts.forEach((p, i) => {
+      if (lowerIsBetter ? p.value < pts[bestIdx].value : p.value > pts[bestIdx].value) bestIdx = i;
+    });
+    return pts.map((p, i) => ({
+      ...p,
+      label: i % step === 0 ? p.date : '',
+      dataPointText: i === bestIdx || i === pts.length - 1 ? fmt(p.value) : '',
+    }));
+  };
+
   useEffect(() => {
     if (historySessions.length === 0) return;
-    const cutoff = chartRange === 'All' ? null : (() => {
-      const d = new Date();
-      const months = chartRange === '1M' ? 1 : chartRange === '3M' ? 3 : 6;
-      d.setMonth(d.getMonth() - months);
-      return d;
-    })();
     const chrono = [...historySessions].reverse();
-    const inRange = chrono.filter(s => !cutoff || parseApiDate(s.date) >= cutoff);
-
-    const buildPoints = (items: HistorySession[], getter: (s: HistorySession) => number): ChartPoint[] => {
-      const pts = items
-        .filter(s => getter(s) > 0)
-        .map(s => {
-          const d = parseApiDate(s.date);
-          const val = parseFloat(convertWeight(getter(s), weightUnit).toFixed(1));
-          return { value: val, date: `${d.getMonth() + 1}/${d.getDate()}` };
-        });
-      // Thin x labels to ~4; direct-label only the max and latest points
-      const step = Math.max(1, Math.ceil(pts.length / 4));
-      let maxIdx = 0;
-      pts.forEach((p, i) => { if (p.value > pts[maxIdx].value) maxIdx = i; });
-      return pts.map((p, i) => ({
-        ...p,
-        label: i % step === 0 ? p.date : '',
-        dataPointText: i === maxIdx || i === pts.length - 1 ? `${Math.round(p.value)}` : '',
-      }));
-    };
+    const inRange = chrono.filter(s => !rangeCutoff || parseApiDate(s.date) >= rangeCutoff);
+    const series = (getter: (s: HistorySession) => number) => toPoints(
+      inRange.filter(s => getter(s) > 0).map(s => ({ date: s.date, value: parseFloat(convertWeight(getter(s), weightUnit).toFixed(1)) })),
+      v => `${Math.round(v)}`,
+    );
 
     // Range-independent counts decide whether a chart exists at all vs is just
     // empty for the selected range
@@ -335,10 +375,32 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
       maxW: chrono.filter(s => s.bestWeight > 0).length >= 2,
       vol: chrono.filter(s => s.volume > 0).length >= 2,
     });
-    setChart1RM(buildPoints(inRange, s => s.best1rm));
-    setChartMaxWeight(buildPoints(inRange, s => s.bestWeight));
-    setChartVolume(buildPoints(inRange, s => s.volume));
-  }, [historySessions, chartRange, weightUnit]);
+    setChart1RM(series(s => s.best1rm));
+    setChartMaxWeight(series(s => s.bestWeight));
+    setChartVolume(series(s => s.volume));
+  }, [historySessions, rangeCutoff, weightUnit]);
+
+  // Cardio: distance and pace per session, in the user's mi/km
+  useEffect(() => {
+    if (cardioHistory.length === 0) return;
+    const chrono = [...cardioHistory].reverse();
+    const inRange = chrono.filter(s => !rangeCutoff || parseApiDate(s.date) >= rangeCutoff);
+    setHasCardioCharts({
+      distance: chrono.filter(s => (s.distance_km ?? 0) > 0).length >= 2,
+      pace: chrono.filter(s => (s.pace ?? 0) > 0).length >= 2,
+    });
+    setChartDistance(toPoints(
+      inRange.filter(s => (s.distance_km ?? 0) > 0)
+        .map(s => ({ date: s.date, value: Math.round(toDisplayDistance(s.distance_km!, distanceUnit) * 100) / 100 })),
+      v => v.toFixed(1),
+    ));
+    setChartPace(toPoints(
+      inRange.filter(s => (s.pace ?? 0) > 0)
+        .map(s => ({ date: s.date, value: toDisplayPace(s.pace!, distanceUnit) })),
+      v => fmtMinSec(v),
+      true,
+    ));
+  }, [cardioHistory, rangeCutoff, distanceUnit]);
 
   useEffect(() => {
     if (activeTab !== 'overview' || stats.totalSets === 0) return;
@@ -350,14 +412,16 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     if (activeTab !== 'history') return;
-    const count = exerciseType === 'cardio' ? cardioHistory.length : historySessions.length;
+    const count = exerciseType === 'cardio' ? cardioHistory.length
+      : exerciseType === 'duration' ? holdHistory.length
+      : historySessions.length;
     if (count === 0) return;
     while (histAnims.current.length < count) histAnims.current.push(new Animated.Value(0));
     histAnims.current.slice(0, count).forEach(a => a.setValue(0));
     Animated.stagger(60, histAnims.current.slice(0, count).map(a =>
       Animated.timing(a, { toValue: 1, duration: 260, useNativeDriver: true })
     )).start();
-  }, [activeTab, historySessions.length, cardioHistory.length]);
+  }, [activeTab, historySessions.length, cardioHistory.length, holdHistory.length]);
 
   useEffect(() => {
     fetchExerciseData();
@@ -389,33 +453,37 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   // exercises, which have no seeded entry) — fall back to the generic
   // per-muscle-group blurb, then the fully generic default.
   const exerciseDescription =
-    templateDescription || description || (muscleGroup ? exerciseDescriptions[muscleGroup] : null) || defaultDescription;
+    templateDescription || description || (primaryMuscle ? exerciseDescriptions[primaryMuscle] : null) || defaultDescription;
 
   const fmtK = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : `${Math.round(v)}`);
 
-  const renderDelta = (points: ChartPoint[], suffix: string) => {
+  const weightSpec: ChartSpec = { suffix: weightUnit, fmt: fmtK };
+
+  const renderDelta = (points: ChartPoint[], spec: ChartSpec) => {
     const delta = points[points.length - 1].value - points[0].value;
-    if (Math.round(Math.abs(delta)) === 0) return null;
+    // Nothing to show when the change rounds away in the chart's own format
+    if (spec.fmt(Math.abs(delta)) === spec.fmt(0)) return null;
     const up = delta > 0;
-    const deltaColor = up ? colors.save : colors.danger;
+    const better = spec.lowerIsBetter ? !up : up;
+    const deltaColor = better ? colors.save : colors.danger;
     return (
       <View style={styles.deltaRow}>
         <Ionicons name={up ? 'trending-up' : 'trending-down'} size={12} color={deltaColor} />
         <Text style={[styles.deltaText, { color: deltaColor }]}>
-          {up ? '+' : '−'}{fmtK(Math.abs(delta))} {suffix}
+          {up ? '+' : '−'}{spec.fmt(Math.abs(delta))} {spec.suffix}
         </Text>
       </View>
     );
   };
 
-  const renderTooltipBubble = (item: ChartPoint, suffix: string) => (
+  const renderTooltipBubble = (item: ChartPoint, spec: ChartSpec) => (
     <View style={styles.tooltipBubble}>
       <Text style={styles.tooltipDate}>{item.date}</Text>
-      <Text style={styles.tooltipValue}>{fmtK(item.value)} {suffix}</Text>
+      <Text style={styles.tooltipValue}>{spec.fmt(item.value)} {spec.suffix}</Text>
     </View>
   );
 
-  const renderChart = (points: ChartPoint[], title: string, color: string, hasAny: boolean) => {
+  const renderChart = (points: ChartPoint[], title: string, color: string, hasAny: boolean, spec: ChartSpec = weightSpec) => {
     if (!hasAny) return null;
     if (points.length < 2) {
       return (
@@ -425,19 +493,15 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         </View>
       );
     }
-    const vals = points.map(p => p.value);
-    const minVal = Math.min(...vals);
-    const maxVal = Math.max(...vals);
-    // Window the y-axis around the data — a zero floor flattens progress lines
-    const pad = Math.max((maxVal - minVal) * 0.2, maxVal * 0.04, 2);
-    const yMin = Math.max(0, Math.floor(minVal - pad));
-    const yMax = Math.ceil(maxVal + pad);
+    // Snapped to whole, evenly spaced ticks (CLAUDE.md, Charts): padding raw
+    // min/max let adjacent tick labels round to the same number
+    const { maxValue, yAxisOffset } = computeChartYAxisRange(points.map(p => p.value), 3);
     const spacing = Math.max(12, Math.floor((CHART_WIDTH - 40) / (points.length - 1)));
     return (
       <View style={styles.chartCard}>
         <View style={styles.chartHeaderRow}>
           <Text style={styles.chartTitle}>{title}</Text>
-          {renderDelta(points, weightUnit)}
+          {renderDelta(points, spec)}
         </View>
         <LineChart
           data={points}
@@ -453,16 +517,16 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           startOpacity={0.16}
           endOpacity={0}
           areaChart
-          curved
           rulesType="dashed"
           rulesColor={colors.border}
           rulesThickness={1}
           yAxisTextStyle={styles.axisLabel}
-          yAxisLabelWidth={36}
+          yAxisLabelWidth={40}
+          formatYLabel={(label: string) => spec.fmt(Number(label))}
           xAxisLabelTextStyle={styles.axisLabel}
           noOfSections={3}
-          maxValue={yMax - yMin}
-          yAxisOffset={yMin}
+          maxValue={maxValue}
+          yAxisOffset={yAxisOffset}
           initialSpacing={10}
           endSpacing={10}
           textShiftY={-8}
@@ -482,19 +546,19 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
             pointerLabelWidth: 96,
             pointerLabelHeight: 44,
             autoAdjustPointerLabelPosition: true,
-            pointerLabelComponent: (items: ChartPoint[]) => renderTooltipBubble(items[0], weightUnit),
+            pointerLabelComponent: (items: ChartPoint[]) => renderTooltipBubble(items[0], spec),
           }}
         />
       </View>
     );
   };
 
-  const renderVolumeChart = (points: ChartPoint[], hasAny: boolean) => {
+  const renderBarChart = (points: ChartPoint[], title: string, hasAny: boolean, spec: ChartSpec = weightSpec) => {
     if (!hasAny) return null;
     if (points.length < 2) {
       return (
         <View style={styles.chartCard}>
-          <Text style={styles.chartTitle}>Session volume ({weightUnit})</Text>
+          <Text style={styles.chartTitle}>{title}</Text>
           <Text style={styles.chartEmptyNote}>Not enough data in this range</Text>
         </View>
       );
@@ -506,8 +570,8 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     return (
       <View style={styles.chartCard}>
         <View style={styles.chartHeaderRow}>
-          <Text style={styles.chartTitle}>Session volume ({weightUnit})</Text>
-          {renderDelta(points, weightUnit)}
+          <Text style={styles.chartTitle}>{title}</Text>
+          {renderDelta(points, spec)}
         </View>
         <BarChart
           data={points}
@@ -523,17 +587,17 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           rulesThickness={1}
           yAxisTextStyle={styles.axisLabel}
           yAxisLabelWidth={36}
-          formatYLabel={(label: string) => fmtK(Number(label))}
+          formatYLabel={(label: string) => spec.fmt(Number(label))}
           xAxisLabelTextStyle={styles.axisLabel}
           noOfSections={3}
-          maxValue={Math.ceil(maxVal * 1.15)}
+          maxValue={computeBarChartMax(maxVal * 1.1, 3)}
           initialSpacing={10}
           endSpacing={10}
           xAxisThickness={1}
           xAxisColor={colors.border}
           yAxisThickness={0}
           isAnimated
-          renderTooltip={(item: ChartPoint) => renderTooltipBubble(item, weightUnit)}
+          renderTooltip={(item: ChartPoint) => renderTooltipBubble(item, spec)}
         />
       </View>
     );
@@ -563,7 +627,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statLabel}>Total Time</Text>
-          <Text style={styles.statValue}>{Math.round(total_duration)} min</Text>
+          <Text style={styles.statValue}>{fmtMinutes(total_duration)}</Text>
         </View>
         {paceDisplay != null && (
           <View style={styles.statCard}>
@@ -592,8 +656,13 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
             {session.bouts.map((bout, j) => {
               const parts: string[] = [];
               if (bout.cardio_duration) parts.push(`${Math.round(bout.cardio_duration)} min`);
-              if (bout.distance) parts.push(`${bout.distance.toFixed(2)} ${bout.distance_unit}`);
-              if (bout.intensity) parts.push(`@ ${fmtPace(bout.intensity, bout.distance_unit || 'km')}`);
+              const loggedUnit = bout.distance_unit === 'mi' ? 'mi' : 'km';
+              if (bout.distance) parts.push(`${toDisplayDistance(toKm(bout.distance, loggedUnit), distanceUnit).toFixed(2)} ${distanceUnit}`);
+              // intensity is a pace in the bout's own unit (min per mi or km)
+              if (bout.intensity) {
+                const minPerKm = loggedUnit === 'mi' ? bout.intensity / toKm(1, 'mi') : bout.intensity;
+                parts.push(`@ ${fmtPace(toDisplayPace(minPerKm, distanceUnit), distanceUnit)}`);
+              }
               return (
                 <View key={j} style={styles.historySetRow}>
                   <View style={styles.historySetBadge}>
@@ -609,8 +678,73 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     });
   };
 
+  const renderHoldStats = () => {
+    if (loading) return <ActivityIndicator size="large" color={colors.save} />;
+    if (!holdStats || holdStats.totalSets === 0) return null;
+    return (
+      <View style={styles.statsGrid}>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Longest Hold</Text>
+          <Text style={styles.statValue}>{holdStats.longestHold ? fmtHold(holdStats.longestHold) : '—'}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Workouts</Text>
+          <Text style={styles.statValue}>{holdStats.workouts}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Total Sets</Text>
+          <Text style={styles.statValue}>{holdStats.totalSets}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Total Time</Text>
+          <Text style={styles.statValue}>{holdStats.totalMinutes < 60 ? fmtHold(holdStats.totalMinutes) : fmtMinutes(holdStats.totalMinutes)}</Text>
+        </View>
+      </View>
+    );
+  };
+
+  // Set rows shared by strength and holds: warm-ups get a "W" badge and
+  // working sets are numbered on their own, as in the workout log
+  const renderSetRows = <T extends { set_type?: string }>(sets: T[], body: (set: T) => React.ReactNode) => {
+    let working = 0;
+    return sets.map((set, j) => {
+      const warmup = set.set_type === 'W';
+      if (!warmup) working += 1;
+      return (
+        <View key={j} style={styles.historySetRow}>
+          <View style={[styles.historySetBadge, warmup && { borderColor: colors.warmup }]}>
+            <Text style={[styles.historySetBadgeText, warmup && { color: colors.warmup }]}>{warmup ? 'W' : working}</Text>
+          </View>
+          {body(set)}
+        </View>
+      );
+    });
+  };
+
+  const renderHoldHistory = () => {
+    if (loading) return <ActivityIndicator size="large" color={colors.save} />;
+    if (holdHistory.length === 0) return <Text style={styles.emptyText}>No recorded holds for this exercise yet.</Text>;
+    return holdHistory.map((session, i) => {
+      const anim = histAnims.current[i] ?? new Animated.Value(1);
+      return (
+        <Animated.View key={i} style={{ opacity: anim, transform: [{ translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
+          <View style={styles.historySession}>
+            <View style={styles.historyMeta}>
+              <Text style={styles.historyLabel}>{session.workout_name || 'Workout'}</Text>
+              <Text style={styles.historyDate}>{parseApiDate(session.date).toLocaleDateString()}</Text>
+            </View>
+            {renderSetRows(session.sets, set => (
+              <Text style={styles.historySetReps}>{set.cardio_duration ? fmtHold(set.cardio_duration) : '—'}</Text>
+            ))}
+          </View>
+        </Animated.View>
+      );
+    });
+  };
+
   const renderStats = () => {
     if (exerciseType === 'cardio') return renderCardioStats();
+    if (exerciseType === 'duration') return renderHoldStats();
     if (loading) return <ActivityIndicator size="large" color={colors.save} />;
     if (stats.totalSets === 0) {
       return null;
@@ -786,15 +920,25 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
             ))}
           </View>
         </View>
-        {renderChart(chart1RM, `Estimated 1RM (${weightUnit})`, colors.accent, hasChartData.oneRm)}
-        {renderChart(chartMaxWeight, `Max weight (${weightUnit})`, colors.save, hasChartData.maxW)}
-        {renderVolumeChart(chartVolume, hasChartData.vol)}
+        {exerciseType === 'cardio' ? (
+          <>
+            {renderBarChart(chartDistance, `Distance (${distanceUnit})`, hasCardioCharts.distance, { suffix: distanceUnit, fmt: v => (Number.isInteger(v) ? String(v) : v.toFixed(1)) })}
+            {renderChart(chartPace, `Pace (/${distanceUnit})`, colors.accent, hasCardioCharts.pace, { suffix: `/${distanceUnit}`, fmt: v => fmtMinSec(v), lowerIsBetter: true })}
+          </>
+        ) : (
+          <>
+            {renderChart(chart1RM, `Estimated 1RM (${weightUnit})`, colors.accent, hasChartData.oneRm)}
+            {renderChart(chartMaxWeight, `Max weight (${weightUnit})`, colors.save, hasChartData.maxW)}
+            {renderBarChart(chartVolume, `Session volume (${weightUnit})`, hasChartData.vol)}
+          </>
+        )}
       </View>
     );
   };
 
   const renderHistory = () => {
     if (exerciseType === 'cardio') return renderCardioHistory();
+    if (exerciseType === 'duration') return renderHoldHistory();
     if (loading) return <ActivityIndicator size="large" color={colors.save} />;
     if (historySessions.length === 0) {
       return <Text style={styles.emptyText}>No recorded sets for this exercise yet.</Text>;
@@ -811,14 +955,11 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
             {session.notes ? (
               <Text style={styles.historyNotes}>{session.notes}</Text>
             ) : null}
-            {session.sets.map((set, j) => (
-              <View key={j} style={styles.historySetRow}>
-                <View style={styles.historySetBadge}>
-                  <Text style={styles.historySetBadgeText}>{j + 1}</Text>
-                </View>
+            {renderSetRows(session.sets, set => (
+              <>
                 <Text style={styles.historySetReps}>{set.reps} reps</Text>
                 {set.weight ? <Text style={styles.historySetWeight}>{toDisplayWeight(set.weight, weightUnit)}</Text> : null}
-              </View>
+              </>
             ))}
           </View>
         </Animated.View>
