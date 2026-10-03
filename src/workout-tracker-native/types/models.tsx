@@ -14,6 +14,12 @@ export type Workout = {
   // has no wearable or health sync is off -- never 0.
   avg_heart_rate?: number | null
   max_heart_rate?: number | null
+  /** 'cardio' only when every exercise is cardio (Workout.to_dict) */
+  workout_type?: 'strength' | 'cardio'
+  /** Cardio workouts only: totals across every bout, distance in the first bout's unit */
+  cardio_duration?: number | null
+  distance?: number | null
+  distance_unit?: string
   exercises: Exercise[]
 };
 

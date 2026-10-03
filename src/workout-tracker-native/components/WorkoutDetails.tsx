@@ -22,7 +22,8 @@ import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { estimateCalories } from '../utils/cardioCalories';
-import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toExactVolume, toKm } from '../utils/units';
+import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayPace, toExactVolume, toKm } from '../utils/units';
+import { fmtMinSec, PR_TYPE_LABELS } from '../utils/prFormat';
 import { PR_GOLD } from '../constants/prColors';
 import Collapsible, { useCollapseAnim } from './Collapsible';
 import { captureAndShare } from '../utils/shareCapture';
@@ -150,11 +151,13 @@ export default function WorkoutDetailsScreen({
           id: mode === 'edit' ? s.id : undefined,
           reps: mode === 'edit' ? (s.reps ?? '') : '',
           weight: mode === 'edit' ? (s.weight ?? '') : '',
-          set_type: mode === 'edit' ? (s.set_type ?? 'N') : 'N',
+          // Perform Again keeps warm-ups and drop sets as they were planned;
+          // only the logged numbers start blank
+          set_type: s.set_type ?? 'N',
           rpe: mode === 'edit' ? (s.rpe != null ? String(s.rpe) : '') : '',
           cardio_duration: mode === 'edit' ? (s.cardio_duration ?? '') : '',
           distance: mode === 'edit' ? (s.distance ?? '') : '',
-          distance_unit: mode === 'edit' ? (s.distance_unit ?? 'km') : 'mi',
+          distance_unit: mode === 'edit' ? (s.distance_unit ?? 'km') : distanceUnit,
           intensity: mode === 'edit' ? (s.intensity ?? '') : '',
         })),
       })),
@@ -222,25 +225,28 @@ export default function WorkoutDetailsScreen({
       ? new Date(workout.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
       : '';
 
-    const cardioEx = workout.exercises.find(e => e.exercise_type === 'cardio');
-    if (cardioEx) {
-      const set: any = cardioEx.sets?.[0] ?? {};
+    // A cardio card only for an all-cardio workout, matching workout_type: a
+    // lifting session with a treadmill warm-up shares as a workout. Distance
+    // and time are the backend's totals across every bout, not the first set.
+    if (workout.workout_type === 'cardio') {
+      const routed = workout.exercises.find(e => e.route_polyline);
       let coords: { latitude: number; longitude: number }[] = [];
-      if (cardioEx.route_polyline) {
+      if (routed?.route_polyline) {
         try {
           coords = polylineLib
-            .decode(cardioEx.route_polyline)
+            .decode(routed.route_polyline)
             .map(([lat, lng]: [number, number]) => ({ latitude: lat, longitude: lng }));
         } catch {}
       }
+      const elevated: any = workout.exercises.flatMap(e => e.sets).find((st: any) => st.elevation_gain != null);
       return {
         kind: 'cardio' as const,
         date: dateStr,
         activityName: workout.name,
-        distance: parseFloat(set.distance ?? '0') || 0,
-        distanceUnit: (set.distance_unit === 'mi' ? 'mi' : 'km') as 'km' | 'mi',
-        durationMin: parseFloat(set.cardio_duration ?? '0') || 0,
-        elevationM: set.elevation_gain != null ? parseFloat(set.elevation_gain) || null : null,
+        distance: Number(workout.distance) || 0,
+        distanceUnit: (workout.distance_unit === 'mi' ? 'mi' : 'km') as 'km' | 'mi',
+        durationMin: Number(workout.cardio_duration) || 0,
+        elevationM: elevated ? parseFloat(elevated.elevation_gain) || null : null,
         coords,
       };
     }
@@ -351,32 +357,36 @@ export default function WorkoutDetailsScreen({
     return out;
   }, [workout]);
 
-  const PR_LABELS: Record<string, string> = {
-    max_weight: 'Max Weight',
-    max_reps: 'Rep Record',
-    best_time: 'Best Time',
-    best_distance: 'Best Distance',
-    max_duration: 'Longest Hold',
-  };
-
+  // One row per exercise+type, counting every PR (two rep records at two
+  // weights are two) and listing what each was, as on the workout summary.
+  // Cardio best times/distances keep just their type: the milestone they
+  // were set at isn't on the set.
   const workoutPrs = useMemo(() => {
     if (!workout) return [];
-    // One row per exercise+type, but count every PR (e.g. two rep PRs at
-    // different weights) so the total matches the dashboard card's pr_count
-    const map = new Map<string, { exercise_name: string; pr_type: string; count: number }>();
+    const map = new Map<string, { exercise_name: string; pr_type: string; count: number; values: string[] }>();
     for (const ex of workout.exercises) {
       for (const s of ex.sets) {
         for (const t of s.pr_types ?? []) {
           if (t === 'estimated_1rm') continue;
+          const reps = parseFloat(s.reps ?? '0') || 0;
+          const weight = parseFloat(s.weight ?? '0') || 0;
+          const value = t === 'max_weight' ? `${weight} ${weightUnit}`
+            : t === 'max_reps' ? (weight > 0 ? `${reps} reps at ${weight} ${weightUnit}` : `${reps} reps`)
+            : t === 'max_duration' && Number(s.cardio_duration) > 0 ? fmtHold(Number(s.cardio_duration))
+            : null;
           const key = `${ex.name}|${t}`;
-          const entry = map.get(key);
-          if (entry) entry.count += 1;
-          else map.set(key, { exercise_name: ex.name, pr_type: t, count: 1 });
+          const entry = map.get(key) ?? { exercise_name: ex.name, pr_type: t, count: 0, values: [] };
+          entry.count += 1;
+          if (value) entry.values.push(value);
+          map.set(key, entry);
         }
       }
     }
     return [...map.values()];
-  }, [workout]);
+  }, [workout, weightUnit]);
+
+  const prTitle = (pr: { exercise_name: string; pr_type: string; count: number }) =>
+    `${pr.exercise_name} · ${PR_TYPE_LABELS[pr.pr_type] ?? 'PR'}${pr.count > 1 ? 's' : ''}`;
 
   const totalPrCount = useMemo(
     () => workoutPrs.reduce((n, pr) => n + pr.count, 0),
@@ -420,7 +430,7 @@ export default function WorkoutDetailsScreen({
               </TouchableOpacity>
             )}
             <Text style={styles.title} numberOfLines={2}>{workout.name}</Text>
-            <TouchableOpacity onPress={openMenu} style={styles.menuBtn}>
+            <TouchableOpacity onPress={openMenu} style={styles.menuBtn} accessibilityRole="button" accessibilityLabel="Workout options">
               <Ionicons name="ellipsis-vertical" size={22} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
@@ -510,10 +520,12 @@ export default function WorkoutDetailsScreen({
               {workoutPrs.length === 1 ? (
                 <View style={styles.prHeader}>
                   <LaurelBranch height={20} color={PR_GOLD} />
-                  <Text style={styles.prHeaderText}>
-                    {workoutPrs[0].exercise_name}: {PR_LABELS[workoutPrs[0].pr_type] ?? 'PR'}
-                    {workoutPrs[0].count > 1 ? ` ×${workoutPrs[0].count}` : ''}
-                  </Text>
+                  <View style={styles.prTextCol}>
+                    <Text style={styles.prHeaderText}>{prTitle(workoutPrs[0])}</Text>
+                    {workoutPrs[0].values.length > 0 && (
+                      <Text style={styles.prValuesText}>{workoutPrs[0].values.join(', ')}</Text>
+                    )}
+                  </View>
                   <LaurelBranch side="right" height={20} color={PR_GOLD} />
                 </View>
               ) : (
@@ -525,31 +537,30 @@ export default function WorkoutDetailsScreen({
                   >
                     <LaurelBranch height={20} color={PR_GOLD} />
                     <Text style={styles.prHeaderText}>{totalPrCount} Personal Records</Text>
-                    <Animated.Text
-                      style={[
-                        styles.prChevron,
-                        {
-                          transform: [{
-                            rotate: prAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: ['0deg', '180deg'],
-                            }),
-                          }],
-                        },
-                      ]}
+                    <Animated.View
+                      style={{
+                        transform: [{
+                          rotate: prAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: ['0deg', '180deg'],
+                          }),
+                        }],
+                      }}
                     >
-                      ▼
-                    </Animated.Text>
+                      <Ionicons name="chevron-down" size={14} color={PR_GOLD} />
+                    </Animated.View>
                     <LaurelBranch side="right" height={20} color={PR_GOLD} />
                   </TouchableOpacity>
                   <Collapsible progress={prAnim} expanded={prExpanded}>
                     {workoutPrs.map((pr, i) => (
                       <View key={i} style={styles.prRow}>
                         <LaurelBranch height={18} color={PR_GOLD} />
-                        <Text style={styles.prRowText}>
-                          {pr.exercise_name}: {PR_LABELS[pr.pr_type] ?? 'PR'}
-                          {pr.count > 1 ? ` ×${pr.count}` : ''}
-                        </Text>
+                        <View style={styles.prTextCol}>
+                          <Text style={styles.prRowText}>{prTitle(pr)}</Text>
+                          {pr.values.length > 0 && (
+                            <Text style={styles.prValuesText}>{pr.values.join(', ')}</Text>
+                          )}
+                        </View>
                         <LaurelBranch side="right" height={18} color={PR_GOLD} />
                       </View>
                     ))}
@@ -632,11 +643,15 @@ export default function WorkoutDetailsScreen({
                 const dur = Number(s.cardio_duration) || 0;
                 const dist = Number(s.distance) || 0;
                 const intensity = Number(s.intensity) || 0;
-                const durStr = dur > 0
-                  ? `${Math.floor(dur)}:${String(Math.round((dur % 1) * 60)).padStart(2, '0')} min`
+                const loggedUnit = s.distance_unit === 'mi' ? 'mi' : 'km';
+                const durStr = dur > 0 ? fmtMinSec(dur) : null;
+                const distStr = dist > 0
+                  ? `${toDisplayDistance(toKm(dist, loggedUnit), distanceUnit).toFixed(2)} ${distanceUnit}`
                   : null;
-                const distStr = dist > 0 ? `${dist} ${s.distance_unit || 'km'}` : null;
-                const paceStr = intensity > 0 ? `${intensity.toFixed(2)} min/${s.distance_unit || 'km'}` : null;
+                // intensity is a pace in the bout's own unit; shown as m:ss in the user's
+                const paceStr = intensity > 0
+                  ? `${fmtMinSec(toDisplayPace(loggedUnit === 'mi' ? intensity / toKm(1, 'mi') : intensity, distanceUnit))} /${distanceUnit}`
+                  : null;
                 return (
                   <View key={i} style={styles.cardioBoutRow}>
                     <Text style={[styles.setNumText, { color: colors.textSecondary, width: 20 }]}>{i + 1}</Text>
@@ -1049,7 +1064,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: 10, padding: 12, marginBottom: spacing.xs,
   },
   prHeaderText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: PR_GOLD, flex: 1 },
-  prChevron: { fontSize: 12, color: PR_GOLD },
+  prTextCol: { flex: 1 },
+  prValuesText: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
   prRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     backgroundColor: colors.surface,
