@@ -32,6 +32,7 @@ function workout(overrides: any = {}, setOverrides: any = {}) {
     notes: null,
     exercises: [{
       name: 'Running',
+      exercise_type: 'cardio',
       route_polyline: null,
       sets: [{ cardio_duration: 30, distance: 5, distance_unit: 'km', elevation_gain: null, ...setOverrides }],
     }],
@@ -81,12 +82,62 @@ describe('CardioDetailsScreen', () => {
   afterEach(() => { alertSpy.mockRestore(); mockSheetChoice = 2; });
 
   it('shows the activity name and its stats', async () => {
+    await AsyncStorage.setItem(UNIT_KEY, 'km');
     const { getByText, getAllByText } = await renderScreen();
     // The off-screen share card repeats the name and stats
     await waitFor(() => expect(getAllByText('Morning Run').length).toBeGreaterThan(0));
     expect(getAllByText('30m 0s').length).toBeGreaterThan(0);   // duration
     expect(getAllByText('5.00').length).toBeGreaterThan(0);    // distance
     expect(getAllByText('Duration').length).toBeGreaterThan(0);
+  });
+
+  it("converts a km-logged run for a miles user instead of relabelling it", async () => {
+    // Default unit is mi; the run was logged in km. It used to read "5.00 mi".
+    const { getAllByText, queryAllByText } = await renderScreen();
+    await waitFor(() => expect(getAllByText('3.11').length).toBeGreaterThan(0));
+    expect(queryAllByText('5.00')).toHaveLength(0);
+  });
+
+  it('totals every bout and finds the cardio in a mixed workout', async () => {
+    await AsyncStorage.setItem(UNIT_KEY, 'km');
+    installServer(workout({
+      exercises: [
+        { name: 'Squat', exercise_type: 'strength', route_polyline: null, sets: [{ reps: 5, weight: 225 }] },
+        { name: 'Running', exercise_type: 'cardio', route_polyline: null, sets: [
+          { cardio_duration: 20, distance: 4, distance_unit: 'km', elevation_gain: null },
+          { cardio_duration: 10, distance: 1, distance_unit: 'km', elevation_gain: null },
+        ] },
+      ],
+    }));
+    const { getAllByText } = await renderScreen();
+    await waitFor(() => expect(getAllByText('5.00').length).toBeGreaterThan(0));
+    expect(getAllByText('30m 0s').length).toBeGreaterThan(0);
+  });
+
+  it('shows speed, not pace, for a ride', async () => {
+    await AsyncStorage.setItem(UNIT_KEY, 'km');
+    installServer(workout({
+      name: 'Evening Ride',
+      exercises: [{ name: 'Cycling', exercise_type: 'cardio', route_polyline: null, sets: [
+        { cardio_duration: 60, distance: 30, distance_unit: 'km', elevation_gain: null },
+      ] }],
+    }));
+    const { findByText, getByText } = await renderScreen();
+    expect(await findByText('30.0')).toBeTruthy();
+    expect(getByText('km/h')).toBeTruthy();
+  });
+
+  it('stays on the activity and says so when the delete fails', async () => {
+    handlers.DELETE = null;
+    const r = await renderScreen();
+    await r.findByLabelText('Activity options');
+    alertSpy.mockImplementation((_t: string, _m?: string, buttons?: any[]) => {
+      buttons?.find(b => b.text === 'Delete')?.onPress?.();
+    });
+    mockSheetChoice = 1;  // Delete Activity
+    fireEvent.press(r.getByLabelText('Activity options'));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("Couldn't Delete Activity", expect.any(String)));
+    expect(r.nav.goBack).not.toHaveBeenCalled();
   });
 
   it('shows the activity name over the map in readable text, not the accent text colour', async () => {

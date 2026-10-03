@@ -36,9 +36,13 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { estimateCalories } from '../../utils/cardioCalories';
 import { fmtPaceValue } from '../../utils/cardioFormat';
-import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
+import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayPace } from '../../utils/units';
 import { toLocalDateStr } from '../../utils/date';
-import { extractBestEfforts } from '../../utils/bestEfforts';
+import { extractBestEfforts, haversineKm } from '../../utils/bestEfforts';
+import {
+  addAltitude, currentPaceMinPerKm, isCycling, speedInUnit, speedLabel,
+  MIN_PACE_DISTANCE_KM, type ClimbState,
+} from '../../utils/gpsMetrics';
 
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'GPSCardio'>;
@@ -103,18 +107,6 @@ async function resolveCardioTemplateId(
 // GPS fixes worse than this add phantom distance and jagged routes — drop them
 const MAX_ACCURACY_M = 30;
 
-function haversineKm(a: Coord, b: Coord): number {
-  const R = 6371;
-  const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
-  const dLon = ((b.longitude - a.longitude) * Math.PI) / 180;
-  const lat1 = (a.latitude * Math.PI) / 180;
-  const lat2 = (b.latitude * Math.PI) / 180;
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-
 function fmtElapsed(totalSec: number): string {
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
@@ -162,7 +154,8 @@ export default function GPSCardioScreen({ navigation }: Props) {
   const locationSub = useRef<Location.LocationSubscription | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mapRef = useRef<any>(null);
-  const lastAltRef = useRef<number | null>(null);
+  // Elevation gain runs through a hysteresis filter (see gpsMetrics.addAltitude)
+  const climbRef = useRef<ClimbState>({ anchor: null });
   const skipNextDistanceRef = useRef(false);
   const trackingModeRef = useRef<TrackingMode | null>(null);
   const gpsUnsubRef = useRef<(() => void) | null>(null);
@@ -172,7 +165,21 @@ export default function GPSCardioScreen({ navigation }: Props) {
   const segmentStartRef = useRef<Date | null>(null);
 
   const displayDistance = toDisplayDistance(distanceKm, distanceUnit);
-  const pace = displayDistance > 0 ? elapsedSec / 60 / displayDistance : 0;
+  // Nothing until there's enough distance: the first few meters gave paces like 99:59
+  const hasPace = distanceKm >= MIN_PACE_DISTANCE_KM;
+  const pace = hasPace ? elapsedSec / 60 / displayDistance : 0;
+  // Rides read speed, the rest pace; "current" is roughly the last 30 seconds
+  const cycling = isCycling(activity);
+  const rateUnit = cycling ? speedLabel(distanceUnit) : `/${distanceUnit}`;
+  const avgRateText = cycling
+    ? (hasPace ? speedInUnit(distanceKm, elapsedSec / 60, distanceUnit).toFixed(1) : '--')
+    : fmtPaceValue(pace);
+  const currentPaceKm = trackingState === 'running' ? currentPaceMinPerKm(coords) : null;
+  const currentRateText = currentPaceKm == null
+    ? (cycling ? '--' : '--:--')
+    : cycling
+      ? (60 / toDisplayPace(currentPaceKm, distanceUnit)).toFixed(1)
+      : fmtPaceValue(toDisplayPace(currentPaceKm, distanceUnit));
 
   const computeElapsed = () =>
     baseElapsedRef.current +
@@ -248,7 +255,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
               baseElapsedRef.current = cp.elapsedSec ?? 0;
               segmentStartRef.current = null;
               setElapsedSec(cp.elapsedSec ?? 0);
-              lastAltRef.current = null;
+              climbRef.current = { anchor: null };
               // Movement between the crash and the restore must not count
               skipNextDistanceRef.current = true;
               setTrackingState('paused');
@@ -312,12 +319,8 @@ export default function GPSCardioScreen({ navigation }: Props) {
       timestamp: loc.timestamp,
       ...(resumed ? { resumed: true } : {}),
     };
-    const alt = newCoord.altitude;
-    if (alt !== null && lastAltRef.current !== null) {
-      const delta = alt - lastAltRef.current;
-      if (delta > 2) setElevationGainM(g => g + delta);
-    }
-    if (alt !== null) lastAltRef.current = alt;
+    const climbed = addAltitude(climbRef.current, newCoord.altitude, loc.coords.altitudeAccuracy ?? null);
+    if (climbed > 0) setElevationGainM(g => g + climbed);
     setCoords(prev => {
       if (prev.length > 0 && !resumed) {
         setDistanceKm(d => d + haversineKm(prev[prev.length - 1], newCoord));
@@ -366,7 +369,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
       return;
     }
 
-    lastAltRef.current = null;
+    climbRef.current = { anchor: null };
     await beginLocationUpdates();
     baseElapsedRef.current = 0;
     segmentStartRef.current = new Date();
@@ -382,7 +385,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
   };
 
   const handleResume = async () => {
-    lastAltRef.current = null;
+    climbRef.current = { anchor: null };
     skipNextDistanceRef.current = true;
     await beginLocationUpdates();
     segmentStartRef.current = new Date();
@@ -405,7 +408,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
     setElapsedSec(0);
     setDistanceKm(0);
     setElevationGainM(0);
-    lastAltRef.current = null;
+    climbRef.current = { anchor: null };
     baseElapsedRef.current = 0;
     segmentStartRef.current = null;
     setTrackingState('idle');
@@ -532,16 +535,16 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
   if (!MAPS_AVAILABLE) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', gap: spacing.md }]}>
+      <View style={[styles.container, styles.unavailable]}>
         <Ionicons name="map-outline" size={48} color={colors.textSecondary} />
-        <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700' }}>GPS Tracking Unavailable</Text>
-        <Text style={{ color: colors.textSecondary, fontSize: typography.fontSize.sm, textAlign: 'center', paddingHorizontal: spacing.xl }}>
+        <Text style={styles.unavailableTitle}>GPS Tracking Unavailable</Text>
+        <Text style={styles.unavailableBody}>
           GPS tracking requires a development build.{'\n'}Run with{' '}
-          <Text style={{ fontWeight: '600' }}>npx expo run:ios</Text> or{' '}
-          <Text style={{ fontWeight: '600' }}>npx expo run:android</Text> to enable it.
+          <Text style={styles.unavailableCode}>npx expo run:ios</Text> or{' '}
+          <Text style={styles.unavailableCode}>npx expo run:android</Text> to enable it.
         </Text>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: spacing.sm }}>
-          <Text style={{ color: colors.accent, fontWeight: '600' }}>Go Back</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.unavailableBack}>
+          <Text style={styles.unavailableBackText}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -584,6 +587,8 @@ export default function GPSCardioScreen({ navigation }: Props) {
       <TouchableOpacity
         style={[styles.backBtn, { top: insets.top + spacing.sm }]}
         onPress={() => navigation.goBack()}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
       >
         <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
       </TouchableOpacity>
@@ -624,8 +629,13 @@ export default function GPSCardioScreen({ navigation }: Props) {
               </View>
               <View style={styles.statSep} />
               <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtPaceValue(pace)}</Text>
-                <Text style={styles.statLabel}>/{distanceUnit}</Text>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{currentRateText}</Text>
+                <Text style={styles.statLabel}>now {rateUnit}</Text>
+              </View>
+              <View style={styles.statSep} />
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{avgRateText}</Text>
+                <Text style={styles.statLabel}>avg {rateUnit}</Text>
               </View>
             </View>
             <View style={styles.runningBtns}>
@@ -655,8 +665,8 @@ export default function GPSCardioScreen({ navigation }: Props) {
               </View>
               <View style={styles.statSep} />
               <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtPaceValue(pace)}</Text>
-                <Text style={styles.statLabel}>/{distanceUnit}</Text>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{avgRateText}</Text>
+                <Text style={styles.statLabel}>avg {rateUnit}</Text>
               </View>
             </View>
             <View style={styles.runningBtns}>
@@ -698,8 +708,8 @@ export default function GPSCardioScreen({ navigation }: Props) {
                 <Text style={[styles.modalStatLabel, { color: colors.textSecondary }]}>Distance</Text>
               </View>
               <View style={styles.modalStatItem}>
-                <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>{fmtPaceValue(pace)} /{distanceUnit}</Text>
-                <Text style={[styles.modalStatLabel, { color: colors.textSecondary }]}>Avg Pace</Text>
+                <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>{avgRateText} {rateUnit}</Text>
+                <Text style={[styles.modalStatLabel, { color: colors.textSecondary }]}>{cycling ? 'Avg Speed' : 'Avg Pace'}</Text>
               </View>
               <View style={styles.modalStatItem}>
                 <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>~{estimatedKcal} kcal</Text>
@@ -748,6 +758,12 @@ export default function GPSCardioScreen({ navigation }: Props) {
 }
 
 const createStyles = (colors: Colors) => StyleSheet.create({
+  unavailable: { justifyContent: 'center', alignItems: 'center', gap: spacing.md },
+  unavailableTitle: { color: colors.textPrimary, fontSize: typography.fontSize.lg, fontWeight: '700' },
+  unavailableBody: { color: colors.textSecondary, fontSize: typography.fontSize.sm, textAlign: 'center', paddingHorizontal: spacing.xl },
+  unavailableCode: { fontWeight: '600' },
+  unavailableBack: { marginTop: spacing.sm },
+  unavailableBackText: { color: colors.accent, fontWeight: '600' },
   container: { flex: 1, backgroundColor: colors.background },
   map: { flex: 1 },
   mapFallback: { justifyContent: 'center', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl, backgroundColor: colors.background },

@@ -43,7 +43,8 @@ const MIN_POINTS_PER_WINDOW = 3;
 
 const EARTH_RADIUS_KM = 6371;
 
-function haversineKm(a: TrackPoint, b: TrackPoint): number {
+/** Great-circle distance between two fixes. Shared with the live tracker (gpsMetrics). */
+export function haversineKm(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }): number {
   const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
   const dLon = ((b.longitude - a.longitude) * Math.PI) / 180;
   const lat1 = (a.latitude * Math.PI) / 180;

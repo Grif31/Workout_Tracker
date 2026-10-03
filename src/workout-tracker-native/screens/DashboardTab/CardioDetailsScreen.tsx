@@ -17,6 +17,7 @@ import { estimateCalories } from '../../utils/cardioCalories';
 import { fmtDuration, fmtPace, fmtRaceTime } from '../../utils/cardioFormat';
 import { bestEffortLabel, type BestEffort } from '../../utils/bestEfforts';
 import { GPS_DISTANCE_UNIT_KEY, toKm, toDisplayDistance, roundTenth } from '../../utils/units';
+import { isCycling, speedInUnit, speedLabel } from '../../utils/gpsMetrics';
 import { captureAndShare } from '../../utils/shareCapture';
 import CardioShareCard from '../../components/share/CardioShareCard';
 import { spacing, radius } from '../../theme/spacing';
@@ -57,8 +58,15 @@ interface CardioWorkout {
   name: string;
   date: string | null;
   notes: string | null;
+  // Totals across every bout (Workout.to_dict), present when every exercise is
+  // cardio; distance is in the first bout's unit
+  cardio_duration?: number | null;
+  distance?: number | null;
+  distance_unit?: string;
   exercises: CardioExercise[];
 }
+
+const unitOf = (u: string | null | undefined) => (u === 'mi' ? 'mi' : 'km');
 
 
 export default function CardioDetailsScreen({ navigation, route }: Props) {
@@ -100,16 +108,24 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
   const { exercise, coords, mapRegion, durationMin, distanceKm, elevationGainM, calories, bestEfforts } = useMemo(() => {
     if (!workout) return { exercise: null, coords: [], mapRegion: null, durationMin: 0, distanceKm: 0, elevationGainM: null, calories: 0, bestEfforts: [] as BestEffort[] };
 
-    const ex = workout.exercises?.[0] ?? null;
-    const set = ex?.sets?.[0] ?? null;
+    // Every cardio exercise and bout, not exercises[0].sets[0]: intervals are
+    // several bouts, and a lifting session reached from a cardio PR has its
+    // lift first. The route and best efforts come from whichever recorded one.
+    const cardioExercises = (workout.exercises ?? []).filter(e => e.exercise_type === 'cardio');
+    const ex = cardioExercises.find(e => e.route_polyline) ?? cardioExercises[0] ?? null;
+    const bouts = cardioExercises.flatMap(e => e.sets ?? []);
 
-    const dur = Number(set?.cardio_duration) || 0;
-    const dist = Number(set?.distance) || 0;
-    const elev = set?.elevation_gain != null ? Number(set.elevation_gain) : null;
-    // set.distance is stored in whatever unit was active when logged (distance_unit) —
-    // must convert to true km before deriving speed, or a miles-preference user's speed
-    // (and therefore the MET-based calorie estimate) comes out too low.
-    const distKm = toKm(dist, set?.distance_unit === 'mi' ? 'mi' : 'km');
+    // Prefer the backend's totals; sum the bouts when it has none (a mixed workout)
+    const dur = workout.cardio_duration != null
+      ? Number(workout.cardio_duration) || 0
+      : bouts.reduce((t, b) => t + (Number(b.cardio_duration) || 0), 0);
+    // Distances are stored in the unit active when logged, so everything goes
+    // through true km and only converts to the user's unit for display
+    const distKm = workout.distance != null
+      ? toKm(Number(workout.distance) || 0, unitOf(workout.distance_unit))
+      : bouts.reduce((t, b) => t + toKm(Number(b.distance) || 0, unitOf(b.distance_unit)), 0);
+    const elevations = bouts.filter(b => b.elevation_gain != null).map(b => Number(b.elevation_gain) || 0);
+    const elev = elevations.length > 0 ? elevations.reduce((a, b) => a + b, 0) : null;
     const speedKmH = dur > 0 && distKm > 0 ? distKm / (dur / 60) : 0;
     const kcal = estimateCalories(ex?.name ?? '', dur, weightKg, speedKmH);
 
@@ -145,7 +161,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
         : a.duration_min - b.duration_min;
     });
 
-    return { exercise: ex, coords: decodedCoords, mapRegion: region, durationMin: dur, distanceKm: dist, elevationGainM: elev, calories: kcal, bestEfforts: efforts };
+    return { exercise: ex, coords: decodedCoords, mapRegion: region, durationMin: dur, distanceKm: distKm, elevationGainM: elev, calories: kcal, bestEfforts: efforts };
   }, [workout, weightKg]);
 
   // This screen renders the route twice at once — the static map below, and
@@ -190,8 +206,16 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete', style: 'destructive', onPress: async () => {
-          await apiFetch(`/api/workouts/${workoutId}`, { method: 'DELETE' });
-          navigation.goBack();
+          try {
+            const res = await apiFetch(`/api/workouts/${workoutId}`, { method: 'DELETE' });
+            if (!res.ok) {
+              Alert.alert("Couldn't Delete Activity", 'Try again in a moment.');
+              return;
+            }
+            navigation.goBack();
+          } catch (err) {
+            if (!isNetworkError(err)) Alert.alert("Couldn't Delete Activity", 'Try again in a moment.');
+          }
         },
       },
     ]);
@@ -235,6 +259,8 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
   }
 
   const activityName = exercise?.name ?? workout.name ?? 'Activity';
+  const displayDistance = toDisplayDistance(distanceKm, distanceUnit);
+  const cycling = isCycling(activityName);
   const dateStr = workout.date
     ? new Date(workout.date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
     : '';
@@ -252,7 +278,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
           date={workout.date
             ? new Date(workout.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
             : ''}
-          distance={distanceKm}
+          distance={displayDistance}
           distanceUnit={distanceUnit}
           durationMin={durationMin}
           elevationM={elevationGainM}
@@ -282,6 +308,8 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
         <TouchableOpacity
           style={[styles.overlayBtn, { top: insets.top + spacing.sm, left: spacing.md }]}
           onPress={() => navigation.goBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
         >
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
@@ -290,6 +318,8 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
         <TouchableOpacity
           style={[styles.overlayBtn, { top: insets.top + spacing.sm, right: spacing.md }]}
           onPress={showOptions}
+          accessibilityRole="button"
+          accessibilityLabel="Activity options"
         >
           <Ionicons name="ellipsis-horizontal" size={20} color={colors.textPrimary} />
         </TouchableOpacity>
@@ -298,6 +328,8 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
         <TouchableOpacity
           style={[styles.overlayBtn, { top: insets.top + spacing.sm, right: spacing.md + 48 }]}
           onPress={handleShare}
+          accessibilityRole="button"
+          accessibilityLabel="Share activity"
         >
           <Ionicons name="share-outline" size={20} color={colors.textPrimary} />
         </TouchableOpacity>
@@ -322,13 +354,18 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{distanceKm > 0 ? distanceKm.toFixed(2) : '--'}</Text>
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{distanceKm > 0 ? displayDistance.toFixed(2) : '--'}</Text>
             <Text style={styles.statLabel}>{distanceUnit}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{fmtPace(durationMin, distanceKm)}</Text>
-            <Text style={styles.statLabel}>/{distanceUnit} pace</Text>
+            {/* Rides read speed, the rest pace */}
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+              {cycling
+                ? (distanceKm > 0 && durationMin > 0 ? speedInUnit(distanceKm, durationMin, distanceUnit).toFixed(1) : '--')
+                : fmtPace(durationMin, displayDistance)}
+            </Text>
+            <Text style={styles.statLabel}>{cycling ? speedLabel(distanceUnit) : `/${distanceUnit} pace`}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
