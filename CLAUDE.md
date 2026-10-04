@@ -262,7 +262,7 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 | `workout_reminder_minute_${uid}` | '00' | Reminder minute |
 | `health_sync_enabled_${uid}` | false | Apple Health / Health Connect sync toggle |
 | `plate_calc_bar_${uid}` | 'standard' | Last-used bar type in plate calculator |
-| `plate_calc_plates_${uid}` | all defaults | Enabled plate sizes in plate calculator (JSON number[]) |
+| `plate_calc_plates_${uid}` | all on | Plate sizes switched **off** in the plate calculator, per unit: JSON `{lbsOff, kgOff}`, so a plate added in a later release starts on. Older builds stored one unitless array of plates switched on; `enabledPlatesFor` in `utils/plateCalc.ts` reads both and applies an old array only to the unit whose plates it names |
 | `default_rest_timer_${uid}` | '90' | Default rest timer duration in seconds |
 | `gps_distance_unit_${uid}` | 'mi' | Distance unit for GPS cardio activities ('km' or 'mi') |
 | `workout_weekly_goal_${uid}` | '3' | Weekly workout target (integer string) |

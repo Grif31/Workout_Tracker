@@ -35,7 +35,7 @@ export default function LiftDetailModal({ visible, onClose, lift, weightUnit }: 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={onClose}>
-        <View style={styles.modalSheet}>
+        <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
           {lift?.has_data && (() => {
             const liftColor = lift.rank ? (SCORE_RANK_COLORS[lift.rank.label] ?? colors.accent) : colors.accent;
             const pct = lift.percentile ?? 0;

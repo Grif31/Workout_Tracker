@@ -1549,6 +1549,7 @@ export default function CoachScreen({ navigation }: Props) {
       <RoutinePickerModal
         visible={selectModalVisible}
         routines={routines}
+        activeRoutineId={user?.active_routine_id}
         onSelect={activateRoutine}
         onClose={() => setSelectModalVisible(false)}
       />

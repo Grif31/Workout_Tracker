@@ -51,6 +51,8 @@ function Chip({
   return (
     <TouchableOpacity
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
       style={[
         chipStyles.chip,
         {
@@ -88,7 +90,7 @@ export default function CoachProfileModal({ visible, onClose, onSave }: Props) {
       if (legacyRaw[1]) {
         try {
           const s = JSON.parse(legacyRaw[1]);
-          setProfile({
+          return setProfile({
             ...DEFAULT_PROFILE,
             goal: s.goal ?? DEFAULT_PROFILE.goal,
             experience: s.exp ?? DEFAULT_PROFILE.experience,
@@ -100,6 +102,9 @@ export default function CoachProfileModal({ visible, onClose, onSave }: Props) {
           });
         } catch { }
       }
+      // Nothing saved: show the defaults, not edits from a session that was
+      // closed without saving (the modal stays mounted between opens)
+      setProfile(DEFAULT_PROFILE);
     });
   }, [visible]);
 
@@ -123,7 +128,7 @@ export default function CoachProfileModal({ visible, onClose, onSave }: Props) {
       <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} hitSlop={8}>
+          <TouchableOpacity onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close">
             <Ionicons name="close" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Coach Profile</Text>

@@ -27,9 +27,10 @@ export default function MusclePickerModal({
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
-    <Modal visible={visible} transparent animationType="slide">
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={onClose}>
-        <View style={styles.sheet}>
+        {/* Claims touches so a tap between chips doesn't reach the closing backdrop */}
+        <View style={styles.sheet} onStartShouldSetResponder={() => true}>
           <View style={styles.handle} />
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
@@ -39,6 +40,7 @@ export default function MusclePickerModal({
               return (
                 <TouchableOpacity
                   key={mg}
+                  accessibilityState={{ selected: on }}
                   style={[styles.chip, { borderColor: on ? colors.accent : colors.border, backgroundColor: on ? colors.accent + '22' : colors.background }]}
                   onPress={() => onToggle(mg)}
                 >

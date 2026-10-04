@@ -1,17 +1,31 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, ScrollView, ActivityIndicator, Dimensions, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { apiFetch } from '../utils/api';
-import { toLocalDateStr } from '../utils/date';
+import { mondayFirstMonthGrid, toLocalDateStr } from '../utils/date';
+
+// Monday first, like every other week in the app (Weekly Summary, Coach)
+const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
 function isLeapYear(year: number) {
   return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 }
 
-type CalendarWorkout = { id: number; name: string; duration?: number; workout_type?: string };
+type CalendarWorkout = {
+  id: number;
+  name: string;
+  duration?: number;
+  workout_type?: string;
+  cardio_duration?: number | null;
+};
+
+// cardio_duration is the time logged; duration is only the logging screen's
+// timer, ~0 for a run entered afterwards
+const workoutMinutes = (w: CalendarWorkout) =>
+  Math.round((w.workout_type === 'cardio' ? w.cardio_duration ?? w.duration : w.duration) ?? 0);
 type CalView = 'month' | 'year' | 'multiyear';
 
 type Props = {
@@ -32,48 +46,54 @@ export default function CalendarModal({ visible, onClose, onSelectWorkout }: Pro
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null);
   const [selectedDateWorkouts, setSelectedDateWorkouts] = useState<CalendarWorkout[]>([]);
   const [selectedDateLoading, setSelectedDateLoading] = useState(false);
+  const [selectedDateFailed, setSelectedDateFailed] = useState(false);
+  // The day whose workouts were asked for last, so a slow earlier answer
+  // can't replace the list for a day tapped after it
+  const latestDay = useRef<string | null>(null);
 
-  // The Modal's children stay mounted across visible toggles (only the native
-  // overlay hides), so this fires once per app session — same lazy-load-once
-  // behavior as the old inline openCalendar().
+  // Refetched on every open: the Modal stays mounted between opens, and a
+  // workout logged since the last one would otherwise be missing. Only the
+  // first load shows a spinner; later ones refresh in place.
   useEffect(() => {
-    if (!visible || workoutDates.size > 0) return;
-    setDatesLoading(true);
+    if (!visible) return;
+    let cancelled = false;
+    if (workoutDates.size === 0) setDatesLoading(true);
     apiFetch('/api/workouts/dates')
       .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data) setWorkoutDates(new Set(data.dates)); })
+      .then(data => { if (!cancelled && data?.dates) setWorkoutDates(new Set(data.dates)); })
       .catch(() => {})
-      .finally(() => setDatesLoading(false));
+      .finally(() => { if (!cancelled) setDatesLoading(false); });
+    return () => { cancelled = true; };
   }, [visible]);
 
   const prevMonth = () => { setCalendarMonth(d => new Date(d.getFullYear(), d.getMonth() - 1, 1)); setSelectedCalDate(null); };
+  const atCurrentMonth = (() => {
+    const now = new Date();
+    return calendarMonth.getFullYear() * 12 + calendarMonth.getMonth() >= now.getFullYear() * 12 + now.getMonth();
+  })();
   const nextMonth = () => { setCalendarMonth(d => new Date(d.getFullYear(), d.getMonth() + 1, 1)); setSelectedCalDate(null); };
 
   const handleDayPress = async (iso: string) => {
+    latestDay.current = iso;
     setSelectedCalDate(iso);
     setSelectedDateWorkouts([]);
+    setSelectedDateFailed(false);
     setSelectedDateLoading(true);
+    let workouts: CalendarWorkout[] | null = null;
     try {
       const res = await apiFetch(`/api/workouts?date=${iso}`);
-      if (res.ok) setSelectedDateWorkouts(await res.json());
+      if (res.ok) workouts = await res.json();
     } catch {}
+    if (latestDay.current !== iso) return;
+    if (workouts) setSelectedDateWorkouts(workouts);
+    else setSelectedDateFailed(true);
     setSelectedDateLoading(false);
   };
 
-  const calendarGrid = useMemo(() => {
-    const year = calendarMonth.getFullYear();
-    const month = calendarMonth.getMonth();
-    const firstDow = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const cells: (number | null)[] = [
-      ...Array(firstDow).fill(null),
-      ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-    ];
-    while (cells.length % 7 !== 0) cells.push(null);
-    const rows: (number | null)[][] = [];
-    for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
-    return rows;
-  }, [calendarMonth]);
+  const calendarGrid = useMemo(
+    () => mondayFirstMonthGrid(calendarMonth.getFullYear(), calendarMonth.getMonth()),
+    [calendarMonth],
+  );
 
   return (
     <Modal
@@ -116,43 +136,57 @@ export default function CalendarModal({ visible, onClose, onSelectWorkout }: Pro
           <ScrollView contentContainerStyle={styles.calBody}>
             {/* ── Month view ── */}
             {calView === 'month' && (() => {
-              const today = new Date();
+              const todayIso = toLocalDateStr(new Date());
               return (
                 <>
                   <View style={styles.calNav}>
-                    <TouchableOpacity onPress={prevMonth} hitSlop={8} style={styles.calNavBtn}>
+                    <TouchableOpacity onPress={prevMonth} hitSlop={8} style={styles.calNavBtn} accessibilityLabel="Previous month">
                       <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
                     </TouchableOpacity>
                     <Text style={[styles.calMonthLabel, { color: colors.textPrimary }]}>
                       {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                     </Text>
-                    <TouchableOpacity onPress={nextMonth} hitSlop={8} style={styles.calNavBtn}>
-                      <Ionicons name="chevron-forward" size={22} color={colors.textPrimary} />
+                    <TouchableOpacity
+                      onPress={nextMonth}
+                      hitSlop={8}
+                      style={styles.calNavBtn}
+                      disabled={atCurrentMonth}
+                      accessibilityLabel="Next month"
+                    >
+                      <Ionicons name="chevron-forward" size={22} color={atCurrentMonth ? colors.border : colors.textPrimary} />
                     </TouchableOpacity>
                   </View>
 
                   <View style={styles.calDowRow}>
-                    {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
+                    {WEEKDAYS.map(d => (
                       <Text key={d} style={[styles.calDowLabel, { color: colors.textSecondary }]}>{d}</Text>
                     ))}
                   </View>
 
                   {calendarGrid.map((week, wi) => (
                     <View key={wi} style={styles.calWeekRow}>
-                      {week.map((day, di) => {
-                        if (!day) return <View key={di} style={styles.calCell} />;
-                        const iso = toLocalDateStr(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day));
+                      {week.map((iso, di) => {
+                        if (!iso) return <View key={di} style={styles.calCell} />;
+                        const day = Number(iso.slice(8));
                         const hasWorkout = workoutDates.has(iso);
                         const isSelected = iso === selectedCalDate;
-                        const isToday = day === today.getDate() && calendarMonth.getMonth() === today.getMonth() && calendarMonth.getFullYear() === today.getFullYear();
+                        const isToday = iso === todayIso;
                         const DayCell = hasWorkout ? TouchableOpacity : View;
                         return (
-                          <DayCell key={di} style={styles.calCell} onPress={hasWorkout ? () => handleDayPress(iso) : undefined} activeOpacity={0.7}>
+                          <DayCell
+                            key={di}
+                            testID={`calendar-day-${iso}`}
+                            style={styles.calCell}
+                            onPress={hasWorkout ? () => handleDayPress(iso) : undefined}
+                            activeOpacity={0.7}
+                            accessibilityState={hasWorkout ? { selected: isSelected } : undefined}
+                          >
                             <View style={[
                               styles.calDayCircle,
                               hasWorkout && { backgroundColor: colors.accent },
-                              isSelected && { backgroundColor: colors.accent },
                               isToday && !hasWorkout && { borderWidth: 1.5, borderColor: colors.accent },
+                              // A ring, since workout days are already filled
+                              isSelected && styles.calDaySelected,
                             ]}>
                               <Text style={[
                                 styles.calDayText, { color: hasWorkout ? colors.accentText : colors.textPrimary },
@@ -180,7 +214,14 @@ export default function CalendarModal({ visible, onClose, onSelectWorkout }: Pro
                       {selectedDateLoading && <ActivityIndicator size="small" color={colors.accent} />}
                     </View>
                   )}
-                  {selectedCalDate && !selectedDateLoading && selectedDateWorkouts.length === 0 && (
+                  {selectedCalDate && !selectedDateLoading && selectedDateFailed && (
+                    <TouchableOpacity onPress={() => handleDayPress(selectedCalDate)}>
+                      <Text style={[styles.calEmptyText, { color: colors.textSecondary }]}>
+                        Couldn't load this day. Tap to try again.
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  {selectedCalDate && !selectedDateLoading && !selectedDateFailed && selectedDateWorkouts.length === 0 && (
                     <Text style={[styles.calEmptyText, { color: colors.textSecondary }]}>No workouts found.</Text>
                   )}
                   {selectedDateWorkouts.map(item => (
@@ -192,7 +233,9 @@ export default function CalendarModal({ visible, onClose, onSelectWorkout }: Pro
                     >
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.calWorkoutName, { color: colors.textPrimary }]} numberOfLines={1}>{item.name || 'Workout'}</Text>
-                        {item.duration ? <Text style={[styles.calWorkoutMeta, { color: colors.textSecondary }]}>{item.duration} min</Text> : null}
+                        {workoutMinutes(item) > 0 ? (
+                          <Text style={[styles.calWorkoutMeta, { color: colors.textSecondary }]}>{workoutMinutes(item)} min</Text>
+                        ) : null}
                       </View>
                       <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                     </TouchableOpacity>
@@ -223,12 +266,7 @@ export default function CalendarModal({ visible, onClose, onSelectWorkout }: Pro
 
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: MINI_GAP }}>
                     {MNAMES.map((mname, mi) => {
-                      const firstDow = new Date(calYear, mi, 1).getDay();
-                      const daysInMonth = new Date(calYear, mi + 1, 0).getDate();
-                      const cells: (number | null)[] = [...Array(firstDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
-                      while (cells.length % 7 !== 0) cells.push(null);
-                      const rows: (number | null)[][] = [];
-                      for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+                      const rows = mondayFirstMonthGrid(calYear, mi);
                       return (
                         <View key={mi} style={{ width: miniW }}>
                           <Text style={{ fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary, textAlign: 'center', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -236,9 +274,8 @@ export default function CalendarModal({ visible, onClose, onSelectWorkout }: Pro
                           </Text>
                           {rows.map((row, ri) => (
                             <View key={ri} style={{ flexDirection: 'row', gap: 2, marginBottom: 2 }}>
-                              {row.map((day, di) => {
-                                if (!day) return <View key={di} style={{ width: boxSize, height: boxSize }} />;
-                                const iso = `${calYear}-${String(mi + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                              {row.map((iso, di) => {
+                                if (!iso) return <View key={di} style={{ width: boxSize, height: boxSize }} />;
                                 return (
                                   <View key={di} style={{ width: boxSize, height: boxSize, borderRadius: 2, backgroundColor: workoutDates.has(iso) ? colors.accent : colors.border + '80' }} />
                                 );
@@ -273,7 +310,8 @@ export default function CalendarModal({ visible, onClose, onSelectWorkout }: Pro
               return (
                 <>
                   {years.map(year => {
-                    const yearStartDow = new Date(year, 0, 1).getDay();
+                    // Rows run Monday to Sunday
+                    const yearStartDow = (new Date(year, 0, 1).getDay() + 6) % 7;
                     const daysInYear = isLeapYear(year) ? 366 : 365;
                     return (
                       <View key={year} style={{ marginBottom: spacing.lg }}>
@@ -369,6 +407,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     paddingVertical: 2,
+  },
+  calDaySelected: {
+    borderWidth: 2.5,
+    borderColor: colors.textPrimary,
   },
   calDayCircle: {
     width: 36,

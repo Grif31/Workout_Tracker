@@ -35,7 +35,7 @@ export default function DistanceDetailModal({ visible, onClose, distance, distan
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={onClose}>
-        <View style={styles.modalSheet}>
+        <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
           {distance && (() => {
             const color = SCORE_RANK_COLORS[distance.rank.label] ?? colors.accent;
             const pct = distance.percentile;

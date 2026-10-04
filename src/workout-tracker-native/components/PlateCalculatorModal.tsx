@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet,
+  Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,15 +12,20 @@ import {
   type BarType,
   BAR_WEIGHTS_LBS, BAR_WEIGHTS_KG,
   PLATE_CONFIG_LBS, PLATE_CONFIG_KG,
-  plateCalc,
+  plateCalc, enabledPlatesFor, togglePlateSetting,
 } from '../utils/plateCalc';
 
 const BAR_KEY    = 'plate_calc_bar';
 const PLATES_KEY = 'plate_calc_plates';
 
+const PLATE_WIDTH = 22;
+const PLATE_GAP = 2;
+// Rod minimum plus both collars, the diagram's fixed middle
+const DIAGRAM_MIDDLE = 30 + 2 * 10;
+
 const BAR_OPTIONS: { type: BarType; label: string; lbs: number; kg: number }[] = [
   { type: 'standard', label: 'Standard', lbs: 45, kg: 20 },
-  { type: 'short',    label: 'Short',    lbs: 35, kg: 15 },
+  { type: 'short',    label: "Women's",  lbs: 35, kg: 15 },
   { type: 'ez',       label: 'EZ Bar',   lbs: 20, kg: 10 },
   { type: 'none',     label: 'No Bar',   lbs: 0,  kg: 0  },
 ];
@@ -36,45 +41,41 @@ export default function PlateCalculatorModal({ visible, targetWeight, weightUnit
   const { user } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const { width: windowWidth } = useWindowDimensions();
   const barKey    = `${BAR_KEY}_${user?.id}`;
   const platesKey = `${PLATES_KEY}_${user?.id}`;
 
   const isKg = weightUnit === 'kg';
   const plateConfigs = isKg ? PLATE_CONFIG_KG : PLATE_CONFIG_LBS;
   const barWeights   = isKg ? BAR_WEIGHTS_KG  : BAR_WEIGHTS_LBS;
-  const defaultPlates = plateConfigs.map(p => p.weight);
+  const unit = isKg ? 'kg' : 'lbs';
 
-  const [barType, setBarType]           = useState<BarType>('standard');
-  const [enabledPlates, setEnabledPlates] = useState<number[]>(defaultPlates);
-  const [loaded, setLoaded]             = useState(false);
+  const [barType, setBarType]   = useState<BarType>('standard');
+  // The stored plate setting as-is: it holds both units' lists
+  const [platesRaw, setPlatesRaw] = useState<string | null>(null);
+  const enabledPlates = useMemo(() => enabledPlatesFor(platesRaw, unit), [platesRaw, unit]);
 
   useEffect(() => {
     if (!visible) return;
     AsyncStorage.multiGet([barKey, platesKey]).then(pairs => {
-      const barVal    = pairs[0][1];
-      const platesVal = pairs[1][1];
+      const barVal = pairs[0][1];
       if (barVal) setBarType(barVal as BarType);
-      if (platesVal) {
-        try { setEnabledPlates(JSON.parse(platesVal)); } catch {}
-      }
-      setLoaded(true);
+      setPlatesRaw(pairs[1][1]);
     });
   }, [visible]);
 
   const changeBarType = useCallback((t: BarType) => {
     setBarType(t);
     AsyncStorage.setItem(barKey, t);
-  }, []);
+  }, [barKey]);
 
   const togglePlate = useCallback((weight: number) => {
-    setEnabledPlates(prev => {
-      const next = prev.includes(weight)
-        ? prev.filter(w => w !== weight)
-        : [...prev, weight];
-      AsyncStorage.setItem(platesKey, JSON.stringify(next));
+    setPlatesRaw(prev => {
+      const next = togglePlateSetting(prev, unit, weight);
+      AsyncStorage.setItem(platesKey, next);
       return next;
     });
-  }, []);
+  }, [platesKey, unit]);
 
   const targetNum = parseFloat(targetWeight) || 0;
   const barWeight = barWeights[barType];
@@ -94,26 +95,36 @@ export default function PlateCalculatorModal({ visible, targetWeight, weightUnit
   );
   const leftPlates  = [...expandedOneSide].reverse(); // outer → inner (toward bar)
   const rightPlates = [...expandedOneSide];           // inner (near bar) → outer
+  // Narrow the plates when a heavy load wouldn't fit across the sheet
+  const sideSpace = (windowWidth - 2 * spacing.md - 2 * spacing.sm - DIAGRAM_MIDDLE) / 2;
+  const plateWidth = Math.max(
+    8,
+    Math.min(PLATE_WIDTH, Math.floor(sideSpace / Math.max(1, expandedOneSide.length)) - PLATE_GAP),
+  );
+  const fmt = (n: number) => String(Math.round(n * 100) / 100);
 
   const summaryText = (): string => {
     if (targetNum <= 0) return 'Enter a weight to calculate';
     if (targetNum < barWeight) return `Weight is below bar weight (${barWeight} ${weightUnit})`;
     if (expandedOneSide.length === 0 && result.remainder === 0) return 'Just the bar';
+    if (expandedOneSide.length === 0) return 'Your plates are too heavy for this weight';
     const parts = result.plates.map(({ plate, count }) =>
       `${count} × ${plate}`
     );
-    let text = parts.join('  ·  ') + ' per side';
-    if (result.remainder > 0) text += `  ⚠ +${result.remainder} ${weightUnit} unloaded`;
-    return text;
+    return parts.join('  ·  ') + ' per side';
   };
+  // What the bar actually weighs when the target can't be made exactly
+  const closest = targetNum >= barWeight && result.remainder > 0
+    ? targetNum - 2 * result.remainder
+    : null;
 
   const renderPlate = (weight: number, idx: number) => {
     const cfg = configMap.get(weight);
     const h = cfg?.height ?? 40;
     const bg = cfg?.color ?? colors.textSecondary;
     return (
-      <View key={idx} style={[styles.plate, { height: h, backgroundColor: bg }]}>
-        <Text style={styles.plateLabel}>{weight}</Text>
+      <View key={idx} style={[styles.plate, { height: h, width: plateWidth, backgroundColor: bg }]}>
+        {plateWidth >= 14 && <Text style={styles.plateLabel}>{weight}</Text>}
       </View>
     );
   };
@@ -137,7 +148,7 @@ export default function PlateCalculatorModal({ visible, targetWeight, weightUnit
         {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.textPrimary }]}>Plate Calculator</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={8}>
+          <TouchableOpacity onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close">
             <Ionicons name="close" size={22} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
@@ -202,9 +213,14 @@ export default function PlateCalculatorModal({ visible, targetWeight, weightUnit
         </View>
 
         {/* Summary text */}
-        <Text style={[styles.summary, { color: result.remainder > 0 ? colors.danger : colors.textSecondary }]}>
+        <Text style={[styles.summary, { color: colors.textSecondary }, closest != null && styles.summaryTight]}>
           {summaryText()}
         </Text>
+        {closest != null && (
+          <Text style={[styles.summary, { color: colors.danger }]}>
+            {`Can't make ${fmt(targetNum)} ${weightUnit} exactly. Closest: ${fmt(closest)} ${weightUnit}`}
+          </Text>
+        )}
 
         {/* Available plates */}
         <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Your Plates</Text>
@@ -222,6 +238,9 @@ export default function PlateCalculatorModal({ visible, targetWeight, weightUnit
                   },
                 ]}
                 onPress={() => togglePlate(cfg.weight)}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: on }}
+                accessibilityLabel={`${cfg.weight} ${weightUnit} plates`}
               >
                 <View style={[styles.plateChipDot, { backgroundColor: cfg.color }]} />
                 <Text style={[styles.plateChipText, { color: on ? colors.textPrimary : colors.textSecondary }]}>
@@ -312,15 +331,15 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     alignItems: 'center',
   },
   plate: {
-    width: 22,
     borderRadius: 3,
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 1,
+    marginHorizontal: PLATE_GAP / 2,
     overflow: 'hidden',
   },
+  // White reads on every plate colour; the accent text colour flips with the theme
   plateLabel: {
-    color: colors.accentText,
+    color: '#fff',
     fontSize: 8,
     fontWeight: '800',
     transform: [{ rotate: '90deg' }],
@@ -345,6 +364,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.md,
     fontWeight: '500',
   },
+  summaryTight: { marginBottom: spacing.xs },
 
   // Plate chips
   sectionLabel: {
