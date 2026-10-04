@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NewExerciseForm from './NewExerciseForm';
 import { resolveMediaUrl } from '../utils/api';
+import { matchesExerciseSearch } from '../utils/exerciseSearch';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -44,6 +45,8 @@ type Props = {
   muscleGroups: string[];
   multiSelect?: boolean;
   initialMuscle?: string;
+  /** Template ids already in the workout, tagged "Added" so they aren't picked twice by accident */
+  addedIds?: (number | undefined)[];
 };
 
 export default function ExerciseListModal({
@@ -56,6 +59,7 @@ export default function ExerciseListModal({
   muscleGroups,
   multiSelect = false,
   initialMuscle,
+  addedIds = [],
 }: Props) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
@@ -85,15 +89,17 @@ export default function ExerciseListModal({
   const strengthFiltered = useMemo(() => {
     if (selectedMuscle === 'Cardio') return [];
     return strengthExercises.filter(ex => {
-      const searchMatch = displayName(ex).toLowerCase().includes(search.toLowerCase());
+      const searchMatch = matchesExerciseSearch(search, ex);
       const muscleMatch = selectedMuscle === 'All' || ex.muscle_group?.split(',').map(m => m.trim()).includes(selectedMuscle);
       return searchMatch && muscleMatch;
     });
   }, [strengthExercises, search, selectedMuscle]);
 
-  const cardioFiltered = useMemo(() => cardioExercises.filter(ex =>
-    displayName(ex).toLowerCase().includes(search.toLowerCase())
-  ), [cardioExercises, search]);
+  const cardioFiltered = useMemo(
+    () => cardioExercises.filter(ex => matchesExerciseSearch(search, ex)),
+    [cardioExercises, search],
+  );
+  const added = useMemo(() => new Set(addedIds), [addedIds]);
 
   const recentFiltered = useMemo(() => {
     if (search) return [];
@@ -208,6 +214,11 @@ export default function ExerciseListModal({
                 <Text style={styles.customBadgeText}>Custom</Text>
               </View>
             )}
+            {added.has(item.id) && (
+              <View style={[styles.addedBadge, { borderColor: colors.save }]}>
+                <Text style={[styles.addedBadgeText, { color: colors.save }]}>Added</Text>
+              </View>
+            )}
           </View>
           <Text style={styles.cardMuscle}>{isCardio ? 'Cardio' : item.muscle_group}</Text>
         </View>
@@ -225,7 +236,7 @@ export default function ExerciseListModal({
       <View style={[styles.container, { paddingTop: insets.top }]}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
+          <TouchableOpacity onPress={handleClose} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Close">
             <Ionicons name="close" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Select Exercise</Text>
@@ -247,7 +258,7 @@ export default function ExerciseListModal({
               onChangeText={setSearch}
             />
             {search !== '' && (
-              <TouchableOpacity onPress={() => setSearch('')}>
+              <TouchableOpacity onPress={() => setSearch('')} accessibilityLabel="Clear search">
                 <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
               </TouchableOpacity>
             )}
@@ -448,6 +459,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
   },
+  addedBadge: { borderWidth: 1, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
+  addedBadgeText: { fontSize: typography.fontSize.xs, fontWeight: '700' },
   customBadge: {
     backgroundColor: colors.accent + '22',
     borderRadius: 4,

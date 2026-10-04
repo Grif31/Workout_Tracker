@@ -25,6 +25,7 @@ import NewExerciseForm from '../../components/NewExerciseForm';
 import SectionRule from '../../components/SectionRule';
 import { apiFetch, resolveMediaUrl, isNetworkError } from '../../utils/api';
 import { loadExerciseList } from '../../utils/exerciseCache';
+import { matchesExerciseSearch } from '../../utils/exerciseSearch';
 import { useAuth } from '../../context/AuthContext';
 
 
@@ -109,7 +110,7 @@ export default function ExercisesScreen({ navigation }: Props) {
 
   const filteredExercises = useMemo(() => {
     const filtered = exerciseList.filter(ex => {
-      const matchSearch = ex.name.toLowerCase().includes(search.toLowerCase());
+      const matchSearch = matchesExerciseSearch(search, ex);
       if (selectedMuscle === 'Cardio') return matchSearch && ex.exercise_type === 'cardio';
       // Cardio has no muscle group, so it only makes sense to exclude it when a
       // specific muscle filter is active — leave it in under the default "All"
@@ -217,7 +218,7 @@ export default function ExercisesScreen({ navigation }: Props) {
             onChangeText={setSearch}
           />
           {search !== '' && (
-            <TouchableOpacity onPress={() => setSearch('')} style={styles.clearBtn}>
+            <TouchableOpacity onPress={() => setSearch('')} style={styles.clearBtn} accessibilityLabel="Clear search">
               <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
@@ -231,10 +232,10 @@ export default function ExercisesScreen({ navigation }: Props) {
             <Text style={styles.dropdownBtnText} numberOfLines={1}>
               {selectedMuscle === 'All' ? 'All Muscles' : selectedMuscle}
             </Text>
-            <Text style={styles.dropdownArrow}>▾</Text>
+            <Ionicons name="chevron-down" size={14} color={colors.textSecondary} style={styles.dropdownArrow} />
           </TouchableOpacity>
           {selectedMuscle !== 'All' && (
-            <TouchableOpacity onPress={() => setSelectedMuscle('All')} style={styles.pickerClear}>
+            <TouchableOpacity onPress={() => setSelectedMuscle('All')} style={styles.pickerClear} accessibilityLabel="Clear muscle filter">
               <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
@@ -245,10 +246,10 @@ export default function ExercisesScreen({ navigation }: Props) {
               <Text style={styles.dropdownBtnText} numberOfLines={1}>
                 {selectedEquipment === 'All' ? 'All Equipment' : selectedEquipment}
               </Text>
-              <Text style={styles.dropdownArrow}>▾</Text>
+              <Ionicons name="chevron-down" size={14} color={colors.textSecondary} style={styles.dropdownArrow} />
             </TouchableOpacity>
             {selectedEquipment !== 'All' && (
-              <TouchableOpacity onPress={() => setSelectedEquipment('All')} style={styles.pickerClear}>
+              <TouchableOpacity onPress={() => setSelectedEquipment('All')} style={styles.pickerClear} accessibilityLabel="Clear equipment filter">
                 <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
               </TouchableOpacity>
             )}
@@ -340,13 +341,15 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     backgroundColor: colors.accent, borderRadius: spacing.sm,
     paddingHorizontal: spacing.md, height: 36, justifyContent: 'center',
   },
-  createBtnText: { color: '#fff', fontWeight: '600', fontSize: typography.fontSize.sm },
+  // accentText, not white: in dark mode the accents are bright and pair with black text
+  createBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
   searchWrapper: {
     flex: 1, flexDirection: 'row', alignItems: 'center',
     backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
     borderRadius: spacing.sm, height: 36, paddingHorizontal: spacing.sm,
   },
   searchIcon: { marginRight: spacing.xs },
+  dropdownArrow: { marginLeft: spacing.xs },
   searchInput: { flex: 1, fontSize: typography.fontSize.sm, color: colors.textPrimary, height: 36, padding: 0 },
   clearBtn: { padding: 2 },
   pickerRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
@@ -358,7 +361,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: spacing.sm, paddingHorizontal: spacing.sm, height: 36,
   },
   dropdownBtnText: { fontSize: typography.fontSize.sm, color: colors.textPrimary, flex: 1 },
-  dropdownArrow: { fontSize: 12, color: colors.textSecondary, marginLeft: spacing.xs },
   dropdownOverlay: { flex: 1 },
   dropdownList: {
     position: 'absolute',

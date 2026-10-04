@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import ExerciseListModal from '../components/ExerciseList';
 
@@ -56,5 +56,22 @@ describe('ExerciseListModal', () => {
     fireEvent.changeText(getByPlaceholderText(/search/i), 'squat');
     expect(queryByText('Bench Press')).toBeNull();
     expect(queryByText('Squat')).toBeTruthy();
+  });
+
+  it('finds a lift by reordered words and gym shorthand', () => {
+    const exercises = [
+      { id: 10, name: 'Incline Bench Press', muscle_group: 'Chest', equipment: 'Dumbbell' },
+      { id: 11, name: 'Incline Bench Press', muscle_group: 'Chest', equipment: 'Barbell' },
+    ];
+    const { getByPlaceholderText, getByText, queryByText } = render(<ExerciseListModal {...defaultProps} exercises={exercises} />);
+    fireEvent.changeText(getByPlaceholderText(/search/i), 'incline db');
+    expect(getByText('Incline Bench Press (Dumbbell)')).toBeTruthy();
+    // "bb" mustn't match inside "dumbbell"
+    expect(queryByText('Incline Bench Press (Barbell)')).toBeNull();
+  });
+
+  it('tags exercises already in the workout', () => {
+    const { getAllByText } = render(<ExerciseListModal {...defaultProps} addedIds={[1, undefined]} />);
+    expect(getAllByText('Added')).toHaveLength(1);
   });
 });

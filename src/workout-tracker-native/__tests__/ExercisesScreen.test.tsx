@@ -48,4 +48,18 @@ describe('ExercisesScreen', () => {
     const { getByText } = render(<ExercisesScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
   });
+  it('matches search words in any order', async () => {
+    const { getByText, getByPlaceholderText, queryByText } = render(<ExercisesScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
+    fireEvent.changeText(getByPlaceholderText(/search/i), 'press bench');
+    expect(getByText('Bench Press')).toBeTruthy();
+    expect(queryByText('Squat')).toBeNull();
+  });
+
+  it('writes Create in the accent text color, not hardcoded white', () => {
+    const { StyleSheet } = require('react-native');
+    const { getByText } = render(<ExercisesScreen navigation={nav as any} route={route as any} />);
+    const { colors } = require('../context/ThemeContext').useTheme();
+    expect(StyleSheet.flatten(getByText('Create').props.style).color).toBe(colors.accentText);
+  });
 });

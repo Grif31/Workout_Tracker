@@ -1584,6 +1584,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         muscleGroups={muscleGroups}
         // Single-select when replacing an exercise; multi-select when adding new ones.
         multiSelect={replacingExIndex === null}
+        addedIds={exercises.map(e => e.exercise_template_id)}
       />
       <NewExerciseForm
         visible={newExerciseFormVisible}
