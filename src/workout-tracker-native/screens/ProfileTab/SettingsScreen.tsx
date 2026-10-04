@@ -13,12 +13,15 @@ import {
 } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { LIVE_WORKOUT_NOTIF_KEY, REST_ALERTS_KEY } from '../../constants/storageKeys';
+import {
+  LIVE_WORKOUT_NOTIF_KEY, REST_ALERTS_KEY, REMINDERS_KEY, REMINDER_HOUR_KEY, REMINDER_MIN_KEY,
+} from '../../constants/storageKeys';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme, ACCENT_PRESETS, KEY_ACCENT, type Colors } from '../../context/ThemeContext';
+import { useTheme, ACCENT_PRESETS, KEY_ACCENT, type Colors, type ThemePreference } from '../../context/ThemeContext';
+import SegmentedControl from '../../components/SegmentedControl';
 import { usePurchase } from '../../context/PurchaseContext';
 import { ProfileStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
@@ -27,11 +30,14 @@ import { apiFetch, isNetworkError } from '../../utils/api';
 import { APP_ICONS_ENABLED, HEALTH_SYNC_ENABLED } from '../../constants/featureFlags';
 import {
   requestNotificationPermission,
+  hasNotificationPermission,
   scheduleWorkoutReminder,
   cancelWorkoutReminder,
 } from '../../utils/notifications';
 import { HEALTH_SYNC_KEY, requestHealthKitPermission } from '../../utils/healthKit';
-import { REST_TIMER_KEY } from '../../components/workout/types';
+import {
+  REST_TIMER_KEY, AUTO_REST_KEY, VIBRATE_KEY, RPE_KEY, PLATE_CALC_KEY, REPEAT_LAST_SET_KEY, PREFILL_PREVIOUS_KEY,
+} from '../../components/workout/types';
 import { requestHealthConnectPermission } from '../../utils/healthConnect';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
 import { openExternalLink } from '../../utils/links';
@@ -39,15 +45,29 @@ import { openExternalLink } from '../../utils/links';
 // Reads the live app.config.js version so this never drifts out of sync again.
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 const REST_TIMER_PRESETS = [30, 45, 60, 90, 120, 150, 180, 240, 300];
-const REMINDERS_KEY = 'workout_reminders_enabled';
-const REMINDER_HOUR_KEY = 'workout_reminder_hour';
-const REMINDER_MIN_KEY = 'workout_reminder_minute';
+
+const THEME_OPTIONS = [
+  { key: 'system', label: 'System' },
+  { key: 'light', label: 'Light' },
+  { key: 'dark', label: 'Dark' },
+] as const satisfies readonly { key: ThemePreference; label: string }[];
+
+// The same switches as the in-workout settings menu, with the same defaults
+// WorkoutLog falls back to when nothing is stored
+const WORKOUT_TOGGLES = [
+  { key: AUTO_REST_KEY, label: 'Auto-start rest timer', hint: 'Start the rest countdown when a set is checked off', icon: 'play-circle-outline', fallback: true },
+  { key: VIBRATE_KEY, label: 'Vibrate when rest ends', hint: 'Vibrate the phone when the rest countdown completes', icon: 'phone-portrait-outline', fallback: true },
+  { key: RPE_KEY, label: 'Track RPE', hint: 'Show an RPE input on each strength set', icon: 'speedometer-outline', fallback: false },
+  { key: PLATE_CALC_KEY, label: 'Show plate calculator', hint: 'Show a plate calculator button while logging sets', icon: 'calculator-outline', fallback: true },
+  { key: REPEAT_LAST_SET_KEY, label: 'Repeat last set', hint: "Add Set copies the last set's reps and weight", icon: 'copy-outline', fallback: false },
+  { key: PREFILL_PREVIOUS_KEY, label: 'Prefill previous sets', hint: "Fill a new exercise's sets with last session's reps and weight", icon: 'reload-outline', fallback: true },
+] as const;
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'Settings'>;
 
 export default function SettingsScreen({ navigation }: Props) {
   const { user, updateUser } = useAuth();
-  const { colors, mode, accentPreset, toggleMode, setAccentPreset } = useTheme();
+  const { colors, mode, accentPreset, themePreference, setThemePreference, setAccentPreset } = useTheme();
   const { isPremium } = usePurchase();
   const uid = user?.id;
   const perUserRestTimerKey    = `${REST_TIMER_KEY}_${uid}`;
@@ -77,15 +97,37 @@ export default function SettingsScreen({ navigation }: Props) {
 
   // Health sync
   const [healthSyncOn, setHealthSyncOn] = useState(false);
+  const [workoutToggles, setWorkoutToggles] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(WORKOUT_TOGGLES.map(t => [t.key, t.fallback])),
+  );
+
+  useEffect(() => {
+    AsyncStorage.multiGet(WORKOUT_TOGGLES.map(t => `${t.key}_${uid}`)).then(pairs => {
+      setWorkoutToggles(Object.fromEntries(WORKOUT_TOGGLES.map((t, i) => {
+        const v = pairs[i][1];
+        return [t.key, v === null ? t.fallback : v === 'true'];
+      })));
+    });
+  }, []);
+
+  const setWorkoutToggle = (key: string, value: boolean) => {
+    setWorkoutToggles(prev => ({ ...prev, [key]: value }));
+    AsyncStorage.setItem(`${key}_${uid}`, String(value));
+  };
 
   useEffect(() => {
     AsyncStorage.multiGet([
       perUserRestTimerKey, perUserRemindersKey, REST_ALERTS_KEY, LIVE_WORKOUT_NOTIF_KEY,
       perUserReminderHourKey, perUserReminderMinKey, perUserHealthSyncKey, perUserGpsKey,
-    ]).then(pairs => {
+    ]).then(async pairs => {
       const map = Object.fromEntries(pairs.map(([k, v]) => [k, v]));
       if (map[perUserRestTimerKey]) setRestTimerSeconds(map[perUserRestTimerKey]!);
-      if (map[perUserRemindersKey] !== null) setRemindersOn(map[perUserRemindersKey] === 'true');
+      if (map[perUserRemindersKey] === 'true') {
+        // Notifications turned off in the phone's settings mean no reminder
+        // will fire, so the switch shouldn't claim one will
+        if (await hasNotificationPermission()) setRemindersOn(true);
+        else AsyncStorage.setItem(perUserRemindersKey, 'false');
+      }
       if (map[REST_ALERTS_KEY] !== null) setRestAlertsOn(map[REST_ALERTS_KEY] !== 'false');
       if (map[LIVE_WORKOUT_NOTIF_KEY] !== null) setLiveNotifOn(map[LIVE_WORKOUT_NOTIF_KEY] !== 'false');
       if (map[perUserReminderHourKey]) setReminderHour(map[perUserReminderHourKey]!);
@@ -104,6 +146,21 @@ export default function SettingsScreen({ navigation }: Props) {
       );
     }
     return granted;
+  };
+
+  // The switch rewrites every stored weight, rounded, so a stray tap shouldn't
+  // be enough
+  const confirmUnitToggle = (value: boolean) => {
+    const unit = value ? 'kg' : 'lbs';
+    Alert.alert(
+      `Switch to ${unit}?`,
+      `Every weight you've logged, your PRs and your bodyweight entries are converted to ${unit}. `
+        + `Converted values are rounded to the nearest 0.5 ${unit}, so switching back may not give the exact original numbers.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: `Convert to ${unit}`, onPress: () => handleUnitToggle(value) },
+      ],
+    );
   };
 
   const handleUnitToggle = async (value: boolean) => {
@@ -165,7 +222,7 @@ export default function SettingsScreen({ navigation }: Props) {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Settings</Text>
@@ -176,7 +233,6 @@ export default function SettingsScreen({ navigation }: Props) {
       <Text style={styles.sectionLabel}>Appearance</Text>
       <View style={styles.group}>
 
-        {/* Dark mode toggle */}
         <View style={styles.row}>
           <View style={styles.rowLeft}>
             <Ionicons
@@ -184,13 +240,13 @@ export default function SettingsScreen({ navigation }: Props) {
               size={20}
               color={colors.textSecondary}
             />
-            <Text style={styles.rowLabel}>Dark Mode</Text>
+            <Text style={styles.rowLabel}>Theme</Text>
           </View>
-          <Switch
-            value={mode === 'dark'}
-            onValueChange={toggleMode}
-            trackColor={{ false: colors.border, true: colors.accent }}
-            thumbColor="#fff"
+          <SegmentedControl
+            options={THEME_OPTIONS}
+            value={themePreference}
+            onChange={setThemePreference}
+            style={styles.themeControl}
           />
         </View>
 
@@ -262,7 +318,8 @@ export default function SettingsScreen({ navigation }: Props) {
             <Switch
               testID="weight-unit-switch"
               value={unitIsKg}
-              onValueChange={handleUnitToggle}
+              onValueChange={confirmUnitToggle}
+              accessibilityLabel="Weight unit kilograms"
               disabled={savingUnit}
               trackColor={{ false: colors.border, true: colors.accent }}
               thumbColor="#fff"
@@ -282,6 +339,7 @@ export default function SettingsScreen({ navigation }: Props) {
             <Text style={[styles.unitLabel, !distanceIsKm && styles.unitActive]}>mi</Text>
             <Switch
               value={distanceIsKm}
+              accessibilityLabel="Distance unit kilometers"
               onValueChange={async (isKm) => {
                 const unit = isKm ? 'km' : 'mi';
                 setDistanceIsKm(isKm);
@@ -293,10 +351,18 @@ export default function SettingsScreen({ navigation }: Props) {
             <Text style={[styles.unitLabel, distanceIsKm && styles.unitActive]}>km</Text>
           </View>
         </View>
+      </View>
 
-        <View style={styles.divider} />
-
-        <TouchableOpacity style={styles.row} onPress={() => setRestTimerPickerVisible(true)} activeOpacity={0.7}>
+      {/* ── Workout ── */}
+      <Text style={styles.sectionLabel}>Workout</Text>
+      <View style={styles.group}>
+        <TouchableOpacity
+          style={styles.row}
+          onPress={() => setRestTimerPickerVisible(true)}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`Default rest timer, ${formatRestTimer(parseInt(restTimerSeconds, 10) || 90)}`}
+        >
           <View style={styles.rowLeft}>
             <Ionicons name="timer-outline" size={20} color={colors.textSecondary} />
             <Text style={styles.rowLabel}>Default Rest Timer</Text>
@@ -306,6 +372,28 @@ export default function SettingsScreen({ navigation }: Props) {
             <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
           </View>
         </TouchableOpacity>
+
+        {WORKOUT_TOGGLES.map(t => (
+          <React.Fragment key={t.key}>
+            <View style={styles.divider} />
+            <View style={styles.row}>
+              <View style={styles.rowLeft}>
+                <Ionicons name={t.icon} size={20} color={colors.textSecondary} />
+                <View style={styles.rowText}>
+                  <Text style={styles.rowLabel}>{t.label}</Text>
+                  <Text style={styles.rowHint}>{t.hint}</Text>
+                </View>
+              </View>
+              <Switch
+                value={workoutToggles[t.key]}
+                onValueChange={v => setWorkoutToggle(t.key, v)}
+                accessibilityLabel={t.label}
+                trackColor={{ false: colors.border, true: colors.accent }}
+                thumbColor="#fff"
+              />
+            </View>
+          </React.Fragment>
+        ))}
       </View>
 
       {/* ── Notifications ── */}
@@ -320,6 +408,7 @@ export default function SettingsScreen({ navigation }: Props) {
           </View>
           <Switch
             value={remindersOn}
+            accessibilityLabel="Workout reminders"
             onValueChange={async (v) => {
               if (v) {
                 if (!(await ensurePermission())) return;
@@ -363,11 +452,12 @@ export default function SettingsScreen({ navigation }: Props) {
         {/* Rest Timer Alerts */}
         <View style={styles.row}>
           <View style={styles.rowLeft}>
-            <Ionicons name="timer-outline" size={20} color={colors.textSecondary} />
+            <Ionicons name="alarm-outline" size={20} color={colors.textSecondary} />
             <Text style={styles.rowLabel}>Rest Timer Alerts</Text>
           </View>
           <Switch
             value={restAlertsOn}
+            accessibilityLabel="Rest timer alerts"
             onValueChange={async (v) => {
               if (v && !(await ensurePermission())) return;
               setRestAlertsOn(v);
@@ -388,6 +478,7 @@ export default function SettingsScreen({ navigation }: Props) {
           </View>
           <Switch
             value={liveNotifOn}
+            accessibilityLabel="Live workout notification"
             onValueChange={async (v) => {
               if (v && !(await ensurePermission())) return;
               setLiveNotifOn(v);
@@ -414,6 +505,7 @@ export default function SettingsScreen({ navigation }: Props) {
               </View>
               <Switch
                 value={healthSyncOn}
+                accessibilityLabel={Platform.OS === 'ios' ? 'Sync to Apple Health' : 'Sync to Health Connect'}
                 onValueChange={async (v) => {
                   if (v) {
                     const granted = Platform.OS === 'ios'
@@ -499,13 +591,16 @@ export default function SettingsScreen({ navigation }: Props) {
         onRequestClose={() => setAccentModalVisible(false)}
       >
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAccentModalVisible(false)}>
-          <View style={styles.modalSheet}>
+          <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
             <Text style={styles.modalTitle}>Accent Color</Text>
             <View style={styles.accentGrid}>
               {ACCENT_PRESETS.map(preset => (
                 <TouchableOpacity
                   key={preset.name}
                   style={styles.accentGridItem}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${preset.name} accent`}
+                  accessibilityState={{ selected: accentPreset.name === preset.name }}
                   onPress={() => {
                     setAccentPreset(preset);
                     if (user?.id) AsyncStorage.setItem(`${KEY_ACCENT}_${user.id}`, preset.name);
@@ -607,6 +702,10 @@ export default function SettingsScreen({ navigation }: Props) {
                 );
               })}
             </View>
+            <Text style={styles.restHint}>
+              Longer rest lets you lift more on the next set. A good start: 1-2 min for isolation and
+              accessory work, 2-3 min for compound lifts, 3-5 min for heavy sets of 1-5 reps.
+            </Text>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -666,6 +765,19 @@ const createStyles = (colors: Colors) =>
     rowLabel: {
       fontSize: typography.fontSize.md,
       color: colors.textPrimary,
+    },
+    rowText: { flex: 1 },
+    rowHint: {
+      fontSize: typography.fontSize.xs,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    themeControl: { width: 190 },
+    restHint: {
+      fontSize: typography.fontSize.sm,
+      color: colors.textSecondary,
+      lineHeight: 20,
+      paddingHorizontal: spacing.lg,
     },
     rowValue: {
       fontSize: typography.fontSize.md,

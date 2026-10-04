@@ -51,6 +51,8 @@ export const mockThemeContext = {
   accentPreset: { name: 'Green', value: '#30D158', text: '#000000' },
   setAccent: jest.fn(),
   toggleMode: jest.fn(),
+  themePreference: 'system',
+  setThemePreference: jest.fn(),
   setAccentPreset: jest.fn(),
 };
 

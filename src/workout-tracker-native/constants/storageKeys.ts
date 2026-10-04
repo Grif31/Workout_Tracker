@@ -33,3 +33,9 @@ export const PROFILE_FRAME_RANK_KEY = 'profile_frame_rank';
 // Per user: `${HOME_STREAK_TYPE_KEY}_${userId}`, 'weekly' | 'monthly' | 'daily',
 // the streak Home's top bar shows.
 export const HOME_STREAK_TYPE_KEY = 'home_streak_type';
+// Per user: `${KEY}_${userId}`. The daily reminder is one scheduled
+// notification on the device, so login reschedules it from these and logout
+// cancels it (utils/notifications.ts); Settings edits them.
+export const REMINDERS_KEY = 'workout_reminders_enabled';
+export const REMINDER_HOUR_KEY = 'workout_reminder_hour';
+export const REMINDER_MIN_KEY = 'workout_reminder_minute';

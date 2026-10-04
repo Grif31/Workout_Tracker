@@ -106,6 +106,8 @@ jest.mock('./context/ThemeContext', () => ({
     mode: 'dark',
     accentPreset: { name: 'Green', value: '#30D158', text: '#000' },
     toggleMode: jest.fn(),
+    themePreference: 'system',
+    setThemePreference: jest.fn(),
     setAccentPreset: jest.fn(),
   }),
   ThemeProvider: ({ children }: any) => children,

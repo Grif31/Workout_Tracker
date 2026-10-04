@@ -14,6 +14,8 @@ jest.mock('../utils/api', () => ({
 jest.mock('../utils/notifications', () => ({
   registerPushToken: jest.fn(),
   deregisterPushToken: jest.fn(),
+  cancelWorkoutReminder: jest.fn(() => Promise.resolve()),
+  restoreWorkoutReminder: jest.fn(() => Promise.resolve()),
 }));
 jest.mock('../context/ThemeContext', () => ({
   useTheme: jest.fn(),
@@ -26,7 +28,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Sentry from '@sentry/react-native';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { setTokens, clearTokens, registerUnauthCallback, apiFetch } from '../utils/api';
-import { registerPushToken, deregisterPushToken } from '../utils/notifications';
+import { registerPushToken, deregisterPushToken, cancelWorkoutReminder, restoreWorkoutReminder } from '../utils/notifications';
 import { useTheme } from '../context/ThemeContext';
 import { appCache } from '../utils/appCache';
 
@@ -165,6 +167,17 @@ describe('AuthContext', () => {
       expect(mockRegisterPushToken).toHaveBeenCalled();
     });
 
+    it("puts back the incoming user's own workout reminder", async () => {
+      const { result } = renderAuth();
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      await act(async () => {
+        await result.current.login({ id: 3, username: 'alice' }, 'acc', 'ref');
+      });
+
+      expect(restoreWorkoutReminder).toHaveBeenCalledWith(3);
+    });
+
     it("loads the incoming user's accent preset", async () => {
       const { result } = renderAuth();
       await waitFor(() => expect(result.current.loading).toBe(false));
@@ -237,6 +250,20 @@ describe('AuthContext', () => {
       for (const key of clearedKeys) {
         expect(await AsyncStorage.getItem(key)).toBeNull();
       }
+    });
+
+    it("cancels the outgoing user's workout reminder", async () => {
+      const { result } = renderAuth();
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      await act(async () => {
+        await result.current.login({ id: 7, username: 'carl' }, 'acc', 'ref');
+      });
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      expect(cancelWorkoutReminder).toHaveBeenCalled();
     });
 
     it('does not throw when logging out with no active session', async () => {

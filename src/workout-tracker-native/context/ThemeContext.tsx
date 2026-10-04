@@ -84,12 +84,17 @@ function buildColors(mode: 'light' | 'dark', preset: AccentPreset): Colors {
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
+export type ThemePreference = 'system' | 'light' | 'dark';
+
 type ThemeContextType = {
   colors:            Colors;
   mode:              'light' | 'dark';
   accentPreset:      AccentPreset;
   accentPresets:     AccentPreset[];
   toggleMode:        () => void;
+  // 'system' follows the phone's light/dark setting; the others pin a mode
+  themePreference:   ThemePreference;
+  setThemePreference: (pref: ThemePreference) => void;
   setAccentPreset:   (preset: AccentPreset) => void;
   resetAccent:       () => void;
   loadAccentForUser: (userId: number | string) => Promise<void>;
@@ -147,6 +152,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(KEY_MODE, next);
   }, [mode]);
 
+  const setThemePreference = useCallback((pref: ThemePreference) => {
+    if (pref === 'system') {
+      setPinnedMode(null);
+      setMode(Appearance.getColorScheme() === 'dark' ? 'dark' : 'light');
+      AsyncStorage.removeItem(KEY_MODE);
+    } else {
+      setPinnedMode(pref);
+      setMode(pref);
+      AsyncStorage.setItem(KEY_MODE, pref);
+    }
+  }, []);
+
   const setAccentPreset = useCallback((preset: AccentPreset) => {
     setAccentState(preset);
     AsyncStorage.setItem(KEY_ACCENT, preset.name);
@@ -177,8 +194,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // theme actually changes.
   const value = useMemo<ThemeContextType>(() => ({
     colors, mode, accentPreset, accentPresets: ACCENT_PRESETS,
-    toggleMode, setAccentPreset, resetAccent, loadAccentForUser,
-  }), [colors, mode, accentPreset, toggleMode, setAccentPreset, resetAccent, loadAccentForUser]);
+    toggleMode, themePreference: pinnedMode ?? 'system', setThemePreference,
+    setAccentPreset, resetAccent, loadAccentForUser,
+  }), [colors, mode, accentPreset, toggleMode, pinnedMode, setThemePreference, setAccentPreset, resetAccent, loadAccentForUser]);
 
   // Don't render until we've loaded saved preferences to avoid a flash
   if (!ready) return null;

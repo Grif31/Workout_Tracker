@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Sentry from '@sentry/react-native';
 import { setTokens, clearTokens, registerUnauthCallback, apiFetch } from '../utils/api';
 import { appCache } from '../utils/appCache';
-import { registerPushToken, deregisterPushToken } from '../utils/notifications';
+import { registerPushToken, deregisterPushToken, cancelWorkoutReminder, restoreWorkoutReminder } from '../utils/notifications';
 import { useTheme, KEY_ACCENT } from './ThemeContext';
 import { SESSION_KEY } from './WorkoutSessionContext';
 import { GREEK_RANK_CACHED_KEY, COACH_INSIGHTS_KEY, USER_KEY } from '../constants/storageKeys';
@@ -33,6 +33,8 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
         }
         themeCtx.resetAccent();
         await deregisterPushToken();
+        // A scheduled reminder would keep firing for whoever uses the phone next
+        cancelWorkoutReminder().catch(() => {});
         Sentry.setUser(null);
         setUser(null);
         setToken(null);
@@ -116,6 +118,7 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
         setUser(userData);
         setToken(accessToken);
         registerPushToken();
+        restoreWorkoutReminder(userData.id).catch(() => {});
     };
 
     const updateUser = async (userData: any) => {

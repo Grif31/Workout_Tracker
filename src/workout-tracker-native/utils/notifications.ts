@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from './api';
+import { REMINDERS_KEY, REMINDER_HOUR_KEY, REMINDER_MIN_KEY } from '../constants/storageKeys';
 
 const PROJECT_ID = '356b88e9-4302-43fc-b50a-6d83030b8fa6';
 const REMINDER_NOTIF_KEY    = 'workout_reminder_notif_id';
@@ -146,6 +147,11 @@ export function cancelLiveWorkoutNotification(): Promise<void> {
 
 // ── Workout Reminders (daily scheduled) ──────────────────────
 
+export async function hasNotificationPermission(): Promise<boolean> {
+  const { status } = await Notifications.getPermissionsAsync();
+  return status === 'granted';
+}
+
 export async function scheduleWorkoutReminder(hour: number, minute: number): Promise<void> {
   await cancelWorkoutReminder();
   const { status } = await Notifications.getPermissionsAsync();
@@ -165,6 +171,19 @@ export async function scheduleWorkoutReminder(hour: number, minute: number): Pro
     });
     await AsyncStorage.setItem(REMINDER_NOTIF_KEY, id);
   } catch {}
+}
+
+// The reminder belongs to whoever turned it on, but it's scheduled on the
+// device: put back this user's (or none) when they sign in.
+export async function restoreWorkoutReminder(userId: number | string): Promise<void> {
+  const [[, on], [, hour], [, minute]] = await AsyncStorage.multiGet([
+    `${REMINDERS_KEY}_${userId}`, `${REMINDER_HOUR_KEY}_${userId}`, `${REMINDER_MIN_KEY}_${userId}`,
+  ]);
+  if (on === 'true') {
+    await scheduleWorkoutReminder(parseInt(hour ?? '', 10) || 9, parseInt(minute ?? '', 10) || 0);
+  } else {
+    await cancelWorkoutReminder();
+  }
 }
 
 export async function cancelWorkoutReminder(): Promise<void> {

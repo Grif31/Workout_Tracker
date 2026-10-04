@@ -39,6 +39,9 @@ import {
   REST_TIMER_KEY,
   AUTO_REST_KEY,
   VIBRATE_KEY,
+  PLATE_CALC_KEY,
+  REPEAT_LAST_SET_KEY,
+  PREFILL_PREVIOUS_KEY,
   RPE_KEY,
   WORKOUT_BACKUP_KEY,
   TIMER_CHECKPOINT_KEY,
@@ -131,9 +134,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const autoRestKey        = `${AUTO_REST_KEY}_${uid}`;
   const vibrateKey         = `${VIBRATE_KEY}_${uid}`;
   const rpeKey             = `${RPE_KEY}_${uid}`;
-  const plateCalcKey       = `workout_show_plate_calc_${uid}`;
-  const repeatLastSetKey   = `workout_repeat_last_set_${uid}`;
-  const prefillPreviousKey = `workout_prefill_previous_sets_${uid}`;
+  const plateCalcKey       = `${PLATE_CALC_KEY}_${uid}`;
+  const repeatLastSetKey   = `${REPEAT_LAST_SET_KEY}_${uid}`;
+  const prefillPreviousKey = `${PREFILL_PREVIOUS_KEY}_${uid}`;
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const SET_TYPE_COLORS = useMemo<Record<SetType, string>>(() => ({
