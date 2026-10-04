@@ -2,6 +2,10 @@ from models import db, Exercise, Set, Workout, PersonalRecord, ExerciseTemplate
 from utils.strength_standards import epley_1rm  # noqa: F401 (re-exported for callers that also need the raw formula)
 
 _EPLEY_EXPR = db.case((Set.reps <= 1, Set.weight), else_=Set.weight * (1 + Set.reps / 30.0))
+# Same limits as the estimated_1rm PRs this is compared against
+# (_compute_and_upsert_prs): Epley isn't reliable past 15 reps, and a 25-rep
+# set would inflate the baseline enough to hide a real gain
+_EPLEY_MAX_REPS = 15
 
 
 def _best_1rm_by_exercise(user_id, start, end):
@@ -17,6 +21,7 @@ def _best_1rm_by_exercise(user_id, start, end):
             Workout.date >= start, Workout.date < end,
             not_warmup, not_cardio,
             Set.reps.isnot(None), Set.weight.isnot(None),
+            Set.reps <= _EPLEY_MAX_REPS, Set.weight > 0,
             Exercise.exercise_template_id.isnot(None),
         )
         .group_by(Exercise.exercise_template_id)
@@ -25,7 +30,7 @@ def _best_1rm_by_exercise(user_id, start, end):
     return {r.exercise_template_id: r.best for r in rows}
 
 
-def compute_most_improved_lift(user_id, period_start, period_end, prev_period_start, kg_to_lbs: float = 1.0):
+def compute_most_improved_lift(user_id, period_start, period_end, prev_period_start):
     """The exercise with the largest genuine new-PR gain in [period_start, period_end)
     vs. its best in [prev_period_start, period_start).
 
@@ -38,8 +43,9 @@ def compute_most_improved_lift(user_id, period_start, period_end, prev_period_st
     directly from Set data instead.
 
     Returns None if no exercise qualifies, else
-    {exercise_name, prev_best, this_best, gain} with weights already
-    converted via kg_to_lbs (pass 1.0 to leave them in the stored unit).
+    {exercise_name, prev_best, this_best, gain} in the user's weight unit:
+    set weights and PR values are stored in it, so no conversion applies (a
+    kg_to_lbs factor here once turned a kg user's 100 kg into "220.5 kg").
     """
     new_pr_values = {
         tid: value
@@ -68,7 +74,7 @@ def compute_most_improved_lift(user_id, period_start, period_end, prev_period_st
     tmpl = db.session.get(ExerciseTemplate, best_tid)
     return {
         'exercise_name': tmpl.name,
-        'prev_best': round(prev_1rm[best_tid] * kg_to_lbs, 1),
-        'this_best': round(new_pr_values[best_tid] * kg_to_lbs, 1),
-        'gain': round(gains[best_tid] * kg_to_lbs, 1),
+        'prev_best': round(prev_1rm[best_tid], 1),
+        'this_best': round(new_pr_values[best_tid], 1),
+        'gain': round(gains[best_tid], 1),
     }

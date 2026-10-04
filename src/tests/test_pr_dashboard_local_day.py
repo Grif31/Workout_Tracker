@@ -1,5 +1,5 @@
 """The PR Dashboard counts days in the user's own calendar, not the server's."""
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 
 def _h(token, local_date=None):
@@ -16,8 +16,11 @@ def _bench(client, token):
 
 
 def test_a_pr_from_the_users_today_is_zero_days_old(client, auth_token):
-    # A US evening: the server has already moved on to the next day
-    users_today = date.today() - timedelta(days=1)
+    # A US evening: the server (UTC) has already moved on to the next day.
+    # Relative to the UTC date, since user_today() only trusts a claimed date
+    # within a day of it; relative to the machine's own date this failed
+    # whenever the machine's evening was already tomorrow in UTC.
+    users_today = datetime.now(timezone.utc).date() - timedelta(days=1)
     ex_id = _bench(client, auth_token)
     client.post('/api/workouts', json={
         'workoutName': 'W', 'date': users_today.isoformat(),

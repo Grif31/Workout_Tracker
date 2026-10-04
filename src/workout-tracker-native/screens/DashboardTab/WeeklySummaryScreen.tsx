@@ -117,9 +117,9 @@ function formatPrValue(
         ? `${pr.value} reps @ ${ctx === 0 ? 'BW' : `${ctx} ${weightUnit}`}`
         : `${pr.value} reps`;
     case 'best_time':
-      return ctx != null ? `${fmtTime(pr.value)} / ${toDist(ctx).toFixed(2)}${distanceUnit}` : fmtTime(pr.value);
+      return ctx != null ? `${fmtTime(pr.value)} / ${toDist(ctx).toFixed(2)} ${distanceUnit}` : fmtTime(pr.value);
     case 'best_distance':
-      return ctx != null ? `${toDist(pr.value).toFixed(2)}${distanceUnit} / ${ctx}min` : `${toDist(pr.value).toFixed(2)}${distanceUnit}`;
+      return ctx != null ? `${toDist(pr.value).toFixed(2)} ${distanceUnit} / ${ctx} min` : `${toDist(pr.value).toFixed(2)} ${distanceUnit}`;
     case 'max_duration':
       return fmtHold(pr.value);
     default:
@@ -372,12 +372,12 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
       )}
 
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Weekly Summary</Text>
         {data && data.workouts > 0 ? (
-          <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={8}>
+          <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={8} accessibilityRole="button" accessibilityLabel="Share your week">
             {sharing ? (
               <ActivityIndicator color={colors.textPrimary} size="small" />
             ) : (
@@ -599,13 +599,13 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
                         <Text style={styles.milText}>
                           {data.most_improved_cardio.pr_type === 'best_time'
                             ? `${data.most_improved_cardio.milestone_label} time down to ${fmtTime(data.most_improved_cardio.this_best)}`
-                            : `${data.most_improved_cardio.milestone_label} distance up to ${toDisplayDistance(data.most_improved_cardio.this_best, distanceUnit).toFixed(2)}${distanceUnit}`}
+                            : `${data.most_improved_cardio.milestone_label} distance up to ${toDisplayDistance(data.most_improved_cardio.this_best, distanceUnit).toFixed(2)} ${distanceUnit}`}
                         </Text>
                         <View style={styles.milGainBadge}>
                           <Text style={styles.milGainText}>
                             {data.most_improved_cardio.pr_type === 'best_time'
                               ? `-${fmtTime(data.most_improved_cardio.gain)}`
-                              : `+${toDisplayDistance(data.most_improved_cardio.gain, distanceUnit).toFixed(2)}${distanceUnit}`}
+                              : `+${toDisplayDistance(data.most_improved_cardio.gain, distanceUnit).toFixed(2)} ${distanceUnit}`}
                           </Text>
                         </View>
                       </View>

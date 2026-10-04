@@ -59,7 +59,6 @@ def weekly_summary():
     from datetime import date, timedelta
     user_id = get_jwt_identity()
     user = db.session.get(User, int(user_id))
-    kg_to_lbs = 2.20462 if (user.weight_unit or 'lbs') == 'kg' else 1.0
 
     today = user_today()
     this_week_start = today - timedelta(days=today.weekday())
@@ -85,12 +84,28 @@ def weekly_summary():
     )
     training_days = sorted({w.date.date().isoformat() for w in workout_rows})
 
+    # Workout.duration is the logging screen's timer, so cardio entered after
+    # the fact reads ~0 min. A workout counts its logged cardio minutes when
+    # they're the larger figure; a lifting session with a 10 min warm-up jog
+    # keeps its own 60 min timer.
+    cardio_minutes = dict(
+        db.session.query(Exercise.workout_id, db.func.sum(Set.cardio_duration))
+        .join(Set, Set.exercise_id == Exercise.id)
+        .filter(
+            Exercise.workout_id.in_([w.id for w in workout_rows] or [-1]),
+            db.func.lower(Exercise.exercise_type) == 'cardio',
+            Set.cardio_duration.isnot(None),
+        )
+        .group_by(Exercise.workout_id)
+        .all()
+    )
+
     resp: dict = {
         'week_start': week_start.isoformat(),
         'week_end': week_end.isoformat(),
         'workouts': len(workout_rows),
         'training_days': training_days,
-        'total_duration_min': sum(w.duration or 0 for w in workout_rows),
+        'total_duration_min': round(sum(max(w.duration or 0, cardio_minutes.get(w.id) or 0) for w in workout_rows)),
         'weight_unit': user.weight_unit or 'lbs',
     }
 
@@ -152,11 +167,11 @@ def weekly_summary():
         .scalar()
     ) or 0.0
     resp['rolling_avg_workouts'] = round(rolling_workout_count / 4.0, 1)
-    resp['rolling_avg_volume'] = round(rolling_volume / 4.0)
+    resp['rolling_avg_volume'] = round(volume_in_user_unit(rolling_volume, user.weight_unit) / 4.0)
 
     # Most-improved lift — shared helper so it can also feed the AI coach's
     # insight context without duplicating the query logic.
-    most_improved = compute_most_improved_lift(user_id, week_start, week_end, prev_week_start, kg_to_lbs)
+    most_improved = compute_most_improved_lift(user_id, week_start, week_end, prev_week_start)
     if most_improved:
         resp['most_improved_lift'] = most_improved
 
