@@ -21,11 +21,16 @@ import { showToast } from '../../utils/toast';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
 import { buildTemplatePrefill, parseProgramming, type ProgrammingEntry, type TemplateExercise } from '../../utils/templatePrefill';
+import { useDiscardGuard } from '../../utils/useDiscardGuard';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'TemplateDetail'>;
 type Exercise = TemplateExercise;
 type Template = { id: number; name: string; exercises: Exercise[]; programming_json?: string | null };
 type RemovedState = { index: number; exercise: Exercise } | null;
+
+// What the user can change, for spotting unsaved edits
+const snapshot = (name: string, exercises: Exercise[], prog: Record<number, ProgrammingEntry>) =>
+  JSON.stringify({ name: name.trim(), ids: exercises.map(e => e.id), prog: exercises.map(e => prog[e.id] ?? null) });
 
 export default function TemplateDetailScreen({ route, navigation }: Props) {
   const { templateId, muscleGroups: targetMuscles } = route.params;
@@ -49,6 +54,10 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
   const [listDragging, setListDragging] = useState(false);
   // Shows the "log it now?" bar right after a new template's first save
   const [justCreated, setJustCreated] = useState(false);
+  // The template as loaded or last saved; null until it has loaded
+  const [initial, setInitial] = useState<string | null>(() => (isNew ? snapshot('New Template', [], {}) : null));
+  const dirty = initial != null && snapshot(name, exercises, progMap) !== initial;
+  const leave = useDiscardGuard(navigation, dirty, "Your template changes haven't been saved.");
 
   const fetchTemplate = async () => {
     try {
@@ -58,9 +67,11 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
       ]);
       if (tmplRes?.ok) {
         const data: Template = await tmplRes.json();
+        const prog = parseProgramming(data.programming_json);
         setName(data.name);
         setExercises(data.exercises);
-        setProgMap(parseProgramming(data.programming_json));
+        setProgMap(prog);
+        setInitial(snapshot(data.name, data.exercises, prog));
       }
     } catch (err) {
       if (!isNetworkError(err)) Alert.alert("Couldn't Load Template", 'Try again in a moment.');
@@ -157,11 +168,12 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         navigation.setParams({ templateId: data.id });
         setRemoved(null);
         setJustCreated(true);
+        setInitial(snapshot(name, exercises, progMap));
       } else {
         // Toast, not an Alert: ToastBanner lives at the app root, so it stays up
         // through goBack instead of making the user tap OK before leaving.
         showToast('Template saved');
-        navigation.goBack();
+        leave(() => navigation.goBack());
       }
     } catch (err) {
       if (!isNetworkError(err)) Alert.alert("Couldn't Save Template", 'Try again in a moment.');
@@ -179,7 +191,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
           try {
             const res = await apiFetch(`/api/workout-templates/${templateId}`, { method: 'DELETE' });
             if (res.ok) {
-              navigation.goBack();
+              leave(() => navigation.goBack());
             } else if (res.status === 409) {
               const data = await res.json();
               Alert.alert(
@@ -220,7 +232,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Template</Text>

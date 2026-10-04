@@ -9,6 +9,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch, isNetworkError } from '../../utils/api';
+import { useDiscardGuard } from '../../utils/useDiscardGuard';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
 import ExerciseListModal from '../../components/ExerciseList';
@@ -46,6 +47,8 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
   const [editTarget, setEditTarget] = useState<EditState>(null);
   const [removed, setRemoved] = useState<RemovedState>(null);
   const [regenerating, setRegenerating] = useState(false);
+  // A generated plan is unsaved until saved, and regenerating it costs a call
+  const leave = useDiscardGuard(navigation, true, "This plan hasn't been saved. Leaving discards it.");
   const [saving, setSaving] = useState(false);
   const [listDragging, setListDragging] = useState(false);
 
@@ -136,9 +139,9 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
       if (!res.ok) { Alert.alert("Couldn't Save Workout", data.message || 'Try again in a moment.'); return; }
 
       if (generateType === 'template') {
-        navigation.replace('TemplateDetail', { templateId: data.id });
+        leave(() => navigation.replace('TemplateDetail', { templateId: data.id }));
       } else {
-        navigation.replace('RoutineDetail', { routineId: data.id, routineName: data.name });
+        leave(() => navigation.replace('RoutineDetail', { routineId: data.id, routineName: data.name }));
       }
     } catch (err) {
       if (!isNetworkError(err)) Alert.alert("Couldn't Save Workout", 'Try again in a moment.');
@@ -258,7 +261,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>

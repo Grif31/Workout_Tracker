@@ -18,10 +18,13 @@ import { apiFetch, isNetworkError } from '../../utils/api';
 import { showToast } from '../../utils/toast';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
+import { useDiscardGuard } from '../../utils/useDiscardGuard';
+import ExerciseProgrammingModal, { type ProgrammingValue } from '../../components/ExerciseProgrammingModal';
+import type { ProgrammingEntry } from '../../utils/templatePrefill';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'CreateRoutine'>;
 
-type Exercise = { id: number; name: string; muscle_group: string };
+type Exercise = { id: number; name: string; muscle_group: string; exercise_type?: string };
 type Template = { id: number; name: string; exercises: Exercise[] };
 
 // uid is the React key. List position can't be: LayoutAnimation tracks views by
@@ -29,8 +32,16 @@ type Template = { id: number; name: string; exercises: Exercise[] };
 // remaining cards swap contents.
 type DayEntry = { uid: string } & (
   | { mode: 'existing'; label: string; templateId: number; templateName: string }
-  | { mode: 'new'; label: string; exercises: Exercise[] }
+  // programming: sets/reps/RPE per exercise id, saved with the day's template
+  | { mode: 'new'; label: string; exercises: Exercise[]; programming: Record<number, ProgrammingEntry> }
 );
+
+// What the user has entered, minus React keys, for spotting unsaved changes
+const snapshot = (name: string, description: string, days: DayEntry[]) =>
+  JSON.stringify({ name: name.trim(), description: description.trim(), days: days.map(({ uid, ...d }) => d) });
+
+const fmtProgramming = (p: ProgrammingEntry) =>
+  `${p.sets} × ${p.reps || '?'}${p.rpe != null ? `  @ RPE ${p.rpe}` : ''}`;
 
 export default function CreateRoutineScreen({ route, navigation }: Props) {
   const routineId = route.params?.routineId;
@@ -44,8 +55,14 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
   // Every routine needs at least one day, so a new one starts with Day 1.
   // Editing loads the routine's real days instead.
   const [days, setDays] = useState<DayEntry[]>(() =>
-    isEditing ? [] : [{ uid: makeUid(), mode: 'new', label: 'Day 1', exercises: [] }],
+    isEditing ? [] : [{ uid: makeUid(), mode: 'new', label: 'Day 1', exercises: [], programming: {} }],
   );
+  // The form as loaded; anything different is unsaved. Null until an edited
+  // routine has loaded, so the load itself never counts as a change.
+  const [initial, setInitial] = useState<string | null>(() => (isEditing ? null : snapshot('', '', days)));
+  const dirty = initial != null && snapshot(routineName, description, days) !== initial;
+  const leave = useDiscardGuard(navigation, dirty, "Your routine changes haven't been saved.");
+  const [progTarget, setProgTarget] = useState<{ dayIdx: number; exercise: Exercise } | null>(null);
   const [exerciseList, setExerciseList] = useState<Exercise[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [saving, setSaving] = useState(false);
@@ -72,15 +89,17 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
       const res = await apiFetch(`/api/routines/${routineId}`);
       if (!res.ok) { Alert.alert("Couldn't Load Routine", 'Try again in a moment.'); navigation.goBack(); return; }
       const data = await res.json();
-      setRoutineName(data.name ?? '');
-      setDescription(data.description ?? '');
-      setDays((data.days ?? []).map((d: any) => ({
+      const loadedDays: DayEntry[] = (data.days ?? []).map((d: any) => ({
         uid: makeUid(),
         mode: 'existing' as const,
         label: d.label,
         templateId: d.workout_template.id,
         templateName: d.workout_template.name,
-      })));
+      }));
+      setRoutineName(data.name ?? '');
+      setDescription(data.description ?? '');
+      setDays(loadedDays);
+      setInitial(snapshot(data.name ?? '', data.description ?? '', loadedDays));
     } catch (err) {
       if (!isNetworkError(err)) Alert.alert("Couldn't Load Routine", 'Try again in a moment.');
       navigation.goBack();
@@ -108,7 +127,7 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
 
   const addDay = () => {
     animateNextRowChange();
-    setDays(prev => [...prev, { uid: makeUid(), mode: 'new', label: `Day ${prev.length + 1}`, exercises: [] }]);
+    setDays(prev => [...prev, { uid: makeUid(), mode: 'new', label: `Day ${prev.length + 1}`, exercises: [], programming: {} }]);
   };
 
   const removeDay = (idx: number) => {
@@ -119,13 +138,45 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
   const updateLabel = (idx: number, label: string) =>
     setDays(prev => prev.map((d, i) => i === idx ? { ...d, label } : d));
 
-  const switchMode = (idx: number, mode: 'new' | 'existing') => {
+  const applyMode = (idx: number, mode: 'new' | 'existing') => {
     setDays(prev => prev.map((d, i) => {
       if (i !== idx) return d;
-      if (mode === 'new') return { uid: d.uid, mode: 'new', label: d.label, exercises: [] };
+      if (mode === 'new') return { uid: d.uid, mode: 'new', label: d.label, exercises: [], programming: {} };
       return { uid: d.uid, mode: 'existing', label: d.label, templateId: 0, templateName: '' };
     }));
     if (mode === 'existing') setTmplPickerDay(idx);
+  };
+
+  // Switching a day that already has exercises would drop them silently
+  const switchMode = (idx: number, mode: 'new' | 'existing') => {
+    const day = days[idx];
+    if (!day || day.mode === mode) return;
+    if (day.mode === 'new' && day.exercises.length > 0) {
+      const n = day.exercises.length;
+      Alert.alert(
+        'Use a template instead?',
+        `This clears the ${n} exercise${n !== 1 ? 's' : ''} you added to ${day.label.trim() || 'this day'}.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Use Template', style: 'destructive', onPress: () => applyMode(idx, mode) },
+        ],
+      );
+      return;
+    }
+    applyMode(idx, mode);
+  };
+
+  const saveProgramming = (value: ProgrammingValue | null) => {
+    if (!progTarget) return;
+    const { dayIdx, exercise } = progTarget;
+    setDays(prev => prev.map((d, i) => {
+      if (i !== dayIdx || d.mode !== 'new') return d;
+      const programming = { ...d.programming };
+      if (value) programming[exercise.id] = { exercise_template_id: exercise.id, sets: value.sets, reps: value.reps, rpe: value.rpe };
+      else delete programming[exercise.id];
+      return { ...d, programming };
+    }));
+    setProgTarget(null);
   };
 
   const pickTemplate = (dayIdx: number, tmpl: Template) => {
@@ -153,7 +204,8 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
     animateNextRowChange();
     setDays(prev => prev.map((d, i) => {
       if (i !== dayIdx || d.mode !== 'new') return d;
-      return { ...d, exercises: d.exercises.filter(e => e.id !== exerciseId) };
+      const { [exerciseId]: _dropped, ...programming } = d.programming;
+      return { ...d, exercises: d.exercises.filter(e => e.id !== exerciseId), programming };
     }));
   };
 
@@ -173,6 +225,14 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
     if (days.length === 0) { Alert.alert('Add a Day', 'A routine needs at least one day.'); return; }
     const incomplete = days.find(d => d.mode === 'existing' && !d.templateId);
     if (incomplete) { Alert.alert('Choose Templates', 'Pick a template for each day, or switch the day to New.'); return; }
+    // Days are matched to logged workouts by name (the rotation on Home and
+    // the Coach), so each needs a real one
+    if (days.some(d => !d.label.trim())) { Alert.alert('Name Each Day', 'Give every day a name, like Push or Legs.'); return; }
+    const empty = days.find(d => d.mode === 'new' && d.exercises.length === 0);
+    if (empty) {
+      Alert.alert('Add Exercises', `${empty.label.trim()} has no exercises yet. Add at least one, or use a template.`);
+      return;
+    }
 
     setSaving(true);
     try {
@@ -180,10 +240,13 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
         name: routineName.trim(),
         description: description.trim() || null,
         days: days.map(d => ({
-          label: d.label,
+          label: d.label.trim(),
           ...(d.mode === 'existing'
             ? { workout_template_id: d.templateId }
-            : { exercise_template_ids: d.exercises.map(e => e.id) }),
+            : {
+                exercise_template_ids: d.exercises.map(e => e.id),
+                programming: d.exercises.filter(e => d.programming[e.id]).map(e => d.programming[e.id]),
+              }),
         })),
       };
 
@@ -199,7 +262,7 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
       if (res.ok) {
         // ToastBanner lives at the app root, so this stays visible after goBack
         showToast('Routine saved');
-        navigation.goBack();
+        leave(() => navigation.goBack());
       } else {
         const data = await res.json();
         Alert.alert("Couldn't Save Routine", data.message || 'Try again in a moment.');
@@ -223,7 +286,7 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{isEditing ? 'Edit Routine' : 'Create Routine'}</Text>
@@ -299,10 +362,18 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
                       <Ionicons name="chevron-down" size={15} color={exIdx === day.exercises.length - 1 ? colors.border : colors.textSecondary} />
                     </TouchableOpacity>
                   </View>
-                  <View style={{ flex: 1 }}>
+                  <TouchableOpacity
+                    style={{ flex: 1 }}
+                    onPress={() => setProgTarget({ dayIdx, exercise: ex })}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Sets and reps for ${ex.name}`}
+                  >
                     <Text style={styles.exerciseRowName}>{ex.name}</Text>
                     <Text style={styles.exerciseRowMuscle}>{ex.muscle_group}</Text>
-                  </View>
+                    <Text style={[styles.exerciseRowProg, !day.programming[ex.id] && { color: colors.accent }]}>
+                      {day.programming[ex.id] ? fmtProgramming(day.programming[ex.id]) : '+ Sets & reps'}
+                    </Text>
+                  </TouchableOpacity>
                   <TouchableOpacity onPress={() => removeExerciseFromDay(dayIdx, ex.id)}>
                     <Ionicons name="remove-circle-outline" size={20} color={colors.danger} />
                   </TouchableOpacity>
@@ -346,6 +417,18 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
         />
       )}
 
+      <ExerciseProgrammingModal
+        visible={progTarget !== null}
+        exerciseName={progTarget?.exercise.name ?? ''}
+        isHold={progTarget?.exercise.exercise_type === 'duration'}
+        initial={(() => {
+          const d = progTarget ? days[progTarget.dayIdx] : null;
+          return d && d.mode === 'new' ? d.programming[progTarget!.exercise.id] ?? null : null;
+        })()}
+        onClose={() => setProgTarget(null)}
+        onSave={saveProgramming}
+      />
+
       <Modal visible={tmplPickerDay !== null} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
@@ -380,6 +463,7 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
 }
 
 const createStyles = (colors: Colors) => StyleSheet.create({
+  exerciseRowProg: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingBottom: spacing.xl * 2 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },

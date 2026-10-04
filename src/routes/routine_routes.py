@@ -1,3 +1,4 @@
+import json
 from flask import Blueprint, request, jsonify, g
 from models import db, Routine, RoutineDay, WorkoutTemplate, User
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -10,6 +11,15 @@ routine_bp = Blueprint('routine_bp', __name__)
 _routine_schema = RoutineSchema()
 _update_routine_schema = UpdateRoutineSchema()
 
+
+
+
+def _apply_day_programming(template, day):
+    """Sets/reps/RPE for a day built from exercises in Create Routine, stored
+    the same way a template's own programming is (programming_json)."""
+    prog = day.get('programming')
+    if isinstance(prog, list) and prog:
+        template.programming_json = json.dumps(prog)
 
 @routine_bp.post('/api/routines')
 @jwt_required()
@@ -40,6 +50,7 @@ def create_routine():
                 return jsonify({'message': f'Template {existing_id} not found'}), 404
         else:
             template = WorkoutTemplate(user_id=user_id, name=f"{name} - {label}")
+            _apply_day_programming(template, day)
             db.session.add(template)
             db.session.flush()
             add_template_exercises(template.id, user_id, day.get('exercise_template_ids', []))
@@ -108,6 +119,7 @@ def update_routine(routine_id):
                     return jsonify({'message': f'Template {existing_id} not found'}), 404
             else:
                 template = WorkoutTemplate(user_id=user_id, name=f"{routine.name} - {label}")
+                _apply_day_programming(template, day)
                 db.session.add(template)
                 db.session.flush()
                 add_template_exercises(template.id, user_id, day.get('exercise_template_ids', []))

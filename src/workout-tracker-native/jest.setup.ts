@@ -68,6 +68,9 @@ jest.mock('@react-navigation/native', () => {
     useFocusEffect: (cb: () => void) => { useEffect(() => { cb(); return () => {}; }, []); },
     useNavigation: () => nav,
     useRoute: () => ({ params: {} }),
+    // Needs a real navigator otherwise; tests read its last call to check a
+    // screen's unsaved-changes guard (utils/useDiscardGuard)
+    usePreventRemove: jest.fn(),
   };
 });
 
