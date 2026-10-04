@@ -285,7 +285,13 @@ describe('GreekRankScreen', () => {
         gates: { [ARETE]: 80, Titan: 50 } as Record<string, number>,
       }));
       const shown = getAllByText(/th percentile/).map(n => String(n.props.children[0]));
-      expect(shown).toEqual(['50', '80'].map(v => `${v}`));
+      expect(shown).toEqual(['50th', '80th']);
+    });
+
+    it('writes percentiles as real ordinals', async () => {
+      // 72 used to read "72th"
+      const { getByText } = await renderNearTopRanks(payload(72, null));
+      expect(getByText(/you're at 72nd/)).toBeTruthy();
     });
   });
 

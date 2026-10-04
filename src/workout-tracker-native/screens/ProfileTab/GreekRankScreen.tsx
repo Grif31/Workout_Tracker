@@ -23,6 +23,7 @@ import { appCache } from '../../utils/appCache';
 import { contrastTextColor } from '../../utils/contrast';
 import { resolveMediaUrl } from '../../utils/api';
 import { type GreekRankData, bestPerformanceLeg, gateRequirementText } from '../../utils/greekRank';
+import { fmtOrdinal } from '../../utils/prFormat';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'GreekRank'>;
 
@@ -324,7 +325,7 @@ export default function GreekRankScreen({ navigation }: Props) {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Your Journey</Text>
@@ -511,8 +512,8 @@ export default function GreekRankScreen({ navigation }: Props) {
                             <Ionicons name={met ? 'checkmark-circle' : 'lock-closed'} size={16} color={met ? gateColor : colors.textSecondary} />
                             <Text style={[styles.gateRank, { color: met ? gateColor : colors.textPrimary }]}>{gateRank}</Text>
                             <Text style={styles.gateRequirement}>
-                              {Math.round(required)}th percentile
-                              {performance.best != null && !met && ` · you're at ${Math.round(performance.best)}th`}
+                              {fmtOrdinal(required)} percentile
+                              {performance.best != null && !met && ` · you're at ${fmtOrdinal(performance.best)}`}
                             </Text>
                           </View>
                         );

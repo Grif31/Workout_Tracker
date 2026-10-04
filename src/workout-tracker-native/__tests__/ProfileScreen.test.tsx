@@ -43,6 +43,20 @@ describe('ProfileScreen', () => {
   };
   const withCardio = () => mockFetchSequence([workoutsResponse, cardioStats, { data: [] }, strengthScoreResponse]);
 
+  it('lists a cardio workout with the time logged, in the user unit', async () => {
+    mockFetchSequence([
+      { data: { workouts: [{
+        id: 2, name: 'Morning Run', date: '2026-05-02T00:00:00', workout_type: 'cardio',
+        duration: 1, cardio_duration: 45, distance: 5, distance_unit: 'km',
+      }], total: 1, has_more: false } },
+      statsResponse, { data: [] }, strengthScoreResponse,
+    ]);
+    const { findByText, queryByText } = render(<ProfileScreen navigation={nav as any} route={route as any} />);
+    // The logging timer said 1 min; 5 km in the default mi
+    expect(await findByText('45 min  ·  3.11 mi')).toBeTruthy();
+    expect(queryByText(/^1 min/)).toBeNull();
+  });
+
   it('hides the cardio totals for a user with no cardio', async () => {
     const { getByText, queryByText } = render(<ProfileScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Total Volume')).toBeTruthy());

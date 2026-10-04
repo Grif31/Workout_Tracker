@@ -22,7 +22,8 @@ import { typography } from '../../theme/typography';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import type { PR } from './PersonalRecordsScreen';
-import { toDisplayVolume, roundTenth, type WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
+import { toDisplayVolume, roundTenth, type WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toKm } from '../../utils/units';
+import PressableScale from '../../components/PressableScale';
 import { fmtDuration } from '../../utils/cardioFormat';
 import { toLocalDateStr } from '../../utils/date';
 import { GREEK_RANK_CACHED_KEY, WEEKLY_GOAL_KEY, PROFILE_FRAME_RANK_KEY } from '../../constants/storageKeys';
@@ -50,6 +51,7 @@ type Workout = {
   duration?: number;
   volume?: number;
   workout_type?: string;
+  cardio_duration?: number | null;
   distance?: number;
   distance_unit?: string;
   pr_count?: number;
@@ -398,6 +400,8 @@ export default function ProfileScreen({ navigation }: Props) {
           {greekRank ? (
             <TouchableOpacity
               onPress={() => navigation.navigate('GreekRank')}
+              accessibilityRole="button"
+              accessibilityLabel={`Greek Rank: ${greekRank}`}
               style={[styles.rankBadgePill, { backgroundColor: (GREEK_RANK_COLORS[greekRank] ?? GREEK_RANK_COLORS.Neophyte) + '22', borderColor: GREEK_RANK_COLORS[greekRank] ?? GREEK_RANK_COLORS.Neophyte }]}
             >
               <Text style={[styles.rankBadgeText, { color: GREEK_RANK_COLORS[greekRank] ?? GREEK_RANK_COLORS.Neophyte }]}>
@@ -408,7 +412,7 @@ export default function ProfileScreen({ navigation }: Props) {
             <Text style={[styles.title, typography.title]}>Profile</Text>
           )}
         </View>
-        <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+        <TouchableOpacity onPress={() => navigation.navigate('Settings')} accessibilityRole="button" accessibilityLabel="Settings">
           <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
@@ -495,7 +499,13 @@ export default function ProfileScreen({ navigation }: Props) {
         <View style={{ flex: 1 }}>
           <SectionRule label="Workout History" />
         </View>
-        <TouchableOpacity onPress={() => setCalendarVisible(true)} hitSlop={8} style={styles.calendarIconBtn}>
+        <TouchableOpacity
+          onPress={() => setCalendarVisible(true)}
+          hitSlop={8}
+          style={styles.calendarIconBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Workout calendar"
+        >
           <Ionicons name="calendar-outline" size={22} color={colors.accent} />
         </TouchableOpacity>
       </View>
@@ -518,7 +528,7 @@ export default function ProfileScreen({ navigation }: Props) {
         onEndReached={fetchMoreWorkouts}
         onEndReachedThreshold={0.3}
         renderItem={({ item }) => (
-          <TouchableOpacity
+          <PressableScale
             style={styles.workoutCard}
             onPress={() =>
               item.workout_type === 'cardio'
@@ -544,9 +554,13 @@ export default function ProfileScreen({ navigation }: Props) {
               // tappable chips on a card that is itself the tap target.
               const parts = item.workout_type === 'cardio'
                 ? [
-                    item.duration != null ? `${item.duration} min` : null,
+                    // cardio_duration is the time logged; duration is only the
+                    // logging screen's timer, ~0 for a run entered afterwards
+                    (item.cardio_duration ?? item.duration) != null
+                      ? `${Math.round(item.cardio_duration ?? item.duration ?? 0)} min`
+                      : null,
                     item.distance != null && item.distance > 0
-                      ? `${item.distance.toFixed(2)} ${item.distance_unit || 'km'}`
+                      ? `${toDisplayDistance(toKm(item.distance, item.distance_unit === 'mi' ? 'mi' : 'km'), distanceUnit).toFixed(2)} ${distanceUnit}`
                       : null,
                   ]
                 : [
@@ -560,7 +574,7 @@ export default function ProfileScreen({ navigation }: Props) {
               const line = parts.filter(Boolean).join('  ·  ');
               return line ? <Text style={styles.workoutMeta}>{line}</Text> : null;
             })()}
-          </TouchableOpacity>
+          </PressableScale>
         )}
       />
 
