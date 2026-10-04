@@ -31,6 +31,7 @@ import { typography } from '../../theme/typography';
 import { apiFetch, isNetworkError } from '../../utils/api';
 import { roundTenth } from '../../utils/units';
 import { toLocalDateStr } from '../../utils/date';
+import { computeChartYAxisRange } from '../../utils/prFormat';
 import {
   MEASUREMENT_FIELDS,
   fmtSignedDelta,
@@ -52,6 +53,14 @@ type MValues = Record<MeasurementKey, string>;
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const EMPTY_M_VALUES: MValues = { waist: '', chest: '', right_arm: '', left_arm: '', right_leg: '', left_leg: '' };
+// The photo viewer sits on a near-black overlay in both themes, so its text
+// and icons are fixed white. accentText was black in dark mode for every
+// accent but Indigo, which made the viewer's close, dates, notes and delete
+// icon invisible.
+const ON_PHOTO_OVERLAY = '#fff';
+const CHART_SECTIONS = 4;
+// Snapped, evenly spaced ticks (CLAUDE.md, Charts) labelled to the unit's precision
+const fmtAxis = (label: string) => String(Math.round(Number(label)));
 
 // Edits and backdated entries can land anywhere in the history, so re-sort
 // rather than prepending. Same-day ties keep the newest entry first.
@@ -90,6 +99,8 @@ export default function MeasurementsScreen({ navigation }: Props) {
   const [mValues, setMValues]         = useState<MValues>(EMPTY_M_VALUES);
   const [mDate, setMDate]             = useState(() => new Date());
   const [mSaving, setMSaving]         = useState(false);
+  // Tapping a measurement's box opens its chart below the grid
+  const [mChartKey, setMChartKey]     = useState<MeasurementKey | null>(null);
 
   // Android has no inline date picker: mounting it opens the system dialog.
   const [androidPickerOpen, setAndroidPickerOpen] = useState(false);
@@ -383,6 +394,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
     label: new Date(log.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
   }));
   const bwAvgChartData = chartAverages.map(value => ({ value }));
+  const bwAxis = computeChartYAxisRange([...chartLogs.map(l => l.weight), ...chartAverages], CHART_SECTIONS);
 
   const currentBw = bwLogs[0]?.weight;
   const currentAvg = bwAverages[bwAverages.length - 1];
@@ -502,13 +514,17 @@ export default function MeasurementsScreen({ navigation }: Props) {
                   startOpacity2={0}
                   endOpacity2={0}
                   areaChart
-                  curved
                   hideRules
-                  hideYAxisText
-                  xAxisLabelTextStyle={{ fontSize: 10, color: colors.textSecondary }}
+                  yAxisTextStyle={styles.axisLabel}
+                  yAxisLabelWidth={36}
+                  yAxisThickness={0}
+                  formatYLabel={fmtAxis}
+                  maxValue={bwAxis.maxValue}
+                  yAxisOffset={bwAxis.yAxisOffset}
+                  xAxisLabelTextStyle={styles.axisLabel}
                   initialSpacing={10}
                   endSpacing={10}
-                  noOfSections={4}
+                  noOfSections={CHART_SECTIONS}
                 />
                 <View style={styles.legendRow}>
                   <View style={[styles.legendSwatch, { backgroundColor: colors.accent }]} />
@@ -540,6 +556,58 @@ export default function MeasurementsScreen({ navigation }: Props) {
     );
   };
 
+  const renderMeasurementChart = (key: MeasurementKey) => {
+    const label = MEASUREMENT_FIELDS.find(f => f.key === key)?.label ?? key;
+    // Oldest first, only entries that recorded this measurement
+    const points = [...mLogs].reverse().filter(m => m[key] != null);
+    if (points.length < 2) {
+      return (
+        <View style={styles.chartCard}>
+          <Text style={styles.sectionTitle}>{label}</Text>
+          <Text style={styles.emptyText}>Log {label.toLowerCase()} again to see a trend.</Text>
+        </View>
+      );
+    }
+    const values = points.map(m => roundTenth(m[key] as number));
+    const axis = computeChartYAxisRange(values, CHART_SECTIONS);
+    const step = Math.max(1, Math.ceil(points.length / 5));
+    return (
+      <View style={styles.chartCard}>
+        <Text style={styles.sectionTitle}>{label} ({lengthUnit})</Text>
+        <LineChart
+          data={points.map((m, i) => ({
+            value: values[i],
+            label: i % step === 0 || i === points.length - 1
+              ? new Date(m.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+              : '',
+          }))}
+          height={140}
+          spacing={Math.max(36, Math.floor((SCREEN_WIDTH - spacing.md * 4 - 36) / Math.max(points.length - 1, 1)))}
+          color={colors.accent}
+          thickness={2}
+          dataPointsColor={colors.accent}
+          startFillColor={colors.accent}
+          endFillColor={colors.background}
+          startOpacity={0.2}
+          endOpacity={0}
+          areaChart
+          hideRules
+          yAxisTextStyle={styles.axisLabel}
+          yAxisLabelWidth={36}
+          yAxisThickness={0}
+          formatYLabel={fmtAxis}
+          maxValue={axis.maxValue}
+          yAxisOffset={axis.yAxisOffset}
+          xAxisLabelTextStyle={styles.axisLabel}
+          initialSpacing={10}
+          endSpacing={10}
+          noOfSections={CHART_SECTIONS}
+          isAnimated
+        />
+      </View>
+    );
+  };
+
   const renderMeasurementsTab = () => {
     if (mLoading) return <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: spacing.xl }} />;
     return (
@@ -549,10 +617,20 @@ export default function MeasurementsScreen({ navigation }: Props) {
         ListHeaderComponent={
           <View>
             <View style={styles.statsGrid}>
-              {MEASUREMENT_FIELDS.map(({ key, short }) => {
+              {MEASUREMENT_FIELDS.map(({ key, short, label }) => {
                 const trend = mTrends[key];
+                const open = mChartKey === key;
                 return (
-                  <View key={key} style={styles.statBox}>
+                  <TouchableOpacity
+                    key={key}
+                    style={[styles.statBox, open && { borderColor: colors.accent }]}
+                    onPress={() => setMChartKey(open ? null : key)}
+                    disabled={!trend}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: open }}
+                    accessibilityLabel={`${label} chart`}
+                  >
                     <Text style={styles.statBoxLabel}>{short}</Text>
                     <Text style={styles.statBoxValue}>
                       {trend ? `${roundTenth(trend.latest)}` : '—'}
@@ -564,10 +642,11 @@ export default function MeasurementsScreen({ navigation }: Props) {
                     {trend?.sinceFirst != null && (
                       <Text style={styles.statBoxDelta}>{fmtSignedDelta(trend.sinceFirst)} since start</Text>
                     )}
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
+            {mChartKey && renderMeasurementChart(mChartKey)}
             <Text style={styles.sectionTitle}>History</Text>
           </View>
         }
@@ -689,12 +768,17 @@ export default function MeasurementsScreen({ navigation }: Props) {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Measurements</Text>
         {activeTab !== 'photos' ? (
-          <TouchableOpacity style={[styles.addBtn, { backgroundColor: colors.accent }]} onPress={handleAdd}>
+          <TouchableOpacity
+            style={[styles.addBtn, { backgroundColor: colors.accent }]}
+            onPress={handleAdd}
+            accessibilityRole="button"
+            accessibilityLabel={activeTab === 'bodyweight' ? 'Log weight' : 'Log measurements'}
+          >
             <Ionicons name="add" size={22} color={colors.accentText} />
           </TouchableOpacity>
         ) : (
@@ -809,7 +893,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
       <Modal visible={!!comparePair} transparent animationType="fade" onRequestClose={exitCompare}>
         <View style={styles.photoModalOverlay}>
           <TouchableOpacity style={styles.photoModalClose} onPress={exitCompare} accessibilityLabel="Close comparison">
-            <Ionicons name="close" size={28} color={colors.accentText} />
+            <Ionicons name="close" size={28} color={ON_PHOTO_OVERLAY} />
           </TouchableOpacity>
           {comparePair && (
             <>
@@ -841,8 +925,8 @@ export default function MeasurementsScreen({ navigation }: Props) {
       {/* Full-screen photo modal */}
       <Modal visible={!!selectedPhoto} transparent animationType="fade" onRequestClose={() => setSelectedPhoto(null)}>
         <View style={styles.photoModalOverlay}>
-          <TouchableOpacity style={styles.photoModalClose} onPress={() => setSelectedPhoto(null)}>
-            <Ionicons name="close" size={28} color={colors.accentText} />
+          <TouchableOpacity style={styles.photoModalClose} onPress={() => setSelectedPhoto(null)} accessibilityLabel="Close photo">
+            <Ionicons name="close" size={28} color={ON_PHOTO_OVERLAY} />
           </TouchableOpacity>
           {selectedPhoto && (
             <>
@@ -858,7 +942,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
                 style={[styles.photoDeleteBtn, { backgroundColor: colors.danger }]}
                 onPress={() => handleDeletePhoto(selectedPhoto)}
               >
-                <Ionicons name="trash-outline" size={18} color={colors.accentText} />
+                <Ionicons name="trash-outline" size={18} color={ON_PHOTO_OVERLAY} />
                 <Text style={styles.photoDeleteText}>Delete</Text>
               </TouchableOpacity>
             </>
@@ -965,7 +1049,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: spacing.sm,
     padding: spacing.md,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
+  axisLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
   statBoxLabel: {
     fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
@@ -1169,21 +1256,21 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     padding: spacing.sm,
   },
   compareTitle: {
-    color: colors.accentText,
+    color: ON_PHOTO_OVERLAY,
     fontSize: typography.fontSize.lg,
     fontWeight: '700',
     marginBottom: spacing.md,
   },
   compareRow: { flexDirection: 'row', gap: spacing.md },
   compareDate: {
-    color: colors.accentText,
+    color: ON_PHOTO_OVERLAY,
     fontSize: typography.fontSize.sm,
     fontWeight: '600',
     textAlign: 'center',
     marginTop: spacing.sm,
   },
   compareNotes: {
-    color: colors.accentText,
+    color: ON_PHOTO_OVERLAY,
     fontSize: typography.fontSize.xs,
     textAlign: 'center',
     marginTop: spacing.xs,
@@ -1193,7 +1280,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     height: SCREEN_WIDTH * 1.2,
   },
   photoNotes: {
-    color: colors.accentText,
+    color: ON_PHOTO_OVERLAY,
     fontSize: typography.fontSize.sm,
     marginTop: spacing.sm,
     textAlign: 'center',
@@ -1209,7 +1296,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: spacing.sm,
   },
   photoDeleteText: {
-    color: colors.accentText,
+    color: ON_PHOTO_OVERLAY,
     fontWeight: '600',
     fontSize: typography.fontSize.md,
   },
