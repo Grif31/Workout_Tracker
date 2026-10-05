@@ -1059,3 +1059,92 @@ Check off items as you complete them.
 - [ ] A reorder reads as continuous motion in all four call sites, with nothing left transformed after a drop
 - [ ] Home's cards can be dragged at their real size, and `WorkoutLog`'s reorder list scrolls while dragging
 - [ ] CLAUDE.md notes the new contract (variable heights, autoscroll) so future call sites know what they can rely on
+
+---
+
+## 💎 21. Premium Worth Buying
+> Goal: a free user who trains for a few weeks should *want* Premium, see exactly what it would show them about their own training, and be able to buy it without friction or doubt. Written 2026-10-04 from a review of `PaywallScreen.tsx`, `PurchaseContext.tsx` and every `isPremium` gate.
+>
+> **Where it stands.** Premium today is: AI Coach generation, AI insights, Strength Score, Endurance Score, muscle volume zones (MEV/MAV/MRV), and lifting two caps (5 templates, 2 routines). Everything else is free: logging, GPS cardio, PRs, charts, Weekly Summary, Greek Rank, measurements, Health sync. Three weaknesses:
+> 1. **Most of it is one-time value.** A generated program is used for months; a score is checked now and then. Little in Premium gives a reason to stay subscribed in month 4.
+> 2. **Free users can't see what they're missing.** The score screens and insights are locked outright, so the paywall sells a description, not the user's own numbers.
+> 3. **The purchase path has holes** (silent failures, stale entitlement, no savings shown, one generic pitch for eleven different entry points).
+>
+> **Principle to keep.** Logging is never paywalled and never degraded. Free is a complete tracker; Premium is the coach on top of it, and gets more valuable the more you log.
+>
+> **Branch note.** `launch/premium-gate` (5058e0c, PR open, not yet in `main` or the `improve/*` stack) already adds the paywall's Terms/Privacy links, removes `EXPO_PUBLIC_BETA_PREMIUM` from the production profile and adds `flask grant-beta-premium`. Merge it before starting Phase 0 so this work builds on it rather than redoing it. On the `improve/*` stack all three eas.json profiles still set `EXPO_PUBLIC_BETA_PREMIUM=true`.
+
+### Decisions needed first (owner)
+- [ ] **Prices and trial.** What are the monthly / annual / lifetime prices in App Store Connect, and is a free trial configured on any of them? The paywall already shows a trial if StoreKit reports one. Recommendation: 7-day trial on annual only, annual priced at 40-50% off twelve monthlies, lifetime at roughly 2.5x annual.
+- [ ] **Keep or drop the template/routine caps.** Caps are the only Premium feature that takes something away rather than adding something. Recommendation: keep the caps but make the onboarding-generated routine not count against them, so nobody hits a wall on day one.
+- [ ] **How much AI is free.** Recommendation: the onboarding program stays free (it already is: onboarding calls `/api/ai/generate` with no premium check), plus one free insight a week as a taste.
+- [ ] **What a free user sees of the scores.** Recommendation in Phase 2.
+
+### Phase 0 — The purchase path must be correct (launch blocker)
+> None of the rest matters if buying fails silently or a subscriber is shown the paywall.
+- [ ] Merge `launch/premium-gate`; confirm Terms of Use + Privacy Policy links are on the paywall (App Store guideline 3.1.2)
+- [ ] **Entitlement stays current** (`PurchaseContext.tsx`)
+  - [ ] `await Purchases.logIn()` before reading customer info, and take the `customerInfo` it returns; today the read can race the login and check an anonymous user
+  - [ ] `Purchases.addCustomerInfoUpdateListener` so expiry, renewal and a purchase on another device apply without a relaunch
+  - [ ] Refresh customer info when the app returns to the foreground
+  - [ ] On logout: `Purchases.logOut()` and reset `isPremium`, so a failed status check can't leave the next account with the last one's Premium
+  - [ ] Drop the duplicate login + load that both mount effects run when a user is already signed in
+- [ ] **Purchase failures say something.** Return a reason from `purchasePackage` instead of `false`: cancelled (silent), pending / Ask to Buy ("Waiting for approval"), network, store problem, already owned (offer Restore)
+- [ ] **Restore tells a failure from "nothing to restore."** A network error must not read "No purchases found"
+- [ ] **Plans that fail to load** show a message and a Try Again button instead of spinners forever; retry `getOfferings` when the paywall opens with none
+- [ ] Legal line matches the plan picked: no "automatically renew" wording under Lifetime; state price and period for subscriptions
+- [ ] Accessibility: label on Close, `selected` state on plan cards
+- [ ] Tests: entitlement listener, login race, logout reset, each failure reason, offerings retry
+
+### Phase 1 — A paywall that converts
+- [ ] **Pitch what they tapped.** Every entry point already passes `source` (`ai_coach`, `strength_score`, `endurance_score`, `muscle_volume`, `templates`, `routines`, `app_icon`) and the paywall ignores it. Map each to a headline ("Strength Score is part of Premium") and move that feature to the top of the list
+- [ ] **Show the annual saving from real store prices**: "Save 40%" badge and "$3.33/mo, billed yearly" under Annual (`product.price` / 12, formatted with `product.currencyCode`)
+- [ ] **Button names the plan**: "Start 7-Day Free Trial", "Subscribe for $39.99/year", "Buy Lifetime for $99.99"
+- [ ] **Trial timeline** when a trial is offered: Today: full access. Day 5: reminder. Day 7: first charge. Schedule the day-5 local notification on trial start (expo-notifications is already in)
+- [ ] **Feature rows with substance**: one line each on what it does for you, not just a name ("See which lifts are holding your score back")
+- [ ] Motion: press scale + haptic on plan cards, staggered fade-in on feature rows, check animation on success before the screen closes
+- [ ] **Manage Subscription** row in Account Settings for subscribers (opens Apple's subscriptions page), showing the plan and renewal date from customer info
+- [ ] Premium users who somehow reach the paywall see "You're Premium" instead of prices
+
+### Phase 2 — Let free users see their own locked value
+> A locked screen sells nothing. Their own number, partly shown, sells itself.
+- [ ] **Strength Score / Endurance Score teaser.** Free users open the screen and see their overall tier and ring; the per-lift percentiles, history chart and "what to improve" are blurred behind one Unlock button. The server already computes all of it
+- [ ] **Per-lift rank on Exercise Detail and Personal Records**: show the rank badge greyed with a lock rather than hiding it
+- [ ] **One free insight a week.** Show the top insight in full and the count of the rest ("3 more insights this week")
+- [ ] **Upsell at the moment it's relevant**, each at most once per event and never mid-workout:
+  - [ ] After a PR on a scored lift: "This puts your bench in the top X%" (X locked for free users)
+  - [ ] Weekly Summary: one locked "Coach's read on your week" card
+  - [ ] Muscle chart: a muscle sitting below MEV for 2+ weeks gets a "why" link
+  - [ ] Hitting the template/routine cap: say what the cap is before they tap, not after
+- [ ] **Premium welcome.** After purchase, a short screen listing what just unlocked with a button to each, instead of a toast
+
+### Phase 3 — Reasons to stay subscribed
+> Features that produce something new every week from data the app already has. Most are already specced; this is the order to build them in.
+- [ ] **Next-session targets (progressive overload).** For each exercise in today's workout, suggest reps x weight from the last sessions and RPE ("Last: 8 x 185 @ RPE 7. Try 8 x 190"). It shows up inside every workout, so it is the strongest reason to stay. New; needs a design pass
+- [ ] **Weekly coach review** in Weekly Summary: what went well, what lagged, one change for next week (reuses `_build_insights_context`)
+- [ ] **PR velocity + plateau / deload nudge** (§10 "PR velocity", §14 "Plateau / deload nudge")
+- [ ] **Fatigue monitor: volume vs last week** (§10)
+- [ ] **Muscle training frequency + 4-week volume trend** (§10)
+- [ ] **Push / Pull / Legs balance** (§10)
+- [ ] **Exercise substitution for flagged injuries** (§14)
+- [ ] Workout density metric (§10), lowest priority
+- [ ] Decide for each whether free users get a teaser (Phase 2 pattern) or nothing
+
+### Phase 4 — Enforce it and protect the cost
+- [ ] **Server-side premium** (§5 "Server-side premium enforcement"): `User.is_premium`, RevenueCat webhook, replace the hardcoded `is_pro = True`. Until this ships, anyone calling the API directly gets every premium field
+- [ ] Gate `/api/ai/generate` and `/api/ai/insights` on the server once `is_premium` exists, with the free allowances from "Decisions" as explicit limits (today: 10 generations and 5 insight calls a day for everyone)
+- [ ] `flask grant-beta-premium` re-run on release day (see launch notes)
+
+### Phase 5 — Know whether it's working
+> There is no product analytics in the app today, so conversion can't be measured.
+- [ ] Pick a tool (PostHog or similar) and add a thin `track()` wrapper; ids only, no PII, same rule as Sentry
+- [ ] Events: `paywall_viewed {source}`, `plan_selected`, `purchase_started`, `purchase_completed {plan, trial}`, `purchase_failed {reason}`, `restore_*`, `upsell_shown {where}`, `upsell_tapped`
+- [ ] Watch in RevenueCat: trial start rate, trial-to-paid, month-1 and month-3 retention, plan mix
+- [ ] First things to test once there's traffic: trial vs no trial, annual-first vs monthly-first, teaser depth on the score screens
+
+### Done when
+- [ ] A purchase, a restore, a failure and an expiry each behave correctly on a real device with a sandbox account
+- [ ] Every paywall entry point shows a pitch for the thing that was tapped
+- [ ] A free user can see their own Strength Score tier and one real insight without paying
+- [ ] At least two Phase 3 features give a subscriber something new each week
+- [ ] Paywall views and conversions are measured per source
