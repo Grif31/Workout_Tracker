@@ -8,9 +8,11 @@ jest.mock('../context/PurchaseContext', () => ({
   usePurchase: jest.fn(),
 }));
 jest.mock('../utils/toast', () => ({ showToast: jest.fn() }));
+jest.mock('../utils/links', () => ({ openExternalLink: jest.fn() }));
 
 const mockUsePurchase = usePurchase as jest.Mock;
 const { showToast } = require('../utils/toast');
+const { openExternalLink } = require('../utils/links');
 
 const nav = createMockNavigation();
 const route = createMockRoute('Paywall');
@@ -183,5 +185,14 @@ describe('PaywallScreen', () => {
       await waitFor(() => expect(showToast).toHaveBeenCalledWith('No purchases found'));
       expect(nav.goBack).not.toHaveBeenCalled();
     });
+  });
+
+  // Apple rejects subscription apps whose purchase screen lacks these (guideline 3.1.2)
+  it('links to the Terms of Use and Privacy Policy', () => {
+    const { getByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
+    fireEvent.press(getByText('Terms of Use'));
+    expect(openExternalLink).toHaveBeenCalledWith('https://aretefitnessapp.com/terms');
+    fireEvent.press(getByText('Privacy Policy'));
+    expect(openExternalLink).toHaveBeenCalledWith('https://aretefitnessapp.com/privacy');
   });
 });

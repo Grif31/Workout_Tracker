@@ -22,9 +22,8 @@ const PREMIUM_FEATURES = [
   ...(APP_ICONS_ENABLED ? ['Custom app icons'] : []),
 ];
 
-// Testers get premium for free while this is set (see PurchaseContext), so the
-// premium pitch slide is hidden. It returns automatically at public launch when
-// EXPO_PUBLIC_BETA_PREMIUM is removed from eas.json.
+// Builds that set this hand out premium for free (see PurchaseContext), so the
+// premium pitch slide is hidden. Production doesn't set it.
 const BETA_PREMIUM = process.env.EXPO_PUBLIC_BETA_PREMIUM === 'true';
 
 const SLIDES: Slide[] = [
