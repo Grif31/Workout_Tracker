@@ -51,6 +51,14 @@ npx expo install <pkg>      # install Expo-compatible package version
 #   Before pushing, prove EAS can install: `npm_config_legacy_peer_deps=false npm ci` (only the development profile sets legacy peer deps)
 ```
 
+### Testing in-app purchases
+The normal dev build can't load plans: its bundle ID is `com.aretefitness.app.dev` and Apple only serves the in-app purchases to `com.aretefitness.app`. Use the `development-store` EAS profile, a dev client with the production bundle ID (it replaces the App Store/TestFlight copy on the phone while installed):
+```bash
+eas build --profile development-store --platform ios   # once, then install it
+cp .env.purchase-testing .env && npx expo start -c     # RevenueCat key on, beta premium off
+```
+A dev client takes its `EXPO_PUBLIC_*` values from the local `.env` at bundle time, not from the profile's `env`, which is why the swap is needed; `.env.purchase-testing` is local and gitignored. Sign in with an account that has no premium grant, with a Sandbox Apple Account set on the phone (Settings → Developer). Put the normal one back afterwards (`cp .env.normal .env`, then restart with `-c`), or every account in dev reads as free. Keep `.env.normal` in step with `.env` when adding a variable.
+
 ### Backend (`src/`)
 ```bash
 ./venv/Scripts/flask.exe run --debug          # start Flask dev server

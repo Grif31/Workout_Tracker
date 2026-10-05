@@ -15,6 +15,15 @@
         "EXPO_PUBLIC_BETA_PREMIUM": "true"
       }
     },
+    "development-store": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "node": "22.14.0",
+      "env": {
+        "EXPO_PUBLIC_USE_RN_FETCH": "1",
+        "npm_config_legacy_peer_deps": "true"
+      }
+    },
     "preview": {
       "distribution": "internal",
       "autoIncrement": true,

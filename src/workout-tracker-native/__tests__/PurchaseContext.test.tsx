@@ -4,24 +4,13 @@
  * without touching RevenueCat. That means the real provider has never been
  * exercised anywhere. This file unmocks it and tests the real implementation.
  *
- * Two env facts about this repo constrain what's testable here:
- *  - EXPO_PUBLIC_REVENUECAT_IOS_KEY has no value in `.env` or ambient env,
- *    so `API_KEY` in PurchaseContext.tsx is always '' in this test run —
- *    the fail-closed branch (`!API_KEY || Platform.OS !== 'ios'`) always
- *    triggers, and Purchases.configure is never reachable here.
- *  - `.env` sets EXPO_PUBLIC_BETA_PREMIUM=true, and react-native-dotenv
- *    inlines that `process.env.*` read into a literal at babel-transform
- *    time — so BETA_PREMIUM is unconditionally `true` in this test run and
- *    cannot be varied at runtime (mutating process.env has no effect on an
- *    already-compiled constant, and re-requiring the module with a reset
- *    registry to force re-evaluation pulls in a second React instance,
- *    breaking hooks — not worth the fragility).
- * Both constants are frozen module-wide for this whole file as a result.
- * What IS still real and worth testing: the fail-closed gate firing as
- * expected given those frozen values, and — most importantly — the actual
- * money-path functions (purchasePackage/restorePurchases), which read the
- * SDK's returned entitlement directly and don't reference either constant.
+ * This file pins the build with no RevenueCat key and beta premium on (the
+ * dev and preview setup), whatever `.env` holds: the fail-closed gate, and
+ * the money-path functions (purchasePackage/restorePurchases), which read
+ * the SDK's returned entitlement directly. PurchaseEntitlement.test.tsx
+ * covers the build with a key.
  */
+jest.mock('../constants/purchaseConfig', () => ({ REVENUECAT_IOS_KEY: '', BETA_PREMIUM: true }));
 jest.mock('react-native-purchases', () => ({
   __esModule: true,
   default: {
@@ -65,7 +54,7 @@ describe('PurchaseContext', () => {
     (Platform as any).OS = REAL_PLATFORM_OS;
   });
 
-  describe('fail-closed gate (this build has no RevenueCat key configured)', () => {
+  describe('fail-closed gate (a build with no RevenueCat key)', () => {
     it('never calls Purchases.configure, on iOS or Android', async () => {
       (Platform as any).OS = 'ios';
       const { result: iosResult } = renderPurchase();
@@ -85,7 +74,6 @@ describe('PurchaseContext', () => {
     });
 
     it('the beta-premium build flag forces isPremium true regardless of platform or user', async () => {
-      // Documents this repo's real current behavior — see file header.
       mockUseAuth.mockReturnValue({ user: { id: 42 } });
       const { result } = renderPurchase();
       await waitFor(() => expect(result.current.loading).toBe(false));
