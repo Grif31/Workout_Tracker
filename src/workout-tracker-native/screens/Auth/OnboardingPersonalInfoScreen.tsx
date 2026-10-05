@@ -1,11 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
   StatusBar, ActivityIndicator, Platform, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
 import { OnboardingStackParamsList } from '../../navigation/types';
@@ -13,7 +12,6 @@ import { AUTH } from '../../theme/authColors';
 import { apiFetch } from '../../utils/api';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
 import { toLocalDateStr } from '../../utils/date';
 
 type Props = NativeStackScreenProps<OnboardingStackParamsList, 'OnboardingPersonalInfo'>;
@@ -30,15 +28,10 @@ export default function OnboardingPersonalInfoScreen({ navigation }: Props) {
   const [birthDate, setBirthDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving] = useState(false);
-  // km selected on the units screen implies metric — measure height in cm, not ft/in
-  const [useMetricHeight, setUseMetricHeight] = useState(false);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user.id}`).then(v => {
-      setUseMetricHeight(v === 'km');
-    });
-  }, [user?.id]);
+  const [gender, setGender] = useState<'male' | 'female' | null>(null);
+  // Lengths follow the weight unit everywhere (body measurements are cm for
+  // kg users, utils/bodyMetrics lengthUnitFor), so height does too
+  const useMetricHeight = weightUnit === 'kg';
 
   const goNext = () => navigation.navigate('Onboarding');
 
@@ -47,6 +40,7 @@ export default function OnboardingPersonalInfoScreen({ navigation }: Props) {
     try {
       const updates: Record<string, unknown> = {};
       if (name.trim()) updates.name = name.trim();
+      if (gender) updates.gender = gender;
       if (birthDate) updates.birth_date = toLocalDateStr(birthDate);
       if (useMetricHeight && heightCm) {
         updates.height = parseFloat(heightCm) / 2.54;
@@ -158,6 +152,22 @@ export default function OnboardingPersonalInfoScreen({ navigation }: Props) {
           keyboardType="decimal-pad"
         />
 
+        <Text style={styles.label}>Sex</Text>
+        <View style={styles.row}>
+          {([['male', 'Male'], ['female', 'Female']] as const).map(([value, label]) => (
+            <TouchableOpacity
+              key={value}
+              style={[styles.input, styles.choice, gender === value && styles.choiceOn]}
+              onPress={() => setGender(g => (g === value ? null : value))}
+              accessibilityRole="button"
+              accessibilityState={{ selected: gender === value }}
+            >
+              <Text style={[styles.inputText, gender === value && styles.choiceOnText]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <Text style={styles.hint}>Used to compare your lifts with lifters of the same sex in your Strength Score.</Text>
+
         <Text style={styles.label}>Height</Text>
         {useMetricHeight ? (
           <TextInput
@@ -236,6 +246,9 @@ const styles = StyleSheet.create({
   hint: { fontSize: typography.fontSize.sm, color: AUTH.subtext, marginTop: -spacing.sm, marginBottom: spacing.md },
 
   row: { flexDirection: 'row', gap: spacing.sm },
+  choice: { flex: 1, alignItems: 'center' },
+  choiceOn: { borderColor: AUTH.accent, backgroundColor: AUTH.accent + '22' },
+  choiceOnText: { color: AUTH.accent, fontWeight: '700' },
   halfInputWrapper: { flex: 1 },
 
   pickerModal: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },

@@ -10,6 +10,11 @@ import SplashView from '../components/SplashView';
 
 type Props = { onComplete: () => void };
 
+// apiFetch has no timeout, so one stalled request on a bad connection would
+// hold the splash until the OS gives up. Past this the app opens anyway: every
+// screen fetches what it didn't find in the cache.
+export const PRELOAD_MAX_WAIT_MS = 8000;
+
 function buildCalls() {
   const now = new Date();
   const localDate = toLocalDateStr(now);
@@ -33,6 +38,12 @@ export default function PreloadScreen({ onComplete }: Props) {
   const { user } = useAuth();
   const progress = useRef(new Animated.Value(0)).current;
   const completed = useRef(0);
+  const finished = useRef(false);
+  const finish = () => {
+    if (finished.current) return;
+    finished.current = true;
+    onComplete();
+  };
   const CALLS = buildCalls();
   const total = CALLS.length + 1; // +1 for profile_stats (needs weekly goal from AsyncStorage)
 
@@ -44,7 +55,7 @@ export default function PreloadScreen({ onComplete }: Props) {
       useNativeDriver: false,
     }).start();
     if (completed.current >= total) {
-      setTimeout(onComplete, 150);
+      setTimeout(finish, 150);
     }
   };
 
@@ -69,6 +80,8 @@ export default function PreloadScreen({ onComplete }: Props) {
       ]);
     };
     run();
+    const giveUp = setTimeout(finish, PRELOAD_MAX_WAIT_MS);
+    return () => clearTimeout(giveUp);
   }, []);
 
   return (

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,12 @@ import { typography } from '../../theme/typography';
 
 type Props = NativeStackScreenProps<AuthStackParamsList, 'Signup'>;
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// The server's validation errors read "field: message"; show the message only
+const serverMessage = (msg: unknown) =>
+  typeof msg === 'string' ? msg.replace(/^\w+: /, '') : null;
+
 export default function SignupScreen({ navigation }: Props) {
   const { login } = useAuth();
   const { handleApple, handleGoogle, handleFacebook } = useSocialAuth();
@@ -37,11 +43,22 @@ export default function SignupScreen({ navigation }: Props) {
   const [showConfirm, setShowConfirm]     = useState(false);
   const [error, setError]                 = useState('');
   const [loading, setLoading]             = useState(false);
+  const emailRef    = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const confirmRef  = useRef<TextInput>(null);
 
   const handleSignup = async () => {
     setError('');
     if (!username.trim() || !email.trim() || !password || !confirmPassword) {
       setError('Please fill in all fields.');
+      return;
+    }
+    if (username.trim().length < 2 || username.trim().length > 50) {
+      setError('Usernames need 2 to 50 characters.');
+      return;
+    }
+    if (!EMAIL_RE.test(email.trim())) {
+      setError('Enter a valid email address, like name@example.com.');
       return;
     }
     if (password.length < 6) {
@@ -63,7 +80,7 @@ export default function SignupScreen({ navigation }: Props) {
       if (res.ok) {
         await login(data.user ?? data, data.token ?? data.access_token, data.refresh_token);
       } else {
-        setError(data.message || 'Could not create account.');
+        setError(serverMessage(data.message) || 'Could not create account.');
       }
     } catch {
       setError('Something went wrong. Please try again.');
@@ -86,7 +103,7 @@ export default function SignupScreen({ navigation }: Props) {
           showsVerticalScrollIndicator={false}
         >
           {/* Back */}
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} accessibilityLabel="Go back">
             <Ionicons name="arrow-back" size={24} color={AUTH.text} />
           </TouchableOpacity>
 
@@ -105,7 +122,13 @@ export default function SignupScreen({ navigation }: Props) {
               placeholder="Username"
               placeholderTextColor={AUTH.placeholder}
               autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="username-new"
+              textContentType="username"
               keyboardAppearance="dark"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => emailRef.current?.focus()}
               value={username}
               onChangeText={setUsername}
             />
@@ -116,11 +139,18 @@ export default function SignupScreen({ navigation }: Props) {
             <Ionicons name="mail-outline" size={18} color={AUTH.subtext} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
+              ref={emailRef}
               placeholder="e.g. john@example.com"
               placeholderTextColor={AUTH.placeholder}
               autoCapitalize="none"
+              autoCorrect={false}
               keyboardType="email-address"
+              autoComplete="email"
+              textContentType="emailAddress"
               keyboardAppearance="dark"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => passwordRef.current?.focus()}
               value={email}
               onChangeText={setEmail}
             />
@@ -130,15 +160,25 @@ export default function SignupScreen({ navigation }: Props) {
           <View style={styles.inputWrapper}>
             <Ionicons name="lock-closed-outline" size={18} color={AUTH.subtext} style={styles.inputIcon} />
             <TextInput
+              ref={passwordRef}
               style={[styles.input, { flex: 1 }]}
               placeholder="Min. 6 characters"
               placeholderTextColor={AUTH.placeholder}
               secureTextEntry={!showPw}
+              autoComplete="new-password"
+              textContentType="newPassword"
               keyboardAppearance="dark"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => confirmRef.current?.focus()}
               value={password}
               onChangeText={setPassword}
             />
-            <TouchableOpacity onPress={() => setShowPw(p => !p)} style={styles.eyeBtn}>
+            <TouchableOpacity
+              onPress={() => setShowPw(p => !p)}
+              style={styles.eyeBtn}
+              accessibilityLabel={showPw ? 'Hide password' : 'Show password'}
+            >
               <Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={20} color={AUTH.subtext} />
             </TouchableOpacity>
           </View>
@@ -151,14 +191,23 @@ export default function SignupScreen({ navigation }: Props) {
             <Ionicons name="lock-closed-outline" size={18} color={AUTH.subtext} style={styles.inputIcon} />
             <TextInput
               style={[styles.input, { flex: 1 }]}
+              ref={confirmRef}
               placeholder="Confirm password"
               placeholderTextColor={AUTH.placeholder}
               secureTextEntry={!showConfirm}
+              autoComplete="new-password"
+              textContentType="newPassword"
               keyboardAppearance="dark"
+              returnKeyType="go"
+              onSubmitEditing={handleSignup}
               value={confirmPassword}
               onChangeText={setConfirm}
             />
-            <TouchableOpacity onPress={() => setShowConfirm(p => !p)} style={styles.eyeBtn}>
+            <TouchableOpacity
+              onPress={() => setShowConfirm(p => !p)}
+              style={styles.eyeBtn}
+              accessibilityLabel={showConfirm ? 'Hide password' : 'Show password'}
+            >
               <Ionicons name={showConfirm ? 'eye-off-outline' : 'eye-outline'} size={20} color={AUTH.subtext} />
             </TouchableOpacity>
           </View>

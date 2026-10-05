@@ -12,7 +12,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ONBOARDING_COMPLETE_KEY, WEEKLY_GOAL_KEY } from '../../constants/storageKeys';
+import { WEEKLY_GOAL_KEY } from '../../constants/storageKeys';
+import { markOnboardingComplete } from '../../utils/onboarding';
 import { useAuth } from '../../context/AuthContext';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OnboardingStackParamsList } from '../../navigation/types';
@@ -30,7 +31,18 @@ type Msg =
   | { id: string; type: 'user'; text: string }
   | { id: string; type: 'typing' };
 
-const STEPS = [
+type Step = {
+  key: string;
+  botText: string;
+  options: { label: string; value: string }[];
+  // Several options can be picked before a Done chip; 'none' still answers at once
+  multi?: boolean;
+};
+
+const AVOID_STEP = 5;
+const DONE_VALUE = '__done';
+
+const STEPS: Step[] = [
   {
     key: 'goal',
     botText: "Hey! I'm your Aretē coach 👋\n\nWhat's your main goal?",
@@ -69,15 +81,16 @@ const STEPS = [
     key: 'session_length',
     botText: 'How long can each workout be?',
     options: [
-      { label: '30–45 min', value: '30' },
-      { label: '45–60 min', value: '45' },
-      { label: '60–75 min', value: '60' },
-      { label: '90+ min', value: '90' },
+      { label: '30 min', value: '30' },
+      { label: '45 min', value: '45' },
+      { label: '60 min', value: '60' },
+      { label: '90 min', value: '90' },
     ],
   },
   {
     key: 'avoid',
-    botText: 'Any injuries or areas I should work around?',
+    botText: 'Any injuries or areas I should work around? Pick all that apply.',
+    multi: true,
     options: [
       { label: 'Lower back', value: 'lower_back' },
       { label: 'Knees', value: 'knees' },
@@ -121,9 +134,10 @@ export default function OnboardingScreen({ onComplete }: Props) {
   const [generatedRoutine, setGeneratedRoutine] = useState<GeneratedRoutine | null>(null);
   const [answers, setAnswers] = useState({
     goal: '', exp: '', days: 0,
-    equipment: 'full_gym', sessionLength: '60', avoid: 'none',
+    equipment: 'full_gym', sessionLength: '60', avoid: [] as string[],
     routine: false,
   });
+  const [avoidPicks, setAvoidPicks] = useState<string[]>([]);
 
   const scrollRef = useRef<ScrollView>(null);
 
@@ -134,6 +148,11 @@ export default function OnboardingScreen({ onComplete }: Props) {
 
   const handleSelect = (option: { label: string; value: string }) => {
     if (!chipsActive) return;
+    if (STEPS[currentStep].multi && option.value !== 'none' && option.value !== DONE_VALUE) {
+      setAvoidPicks(prev =>
+        prev.includes(option.value) ? prev.filter(v => v !== option.value) : [...prev, option.value]);
+      return;
+    }
     setChipsActive(false);
 
     const newAnswers = { ...answers };
@@ -142,7 +161,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
     else if (currentStep === 2) newAnswers.days = parseInt(option.value, 10);
     else if (currentStep === 3) newAnswers.equipment = option.value;
     else if (currentStep === 4) newAnswers.sessionLength = option.value;
-    else if (currentStep === 5) newAnswers.avoid = option.value;
+    else if (currentStep === AVOID_STEP) newAnswers.avoid = option.value === 'none' ? [] : avoidPicks;
     else if (currentStep === 6) newAnswers.routine = option.value === 'yes';
     setAnswers(newAnswers);
 
@@ -192,17 +211,14 @@ export default function OnboardingScreen({ onComplete }: Props) {
       equipment: a.equipment,
       days_per_week: a.days || 3,
       session_length_min: parseInt(a.sessionLength, 10) || 60,
-      avoid: a.avoid && a.avoid !== 'none' ? [a.avoid] : [],
+      avoid: a.avoid,
       notes: '',
     };
     await AsyncStorage.multiSet([
       [`${COACH_PROFILE_KEY}_${user?.id}`, JSON.stringify(profile)],
-      ['user_goal', a.goal],
-      ['user_experience', a.exp],
-      ['user_days_per_week', String(a.days)],
       [`${WEEKLY_GOAL_KEY}_${user?.id}`, String(a.days)],
-      [ONBOARDING_COMPLETE_KEY, 'true'],
     ]);
+    if (user?.id) await markOnboardingComplete(user.id);
   };
 
   const runGeneration = async (a: typeof answers) => {
@@ -307,7 +323,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
           text: 'Skip',
           style: 'destructive',
           onPress: async () => {
-            await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
+            if (user?.id) await markOnboardingComplete(user.id);
             onComplete();
           },
         },
@@ -315,7 +331,9 @@ export default function OnboardingScreen({ onComplete }: Props) {
     );
   };
 
-  const currentOptions = !isDone && chipsActive ? STEPS[currentStep].options : [];
+  const step = STEPS[currentStep];
+  const currentOptions = !isDone && chipsActive ? step.options : [];
+  const pickedLabels = step.options.filter(o => avoidPicks.includes(o.value)).map(o => o.label);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -379,16 +397,29 @@ export default function OnboardingScreen({ onComplete }: Props) {
       {currentOptions.length > 0 && (
         <View style={styles.chipsArea}>
           <View style={styles.chips}>
-            {currentOptions.map(opt => (
+            {currentOptions.map(opt => {
+              const picked = step.multi && avoidPicks.includes(opt.value);
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.chip, picked && styles.chipPicked]}
+                  onPress={() => handleSelect(opt)}
+                  activeOpacity={0.75}
+                  accessibilityState={step.multi ? { selected: !!picked } : undefined}
+                >
+                  <Text style={[styles.chipText, picked && styles.chipTextPicked]}>{opt.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+            {step.multi && avoidPicks.length > 0 && (
               <TouchableOpacity
-                key={opt.value}
-                style={styles.chip}
-                onPress={() => handleSelect(opt)}
+                style={[styles.chip, styles.chipDone]}
+                onPress={() => handleSelect({ label: pickedLabels.join(', '), value: DONE_VALUE })}
                 activeOpacity={0.75}
               >
-                <Text style={styles.chipText}>{opt.label}</Text>
+                <Text style={styles.chipDoneText}>Done</Text>
               </TouchableOpacity>
-            ))}
+            )}
           </View>
         </View>
       )}
@@ -505,6 +536,10 @@ const styles = StyleSheet.create({
     borderColor: AUTH.border,
   },
   chipText: { fontSize: typography.fontSize.sm, fontWeight: '500', color: AUTH.text },
+  chipPicked: { borderColor: AUTH.accent, backgroundColor: AUTH.accent + '22' },
+  chipTextPicked: { color: AUTH.accent, fontWeight: '700' },
+  chipDone: { backgroundColor: AUTH.accent, borderColor: AUTH.accent },
+  chipDoneText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: AUTH.bg },
 
   footer: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, paddingTop: spacing.sm },
   continueBtn: {

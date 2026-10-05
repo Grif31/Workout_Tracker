@@ -40,17 +40,27 @@ describe('OnboardingUnitsScreen', () => {
     expect(getByText('Set Your Units')).toBeTruthy();
   });
 
-  it('defaults to lbs + mi and PATCHes weight_unit lbs on continue', async () => {
+  it("leaves the server alone when the weight unit isn't changed", async () => {
     const { getByText, nav } = renderScreen();
     fireEvent.press(getByText('Continue'));
 
-    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
-    const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
-    expect(url).toMatch(/\/api\/me$/);
-    expect(init.method).toBe('PATCH');
-    expect(JSON.parse(init.body)).toEqual({ weight_unit: 'lbs' });
-    expect(mockUpdateUser).toHaveBeenCalledWith({ weight_unit: 'lbs' });
     await waitFor(() => expect(nav.navigate).toHaveBeenCalledWith('OnboardingPersonalInfo'));
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
+  it('keeps the old unit, and says so, when the server rejects the change', async () => {
+    const alertSpy = jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => {});
+    mockFetch({ message: 'boom' }, false, 500);
+    const { getByText, UNSAFE_getAllByType, nav } = renderScreen();
+    const [weightSwitch] = UNSAFE_getAllByType(require('react-native').Switch);
+    fireEvent(weightSwitch, 'valueChange', true);
+    fireEvent.press(getByText('Continue'));
+
+    await waitFor(() => expect(nav.navigate).toHaveBeenCalledWith('OnboardingPersonalInfo'));
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith("Couldn't Save Weight Unit", expect.stringContaining('lbs'));
+    alertSpy.mockRestore();
   });
 
   it('sends weight_unit kg when the weight switch is toggled on', async () => {
@@ -97,15 +107,18 @@ describe('OnboardingUnitsScreen', () => {
   });
 
   it('still advances to the next step when the API call fails', async () => {
+    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => {});
     (global.fetch as jest.Mock) = jest.fn(() => Promise.reject(new Error('offline')));
-    const { getByText, nav } = renderScreen();
+    const { getByText, nav, UNSAFE_getAllByType } = renderScreen();
+    fireEvent(UNSAFE_getAllByType(require('react-native').Switch)[0], 'valueChange', true);
     fireEvent.press(getByText('Continue'));
     await waitFor(() => expect(nav.navigate).toHaveBeenCalledWith('OnboardingPersonalInfo'));
   });
 
   it('pre-selects km when the stored distance unit is km', async () => {
     await AsyncStorage.setItem('gps_distance_unit_1', 'km');
-    const { getByText } = renderScreen();
+    const { getByText, UNSAFE_getAllByType } = renderScreen();
+    await waitFor(() => expect(UNSAFE_getAllByType(require('react-native').Switch)[1].props.value).toBe(true));
     fireEvent.press(getByText('Continue'));
     await waitFor(() =>
       expect(AsyncStorage.setItem).toHaveBeenLastCalledWith('gps_distance_unit_1', 'km'),

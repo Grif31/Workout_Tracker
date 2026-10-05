@@ -107,8 +107,8 @@ describe('OnboardingPersonalInfoScreen', () => {
     expect(findCall(/\/api\/bodyweight$/)).toBeUndefined();
   });
 
-  it('uses a cm height field and converts to inches when the stored distance unit is km', async () => {
-    await AsyncStorage.setItem('gps_distance_unit_1', 'km');
+  it('uses a cm height field and converts to inches for a kg user', async () => {
+    mockWeightUnit = 'kg';
     const { getByText, getByPlaceholderText, queryByPlaceholderText } = renderScreen();
 
     await waitFor(() => expect(getByPlaceholderText('cm')).toBeTruthy());
@@ -120,6 +120,15 @@ describe('OnboardingPersonalInfoScreen', () => {
     await waitFor(() => expect(findCall(/\/api\/me$/)).toBeDefined());
     const [, init] = findCall(/\/api\/me$/)!;
     expect(JSON.parse(init.body).height).toBeCloseTo(70, 5);
+  });
+
+  it('saves the sex picked, for Strength Score percentiles', async () => {
+    const { getByText } = renderScreen();
+    fireEvent.press(getByText('Female'));
+    fireEvent.press(getByText('Continue'));
+
+    await waitFor(() => expect(findCall(/\/api\/me$/)).toBeDefined());
+    expect(JSON.parse(findCall(/\/api\/me$/)![1].body).gender).toBe('female');
   });
 
   it('labels the weight field with the user\'s unit (kg)', () => {

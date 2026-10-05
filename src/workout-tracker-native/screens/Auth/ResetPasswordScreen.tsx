@@ -38,6 +38,7 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
   const [resent,      setResent]      = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
   const checkAnim = useRef(new Animated.Value(0)).current;
+  const confirmRef = useRef<TextInput>(null);
 
   const handleVerify = async () => {
     setError('');
@@ -81,12 +82,18 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
     setResent(false);
     setResending(true);
     try {
-      await apiFetch('/api/forgot-password', {
+      const res = await apiFetch('/api/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      setResent(true);
+      if (res.ok) {
+        setResent(true);
+      } else {
+        // e.g. the rate limit: saying "sent" would leave them waiting for nothing
+        const data = await res.json().catch(() => null);
+        setError(data?.message || "Couldn't send a new code. Try again in a few minutes.");
+      }
     } catch {
       setError('Could not connect. Please check your connection.');
     } finally {
@@ -208,8 +215,12 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
                   placeholder="6-digit code"
                   placeholderTextColor={AUTH.placeholder}
                   keyboardType="number-pad"
+                  autoComplete="one-time-code"
+                  textContentType="oneTimeCode"
                   keyboardAppearance="dark"
                   maxLength={6}
+                  returnKeyType="done"
+                  onSubmitEditing={handleVerify}
                   value={otp}
                   onChangeText={setOtp}
                   autoFocus
@@ -248,7 +259,12 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
                   placeholder="New password (min 6 chars)"
                   placeholderTextColor={AUTH.placeholder}
                   secureTextEntry={!showPw}
+                  autoComplete="new-password"
+                  textContentType="newPassword"
                   keyboardAppearance="dark"
+                  returnKeyType="next"
+                  submitBehavior="submit"
+                  onSubmitEditing={() => confirmRef.current?.focus()}
                   value={newPassword}
                   onChangeText={setNewPassword}
                   autoFocus
@@ -262,10 +278,15 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
                 <Ionicons name="lock-closed-outline" size={18} color={AUTH.subtext} style={styles.inputIcon} />
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
+                  ref={confirmRef}
                   placeholder="Confirm new password"
                   placeholderTextColor={AUTH.placeholder}
                   secureTextEntry={!showConfirm}
+                  autoComplete="new-password"
+                  textContentType="newPassword"
                   keyboardAppearance="dark"
+                  returnKeyType="go"
+                  onSubmitEditing={handleReset}
                   value={confirmPw}
                   onChangeText={setConfirmPw}
                 />

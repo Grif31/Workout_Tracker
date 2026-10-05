@@ -273,6 +273,7 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 | `workout_show_plate_calc_${uid}` | true | Show plate calculator in workout |
 | `workout_repeat_last_set_${uid}` | false | Add Set pre-fills the new set with the last set's values |
 | `workout_prefill_previous_sets_${uid}` | true | Adding an exercise pre-fills its sets with last session's reps/weight for that exercise |
+| `onboarding_complete_${uid}` | — | This account finished or skipped onboarding on this phone (`utils/onboarding.ts`). Checked after the preload: an account with logged workouts skips onboarding and gets the flag. The unsuffixed `onboarding_complete` from older builds was one flag for the whole phone, which let a second account skip onboarding; it's handed to whichever account is signed in when the update lands, then deleted |
 | `profile_frame_rank_${uid}` | 'Neophyte' | Selected avatar frame rank name |
 | `home_streak_type_${uid}` | 'weekly' | Which streak Home's top bar shows ('weekly' \| 'monthly' \| 'daily'), picked in its streak modal |
 | `@pr_pins_${uid}` | — | JSON array of 3 pinned PR slots on Profile (Pin\|null)[] |

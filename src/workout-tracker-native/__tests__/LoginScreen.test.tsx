@@ -35,8 +35,8 @@ describe('LoginScreen', () => {
     const { getByText, getByPlaceholderText } = render(
       <LoginScreen navigation={nav as any} route={route as any} />
     );
-    fireEvent.changeText(getByPlaceholderText('e.g. john@example.com'), 'test@example.com');
-    fireEvent.changeText(getByPlaceholderText('Min. 6 characters'), 'password123');
+    fireEvent.changeText(getByPlaceholderText('Email or username'), 'test@example.com');
+    fireEvent.changeText(getByPlaceholderText('Password'), 'password123');
     fireEvent.press(getByText('Log In'));
     await waitFor(() => expect((useAuth() as any).login).toHaveBeenCalled());
   });
@@ -46,8 +46,8 @@ describe('LoginScreen', () => {
     const { getByText, getByPlaceholderText } = render(
       <LoginScreen navigation={nav as any} route={route as any} />
     );
-    fireEvent.changeText(getByPlaceholderText('e.g. john@example.com'), 'bad@example.com');
-    fireEvent.changeText(getByPlaceholderText('Min. 6 characters'), 'wrongpass');
+    fireEvent.changeText(getByPlaceholderText('Email or username'), 'bad@example.com');
+    fireEvent.changeText(getByPlaceholderText('Password'), 'wrongpass');
     fireEvent.press(getByText('Log In'));
     await waitFor(() => expect(getByText('Invalid credentials.')).toBeTruthy());
   });

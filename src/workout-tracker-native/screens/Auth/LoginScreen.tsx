@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -33,6 +33,7 @@ export default function LoginScreen({ navigation }: Props) {
   const [showPw, setShowPw]         = useState(false);
   const [error, setError]           = useState('');
   const [loading, setLoading]       = useState(false);
+  const passwordRef = useRef<TextInput>(null);
 
   const handleLogin = async () => {
     setError('');
@@ -74,7 +75,7 @@ export default function LoginScreen({ navigation }: Props) {
           showsVerticalScrollIndicator={false}
         >
           {/* Back */}
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.navigate('Welcome')}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.navigate('Welcome')} accessibilityLabel="Go back">
             <Ionicons name="arrow-back" size={24} color={AUTH.text} />
           </TouchableOpacity>
 
@@ -90,10 +91,16 @@ export default function LoginScreen({ navigation }: Props) {
             <Ionicons name="person-outline" size={18} color={AUTH.subtext} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="e.g. john@example.com"
+              placeholder="Email or username"
               placeholderTextColor={AUTH.placeholder}
               autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="username"
+              textContentType="username"
               keyboardAppearance="dark"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => passwordRef.current?.focus()}
               value={identifier}
               onChangeText={setIdentifier}
             />
@@ -103,15 +110,24 @@ export default function LoginScreen({ navigation }: Props) {
           <View style={styles.inputWrapper}>
             <Ionicons name="lock-closed-outline" size={18} color={AUTH.subtext} style={styles.inputIcon} />
             <TextInput
+              ref={passwordRef}
               style={[styles.input, { flex: 1 }]}
-              placeholder="Min. 6 characters"
+              placeholder="Password"
               placeholderTextColor={AUTH.placeholder}
               secureTextEntry={!showPw}
+              autoComplete="current-password"
+              textContentType="password"
               keyboardAppearance="dark"
+              returnKeyType="go"
+              onSubmitEditing={handleLogin}
               value={password}
               onChangeText={setPassword}
             />
-            <TouchableOpacity onPress={() => setShowPw(p => !p)} style={styles.eyeBtn}>
+            <TouchableOpacity
+              onPress={() => setShowPw(p => !p)}
+              style={styles.eyeBtn}
+              accessibilityLabel={showPw ? 'Hide password' : 'Show password'}
+            >
               <Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={20} color={AUTH.subtext} />
             </TouchableOpacity>
           </View>

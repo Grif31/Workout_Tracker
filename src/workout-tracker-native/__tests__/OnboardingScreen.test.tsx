@@ -57,8 +57,8 @@ async function completeChat(r: any, { routine, ends = routine ? 'View My Program
   await answer(r, 'Build Muscle', 'Under 1 year');
   await answer(r, 'Under 1 year', '4 days');
   await answer(r, '4 days', 'Full gym');
-  await answer(r, 'Full gym', '60–75 min');
-  await answer(r, '60–75 min', 'All clear');
+  await answer(r, 'Full gym', '60 min');
+  await answer(r, '60 min', 'All clear');
   await answer(r, 'All clear', routine ? 'Yes, build my program' : 'Maybe later');
   fireEvent.press(r.getByText(routine ? 'Yes, build my program' : 'Maybe later'));
   await waitFor(() => expect(r.getByText(ends)).toBeTruthy());
@@ -109,7 +109,7 @@ describe('OnboardingScreen', () => {
       });
       // The weekly workout goal follows the days answered here
       expect(await AsyncStorage.getItem(`${WEEKLY_GOAL_KEY}_${mockUser.id}`)).toBe('4');
-      expect(await AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY)).toBe('true');
+      expect(await AsyncStorage.getItem(`${ONBOARDING_COMPLETE_KEY}_${mockUser.id}`)).toBe('true');
       expect(r.onComplete).toHaveBeenCalled();
       expect((global.fetch as jest.Mock)).not.toHaveBeenCalled();
     });
@@ -135,7 +135,7 @@ describe('OnboardingScreen', () => {
       await completeChat(r, { routine: true, ends: 'Continue' });
       await act(async () => { fireEvent.press(r.getByText('Continue')); });
       expect(r.onComplete).toHaveBeenCalled();
-      expect(await AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY)).toBe('true');
+      expect(await AsyncStorage.getItem(`${ONBOARDING_COMPLETE_KEY}_${mockUser.id}`)).toBe('true');
     });
 
     it('still finishes when the routine generates but cannot be saved', async () => {
@@ -155,7 +155,7 @@ describe('OnboardingScreen', () => {
 
       expect(alertSpy).toHaveBeenCalledWith('Skip coach setup?', expect.any(String), expect.any(Array));
       expect(r.onComplete).toHaveBeenCalled();
-      expect(await AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY)).toBe('true');
+      expect(await AsyncStorage.getItem(`${ONBOARDING_COMPLETE_KEY}_${mockUser.id}`)).toBe('true');
       // Nothing was answered, so no coach profile is written
       expect(await AsyncStorage.getItem(COACH_PROFILE)).toBeNull();
     });
@@ -167,7 +167,30 @@ describe('OnboardingScreen', () => {
       const r = renderScreen();
       await act(async () => { fireEvent.press(r.getByText('Skip')); });
       expect(r.onComplete).not.toHaveBeenCalled();
-      expect(await AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY)).toBeNull();
+      expect(await AsyncStorage.getItem(`${ONBOARDING_COMPLETE_KEY}_${mockUser.id}`)).toBeNull();
+    });
+  });
+
+  describe('injuries', () => {
+    it('takes several areas and saves them all to the coach profile', async () => {
+      const r = renderScreen();
+      await answer(r, 'Build Muscle', 'Under 1 year');
+      await answer(r, 'Under 1 year', '4 days');
+      await answer(r, '4 days', 'Full gym');
+      await answer(r, 'Full gym', '60 min');
+      await answer(r, '60 min', 'Knees');
+      fireEvent.press(r.getByText('Knees'));
+      fireEvent.press(r.getByText('Shoulders'));
+      fireEvent.press(r.getByText('Shoulders'));
+      fireEvent.press(r.getByText('Lower back'));
+      await answer(r, 'Done', 'Maybe later');
+      expect(r.getByText('Lower back, Knees')).toBeTruthy();
+      fireEvent.press(r.getByText('Maybe later'));
+      await waitFor(() => expect(r.getByText('Continue')).toBeTruthy());
+      await act(async () => { fireEvent.press(r.getByText('Continue')); });
+
+      const profile = JSON.parse((await AsyncStorage.getItem(COACH_PROFILE))!);
+      expect([...profile.avoid].sort()).toEqual(['knees', 'lower_back']);
     });
   });
 });

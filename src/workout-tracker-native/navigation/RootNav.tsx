@@ -4,8 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { ActivityIndicator } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ONBOARDING_COMPLETE_KEY } from '../constants/storageKeys';
+import { needsOnboarding as checkNeedsOnboarding } from '../utils/onboarding';
 import { AppTabs } from './AppTabs';
 import { AuthStackScreen } from './AuthStack';
 import { WorkoutSessionProvider } from '../context/WorkoutSessionContext';
@@ -35,28 +34,39 @@ export default function RootNavigator() {
   useEffect(() => {
     if (user?.id !== prevUserId.current) {
       prevUserId.current = user?.id ?? null;
-      if (user) setPreloaded(false);
-      else appCache.clear();
+      // Also on logout, so the next account starts from the preload rather
+      // than a render with the last account's preloaded flag still set
+      setPreloaded(false);
+      if (!user) appCache.clear();
     }
   }, [user?.id]);
 
+  // Decided after the preload, which fetches recent workouts: an account
+  // that has logged some skips onboarding (utils/onboarding.ts)
   useEffect(() => {
     if (!user) {
       setOnboardingChecked(true);
       setNeedsOnboarding(false);
       return;
     }
-    AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY).then(val => {
-      setNeedsOnboarding(val !== 'true');
+    if (!preloaded) {
+      setOnboardingChecked(false);
+      return;
+    }
+    let cancelled = false;
+    checkNeedsOnboarding(user.id, appCache.get('recent_workouts')).then(needs => {
+      if (cancelled) return;
+      setNeedsOnboarding(needs);
       setOnboardingChecked(true);
     });
-  }, [user]);
+    return () => { cancelled = true; };
+  }, [user?.id, preloaded]);
 
   const handleOnboardingComplete = useCallback(() => {
     setNeedsOnboarding(false);
   }, []);
 
-  if (loading || !onboardingChecked) {
+  if (loading) {
     // Same look as the native splash so launch reads as one continuous screen
     return (
       <SplashView>
@@ -85,6 +95,10 @@ export default function RootNavigator() {
           <AuthStackScreen />
         ) : !preloaded ? (
           <PreloadScreen onComplete={() => setPreloaded(true)} />
+        ) : !onboardingChecked ? (
+          <SplashView>
+            <ActivityIndicator color="#fff" />
+          </SplashView>
         ) : needsOnboarding ? (
           <OnboardingStack.Navigator screenOptions={{ headerShown: false }}>
             <OnboardingStack.Screen name="OnboardingTutorial" component={OnboardingTutorialScreen} />

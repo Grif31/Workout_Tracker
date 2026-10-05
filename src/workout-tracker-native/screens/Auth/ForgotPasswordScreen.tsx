@@ -89,8 +89,13 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
               placeholder="e.g. john@example.com"
               placeholderTextColor={AUTH.placeholder}
               autoCapitalize="none"
+              autoCorrect={false}
               keyboardType="email-address"
+              autoComplete="email"
+              textContentType="emailAddress"
               keyboardAppearance="dark"
+              returnKeyType="send"
+              onSubmitEditing={handleSubmit}
               value={email}
               onChangeText={setEmail}
             />

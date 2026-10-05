@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Switch, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Switch, StatusBar, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -31,20 +31,30 @@ export default function OnboardingUnitsScreen({ navigation }: Props) {
     setSaving(true);
     const weightUnit = weightIsKg ? 'kg' : 'lbs';
     const distanceUnit = distanceIsMi ? 'mi' : 'km';
-    try {
-      await updateUser({ weight_unit: weightUnit });
-      await apiFetch('/api/me', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ weight_unit: weightUnit }),
-      });
-      if (user?.id) await AsyncStorage.setItem(`${GPS_DISTANCE_UNIT_KEY}_${user.id}`, distanceUnit);
-    } catch {
-      // best-effort — the app-wide defaults still work fine if this fails
-    } finally {
-      setSaving(false);
-      navigation.navigate('OnboardingPersonalInfo');
+    const previousUnit = user?.weight_unit === 'kg' ? 'kg' : 'lbs';
+    if (user?.id) await AsyncStorage.setItem(`${GPS_DISTANCE_UNIT_KEY}_${user.id}`, distanceUnit);
+    if (weightUnit !== previousUnit) {
+      // The server's unit decides how stored weights read; a local unit it
+      // never accepted would label every weight wrong, so only keep it once
+      // the PATCH succeeds
+      let saved = false;
+      try {
+        const res = await apiFetch('/api/me', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ weight_unit: weightUnit }),
+        });
+        saved = res.ok;
+      } catch { /* not saved */ }
+      if (saved) {
+        await updateUser({ weight_unit: weightUnit });
+      } else {
+        setWeightIsKg(previousUnit === 'kg');
+        Alert.alert("Couldn't Save Weight Unit", `You're set to ${previousUnit} for now. You can change it anytime in Settings.`);
+      }
     }
+    setSaving(false);
+    navigation.navigate('OnboardingPersonalInfo');
   };
 
   return (
