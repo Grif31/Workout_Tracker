@@ -1082,19 +1082,21 @@ Check off items as you complete them.
 
 ### Phase 0 — The purchase path must be correct (launch blocker)
 > None of the rest matters if buying fails silently or a subscriber is shown the paywall.
-- [ ] Merge `launch/premium-gate`; confirm Terms of Use + Privacy Policy links are on the paywall (App Store guideline 3.1.2)
-- [ ] **Entitlement stays current** (`PurchaseContext.tsx`)
-  - [ ] `await Purchases.logIn()` before reading customer info, and take the `customerInfo` it returns; today the read can race the login and check an anonymous user
-  - [ ] `Purchases.addCustomerInfoUpdateListener` so expiry, renewal and a purchase on another device apply without a relaunch
-  - [ ] Refresh customer info when the app returns to the foreground
-  - [ ] On logout: `Purchases.logOut()` and reset `isPremium`, so a failed status check can't leave the next account with the last one's Premium
-  - [ ] Drop the duplicate login + load that both mount effects run when a user is already signed in
-- [ ] **Purchase failures say something.** Return a reason from `purchasePackage` instead of `false`: cancelled (silent), pending / Ask to Buy ("Waiting for approval"), network, store problem, already owned (offer Restore)
-- [ ] **Restore tells a failure from "nothing to restore."** A network error must not read "No purchases found"
-- [ ] **Plans that fail to load** show a message and a Try Again button instead of spinners forever; retry `getOfferings` when the paywall opens with none
-- [ ] Legal line matches the plan picked: no "automatically renew" wording under Lifetime; state price and period for subscriptions
-- [ ] Accessibility: label on Close, `selected` state on plan cards
-- [ ] Tests: entitlement listener, login race, logout reset, each failure reason, offerings retry
+- [x] Merge `launch/premium-gate`; confirm Terms of Use + Privacy Policy links are on the paywall (App Store guideline 3.1.2)
+- [x] **Entitlement stays current** (`PurchaseContext.tsx`)
+  - [x] `await Purchases.logIn()` before reading customer info, and take the `customerInfo` it returns; today the read can race the login and check an anonymous user
+  - [x] `Purchases.addCustomerInfoUpdateListener` so expiry, renewal and a purchase on another device apply without a relaunch
+  - [x] Refresh customer info when the app returns to the foreground
+  - [x] On logout: `Purchases.logOut()` and reset `isPremium`, so a failed status check can't leave the next account with the last one's Premium
+  - [x] Drop the duplicate login + load that both mount effects run when a user is already signed in
+- [x] **Purchase failures say something.** Return a reason from `purchasePackage` instead of `false`: cancelled (silent), pending / Ask to Buy ("Waiting for approval"), network, store problem, already owned (offer Restore)
+- [x] **Restore tells a failure from "nothing to restore."** A network error must not read "No purchases found"
+- [x] **Plans that fail to load** show a message and a Try Again button instead of spinners forever; retry `getOfferings` when the paywall opens with none
+- [x] Legal line matches the plan picked: no "automatically renew" wording under Lifetime; state price and period for subscriptions
+- [x] Accessibility: label on Close, `selected` state on plan cards
+- [x] Tests: entitlement listener, login race, logout reset, each failure reason, offerings retry
+
+> **Status 2026-10-04:** done in code and tests on `improve/paywall`. Not yet exercised against the real store: run a purchase, a cancel, a restore and an expiry with a sandbox account before release.
 
 ### Phase 1 — A paywall that converts
 - [ ] **Pitch what they tapped.** Every entry point already passes `source` (`ai_coach`, `strength_score`, `endurance_score`, `muscle_volume`, `templates`, `routines`, `app_icon`) and the paywall ignores it. Map each to a headline ("Strength Score is part of Premium") and move that feature to the top of the list

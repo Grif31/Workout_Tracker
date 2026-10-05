@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  ActivityIndicator, SafeAreaView,
+  ActivityIndicator, SafeAreaView, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Purchases, { INTRO_ELIGIBILITY_STATUS, type PurchasesPackage } from 'react-native-purchases';
-import { usePurchase } from '../context/PurchaseContext';
+import { usePurchase, type PurchaseOutcome } from '../context/PurchaseContext';
 import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { showToast } from '../utils/toast';
@@ -53,8 +53,17 @@ function freeTrialText(pkg: PurchasesPackage): string | null {
   return `${n} ${unit}${n === 1 ? '' : 's'} free`;
 }
 
+// What to tell the user when a purchase doesn't go through. Cancelling is
+// their own choice and gets no message.
+const PURCHASE_PROBLEMS: Partial<Record<PurchaseOutcome, [string, string]>> = {
+  pending: ['Waiting for Approval', "Your purchase needs approval before it goes through. Premium unlocks as soon as it's approved."],
+  network: ["Couldn't Reach the App Store", 'Check your connection and try again. You have not been charged.'],
+  already_owned: ['Already Purchased', 'This Apple ID already owns this plan. Tap Restore Purchases to unlock it.'],
+  failed: ["Purchase Didn't Go Through", 'You have not been charged. Try again in a moment.'],
+};
+
 export default function PaywallScreen({ navigation }: Props) {
-  const { offerings, purchasePackage, restorePurchases } = usePurchase();
+  const { offerings, offeringsState, reloadOfferings, purchasePackage, restorePurchases } = usePurchase();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -72,6 +81,14 @@ export default function PaywallScreen({ navigation }: Props) {
     return offering ? withPkg.filter(t => t.pkg) : withPkg;
   }, [offerings]);
   const packages = tierPackages.map(t => t.pkg).filter(Boolean) as PurchasesPackage[];
+  // Plans that never arrived: say so rather than spin forever
+  const plansMissing = packages.length === 0 && (offeringsState === 'failed' || offeringsState === 'unavailable'
+    || offeringsState === 'ready');
+
+  // Plans are fetched at sign-in; if that failed, opening the paywall tries again
+  useEffect(() => {
+    if (offeringsState === 'failed') reloadOfferings();
+  }, []);
 
   // Apple only honors an intro offer once per subscription group, so the trial
   // is advertised only to users StoreKit confirms are still eligible
@@ -96,28 +113,36 @@ export default function PaywallScreen({ navigation }: Props) {
   const trialFor = (pkg?: PurchasesPackage) =>
     pkg && trialEligible[pkg.product.identifier] ? freeTrialText(pkg) : null;
   const selectedTrial = trialFor(tierPackages[selectedIndex]?.pkg);
+  const selectedIsLifetime = tierPackages[selectedIndex]?.type === 'LIFETIME';
 
   const handlePurchase = async () => {
     const pkg = tierPackages[selectedIndex]?.pkg;
     if (!pkg) return;
     setPurchasing(true);
-    const success = await purchasePackage(pkg);
+    const outcome = await purchasePackage(pkg);
     setPurchasing(false);
-    if (success) {
+    if (outcome === 'purchased') {
       showToast('Premium is active.');
       navigation.goBack();
+      return;
     }
+    const problem = PURCHASE_PROBLEMS[outcome];
+    if (problem) Alert.alert(problem[0], problem[1]);
   };
 
   const handleRestore = async () => {
     setRestoring(true);
-    const success = await restorePurchases();
+    const outcome = await restorePurchases();
     setRestoring(false);
-    if (success) {
+    if (outcome === 'restored') {
       showToast('Purchases restored.');
       navigation.goBack();
-    } else {
+    } else if (outcome === 'none') {
       showToast('No purchases found');
+    } else {
+      // Not the same as having nothing to restore: a paying user on a bad
+      // connection must not be told they have no purchase
+      Alert.alert("Couldn't Restore", "The App Store couldn't be reached. Check your connection and try again.");
     }
   };
 
@@ -126,7 +151,12 @@ export default function PaywallScreen({ navigation }: Props) {
       <View style={styles.topGoldLine} />
 
       <SafeAreaView style={styles.safeTop}>
-        <TouchableOpacity style={styles.closeBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={styles.closeBtn}
+          onPress={() => navigation.goBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        >
           <Ionicons name="close" size={24} color={GOLD_DIM} />
         </TouchableOpacity>
       </SafeAreaView>
@@ -159,8 +189,23 @@ export default function PaywallScreen({ navigation }: Props) {
           ))}
         </View>
 
+        {plansMissing && (
+          <View style={styles.plansMissing}>
+            <Text style={styles.plansMissingText}>
+              {offeringsState === 'failed'
+                ? "Couldn't load the plans. Check your connection and try again."
+                : "Premium can't be purchased on this device right now."}
+            </Text>
+            {offeringsState === 'failed' && (
+              <TouchableOpacity onPress={reloadOfferings} accessibilityRole="button">
+                <Text style={styles.plansRetry}>Try Again</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
         {/* Pricing tiers */}
-        {tierPackages.map(({ type, label, badge, pkg }, i) => {
+        {!plansMissing && tierPackages.map(({ type, label, badge, pkg }, i) => {
           const selected = selectedIndex === i;
           const trial = trialFor(pkg);
           return (
@@ -169,6 +214,8 @@ export default function PaywallScreen({ navigation }: Props) {
               style={[styles.tierCard, selected && styles.tierCardSelected]}
               onPress={() => setSelectedIndex(i)}
               activeOpacity={0.8}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
             >
               <View style={styles.tierLeft}>
                 <View style={[styles.radio, selected && styles.radioSelected]}>
@@ -215,7 +262,9 @@ export default function PaywallScreen({ navigation }: Props) {
           {selectedTrial
             ? 'Payment is charged to your Apple ID when the free trial ends unless you cancel at least 24 hours before. '
             : 'Payment charged to your Apple ID at confirmation of purchase. '}
-          Subscriptions automatically renew unless cancelled at least 24 hours before the end of the current period.
+          {selectedIsLifetime
+            ? 'Lifetime is a one-time purchase. It does not renew.'
+            : 'Subscriptions automatically renew unless cancelled at least 24 hours before the end of the current period. Manage or cancel anytime in your Apple ID settings.'}
         </Text>
 
         {/* Apple guideline 3.1.2 requires working Terms and Privacy links in the purchase flow */}
@@ -379,6 +428,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 16,
   },
+  plansMissing: {
+    backgroundColor: PW_CARD,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: PW_BORDER,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  plansMissingText: { fontSize: typography.fontSize.sm, color: GOLD_LIGHT, textAlign: 'center', lineHeight: 20 },
+  plansRetry: { fontSize: typography.fontSize.sm, fontWeight: '700', color: GOLD },
   legalLinks: {
     flexDirection: 'row',
     justifyContent: 'center',

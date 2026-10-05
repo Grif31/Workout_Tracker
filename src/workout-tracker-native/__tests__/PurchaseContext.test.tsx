@@ -78,6 +78,12 @@ describe('PurchaseContext', () => {
       expect(mockPurchases.configure).not.toHaveBeenCalled();
     });
 
+    it('reports that there are no plans to load, so the paywall does not wait for them', async () => {
+      const { result } = renderPurchase();
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.offeringsState).toBe('unavailable');
+    });
+
     it('the beta-premium build flag forces isPremium true regardless of platform or user', async () => {
       // Documents this repo's real current behavior — see file header.
       mockUseAuth.mockReturnValue({ user: { id: 42 } });
@@ -88,89 +94,109 @@ describe('PurchaseContext', () => {
   });
 
   describe('purchasePackage', () => {
-    it('sets isPremium true and returns true when the returned entitlement is active', async () => {
+    it('sets isPremium true and reports purchased when the returned entitlement is active', async () => {
       mockPurchases.purchasePackage.mockResolvedValue({
         customerInfo: { entitlements: { active: { premium: {} } } },
       });
       const { result } = renderPurchase();
 
-      let purchaseResult: boolean | undefined;
+      let purchaseResult: string | undefined;
       await act(async () => {
         purchaseResult = await result.current.purchasePackage({} as any);
       });
 
-      expect(purchaseResult).toBe(true);
+      expect(purchaseResult).toBe('purchased');
       expect(result.current.isPremium).toBe(true);
     });
 
-    it('sets isPremium false and returns false when the returned entitlement is not active', async () => {
+    it('sets isPremium false and reports failed when the returned entitlement is not active', async () => {
       mockPurchases.purchasePackage.mockResolvedValue({
         customerInfo: { entitlements: { active: {} } },
       });
       const { result } = renderPurchase();
 
-      let purchaseResult: boolean | undefined;
+      let purchaseResult: string | undefined;
       await act(async () => {
         purchaseResult = await result.current.purchasePackage({} as any);
       });
 
-      expect(purchaseResult).toBe(false);
+      expect(purchaseResult).toBe('failed');
       expect(result.current.isPremium).toBe(false);
     });
 
-    it('returns false and leaves isPremium unchanged when the purchase throws (e.g. user cancelled)', async () => {
+    it('reports failed and leaves isPremium unchanged when the purchase throws an unknown error', async () => {
       mockPurchases.purchasePackage.mockRejectedValue(new Error('user cancelled'));
       const { result } = renderPurchase();
       const before = result.current.isPremium;
 
-      let purchaseResult: boolean | undefined;
+      let purchaseResult: string | undefined;
       await act(async () => {
         purchaseResult = await result.current.purchasePackage({} as any);
       });
 
-      expect(purchaseResult).toBe(false);
+      expect(purchaseResult).toBe('failed');
       expect(result.current.isPremium).toBe(before);
     });
   });
 
+  describe('purchase failures are told apart', () => {
+    it.each([
+      [{ userCancelled: true }, 'cancelled'],
+      [{ code: '1' }, 'cancelled'],
+      [{ code: '20' }, 'pending'],
+      [{ code: '10' }, 'network'],
+      [{ code: '35' }, 'network'],
+      [{ code: '6' }, 'already_owned'],
+      [{ code: '2' }, 'failed'],
+    ])('%j reads as %s', async (error, outcome) => {
+      mockPurchases.purchasePackage.mockRejectedValue(error);
+      const { result } = renderPurchase();
+      let purchaseResult: string | undefined;
+      await act(async () => {
+        purchaseResult = await result.current.purchasePackage({} as any);
+      });
+      expect(purchaseResult).toBe(outcome);
+    });
+  });
+
   describe('restorePurchases', () => {
-    it('sets isPremium true and returns true when a restored entitlement is active', async () => {
+    it('sets isPremium true and reports restored when a restored entitlement is active', async () => {
       mockPurchases.restorePurchases.mockResolvedValue({ entitlements: { active: { premium: {} } } });
       const { result } = renderPurchase();
 
-      let restoreResult: boolean | undefined;
+      let restoreResult: string | undefined;
       await act(async () => {
         restoreResult = await result.current.restorePurchases();
       });
 
-      expect(restoreResult).toBe(true);
+      expect(restoreResult).toBe('restored');
       expect(result.current.isPremium).toBe(true);
     });
 
-    it('sets isPremium false and returns false when there is no active entitlement to restore', async () => {
+    it('sets isPremium false and reports none when there is no active entitlement to restore', async () => {
       mockPurchases.restorePurchases.mockResolvedValue({ entitlements: { active: {} } });
       const { result } = renderPurchase();
 
-      let restoreResult: boolean | undefined;
+      let restoreResult: string | undefined;
       await act(async () => {
         restoreResult = await result.current.restorePurchases();
       });
 
-      expect(restoreResult).toBe(false);
+      expect(restoreResult).toBe('none');
       expect(result.current.isPremium).toBe(false);
     });
 
-    it('returns false and leaves isPremium unchanged when restore throws', async () => {
+    it('reports failed, not none, and leaves isPremium unchanged when restore throws', async () => {
       mockPurchases.restorePurchases.mockRejectedValue(new Error('network error'));
       const { result } = renderPurchase();
       const before = result.current.isPremium;
 
-      let restoreResult: boolean | undefined;
+      let restoreResult: string | undefined;
       await act(async () => {
         restoreResult = await result.current.restorePurchases();
       });
 
-      expect(restoreResult).toBe(false);
+      expect(restoreResult).toBe('failed');
       expect(result.current.isPremium).toBe(before);
     });
   });

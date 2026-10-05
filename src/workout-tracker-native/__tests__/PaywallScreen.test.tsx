@@ -1,4 +1,5 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { createMockNavigation, createMockRoute } from './testUtils';
 import { usePurchase } from '../context/PurchaseContext';
@@ -36,8 +37,8 @@ describe('PaywallScreen', () => {
     jest.clearAllMocks();
     mockUsePurchase.mockReturnValue({
       offerings: null,
-      purchasePackage: jest.fn(() => Promise.resolve(true)),
-      restorePurchases: jest.fn(() => Promise.resolve(true)),
+      purchasePackage: jest.fn(() => Promise.resolve('purchased')),
+      restorePurchases: jest.fn(() => Promise.resolve('restored')),
     });
   });
 
@@ -55,8 +56,8 @@ describe('PaywallScreen', () => {
   it('shows the tier price once offerings load', () => {
     mockUsePurchase.mockReturnValue({
       offerings: withOfferings(THREE_PACKAGES),
-      purchasePackage: jest.fn(() => Promise.resolve(true)),
-      restorePurchases: jest.fn(() => Promise.resolve(true)),
+      purchasePackage: jest.fn(() => Promise.resolve('purchased')),
+      restorePurchases: jest.fn(() => Promise.resolve('restored')),
     });
     const { getByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
     expect(getByText('$59.99/yr')).toBeTruthy();
@@ -73,7 +74,7 @@ describe('PaywallScreen', () => {
 
   describe('purchase', () => {
     it('does not attempt a purchase when no packages have loaded', () => {
-      const purchasePackage = jest.fn(() => Promise.resolve(true));
+      const purchasePackage = jest.fn(() => Promise.resolve('purchased'));
       mockUsePurchase.mockReturnValue({ offerings: null, purchasePackage, restorePurchases: jest.fn() });
       const { getByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
       fireEvent.press(getByText('Get Premium'));
@@ -81,7 +82,7 @@ describe('PaywallScreen', () => {
     });
 
     it('purchases the first (Annual) tier by default', async () => {
-      const purchasePackage = jest.fn(() => Promise.resolve(true));
+      const purchasePackage = jest.fn(() => Promise.resolve('purchased'));
       mockUsePurchase.mockReturnValue({
         offerings: withOfferings(THREE_PACKAGES), purchasePackage, restorePurchases: jest.fn(),
       });
@@ -91,7 +92,7 @@ describe('PaywallScreen', () => {
     });
 
     it('purchases the selected tier after switching selection', async () => {
-      const purchasePackage = jest.fn(() => Promise.resolve(true));
+      const purchasePackage = jest.fn(() => Promise.resolve('purchased'));
       mockUsePurchase.mockReturnValue({
         offerings: withOfferings(THREE_PACKAGES), purchasePackage, restorePurchases: jest.fn(),
       });
@@ -102,7 +103,7 @@ describe('PaywallScreen', () => {
     });
 
     it('shows a success toast and navigates back on a successful purchase', async () => {
-      const purchasePackage = jest.fn(() => Promise.resolve(true));
+      const purchasePackage = jest.fn(() => Promise.resolve('purchased'));
       mockUsePurchase.mockReturnValue({
         offerings: withOfferings(THREE_PACKAGES), purchasePackage, restorePurchases: jest.fn(),
       });
@@ -112,8 +113,42 @@ describe('PaywallScreen', () => {
       expect(nav.goBack).toHaveBeenCalled();
     });
 
-    it('does not navigate or toast success when the purchase fails or is cancelled', async () => {
-      const purchasePackage = jest.fn(() => Promise.resolve(false));
+    it('says nothing when the user cancels', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const purchasePackage = jest.fn(() => Promise.resolve('cancelled'));
+      mockUsePurchase.mockReturnValue({
+        offerings: withOfferings(THREE_PACKAGES), purchasePackage, restorePurchases: jest.fn(),
+      });
+      const { getByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
+      fireEvent.press(getByText('Get Premium'));
+      await waitFor(() => expect(purchasePackage).toHaveBeenCalled());
+      expect(alertSpy).not.toHaveBeenCalled();
+      expect(nav.goBack).not.toHaveBeenCalled();
+      alertSpy.mockRestore();
+    });
+
+    it.each([
+      ['pending', 'Waiting for Approval'],
+      ['network', "Couldn't Reach the App Store"],
+      ['already_owned', 'Already Purchased'],
+      ['failed', "Purchase Didn't Go Through"],
+    ])('explains a purchase that ends %s', async (outcome, title) => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      mockUsePurchase.mockReturnValue({
+        offerings: withOfferings(THREE_PACKAGES),
+        purchasePackage: jest.fn(() => Promise.resolve(outcome)), restorePurchases: jest.fn(),
+      });
+      const { getByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
+      fireEvent.press(getByText('Get Premium'));
+      await waitFor(() => expect(alertSpy).toHaveBeenCalledWith(title, expect.any(String)));
+      expect(showToast).not.toHaveBeenCalledWith('Premium is active.');
+      expect(nav.goBack).not.toHaveBeenCalled();
+      alertSpy.mockRestore();
+    });
+
+    it('does not navigate or toast success when the purchase fails', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const purchasePackage = jest.fn(() => Promise.resolve('failed'));
       mockUsePurchase.mockReturnValue({
         offerings: withOfferings(THREE_PACKAGES), purchasePackage, restorePurchases: jest.fn(),
       });
@@ -169,7 +204,7 @@ describe('PaywallScreen', () => {
 
   describe('restore', () => {
     it('shows a success toast and navigates back when a purchase is restored', async () => {
-      const restorePurchases = jest.fn(() => Promise.resolve(true));
+      const restorePurchases = jest.fn(() => Promise.resolve('restored'));
       mockUsePurchase.mockReturnValue({ offerings: null, purchasePackage: jest.fn(), restorePurchases });
       const { getByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
       fireEvent.press(getByText('Restore Purchases'));
@@ -178,13 +213,62 @@ describe('PaywallScreen', () => {
     });
 
     it('shows a "no purchases found" toast and does not navigate when nothing is restored', async () => {
-      const restorePurchases = jest.fn(() => Promise.resolve(false));
+      const restorePurchases = jest.fn(() => Promise.resolve('none'));
       mockUsePurchase.mockReturnValue({ offerings: null, purchasePackage: jest.fn(), restorePurchases });
       const { getByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
       fireEvent.press(getByText('Restore Purchases'));
       await waitFor(() => expect(showToast).toHaveBeenCalledWith('No purchases found'));
       expect(nav.goBack).not.toHaveBeenCalled();
     });
+  });
+
+  it('tells a failed restore apart from having nothing to restore', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const restorePurchases = jest.fn(() => Promise.resolve('failed'));
+    mockUsePurchase.mockReturnValue({ offerings: null, purchasePackage: jest.fn(), restorePurchases });
+    const { getByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
+    fireEvent.press(getByText('Restore Purchases'));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("Couldn't Restore", expect.any(String)));
+    expect(showToast).not.toHaveBeenCalledWith('No purchases found');
+    alertSpy.mockRestore();
+  });
+
+  describe('when the plans did not load', () => {
+    it('retries on open, says so, and offers Try Again instead of spinning', () => {
+      const reloadOfferings = jest.fn(() => Promise.resolve());
+      mockUsePurchase.mockReturnValue({
+        offerings: null, offeringsState: 'failed', reloadOfferings,
+        purchasePackage: jest.fn(), restorePurchases: jest.fn(),
+      });
+      const { getByText, queryByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
+      expect(reloadOfferings).toHaveBeenCalledTimes(1);
+      expect(getByText(/Couldn't load the plans/)).toBeTruthy();
+      expect(queryByText('Annual')).toBeNull();
+      fireEvent.press(getByText('Try Again'));
+      expect(reloadOfferings).toHaveBeenCalledTimes(2);
+    });
+
+    it('says purchases are unavailable where there is no store', () => {
+      mockUsePurchase.mockReturnValue({
+        offerings: null, offeringsState: 'unavailable', reloadOfferings: jest.fn(),
+        purchasePackage: jest.fn(), restorePurchases: jest.fn(),
+      });
+      const { getByText, queryByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
+      expect(getByText(/can't be purchased on this device/)).toBeTruthy();
+      expect(queryByText('Try Again')).toBeNull();
+    });
+  });
+
+  it('drops the renewal wording for the one-time Lifetime plan', () => {
+    mockUsePurchase.mockReturnValue({
+      offerings: withOfferings(THREE_PACKAGES), offeringsState: 'ready',
+      purchasePackage: jest.fn(), restorePurchases: jest.fn(),
+    });
+    const { getByText, queryByText } = render(<PaywallScreen navigation={nav as any} route={route as any} />);
+    expect(getByText(/automatically renew/)).toBeTruthy();
+    fireEvent.press(getByText('Lifetime'));
+    expect(queryByText(/automatically renew/)).toBeNull();
+    expect(getByText(/one-time purchase/)).toBeTruthy();
   });
 
   // Apple rejects subscription apps whose purchase screen lacks these (guideline 3.1.2)
