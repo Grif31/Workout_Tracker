@@ -7,6 +7,11 @@ import PreloadScreen, { PRELOAD_MAX_WAIT_MS } from '../screens/PreloadScreen';
 import SignupScreen from '../screens/Auth/SignupScreen';
 import ResetPasswordScreen from '../screens/Auth/ResetPasswordScreen';
 
+// Whatever the dev-only override is set to, test the real rules
+jest.mock('../constants/featureFlags', () => ({
+  ...jest.requireActual('../constants/featureFlags'),
+  FORCE_ONBOARDING: false,
+}));
 jest.mock('../hooks/useSocialAuth', () => ({
   useSocialAuth: () => ({ handleApple: jest.fn(), handleGoogle: jest.fn(), handleFacebook: jest.fn() }),
 }));

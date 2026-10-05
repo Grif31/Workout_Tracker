@@ -14,6 +14,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamsList } from '../../navigation/types';
 import { useSocialAuth } from '../../hooks/useSocialAuth';
 import { AUTH } from '../../theme/authColors';
+import FeatureCarousel from '../../components/onboarding/FeatureCarousel';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 
@@ -26,7 +27,7 @@ export default function WelcomeScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={AUTH.bg} />
 
-      {/* ── hero ── */}
+      {/* ── brand ── */}
       <View style={styles.hero}>
         <Image
           source={require('../../assets/Arete_name.png')}
@@ -34,6 +35,11 @@ export default function WelcomeScreen({ navigation }: Props) {
           resizeMode="contain"
         />
         <Text style={styles.tagline}>Pursue Excellence</Text>
+      </View>
+
+      {/* Full-bleed: the slides page by the window width */}
+      <View style={styles.carousel}>
+        <FeatureCarousel />
       </View>
 
       {/* ── bottom actions ── */}
@@ -78,15 +84,17 @@ const styles = StyleSheet.create({
   },
 
   hero: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
   },
   logo: {
-    width: 220,
-    height: 72,
-    marginBottom: spacing.xs,
+    width: 160,
+    height: 48,
+  },
+  carousel: {
+    flex: 1,
+    marginHorizontal: -spacing.lg,
   },
   tagline: {
     fontSize: typography.fontSize.md,

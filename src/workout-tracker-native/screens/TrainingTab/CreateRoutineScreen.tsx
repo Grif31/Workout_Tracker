@@ -19,6 +19,7 @@ import { showToast } from '../../utils/toast';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
 import { useDiscardGuard } from '../../utils/useDiscardGuard';
+import SegmentedControl from '../../components/SegmentedControl';
 import ExerciseProgrammingModal, { type ProgrammingValue } from '../../components/ExerciseProgrammingModal';
 import type { ProgrammingEntry } from '../../utils/templatePrefill';
 
@@ -39,6 +40,11 @@ type DayEntry = { uid: string } & (
 // What the user has entered, minus React keys, for spotting unsaved changes
 const snapshot = (name: string, description: string, days: DayEntry[]) =>
   JSON.stringify({ name: name.trim(), description: description.trim(), days: days.map(({ uid, ...d }) => d) });
+
+const DAY_MODES = [
+  { key: 'new', label: 'New' },
+  { key: 'existing', label: 'Use Template' },
+] as const;
 
 const fmtProgramming = (p: ProgrammingEntry) =>
   `${p.sets} × ${p.reps || '?'}${p.rpe != null ? `  @ RPE ${p.rpe}` : ''}`;
@@ -328,20 +334,13 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.modeRow}>
-            <TouchableOpacity
-              style={[styles.modeBtn, day.mode === 'new' && styles.modeBtnActive]}
-              onPress={() => switchMode(dayIdx, 'new')}
-            >
-              <Text style={[styles.modeBtnText, day.mode === 'new' && styles.modeBtnTextActive]}>New</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modeBtn, day.mode === 'existing' && styles.modeBtnActive]}
-              onPress={() => switchMode(dayIdx, 'existing')}
-            >
-              <Text style={[styles.modeBtnText, day.mode === 'existing' && styles.modeBtnTextActive]}>Use Template</Text>
-            </TouchableOpacity>
-          </View>
+          <SegmentedControl
+            options={DAY_MODES}
+            value={day.mode}
+            onChange={mode => switchMode(dayIdx, mode)}
+            appearance="solid"
+            style={styles.modeRow}
+          />
 
           {day.mode === 'existing' ? (
             <TouchableOpacity style={styles.templatePicker} onPress={() => setTmplPickerDay(dayIdx)}>
@@ -530,23 +529,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingBottom: 2,
   },
   removeText: { color: colors.danger, fontSize: typography.fontSize.sm, fontWeight: '600' },
-  modeRow: {
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: spacing.xs,
-    overflow: 'hidden',
-    marginBottom: spacing.md,
-  },
-  modeBtn: {
-    flex: 1,
-    paddingVertical: spacing.xs,
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  modeBtnActive: { backgroundColor: colors.accent },
-  modeBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
-  modeBtnTextActive: { color: colors.accentText },
+  modeRow: { marginBottom: spacing.md, backgroundColor: colors.background },
   templatePicker: {
     flexDirection: 'row',
     alignItems: 'center',

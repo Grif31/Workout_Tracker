@@ -22,6 +22,7 @@ import { usePurchase } from '../../context/PurchaseContext';
 import { SCORE_RANK_COLORS } from '../../constants/strengthRanks';
 import { fmtOrdinal } from '../../utils/prFormat';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
+import SegmentedControl from '../../components/SegmentedControl';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'PersonalRecords'>;
 
@@ -425,35 +426,16 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
       {/* Sort + Search bar */}
       <View style={[styles.sortBar, { borderBottomColor: colors.border }]}>
         {showSortToggle && (
-          <>
-            <TouchableOpacity
-              style={[styles.sortBtn, sortBy === 'default' && { backgroundColor: colors.accent + '20' }]}
-              onPress={() => setSortBy('default')}
-            >
-              <Text style={[styles.sortBtnText, { color: sortBy === 'default' ? colors.accent : colors.textSecondary }]}>
-                {activeTab === 'max_weight' ? 'Heaviest' : 'A–Z'}
-              </Text>
-            </TouchableOpacity>
-            {activeTab === 'max_weight' && (
-              <TouchableOpacity
-                style={[styles.sortBtn, sortBy === 'recent' && { backgroundColor: colors.accent + '20' }]}
-                onPress={() => setSortBy('recent')}
-              >
-                <Text style={[styles.sortBtnText, { color: sortBy === 'recent' ? colors.accent : colors.textSecondary }]}>
-                  Recent
-                </Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={[styles.sortBtn, sortBy === 'muscle' && { backgroundColor: colors.accent + '20' }]}
-              onPress={() => setSortBy('muscle')}
-            >
-              <Ionicons name="body-outline" size={14} color={sortBy === 'muscle' ? colors.accent : colors.textSecondary} style={{ marginRight: spacing.xs }} />
-              <Text style={[styles.sortBtnText, { color: sortBy === 'muscle' ? colors.accent : colors.textSecondary }]}>
-                By Muscle
-              </Text>
-            </TouchableOpacity>
-          </>
+          <SegmentedControl
+            options={[
+              { key: 'default', label: activeTab === 'max_weight' ? 'Heaviest' : 'A–Z' },
+              ...(activeTab === 'max_weight' ? [{ key: 'recent' as const, label: 'Recent' }] : []),
+              { key: 'muscle', label: 'By Muscle', icon: 'body-outline' },
+            ]}
+            value={sortBy}
+            onChange={setSortBy}
+            style={styles.sortControl}
+          />
         )}
         <TouchableOpacity
           style={[styles.searchIconBtn, searchOpen && { backgroundColor: colors.accent + '20' }]}
@@ -684,19 +666,13 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   tabText: { fontSize: 15, fontWeight: '600' },
   sortBar: {
     flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     gap: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  sortBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
-    borderRadius: 20,
-  },
-  sortBtnText: { fontSize: 13, fontWeight: '600' },
+  sortControl: { flex: 1 },
   searchIconBtn: {
     marginLeft: 'auto',
     padding: spacing.xs + 2,

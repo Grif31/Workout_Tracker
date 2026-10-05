@@ -11,9 +11,7 @@ import { WorkoutSessionProvider } from '../context/WorkoutSessionContext';
 import { navigationRef } from './navigationRef';
 import { OnboardingStackParamsList, RootStackParamsList } from './types';
 import OnboardingScreen from '../screens/Auth/OnboardingScreen';
-import OnboardingTutorialScreen from '../screens/Auth/OnboardingTutorialScreen';
-import OnboardingUnitsScreen from '../screens/Auth/OnboardingUnitsScreen';
-import OnboardingPersonalInfoScreen from '../screens/Auth/OnboardingPersonalInfoScreen';
+import OnboardingAboutYouScreen from '../screens/Auth/OnboardingAboutYouScreen';
 import PaywallScreen from '../screens/PaywallScreen';
 import PreloadScreen from '../screens/PreloadScreen';
 import SplashView from '../components/SplashView';
@@ -101,9 +99,7 @@ export default function RootNavigator() {
           </SplashView>
         ) : needsOnboarding ? (
           <OnboardingStack.Navigator screenOptions={{ headerShown: false }}>
-            <OnboardingStack.Screen name="OnboardingTutorial" component={OnboardingTutorialScreen} />
-            <OnboardingStack.Screen name="OnboardingUnits" component={OnboardingUnitsScreen} />
-            <OnboardingStack.Screen name="OnboardingPersonalInfo" component={OnboardingPersonalInfoScreen} />
+            <OnboardingStack.Screen name="OnboardingAboutYou" component={OnboardingAboutYouScreen} />
             <OnboardingStack.Screen
               name="Onboarding"
               children={(props) => (

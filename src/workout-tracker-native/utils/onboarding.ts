@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ONBOARDING_COMPLETE_KEY } from '../constants/storageKeys';
+import { FORCE_ONBOARDING } from '../constants/featureFlags';
 
 const keyFor = (userId: number | string) => `${ONBOARDING_COMPLETE_KEY}_${userId}`;
 
@@ -14,6 +15,7 @@ export async function markOnboardingComplete(userId: number | string): Promise<v
  * skips onboarding on a new phone too.
  */
 export async function needsOnboarding(userId: number | string, recentWorkouts: unknown): Promise<boolean> {
+  if (FORCE_ONBOARDING) return true;
   const [[, own], [, legacy]] = await AsyncStorage.multiGet([keyFor(userId), ONBOARDING_COMPLETE_KEY]);
   if (own === 'true') return false;
   // Builds before the per-account flag set one flag for the phone. Whoever is

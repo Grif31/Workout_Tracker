@@ -29,6 +29,9 @@ import { parseApiDate } from '../../utils/date';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import { SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
 import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModal';
+import SegmentedControl from '../../components/SegmentedControl';
+
+const RANGE_SEGMENTS = (['1M', '3M', '6M', 'All'] as const).map(r => ({ key: r, label: r }));
 
 const SCREEN_WIDTH  = Dimensions.get('window').width;
 const CHART_WIDTH   = SCREEN_WIDTH - spacing.md * 4;
@@ -908,17 +911,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
       <View>
         <View style={styles.progressHeaderRow}>
           <Text style={styles.progressLabel}>Progress</Text>
-          <View style={styles.rangeToggle}>
-            {(['1M', '3M', '6M', 'All'] as const).map(r => (
-              <TouchableOpacity
-                key={r}
-                style={[styles.rangeBtn, chartRange === r && { backgroundColor: colors.accent + '22' }]}
-                onPress={() => setChartRange(r)}
-              >
-                <Text style={[styles.rangeBtnText, chartRange === r && { color: colors.accent, fontWeight: '700' }]}>{r}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <SegmentedControl options={RANGE_SEGMENTS} value={chartRange} onChange={setChartRange} style={styles.rangeToggle} />
         </View>
         {exerciseType === 'cardio' ? (
           <>
@@ -1325,25 +1318,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
-  rangeToggle: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm + 2,
-    padding: 2,
-  },
-  rangeBtn: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: 12,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-  },
-  rangeBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
+  rangeToggle: { width: 172, backgroundColor: colors.surface },
   chartCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,

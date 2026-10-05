@@ -1,6 +1,6 @@
 /**
  * Post-signup coach setup: a chat that collects goal, experience, days,
- * equipment, session length and injuries, then optionally generates a starting
+ * equipment and injuries, then optionally generates a starting
  * routine. What must hold: the answers reach the key the Coach tab actually
  * reads (coach_profile, not the legacy coach_settings), onboarding is marked
  * complete on every exit, and a failed generation still lets the user in.
@@ -57,8 +57,7 @@ async function completeChat(r: any, { routine, ends = routine ? 'View My Program
   await answer(r, 'Build Muscle', 'Under 1 year');
   await answer(r, 'Under 1 year', '4 days');
   await answer(r, '4 days', 'Full gym');
-  await answer(r, 'Full gym', '60 min');
-  await answer(r, '60 min', 'All clear');
+  await answer(r, 'Full gym', 'All clear');
   await answer(r, 'All clear', routine ? 'Yes, build my program' : 'Maybe later');
   fireEvent.press(r.getByText(routine ? 'Yes, build my program' : 'Maybe later'));
   await waitFor(() => expect(r.getByText(ends)).toBeTruthy());
@@ -126,6 +125,7 @@ describe('OnboardingScreen', () => {
       });
       const saved = bodyOf('/api/ai/save');
       expect(saved.name).toBe('AI Push Pull Legs');
+      expect(r.getByText('Your program is ready')).toBeTruthy();
       expect(saved.days[0].programming[0]).toMatchObject({ exercise_template_id: 3, sets: 4, reps: '8', rpe: 8 });
     });
 
@@ -177,8 +177,7 @@ describe('OnboardingScreen', () => {
       await answer(r, 'Build Muscle', 'Under 1 year');
       await answer(r, 'Under 1 year', '4 days');
       await answer(r, '4 days', 'Full gym');
-      await answer(r, 'Full gym', '60 min');
-      await answer(r, '60 min', 'Knees');
+      await answer(r, 'Full gym', 'Knees');
       fireEvent.press(r.getByText('Knees'));
       fireEvent.press(r.getByText('Shoulders'));
       fireEvent.press(r.getByText('Shoulders'));
@@ -192,5 +191,75 @@ describe('OnboardingScreen', () => {
       const profile = JSON.parse((await AsyncStorage.getItem(COACH_PROFILE))!);
       expect([...profile.avoid].sort()).toEqual(['knees', 'lower_back']);
     });
+  });
+
+  describe('changing an answer', () => {
+    it('replaces just that answer and keeps the chat where it was', async () => {
+      const r = renderScreen();
+      await answer(r, 'Build Muscle', 'Under 1 year');
+      await answer(r, 'Under 1 year', '4 days');
+
+      fireEvent.press(r.getByText('Build Muscle'));
+      await waitFor(() => expect(r.getByText('Changing: Main goal')).toBeTruthy());
+      fireEvent.press(r.getByText('Get Stronger'));
+
+      // The goal bubble now reads the new answer, the later answer is still
+      // there, and the chat is back on the question it was asking
+      expect(r.getByText('Get Stronger')).toBeTruthy();
+      expect(r.queryByText('Build Muscle')).toBeNull();
+      expect(r.getByText('Under 1 year')).toBeTruthy();
+      expect(r.getAllByText(/How long have you been training/)).toHaveLength(1);
+      expect(r.getByText('4 days')).toBeTruthy();
+
+      await answer(r, '4 days', 'Full gym');
+      await answer(r, 'Full gym', 'All clear');
+      await answer(r, 'All clear', 'Maybe later');
+      fireEvent.press(r.getByText('Maybe later'));
+      await waitFor(() => expect(r.getByText('Continue')).toBeTruthy());
+      await act(async () => { fireEvent.press(r.getByText('Continue')); });
+
+      const profile = JSON.parse((await AsyncStorage.getItem(COACH_PROFILE))!);
+      expect(profile).toMatchObject({ goal: 'strength', experience: 'beginner', days_per_week: 4 });
+    });
+
+    it('can change an answer after the last question without asking anything again', async () => {
+      const r = renderScreen();
+      await completeChat(r, { routine: false });
+      fireEvent.press(r.getByText('4 days'));
+      await waitFor(() => expect(r.getByText('Changing: Days per week')).toBeTruthy());
+      // Continue waits until the change is made or cancelled
+      expect(r.queryByText('Continue')).toBeNull();
+      fireEvent.press(r.getByText('5 days'));
+      await act(async () => { fireEvent.press(r.getByText('Continue')); });
+
+      expect(await AsyncStorage.getItem(`${WEEKLY_GOAL_KEY}_${mockUser.id}`)).toBe('5');
+    });
+
+    it('leaves the answer alone when the change is cancelled', async () => {
+      const r = renderScreen();
+      await answer(r, 'Build Muscle', 'Under 1 year');
+      fireEvent.press(r.getByText('Build Muscle'));
+      await waitFor(() => expect(r.getByText('Cancel')).toBeTruthy());
+      fireEvent.press(r.getByText('Cancel'));
+      expect(r.getByText('Build Muscle')).toBeTruthy();
+      expect(r.getByText('Under 1 year')).toBeTruthy();
+      expect(r.queryByText('Changing: Main goal')).toBeNull();
+    });
+  });
+
+  it('shows a placeholder program while it generates', async () => {
+    installServer();
+    (global.fetch as jest.Mock).mockImplementation(() => new Promise(() => {}));
+    const r = renderScreen();
+    await answer(r, 'Build Muscle', 'Under 1 year');
+    await answer(r, 'Under 1 year', '4 days');
+    await answer(r, '4 days', 'Full gym');
+    await answer(r, 'Full gym', 'All clear');
+    await answer(r, 'All clear', 'Yes, build my program');
+    fireEvent.press(r.getByText('Yes, build my program'));
+    expect(r.getByTestId('generating-card')).toBeTruthy();
+    expect(r.getByText('Choosing your split…')).toBeTruthy();
+    expect(r.queryByText('Skip')).toBeNull();
+    r.unmount();
   });
 });

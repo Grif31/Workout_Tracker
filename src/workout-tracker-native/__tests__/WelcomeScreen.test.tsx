@@ -37,4 +37,11 @@ describe('WelcomeScreen', () => {
     fireEvent.press(getByText('Log In'));
     expect(nav.navigate).toHaveBeenCalledWith('Login');
   });
+
+  it('shows the feature tour before sign-up', () => {
+    const { getByText } = render(<WelcomeScreen navigation={nav as any} route={route as any} />);
+    expect(getByText('Track Every Workout')).toBeTruthy();
+    expect(getByText('Watch Yourself Improve')).toBeTruthy();
+    expect(getByText('Your AI Coach')).toBeTruthy();
+  });
 });

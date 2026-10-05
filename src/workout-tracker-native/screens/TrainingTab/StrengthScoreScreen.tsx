@@ -29,6 +29,9 @@ import { toLocalDateStr, timeAgo } from '../../utils/date';
 import ScoreRing, { AnimatedPercentText } from '../../components/ScoreRing';
 import PercentileBar from '../../components/PercentileBar';
 import SectionRule from '../../components/SectionRule';
+import SegmentedControl from '../../components/SegmentedControl';
+
+const RANGE_SEGMENTS = (['1M', '3M', '6M', 'All'] as const).map(r => ({ key: r, label: r }));
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'StrengthScore'>;
 
@@ -659,17 +662,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               <Reanimated.View entering={FadeInDown.delay(400).duration(400)}>
                 <View style={styles.moreLiftsTitleRow}>
                   <SectionRule label="Score Over Time" style={{ flex: 1, marginBottom: 0 }} fontSize={typography.fontSize.sm} />
-                  <View style={styles.rangeToggle}>
-                    {(['1M', '3M', '6M', 'All'] as const).map(r => (
-                      <TouchableOpacity
-                        key={r}
-                        style={[styles.rangeBtn, chartRange === r && { backgroundColor: colors.accent + '22' }]}
-                        onPress={() => setChartRange(r)}
-                      >
-                        <Text style={[styles.rangeBtnText, chartRange === r && { color: colors.accent, fontWeight: '700' }]}>{r}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                  <SegmentedControl options={RANGE_SEGMENTS} value={chartRange} onChange={setChartRange} style={styles.rangeToggle} />
                 </View>
                 <View style={[styles.card, { padding: spacing.sm }]}>
                   {chartData.length >= 2 ? (
@@ -1001,12 +994,7 @@ const createStyles = (colors: Colors) =>
       marginTop: spacing.sm, paddingVertical: spacing.xs,
     },
     heroExpandText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
-    rangeToggle: {
-      flexDirection: 'row', backgroundColor: colors.surface,
-      borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm + 2, padding: 2,
-    },
-    rangeBtn: { paddingVertical: spacing.xs, paddingHorizontal: 12, borderRadius: radius.sm, alignItems: 'center' },
-    rangeBtnText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
+    rangeToggle: { width: 172, backgroundColor: colors.surface },
     rankUpBanner: {
       flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
       borderRadius: 10, borderWidth: 1, padding: spacing.sm,

@@ -154,9 +154,7 @@ export type AuthStackParamsList = {
 
 export type OnboardingStackParamsList = {
     Onboarding:             undefined;
-    OnboardingTutorial:     undefined;
-    OnboardingUnits:        undefined;
-    OnboardingPersonalInfo: undefined;
+    OnboardingAboutYou:     undefined;
 }
 
 export type RootStackParamsList = {

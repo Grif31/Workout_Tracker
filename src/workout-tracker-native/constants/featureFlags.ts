@@ -10,3 +10,8 @@ export const APP_ICONS_ENABLED = false;
 // iOS now runs on @kingstinct/react-native-healthkit — verify in a TestFlight
 // build before the next App Store submission.
 export const HEALTH_SYNC_ENABLED = true;
+
+// Dev only: show onboarding on every sign-in or launch, even for an account
+// that finished it or has logged workouts, so the flow can be tried on a real
+// account. __DEV__ keeps it out of release builds whatever this is set to.
+export const FORCE_ONBOARDING = __DEV__ && false;
