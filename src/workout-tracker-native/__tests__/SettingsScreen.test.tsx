@@ -144,25 +144,10 @@ describe('SettingsScreen', () => {
     });
   });
 
-  describe('workout settings', () => {
-    beforeEach(() => AsyncStorage.clear());
-
-    it("shows WorkoutLog's defaults when nothing is stored", async () => {
-      const { getByLabelText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
-      await waitFor(() => expect(getByLabelText('Track RPE').props.value).toBe(false));
-      expect(getByLabelText('Auto-start rest timer').props.value).toBe(true);
-      expect(getByLabelText('Prefill previous sets').props.value).toBe(true);
-      expect(getByLabelText('Repeat last set').props.value).toBe(false);
-    });
-
-    it("reads and writes the same per-user keys WorkoutLog uses", async () => {
-      await AsyncStorage.setItem('workout_show_plate_calc_1', 'false');
-      const { getByLabelText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
-      await waitFor(() => expect(getByLabelText('Show plate calculator').props.value).toBe(false));
-
-      fireEvent(getByLabelText('Track RPE'), 'valueChange', true);
-      await waitFor(async () => expect(await AsyncStorage.getItem('workout_show_rpe_1')).toBe('true'));
-      expect(getByLabelText('Track RPE').props.value).toBe(true);
-    });
+  it('opens the Workout settings from its row', () => {
+    const { getAllByText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
+    // The section label reads the same; the row is the second
+    fireEvent.press(getAllByText('Workout')[1]);
+    expect(nav.navigate).toHaveBeenCalledWith('WorkoutSettings');
   });
 });

@@ -7,6 +7,7 @@ import EditWorkoutScreen from '../screens/ProfileTab/EditWorkoutScreen';
 import ChangePasswordScreen from '../screens/ProfileTab/ChangePasswordScreen';
 import SettingsScreen from '../screens/ProfileTab/SettingsScreen';
 import AccountSettingsScreen from '../screens/ProfileTab/AccountSettingsScreen';
+import WorkoutSettingsScreen from '../screens/ProfileTab/WorkoutSettingsScreen';
 import WorkoutDetails from '../screens/ProfileTab/WorkoutDetails';
 import CardioDetailsScreen from '../screens/DashboardTab/CardioDetailsScreen';
 import MeasurementsScreen from '../screens/ProfileTab/MeasurementsScreen';
@@ -32,6 +33,7 @@ export function ProfileStack() {
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
+      <Stack.Screen name="WorkoutSettings" component={WorkoutSettingsScreen} />
       <Stack.Screen name="WorkoutDetails" component={WorkoutDetails} />
       <Stack.Screen name="CardioDetails" component={CardioDetailsScreen} options={{ contentStyle: { paddingTop: 0 } }} />
       <Stack.Screen name="EditWorkout" component={EditWorkoutScreen} />

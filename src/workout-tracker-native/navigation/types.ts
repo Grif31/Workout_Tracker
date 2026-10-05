@@ -117,6 +117,7 @@ export type ProfileStackParamsList = {
     EditProfile: undefined
     Settings: undefined
     AccountSettings: undefined
+    WorkoutSettings: undefined
     ChangePassword: undefined
     WorkoutDetails: { workoutId: number };
     CardioDetails: { workoutId: number };
