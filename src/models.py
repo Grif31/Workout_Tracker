@@ -47,6 +47,8 @@ class User(db.Model):
             'active_routine_id': self.active_routine_id,
             'gender': self.gender,
             'birth_date': self.birth_date.isoformat() if self.birth_date else None,
+            # No password to change yet: the app offers "set a password" instead
+            'is_social_only': bool(self.is_social_only),
         }
 
 

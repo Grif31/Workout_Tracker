@@ -38,12 +38,18 @@ class ChangePasswordSchema(Schema):
 # ── User ─────────────────────────────────────────────────────
 # No load_default on optional fields — missing fields excluded from dict,
 # preserving the 'if field in data' PATCH semantics in update_user_info.
+# The app sends the avatar as a 300px JPEG data URL, about 30 KB of text.
+PROFILE_PIC_MAX_LEN = 400_000
+
 class UpdateProfileSchema(_Base):
-    name            = fields.Str()
-    bio             = fields.Str()
-    profile_pic_url = fields.Str()
-    bodyweight      = fields.Float()
-    height          = fields.Float()
+    # user.name is String(100): without the cap Postgres raises on a longer one and the save 500s
+    name            = fields.Str(validate=validate.Length(max=100))
+    bio             = fields.Str(validate=validate.Length(max=1000))
+    profile_pic_url = fields.Str(validate=validate.Length(max=PROFILE_PIC_MAX_LEN))
+    # null clears these. Edit Profile sends height: null when the field is
+    # empty, which used to be rejected and blocked the whole save.
+    bodyweight      = fields.Float(allow_none=True)
+    height          = fields.Float(allow_none=True, validate=validate.Range(min=20, max=108))
     weight_unit     = fields.Str(validate=validate.OneOf(['kg', 'lbs']))
     # gender had a load_default and so was injected as None into every partial
     # PATCH, wiping it whenever Settings sent only weight_unit. Sending an

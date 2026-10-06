@@ -11,6 +11,7 @@ import {
   Image,
   Platform,
   Modal,
+  KeyboardAvoidingView,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,43 +25,95 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch, resolveMediaUrl, isNetworkError } from '../../utils/api';
 import { toLocalDateStr } from '../../utils/date';
+import { showToast } from '../../utils/toast';
+import { useDiscardGuard } from '../../utils/useDiscardGuard';
+import { cmToInches, ftInToInches, inchesToCm, inchesToFtIn } from '../../utils/height';
+import SegmentedControl from '../../components/SegmentedControl';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'EditProfile'>;
 
+type Gender = 'male' | 'female' | 'none';
+const GENDERS = [
+  { key: 'male', label: 'Male' },
+  { key: 'female', label: 'Female' },
+  { key: 'none', label: 'Rather not say' },
+] as const;
+
+// Mirror UpdateProfileSchema in schemas.py; past them the save is rejected
+const NAME_MAX = 100;
+const BIO_MAX = 1000;
+
+type Form = {
+  name: string; bio: string; pic: string; gender: Gender;
+  heightFt: string; heightIn: string; heightCm: string; birthDate: string | null;
+};
+
 export default function EditProfileScreen({ navigation }: Props) {
   const { user, updateUser } = useAuth();
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  // Lengths follow the weight unit everywhere (utils/bodyMetrics lengthUnitFor)
+  const metric = user?.weight_unit === 'kg';
 
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
   const [profilePicUri, setProfilePicUri] = useState('');
   const [heightFt, setHeightFt] = useState('');
   const [heightIn, setHeightIn] = useState('');
-  const [gender, setGender] = useState<'male' | 'female' | null>(null);
+  const [heightCm, setHeightCm] = useState('');
+  const [gender, setGender] = useState<Gender>('none');
   const [birthDate, setBirthDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving] = useState(false);
+  // The form as loaded; anything different is unsaved
+  const [initial, setInitial] = useState<string | null>(null);
 
-  // Prefill from user whenever user data loads (handles async auth state)
+  const snapshot = (f: Form) => JSON.stringify({ ...f, name: f.name.trim(), bio: f.bio.trim() });
+  const current: Form = {
+    name, bio, pic: profilePicUri, gender, heightFt, heightIn, heightCm,
+    birthDate: birthDate ? toLocalDateStr(birthDate) : null,
+  };
+
+  // Prefill once the user is known. Keyed on the id, not the object: a
+  // refreshed user object mid-edit must not wipe what's been typed.
   useEffect(() => {
     if (!user) return;
-    setName(user.name ?? '');
-    setBio(user.bio ?? '');
-    setProfilePicUri(user.profile_pic_url ?? '');
+    const loaded: Form = {
+      name: user.name ?? '',
+      bio: user.bio ?? '',
+      pic: user.profile_pic_url ?? '',
+      gender: (user as any).gender ?? 'none',
+      heightFt: '', heightIn: '', heightCm: '',
+      birthDate: (user as any).birth_date ?? null,
+    };
     if (user.height != null) {
-      setHeightFt(String(Math.floor(user.height / 12)));
-      setHeightIn(String(Math.round(user.height % 12)));
+      const { ft, inch } = inchesToFtIn(user.height);
+      loaded.heightFt = String(ft);
+      loaded.heightIn = String(inch);
+      loaded.heightCm = String(inchesToCm(user.height));
     }
-    setGender((user as any).gender ?? null);
-    const bd = (user as any).birth_date;
-    if (bd) {
-      const [y, m, d] = bd.split('-').map(Number);
+    setName(loaded.name);
+    setBio(loaded.bio);
+    setProfilePicUri(loaded.pic);
+    setGender(loaded.gender);
+    setHeightFt(loaded.heightFt);
+    setHeightIn(loaded.heightIn);
+    setHeightCm(loaded.heightCm);
+    if (loaded.birthDate) {
+      const [y, m, d] = loaded.birthDate.split('-').map(Number);
       setBirthDate(new Date(y, m - 1, d));
     } else {
       setBirthDate(null);
     }
-  }, [user]);
+    setInitial(snapshot(loaded));
+  }, [user?.id]);
+
+  const dirty = initial != null && snapshot(current) !== initial;
+  const leave = useDiscardGuard(navigation, dirty, "Your profile changes haven't been saved.");
+  const heightChanged = initial != null && (() => {
+    const was: Form = JSON.parse(initial);
+    return was.heightFt !== heightFt || was.heightIn !== heightIn || was.heightCm !== heightCm;
+  })();
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -84,38 +137,37 @@ export default function EditProfileScreen({ navigation }: Props) {
   };
 
   const handleSave = async () => {
-    const totalInches =
-      heightFt || heightIn
-        ? parseInt(heightFt || '0') * 12 + parseFloat(heightIn || '0')
-        : null;
-
-    const birthDateIso = birthDate ? toLocalDateStr(birthDate) : null;
+    const body: Record<string, unknown> = {
+      name: name.trim(),
+      bio: bio.trim(),
+      profile_pic_url: profilePicUri,
+      gender: gender === 'none' ? null : gender,
+      birth_date: birthDate ? toLocalDateStr(birthDate) : null,
+    };
+    // Only when edited: the fields show a rounded height, and sending that
+    // back untouched would quietly change what's stored
+    if (heightChanged) {
+      body.height = metric ? cmToInches(heightCm) : ftInToInches(heightFt, heightIn);
+    }
 
     setSaving(true);
     try {
-      const resolvedPicUrl = profilePicUri;
-
       const res = await apiFetch('/api/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          bio,
-          profile_pic_url: resolvedPicUrl,
-          height: totalInches,
-          gender,
-          birth_date: birthDateIso,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (res.ok) {
-        const updated = await res.json();
-        await updateUser(updated);
-        Alert.alert('Saved', 'Profile updated successfully');
-        navigation.goBack();
+        await updateUser(await res.json());
+        showToast('Profile saved');
+        leave(() => navigation.goBack());
       } else {
-        const data = await res.json();
-        Alert.alert("Couldn't Save Profile", data.message || 'Try again in a moment.');
+        const data = await res.json().catch(() => null);
+        const message = typeof data?.message === 'string' && data.message.startsWith('height')
+          ? 'Check the height you entered.'
+          : 'Try again in a moment.';
+        Alert.alert("Couldn't Save Profile", message);
       }
     } catch (err) {
       if (!isNetworkError(err)) Alert.alert("Couldn't Save Profile", 'Try again in a moment.');
@@ -124,153 +176,187 @@ export default function EditProfileScreen({ navigation }: Props) {
     }
   };
 
+  const birthdayPicker = (
+    <DateTimePicker
+      value={birthDate ?? new Date(1990, 0, 1)}
+      mode="date"
+      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+      // Without it the iOS spinner follows the system theme, not the app's,
+      // and can draw dark text on the dark sheet
+      themeVariant={mode}
+      maximumDate={new Date(new Date().getFullYear() - 14, 11, 31)}
+      minimumDate={new Date(1920, 0, 1)}
+      onChange={(_, date) => {
+        if (Platform.OS !== 'ios') setShowDatePicker(false);
+        if (date) setBirthDate(date);
+      }}
+    />
+  );
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.titleRow}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={8}>
-          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <View style={styles.titleRow}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backBtn}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.title}>Edit Profile</Text>
+        </View>
+
+        <TouchableOpacity
+          onPress={pickImage}
+          style={styles.avatarContainer}
+          accessibilityRole="button"
+          accessibilityLabel="Change profile photo"
+        >
+          <View>
+            <Image
+              source={
+                profilePicUri
+                  ? { uri: resolveMediaUrl(profilePicUri) }
+                  : require('../../assets/profile-placeholder.png')
+              }
+              style={styles.avatar}
+            />
+            <View style={styles.cameraBadge}>
+              <Ionicons name="camera" size={14} color={colors.accentText} />
+            </View>
+          </View>
+          <Text style={styles.avatarHint}>Tap to change photo</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Edit Profile</Text>
-      </View>
 
-      <TouchableOpacity onPress={pickImage} style={styles.avatarContainer}>
-        <Image
-          source={
-            profilePicUri
-              ? { uri: resolveMediaUrl(profilePicUri) }
-              : require('../../assets/profile-placeholder.png')
-          }
-          style={styles.avatar}
+        <Text style={styles.label}>Name</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Your name"
+          placeholderTextColor={colors.placeholder}
+          value={name}
+          onChangeText={setName}
+          maxLength={NAME_MAX}
+          autoComplete="name"
+          textContentType="name"
         />
-        <Text style={styles.avatarHint}>Tap to change photo</Text>
-      </TouchableOpacity>
 
-      <Text style={styles.label}>Name</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Your name"
-        placeholderTextColor={colors.placeholder}
-        value={name}
-        onChangeText={setName}
-      />
+        <Text style={styles.label}>Bio</Text>
+        <TextInput
+          style={[styles.input, styles.bioInput]}
+          placeholder="Describe yourself, your fitness goals, or anything you like."
+          placeholderTextColor={colors.placeholder}
+          value={bio}
+          onChangeText={setBio}
+          maxLength={BIO_MAX}
+          multiline
+          numberOfLines={4}
+        />
 
-      <Text style={styles.label}>Bio</Text>
-      <TextInput
-        style={[styles.input, styles.bioInput]}
-        placeholder="Describe yourself, your fitness goals, or anything you like."
-        placeholderTextColor={colors.placeholder}
-        value={bio}
-        onChangeText={setBio}
-        multiline
-        numberOfLines={4}
-      />
+        <Text style={styles.sectionHeader}>Body Stats</Text>
 
-      <Text style={styles.sectionHeader}>Body Stats</Text>
+        <Text style={styles.label}>Gender</Text>
+        <SegmentedControl options={GENDERS} value={gender} onChange={setGender} size="md" appearance="solid" />
+        <Text style={styles.hint}>Strength Score and Endurance Score need this to compare your exercises.</Text>
 
-      <Text style={styles.label}>Gender</Text>
-      <View style={styles.chipRow}>
-        {(['male', 'female', null] as const).map((val) => {
-          const label = val === 'male' ? 'Male' : val === 'female' ? 'Female' : 'Prefer not to say';
-          const active = gender === val;
-          return (
-            <TouchableOpacity
-              key={label}
-              style={[styles.chip, active && { backgroundColor: colors.accent, borderColor: colors.accent }]}
-              onPress={() => setGender(val)}
-            >
-              <Text style={[styles.chipText, active && { color: colors.accentText }]}>{label}</Text>
+        <Text style={styles.label}>Birthday</Text>
+        <View style={styles.dateRow}>
+          <TouchableOpacity style={styles.dateTap} onPress={() => setShowDatePicker(true)} accessibilityRole="button">
+            <Text style={[styles.dateText, !birthDate && { color: colors.placeholder }]}>
+              {birthDate
+                ? birthDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
+                : 'Select birthday'}
+            </Text>
+          </TouchableOpacity>
+          {birthDate && (
+            <TouchableOpacity onPress={() => setBirthDate(null)} hitSlop={8} accessibilityLabel="Clear birthday">
+              <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
-          );
-        })}
-      </View>
+          )}
+        </View>
 
-      <Text style={styles.label}>Birthday</Text>
-      <TouchableOpacity style={styles.dateRow} onPress={() => setShowDatePicker(true)}>
-        <Text style={[styles.dateText, !birthDate && { color: colors.placeholder }]}>
-          {birthDate
-            ? birthDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
-            : 'Select birthday'}
-        </Text>
-      </TouchableOpacity>
+        {/* iOS: modal wrapper so the picker doesn't push layout */}
+        {Platform.OS === 'ios' ? (
+          <Modal
+            visible={showDatePicker}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setShowDatePicker(false)}
+          >
+            <TouchableOpacity style={styles.pickerModal} activeOpacity={1} onPress={() => setShowDatePicker(false)}>
+              <View style={styles.pickerCard} onStartShouldSetResponder={() => true}>
+                <TouchableOpacity style={styles.pickerDone} onPress={() => setShowDatePicker(false)}>
+                  <Text style={styles.pickerDoneText}>Done</Text>
+                </TouchableOpacity>
+                {birthdayPicker}
+              </View>
+            </TouchableOpacity>
+          </Modal>
+        ) : (
+          showDatePicker && birthdayPicker
+        )}
 
-      {/* iOS: modal wrapper so the picker doesn't push layout */}
-      {Platform.OS === 'ios' ? (
-        <Modal visible={showDatePicker} transparent animationType="slide">
-          <View style={styles.pickerModal}>
-            <View style={styles.pickerCard}>
-              <TouchableOpacity style={styles.pickerDone} onPress={() => setShowDatePicker(false)}>
-                <Text style={{ color: colors.accent, fontWeight: '600', fontSize: typography.fontSize.md }}>Done</Text>
-              </TouchableOpacity>
-              <DateTimePicker
-                value={birthDate ?? new Date(1990, 0, 1)}
-                mode="date"
-                display="spinner"
-                maximumDate={new Date(new Date().getFullYear() - 14, 11, 31)}
-                minimumDate={new Date(1920, 0, 1)}
-                onChange={(_, date) => { if (date) setBirthDate(date); }}
+        <Text style={styles.label}>Height</Text>
+        {metric ? (
+          <TextInput
+            style={styles.input}
+            placeholder="cm"
+            placeholderTextColor={colors.placeholder}
+            value={heightCm}
+            onChangeText={setHeightCm}
+            keyboardType="decimal-pad"
+            accessibilityLabel="Height in centimeters"
+          />
+        ) : (
+          <View style={styles.row}>
+            <View style={styles.halfInputWrapper}>
+              <TextInput
+                style={styles.input}
+                placeholder="ft"
+                placeholderTextColor={colors.placeholder}
+                value={heightFt}
+                onChangeText={setHeightFt}
+                keyboardType="number-pad"
+                accessibilityLabel="Height, feet"
+              />
+            </View>
+            <View style={styles.halfInputWrapper}>
+              <TextInput
+                style={styles.input}
+                placeholder="in"
+                placeholderTextColor={colors.placeholder}
+                value={heightIn}
+                onChangeText={setHeightIn}
+                keyboardType="decimal-pad"
+                accessibilityLabel="Height, inches"
               />
             </View>
           </View>
-        </Modal>
-      ) : (
-        showDatePicker && (
-          <DateTimePicker
-            value={birthDate ?? new Date(1990, 0, 1)}
-            mode="date"
-            display="default"
-            maximumDate={new Date(new Date().getFullYear() - 14, 11, 31)}
-            minimumDate={new Date(1920, 0, 1)}
-            onChange={(_, date) => {
-              setShowDatePicker(false);
-              if (date) setBirthDate(date);
-            }}
-          />
-        )
-      )}
+        )}
 
-      <Text style={styles.label}>Height</Text>
-      <View style={styles.row}>
-        <View style={styles.halfInputWrapper}>
-          <TextInput
-            style={styles.input}
-            placeholder="ft"
-            placeholderTextColor={colors.placeholder}
-            value={heightFt}
-            onChangeText={setHeightFt}
-            keyboardType="number-pad"
-          />
-        </View>
-        <View style={styles.halfInputWrapper}>
-          <TextInput
-            style={styles.input}
-            placeholder="in"
-            placeholderTextColor={colors.placeholder}
-            value={heightIn}
-            onChangeText={setHeightIn}
-            keyboardType="decimal-pad"
-          />
-        </View>
-      </View>
+        <TouchableOpacity
+          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+          onPress={handleSave}
+          disabled={saving}
+        >
+          {saving
+            ? <ActivityIndicator color={colors.accentText} />
+            : <Text style={styles.saveButtonText}>Save Changes</Text>
+          }
+        </TouchableOpacity>
 
-      <TouchableOpacity
-        style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-        onPress={handleSave}
-        disabled={saving}
-      >
-        {saving
-          ? <ActivityIndicator color={colors.accentText} />
-          : <Text style={styles.saveButtonText}>Save Changes</Text>
-        }
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.goBack()}>
-        <Text style={styles.cancelButtonText}>Cancel</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.goBack()}>
+          <Text style={styles.cancelButtonText}>Cancel</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const createStyles = (colors: Colors) => StyleSheet.create({
+  flex: { flex: 1, backgroundColor: colors.background },
   container: {
     padding: spacing.md,
     backgroundColor: colors.background,
@@ -298,6 +384,19 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: 45,
     backgroundColor: colors.border,
   },
+  cameraBadge: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.accent,
+    borderWidth: 2,
+    borderColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   avatarHint: {
     color: colors.save,
     fontSize: typography.fontSize.sm,
@@ -315,6 +414,13 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textPrimary,
     marginBottom: spacing.xs,
   },
+  hint: {
+    fontSize: typography.fontSize.xs,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
+    lineHeight: 16,
+  },
   input: {
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -330,13 +436,16 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     textAlignVertical: 'top',
   },
   dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: spacing.sm,
-    padding: spacing.md,
+    paddingRight: spacing.md,
     marginBottom: spacing.md,
   },
+  dateTap: { flex: 1, padding: spacing.md },
   dateText: {
     fontSize: typography.fontSize.md,
     color: colors.textPrimary,
@@ -356,25 +465,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     alignItems: 'flex-end',
     padding: spacing.md,
   },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  chipText: {
-    fontSize: typography.fontSize.sm,
-    color: colors.textPrimary,
-    fontWeight: '500',
-  },
+  pickerDoneText: { color: colors.accent, fontWeight: '600', fontSize: typography.fontSize.md },
   row: {
     flexDirection: 'row',
     gap: spacing.sm,
