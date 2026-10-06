@@ -1099,14 +1099,16 @@ Check off items as you complete them.
 > **Status 2026-10-04:** done in code and tests on `improve/paywall`. Not yet exercised against the real store: run a purchase, a cancel, a restore and an expiry with a sandbox account before release.
 
 ### Phase 1 — A paywall that converts
-- [ ] **Pitch what they tapped.** Every entry point already passes `source` (`ai_coach`, `strength_score`, `endurance_score`, `muscle_volume`, `templates`, `routines`, `app_icon`) and the paywall ignores it. Map each to a headline ("Strength Score is part of Premium") and move that feature to the top of the list
-- [ ] **Show the annual saving from real store prices**: "Save 40%" badge and "$3.33/mo, billed yearly" under Annual (`product.price` / 12, formatted with `product.currencyCode`)
-- [ ] **Button names the plan**: "Start 7-Day Free Trial", "Subscribe for $39.99/year", "Buy Lifetime for $99.99"
-- [ ] **Trial timeline** when a trial is offered: Today: full access. Day 5: reminder. Day 7: first charge. Schedule the day-5 local notification on trial start (expo-notifications is already in)
-- [ ] **Feature rows with substance**: one line each on what it does for you, not just a name ("See which lifts are holding your score back")
-- [ ] Motion: press scale + haptic on plan cards, staggered fade-in on feature rows, check animation on success before the screen closes
-- [ ] **Manage Subscription** row in Account Settings for subscribers (opens Apple's subscriptions page), showing the plan and renewal date from customer info
-- [ ] Premium users who somehow reach the paywall see "You're Premium" instead of prices
+- [x] **Pitch what they tapped.** Every entry point already passes `source` (`ai_coach`, `strength_score`, `endurance_score`, `muscle_volume`, `templates`, `routines`, `app_icon`) and the paywall ignores it. Map each to a headline ("Strength Score is part of Premium") and move that feature to the top of the list
+- [x] **Show the annual saving from real store prices**: "Save 40%" badge and "$3.33/mo, billed yearly" under Annual (`product.price` / 12, formatted with `product.currencyCode`)
+- [x] **Button names the plan**: "Start 7-Day Free Trial", "Subscribe for $39.99/year", "Buy Lifetime for $99.99"
+- [x] **Trial reminder.** Starting a trial schedules a local notification two days before the first charge, if notifications are already allowed. The on-screen Today / Day 5 / Day 7 timeline was built and removed 2026-10-05 (owner: unnecessary); the plan card and button already state the trial
+- [x] **Feature rows with substance**: one line each on what it does for you, not just a name ("See which lifts are holding your score back")
+- [x] Motion: press scale + haptic on plan cards, staggered fade-in on feature rows, check animation on success before the screen closes
+- [x] **Manage Subscription** row in Account Settings for subscribers (opens Apple's subscriptions page), showing the plan and renewal date from customer info
+- [x] Premium users who somehow reach the paywall see "You're Premium" instead of prices
+
+> **Status 2026-10-05:** built and tested on `improve/paywall`; reviewable in the dev build with `PAYWALL_PREVIEW` (`constants/featureFlags.ts`), which shows a free account and sample plans. Savings, button and trial read the store's own prices; real prices and a real trial still need the TestFlight check.
 
 ### Phase 2 — Let free users see their own locked value
 > A locked screen sells nothing. Their own number, partly shown, sells itself.

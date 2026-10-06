@@ -11,6 +11,12 @@
  * covers the build with a key.
  */
 jest.mock('../constants/purchaseConfig', () => ({ REVENUECAT_IOS_KEY: '', BETA_PREMIUM: true }));
+// Whatever the dev-only paywall preview is set to, test the real rules
+jest.mock('../constants/featureFlags', () => ({
+  ...jest.requireActual('../constants/featureFlags'),
+  PAYWALL_PREVIEW: false,
+}));
+jest.mock('../utils/notifications', () => ({ cancelTrialReminder: jest.fn() }));
 jest.mock('react-native-purchases', () => ({
   __esModule: true,
   default: {

@@ -7,6 +7,7 @@ import { REMINDERS_KEY, REMINDER_HOUR_KEY, REMINDER_MIN_KEY } from '../constants
 const PROJECT_ID = '356b88e9-4302-43fc-b50a-6d83030b8fa6';
 const REMINDER_NOTIF_KEY    = 'workout_reminder_notif_id';
 const REST_TIMER_NOTIF_KEY  = 'rest_timer_notif_id';
+const TRIAL_REMINDER_NOTIF_KEY = 'trial_reminder_notif_id';
 
 // In-memory cache — avoids AsyncStorage reads while the app is running.
 // On restart the cache is empty; functions fall back to AsyncStorage.
@@ -191,5 +192,35 @@ export async function cancelWorkoutReminder(): Promise<void> {
   if (id) {
     await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
     await AsyncStorage.removeItem(REMINDER_NOTIF_KEY);
+  }
+}
+
+// ── Free trial ending (one-off) ──────────────────────────────
+
+/**
+ * Reminds the user their free trial is about to convert. Only when
+ * notifications are already allowed: a permission prompt straight after a
+ * purchase, for a reminder nobody asked for, would be out of place.
+ */
+export async function scheduleTrialReminder(daysFromNow: number, body: string): Promise<void> {
+  await cancelTrialReminder();
+  if (!(await hasNotificationPermission())) return;
+  try {
+    const id = await Notifications.scheduleNotificationAsync({
+      content: { title: 'Your free trial ends soon', body, sound: true },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: new Date(Date.now() + daysFromNow * 24 * 60 * 60 * 1000),
+      },
+    });
+    await AsyncStorage.setItem(TRIAL_REMINDER_NOTIF_KEY, id);
+  } catch {}
+}
+
+export async function cancelTrialReminder(): Promise<void> {
+  const id = await AsyncStorage.getItem(TRIAL_REMINDER_NOTIF_KEY);
+  if (id) {
+    await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
+    await AsyncStorage.removeItem(TRIAL_REMINDER_NOTIF_KEY);
   }
 }

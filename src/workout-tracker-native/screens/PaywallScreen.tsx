@@ -1,57 +1,44 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  ActivityIndicator, SafeAreaView, Alert,
+  ActivityIndicator, Alert, Animated as RNAnimated,
 } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import Purchases, { INTRO_ELIGIBILITY_STATUS, type PurchasesPackage } from 'react-native-purchases';
+import { type PurchasesPackage } from 'react-native-purchases';
 import { usePurchase, type PurchaseOutcome } from '../context/PurchaseContext';
+import PressableScale from '../components/PressableScale';
+import { AUTH } from '../theme/authColors';
 import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { showToast } from '../utils/toast';
 import { openExternalLink } from '../utils/links';
+import { scheduleTrialReminder } from '../utils/notifications';
+import { annualSavings, ctaLabel, featuresFor, headlineFor, trialOf, trialReminderDay } from '../utils/paywall';
 import { type RootStackParamsList } from '../navigation/types';
-import { APP_ICONS_ENABLED } from '../constants/featureFlags';
 
 type Props = NativeStackScreenProps<RootStackParamsList, 'Paywall'>;
 
-// Paywall brand palette — fixed premium look, independent of app theme
-const GOLD        = '#FFD700';
-const GOLD_LIGHT  = '#E8D5A3';
-const GOLD_DIM    = '#7A6235';
-const PW_BG       = '#0A0806';
-const PW_CARD     = '#14100A';
-const PW_BORDER   = '#2A1F08';
-
-const FEATURES: { icon: string; label: string }[] = [
-  { icon: 'sparkles',            label: 'AI Coach: generate workouts & routines' },
-  { icon: 'bulb-outline',        label: 'Personalized training insights' },
-  { icon: 'trophy-outline',      label: 'Strength Score & lifter ranking' },
-  { icon: 'speedometer-outline', label: 'Endurance Score & runner ranking' },
-  { icon: 'bar-chart-outline',   label: 'Muscle volume zones: MEV · MAV · MRV' },
-  { icon: 'list-outline',        label: 'Unlimited templates & routines' },
-  ...(APP_ICONS_ENABLED ? [{ icon: 'apps-outline', label: 'Custom app icons' }] : []),
-];
+// The paywall wears the onboarding look (always dark, brand green) rather than
+// the app theme: it reads the same whatever accent or light mode the user picked
+const ACCENT  = AUTH.accent;
+const TEXT    = AUTH.text;
+const SUBTEXT = AUTH.subtext;
+const PW_BG     = AUTH.bg;
+const PW_CARD   = AUTH.card;
+const PW_BORDER = AUTH.border;
+// Top of the hero's fade into the background
+const HERO_TINT = '#0F2018';
 
 const TIERS = [
   { type: 'ANNUAL',   label: 'Annual',   badge: 'Best Value' },
   { type: 'MONTHLY',  label: 'Monthly',  badge: '' },
-  { type: 'LIFETIME', label: 'Lifetime', badge: 'One-time' },
+  { type: 'LIFETIME', label: 'Lifetime', badge: 'Launch Promo' },
 ];
-
-const PERIOD_UNITS: Record<string, string> = { DAY: 'day', WEEK: 'week', MONTH: 'month', YEAR: 'year' };
-
-// "1 week free" for a free intro offer, null for a paid intro or none
-function freeTrialText(pkg: PurchasesPackage): string | null {
-  const intro = pkg.product.introPrice;
-  if (!intro || intro.price !== 0) return null;
-  const unit = PERIOD_UNITS[intro.periodUnit];
-  if (!unit) return null;
-  const n = intro.periodNumberOfUnits;
-  return `${n} ${unit}${n === 1 ? '' : 's'} free`;
-}
 
 // What to tell the user when a purchase doesn't go through. Cancelling is
 // their own choice and gets no message.
@@ -62,11 +49,30 @@ const PURCHASE_PROBLEMS: Partial<Record<PurchaseOutcome, [string, string]>> = {
   failed: ["Purchase Didn't Go Through", 'You have not been charged. Try again in a moment.'],
 };
 
-export default function PaywallScreen({ navigation }: Props) {
-  const { offerings, offeringsState, reloadOfferings, purchasePackage, restorePurchases } = usePurchase();
+// How long the success check shows before the paywall closes
+const SUCCESS_MS = 700;
+
+export default function PaywallScreen({ navigation, route }: Props) {
+  const {
+    isPremium, offerings, offeringsState, reloadOfferings, checkTrialEligibility,
+    purchasePackage, restorePurchases,
+  } = usePurchase();
+  const insets = useSafeAreaInsets();
+  const source = route.params?.source;
+  const headline = headlineFor(source);
+  const features = useMemo(() => featuresFor(source), [source]);
+
+  // Someone who was already premium on arrival has nothing to buy here.
+  // Read once: buying on this screen must not swap it out mid-purchase.
+  const alreadyPremium = useRef(!!isPremium).current;
+
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [succeeded, setSucceeded] = useState(false);
+  const successScale = useRef(new RNAnimated.Value(0)).current;
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
 
   const tierPackages = useMemo(() => {
     const allOfferings = Object.values(offerings?.all ?? {});
@@ -90,40 +96,50 @@ export default function PaywallScreen({ navigation }: Props) {
     if (offeringsState === 'failed') reloadOfferings();
   }, []);
 
-  // Apple only honors an intro offer once per subscription group, so the trial
-  // is advertised only to users StoreKit confirms are still eligible
   const [trialEligible, setTrialEligible] = useState<Record<string, boolean>>({});
   const productIds = packages.map(p => p.product.identifier).join(',');
   useEffect(() => {
     if (!productIds) return;
     let cancelled = false;
-    Purchases.checkTrialOrIntroductoryPriceEligibility(productIds.split(','))
-      .then(res => {
-        if (cancelled) return;
-        const map: Record<string, boolean> = {};
-        for (const [id, e] of Object.entries(res ?? {})) {
-          map[id] = e.status === INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE;
-        }
-        setTrialEligible(map);
-      })
+    checkTrialEligibility(productIds.split(','))
+      .then(map => { if (!cancelled) setTrialEligible(map); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [productIds]);
 
   const trialFor = (pkg?: PurchasesPackage) =>
-    pkg && trialEligible[pkg.product.identifier] ? freeTrialText(pkg) : null;
-  const selectedTrial = trialFor(tierPackages[selectedIndex]?.pkg);
-  const selectedIsLifetime = tierPackages[selectedIndex]?.type === 'LIFETIME';
+    pkg && trialEligible[pkg.product.identifier] ? trialOf(pkg) : null;
+
+  const selected = tierPackages[selectedIndex];
+  const selectedTrial = trialFor(selected?.pkg);
+  const selectedIsLifetime = selected?.type === 'LIFETIME';
+  const savings = annualSavings(
+    tierPackages.find(t => t.type === 'ANNUAL')?.pkg,
+    tierPackages.find(t => t.type === 'MONTHLY')?.pkg,
+  );
+
+  const finish = (message: string) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    showToast(message);
+    setSucceeded(true);
+    RNAnimated.spring(successScale, { toValue: 1, friction: 5, tension: 90, useNativeDriver: true }).start();
+    closeTimer.current = setTimeout(() => navigation.goBack(), SUCCESS_MS);
+  };
 
   const handlePurchase = async () => {
-    const pkg = tierPackages[selectedIndex]?.pkg;
+    const pkg = selected?.pkg;
     if (!pkg) return;
+    const trial = selectedTrial;
     setPurchasing(true);
     const outcome = await purchasePackage(pkg);
     setPurchasing(false);
     if (outcome === 'purchased') {
-      showToast('Premium is active.');
-      navigation.goBack();
+      // A heads-up before the first charge, so the trial ending isn't a surprise
+      const day = trial ? trialReminderDay(trial) : null;
+      if (trial && day != null) {
+        scheduleTrialReminder(day, `Your Aretē Premium trial ends in ${trial.days - day} days. After that it renews at ${pkg.product.priceString}.`);
+      }
+      finish('Premium is active.');
       return;
     }
     const problem = PURCHASE_PROBLEMS[outcome];
@@ -135,8 +151,7 @@ export default function PaywallScreen({ navigation }: Props) {
     const outcome = await restorePurchases();
     setRestoring(false);
     if (outcome === 'restored') {
-      showToast('Purchases restored.');
-      navigation.goBack();
+      finish('Purchases restored.');
     } else if (outcome === 'none') {
       showToast('No purchases found');
     } else {
@@ -146,126 +161,145 @@ export default function PaywallScreen({ navigation }: Props) {
     }
   };
 
+  const selectTier = (i: number) => {
+    if (i !== selectedIndex) Haptics.selectionAsync();
+    setSelectedIndex(i);
+  };
+
   return (
     <View style={styles.container}>
-      <View style={styles.topGoldLine} />
-
-      <SafeAreaView style={styles.safeTop}>
-        <TouchableOpacity
-          style={styles.closeBtn}
-          onPress={() => navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel="Close"
-        >
-          <Ionicons name="close" size={24} color={GOLD_DIM} />
-        </TouchableOpacity>
-      </SafeAreaView>
-
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
         {/* Hero */}
-        <LinearGradient colors={['#1F1506', PW_BG]} style={styles.hero}>
+        <LinearGradient colors={[HERO_TINT, PW_BG]} style={[styles.hero, { paddingTop: insets.top + spacing.md }]}>
           <View style={styles.badgeRow}>
-            <Ionicons name="leaf-outline" size={12} color={GOLD} />
+            <Ionicons name="leaf-outline" size={12} color={ACCENT} />
             <Text style={styles.badgeText}>ARETĒ PREMIUM</Text>
-            <Ionicons name="leaf-outline" size={12} color={GOLD} style={styles.leafFlip} />
+            <Ionicons name="leaf-outline" size={12} color={ACCENT} style={styles.leafFlip} />
           </View>
-          <Text style={styles.title}>Reach your peak</Text>
-          <Text style={styles.subtitle}>Unlock every tool Aretē has to offer</Text>
+          <Text style={styles.title}>{alreadyPremium ? "You're Premium" : headline.title}</Text>
+          <Text style={styles.subtitle}>
+            {alreadyPremium ? 'Everything below is already unlocked' : headline.subtitle}
+          </Text>
         </LinearGradient>
 
-        <View style={styles.goldDivider} />
+        <View style={styles.accentDivider} />
 
         {/* Features */}
         <View style={styles.featuresCard}>
-          {FEATURES.map((f, i) => (
-            <View key={i} style={[styles.featureRow, i < FEATURES.length - 1 && styles.featureRowBorder]}>
+          {features.map((f, i) => (
+            <Animated.View
+              key={f.key}
+              entering={FadeInDown.delay(80 + i * 50).duration(260)}
+              style={[styles.featureRow, i < features.length - 1 && styles.featureRowBorder]}
+            >
               <View style={styles.featureIconWrap}>
-                <Ionicons name={f.icon as any} size={18} color={GOLD} />
+                <Ionicons name={f.icon as any} size={18} color={ACCENT} />
               </View>
-              <Text style={styles.featureLabel}>{f.label}</Text>
-              <Ionicons name="checkmark" size={16} color={GOLD} />
-            </View>
+              <View style={styles.featureText}>
+                <Text style={styles.featureLabel}>{f.label}</Text>
+                <Text style={styles.featureDetail}>{f.detail}</Text>
+              </View>
+              <Ionicons name="checkmark" size={16} color={ACCENT} />
+            </Animated.View>
           ))}
         </View>
 
-        {plansMissing && (
-          <View style={styles.plansMissing}>
-            <Text style={styles.plansMissingText}>
-              {offeringsState === 'failed'
-                ? "Couldn't load the plans. Check your connection and try again."
-                : "Premium can't be purchased on this device right now."}
-            </Text>
-            {offeringsState === 'failed' && (
-              <TouchableOpacity onPress={reloadOfferings} accessibilityRole="button">
-                <Text style={styles.plansRetry}>Try Again</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
-        {/* Pricing tiers */}
-        {!plansMissing && tierPackages.map(({ type, label, badge, pkg }, i) => {
-          const selected = selectedIndex === i;
-          const trial = trialFor(pkg);
-          return (
-            <TouchableOpacity
-              key={type}
-              style={[styles.tierCard, selected && styles.tierCardSelected]}
-              onPress={() => setSelectedIndex(i)}
-              activeOpacity={0.8}
-              accessibilityRole="radio"
-              accessibilityState={{ selected }}
-            >
-              <View style={styles.tierLeft}>
-                <View style={[styles.radio, selected && styles.radioSelected]}>
-                  {selected && <View style={styles.radioDot} />}
-                </View>
-                <View>
-                  <Text style={[styles.tierLabel, selected && styles.tierLabelSelected]}>
-                    {label}
-                  </Text>
-                  {pkg ? (
-                    <Text style={styles.tierPrice}>
-                      {trial ? `${trial}, then ${pkg.product.priceString}` : pkg.product.priceString}
-                    </Text>
-                  ) : (
-                    <ActivityIndicator size="small" color={GOLD_DIM} style={{ marginTop: 2 }} />
-                  )}
-                </View>
+        {alreadyPremium ? (
+          <TouchableOpacity style={styles.ctaBtn} onPress={() => navigation.goBack()}>
+            <Text style={styles.ctaBtnText}>Done</Text>
+          </TouchableOpacity>
+        ) : (
+          <>
+            {plansMissing && (
+              <View style={styles.plansMissing}>
+                <Text style={styles.plansMissingText}>
+                  {offeringsState === 'failed'
+                    ? "Couldn't load the plans. Check your connection and try again."
+                    : "Premium can't be purchased on this device right now."}
+                </Text>
+                {offeringsState === 'failed' && (
+                  <TouchableOpacity onPress={reloadOfferings} accessibilityRole="button">
+                    <Text style={styles.plansRetry}>Try Again</Text>
+                  </TouchableOpacity>
+                )}
               </View>
-              {badge ? (
-                <View style={styles.tierBadge}>
-                  <Text style={styles.tierBadgeText}>{badge}</Text>
-                </View>
-              ) : null}
+            )}
+
+            {/* Pricing tiers */}
+            {!plansMissing && tierPackages.map(({ type, label, badge, pkg }, i) => {
+              const isSelected = selectedIndex === i;
+              const trial = trialFor(pkg);
+              const isAnnual = type === 'ANNUAL';
+              const tierBadge = isAnnual && savings ? `Save ${savings.percent}%` : badge;
+              return (
+                <PressableScale
+                  key={type}
+                  style={[styles.tierCard, isSelected && styles.tierCardSelected]}
+                  onPress={() => selectTier(i)}
+                >
+                  <View
+                    style={styles.tierLeft}
+                    accessible
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSelected }}
+                    accessibilityLabel={`${label}${pkg ? `, ${pkg.product.priceString}` : ''}`}
+                  >
+                    <View style={[styles.radio, isSelected && styles.radioSelected]}>
+                      {isSelected && <View style={styles.radioDot} />}
+                    </View>
+                    <View>
+                      <Text style={[styles.tierLabel, isSelected && styles.tierLabelSelected]}>
+                        {label}
+                      </Text>
+                      {pkg ? (
+                        <>
+                          <Text style={styles.tierPrice}>
+                            {trial ? `${trial.text}, then ${pkg.product.priceString}` : pkg.product.priceString}
+                          </Text>
+                          {isAnnual && savings?.perMonth && (
+                            <Text style={styles.tierSub}>{savings.perMonth}/mo, billed yearly</Text>
+                          )}
+                        </>
+                      ) : (
+                        <ActivityIndicator size="small" color={SUBTEXT} style={{ marginTop: 2 }} />
+                      )}
+                    </View>
+                  </View>
+                  {tierBadge ? (
+                    <View style={styles.tierBadge}>
+                      <Text style={styles.tierBadgeText}>{tierBadge}</Text>
+                    </View>
+                  ) : null}
+                </PressableScale>
+              );
+            })}
+
+            {/* CTA */}
+            <TouchableOpacity
+              style={[styles.ctaBtn, (purchasing || succeeded || packages.length === 0) && { opacity: 0.6 }]}
+              onPress={handlePurchase}
+              disabled={purchasing || succeeded || packages.length === 0}
+            >
+              {purchasing
+                ? <ActivityIndicator color={PW_BG} />
+                : <Text style={styles.ctaBtnText}>{ctaLabel(selected?.type ?? '', selected?.pkg, selectedTrial)}</Text>}
             </TouchableOpacity>
-          );
-        })}
 
-        {/* CTA */}
-        <TouchableOpacity
-          style={[styles.ctaBtn, (purchasing || packages.length === 0) && { opacity: 0.6 }]}
-          onPress={handlePurchase}
-          disabled={purchasing || packages.length === 0}
-        >
-          {purchasing
-            ? <ActivityIndicator color={PW_BG} />
-            : <Text style={styles.ctaBtnText}>{selectedTrial ? 'Start Free Trial' : 'Get Premium'}</Text>}
-        </TouchableOpacity>
+            <TouchableOpacity style={styles.restoreBtn} onPress={handleRestore} disabled={restoring || succeeded}>
+              <Text style={styles.restoreBtnText}>{restoring ? 'Restoring…' : 'Restore Purchases'}</Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity style={styles.restoreBtn} onPress={handleRestore} disabled={restoring}>
-          <Text style={styles.restoreBtnText}>{restoring ? 'Restoring…' : 'Restore Purchases'}</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.legalText}>
-          {selectedTrial
-            ? 'Payment is charged to your Apple ID when the free trial ends unless you cancel at least 24 hours before. '
-            : 'Payment charged to your Apple ID at confirmation of purchase. '}
-          {selectedIsLifetime
-            ? 'Lifetime is a one-time purchase. It does not renew.'
-            : 'Subscriptions automatically renew unless cancelled at least 24 hours before the end of the current period. Manage or cancel anytime in your Apple ID settings.'}
-        </Text>
+            <Text style={styles.legalText}>
+              {selectedTrial
+                ? 'Payment is charged to your Apple ID when the free trial ends unless you cancel at least 24 hours before. '
+                : 'Payment charged to your Apple ID at confirmation of purchase. '}
+              {selectedIsLifetime
+                ? 'Lifetime is a one-time purchase. It does not renew.'
+                : 'Subscriptions automatically renew unless cancelled at least 24 hours before the end of the current period. Manage or cancel anytime in your Apple ID settings.'}
+            </Text>
+          </>
+        )}
 
         {/* Apple guideline 3.1.2 requires working Terms and Privacy links in the purchase flow */}
         <View style={styles.legalLinks}>
@@ -278,6 +312,25 @@ export default function PaywallScreen({ navigation }: Props) {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Floats over the hero: its own row read as a bar across the top */}
+      <TouchableOpacity
+        style={[styles.closeBtn, { top: insets.top + spacing.xs }]}
+        onPress={() => navigation.goBack()}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Close"
+      >
+        <Ionicons name="close" size={22} color={TEXT} />
+      </TouchableOpacity>
+
+      {succeeded && (
+        <View style={styles.successOverlay} pointerEvents="none" testID="purchase-success">
+          <RNAnimated.View style={[styles.successCircle, { transform: [{ scale: successScale }] }]}>
+            <Ionicons name="checkmark" size={44} color={PW_BG} />
+          </RNAnimated.View>
+        </View>
+      )}
     </View>
   );
 }
@@ -285,19 +338,25 @@ export default function PaywallScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: PW_BG },
 
-  topGoldLine: { height: 2, backgroundColor: GOLD },
-
-  safeTop: { alignItems: 'flex-end' },
-  closeBtn: { padding: spacing.md },
+  closeBtn: {
+    position: 'absolute',
+    right: spacing.md,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: PW_CARD,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl * 2 },
 
   hero: {
     alignItems: 'center',
-    paddingVertical: spacing.lg,
+    paddingBottom: spacing.md,
     marginHorizontal: -spacing.lg,
     paddingHorizontal: spacing.lg,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   badgeRow: {
     flexDirection: 'row',
@@ -308,28 +367,28 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: typography.fontSize.xs,
     fontWeight: '700',
-    color: GOLD,
+    color: ACCENT,
     letterSpacing: 2,
   },
   leafFlip: { transform: [{ scaleX: -1 }] },
   title: {
     fontSize: typography.fontSize.xxl,
     fontWeight: '700',
-    color: GOLD_LIGHT,
+    color: TEXT,
     marginBottom: spacing.xs,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: typography.fontSize.sm,
-    color: GOLD_DIM,
+    color: SUBTEXT,
     textAlign: 'center',
   },
 
-  goldDivider: {
+  accentDivider: {
     height: 1,
-    backgroundColor: GOLD,
+    backgroundColor: ACCENT,
     opacity: 0.3,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
     marginHorizontal: spacing.xl,
   },
 
@@ -353,10 +412,17 @@ const styles = StyleSheet.create({
     borderBottomColor: PW_BORDER,
   },
   featureIconWrap: { width: 28, alignItems: 'center' },
+  featureText: { flex: 1 },
   featureLabel: {
-    flex: 1,
     fontSize: typography.fontSize.sm,
-    color: GOLD_LIGHT,
+    fontWeight: '600',
+    color: TEXT,
+  },
+  featureDetail: {
+    fontSize: typography.fontSize.xs,
+    color: SUBTEXT,
+    marginTop: 2,
+    lineHeight: 15,
   },
 
   tierCard: {
@@ -371,10 +437,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   tierCardSelected: {
-    borderColor: GOLD,
-    backgroundColor: GOLD + '18',
+    borderColor: ACCENT,
+    backgroundColor: ACCENT + '18',
   },
-  tierLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  tierLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexShrink: 1 },
   radio: {
     width: 20,
     height: 20,
@@ -384,23 +450,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  radioSelected: { borderColor: GOLD },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: GOLD },
-  tierLabel: { fontSize: typography.fontSize.md, color: GOLD_DIM },
-  tierLabelSelected: { color: GOLD_LIGHT, fontWeight: '600' },
-  tierPrice: { fontSize: typography.fontSize.sm, color: GOLD_DIM, marginTop: 1 },
+  radioSelected: { borderColor: ACCENT },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: ACCENT },
+  tierLabel: { fontSize: typography.fontSize.md, color: SUBTEXT },
+  tierLabelSelected: { color: TEXT, fontWeight: '600' },
+  tierPrice: { fontSize: typography.fontSize.sm, color: SUBTEXT, marginTop: 1 },
+  tierSub: { fontSize: typography.fontSize.xs, color: SUBTEXT, marginTop: 1 },
   tierBadge: {
-    backgroundColor: GOLD + '22',
+    backgroundColor: ACCENT + '22',
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     borderWidth: 1,
-    borderColor: GOLD + '55',
+    borderColor: ACCENT + '55',
   },
-  tierBadgeText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: GOLD },
+  tierBadgeText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: ACCENT },
 
   ctaBtn: {
-    backgroundColor: GOLD,
+    backgroundColor: ACCENT,
     borderRadius: radius.lg,
     paddingVertical: spacing.md,
     alignItems: 'center',
@@ -419,12 +486,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     marginBottom: spacing.md,
   },
-  restoreBtnText: { fontSize: typography.fontSize.sm, color: GOLD_DIM },
+  restoreBtnText: { fontSize: typography.fontSize.sm, color: SUBTEXT },
 
   legalText: {
     fontSize: typography.fontSize.xs,
-    color: GOLD_DIM,
-    opacity: 0.6,
+    color: SUBTEXT,
     textAlign: 'center',
     lineHeight: 16,
   },
@@ -438,8 +504,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  plansMissingText: { fontSize: typography.fontSize.sm, color: GOLD_LIGHT, textAlign: 'center', lineHeight: 20 },
-  plansRetry: { fontSize: typography.fontSize.sm, fontWeight: '700', color: GOLD },
+  plansMissingText: { fontSize: typography.fontSize.sm, color: TEXT, textAlign: 'center', lineHeight: 20 },
+  plansRetry: { fontSize: typography.fontSize.sm, fontWeight: '700', color: ACCENT },
   legalLinks: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -449,9 +515,28 @@ const styles = StyleSheet.create({
   },
   legalLink: {
     fontSize: typography.fontSize.xs,
-    color: GOLD_DIM,
+    color: SUBTEXT,
     textDecorationLine: 'underline',
     paddingVertical: spacing.xs,
   },
-  legalLinkSeparator: { fontSize: typography.fontSize.xs, color: GOLD_DIM },
+  legalLinkSeparator: { fontSize: typography.fontSize.xs, color: SUBTEXT },
+
+  successOverlay: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successCircle: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: ACCENT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

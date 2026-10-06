@@ -245,8 +245,10 @@ jest.mock('./context/PurchaseContext', () => ({
   usePurchase: () => ({
     isPremium: true,
     offerings: null,
+    subscription: null,
     offeringsState: 'ready',
     reloadOfferings: jest.fn(() => Promise.resolve()),
+    checkTrialEligibility: jest.fn(() => Promise.resolve({})),
     purchasePackage: jest.fn(() => Promise.resolve('purchased')),
     restorePurchases: jest.fn(() => Promise.resolve('restored')),
     loading: false,

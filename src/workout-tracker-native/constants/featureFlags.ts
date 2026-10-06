@@ -15,3 +15,10 @@ export const HEALTH_SYNC_ENABLED = true;
 // that finished it or has logged workouts, so the flow can be tried on a real
 // account. __DEV__ keeps it out of release builds whatever this is set to.
 export const FORCE_ONBOARDING = __DEV__ && false;
+
+// Dev only: treat the account as free and give the paywall sample plans, so
+// its design can be reviewed in the normal dev build, which can't load the
+// real App Store products (see "Testing in-app purchases" in CLAUDE.md).
+// "Buying" a sample plan just unlocks premium until the app restarts.
+// Ignored when a RevenueCat key is set, and never on in release builds.
+export const PAYWALL_PREVIEW = __DEV__ && false;

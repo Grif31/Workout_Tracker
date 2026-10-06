@@ -5,6 +5,7 @@
  * beta premium off.
  */
 jest.mock('../constants/purchaseConfig', () => ({ REVENUECAT_IOS_KEY: 'test-key', BETA_PREMIUM: false }));
+jest.mock('../utils/notifications', () => ({ cancelTrialReminder: jest.fn() }));
 jest.mock('react-native-purchases', () => ({
   __esModule: true,
   default: {
@@ -120,6 +121,37 @@ describe('premium status with RevenueCat configured', () => {
     await waitFor(() => expect(rc.logIn).toHaveBeenCalledWith('8'));
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.isPremium).toBe(false);
+  });
+
+  it('describes the plan held, for Account Settings', async () => {
+    rc.logIn.mockResolvedValue({
+      customerInfo: {
+        managementURL: 'https://apps.apple.com/account/subscriptions',
+        entitlements: { active: { premium: {
+          productIdentifier: 'com.aretefitness.app.sub.monthly', expirationDate: '2026-11-05T10:00:00Z', willRenew: true,
+        } } },
+      },
+    });
+    signIn(7);
+    const { result } = renderPurchase();
+    await waitFor(() => expect(result.current.isPremium).toBe(true));
+    expect(result.current.subscription).toEqual({
+      productId: 'com.aretefitness.app.sub.monthly',
+      expiresAt: '2026-11-05T10:00:00Z',
+      willRenew: true,
+      managementURL: 'https://apps.apple.com/account/subscriptions',
+    });
+  });
+
+  it('cancels the trial reminder once premium lapses', async () => {
+    const { cancelTrialReminder } = require('../utils/notifications');
+    rc.logIn.mockResolvedValue({ customerInfo: PREMIUM });
+    signIn(7);
+    const { result } = renderPurchase();
+    await waitFor(() => expect(result.current.isPremium).toBe(true));
+    expect(cancelTrialReminder).not.toHaveBeenCalled();
+    act(() => sdkListener()(FREE));
+    expect(cancelTrialReminder).toHaveBeenCalled();
   });
 
   it('reports plans that failed to load, and loads them on a retry', async () => {

@@ -11,13 +11,42 @@ import { useAuth } from '../../context/AuthContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch, isNetworkError } from '../../utils/api';
+import { usePurchase, type SubscriptionInfo } from '../../context/PurchaseContext';
+import { openExternalLink } from '../../utils/links';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'AccountSettings'>;
+
+// Where iOS lists and cancels subscriptions, for when RevenueCat gives no link of its own
+const APPLE_SUBSCRIPTIONS_URL = 'https://apps.apple.com/account/subscriptions';
+
+const fmtDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+/** The plan name and what happens next, for the Premium row. */
+function describePlan(sub: SubscriptionInfo): { plan: string; status: string; manageable: boolean } {
+  if (!sub.expiresAt) return { plan: 'Lifetime', status: 'Yours for good', manageable: false };
+  const id = sub.productId.toLowerCase();
+  // A RevenueCat grant (the beta testers' premium) isn't an Apple subscription:
+  // nothing renews and there is nothing to manage. A "lifetime" grant is
+  // stored as an expiry centuries away.
+  if (id.startsWith('rc_promo')) {
+    const forGood = new Date(sub.expiresAt).getFullYear() - new Date().getFullYear() > 50;
+    return { plan: 'Complimentary', status: forGood ? 'Yours for good' : `Until ${fmtDate(sub.expiresAt)}`, manageable: false };
+  }
+  const plan = id.includes('annual') || id.includes('year') ? 'Annual' : id.includes('month') ? 'Monthly' : 'Premium';
+  return {
+    plan,
+    status: sub.willRenew ? `Renews ${fmtDate(sub.expiresAt)}` : `Ends ${fmtDate(sub.expiresAt)}`,
+    manageable: true,
+  };
+}
 
 export default function AccountSettingsScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const { user, logout } = useAuth();
+  const { isPremium, subscription } = usePurchase();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const plan = subscription ? describePlan(subscription) : null;
   const [exporting, setExporting] = useState(false);
 
   const handleExport = async () => {
@@ -93,7 +122,7 @@ export default function AccountSettingsScreen({ navigation }: Props) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Account</Text>
@@ -123,6 +152,49 @@ export default function AccountSettingsScreen({ navigation }: Props) {
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
         </TouchableOpacity>
+      </View>
+
+      <Text style={styles.sectionLabel}>Premium</Text>
+      <View style={styles.group}>
+        {!isPremium ? (
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => (navigation as any).navigate('Paywall', { source: 'account' })}
+          >
+            <View style={styles.rowLeft}>
+              <Ionicons name="sparkles-outline" size={20} color={colors.accent} />
+              <Text style={styles.rowLabel}>Get Aretē Premium</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
+        ) : plan?.manageable ? (
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => openExternalLink(subscription?.managementURL ?? APPLE_SUBSCRIPTIONS_URL)}
+            accessibilityRole="button"
+            accessibilityLabel={`Manage subscription. ${plan.plan}, ${plan.status}`}
+          >
+            <View style={styles.rowLeft}>
+              <Ionicons name="sparkles" size={20} color={colors.accent} />
+              <View>
+                <Text style={styles.rowLabel}>Manage Subscription</Text>
+                <Text style={styles.rowSub}>{plan.plan} · {plan.status}</Text>
+              </View>
+            </View>
+            <Ionicons name="open-outline" size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="sparkles" size={20} color={colors.accent} />
+              <View>
+                <Text style={styles.rowLabel}>Aretē Premium</Text>
+                {/* No plan on record means the build itself unlocks premium (beta and dev) */}
+                <Text style={styles.rowSub}>{plan ? `${plan.plan} · ${plan.status}` : 'Included with this build'}</Text>
+              </View>
+            </View>
+          </View>
+        )}
       </View>
 
       <Text style={styles.sectionLabel}>Data</Text>
@@ -205,6 +277,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     minHeight: 52,
   },
   rowLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  rowSub: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
   rowLabel: { fontSize: typography.fontSize.md, color: colors.textPrimary },
   divider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.md },
 });
