@@ -66,7 +66,8 @@ export default function PremiumTeaser({ locked, source, title, body, children }:
 }
 
 const createStyles = (colors: Colors) => StyleSheet.create({
-  wrap: { borderRadius: radius.lg, overflow: 'hidden', marginTop: spacing.sm },
+  // Tall enough for the unlock card even when there is little behind it
+  wrap: { borderRadius: radius.lg, overflow: 'hidden', marginTop: spacing.sm, minHeight: 280 },
   preview: { maxHeight: PREVIEW_HEIGHT, overflow: 'hidden' },
   veil: { backgroundColor: colors.background, opacity: 0.55 },
   cardWrap: {

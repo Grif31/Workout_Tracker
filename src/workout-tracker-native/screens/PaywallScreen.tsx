@@ -16,6 +16,7 @@ import { AUTH } from '../theme/authColors';
 import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { showToast } from '../utils/toast';
+import { navigationRef } from '../navigation/navigationRef';
 import { openExternalLink } from '../utils/links';
 import { scheduleTrialReminder } from '../utils/notifications';
 import { annualSavings, ctaLabel, featuresFor, headlineFor, trialOf, trialReminderDay } from '../utils/paywall';
@@ -49,8 +50,12 @@ const PURCHASE_PROBLEMS: Partial<Record<PurchaseOutcome, [string, string]>> = {
   failed: ["Purchase Didn't Go Through", 'You have not been charged. Try again in a moment.'],
 };
 
-// How long the success check shows before the paywall closes
-const SUCCESS_MS = 700;
+// Where each thing that just unlocked lives, for the welcome screen
+const UNLOCKED: { icon: string; label: string; detail: string; screen: string }[] = [
+  { icon: 'trophy-outline', label: 'Strength Score', detail: 'See how every lift ranks', screen: 'StrengthScore' },
+  { icon: 'speedometer-outline', label: 'Endurance Score', detail: 'See your rank at every distance', screen: 'EnduranceScore' },
+  { icon: 'sparkles', label: 'AI Coach', detail: 'Insights, programs and volume zones', screen: 'TrainingHome' },
+];
 
 export default function PaywallScreen({ navigation, route }: Props) {
   const {
@@ -69,10 +74,10 @@ export default function PaywallScreen({ navigation, route }: Props) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
-  const [succeeded, setSucceeded] = useState(false);
+  // Set once premium is unlocked here: the paywall becomes a welcome screen
+  const [welcome, setWelcome] = useState<string | null>(null);
+  const succeeded = welcome != null;
   const successScale = useRef(new RNAnimated.Value(0)).current;
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
 
   const tierPackages = useMemo(() => {
     const allOfferings = Object.values(offerings?.all ?? {});
@@ -118,12 +123,18 @@ export default function PaywallScreen({ navigation, route }: Props) {
     tierPackages.find(t => t.type === 'MONTHLY')?.pkg,
   );
 
-  const finish = (message: string) => {
+  const finish = (title: string) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    showToast(message);
-    setSucceeded(true);
+    setWelcome(title);
     RNAnimated.spring(successScale, { toValue: 1, friction: 5, tension: 90, useNativeDriver: true }).start();
-    closeTimer.current = setTimeout(() => navigation.goBack(), SUCCESS_MS);
+  };
+
+  // Close the paywall, then open what they just unlocked
+  const openUnlocked = (screen: string) => {
+    navigation.goBack();
+    if (navigationRef.isReady()) {
+      (navigationRef as any).navigate('TrainingTab', { screen, initial: false });
+    }
   };
 
   const handlePurchase = async () => {
@@ -139,7 +150,7 @@ export default function PaywallScreen({ navigation, route }: Props) {
       if (trial && day != null) {
         scheduleTrialReminder(day, `Your Aretē Premium trial ends in ${trial.days - day} days. After that it renews at ${pkg.product.priceString}.`);
       }
-      finish('Premium is active.');
+      finish('Welcome to Aretē Premium');
       return;
     }
     const problem = PURCHASE_PROBLEMS[outcome];
@@ -151,7 +162,7 @@ export default function PaywallScreen({ navigation, route }: Props) {
     const outcome = await restorePurchases();
     setRestoring(false);
     if (outcome === 'restored') {
-      finish('Purchases restored.');
+      finish('Premium Restored');
     } else if (outcome === 'none') {
       showToast('No purchases found');
     } else {
@@ -324,11 +335,37 @@ export default function PaywallScreen({ navigation, route }: Props) {
         <Ionicons name="close" size={22} color={TEXT} />
       </TouchableOpacity>
 
-      {succeeded && (
-        <View style={styles.successOverlay} pointerEvents="none" testID="purchase-success">
+      {/* After a purchase: what just unlocked and a way straight into each, instead of a toast */}
+      {welcome != null && (
+        <View style={[styles.welcome, { paddingTop: insets.top + spacing.xl }]} testID="purchase-success">
           <RNAnimated.View style={[styles.successCircle, { transform: [{ scale: successScale }] }]}>
             <Ionicons name="checkmark" size={44} color={PW_BG} />
           </RNAnimated.View>
+          <Text style={styles.title}>{welcome}</Text>
+          <Text style={styles.subtitle}>Here is what you can open now</Text>
+          <View style={[styles.featuresCard, styles.welcomeList]}>
+            {UNLOCKED.map((u, i) => (
+              <Animated.View key={u.screen} entering={FadeInDown.delay(250 + i * 80).duration(260)}>
+                <TouchableOpacity
+                  style={[styles.featureRow, i < UNLOCKED.length - 1 && styles.featureRowBorder]}
+                  onPress={() => openUnlocked(u.screen)}
+                  accessibilityRole="button"
+                >
+                  <View style={styles.featureIconWrap}>
+                    <Ionicons name={u.icon as any} size={18} color={ACCENT} />
+                  </View>
+                  <View style={styles.featureText}>
+                    <Text style={styles.featureLabel}>{u.label}</Text>
+                    <Text style={styles.featureDetail}>{u.detail}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={SUBTEXT} />
+                </TouchableOpacity>
+              </Animated.View>
+            ))}
+          </View>
+          <TouchableOpacity style={[styles.ctaBtn, styles.welcomeDone]} onPress={() => navigation.goBack()}>
+            <Text style={styles.ctaBtnText}>Done</Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -521,16 +558,18 @@ const styles = StyleSheet.create({
   },
   legalLinkSeparator: { fontSize: typography.fontSize.xs, color: SUBTEXT },
 
-  successOverlay: {
+  welcome: {
     position: 'absolute',
     top: 0,
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: PW_BG,
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
   },
+  welcomeList: { alignSelf: 'stretch', marginTop: spacing.lg },
+  welcomeDone: { alignSelf: 'stretch' },
   successCircle: {
     width: 88,
     height: 88,
@@ -538,5 +577,6 @@ const styles = StyleSheet.create({
     backgroundColor: ACCENT,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: spacing.md,
   },
 });

@@ -32,6 +32,7 @@ import { type GreekRankData, gateRequirementText } from '../../utils/greekRank';
 import { PR_TYPE_LABELS, PR_TYPE_ORDER, fmtMinSec } from '../../utils/prFormat';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toExactVolume, toKm, type DistanceUnit, type WeightUnit } from '../../utils/units';
 import { fmtHold } from '../../components/workout/types';
+import { usePurchase } from '../../context/PurchaseContext';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WorkoutSummary'>;
 type SummaryPr = Props['route']['params']['prs'][number];
@@ -105,6 +106,7 @@ function CountUpText({ value, format, delay, style }: {
 export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const { workoutId, workoutName, prs, totalVolume, totalReps, totalSets, muscles, isFirstWorkout, isBestVolume, isBestReps } = route.params;
   const { colors } = useTheme();
+  const { isPremium } = usePurchase();
   const s = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -281,6 +283,8 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const pace = cardioMinutes > 0 && cardioDistance > 0 ? cardioMinutes / cardioDistance : null;
 
   const hasPrs = filteredPrs.length > 0;
+  // A PR on a lift the Strength Score ranks: the moment someone most wants to know where it puts them
+  const rankedPr = filteredPrs.find(p => p.scored);
   const shownPrs = groupedPrs.slice(0, PRS_SHOWN_BEFORE_MORE);
   const morePrs = groupedPrs.slice(PRS_SHOWN_BEFORE_MORE);
 
@@ -393,6 +397,19 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
                     </RNAnimated.View>
                   </TouchableOpacity>
                 </>
+              )}
+              {rankedPr && (
+                <TouchableOpacity
+                  style={s.rankLink}
+                  onPress={() => (navigation as any).navigate('TrainingTab', { screen: 'StrengthScore', initial: false })}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name={isPremium ? 'trophy-outline' : 'lock-closed'} size={14} color={colors.accent} />
+                  <Text style={s.rankLinkText} numberOfLines={1}>
+                    See where your {rankedPr.exercise_name} ranks
+                  </Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.accent} />
+                </TouchableOpacity>
               )}
             </View>
           </Animated.View>
@@ -592,6 +609,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm,
     paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border,
   },
+  rankLink: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border,
+  },
+  rankLinkText: { flex: 1, fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.accent },
   prRowIcon: { marginTop: 2 },
   prRowText: { flex: 1 },
   prRowTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },

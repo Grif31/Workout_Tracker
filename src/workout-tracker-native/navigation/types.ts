@@ -15,7 +15,8 @@ export type ExerciseDetailParams = {
 export type WorkoutSummaryParams = {
   workoutId: number;
   workoutName: string;
-  prs: Array<{ exercise_name: string; pr_type: string; value: number; label?: string; weight_context?: number }>;
+  // scored: the lift counts toward the Strength Score, so it has a rank to show
+  prs: Array<{ exercise_name: string; pr_type: string; value: number; label?: string; weight_context?: number; scored?: boolean }>;
   totalVolume: number;
   totalReps: number;
   totalSets: number;

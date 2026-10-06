@@ -160,12 +160,27 @@ describe('PaywallScreen', () => {
       await waitFor(() => expect(purchasePackage).toHaveBeenCalledWith(LIFETIME));
     });
 
-    it('confirms a successful purchase, then closes', async () => {
-      const { getByText, findByTestId } = renderPaywall();
+    it('welcomes a new subscriber with what just unlocked, and closes on Done', async () => {
+      const { getByText, findByTestId, findByText } = renderPaywall();
       fireEvent.press(getByText(BUY_ANNUAL));
       expect(await findByTestId('purchase-success')).toBeTruthy();
-      expect(showToast).toHaveBeenCalledWith('Premium is active.');
-      await waitFor(() => expect(nav.goBack).toHaveBeenCalled(), { timeout: 2000 });
+      expect(await findByText('Welcome to Aretē Premium')).toBeTruthy();
+      // Stays up until dismissed: it is a screen now, not a toast
+      expect(nav.goBack).not.toHaveBeenCalled();
+      fireEvent.press(getByText('Done'));
+      expect(nav.goBack).toHaveBeenCalled();
+    });
+
+    it('opens an unlocked feature straight from the welcome screen', async () => {
+      const { navigationRef } = require('../navigation/navigationRef');
+      jest.spyOn(navigationRef, 'isReady').mockReturnValue(true);
+      const navigate = jest.spyOn(navigationRef, 'navigate').mockImplementation(() => {});
+      const { getByText, findByText } = renderPaywall();
+      fireEvent.press(getByText(BUY_ANNUAL));
+      await findByText('Welcome to Aretē Premium');
+      fireEvent.press(getByText('See how every lift ranks'));
+      expect(nav.goBack).toHaveBeenCalled();
+      expect(navigate).toHaveBeenCalledWith('TrainingTab', { screen: 'StrengthScore', initial: false });
     });
 
     it('says nothing when the user cancels', async () => {
@@ -187,7 +202,6 @@ describe('PaywallScreen', () => {
       const { getByText, queryByTestId } = renderPaywall();
       fireEvent.press(getByText(BUY_ANNUAL));
       await waitFor(() => expect(alertSpy).toHaveBeenCalledWith(title, expect.any(String)));
-      expect(showToast).not.toHaveBeenCalledWith('Premium is active.');
       expect(queryByTestId('purchase-success')).toBeNull();
       expect(nav.goBack).not.toHaveBeenCalled();
     });
@@ -253,11 +267,10 @@ describe('PaywallScreen', () => {
   });
 
   describe('restore', () => {
-    it('confirms and closes when a purchase is restored', async () => {
-      const { getByText } = renderPaywall();
+    it('shows the welcome screen when a purchase is restored', async () => {
+      const { getByText, findByText } = renderPaywall();
       fireEvent.press(getByText('Restore Purchases'));
-      await waitFor(() => expect(showToast).toHaveBeenCalledWith('Purchases restored.'));
-      await waitFor(() => expect(nav.goBack).toHaveBeenCalled(), { timeout: 2000 });
+      expect(await findByText('Premium Restored')).toBeTruthy();
     });
 
     it('shows a "no purchases found" toast and does not navigate when nothing is restored', async () => {

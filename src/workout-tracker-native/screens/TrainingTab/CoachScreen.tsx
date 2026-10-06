@@ -83,6 +83,9 @@ type InsightsCache = { insights: Insight[]; fetchedAt: string };
 // was fetched.
 const FREE_INSIGHT_KEY = 'coach_free_insight';
 const FREE_INSIGHT_DAYS = 7;
+// How many a free account can keep; the paywall's wording states the same numbers (utils/paywall.ts)
+const FREE_TEMPLATE_LIMIT = 5;
+const FREE_ROUTINE_LIMIT = 2;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 
@@ -970,14 +973,17 @@ export default function CoachScreen({ navigation }: Props) {
           {/* Templates */}
           <View style={styles.sectionHeaderRow}>
             <SectionRule label="Templates" style={{ flex: 1, marginBottom: 0 }} />
+            {!isPremium && (
+              <Text style={styles.freeLimitText}>{Math.min(templates.length, FREE_TEMPLATE_LIMIT)} of {FREE_TEMPLATE_LIMIT} free</Text>
+            )}
             <TouchableOpacity
-              onPress={!isPremium && templates.length >= 5
+              onPress={!isPremium && templates.length >= FREE_TEMPLATE_LIMIT
                 ? () => (navigation as any).navigate('Paywall', { source: 'templates' })
                 : createTemplate
               }
               style={styles.newTemplateBtn}
             >
-              <Ionicons name={!isPremium && templates.length >= 5 ? 'lock-closed-outline' : 'add'} size={16} color={colors.save} />
+              <Ionicons name={!isPremium && templates.length >= FREE_TEMPLATE_LIMIT ? 'lock-closed-outline' : 'add'} size={16} color={colors.save} />
               <Text style={styles.newTemplateBtnText}>New</Text>
             </TouchableOpacity>
           </View>
@@ -1014,14 +1020,17 @@ export default function CoachScreen({ navigation }: Props) {
           {/* Routines */}
           <View style={[styles.sectionHeaderRow, { marginTop: spacing.md }]}>
             <SectionRule label="Routines" style={{ flex: 1, marginBottom: 0 }} />
+            {!isPremium && (
+              <Text style={styles.freeLimitText}>{Math.min(routines.length, FREE_ROUTINE_LIMIT)} of {FREE_ROUTINE_LIMIT} free</Text>
+            )}
             <TouchableOpacity
-              onPress={!isPremium && routines.length >= 2
+              onPress={!isPremium && routines.length >= FREE_ROUTINE_LIMIT
                 ? () => (navigation as any).navigate('Paywall', { source: 'routines' })
                 : () => navigation.navigate('CreateRoutine')
               }
               style={styles.newTemplateBtn}
             >
-              <Ionicons name={!isPremium && routines.length >= 2 ? 'lock-closed-outline' : 'add'} size={16} color={colors.save} />
+              <Ionicons name={!isPremium && routines.length >= FREE_ROUTINE_LIMIT ? 'lock-closed-outline' : 'add'} size={16} color={colors.save} />
               <Text style={styles.newTemplateBtnText}>New</Text>
             </TouchableOpacity>
           </View>
@@ -1846,6 +1855,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   insightIconWrap: { width: 32, alignItems: 'center', paddingTop: 2 },
   insightTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs },
   insightBody: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 18 },
+  freeLimitText: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
   moreInsightsText: { flex: 1, fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
   insightsEmpty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
   insightsEmptyText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center', maxWidth: 240 },

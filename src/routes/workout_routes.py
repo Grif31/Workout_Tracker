@@ -214,6 +214,11 @@ def _compute_and_upsert_prs(user_id, exercise_set_pairs, workout_date):
         weighted = [(r, w, sid) for r, w, sid in valid if w > 0]
         epley_valid = [(r, w, sid) for r, w, sid in weighted if r <= 15]
 
+        # Whether this lift counts toward the Strength Score, so the workout
+        # summary can point at where the new PR ranks
+        tmpl = db.session.get(ExerciseTemplate, exercise.exercise_template_id)
+        scored = bool(tmpl and tmpl.standards_key)
+
         workout_max_weight = max((w for _, w, _ in weighted), default=None)
         workout_max_1rm    = max(epley_1rm(w, r) for r, w, _ in epley_valid) if epley_valid else None
 
@@ -259,6 +264,7 @@ def _compute_and_upsert_prs(user_id, exercise_set_pairs, workout_date):
                 'exercise_name': exercise.name,
                 'pr_type': pr_type,
                 'value': round(workout_value, 1),
+                'scored': scored,
             })
 
         # ── max_reps: one record per weight used in this workout ───────────────

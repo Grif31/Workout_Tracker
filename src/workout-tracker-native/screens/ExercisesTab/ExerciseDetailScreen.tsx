@@ -30,6 +30,7 @@ import MuscleDiagram from '../../components/MuscleDiagram';
 import { SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
 import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModal';
 import SegmentedControl from '../../components/SegmentedControl';
+import { usePurchase } from '../../context/PurchaseContext';
 
 const RANGE_SEGMENTS = (['1M', '3M', '6M', 'All'] as const).map(r => ({ key: r, label: r }));
 
@@ -139,6 +140,7 @@ type TabKey = 'overview' | 'charts' | 'history';
 export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const { user } = useAuth();
   const { colors } = useTheme();
+  const { isPremium } = usePurchase();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const weightUnit: WeightUnit = (user?.weight_unit as WeightUnit) || 'lbs';
   const {
@@ -849,7 +851,27 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         </View>
       )}
 
-      {scoreEntry?.rank && (() => {
+      {scoreEntry?.rank && !isPremium && (
+        // The rank itself is premium; a free account sees that this lift has one
+        <TouchableOpacity
+          style={[styles.scoreCard, styles.scoreCardLocked]}
+          activeOpacity={0.8}
+          onPress={() => (navigation as any).navigate('TrainingTab', { screen: 'StrengthScore', initial: false })}
+          accessibilityRole="button"
+          accessibilityLabel="Strength Score rank, premium"
+        >
+          <View style={[styles.scoreCircle, { borderColor: colors.border }]}>
+            <Ionicons name="lock-closed" size={16} color={colors.textSecondary} />
+          </View>
+          <View style={styles.scoreCardTextCol}>
+            <Text style={[styles.scoreCardLabel, { color: colors.textPrimary }]}>Strength Score</Text>
+            <Text style={[styles.scoreCardRank, { color: colors.textSecondary }]}>See how this lift ranks</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+        </TouchableOpacity>
+      )}
+
+      {scoreEntry?.rank && isPremium && (() => {
         const rankColor = SCORE_RANK_COLORS[scoreEntry.rank.label] ?? colors.accent;
         const textColor = contrastTextColor(rankColor);
         const pct = scoreEntry.percentile ?? 0;
@@ -1157,6 +1179,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   diagramCard: {
     marginBottom: spacing.md,
   },
+  scoreCardLocked: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   scoreCard: {
     flexDirection: 'row',
     alignItems: 'center',

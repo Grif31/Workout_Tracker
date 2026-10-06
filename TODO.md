@@ -1116,13 +1116,13 @@ Check off items as you complete them.
 - [x] **Per-lift rank on Exercise Detail and Personal Records**: show the rank badge greyed with a lock rather than hiding it
 - [x] **One free insight a week.** Show the top insight in full and the count of the rest ("3 more insights this week")
 - [ ] **Upsell at the moment it's relevant**, each at most once per event and never mid-workout:
-  - [ ] After a PR on a scored lift: "This puts your bench in the top X%" (X locked for free users)
-  - [ ] Weekly Summary: one locked "Coach's read on your week" card
-  - [ ] Muscle chart: a muscle sitting below MEV for 2+ weeks gets a "why" link
-  - [ ] Hitting the template/routine cap: say what the cap is before they tap, not after
-- [ ] **Premium welcome.** After purchase, a short screen listing what just unlocked with a button to each, instead of a toast
+  - [x] After a PR on a ranked lift, the workout summary links to where it ranks (the POST flags `scored` PRs)
+  - [ ] Weekly Summary: one locked "Coach's read on your week" card. Held until Phase 3 builds the weekly coach review; a lock on something that doesn't exist yet sells nothing
+  - [ ] Muscle chart: a muscle sitting below MEV for 2+ weeks gets a "why" link. Needs the multi-week volume data from Phase 3's 4-week trend
+  - [x] Template and routine headers show "3 of 5 free" before the cap is hit
+- [x] **Premium welcome.** After purchase, a short screen listing what just unlocked with a button to each, instead of a toast
 
-> **Status 2026-10-05:** teasers, locked rank pills on Personal Records and the weekly free insight are built on `improve/paywall` (`components/PremiumTeaser.tsx`). Exercise Detail already showed the rank to everyone and was left that way. Still open: the upsell moments and the premium welcome screen. Not yet seen on a device, the blur in particular.
+> **Status 2026-10-06:** done on `improve/paywall` except the two upsells held for Phase 3 above. Exercise Detail's per-lift rank is now locked for free accounts too (owner). Not yet seen on a device, the blur in particular.
 
 ### Phase 3 — Reasons to stay subscribed
 > Features that produce something new every week from data the app already has. Most are already specced; this is the order to build them in.
