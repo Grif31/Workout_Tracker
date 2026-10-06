@@ -30,6 +30,8 @@ import ScoreRing, { AnimatedPercentText } from '../../components/ScoreRing';
 import PercentileBar from '../../components/PercentileBar';
 import SectionRule from '../../components/SectionRule';
 import SegmentedControl from '../../components/SegmentedControl';
+import PremiumTeaser from '../../components/PremiumTeaser';
+import { usePurchase } from '../../context/PurchaseContext';
 
 const RANGE_SEGMENTS = (['1M', '3M', '6M', 'All'] as const).map(r => ({ key: r, label: r }));
 
@@ -119,6 +121,8 @@ export default function StrengthScoreScreen({ navigation }: Props) {
   const [coverageModalVisible, setCoverageModalVisible] = useState(false);
 
   // Hero card starts collapsed to just the score + based-on line
+  // Free accounts see their overall score; the breakdown below it is the premium part
+  const { isPremium } = usePurchase();
   const [heroExpanded, setHeroExpanded] = useState(false);
   const heroAnim = useCollapseAnim(heroExpanded);
 
@@ -356,7 +360,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Strength Score</Text>
         <View style={styles.headerIcons}>
-          {scoreData && (
+          {scoreData && isPremium && (
             <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={8}>
               {sharing ? (
                 <ActivityIndicator color={colors.textPrimary} size="small" />
@@ -421,6 +425,8 @@ export default function StrengthScoreScreen({ navigation }: Props) {
           <Reanimated.View entering={FadeInDown.duration(400)}>
             <TouchableOpacity
               activeOpacity={0.9}
+              // The expanded hero names the strongest and weakest lifts
+              disabled={!isPremium}
               onPress={() => setHeroExpanded(v => !v)}
               style={[styles.heroCard, { borderColor: rankColor }]}
             >
@@ -481,17 +487,25 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                   )}
                 </View>
               </Collapsible>
-              <View style={styles.heroExpandToggle} pointerEvents="none">
-                <Text style={styles.heroExpandText}>{heroExpanded ? 'Show less' : 'Show more'}</Text>
-                <Animated.View
-                  style={{ transform: [{ rotate: heroAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}
-                >
-                  <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
-                </Animated.View>
-              </View>
+              {isPremium && (
+                <View style={styles.heroExpandToggle} pointerEvents="none">
+                  <Text style={styles.heroExpandText}>{heroExpanded ? 'Show less' : 'Show more'}</Text>
+                  <Animated.View
+                    style={{ transform: [{ rotate: heroAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}
+                  >
+                    <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
+                  </Animated.View>
+                </View>
+              )}
             </TouchableOpacity>
           </Reanimated.View>
 
+          <PremiumTeaser
+            locked={!isPremium}
+            source="strength_score"
+            title="See what's behind your score"
+            body="Your rank for every lift and muscle group, your strongest and weakest lifts, and how your score has moved over time."
+          >
           {/* Muscle Group Scores */}
           {scoreData.muscle_groups && scoreData.muscle_groups.length > 0 && (
             <Reanimated.View entering={FadeInDown.delay(100).duration(400)}>
@@ -725,6 +739,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               </Reanimated.View>
             );
           })()}
+          </PremiumTeaser>
 
           <View style={{ height: spacing.xl * 2 }} />
         </ScrollView>

@@ -78,6 +78,13 @@ type ActiveRoutine = { id: number; name: string; days: RoutineDay[] };
 type Insight = { type: string; title: string; body: string; priority: 'high' | 'medium' | 'low' };
 type InsightsCache = { insights: Insight[]; fetchedAt: string };
 
+// Per user: `${FREE_INSIGHT_KEY}_${userId}`. A free account gets one set of
+// insights a week and reads the first of them; this is that set and when it
+// was fetched.
+const FREE_INSIGHT_KEY = 'coach_free_insight';
+const FREE_INSIGHT_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 
 
 const INSIGHT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -267,6 +274,7 @@ export default function CoachScreen({ navigation }: Props) {
   const [insights, setInsights] = useState<Insight[]>([]);
   const [insightsFetchedAt, setInsightsFetchedAt] = useState<string | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
+  const [freeInsight, setFreeInsight] = useState<InsightsCache | null>(null);
   // AI generate muscle picker
   const [aiMusclePickerVisible, setAiMusclePickerVisible] = useState(false);
   const [aiSelectedMuscles, setAiSelectedMuscles] = useState<string[]>([]);
@@ -305,6 +313,22 @@ export default function CoachScreen({ navigation }: Props) {
       } catch { }
     });
   }, []);
+
+  useEffect(() => {
+    if (isPremium || !user?.id) return;
+    AsyncStorage.getItem(`${FREE_INSIGHT_KEY}_${user.id}`).then(raw => {
+      if (!raw) return;
+      try {
+        const cache: InsightsCache = JSON.parse(raw);
+        if (cache.insights?.length) setFreeInsight(cache);
+      } catch { }
+    });
+  }, [isPremium, user?.id]);
+
+  // Days until a free account can ask for insights again; 0 when it can now
+  const freeInsightWaitDays = freeInsight
+    ? Math.max(0, Math.ceil((new Date(freeInsight.fetchedAt).getTime() + FREE_INSIGHT_DAYS * DAY_MS - Date.now()) / DAY_MS))
+    : 0;
 
   const updateWeeklyGoal = (delta: number) => {
     const next = Math.max(1, Math.min(7, weeklyGoal + delta));
@@ -529,6 +553,14 @@ export default function CoachScreen({ navigation }: Props) {
       const data = await res.json();
       if (!res.ok) { Alert.alert("Couldn't Load Insights", data.message || 'Try again in a moment.'); return; }
       const fetchedAt = data.generated_at || new Date().toISOString();
+      if (!isPremium) {
+        const cache: InsightsCache = { insights: data.insights ?? [], fetchedAt };
+        setFreeInsight(cache.insights.length ? cache : null);
+        if (cache.insights.length && user?.id) {
+          await AsyncStorage.setItem(`${FREE_INSIGHT_KEY}_${user.id}`, JSON.stringify(cache));
+        }
+        return;
+      }
       setInsights(data.insights ?? []);
       setInsightsFetchedAt(fetchedAt);
       await AsyncStorage.setItem(COACH_INSIGHTS_KEY, JSON.stringify({ insights: data.insights, fetchedAt }));
@@ -756,19 +788,6 @@ export default function CoachScreen({ navigation }: Props) {
       </Animated.View>
     );
   };
-
-  const renderLockedInsightPlaceholder = (idx: number) => (
-    <View key={idx} style={[styles.insightCard, styles.insightCardLocked]}>
-      <View style={styles.insightIconWrap}>
-        <Ionicons name="lock-closed" size={18} color={colors.textSecondary} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <View style={[styles.insightPlaceholderLine, { width: '60%' }]} />
-        <View style={[styles.insightPlaceholderLine, { width: '90%', marginTop: 6 }]} />
-        <View style={[styles.insightPlaceholderLine, { width: '75%', marginTop: spacing.xs }]} />
-      </View>
-    </View>
-  );
 
   const weeklySummarySubtitle = () => {
     const p = weeklySummaryPreview;
@@ -1036,10 +1055,7 @@ export default function CoachScreen({ navigation }: Props) {
             <View style={styles.coachHeroTopRow}>
               <TouchableOpacity
                 style={[styles.rankPill, { borderColor: rankColor + '55' }]}
-                onPress={() => isPremium
-                  ? navigation.navigate('StrengthScore')
-                  : (navigation as any).navigate('Paywall', { source: 'strength_score' })
-                }
+                onPress={() => navigation.navigate('StrengthScore')}
               >
                 <View style={[styles.rankPillIcon, { backgroundColor: rankColor }]}>
                   <Text style={[styles.rankPillIconText, { color: onColor(rankColor) }]}>{rankIcon}</Text>
@@ -1157,7 +1173,52 @@ export default function CoachScreen({ navigation }: Props) {
                   )
               ) : (
                 <>
-                  {[0, 1, 2].map(renderLockedInsightPlaceholder)}
+                  {/* A free account reads one real insight a week; the rest stay locked */}
+                  {freeInsight && renderInsightCard(freeInsight.insights[0], 0)}
+                  {freeInsight && freeInsight.insights.length > 1 && (
+                    <TouchableOpacity
+                      style={[styles.insightCard, styles.moreInsightsRow]}
+                      onPress={() => (navigation as any).navigate('Paywall', { source: 'ai_coach' })}
+                      accessibilityRole="button"
+                    >
+                      <View style={styles.insightIconWrap}>
+                        <Ionicons name="lock-closed" size={18} color={colors.textSecondary} />
+                      </View>
+                      <Text style={styles.moreInsightsText}>
+                        {freeInsight.insights.length - 1} more insight{freeInsight.insights.length - 1 === 1 ? '' : 's'} this week
+                      </Text>
+                      <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  )}
+                  {freeInsight && freeInsightWaitDays > 0 && (
+                    <Text style={styles.insightsUpdated}>
+                      Next free insight in {freeInsightWaitDays} day{freeInsightWaitDays === 1 ? '' : 's'}
+                    </Text>
+                  )}
+                  {freeInsightWaitDays === 0 && (
+                    <View style={styles.insightsEmpty}>
+                      <Ionicons name="sparkles-outline" size={32} color={colors.textSecondary} />
+                      <Text style={styles.insightsEmptyText}>
+                        One free insight a week, based on your recent training.
+                      </Text>
+                      <TouchableOpacity
+                        style={[styles.generateInsightsBtn, { backgroundColor: colors.accent }, insightsLoading && { opacity: 0.6 }]}
+                        onPress={fetchInsights}
+                        disabled={insightsLoading}
+                      >
+                        {insightsLoading ? (
+                          <ActivityIndicator size="small" color={colors.accentText} />
+                        ) : (
+                          <>
+                            <Ionicons name="sparkles" size={16} color={colors.accentText} />
+                            <Text style={[styles.generateInsightsBtnText, { color: colors.accentText }]}>
+                              Get This Week's Insight
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  )}
                   <TouchableOpacity
                     style={styles.upgradeBanner}
                     onPress={() => (navigation as any).navigate('Paywall', { source: 'ai_coach' })}
@@ -1165,7 +1226,7 @@ export default function CoachScreen({ navigation }: Props) {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.upgradeBannerTitle}>Unlock AI Coach</Text>
                       <Text style={styles.upgradeBannerSub}>
-                        Personalized insights, deload recommendations, smart generation & more.
+                        Every insight, refreshed whenever you want, plus programs built for you.
                       </Text>
                     </View>
                     <View style={styles.upgradeBannerCTA}>
@@ -1280,10 +1341,8 @@ export default function CoachScreen({ navigation }: Props) {
                 <View style={styles.scoreGoalRow}>
                   <TouchableOpacity
                     style={styles.scoreCircleWrap}
-                    onPress={() => isPremium
-                      ? navigation.navigate('StrengthScore')
-                      : (navigation as any).navigate('Paywall', { source: 'strength_score' })
-                    }
+                    // Open to everyone: free accounts see their score with the breakdown locked
+                    onPress={() => navigation.navigate('StrengthScore')}
                   >
                     <View style={[styles.scoreCircle, { borderColor: scoreRingColor }]}>
                       {strengthRankLabel && (
@@ -1357,10 +1416,7 @@ export default function CoachScreen({ navigation }: Props) {
                     rather than competing with it. */}
                 <TouchableOpacity
                   style={styles.weeklySummaryCard}
-                  onPress={() => isPremium
-                    ? navigation.navigate('EnduranceScore')
-                    : (navigation as any).navigate('Paywall', { source: 'endurance_score' })
-                  }
+                  onPress={() => navigation.navigate('EnduranceScore')}
                 >
                   <View style={styles.enduranceRing}>
                     <Svg width={MINI_RING_SIZE} height={MINI_RING_SIZE}>
@@ -1786,11 +1842,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1,
     borderTopColor: colors.border, borderRightColor: colors.border, borderBottomColor: colors.border,
   },
-  insightCardLocked: { opacity: 0.45 },
+  moreInsightsRow: { alignItems: 'center' },
   insightIconWrap: { width: 32, alignItems: 'center', paddingTop: 2 },
   insightTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs },
   insightBody: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 18 },
-  insightPlaceholderLine: { height: 10, backgroundColor: colors.border, borderRadius: 5 },
+  moreInsightsText: { flex: 1, fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
   insightsEmpty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
   insightsEmptyText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center', maxWidth: 240 },
   generateInsightsBtn: {

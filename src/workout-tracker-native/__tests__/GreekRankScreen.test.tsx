@@ -367,8 +367,8 @@ describe('GreekRankScreen', () => {
       expect(queryByText(/Log a lift that counts toward/)).toBeNull();
     });
   });
-  describe('premium score links', () => {
-    it('sends a subscriber straight to each breakdown', async () => {
+  describe('score links', () => {
+    it('opens each score screen', async () => {
       const { getByText, nav } = await renderWith(payload(41, 67));
       fireEvent.press(getByText('Strength Score'));
       expect(nav.navigate).toHaveBeenCalledWith('TrainingTab', { screen: 'StrengthScore', initial: false });
@@ -376,28 +376,16 @@ describe('GreekRankScreen', () => {
       expect(nav.navigate).toHaveBeenCalledWith('TrainingTab', { screen: 'EnduranceScore', initial: false });
     });
 
-    it('marks both links as premium when the user is not subscribed', async () => {
+    // The score screens show a free account its score and lock the breakdown
+    // themselves, so the links no longer stop at the paywall
+    it('opens them for a free account too, with no lock', async () => {
       mockIsPremium = false;
-      const { getByLabelText } = await renderWith(payload(41, 67));
-      expect(getByLabelText('Strength Score, premium')).toBeTruthy();
-      expect(getByLabelText('Endurance Score, premium')).toBeTruthy();
-    });
-
-    it('shows a lock instead of a chevron when locked', async () => {
-      mockIsPremium = false;
-      const { getByLabelText } = await renderWith(payload(41, 67));
-      const icons = getByLabelText('Strength Score, premium').findAllByType(Ionicons as any);
-      expect(icons.map((i: any) => i.props.name)).toContain('lock-closed');
-    });
-
-    it('sends a non-subscriber to the paywall instead', async () => {
-      mockIsPremium = false;
-      const { getByText, nav } = await renderWith(payload(41, 67));
+      const { getByText, getByLabelText, nav } = await renderWith(payload(41, 67));
       fireEvent.press(getByText('Strength Score'));
-      expect(nav.navigate).toHaveBeenCalledWith('Paywall', { source: 'strength_score' });
-      fireEvent.press(getByText('Endurance Score'));
-      expect(nav.navigate).toHaveBeenCalledWith('Paywall', { source: 'endurance_score' });
-      expect(nav.navigate).not.toHaveBeenCalledWith('TrainingTab', expect.anything());
+      expect(nav.navigate).toHaveBeenCalledWith('TrainingTab', { screen: 'StrengthScore', initial: false });
+      expect(nav.navigate).not.toHaveBeenCalledWith('Paywall', expect.anything());
+      const icons = getByLabelText('Strength Score').findAllByType(Ionicons as any);
+      expect(icons.map((i: any) => i.props.name)).not.toContain('lock-closed');
     });
   });
 });

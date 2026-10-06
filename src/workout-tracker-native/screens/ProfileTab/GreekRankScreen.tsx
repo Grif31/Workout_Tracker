@@ -11,7 +11,6 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { usePurchase } from '../../context/PurchaseContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
@@ -30,8 +29,8 @@ type Props = NativeStackScreenProps<ProfileStackParamsList, 'GreekRank'>;
 const ARETE_RANK = 'Aretē';
 // Both breakdown screens are premium; locked, these open the paywall instead
 const SCORE_LINKS = [
-  { label: 'Strength Score',  screen: 'StrengthScore',  source: 'strength_score' },
-  { label: 'Endurance Score', screen: 'EnduranceScore', source: 'endurance_score' },
+  { label: 'Strength Score',  screen: 'StrengthScore' },
+  { label: 'Endurance Score', screen: 'EnduranceScore' },
 ] as const;
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CIRCLE_SIZE = 88;
@@ -153,7 +152,6 @@ function RankCircle({
 export default function GreekRankScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const { user } = useAuth();
-  const { isPremium } = usePurchase();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const frameKey = `${PROFILE_FRAME_RANK_KEY}_${user?.id}`;
 
@@ -561,25 +559,16 @@ export default function GreekRankScreen({ navigation }: Props) {
             {SCORE_LINKS.map(link => (
               <TouchableOpacity
                 key={link.screen}
-                style={[styles.scoreLinkBtn, { borderColor: isPremium ? colors.accent : colors.border }]}
+                style={[styles.scoreLinkBtn, { borderColor: colors.accent }]}
                 accessibilityRole="button"
-                accessibilityLabel={isPremium ? link.label : `${link.label}, premium`}
-                onPress={() => isPremium
-                  ? (navigation as any).navigate('TrainingTab', { screen: link.screen, initial: false })
-                  : (navigation as any).navigate('Paywall', { source: link.source })
-                }
+                accessibilityLabel={link.label}
+                // Open to everyone: the score screens lock their own breakdown for free accounts
+                onPress={() => (navigation as any).navigate('TrainingTab', { screen: link.screen, initial: false })}
               >
-                <Text
-                  style={[styles.fullBreakdownText, { color: isPremium ? colors.accent : colors.textPrimary }]}
-                  numberOfLines={1}
-                >
+                <Text style={[styles.fullBreakdownText, { color: colors.accent }]} numberOfLines={1}>
                   {link.label}
                 </Text>
-                <Ionicons
-                  name={isPremium ? 'chevron-forward' : 'lock-closed'}
-                  size={16}
-                  color={colors.accent}
-                />
+                <Ionicons name="chevron-forward" size={16} color={colors.accent} />
               </TouchableOpacity>
             ))}
           </View>

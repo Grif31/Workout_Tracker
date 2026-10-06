@@ -145,7 +145,8 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
       } catch {}
       if (alive) setLoading(false);
     })();
-    if (isPremium) {
+    // Fetched for free accounts too: they see which lifts have a rank, locked
+    {
       (async () => {
         try {
           const res = await apiFetch('/api/stats/strength-score');
@@ -373,6 +374,20 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
   const renderStrengthPill = (item: PR) => {
     const score = item.standards_key ? liftScores[item.standards_key] : undefined;
     if (!score) return null;
+    if (!isPremium) {
+      return (
+        <TouchableOpacity
+          style={[styles.strengthPill, styles.strengthPillLocked, { borderColor: colors.border }]}
+          onPress={() => (navigation as any).navigate('TrainingTab', { screen: 'StrengthScore', initial: false })}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel="Strength rank, premium"
+        >
+          <Ionicons name="lock-closed" size={10} color={colors.textSecondary} />
+          <Text style={[styles.strengthPillText, { color: colors.textSecondary }]}>Rank</Text>
+        </TouchableOpacity>
+      );
+    }
     const color = SCORE_RANK_COLORS[score.rank] ?? colors.accent;
     return (
       <TouchableOpacity
@@ -640,6 +655,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
   },
+  strengthPillLocked: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   strengthPillText: { fontSize: typography.fontSize.xs, fontWeight: '700' },
   header: {
     flexDirection: 'row',

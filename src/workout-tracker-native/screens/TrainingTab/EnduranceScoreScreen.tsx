@@ -31,6 +31,8 @@ import ScoreRing, { AnimatedPercentText } from '../../components/ScoreRing';
 import PercentileBar from '../../components/PercentileBar';
 import SectionRule from '../../components/SectionRule';
 import SegmentedControl from '../../components/SegmentedControl';
+import PremiumTeaser from '../../components/PremiumTeaser';
+import { usePurchase } from '../../context/PurchaseContext';
 
 const RANGE_SEGMENTS = (['1M', '3M', '6M', 'All'] as const).map(r => ({ key: r, label: r }));
 
@@ -75,6 +77,7 @@ interface EnduranceData {
 
 export default function EnduranceScoreScreen({ navigation }: Props) {
   const { colors } = useTheme();
+  const { isPremium } = usePurchase();
   const { user } = useAuth();
   const uid = user?.id;
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -337,7 +340,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Endurance Score</Text>
         <View style={styles.headerIcons}>
-          {overall != null && (
+          {overall != null && isPremium && (
             <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={8}>
               {sharing
                 ? <ActivityIndicator size="small" color={colors.textPrimary} />
@@ -407,6 +410,8 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
           <Reanimated.View entering={FadeInDown.duration(400)}>
             <TouchableOpacity
               activeOpacity={0.9}
+              // Free accounts see the overall score; what's behind it is the premium part
+              disabled={!isPremium}
               onPress={() => setHeroExpanded(v => !v)}
               style={[styles.heroCard, { borderColor: rankColor }]}
             >
@@ -447,17 +452,25 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
                   )}
                 </View>
               </Collapsible>
-              <View style={styles.heroExpandToggle} pointerEvents="none">
-                <Text style={styles.heroExpandText}>{heroExpanded ? 'Show less' : 'Show more'}</Text>
-                <Animated.View
-                  style={{ transform: [{ rotate: heroAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}
-                >
-                  <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
-                </Animated.View>
-              </View>
+              {isPremium && (
+                <View style={styles.heroExpandToggle} pointerEvents="none">
+                  <Text style={styles.heroExpandText}>{heroExpanded ? 'Show less' : 'Show more'}</Text>
+                  <Animated.View
+                    style={{ transform: [{ rotate: heroAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}
+                  >
+                    <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
+                  </Animated.View>
+                </View>
+              )}
             </TouchableOpacity>
           </Reanimated.View>
 
+          <PremiumTeaser
+            locked={!isPremium}
+            source="endurance_score"
+            title="See what's behind your score"
+            body="Your rank at every distance from 400 m to the marathon, how endurance and speed each count, and how your score has moved over time."
+          >
           {/* Tier split */}
           <Reanimated.View entering={FadeInDown.delay(100).duration(400)}>
             <SectionRule label="Score Breakdown" style={{ marginBottom: spacing.sm }} fontSize={typography.fontSize.sm} />
@@ -582,6 +595,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
               </Reanimated.View>
             );
           })()}
+          </PremiumTeaser>
 
           <View style={{ height: spacing.xl * 2 }} />
         </ScrollView>
