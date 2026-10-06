@@ -345,7 +345,6 @@ export default function DashboardScreen({ navigation }: Props) {
   // only worth a slot for someone who actually logs cardio, so the all-time
   // count is what decides whether it renders at all.
   const [weekCardio, setWeekCardio] = useState({ activities: 0, distanceKm: 0, minutes: 0 });
-  const [totalCardioActivities, setTotalCardioActivities] = useState(0);
   const [weeklyGoal, setWeeklyGoal] = useState(3);
   const [thisWeekCount, setThisWeekCount] = useState(0);
   const [greekRank, setGreekRank] = useState<{ rank: string | null; score: number | null; heldByGate: boolean }>(
@@ -609,7 +608,6 @@ export default function DashboardScreen({ navigation }: Props) {
         setDailyStreak(data.current_daily_streak ?? 0);
         setLongestDailyStreak(data.longest_daily_streak ?? 0);
         setThisWeekCount(data.this_week_count ?? 0);
-        setTotalCardioActivities(data.cardio_activities ?? 0);
         setWeekCardio({
           activities: data.week_cardio_activities ?? 0,
           distanceKm: data.week_cardio_distance_km ?? 0,
@@ -862,17 +860,15 @@ export default function DashboardScreen({ navigation }: Props) {
               ),
               weekCardio: (
                 <>
-          {/* Cardio This Week — only for people who log cardio at all, so it
-              doesn't sit empty on a pure lifter's Home. */}
-          {totalCardioActivities > 0 && (
+          {/* Cardio This Week — only in a week with cardio in it. An empty card
+              had nothing to say, to lifters and runners alike. */}
+          {weekCardio.activities > 0 && (
             <View style={[styles.weekCardioCard, cardSize(layout, 'weekCardio') === 'half' && styles.cardHalf]}>
               <View style={styles.weekCardioHeader}>
                 <Ionicons name="pulse" size={14} color={colors.accent} />
                 <Text style={styles.weekCardioTitle}>Cardio This Week</Text>
               </View>
-              {weekCardio.activities === 0 ? (
-                <Text style={styles.weekCardioEmpty}>Nothing logged since Monday</Text>
-              ) : cardSize(layout, 'weekCardio') === 'half' ? (
+              {cardSize(layout, 'weekCardio') === 'half' ? (
                 /* Half width can't carry three columns: lead with the number
                    that matters and demote the rest to one line. */
                 <View>
@@ -1333,7 +1329,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.lg, fontWeight: '800', color: colors.textPrimary,
   },
   weekCardioLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 1 },
-  weekCardioEmpty: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
   activeRoutineNameRow: {
     flexDirection: 'row',
     alignItems: 'center',

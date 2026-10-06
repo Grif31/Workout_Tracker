@@ -300,10 +300,12 @@ describe('DashboardScreen', () => {
       expect(r.queryByText('Cardio This Week')).toBeNull();
     });
 
-    it('says nothing is logged yet for a cardio user with a quiet week', async () => {
+    it('stays off Home in a week with no cardio, even for someone who usually logs it', async () => {
       mockFetchByUrl(withCardio({ week_cardio_activities: 0, week_cardio_distance_km: 0, week_cardio_minutes: 0 }));
       const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
-      await waitFor(() => expect(r.getByText('Nothing logged since Monday')).toBeTruthy());
+      await waitFor(() => expect(r.getByText('Recent Workouts')).toBeTruthy());
+      expect(r.queryByText('Cardio This Week')).toBeNull();
+      expect(r.queryByText('Nothing logged since Monday')).toBeNull();
     });
 
     it('drops the distance column when the week was all machine time', async () => {
