@@ -14,6 +14,7 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { SHARE_TEXT } from '../../constants/shareCardTheme';
 import { PR_TYPE_LABELS } from '../../utils/prFormat';
+import { fmtHold } from '../workout/types';
 
 export type ShareExercise = {
   name: string;
@@ -31,6 +32,9 @@ type WorkoutShareCardProps = {
   totalReps: number;
   /** workout duration in minutes */
   duration?: number | null;
+  /** Total time under tension across timed holds, in minutes. Leads the card
+   *  for a session of planks and wall sits, which has no reps or volume. */
+  holdMinutes?: number;
   weightUnit: string;
   exercises: ShareExercise[];
   prs: { exercise_name: string; pr_type: string }[];
@@ -50,22 +54,27 @@ function bestSetLabel(set: { reps: number; weight: number }, unit: string): stri
 }
 
 const WorkoutShareCard = forwardRef<View, WorkoutShareCardProps>(
-  ({ workoutName, date, volumeText, totalSets, totalReps, duration, weightUnit, exercises, prs, accentColor }, ref) => {
+  ({ workoutName, date, volumeText, totalSets, totalReps, duration, holdMinutes, weightUnit, exercises, prs, accentColor }, ref) => {
     const prLabel =
       prs.length === 1
         ? `New ${prs[0].exercise_name} ${PR_TYPE_LABELS[prs[0].pr_type] ?? 'PR'}`
         : `${prs.length} New PRs`;
 
-    // All-bodyweight sessions have 0 volume — reps become the brag number
-    const heroValue = volumeText ?? totalReps.toLocaleString();
-    const heroLabel = volumeText ? `Total Volume (${weightUnit})` : 'Total Reps';
+    // The brag number is the first of these the session has: volume, reps (all
+    // bodyweight), hold time (planks, wall sits), else the set count. Never a zero.
+    const [heroValue, heroLabel] =
+      volumeText ? [volumeText, `Total Volume (${weightUnit})`]
+      : totalReps > 0 ? [totalReps.toLocaleString(), 'Total Reps']
+      : holdMinutes && holdMinutes > 0 ? [fmtHold(holdMinutes), 'Total Hold Time']
+      : [String(totalSets), totalSets === 1 ? 'Set' : 'Sets'];
 
     const statItems: ShareCardStatItem[] = [];
     if (duration != null && duration > 0) {
       statItems.push({ value: fmtDurationMin(duration), label: 'Duration' });
     }
     statItems.push({ value: totalSets, label: 'Sets' });
-    statItems.push({ value: totalReps, label: 'Reps' });
+    // Not repeated under the headline when reps are the headline
+    if (totalReps > 0 && volumeText) statItems.push({ value: totalReps, label: 'Reps' });
 
     return (
       <ShareCardFrame ref={ref} accentColor={accentColor}>

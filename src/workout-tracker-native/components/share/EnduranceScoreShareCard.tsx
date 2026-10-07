@@ -6,6 +6,7 @@ import {
   ShareCardBanner,
   ShareCardHero,
   ShareCardHeroLabel,
+  ShareCardHeroCaption,
   ShareCardStatsRow,
   ShareCardFooter,
   type ShareCardStatItem,
@@ -44,6 +45,7 @@ const EnduranceScoreShareCard = forwardRef<View, EnduranceScoreShareCardProps>(
 
         <ShareCardHero value={score} accentColor={accentColor}>
           <ShareCardHeroLabel>{rankLabel}</ShareCardHeroLabel>
+          <ShareCardHeroCaption>Faster than {Math.round(score)}% of runners</ShareCardHeroCaption>
         </ShareCardHero>
 
         <ShareCardStatsRow items={statItems} style={styles.statsRow} />

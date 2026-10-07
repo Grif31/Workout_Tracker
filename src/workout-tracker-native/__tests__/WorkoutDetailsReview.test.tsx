@@ -62,8 +62,9 @@ describe('WorkoutDetails', () => {
       cardio_duration: 35, distance: 6, distance_unit: 'km', exercises: [RUN],
     });
     const { findByText } = render(<WorkoutDetails workoutId={2} />);
-    // Off-screen share card: 6 km over both bouts, not the first bout's 5
-    expect(await findByText(/^6\.0/)).toBeTruthy();
+    // Off-screen share card: 6 km over both bouts (not the first bout's 5),
+    // shown in the user's distance unit like Cardio Details: 3.73 mi by default
+    expect(await findByText(/^3\.73/)).toBeTruthy();
   });
 
   it('shares a lifting session with a cardio warm-up as a workout', async () => {

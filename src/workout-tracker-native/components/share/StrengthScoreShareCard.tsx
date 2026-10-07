@@ -6,6 +6,7 @@ import {
   ShareCardBanner,
   ShareCardHero,
   ShareCardHeroLabel,
+  ShareCardHeroCaption,
   ShareCardStatsRow,
   ShareCardFooter,
   type ShareCardStatItem,
@@ -40,6 +41,7 @@ const StrengthScoreShareCard = forwardRef<View, StrengthScoreShareCardProps>(
 
         <ShareCardHero value={score} accentColor={accentColor}>
           <ShareCardHeroLabel>{rankLabel}</ShareCardHeroLabel>
+          <ShareCardHeroCaption>Stronger than {Math.round(score)}% of lifters</ShareCardHeroCaption>
         </ShareCardHero>
 
         <ShareCardStatsRow items={statItems} style={styles.statsRow} />

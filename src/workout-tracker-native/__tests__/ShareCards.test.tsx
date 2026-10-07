@@ -126,4 +126,84 @@ describe('share cards', () => {
     expect(getByText('Trail Run')).toBeTruthy();
     expect(getByText(/3\.10/)).toBeTruthy();
   });
+
+  describe('never leads with a zero', () => {
+    it('a cardio-only week leads with its distance', () => {
+      const { getByText, queryByText } = render(
+        <WeeklySummaryShareCard
+          dateRange="Sep 14 - Sep 20" workouts={3} totalVolume={0} totalReps={0} totalDurationMin={95}
+          weightUnit="lbs" distance={12.44} distanceUnit="mi" prCount={0} accentColor={ACCENT}
+        />,
+      );
+      expect(getByText('12.4')).toBeTruthy();
+      expect(getByText('Distance (mi)')).toBeTruthy();
+      expect(queryByText('Total Reps')).toBeNull();
+      expect(queryByText('Reps')).toBeNull();
+    });
+
+    it('a week with nothing to total leads with its workouts', () => {
+      const { getByText } = render(
+        <WeeklySummaryShareCard
+          dateRange="Sep 14 - Sep 20" workouts={2} totalVolume={0} totalReps={0} totalDurationMin={40}
+          weightUnit="lbs" prCount={0} accentColor={ACCENT}
+        />,
+      );
+      // Once, as the headline: not again in the stats row
+      expect(getByText('Workouts')).toBeTruthy();
+      expect(getByText('Training Time')).toBeTruthy();
+    });
+
+    it('a lifting week still shows the distance run beside its totals', () => {
+      const { getByText } = render(
+        <WeeklySummaryShareCard
+          dateRange="Sep 14 - Sep 20" workouts={4} totalVolume={42000} totalReps={520} totalDurationMin={240}
+          weightUnit="lbs" distance={5} distanceUnit="km" prCount={0} accentColor={ACCENT}
+        />,
+      );
+      expect(getByText('Total Volume (lbs)')).toBeTruthy();
+      expect(getByText('Km')).toBeTruthy();
+      expect(getByText('5.0')).toBeTruthy();
+    });
+
+    it('a session of holds leads with time under tension', () => {
+      const { getByText, queryByText } = render(
+        <WorkoutShareCard
+          workoutName="Core" date="Sep 20, 2026" volumeText={null} totalSets={4} totalReps={0} holdMinutes={3.5}
+          weightUnit="lbs" exercises={[{ name: 'Plank', bestSet: null }]} prs={[]} accentColor={ACCENT}
+        />,
+      );
+      expect(getByText('3:30')).toBeTruthy();
+      expect(getByText('Total Hold Time')).toBeTruthy();
+      expect(queryByText('Total Reps')).toBeNull();
+      expect(queryByText('Reps')).toBeNull();
+      expect(getByText('4')).toBeTruthy();   // the sets still count
+    });
+
+    it('time-only cardio leads with the duration, with no pace', () => {
+      const { getByText, queryByText } = render(
+        <CardioShareCard activityName="Stair Climber" date="Sep 20, 2026" distance={0} distanceUnit="mi" durationMin={25} accentColor={ACCENT} />,
+      );
+      expect(getByText('25m 0s')).toBeTruthy();
+      expect(getByText('Duration')).toBeTruthy();
+      expect(queryByText(/0\.00/)).toBeNull();
+      expect(queryByText(/Pace/)).toBeNull();
+    });
+  });
+
+  it('Cardio card gives elevation in feet to a miles user and metres to a km user', () => {
+    const card = (unit: 'mi' | 'km') => render(
+      <CardioShareCard activityName="Hill Run" date="Sep 20, 2026" distance={3} distanceUnit={unit} durationMin={30} elevationM={120} accentColor={ACCENT} />,
+    );
+    expect(card('mi').getByText('394 ft')).toBeTruthy();
+    expect(card('km').getByText('120 m')).toBeTruthy();
+  });
+
+  it('score cards say what the number means', () => {
+    expect(render(
+      <StrengthScoreShareCard score={62} rankLabel="Advanced" exercisesUsed={4} muscleGroupsUsed={3} accentColor={ACCENT} date="Sep 20, 2026" />,
+    ).getByText('Stronger than 62% of lifters')).toBeTruthy();
+    expect(render(
+      <EnduranceScoreShareCard score={55.4} rankLabel="Intermediate" longestDistance="10K" bestTime="25:00" bestTimeLabel="5K Time" accentColor={ACCENT} date="Sep 20, 2026" />,
+    ).getByText('Faster than 55% of runners')).toBeTruthy();
+  });
 });

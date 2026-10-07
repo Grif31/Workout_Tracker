@@ -358,6 +358,8 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
             totalReps={data.total_reps}
             totalDurationMin={data.total_duration_min}
             weightUnit={data.weight_unit}
+            distance={data.distance_km ? toDisplayDistance(data.distance_km, distanceUnit) : undefined}
+            distanceUnit={distanceUnit}
             prCount={data.prs.length}
             prLabel={data.prs.length === 1
               ? `New ${data.prs[0].exercise_name} ${PR_TYPE_LABELS[data.prs[0].pr_type] ?? 'PR'}!`

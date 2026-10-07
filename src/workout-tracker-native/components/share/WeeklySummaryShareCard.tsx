@@ -21,6 +21,9 @@ type WeeklySummaryShareCardProps = {
   totalReps: number;
   totalDurationMin: number;
   weightUnit: string;
+  /** Cardio distance for the week, already in distanceUnit; leads the card in a week with no lifting */
+  distance?: number;
+  distanceUnit?: 'km' | 'mi';
   prCount: number;
   prLabel?: string;
   topMuscle?: string | null;
@@ -38,12 +41,18 @@ function fmtDurationMin(min: number): string {
 
 const WeeklySummaryShareCard = forwardRef<View, WeeklySummaryShareCardProps>(
   ({
-    dateRange, workouts, totalVolume, totalReps, totalDurationMin, weightUnit,
+    dateRange, workouts, totalVolume, totalReps, totalDurationMin, weightUnit, distance, distanceUnit,
     prCount, prLabel, topMuscle, mostImprovedLift, mostImprovedCardio, streak, accentColor,
   }, ref) => {
-    // All-bodyweight weeks have 0 volume — reps become the brag number
-    const heroValue = totalVolume > 0 ? totalVolume.toLocaleString() : totalReps.toLocaleString();
-    const heroLabel = totalVolume > 0 ? `Total Volume (${weightUnit})` : 'Total Reps';
+    // The brag number is the first of these the week actually has: volume,
+    // reps (an all-bodyweight week), distance (a runner's week), else the
+    // workout count. Never a zero.
+    const hasDistance = distance != null && distance > 0;
+    const [heroValue, heroLabel] =
+      totalVolume > 0 ? [totalVolume.toLocaleString(), `Total Volume (${weightUnit})`]
+      : totalReps > 0 ? [totalReps.toLocaleString(), 'Total Reps']
+      : hasDistance ? [distance!.toFixed(1), `Distance (${distanceUnit ?? 'km'})`]
+      : [String(workouts), workouts === 1 ? 'Workout' : 'Workouts'];
 
     // `flame` draws the app's own streak flame in place of an emoji, which
     // renders at the mercy of the platform font in a captured image.
@@ -54,11 +63,15 @@ const WeeklySummaryShareCard = forwardRef<View, WeeklySummaryShareCardProps>(
       mostImprovedCardio ? { text: `Most Improved Cardio: ${mostImprovedCardio.exercise_name}` } : null,
     ].filter((h): h is { text: string; flame?: boolean } => !!h);
 
-    const statItems: ShareCardStatItem[] = [
-      { value: workouts, label: 'Workouts' },
-      { value: totalReps, label: 'Reps' },
-      { value: fmtDurationMin(totalDurationMin), label: 'Training Time' },
-    ];
+    // Whatever became the headline isn't repeated in the row under it
+    const workoutsLead = totalVolume <= 0 && totalReps <= 0 && !hasDistance;
+    const statItems: ShareCardStatItem[] = workoutsLead ? [] : [{ value: workouts, label: 'Workouts' }];
+    if (totalReps > 0 && totalVolume > 0) statItems.push({ value: totalReps, label: 'Reps' });
+    // Shown beside lifting numbers; when distance is the headline it isn't repeated
+    if (hasDistance && (totalVolume > 0 || totalReps > 0)) {
+      statItems.push({ value: distance!.toFixed(1), label: distanceUnit === 'mi' ? 'Miles' : 'Km' });
+    }
+    statItems.push({ value: fmtDurationMin(totalDurationMin), label: 'Training Time' });
 
     return (
       <ShareCardFrame ref={ref} accentColor={accentColor}>

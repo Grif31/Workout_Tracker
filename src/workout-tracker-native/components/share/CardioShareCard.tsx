@@ -36,12 +36,21 @@ const CardioShareCard = forwardRef<View, CardioShareCardProps>(
   ({ activityName, date, distance, distanceUnit, durationMin, elevationM, coords, accentColor }, ref) => {
     const hasRoute = (coords?.length ?? 0) >= 2;
 
-    const statItems: ShareCardStatItem[] = [
-      { value: fmtDuration(durationMin), label: 'Duration' },
-      { value: fmtPace(durationMin, distance), label: `Pace /${distanceUnit}` },
-    ];
+    // Machine cardio is often logged as time alone: lead with the time then,
+    // rather than "0.00 km" and a pace that can't be worked out
+    const hasDistance = distance > 0;
+    const statItems: ShareCardStatItem[] = hasDistance
+      ? [
+          { value: fmtDuration(durationMin), label: 'Duration' },
+          { value: fmtPace(durationMin, distance), label: `Pace /${distanceUnit}` },
+        ]
+      : [];
     if (elevationM != null && elevationM > 0) {
-      statItems.push({ value: `${Math.round(elevationM)} m`, label: 'Elevation' });
+      // Feet for a miles user, like the Cardio Details screen
+      statItems.push({
+        value: distanceUnit === 'mi' ? `${Math.round(elevationM * 3.28084)} ft` : `${Math.round(elevationM)} m`,
+        label: 'Elevation',
+      });
     }
 
     return (
@@ -63,19 +72,19 @@ const CardioShareCard = forwardRef<View, CardioShareCardProps>(
         )}
 
         <ShareCardHero
-          value={
+          value={hasDistance ? (
             <>
               {distance.toFixed(2)}
               <Text style={styles.heroUnit}> {distanceUnit}</Text>
             </>
-          }
+          ) : fmtDuration(durationMin)}
           accentColor={accentColor}
           style={styles.hero}
         >
-          <ShareCardHeroLabel>Distance</ShareCardHeroLabel>
+          <ShareCardHeroLabel>{hasDistance ? 'Distance' : 'Duration'}</ShareCardHeroLabel>
         </ShareCardHero>
 
-        <ShareCardStatsRow items={statItems} style={styles.statsRow} />
+        {statItems.length > 0 && <ShareCardStatsRow items={statItems} style={styles.statsRow} />}
 
         <ShareCardFooter />
       </ShareCardFrame>

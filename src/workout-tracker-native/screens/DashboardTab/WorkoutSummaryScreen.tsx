@@ -315,6 +315,9 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           totalSets={totalSets}
           totalReps={totalReps}
           duration={durationMin}
+          holdMinutes={exercises
+            .filter(e => e.exercise_type === 'duration')
+            .reduce((sum, e) => sum + e.sets.reduce((t, st) => t + (st.cardio_duration ?? 0), 0), 0)}
           weightUnit={weightUnit}
           exercises={exercises.slice(0, 3).map(e => ({ name: e.name, bestSet: bestSetOf(e) }))}
           prs={filteredPrs}

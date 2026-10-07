@@ -3,8 +3,9 @@ import { View, Text, Image, StyleSheet, StyleProp, ViewStyle } from 'react-nativ
 import { LaurelBranch } from '../LaurelWreath';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
+import { PR_GOLD } from '../../constants/prColors';
 import {
+  SHARE_BACKING,
   SHARE_BG,
   SHARE_SURFACE,
   SHARE_DIVIDER,
@@ -24,9 +25,11 @@ export const SHARE_CARD_WIDTH = 360;
 type ShareCardFrameProps = { accentColor: string; children: React.ReactNode };
 export const ShareCardFrame = forwardRef<View, ShareCardFrameProps>(
   ({ accentColor, children }, ref) => (
-    <View ref={ref} style={styles.card}>
-      <View style={[styles.accentEdge, { backgroundColor: accentColor }]} />
-      <View style={styles.content}>{children}</View>
+    <View ref={ref} style={styles.backing}>
+      <View style={styles.card}>
+        <View style={[styles.accentEdge, { backgroundColor: accentColor }]} />
+        <View style={styles.content}>{children}</View>
+      </View>
     </View>
   )
 );
@@ -80,6 +83,11 @@ export function ShareCardHeroLabel({ children }: { children: React.ReactNode }) 
   return <Text style={styles.heroLabel}>{children}</Text>;
 }
 
+// A plain-words line under a hero number that means nothing on its own outside the app
+export function ShareCardHeroCaption({ children }: { children: React.ReactNode }) {
+  return <Text style={styles.heroCaption}>{children}</Text>;
+}
+
 // Surface row of stat boxes with a divider auto-inserted between each item.
 export type ShareCardStatItem = { value: React.ReactNode; label: string };
 type ShareCardStatsRowProps = { items: ShareCardStatItem[]; style?: StyleProp<ViewStyle> };
@@ -104,6 +112,10 @@ export function ShareCardFooter() {
 }
 
 const styles = StyleSheet.create({
+  backing: {
+    backgroundColor: SHARE_BACKING,
+    padding: spacing.md,
+  },
   card: {
     width: SHARE_CARD_WIDTH,
     backgroundColor: SHARE_BG,
@@ -148,7 +160,8 @@ const styles = StyleSheet.create({
   bannerText: {
     fontSize: 13,
     fontWeight: '700',
-    color: PR_GOLD_TEXT,
+    // PR_GOLD_TEXT is the dark gold for cream backgrounds; on this dark surface it reads dim
+    color: PR_GOLD,
     flex: 1,
     textAlign: 'center',
   },
@@ -168,6 +181,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textTransform: 'uppercase',
     letterSpacing: 1,
+  },
+
+  heroCaption: {
+    fontSize: 14,
+    color: SHARE_TEXT,
+    marginTop: spacing.xs,
   },
 
   statsRow: {

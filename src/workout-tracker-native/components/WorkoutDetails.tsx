@@ -243,8 +243,8 @@ export default function WorkoutDetailsScreen({
         kind: 'cardio' as const,
         date: dateStr,
         activityName: workout.name,
-        distance: Number(workout.distance) || 0,
-        distanceUnit: (workout.distance_unit === 'mi' ? 'mi' : 'km') as 'km' | 'mi',
+        distance: toDisplayDistance(toKm(Number(workout.distance) || 0, workout.distance_unit === 'mi' ? 'mi' : 'km'), distanceUnit),
+        distanceUnit,
         durationMin: Number(workout.cardio_duration) || 0,
         elevationM: elevated ? parseFloat(elevated.elevation_gain) || null : null,
         coords,
@@ -253,6 +253,7 @@ export default function WorkoutDetailsScreen({
 
     let totalReps = 0;
     let setCount = 0;
+    let holdMinutes = 0;
     const prs: { exercise_name: string; pr_type: string }[] = [];
     const exercises: ShareExercise[] = [];
     for (const ex of workout.exercises) {
@@ -261,6 +262,9 @@ export default function WorkoutDetailsScreen({
         const reps = parseFloat(s.reps ?? '0') || 0;
         const weight = parseFloat(s.weight ?? '0') || 0;
         if (reps > 0) { totalReps += reps; setCount += 1; }
+        // A timed hold has no reps but is still a set
+        const hold = ex.exercise_type === 'duration' ? Number(s.cardio_duration) || 0 : 0;
+        if (hold > 0) { holdMinutes += hold; setCount += 1; }
         for (const t of s.pr_types ?? []) {
           if (t !== 'estimated_1rm') prs.push({ exercise_name: ex.name, pr_type: t });
         }
@@ -276,10 +280,11 @@ export default function WorkoutDetailsScreen({
       date: dateStr,
       totalReps,
       setCount,
+      holdMinutes,
       prs,
       exercises: exercises.slice(0, 3),
     };
-  }, [workout]);
+  }, [workout, distanceUnit]);
 
   const openMenu = () => {
     if (!workout) return;
@@ -787,6 +792,7 @@ export default function WorkoutDetailsScreen({
             totalSets={shareData.setCount}
             totalReps={shareData.totalReps}
             duration={workout.duration ?? null}
+            holdMinutes={shareData.holdMinutes}
             weightUnit={weightUnit}
             exercises={shareData.exercises}
             prs={shareData.prs}
