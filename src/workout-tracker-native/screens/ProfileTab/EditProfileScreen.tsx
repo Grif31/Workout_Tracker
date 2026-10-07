@@ -255,8 +255,6 @@ export default function EditProfileScreen({ navigation }: Props) {
           numberOfLines={4}
         />
 
-        <Text style={styles.sectionHeader}>Body Stats</Text>
-
         <Text style={styles.label}>Gender</Text>
         <SegmentedControl options={GENDERS} value={gender} onChange={setGender} size="md" appearance="solid" />
         <Text style={styles.hint}>Strength Score and Endurance Score need this to compare your exercises.</Text>
@@ -401,13 +399,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.save,
     fontSize: typography.fontSize.sm,
     marginTop: spacing.xs,
-  },
-  sectionHeader: {
-    fontSize: typography.fontSize.md,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
   },
   label: {
     fontSize: typography.fontSize.sm,
