@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Animated, Easing,
+  View, Text, TouchableOpacity, StyleSheet, Animated,
   PanResponder, Dimensions,
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
@@ -10,7 +10,6 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { fmtCountdown } from './types';
 
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const RING_CIRCUMFERENCE = 2 * Math.PI * 85;
 
 // Minimized floating bubble
@@ -47,18 +46,12 @@ export default function RestTimer({
 
   const [minimized, setMinimized] = useState(false);
 
-  // Glide the ring between values instead of stepping once a second. Normal
-  // ticks arrive every 1000ms, so a 1000ms linear glide makes the drain
-  // continuous; ±30s adjustments ride the same tween.
-  const progressAnim = useRef(new Animated.Value(progress)).current;
-  useEffect(() => {
-    Animated.timing(progressAnim, {
-      toValue: progress,
-      duration: restPaused ? 250 : 1000,
-      easing: Easing.linear,
-      useNativeDriver: false, // SVG stroke props can't use the native driver
-    }).start();
-  }, [progress, restPaused]);
+  // The ring steps once a second with restRemaining rather than gliding. A
+  // glide has to be a JS-driven Animated (SVG stroke can't use the native
+  // driver), and on Fabric every JS-driven frame commits and lays out the
+  // whole WorkoutLog tree. That ran ~60 commits a second for the length of
+  // every rest: 57% CPU on an iPhone 13 in 1.1.8, and a main thread too busy
+  // mounting to exit within 5s once backgrounded, so iOS killed it (0x8badf00d).
 
   // ── Draggable bubble position ────────────────────────────────
   const { width: W, height: H } = Dimensions.get('window');
@@ -112,16 +105,13 @@ export default function RestTimer({
               strokeWidth={5}
               fill="none"
             />
-            <AnimatedCircle
+            <Circle
               cx={BUBBLE_SIZE / 2} cy={BUBBLE_SIZE / 2} r={BUBBLE_RING_R}
               stroke={ringColor}
               strokeWidth={5}
               fill="none"
               strokeDasharray={`${BUBBLE_CIRCUMFERENCE}`}
-              strokeDashoffset={progressAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [BUBBLE_CIRCUMFERENCE, 0],
-              })}
+              strokeDashoffset={BUBBLE_CIRCUMFERENCE * (1 - progress)}
               strokeLinecap="round"
               transform={`rotate(-90 ${BUBBLE_SIZE / 2} ${BUBBLE_SIZE / 2})`}
             />
@@ -155,16 +145,13 @@ export default function RestTimer({
               strokeWidth={10}
               fill="none"
             />
-            <AnimatedCircle
+            <Circle
               cx={100} cy={100} r={85}
               stroke={ringColor}
               strokeWidth={10}
               fill="none"
               strokeDasharray={`${RING_CIRCUMFERENCE}`}
-              strokeDashoffset={progressAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [RING_CIRCUMFERENCE, 0],
-              })}
+              strokeDashoffset={RING_CIRCUMFERENCE * (1 - progress)}
               strokeLinecap="round"
               transform="rotate(-90 100 100)"
             />
