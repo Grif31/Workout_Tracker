@@ -811,13 +811,13 @@ export default function DashboardScreen({ navigation }: Props) {
                 <View style={styles.allDoneRow}>
                   <Ionicons name="checkmark-circle" size={18} color={colors.save} />
                   <Text style={styles.allDoneText}>
-                    All {routineDays.length} day{routineDays.length !== 1 ? 's' : ''} done this week. Rest up, or keep the rotation going.
+                    Nice Job, keep going or take some rest.
                   </Text>
                 </View>
               )}
 
               {/* Up next — the day to train, with a one-tap Log */}
-              {nextDay && (
+              {nextDay && !allDoneThisWeek && (
                 <View style={[styles.upNextRow, routineCompact && styles.upNextRowCompact]}>
                   <View style={routineCompact ? undefined : { flex: 1 }}>
                     <Text style={styles.upNextLabel}>{rotation.restarted ? 'Up Next · Fresh start' : 'Up Next'}</Text>

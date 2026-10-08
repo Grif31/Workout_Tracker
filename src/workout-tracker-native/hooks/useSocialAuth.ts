@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Platform, Alert } from 'react-native';
 import * as Facebook from 'expo-auth-session/providers/facebook';
 import Constants from 'expo-constants';
+import * as Application from 'expo-application';
 import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, isNetworkError } from '../utils/api';
@@ -19,11 +20,28 @@ const facebookReady = FACEBOOK_ID !== 'not-configured';
 // app.config.js's extra.googleSignIn, which picks the dev build's on its own.
 let GoogleSignIn: typeof import('@react-native-google-signin/google-signin') | null = null;
 try { GoogleSignIn = require('@react-native-google-signin/google-signin'); } catch {}
-const googleConfig: { iosClientId?: string | null; webClientId?: string | null } =
-  Constants.expoConfig?.extra?.googleSignIn ?? {};
+type GoogleConfig = {
+  iosClientId?: string | null;
+  iosClientIds?: { development?: string | null; production?: string | null };
+  webClientId?: string | null;
+};
+const googleConfig: GoogleConfig = Constants.expoConfig?.extra?.googleSignIn ?? {};
+
+/**
+ * The dev build (bundle ID ending .dev) signs in with its own iOS client. Read
+ * from the installed app, not the config's iosClientId: that one is computed
+ * where Metro runs, and picks the production client unless APP_VARIANT happens
+ * to be set there too.
+ */
+export function pickIosClientId(config: GoogleConfig, bundleId: string | null | undefined): string | null {
+  const byBuild = config.iosClientIds;
+  if (byBuild && bundleId) return (bundleId.endsWith('.dev') ? byBuild.development : byBuild.production) ?? null;
+  return config.iosClientId ?? null;
+}
+const iosClientId = pickIosClientId(googleConfig, Application.applicationId);
 /** Whether to offer Google: iOS signs in with its own client, Android with the Web client's ID. */
 export const googleAvailable = !!GoogleSignIn
-  && (Platform.OS === 'ios' ? !!googleConfig.iosClientId : !!googleConfig.webClientId);
+  && (Platform.OS === 'ios' ? !!iosClientId : !!googleConfig.webClientId);
 let googleConfigured = false;
 
 export function useSocialAuth() {
@@ -84,7 +102,7 @@ export function useSocialAuth() {
     try {
       if (!googleConfigured) {
         GoogleSignin.configure({
-          iosClientId: googleConfig.iosClientId ?? undefined,
+          iosClientId: iosClientId ?? undefined,
           webClientId: googleConfig.webClientId ?? undefined,
         });
         googleConfigured = true;
@@ -100,7 +118,12 @@ export function useSocialAuth() {
       GoogleSignin.signOut().catch(() => {});
     } catch (err) {
       if (isErrorWithCode(err) && (err.code === statusCodes.SIGN_IN_CANCELLED || err.code === statusCodes.IN_PROGRESS)) return;
-      Alert.alert('Google Sign In Failed', 'Could not complete Google sign in.');
+      // The native module's code and message are the only way to tell a client
+      // ID or URL scheme mix-up from a cancelled sheet, so dev builds show them
+      const detail = __DEV__ ? `
+
+${(err as any)?.code ?? 'no code'}: ${(err as any)?.message ?? err}` : '';
+      Alert.alert('Google Sign In Failed', `Could not complete Google sign in.${detail}`);
     }
   };
 

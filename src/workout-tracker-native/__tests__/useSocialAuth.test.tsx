@@ -17,6 +17,7 @@ jest.mock('@react-native-google-signin/google-signin', () => ({
 jest.mock('expo-constants', () => ({
   expoConfig: { extra: { googleSignIn: { iosClientId: 'ios-client.apps.googleusercontent.com', webClientId: 'web-client.apps.googleusercontent.com' } } },
 }));
+jest.mock('expo-application', () => ({ applicationId: 'com.aretefitness.app.dev' }));
 jest.mock('expo-auth-session/providers/facebook', () => ({ useAuthRequest: () => [null, null, jest.fn()] }));
 jest.mock('expo-web-browser', () => ({ maybeCompleteAuthSession: jest.fn() }));
 const mockLogin = jest.fn();
@@ -25,7 +26,7 @@ jest.mock('../utils/api', () => ({ apiFetch: jest.fn(), isNetworkError: () => fa
 
 const { GoogleSignin } = jest.requireMock('@react-native-google-signin/google-signin');
 const { apiFetch } = jest.requireMock('../utils/api');
-const { useSocialAuth, googleAvailable } = require('../hooks/useSocialAuth');
+const { useSocialAuth, googleAvailable, pickIosClientId } = require('../hooks/useSocialAuth');
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -72,7 +73,7 @@ describe('Google sign-in', () => {
 
     GoogleSignin.signIn.mockRejectedValueOnce({ code: 'DEVELOPER_ERROR' });
     await act(() => result.current.handleGoogle());
-    expect(Alert.alert).toHaveBeenCalledWith('Google Sign In Failed', 'Could not complete Google sign in.');
+    expect(Alert.alert).toHaveBeenCalledWith('Google Sign In Failed', expect.stringContaining('Could not complete Google sign in.'));
   });
 
   it('shows the backend\'s reason when it refuses the token', async () => {
@@ -82,5 +83,23 @@ describe('Google sign-in', () => {
     await act(() => result.current.handleGoogle());
     expect(Alert.alert).toHaveBeenCalledWith('Sign In Failed', 'Google token was not issued for this app');
     expect(mockLogin).not.toHaveBeenCalled();
+  });
+});
+
+describe('pickIosClientId', () => {
+  const config = { iosClientId: 'from-config', iosClientIds: { development: 'dev-client', production: 'prod-client' } };
+
+  it('uses the dev client for the dev build, whatever the config evaluated to', () => {
+    expect(pickIosClientId(config, 'com.aretefitness.app.dev')).toBe('dev-client');
+  });
+
+  it('uses the production client for the App Store bundle', () => {
+    expect(pickIosClientId(config, 'com.aretefitness.app')).toBe('prod-client');
+  });
+
+  it('falls back to the config client when the bundle ID or the pair is missing', () => {
+    expect(pickIosClientId(config, null)).toBe('from-config');
+    expect(pickIosClientId({ iosClientId: 'only' }, 'com.aretefitness.app.dev')).toBe('only');
+    expect(pickIosClientId({}, 'com.aretefitness.app')).toBeNull();
   });
 });

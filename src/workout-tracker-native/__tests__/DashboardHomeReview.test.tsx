@@ -84,16 +84,16 @@ describe('Home review fixes', () => {
       expect(navigatedPrefillName(nav)).toBe('Legs');
     });
 
-    it('notes a finished week while still offering the next day', async () => {
+    it('congratulates a finished week and drops the Up Next row', async () => {
       mockServer({ history: [
         { id: 12, name: 'Pull', date: '2026-09-16T00:00:00' },
         { id: 11, name: 'Push', date: '2026-09-15T00:00:00' },
         { id: 10, name: 'Legs', date: '2026-09-14T00:00:00' },
       ] });
-      const { findByText, getByText } = render(<DashboardScreen navigation={createMockNavigation() as any} route={route as any} />);
+      const { findByText, queryByText } = render(<DashboardScreen navigation={createMockNavigation() as any} route={route as any} />);
 
-      expect(await findByText(/All 3 days done this week/)).toBeTruthy();
-      expect(getByText('Up Next')).toBeTruthy();
+      expect(await findByText('Nice Job, keep going or take some rest.')).toBeTruthy();
+      expect(queryByText('Up Next')).toBeNull();
     });
   });
 

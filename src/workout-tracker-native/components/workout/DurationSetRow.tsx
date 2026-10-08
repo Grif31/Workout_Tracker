@@ -132,8 +132,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   prevCellTappable: {
     color: colors.textPrimary,
-    textDecorationLine: 'underline',
-    textDecorationStyle: 'dotted',
   },
   secondsWrap: {
     flexDirection: 'row',

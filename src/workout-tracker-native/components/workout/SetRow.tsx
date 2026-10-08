@@ -328,11 +328,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     textAlign: 'center',
     marginHorizontal: spacing.xs,
   },
-  // Dotted underline marks the cell as tappable without competing with the inputs
+  // Brighter than the plain Prev text marks the cell as tappable
   prevCellTappable: {
     color: colors.textPrimary,
-    textDecorationLine: 'underline',
-    textDecorationStyle: 'dotted',
   },
 
   setInput: {

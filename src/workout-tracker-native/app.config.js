@@ -6,9 +6,11 @@ const IOS_BUNDLE_ID = IS_DEV ? 'com.aretefitness.app.dev' : 'com.aretefitness.ap
 // build signs in as itself; the backend's GOOGLE_CLIENT_IDS lists every client.
 // Android's own clients (package plus signing SHA-1) are matched by Google
 // itself and never named here; the app passes the Web client's ID instead.
-const GOOGLE_IOS_CLIENT_ID = IS_DEV
-  ? '722911736139-je9hmktkpeddboafh2acl175il3a1u12.apps.googleusercontent.com'
-  : '722911736139-v5vbpr2a1iu7jgmfchc671nju2707o2m.apps.googleusercontent.com';
+const GOOGLE_IOS_CLIENT_IDS = {
+  development: '722911736139-je9hmktkpeddboafh2acl175il3a1u12.apps.googleusercontent.com',
+  production: '722911736139-v5vbpr2a1iu7jgmfchc671nju2707o2m.apps.googleusercontent.com',
+};
+const GOOGLE_IOS_CLIENT_ID = IS_DEV ? GOOGLE_IOS_CLIENT_IDS.development : GOOGLE_IOS_CLIENT_IDS.production;
 // Google returns to the app through this URL scheme: the client ID reversed
 const GOOGLE_IOS_URL_SCHEME = GOOGLE_IOS_CLIENT_ID.split('.').reverse().join('.');
 // Android asks for tokens with the Web client's ID (one for both builds)
@@ -76,7 +78,11 @@ module.exports = {
         projectId: '356b88e9-4302-43fc-b50a-6d83030b8fa6',
       },
       // Read by hooks/useSocialAuth.ts through expo-constants
-      googleSignIn: { iosClientId: GOOGLE_IOS_CLIENT_ID, webClientId: GOOGLE_WEB_CLIENT_ID },
+      // iosClientIds lets the app pick by the installed build's bundle ID: a dev
+      // client's JS runs from Metro, whose config is evaluated on this computer
+      // where APP_VARIANT is usually unset, so iosClientId alone is the wrong
+      // client there (the build's URL scheme is only registered for its own).
+      googleSignIn: { iosClientId: GOOGLE_IOS_CLIENT_ID, iosClientIds: GOOGLE_IOS_CLIENT_IDS, webClientId: GOOGLE_WEB_CLIENT_ID },
     },
     plugins: [
       'expo-dev-client',
