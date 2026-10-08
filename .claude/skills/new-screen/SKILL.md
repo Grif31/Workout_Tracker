@@ -2,7 +2,7 @@
 name: new-screen
 description: Create a new React Native screen and register it in the correct stack navigator
 disable-model-invocation: true
-argument-hint: [ScreenName] [tab: Dashboard|Exercises|Profile]
+argument-hint: [ScreenName] [tab: Dashboard|Exercises|Training|Profile]
 allowed-tools: Read, Write, Edit, Glob
 ---
 

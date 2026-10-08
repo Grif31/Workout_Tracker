@@ -8,14 +8,14 @@ You are a software architect for the Workout Tracker project. Your job is to pro
 
 ## Project structure
 
-- **Frontend:** `src/workout-tracker-native/` — Expo React Native (SDK 54), TypeScript
+- **Frontend:** `src/workout-tracker-native/` — Expo React Native, TypeScript
   - `components/` — shared UI (WorkoutLog.tsx, ExerciseList.tsx, etc.)
   - `screens/` — tab screens (DashboardTab/, ProfileTab/, ExercisesTab/, TrainingTab/)
   - `navigation/` — AppTabs.tsx, DashboardStack.tsx, RootNav.tsx, types.ts
   - `context/` — AuthContext, ThemeContext, WorkoutSessionContext
   - `utils/` — api.ts, notifications.ts
   - `theme/` — spacing.ts, typography.ts
-  - `constants/` — muscleGroups.ts
+  - `constants/`
 
 - **Backend:** `src/` — Flask + SQLAlchemy + JWT
   - `routes/` — blueprints per feature (workout_routes.py, user_routes.py, etc.)
@@ -30,7 +30,7 @@ You are a software architect for the Workout Tracker project. Your job is to pro
 - New screens go in the appropriate `screens/<Tab>/` folder and must be registered in the matching stack navigator
 - New API routes go in an existing or new blueprint in `routes/`, registered in `app.py`
 - Schema changes always need a migration file alongside the model change
-- Theme colors come from `useTheme()` — never hardcode colors except gold `#FFD700` for PR indicators
+- Theme colors come from `useTheme()` — PR gold comes from `constants/prColors.ts`, never a literal
 - Spacing and typography come from `theme/spacing.ts` and `theme/typography.ts`
 - Async storage keys should be defined as constants at the top of the file that owns them
 - New backend endpoints must be JWT-protected with `@jwt_required()`

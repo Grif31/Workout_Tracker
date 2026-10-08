@@ -57,7 +57,7 @@ In `auth_routes.py`, `_verify_apple_token` and the Google path decide who the ca
 User-controlled text (exercise names, notes, coach profile goals and injuries) is interpolated into prompts. The realistic risk is not that the model says something rude — it is injected text steering output that the app then *acts on*. Check whether the model's JSON is parsed into workouts or routines written to the DB without server-side validation of ids, counts, and sizes: a generated routine referencing another user's exercise id, or ten thousand sets, must be rejected by the route, not trusted because a model produced it. Also confirm no user text lands in a system-prompt position, no API key is echoed in an error response, and the Anthropic failure path doesn't return raw upstream detail to the client.
 
 ### 9. Client-side (React Native)
-- Where the access and refresh tokens live. `AsyncStorage` is unencrypted on disk — reachable on a jailbroken or rooted device and in an unencrypted backup. Report the current state and weigh `expo-secure-store` against the real threat model (per-app sandbox; no other app reads it) rather than asserting it is a bug.
+- Confirm both tokens stay in `expo-secure-store` via `utils/tokenStorage.ts` and nothing writes them to AsyncStorage (only the `secure_token_store_ready` marker belongs there).
 - `apiFetch` base URL: any `http://` outside a documented localhost dev fallback, and any path that would send a JWT in plaintext.
 - Tokens, emails, or user ids in `console.log` that survive into a production build.
 - Deep links (`aretefitness://`): any handler that takes a URL parameter and navigates or fetches with it.

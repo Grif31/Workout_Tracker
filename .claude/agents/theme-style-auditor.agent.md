@@ -9,13 +9,10 @@ You are a style consistency auditor for the Workout Tracker React Native app.
 ## What is allowed
 
 ### Approved hardcoded colors (do NOT flag these)
-- `#FFD700` — PR gold (used for personal record indicators)
-- `#7A5800` — PR gold text contrast
-- `#FFF3C4` — PR banner background (light gold)
 - `#fff` / `#ffffff` — white on colored backgrounds (e.g. button text on accent)
 - `'rgba(0,0,0,0.6)'` — modal backdrop overlay
-- `'rgba(52,199,89,0.08)'` — done-set row tint
-- `'rgba(255,255,255,0.85)'` — selected RPE text
+
+PR gold must use `PR_GOLD`, `PR_GOLD_TEXT`, `PR_GOLD_BG` from `constants/prColors.ts`; flag any literal. `#FFD700` is allowed only in `greekRanks.ts` and `CoachCharacter.tsx` (the Aretē rank color).
 
 ### Theme token system
 - **Colors:** always from `useTheme()` → `colors.*` (e.g. `colors.accent`, `colors.surface`, `colors.textPrimary`, `colors.border`, `colors.danger`, `colors.save`, `colors.background`, `colors.textSecondary`, `colors.placeholder`, `colors.accentText`)

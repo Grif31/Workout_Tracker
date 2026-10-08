@@ -1,6 +1,6 @@
 ---
 name: new-test
-description: Write and run tests for a backend route file, frontend component/screen, both together, or the entire codebase at once. Sets up Jest if not yet configured for frontend.
+description: Write and run tests for a backend route file, frontend component/screen, both together, or the entire codebase at once.
 disable-model-invocation: true
 argument-hint: [backend|frontend|fullstack|all] [target]
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
@@ -72,28 +72,8 @@ If any tests fail, read the error, fix the test (not the application code), and 
 
 ## Frontend ($0 == "frontend")
 
-### Step 1 — Check Jest setup
-Read `src/workout-tracker-native/package.json`. Check if `jest` and `jest-expo` are in devDependencies and if a `"test"` script exists.
-
-**If Jest is NOT configured:**
-
-1. Install dependencies:
-   ```
-   cd src/workout-tracker-native && npm install --save-dev jest jest-expo @testing-library/react-native @testing-library/jest-native
-   ```
-2. Add to `package.json`:
-   - `"test": "jest"` in scripts
-   - Jest config block:
-     ```json
-     "jest": {
-       "preset": "jest-expo",
-       "setupFilesAfterFramework": ["@testing-library/jest-native/extend-expect"],
-       "transformIgnorePatterns": [
-         "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg)"
-       ]
-     }
-     ```
-3. Create `src/workout-tracker-native/__tests__/` directory.
+### Step 1 — Jest
+Jest is already configured (`jest-expo` preset in `package.json`); don't install or reconfigure it.
 
 ### Step 2 — Locate the target file
 Search for `$1` in `src/workout-tracker-native/components/` and `src/workout-tracker-native/screens/`. Read the file to understand its props, state, and rendered UI.
@@ -103,7 +83,7 @@ If the component uses `AuthContext`, `ThemeContext`, or `WorkoutSessionContext`,
 
 ### Step 4 — Run existing frontend tests (baseline)
 ```
-cd src/workout-tracker-native && npx jest --passWithNoTests -q
+cd src/workout-tracker-native && npx jest --passWithNoTests -q --maxWorkers=2
 ```
 Report result. If Jest was just installed and no tests exist yet, baseline is 0 tests.
 
@@ -160,7 +140,7 @@ If multiple files match, pick the most central one and note the choice in the re
 Run both baselines in sequence:
 ```
 cd src && python -m pytest tests/ -q --tb=short
-cd src/workout-tracker-native && npx jest --passWithNoTests -q
+cd src/workout-tracker-native && npx jest --passWithNoTests -q --maxWorkers=2
 ```
 Record each pass/fail count separately.
 
@@ -169,7 +149,7 @@ Follow Backend Steps 1–6 exactly, using the resolved backend filename.
 
 ### Step 4 — Frontend tests
 Follow Frontend Steps 1–6 exactly, using the resolved frontend filename.  
-(Check Jest setup as normal — install if missing.)
+
 
 ### Step 5 — Contract check
 After writing both test files, review them together and verify:
@@ -242,9 +222,9 @@ Frontend: <list>
 ### Step 4 — Run baseline for both layers
 ```
 cd src && python -m pytest tests/ -q --tb=short
-cd src/workout-tracker-native && npx jest --passWithNoTests -q
+cd src/workout-tracker-native && npx jest --passWithNoTests -q --maxWorkers=2
 ```
-Record baseline counts. Check Jest setup first (Frontend Step 1) and install if missing.
+Record baseline counts.
 
 ### Step 5 — Write backend tests (batch)
 For each untested route file (from Step 1), apply Backend Steps 1 and 5 in sequence:
@@ -265,7 +245,7 @@ For each untested screen/component (from Step 2), apply Frontend Steps 2, 3, and
 
 After writing **all** frontend test files, run the full frontend suite once:
 ```
-cd src/workout-tracker-native && npx jest --verbose
+cd src/workout-tracker-native && npx jest --verbose --maxWorkers=2
 ```
 Fix any failures file-by-file before reporting.
 

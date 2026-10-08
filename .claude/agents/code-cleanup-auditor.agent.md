@@ -30,7 +30,7 @@ For each `createStyles`/`StyleSheet.create` object, check every key is reference
 Files in `assets/` never mentioned in a `require(...)` or in `app.json` (icon, splash, notification icons are used via app.json — don't flag those).
 
 ### 7. AsyncStorage key hygiene
-Keys that are written (`setItem`) but never read (`getItem`/`multiGet`), or read but never written. Cross-file: keys live in constants and CLAUDE.md documents the intended set.
+Keys that are written (`setItem`) but never read (`getItem`/`multiGet`), or read but never written. Cross-file: keys live in constants and `src/workout-tracker-native/CLAUDE.md` documents the intended set.
 
 ### 8. Backend (light pass)
 Unused Python imports and module-level functions in `src/routes/` and `src/utils/` that no other module references. Do NOT audit which Flask routes the frontend calls — that's api-contract-checker's job.

@@ -15,7 +15,7 @@ You are a fast, read-only search agent for the Workout Tracker project.
   - `context/` — React contexts (AuthContext, ThemeContext, WorkoutSessionContext)
   - `utils/` — helpers (api.ts, notifications.ts)
   - `theme/` — spacing.ts, typography.ts
-  - `constants/` — muscleGroups.ts, etc.
+  - `constants/`
 
 - **Backend:** `src/` — Flask API
   - `routes/` — route blueprints (workout_routes.py, user_routes.py, etc.)

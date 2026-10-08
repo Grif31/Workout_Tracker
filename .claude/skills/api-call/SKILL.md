@@ -14,9 +14,7 @@ Endpoint: $ARGUMENTS
 2. Read `src/workout-tracker-native/context/AuthContext.tsx` to understand how the token is accessed
 3. Read an existing screen (e.g. `src/workout-tracker-native/screens/ProfileTab/ProfileScreen.tsx`) as a reference for fetch patterns
 4. Output a ready-to-use TypeScript async function that:
-   - Reads `token` from `useAuth()`
-   - Uses `process.env.EXPO_PUBLIC_API_URL` as the base URL
-   - Sets `Authorization: Bearer <token>` header
+   - Calls `apiFetch` from `utils/api.ts` (it attaches the JWT and base URL; never call `fetch` directly)
    - Handles non-ok responses by throwing an error with the server message
    - Is fully typed with the correct response type from models.tsx
    - Includes a try/catch with an `Alert.alert('Error', ...)` in the catch block

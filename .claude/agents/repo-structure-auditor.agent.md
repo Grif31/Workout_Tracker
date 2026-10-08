@@ -18,9 +18,9 @@ Every `.tsx` file under `screens/<Tab>/` should belong to that tab's navigator. 
 Grep for `navigation.navigate('<OtherTab>'` calls and confirm `initial: false` is passed, per the CLAUDE.md rule about the tab-bar-stranding bug. This is a structural/convention check, not a runtime bug hunt — just confirm the pattern is followed everywhere it applies.
 
 ### 3. AsyncStorage key registry drift
-Compare every `AsyncStorage.getItem`/`setItem`/`multiRemove`/`multiGet` key literal or template string found in the frontend source against the two tables in CLAUDE.md (device-level and per-user keys). Flag:
-- Keys used in code but missing from the CLAUDE.md table (undocumented)
-- Keys documented in CLAUDE.md but no longer referenced anywhere in code (stale doc — note for `code-cleanup-auditor` territory, don't deep-dive it)
+Compare every `AsyncStorage.getItem`/`setItem`/`multiRemove`/`multiGet` key literal or template string found in the frontend source against the AsyncStorage tables in `src/workout-tracker-native/CLAUDE.md` (device-level and per-user keys). Flag:
+- Keys used in code but missing from those tables (undocumented)
+- Keys documented there but no longer referenced anywhere in code (stale doc — note for `code-cleanup-auditor` territory, don't deep-dive it)
 - The same logical key implemented as a bare string literal in two different files instead of a shared named constant (CLAUDE.md explicitly requires shared keys live in `constants/` or be exported from an owning file)
 
 ### 4. Duplicated logic that should be shared

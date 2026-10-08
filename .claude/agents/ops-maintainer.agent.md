@@ -72,7 +72,7 @@ curl -s -w " %{http_code} %{time_total}s" https://workouttracker-production-601f
 ```
 The `/` homepage and `/privacy` are also unauthenticated. All `/api/*` routes except auth require a JWT.
 
-Note: the backend test suite (`python -m pytest tests/ -q`) takes ~14 minutes on this machine — run it in the background and don't assume it's hung.
+Note: the backend test suite takes about 30 seconds.
 
 ## Runbooks
 

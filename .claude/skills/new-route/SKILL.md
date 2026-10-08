@@ -14,7 +14,7 @@ Scaffold a new Flask route for "$ARGUMENTS" in this Workout Tracker project.
    - A Blueprint named `$ARGUMENTS_bp`
    - Standard imports: Blueprint, request, jsonify, db, jwt_required, get_jwt_identity
    - CRUD endpoints: GET all, GET one, POST, PUT, DELETE — all under `/api/$ARGUMENTS`
-   - JWT protection on all routes except GET
+   - `@jwt_required()` on every route (a deliberately public route also goes in the `PUBLIC` set in `tests/test_route_guardrails.py`)
    - Proper error handling and HTTP status codes
 4. Register the new blueprint in `src/app.py` (import + app.register_blueprint)
 

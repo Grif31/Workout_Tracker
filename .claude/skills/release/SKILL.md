@@ -14,10 +14,8 @@ project has historically shipped new features under patch bumps too, so
 don't infer minor/major just because a release includes a new feature)
 
 ### Step 1 — Find the current version and compute the next one
-Read the `version` field from `src/workout-tracker-native/package.json`
-(the same value is duplicated in `src/workout-tracker-native/app.config.js`
-as `expo.version` — keep the two in sync). Increment according to the
-bump level.
+Read `version` from `src/workout-tracker-native/app.config.js`; it is the source of truth.
+Increment according to the bump level.
 
 Do **not** touch `ios.buildNumber` or `android.versionCode` in
 `app.config.js` — those are bumped separately, only at actual EAS
@@ -39,9 +37,7 @@ bug fixes, and genuine performance improvements a user would notice
 an N+1 query" is not — translate it to the user-visible effect instead).
 
 ### Step 3 — Update version numbers
-Edit `version` in both `src/workout-tracker-native/package.json` and
-`expo.version` in `src/workout-tracker-native/app.config.js` to the new
-version string. Keep them identical.
+Edit `version` in `src/workout-tracker-native/app.config.js` only.
 
 ### Step 4 — Write the CHANGELOG.md entry
 Insert a new section at the top of `CHANGELOG.md`, directly under the
