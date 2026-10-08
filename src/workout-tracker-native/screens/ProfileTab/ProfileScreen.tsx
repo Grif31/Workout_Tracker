@@ -36,6 +36,7 @@ import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
 import { fmtHold } from '../../components/workout/types';
 import CalendarModal from '../../components/CalendarModal';
 import SectionRule from '../../components/SectionRule';
+import { writeWidgetGreekRank } from '../../utils/widgetData';
 
 const PR_PINS_BASE = '@pr_pins';
 const DEFAULT_PIN_COUNT = 3;
@@ -204,6 +205,7 @@ export default function ProfileScreen({ navigation }: Props) {
         if (d.greek_rank) {
           setGreekRank(d.greek_rank);
           AsyncStorage.setItem(GREEK_RANK_CACHED_KEY, d.greek_rank);
+          writeWidgetGreekRank(user?.id, d);
         }
       }
       if (prsRes.ok) {

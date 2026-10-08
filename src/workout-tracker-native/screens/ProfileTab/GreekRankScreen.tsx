@@ -23,6 +23,7 @@ import { contrastTextColor } from '../../utils/contrast';
 import { resolveMediaUrl } from '../../utils/api';
 import { type GreekRankData, bestPerformanceLeg, gateRequirementText } from '../../utils/greekRank';
 import { fmtOrdinal } from '../../utils/prFormat';
+import { writeWidgetGreekRank } from '../../utils/widgetData';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'GreekRank'>;
 
@@ -184,6 +185,7 @@ export default function GreekRankScreen({ navigation }: Props) {
       applyData(data);
       setError(false);
       appCache.set('greek_rank', data);
+      writeWidgetGreekRank(user?.id, data);
       await AsyncStorage.setItem(GREEK_RANK_CACHED_KEY, data.greek_rank);
     } catch { setError(true); }
   };

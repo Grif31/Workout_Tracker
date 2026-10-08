@@ -16,6 +16,8 @@ import { AppStack } from './types';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { useWorkoutSession, sessionElapsedSeconds } from '../context/WorkoutSessionContext';
 import { navigationRef } from './navigationRef';
+import { useWidgetLinks } from './useWidgetLinks';
+import WidgetDiagramRenderer from '../components/WidgetDiagramRenderer';
 import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -346,16 +348,21 @@ function CustomTabBar(props: BottomTabBarProps) {
 }
 
 export function AppTabs() {
+  useWidgetLinks();
   return (
-    <Tab.Navigator
-      tabBar={(props) => <CustomTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
-    >
-      <Tab.Screen name="DashboardTab" component={FadedDashboardStack} options={{ title: 'Dashboard' }} />
-      <Tab.Screen name="ExercisesTab" component={FadedExercisesStack} options={{ title: 'Exercises' }} />
-      <Tab.Screen name="TrainingTab" component={FadedTrainingStack} options={{ title: 'Training' }} />
-      <Tab.Screen name="ProfileTab" component={FadedProfileStack} options={{ title: 'Profile' }} />
-    </Tab.Navigator>
+    <>
+      {/* Behind the navigator, which covers it: renders Up Next's muscle diagrams for the iOS widget */}
+      {Platform.OS === 'ios' ? <WidgetDiagramRenderer /> : null}
+      <Tab.Navigator
+        tabBar={(props) => <CustomTabBar {...props} />}
+        screenOptions={{ headerShown: false }}
+      >
+        <Tab.Screen name="DashboardTab" component={FadedDashboardStack} options={{ title: 'Dashboard' }} />
+        <Tab.Screen name="ExercisesTab" component={FadedExercisesStack} options={{ title: 'Exercises' }} />
+        <Tab.Screen name="TrainingTab" component={FadedTrainingStack} options={{ title: 'Training' }} />
+        <Tab.Screen name="ProfileTab" component={FadedProfileStack} options={{ title: 'Profile' }} />
+      </Tab.Navigator>
+    </>
   );
 }
 

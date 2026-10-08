@@ -45,7 +45,7 @@ export type Colors = {
 
 // ── Base palettes (no accent) ─────────────────────────────────────────────────
 
-const LIGHT_BASE = {
+export const LIGHT_BASE = {
   background:    '#F2F2F7',
   surface:       '#FFFFFF',
   border:        '#E5E5EA',
@@ -57,7 +57,7 @@ const LIGHT_BASE = {
   dropset:       '#AF52DE',
 };
 
-const DARK_BASE = {
+export const DARK_BASE = {
   background:    '#141416',
   surface:       '#1C1C1E',
   border:        '#38383A',

@@ -33,6 +33,7 @@ import { PR_TYPE_LABELS, PR_TYPE_ORDER, fmtMinSec } from '../../utils/prFormat';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toExactVolume, toKm, type DistanceUnit, type WeightUnit } from '../../utils/units';
 import { fmtHold } from '../../components/workout/types';
 import { usePurchase } from '../../context/PurchaseContext';
+import { writeWidgetGreekRank } from '../../utils/widgetData';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WorkoutSummary'>;
 type SummaryPr = Props['route']['params']['prs'][number];
@@ -179,6 +180,8 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
         if (!alive || !data) return;
         setRankData(data);
         setGreekRank(data.greek_rank);
+        // Right after a save is when the rank most often moves
+        writeWidgetGreekRank(user?.id, data);
         // The cache holds the rank from before this workout, unless something
         // already refreshed it. No cache (fresh login) means nothing to compare.
         const before = GREEK_RANKS.findIndex(r => r.name === rankBefore);

@@ -39,3 +39,9 @@ export const HOME_STREAK_TYPE_KEY = 'home_streak_type';
 export const REMINDERS_KEY = 'workout_reminders_enabled';
 export const REMINDER_HOUR_KEY = 'workout_reminder_hour';
 export const REMINDER_MIN_KEY = 'workout_reminder_minute';
+
+// Device-level, one blob: everything the home screen widgets show, for
+// whoever is logged in (utils/widgetSnapshot.ts). Written only through
+// utils/widgetData.ts; Android's widget task reads it with the app closed.
+// Cleared on logout and login, and a write for any other user starts empty.
+export const WIDGET_SNAPSHOT_KEY = 'widget_snapshot';

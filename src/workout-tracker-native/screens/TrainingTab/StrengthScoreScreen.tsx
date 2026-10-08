@@ -34,6 +34,7 @@ import PremiumTeaser from '../../components/PremiumTeaser';
 import { usePurchase } from '../../context/PurchaseContext';
 
 const RANGE_SEGMENTS = (['1M', '3M', '6M', 'All'] as const).map(r => ({ key: r, label: r }));
+import { writeWidgetScore } from '../../utils/widgetData';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'StrengthScore'>;
 
@@ -176,6 +177,8 @@ export default function StrengthScoreScreen({ navigation }: Props) {
         return;
       }
       const data: ScoreData = await res.json();
+      // Before the no-lifts branch below: a null score is news to the widget too
+      writeWidgetScore(user?.id, 'strength', data);
       // No strength lifts tracked (e.g. cardio-only user) — the endpoint still
       // returns 200 with a real Greek rank (the endurance leg and
       // consistency/dedication/volume don't need strength data), but this

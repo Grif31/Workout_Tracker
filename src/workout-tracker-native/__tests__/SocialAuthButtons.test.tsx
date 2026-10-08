@@ -41,7 +41,31 @@ describe('SocialAuthButtons', () => {
     expect(onApple).toHaveBeenCalledTimes(1);
   });
 
-  it('shows nothing on Android, where there is no sign-in button to offer', () => {
+  it('adds Google beside Apple when it is set up', () => {
+    const { getByText } = render(
+      <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} onFacebook={onFacebook} google />
+    );
+    expect(getByText('Apple')).toBeTruthy();
+    fireEvent.press(getByText('Google'));
+    expect(onGoogle).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers Google alone on Android, under the divider', () => {
+    const os = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'android' });
+    try {
+      const { getByText, queryByText } = render(
+        <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} onFacebook={onFacebook} google label="or sign up with" />
+      );
+      expect(getByText('or sign up with')).toBeTruthy();
+      expect(getByText('Google')).toBeTruthy();
+      expect(queryByText('Apple')).toBeNull();
+    } finally {
+      Object.defineProperty(Platform, 'OS', { configurable: true, get: () => os });
+    }
+  });
+
+  it('shows nothing on Android without Google, where there is no button to offer', () => {
     const os = Platform.OS;
     Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'android' });
     try {

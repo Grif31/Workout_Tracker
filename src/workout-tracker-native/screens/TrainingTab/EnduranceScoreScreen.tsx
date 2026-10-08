@@ -35,6 +35,7 @@ import PremiumTeaser from '../../components/PremiumTeaser';
 import { usePurchase } from '../../context/PurchaseContext';
 
 const RANGE_SEGMENTS = (['1M', '3M', '6M', 'All'] as const).map(r => ({ key: r, label: r }));
+import { writeWidgetScore } from '../../utils/widgetData';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'EnduranceScore'>;
 
@@ -148,6 +149,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
       setMissingGender(false);
       setError(false);
       appCache.set('endurance_score', next);
+      writeWidgetScore(user?.id, 'endurance', next);
       checkRankUp(next);
     } catch (e) {
       if (__DEV__) console.warn('[EnduranceScore] fetch failed', e);

@@ -36,6 +36,8 @@ import GreekRankCard from '../../components/dashboard/GreekRankCard';
 import { GREEK_RANK_CACHED_KEY } from '../../constants/storageKeys';
 import type { GreekRankData } from '../../utils/greekRank';
 import DraggableList from '../../components/DraggableList';
+import { writeWidgetSnapshot, writeWidgetWeek } from '../../utils/widgetData';
+import { buildRoutine } from '../../utils/widgetSnapshot';
 import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../../utils/templatePrefill';
 import { routineRotation, type RotationWorkout } from '../../utils/routineRotation';
 
@@ -277,7 +279,7 @@ const AVATAR_SIZE = 38;
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function DashboardScreen({ navigation }: Props) {
   const { user: authUser } = useAuth();
-  const { colors } = useTheme();
+  const { colors, accentPreset } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   // Starts from the profile PreloadScreen just fetched. The refetch gate below
@@ -363,6 +365,13 @@ export default function DashboardScreen({ navigation }: Props) {
   // Rows drag inside the page's ScrollView, which would pan under the finger
   const [dragging, setDragging] = useState(false);
   const hasLoaded = useRef(false);
+  // The two responses the widgets' week comes from arrive separately (and the
+  // dates call can be skipped as fresh), so each one writes with the latest of
+  // both. Seeded from the preload for the same reason.
+  const widgetWeek = useRef({
+    profileStats: appCache.get<any>('profile_stats'),
+    allWorkoutDates: appCache.get<{ dates: string[] }>('workout_dates')?.dates ?? null,
+  });
 
 
   // ── Active routine: which day is up next ───────────────────────────────────
@@ -381,6 +390,17 @@ export default function DashboardScreen({ navigation }: Props) {
   );
   const nextDay = routineDays[rotation.nextIndex] ?? null;
   const allDoneThisWeek = routineDays.length > 0 && rotation.doneThisWeek.size === routineDays.length;
+
+  // Not written while activeRoutine is still null from the first render: that
+  // would clear the widget's routine on every app open. fetchUser writes the
+  // null itself when the user really has no active routine.
+  useEffect(() => {
+    if (activeRoutine) writeWidgetSnapshot(authUser?.id, { routine: buildRoutine(activeRoutine, [], new Date(), rotation.nextIndex) });
+  }, [activeRoutine, rotation.nextIndex, authUser?.id]);
+
+  useEffect(() => {
+    writeWidgetSnapshot(authUser?.id, { accent: { dark: accentPreset.value, light: accentPreset.light } });
+  }, [accentPreset, authUser?.id]);
 
   const logRoutineDay = (day: RoutineDay) => navigation.navigate('WorkoutLog', {
     prefill: buildTemplatePrefill(
@@ -507,7 +527,10 @@ export default function DashboardScreen({ navigation }: Props) {
       const data = await res.json();
       setUser(data);
       if (data.active_routine_id) fetchActiveRoutine(data.active_routine_id);
-      else setActiveRoutine(null);
+      else {
+        setActiveRoutine(null);
+        writeWidgetSnapshot(authUser?.id, { routine: null });
+      }
     } catch (err) {
       if (!isNetworkError(err)) Alert.alert("Couldn't Load Profile", 'Try again in a moment.');
     }
@@ -574,6 +597,8 @@ export default function DashboardScreen({ navigation }: Props) {
       if (res.ok) {
         const data = await res.json();
         setAllWorkoutDates(data.dates ?? []);
+        widgetWeek.current.allWorkoutDates = data.dates ?? [];
+        writeWidgetWeek(authUser?.id, widgetWeek.current);
       }
     } catch { /* silently fail */ }
   };
@@ -604,6 +629,8 @@ export default function DashboardScreen({ navigation }: Props) {
         const data = await res.json();
         const ws = data.current_streak ?? 0;
         setWeeklyStreak(ws);
+        widgetWeek.current.profileStats = data;
+        writeWidgetWeek(authUser?.id, widgetWeek.current);
         setMonthlyStreak(data.current_monthly_streak ?? 0);
         setDailyStreak(data.current_daily_streak ?? 0);
         setLongestDailyStreak(data.longest_daily_streak ?? 0);

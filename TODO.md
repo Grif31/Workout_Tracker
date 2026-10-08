@@ -975,49 +975,67 @@ Check off items as you complete them.
 >
 > **Constraints found while planning** (verify before building, since library support moves fast):
 > - The app is managed/CNG: there are no committed `ios/` or `android/` folders, so widget targets must come from Expo config plugins and only exist in EAS builds (never Expo Go, same as HealthKit and GPS).
-> - A widget can't call the API: the JWT lives in the app's AsyncStorage, which extensions can't read. The app has to push a small data snapshot out to storage the widget can read, and the widget renders from that.
+> - A widget can't call the API: the JWT lives in the app's SecureStore keychain item, which extensions can't read. The app has to push a small data snapshot out to storage the widget can read, and the widget renders from that.
 > - `app.config.js` switches `bundleIdentifier` on `IS_DEV` (`com.aretefitness.app` vs `.dev`), so the iOS App Group and the widget extension's bundle ID must switch with it (`group.com.aretefitness.app` / `group.com.aretefitness.app.dev`), or dev builds write to a container the widget never sees.
 > - Shares native groundwork with the Apple Watch plan (Pre-Launch section 7): an App Group, an extra Apple target, and EAS signing for it. Whichever ships first should set this up so the other reuses it.
 
 ### Decisions to make first
 - [x] **iOS tooling**: `expo-widgets` (widgets written as React components with `@expo/ui`, CNG generates the extension, App Group and SwiftUI glue, no Swift). Stable from SDK 56; the app was upgraded 55 to 57 for it on 2026-09-23/24 (57 rather than 56 because 56 ships a Hermes memory regression). Rejected `@bacons/apple-targets`: hand-written SwiftUI can't be run or iterated on from this Windows machine. Still to confirm in the Phase 0 spike: EAS signs the extension for both bundle IDs
-- [ ] **Android tooling**: `react-native-android-widget` (widgets described in JSX, updated from JS, ships a config plugin) vs. native Glance/RemoteViews. Leaning `react-native-android-widget` (New Architecture support, Expo plugin); confirm it on SDK 56 in the spike
-- [ ] **Premium**: the Weekly Goal and Greek Rank widgets are free; decide whether the Scores widget follows Strength Score's paywall (widget shows a locked state for free users) or is free as a growth hook
-- [ ] **Launch scope**: iOS-first (larger share of users, lock screen widgets are high value) with Android as a fast follow, or both together
+- [x] **Android tooling**: `react-native-android-widget` (2026-09-25). `expo-widgets` 57's Android side is a placeholder (its widget only draws its own name, with no data methods); real Android support lands in expo-widgets 58, so revisit once the app is on SDK 58 and one widget definition could serve both platforms. `react-native-android-widget` 0.22.1 has a codegen TurboModule and bridgeless `ReactHost` headless tasks, and its Android module compiled locally against RN 0.86
+- [x] **Premium**: the Scores widget is Premium, with a locked state for free users (decided 2026-09-26). Weekly Goal, Greek Rank and Up Next are free
+- [x] **Launch scope**: iOS first, Android after (decided 2026-09-25)
 
 ### Phase 0 — Spike (half a day, throwaway branch)
-- [ ] Hello-world widget on each platform through the chosen plugin, built with EAS `development` profile, installed on a real device
-- [ ] Prove the data path end to end: JS writes a value, widget displays it after `reloadAllTimelines` (iOS) / an update request (Android)
-- [ ] Confirm EAS credentials handle the App Group entitlement and the extension's provisioning profile for both bundle IDs
-- [ ] Record the resulting setup steps in CLAUDE.md (new plugin, `targets/` folder, how to run a widget build) before building for real
+iOS spike on branch `spike/ios-widget` (2026-09-25): a small Streak widget (`widgets/StreakWidget.tsx`) showing the weekly streak Home already fetches, written through `utils/widgets.ts` from `DashboardScreen`'s `fetchStreak`. Setup found: `expo-widgets` generates an `ExpoWidgetsTarget` extension (bundle ID `<app>.widgets`) and the App Group; `Widget.updateSnapshot(props)` writes the props into the App Group and reloads the timeline itself, so no native `UserDefaults` module is needed. The widget layout is a function with a `'widget'` directive that babel ships as a string and the extension evaluates with the `@expo/ui/swift-ui` components as globals, so it can't use anything else from the app.
+- [x] iOS: EAS `development` build installs, the widget can be added, and it shows the streak after Home loads (verified on an iPhone 2026-09-25)
+- [ ] iOS: EAS credentials create the extension's bundle ID, App Group and provisioning profile. Dev bundle ID done 2026-09-25; production still to do on the first production build that includes the widget
+- [x] Android: same Streak widget (`widgets/AndroidStreakWidget.tsx`, drawn by `widgets/androidWidgetTaskHandler.tsx`, registered in `index.js`). Verified on an emulator with an EAS `development` build 2026-09-25
+- [x] Record the resulting setup steps in CLAUDE.md (plugin config, `widgets/` folder, lazy load, how to run a widget build) before building for real
 
 ### Phase 1 — Data bridge
-- [ ] **Snapshot schema** (versioned, one JSON blob, only what widgets render): `version`, `updatedAt`, `userId`, weekly goal (`target`, completed day dates this week, current streak, optional distance goal in km plus this week's distance in km, and the GPS distance unit to show them in), Greek Rank (`rank`, `score`, `nextRank`, points to next, gate text from `utils/greekRank.ts`), scores (strength/endurance percentile + rank label, nullable), active routine (`name`, next day label + index for the deep link), units (`weight_unit`, GPS distance unit), accent color
-- [ ] **`utils/widgetData.ts`**: `writeWidgetSnapshot(partial)` merges and writes the blob, then asks the OS to refresh widgets. iOS needs a native write into App Group `UserDefaults` (a small local Expo module, or a maintained shared-preferences library if one supports the New Architecture); Android goes through the widget library's update API
-- [ ] **Write points** (reuse data already fetched, no new requests): after `PreloadScreen` finishes, after a workout save or delete (weekly goal, streak, rank), after `greek-rank` / score fetches, on active-routine change, on weekly-goal or unit change
-- [ ] **Week rollover without opening the app**: store completed dates, not a count, and have the widget compute "this week" itself, so Monday morning shows 0/3 instead of last week's 3/3. iOS: add a timeline entry at next Monday 00:00 local
-- [ ] **Logout / account switch**: clear the snapshot in `AuthContext`'s logout and login paths alongside the existing `multiRemove`, and refresh widgets, so the next account never sees the previous user's rank. Widgets render a "Log in to Aretē" state when the snapshot is empty
-- [ ] Unit tests for snapshot building (week filtering across a Monday boundary, empty/logged-out state, cardio-only user with no strength score)
+- [x] **Snapshot schema** (2026-09-25, `utils/widgetSnapshot.ts`) (versioned, one JSON blob, only what widgets render): `version`, `updatedAt`, `userId`, weekly goal (`target`, completed day dates this week, current streak, optional distance goal in km plus this week's distance in km, and the GPS distance unit to show them in), Greek Rank (`rank`, `score`, `nextRank`, points to next, gate text from `utils/greekRank.ts`), scores (strength/endurance percentile + rank label, nullable), active routine (`name`, next day label + index for the deep link), units (`weight_unit`, GPS distance unit), accent color
+- [x] **`utils/widgetData.ts`**: `writeWidgetSnapshot(partial)` merges the blob and hands it to each widget's `updateSnapshot` (iOS; which also refreshes it), or the Android library's update API. Grows out of the spike's `utils/widgets.ts`
+- [x] **Write points** (reuse data already fetched, no new requests; the list as built is in CLAUDE.md, Home screen widgets): after `PreloadScreen` finishes, after a workout save or delete (weekly goal, streak, rank), after `greek-rank` / score fetches, on active-routine change, on weekly-goal or unit change
+- [x] **Week rollover without opening the app**: store completed dates, not a count, and have the widget compute "this week" itself, so Monday morning shows 0/3 instead of last week's 3/3. iOS: add a timeline entry at next Monday 00:00 local
+- [x] **Logout / account switch**: clear the snapshot in `AuthContext`'s logout and login paths alongside the existing `multiRemove`, and refresh widgets, so the next account never sees the previous user's rank. Widgets render a "Log in to Aretē" state when the snapshot is empty
+- [x] Unit tests for snapshot building (week filtering across a Monday boundary, empty/logged-out state, cardio-only user with no strength score)
+
+### Design (mock: https://claude.ai/artifact/AD5gF6dtvHxUFDt4moF3SA, revised 2026-09-26)
+- Every widget carries the Aretē logo beside its label: a light version on dark widgets, dark on light. iOS shows it with `Image uiImage` from a file the app copies into `widgetsDirectory`; Android with `ImageWidget`
+- Greek Rank, small, held by a gate: "Unlock by logging a Strength or Endurance Score" (medium keeps the full gate text). At Aretē there's no progress line; it says "Excellence"
+- Up Next comes in small and medium. Small: routine name, day, a small muscle diagram and Start. Every day done: "Great Job! All N Days Complete" (an exclamation mark by request, an exception to the copy rule). Start opens a new workout with the day filled in
+- Up Next's muscle diagram is the app's `MuscleDiagram` (front and back, the day's muscles highlighted), captured to a PNG with `react-native-view-shot` when the routine section is written, since neither widget runtime can draw `react-native-body-highlighter`'s SVG. One file per day, dark and light
+- Scores comes in small and medium. Small shows one score, Strength or Endurance, picked when the widget is added (an expo-widgets `configuration` enum on iOS 17+, `widgetFeatures: 'reconfigurable'` on Android). Free users see a Premium lock in both sizes
+- Lock screen (iOS): circular (weekly goal ring), rectangular (rank, progress, points to next), inline (workouts this week, beside the date)
 
 ### Phase 2 — iOS widgets
-- [ ] **Weekly Goal** (small): ring or dots for this week's workouts vs. goal, streak count, rank-colored accent. Tap opens Dashboard
+Built 2026-09-26 on `spike/ios-widget` (`widgets/WeeklyGoalWidget.tsx`, `widgets/GreekRankWidget.tsx`, props in `utils/widgetProps.ts`); not yet run on a device.
+- [x] **Weekly Goal** (small, and medium): ring or dots for this week's workouts vs. goal, streak count, rank-colored accent. Tap opens Dashboard
   - When a weekly distance goal is set (`workout_weekly_distance_goal_${uid}`), a fill line under the dots as on the Coach card, reusing `distanceGoalProgress` from `utils/weeklyDistanceGoal.ts` so "15 / 15 mi" reads complete the same way in both. Medium size shows the numbers; small may show the line alone
-- [ ] **Greek Rank** (small + medium): rank name in its `GREEK_RANK_COLORS` color and icon, progress bar to the next rank; when held by a top-rank gate, show the gate requirement instead of points (same wording as the app). Tap opens the Greek Rank screen
-- [ ] **Lock screen** accessory widgets: circular (weekly goal ring), rectangular (rank + progress)
-- [ ] Light/dark follow the system; use the stored accent for highlights; Dynamic Type safe
-- [ ] Stale-data handling: if `updatedAt` is older than ~7 days, dim values and show "Open Aretē to update"
+- [x] **Greek Rank** (small + medium): rank name in its `GREEK_RANK_COLORS` color and icon, progress bar to the next rank; when held by a top-rank gate, show the gate requirement instead of points (same wording as the app). Tap opens the Greek Rank screen
+- [x] **Lock screen** accessory widgets (plus the inline line beside the date): circular (weekly goal ring), rectangular (rank + progress)
+- [x] Light/dark follow the system; use the stored accent for highlights (fixed sizes with `minimumScaleFactor` rather than Dynamic Type: a widget's size doesn't grow with the text)
+- [x] Stale-data handling: if `updatedAt` is older than ~7 days, dim values and show "Open Aretē to update"
+
+- [ ] Device check on the dev build. Done 2026-09-29: medium Weekly Goal, and Greek Rank in light and dark. Still to check: small Weekly Goal, the three lock screen widgets, taps open Home and Greek Rank, log out and in, and a Monday rollover (set the phone's date forward)
 
 ### Phase 3 — Android widgets
-- [ ] Weekly Goal and Greek Rank equivalents with the same snapshot and tap targets
-- [ ] Resizable layouts (2x2 and 4x2), respecting Android 12+ rounded widget corners and dynamic color
+Built 2026-09-26 on `spike/ios-widget` (`widgets/androidWidgets.tsx`, drawn from the same `utils/widgetProps.ts` as iOS); not yet run on a device.
+- [x] Weekly Goal and Greek Rank equivalents with the same snapshot and tap targets
+- [x] Resizable layouts (2x2 small, medium from about 4 cells wide), with the widgets' own rounded corners. Not Material You dynamic color: the widgets use the app's accent and surfaces, as iOS does
+- [ ] Device check on an Android dev build: both sizes of each, light and dark, taps open Home and Greek Rank, and the hourly redraw rolls the week over on Monday
 
 ### Phase 4 — Up Next routine widget (both platforms)
-- [ ] Medium widget: active routine name, today's "Up Next" day (same selection logic as the Dashboard Active Routine card: first day not completed this week, resetting to Day 1 each week), and a Log button
-- [ ] **Deep link**: `aretefitness://log?routineId=&day=` opens WorkoutLog pre-filled with that day. Add the route to linking config, including the cold-start and logged-out cases (queue the link until auth resolves)
-- [ ] Empty state when there's no active routine: "Pick a routine" linking to the Coach tab
+Built 2026-09-29 on `spike/ios-widget` (`widgets/UpNextWidget.tsx`, `UpNext` in `widgets/androidWidgets.tsx`), small and medium, with the muscle diagram; not yet run on a device. Needs a new dev build on each platform (a new widget).
+- [x] Small and medium widget: active routine name, today's "Up Next" day (same selection logic as the Dashboard Active Routine card: first day not completed this week, resetting to Day 1 each week), and a Log button
+- [x] **Deep link**: `aretefitness://widget/up-next?routine=&day=` opens WorkoutLog pre-filled with that day. Add the route to linking config, including the cold-start and logged-out cases (queue the link until auth resolves)
+- [x] Empty state when there's no active routine: "Pick a routine" linking to the Coach tab
 
-### Phase 5 — Scores widget (medium)
-- [ ] Strength and Endurance Score mini rings side by side (percentile + rank label), each hidden individually when that score has no data; premium state per the decision above
+### Phase 5 — Scores widget (small + medium, Premium)
+> **After launch** (decided 2026-09-30): the widgets ship with Weekly Goal, Greek Rank and Up Next. The design is settled in the mock; this needs `isPremium` in the snapshot and a native per-widget setting for the small size's score, so a build on each platform.
+- [ ] Medium: Strength and Endurance Score rings side by side (percentile + rank label), each hidden individually when that score has no data
+- [ ] Small: one score, chosen when the widget is added; its own empty state when that score has no data
+- [ ] Locked state for free users in both sizes: needs `isPremium` in the snapshot, written from PurchaseContext
 
 ### Phase 6 — Live Activity for an active workout (stretch, iOS)
 - [ ] Lock screen + Dynamic Island activity while a workout is open or minimized: elapsed time, current exercise, rest timer countdown. Would complement or replace the current live workout notification (`live_workout_notif_enabled`)

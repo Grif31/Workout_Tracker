@@ -1,4 +1,18 @@
 const IS_DEV = process.env.APP_VARIANT === 'development';
+const IOS_BUNDLE_ID = IS_DEV ? 'com.aretefitness.app.dev' : 'com.aretefitness.app';
+
+// Google sign-in OAuth clients (Google Cloud console, Credentials). Not
+// secrets: they ship inside the app. One iOS client per bundle ID, so the dev
+// build signs in as itself; the backend's GOOGLE_CLIENT_IDS lists every client.
+// Android's own clients (package plus signing SHA-1) are matched by Google
+// itself and never named here; the app passes the Web client's ID instead.
+const GOOGLE_IOS_CLIENT_ID = IS_DEV
+  ? '722911736139-je9hmktkpeddboafh2acl175il3a1u12.apps.googleusercontent.com'
+  : '722911736139-v5vbpr2a1iu7jgmfchc671nju2707o2m.apps.googleusercontent.com';
+// Google returns to the app through this URL scheme: the client ID reversed
+const GOOGLE_IOS_URL_SCHEME = GOOGLE_IOS_CLIENT_ID.split('.').reverse().join('.');
+// Android asks for tokens with the Web client's ID (one for both builds)
+const GOOGLE_WEB_CLIENT_ID = '722911736139-dl922st1nco0mk1s8vfhiek6dphevme9.apps.googleusercontent.com';
 
 module.exports = {
   expo: {
@@ -11,7 +25,7 @@ module.exports = {
     userInterfaceStyle: 'automatic',
     ios: {
       supportsTablet: true,
-      bundleIdentifier: IS_DEV ? 'com.aretefitness.app.dev' : 'com.aretefitness.app',
+      bundleIdentifier: IOS_BUNDLE_ID,
       buildNumber: '3',
       entitlements: {
         'com.apple.developer.usernotifications.time-sensitive': true,
@@ -61,6 +75,8 @@ module.exports = {
       eas: {
         projectId: '356b88e9-4302-43fc-b50a-6d83030b8fa6',
       },
+      // Read by hooks/useSocialAuth.ts through expo-constants
+      googleSignIn: { iosClientId: GOOGLE_IOS_CLIENT_ID, webClientId: GOOGLE_WEB_CLIENT_ID },
     },
     plugins: [
       'expo-dev-client',
@@ -162,6 +178,87 @@ module.exports = {
       ],
       'react-native-health-connect',
       'expo-apple-authentication',
+      ['@react-native-google-signin/google-signin', { iosUrlScheme: GOOGLE_IOS_URL_SCHEME }],
+      [
+        // iOS home screen widget (TODO.md section 19). Both identifiers follow
+        // the app's, so the dev build's widget reads the dev app's App Group and
+        // never the store app's. enableAndroid stays off until the iOS widget
+        // is proven on a device.
+        'expo-widgets',
+        {
+          bundleIdentifier: `${IOS_BUNDLE_ID}.widgets`,
+          groupIdentifier: `group.${IOS_BUNDLE_ID}`,
+          // Each name must match its createWidget call in widgets/. The
+          // accessory families are the lock screen widgets.
+          widgets: [
+            {
+              name: 'WeeklyGoalWidget',
+              displayName: 'Weekly Goal',
+              description: 'Your workouts this week against your goal, and your streak.',
+              supportedFamilies: ['systemSmall', 'systemMedium', 'accessoryCircular', 'accessoryInline'],
+            },
+            {
+              name: 'GreekRankWidget',
+              displayName: 'Greek Rank',
+              description: 'Your Greek Rank and how close you are to the next one.',
+              supportedFamilies: ['systemSmall', 'systemMedium', 'accessoryRectangular'],
+            },
+            {
+              name: 'UpNextWidget',
+              displayName: 'Up Next',
+              description: "Your routine's next day, one tap from starting it.",
+              supportedFamilies: ['systemSmall', 'systemMedium'],
+            },
+          ],
+        },
+      ],
+      [
+        // Android home screen widgets, the twins of the iOS ones above. Each
+        // name must be a key of ANDROID_WIDGETS in widgets/androidWidgets.tsx.
+        // One resizable widget each, rather than one per size as on iOS: 2x2
+        // draws the small layout, about 4 cells wide the medium one.
+        // Android only redraws a widget on its update period (30 minutes at
+        // the least), and that redraw is what rolls the week over on Monday
+        // with the app closed: hourly keeps it within the hour.
+        'react-native-android-widget',
+        {
+          widgets: [
+            {
+              name: 'WeeklyGoal',
+              label: 'Weekly Goal',
+              description: 'Your workouts this week against your goal, and your streak.',
+              minWidth: '110dp',
+              minHeight: '110dp',
+              targetCellWidth: 2,
+              targetCellHeight: 2,
+              resizeMode: 'horizontal|vertical',
+              updatePeriodMillis: 60 * 60 * 1000,
+            },
+            {
+              name: 'GreekRank',
+              label: 'Greek Rank',
+              description: 'Your Greek Rank and how close you are to the next one.',
+              minWidth: '110dp',
+              minHeight: '110dp',
+              targetCellWidth: 2,
+              targetCellHeight: 2,
+              resizeMode: 'horizontal|vertical',
+              updatePeriodMillis: 60 * 60 * 1000,
+            },
+            {
+              name: 'UpNext',
+              label: 'Up Next',
+              description: "Your routine's next day, one tap from starting it.",
+              minWidth: '110dp',
+              minHeight: '110dp',
+              targetCellWidth: 2,
+              targetCellHeight: 2,
+              resizeMode: 'horizontal|vertical',
+              updatePeriodMillis: 60 * 60 * 1000,
+            },
+          ],
+        },
+      ],
       // Sentry source-map upload — only active once SENTRY_ORG/SENTRY_PROJECT
       // are set (EAS env or .env). Runtime crash reporting works without it,
       // but stack traces stay minified until this is configured along with
