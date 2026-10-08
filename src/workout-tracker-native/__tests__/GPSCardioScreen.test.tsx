@@ -329,16 +329,16 @@ describe('GPSCardioScreen', () => {
     it('offers to restore an interrupted run and resumes it paused', async () => {
       await AsyncStorage.setItem(CHECKPOINT_KEY, JSON.stringify(checkpoint));
       alertSpy.mockImplementation((title: string, _m, buttons?: any[]) => {
-        if (title === 'Restore activity?') buttons?.find(b => b.text === 'Restore')?.onPress?.();
+        if (title === 'Unsaved activity') buttons?.find(b => b.text === 'Review & Save')?.onPress?.();
       });
       const r = render(<GPSCardioScreen navigation={nav as any} route={route as any} />);
 
-      await waitFor(() => expect(r.getByText('Resume')).toBeTruthy());
+      // Lands on the save sheet, not a paused screen that reads as already saved
+      await waitFor(() => expect(r.getByText('Save Activity?')).toBeTruthy());
       expect(alertSpy.mock.calls[0][1]).toContain('Cycle');
-      expect(r.getByText('15:00')).toBeTruthy();
-      expect(r.getByText((3.2 * MI_PER_KM).toFixed(2))).toBeTruthy();
+      expect(r.getAllByText('15:00').length).toBeGreaterThan(0);
+      expect(r.getByText(`${(3.2 * MI_PER_KM).toFixed(2)} mi`)).toBeTruthy();
 
-      await act(async () => { fireEvent.press(r.getByText('Stop')); });
       await act(async () => { fireEvent.press(r.getByText('Save')); });
       await waitFor(() => expect(posts()).toHaveLength(1));
       const body = JSON.parse(posts()[0][1].body);
@@ -346,15 +346,34 @@ describe('GPSCardioScreen', () => {
       expect(body.exercises[0].sets[0].cardio_duration).toBeCloseTo(15, 5);
     });
 
-    it('discards the checkpoint when the user declines', async () => {
+    it('keeps the checkpoint when the user picks Not Now', async () => {
       await AsyncStorage.setItem(CHECKPOINT_KEY, JSON.stringify(checkpoint));
       alertSpy.mockImplementation((title: string, _m, buttons?: any[]) => {
-        if (title === 'Restore activity?') buttons?.find(b => b.text === 'Discard')?.onPress?.();
+        if (title === 'Unsaved activity') buttons?.find(b => b.text === 'Not Now')?.onPress?.();
       });
       const r = render(<GPSCardioScreen navigation={nav as any} route={route as any} />);
 
-      await waitFor(async () => expect(await AsyncStorage.getItem(CHECKPOINT_KEY)).toBeNull());
+      await waitFor(() => expect(alertSpy).toHaveBeenCalled());
       expect(r.getByText('Start')).toBeTruthy();
+      expect(await AsyncStorage.getItem(CHECKPOINT_KEY)).not.toBeNull();
+    });
+
+    it('asks again before discarding the checkpoint', async () => {
+      await AsyncStorage.setItem(CHECKPOINT_KEY, JSON.stringify(checkpoint));
+      alertSpy.mockImplementation((title: string, _m, buttons?: any[]) => {
+        if (title === 'Unsaved activity') buttons?.find(b => b.text === 'Discard')?.onPress?.();
+      });
+      render(<GPSCardioScreen navigation={nav as any} route={route as any} />);
+
+      await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Discard this activity?', expect.any(String), expect.any(Array)));
+      expect(await AsyncStorage.getItem(CHECKPOINT_KEY)).not.toBeNull();
+
+      const confirm = alertSpy.mock.calls.find(c => c[0] === 'Discard this activity?')![2];
+      await act(async () => { confirm.find((b: any) => b.text === 'Keep It').onPress?.(); });
+      expect(await AsyncStorage.getItem(CHECKPOINT_KEY)).not.toBeNull();
+
+      await act(async () => { confirm.find((b: any) => b.text === 'Discard').onPress(); });
+      await waitFor(async () => expect(await AsyncStorage.getItem(CHECKPOINT_KEY)).toBeNull());
     });
 
     it('silently drops a checkpoint too short to be a route', async () => {
@@ -374,6 +393,9 @@ describe('GPSCardioScreen', () => {
       expect(saved.activity).toBe('Run');
 
       await act(async () => { fireEvent.press(r.getByText('Discard')); });
+      expect(await AsyncStorage.getItem(CHECKPOINT_KEY)).not.toBeNull();
+      const confirm = alertSpy.mock.calls.find(c => c[0] === 'Discard this activity?')![2];
+      await act(async () => { confirm.find((b: any) => b.text === 'Discard').onPress(); });
       await waitFor(async () => expect(await AsyncStorage.getItem(CHECKPOINT_KEY)).toBeNull());
       expect(r.getByText('Start')).toBeTruthy();
     });

@@ -1,5 +1,118 @@
 # Changelog
 
+## 1.1.9 (2026-10-07)
+
+### New: Free accounts see their own scores
+- Strength Score and Endurance Score open for everyone. Without Premium you see your ring, tier and percentile, with the full breakdown shown blurred behind an Unlock button.
+- Coach gives a free account one set of insights a week. The first insight is shown in full and the rest are locked until the next week.
+- A PR on a lift with a Strength Score adds a "See where your Bench Press ranks" link to the workout summary.
+- Templates and Routines show how many of your free slots you've used.
+
+### Redesigned: Premium screen
+- The Premium screen leads with the feature you tapped, and each feature says what it does for you.
+- Annual shows how much you save and the price per month. Starting a free trial schedules a reminder two days before the first charge.
+- Account Settings has a Premium section to upgrade, manage your subscription or see your renewal date.
+- After you subscribe or restore a purchase, a welcome screen takes you straight to what you unlocked.
+- If a purchase doesn't go through, the screen tells you why. If plans can't load, you get a Try Again button.
+- Your Premium status stays current when a subscription renews, expires or is refunded, or when you sign in on another phone.
+
+### New: Shorter onboarding
+- The feature tour moved to the Welcome screen, before you sign up.
+- Setup after sign-up is down to two screens: About You, then a five-question chat with the Coach.
+- Onboarding is tracked per account. A second account on the same phone gets its own setup, and an account that already has workouts skips it.
+- Sign-up checks your email and username as you go, and your keyboard's Return key moves between fields.
+
+### New: Tap-to-copy and undo in workouts
+- Tap the Prev value on a set to fill it from your last session.
+- Swiping a set away shows an Undo bar that puts it back.
+- Checking off a set gives a checkmark pop and a light haptic.
+- Prev reads reps first, like "8 × 185".
+
+### Improved: Exercise search
+- Search finds exercises with the words in any order, so "incline db" and "press incline" both work.
+- Gym shorthand works: DB, BB, KB, OHP, RDL and BW.
+- Exercises already in your workout are tagged Added.
+
+### Improved: Routines on Home and Coach
+- A routine is a rotation. Up Next is the day after the last one you logged, so a missed day shifts your split instead of being skipped. Home and Coach now agree on which day is next.
+- After 14 days without a routine day, Up Next restarts at day 1.
+- Create Routine lets you set sets, reps and RPE for each exercise, and no longer saves an empty day or a day with a blank name.
+- Routines, templates and AI-generated programs ask before you leave with unsaved changes.
+
+### Improved: Personal Records
+- Max Weight sorts by Heaviest, Recent or muscle.
+- Lifts with a Strength Score show your percentile.
+- Each lift lists every record's value, like "8 reps at 185 lbs, 6 reps at 205 lbs".
+- Charts draw straight lines between records, with distances and times in the same unit as the headline.
+
+### Improved: Exercise Detail
+- Timed holds like planks have their own Overview and History, with your longest hold and each set's time.
+- Cardio exercises get a Charts tab with distance and pace per session.
+- Warm-up sets are marked W and numbered apart from working sets.
+- Large cardio totals read in hours.
+
+### Improved: GPS cardio
+- While recording, your current pace shows beside your average.
+- Rides show speed instead of pace.
+- Elevation gain ignores GPS noise, so small bumps no longer count as climbs.
+- Pace shows "--" for the first few meters instead of extreme numbers.
+
+### Improved: Measurements
+- Tap a measurement to see its chart.
+- The bodyweight chart has a y-axis on whole, even steps.
+
+### Improved: Settings
+- Theme can be System, Light or Dark.
+- Workout settings have their own screen, with your default rest timer, RPE, plate calculator and logging options.
+- Switching weight units asks first and says values are rounded.
+- Edit Profile saves with no height set, shows height in centimeters for kg users, and asks before you leave with unsaved changes. The birthday picker follows your theme and can be cleared.
+- If you signed up with Apple or Google, Change Password becomes Set a Password, using a code sent to your email.
+
+### Improved: Workout calendar and plate calculator
+- The workout calendar reloads each time you open it, starts weeks on Monday and offers a retry when a day fails to load.
+- The plate calculator remembers your plates separately for lbs and kg, adds the 25 kg plate, and loads the closest weight it can when your target can't be made exactly.
+
+### Improved: Share cards
+- Cards lead with a number you actually have, so a runner's week no longer opens with "0 Total Reps".
+- Time-only cardio leads with its duration.
+- Elevation shows in feet for miles users.
+- Score cards say what the number means, like "Stronger than 62% of lifters".
+- Share cards have no transparent corners, and a failed share tells you.
+
+### Improved: Coach
+- Coach insights show how old they are.
+- If you flag several areas to avoid in your Coach profile, the AI coach now uses all of them, not just the first.
+- A muscle short of its target reads "N to go" until Sunday, then "Below target".
+
+### Improved: Android
+- The app icon shows the whole logo.
+- The empty "or sign up with" divider no longer shows on the log in and sign up screens.
+
+### Bug Fixes
+- Fixed kg accounts seeing pounds labeled kg for total volume on Coach, Weekly Summary, Profile, the workout summary and Personal Records.
+- Fixed Most Improved Lift multiplying kg values by 2.2 on Weekly Summary and its share card.
+- Fixed Weekly Summary training time counting about 0 minutes for cardio entered after the fact.
+- Fixed Cardio Details showing "5.00 mi" for a 5 km run, and showing only the first bout of an interval session.
+- Fixed a lifting session with a treadmill warm-up being treated as cardio on Cardio Details and when sharing.
+- Fixed Perform Again resetting warm-up and drop sets to Normal.
+- Fixed editing an old workout deleting the workout you had minimized.
+- Fixed the PR banner celebrating records that weren't saved, like a single rep, and its exercise name being invisible in light mode.
+- Fixed Check Off & Save saving blank sets as 0 × 0.
+- Fixed a slow load wiping exercises you added while it was still loading.
+- Fixed workout template chips ignoring the sets, reps and RPE you programmed.
+- Fixed the live volume counting sets you hadn't checked off.
+- Fixed Home's Cardio This Week card showing "Nothing logged since Monday" in a quiet week.
+- Fixed Home restarting your routine at day 1 every Monday.
+- Fixed the cardio history on Home and Profile showing about 0 minutes for runs entered afterwards.
+- Fixed Greek Rank percentiles reading "72th".
+- Fixed Personal Records plotting distances and times in the wrong unit, a search with no match saying you have no PRs, and "This Week's PRs" covering the last 7 days.
+- Fixed Edit Profile failing to save when height is empty.
+- Fixed the progress photo viewer's close button, dates and notes being invisible in dark mode.
+- Fixed the workout reminder still firing after you log out or switch accounts, and reminders saved as on while notifications are blocked.
+- Fixed the plate calculator loading 45 kg plates after switching units.
+- Fixed the rest timer draining battery and keeping the app from closing in the background.
+- Fixed the Welcome and onboarding screens saying "Strive for Excellence" instead of "Pursue Excellence".
+
 ## 1.1.8 (2026-09-24)
 
 ### New: Best Efforts

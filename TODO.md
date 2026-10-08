@@ -1154,3 +1154,55 @@ Check off items as you complete them.
 - [ ] A free user can see their own Strength Score tier and one real insight without paying
 - [ ] At least two Phase 3 features give a subscriber something new each week
 - [ ] Paywall views and conversions are measured per source
+
+---
+
+## 📍 22. GPS Cardio: Never Lose a Tracked Activity
+> Goal: once a user taps Start, the route is on disk before it is on screen, and nothing deletes it without their say-so. Written 2026-10-07 after a user lost a walk.
+>
+> **What happened.** A user tracked a walk with location set to Always, left the app, and finished. The workout never reached the server (no `POST /api/workouts` from the account in the window). The app shows a "Restore activity?" prompt on the next GPS screen open, which means the app had been killed or restarted mid-walk; they tapped Discard, which deleted the checkpoint with no confirmation. The Apple Health entry they saw came from another source, not Aretē. An earlier walk also drew a straight line across a stretch with no fixes.
+>
+> **Root causes in the code.**
+> 1. The run lives only in `GPSCardioScreen` state. The background task in `utils/gpsTracking.ts` hands points to the mounted screen; with no subscriber (app killed or relaunched) they are dropped.
+> 2. The crash checkpoint was written only when the point count hit a multiple of 10, and background batches can jump past it. The restore prompt shows only if the user opens the GPS screen, and `cleanupOrphanedTracking()` ends the OS task on every mount.
+> 3. Every fix is joined to the previous one regardless of the time between them, so a gap draws a straight line and adds its distance. The `resumed` flag only skips distance after a pause; the saved polyline still connects across it.
+> 4. The offline queue deletes a workout after 3 rejected attempts (4xx), and the GPS save has no request timeout.
+> 5. A GPS save never writes to Apple Health or attaches heart rate (only `WorkoutLog` and the queue flush do).
+
+### Phase 0: Shipped in the working tree (needs commit, in 1.1.9)
+- [x] Restore prompt reads "Unsaved activity" with Not Now / Discard / Review & Save; Review & Save opens the save sheet straight away
+- [x] Every discard (restore prompt and save sheet) asks again; Not Now keeps the checkpoint
+- [x] Checkpoint written whenever 10+ new points have arrived, not only at exact multiples of 10
+- [x] Tests updated in `__tests__/GPSCardioScreen.test.tsx`
+- [ ] Commit it, and add a 1.1.9 CHANGELOG bullet (an unsaved GPS activity opens straight to Save after a crash, and discarding one asks first)
+
+### Phase 1: Confirm the cause (before building)
+- [ ] Read-only check of the affected account's past routes (workouts 443, 439, 386, and any others) for long jumps between consecutive points. Reduced version only: point count, total km, median segment, flagged-gap count, 5 longest segments in metres and percent of route, no coordinates. This tells us if iOS suspends tracking even with Always on, or if the app is simply being killed. Result pending from the ops-maintainer agent
+- [ ] Ask the user: iOS version, Low Power Mode on or off, and whether they opened Aretē around 10:41am. The prod logs show GET 401s at 14:41 UTC and cancelled requests at 14:45 UTC, which fits a reopen but cannot be tied to the account (HTTP logs carry no user id)
+- [ ] Decide whether to add the user id to request logs so a future report can be traced
+
+### Phase 2: Never drop a point (target 1.1.10, needs a device test)
+- [ ] Move the accumulation rules (distance, elevation, accuracy filter, gap detection) out of `GPSCardioScreen` into a pure helper in `utils/` that the screen and the background task both call, with Jest tests
+- [ ] The background task appends every fix to disk before notifying the screen, in chunks (about 100 points per key) so a 2 hour walk does not rewrite one big JSON blob per fix
+- [ ] Persist an active session `{activity, startedAt, state}` at Start. Add the key to `constants/storageKeys.ts` and the AsyncStorage table in `src/workout-tracker-native/CLAUDE.md`
+- [ ] `cleanupOrphanedTracking()` stops the OS task only when no live session exists
+- [ ] Resume the session on app launch, not only when the GPS screen opens. Home shows an "Activity in progress" card that opens it
+- [ ] Restored runs open on the save sheet (done in Phase 0); add a "keep recording" option for a session that is still live
+
+### Phase 3: No straight lines across gaps
+- [ ] After a gap in fixes (about 15 s with none, a pause, or a restore), skip the distance and mark the next point as a segment start
+- [ ] Save the route as separate segments so the map, Cardio Details and share cards show no connecting line. Decision needed on the format: segments joined by a character that never appears in an encoded polyline (no migration, but older app builds show garbled lines for new routes), or a new column with a migration
+- [ ] Best-effort scan must not span a gap (it already skips paused time; make the gap rule the same)
+- [ ] Show a banner on return to the app if a gap was recorded
+
+### Phase 4: A save that cannot lose the workout
+- [ ] On Stop, write the final payload to the offline queue first, POST second, and remove it from the queue only on success
+- [ ] Never delete a GPS workout the server rejects. Keep it flagged "needs attention" on Home with a retry
+- [ ] Request timeout on the GPS save so a bad connection falls back to the queue quickly
+- [ ] Idempotency: a client-generated id the server de-duplicates on, so a lost response followed by a queue flush does not create two workouts (schema change, needs a migration and the migration-chain check)
+- [ ] Write a successful GPS workout to Apple Health and attach heart rate, reusing `syncWorkoutToHealthKit` and `attachHeartRateToWorkout`
+
+### Done when
+- [ ] On a real EAS build: walk with the phone locked, force-quit the app mid-walk and reopen, drop to airplane mode at Stop, and pause/resume. In every case the full route is recoverable and none show a straight line across the gap
+- [ ] No path deletes a tracked activity without an explicit second confirmation
+- [ ] A GPS workout the server rejects stays on the phone and is visible

@@ -225,10 +225,26 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
   const clearCheckpoint = () => { AsyncStorage.removeItem(checkpointKey).catch(() => {}); };
 
+  // Background fixes arrive in batches, so the length can jump past a multiple
+  // of 10; compare against the last checkpointed length instead.
+  const checkpointedLenRef = useRef(0);
   useEffect(() => {
-    if (trackingState !== 'running' || coords.length === 0 || coords.length % 10 !== 0) return;
+    if (trackingState !== 'running' || coords.length - checkpointedLenRef.current < 10) return;
+    checkpointedLenRef.current = coords.length;
     writeCheckpoint();
   }, [coords]);
+
+  // A tracked route can't be re-walked, so deleting one always asks twice
+  const confirmDiscard = (onDiscard: () => void) => {
+    Alert.alert(
+      'Discard this activity?',
+      "Its route and stats will be deleted and can't be recovered.",
+      [
+        { text: 'Keep It', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: onDiscard },
+      ],
+    );
+  };
 
   const offerCheckpointRestore = async () => {
     try {
@@ -241,12 +257,14 @@ export default function GPSCardioScreen({ navigation }: Props) {
       }
       const when = new Date(cp.savedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       Alert.alert(
-        'Restore activity?',
-        `A ${cp.activity ?? 'workout'} was interrupted around ${when}. Restore it?`,
+        'Unsaved activity',
+        `A ${cp.activity ?? 'workout'} from around ${when} was never saved. Review it and save it to your history?`,
         [
-          { text: 'Discard', style: 'destructive', onPress: clearCheckpoint },
+          // Leaving the checkpoint alone keeps the run recoverable on the next visit
+          { text: 'Not Now', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: () => confirmDiscard(clearCheckpoint) },
           {
-            text: 'Restore',
+            text: 'Review & Save',
             onPress: () => {
               if (ACTIVITIES.includes(cp.activity)) setActivity(cp.activity);
               setCoords(cp.coords);
@@ -264,6 +282,10 @@ export default function GPSCardioScreen({ navigation }: Props) {
                 latitude: last.latitude, longitude: last.longitude,
                 latitudeDelta: 0.01, longitudeDelta: 0.01,
               });
+              // Straight to the save sheet: a restored run left on the paused
+              // screen reads as already saved, and was discarded as lost
+              setWorkoutName(ACTIVITIES.includes(cp.activity) ? cp.activity : 'Workout');
+              setConfirmVisible(true);
             },
           },
         ],
@@ -412,6 +434,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
     baseElapsedRef.current = 0;
     segmentStartRef.current = null;
     setTrackingState('idle');
+    checkpointedLenRef.current = 0;
     clearCheckpoint();
   };
 
@@ -736,7 +759,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
             </ScrollView>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: colors.border }]} onPress={handleDiscard}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: colors.border }]} onPress={() => confirmDiscard(handleDiscard)}>
                 <Text style={[styles.modalBtnText, { color: colors.textPrimary }]}>Discard</Text>
               </TouchableOpacity>
               <TouchableOpacity
