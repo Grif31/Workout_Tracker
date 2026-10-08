@@ -2,6 +2,19 @@
 
 ## 1.1.9 (2026-10-07)
 
+### New: Home screen widgets
+- Add Aretē to your home screen with three widgets: Weekly Goal, Greek Rank and Up Next. Each comes in small and medium sizes.
+- Weekly Goal shows how many workouts you've done toward your goal this week, and your distance if you've set a distance goal.
+- Greek Rank shows your rank, your progress to the next one, and what's holding you back if you've earned a rank you haven't unlocked yet.
+- Up Next shows the next day of your active routine with the muscles it works, and a Start button that opens the workout.
+- On iPhone, Weekly Goal and Greek Rank also work on the lock screen.
+- On Android, each widget can be resized, and it switches to the medium layout when it's wide enough.
+- Tapping a widget opens the matching screen in the app. Widgets follow your accent color and light or dark mode.
+- Widgets show what the app last saw, so open Aretē now and then to refresh them. If it's been a week, they say so.
+
+### New: Sign in with Google
+- Log in or sign up with Google on iPhone and Android.
+
 ### New: Free accounts see their own scores
 - Strength Score and Endurance Score open for everyone. Without Premium you see your ring, tier and percentile, with the full breakdown shown blurred behind an Unlock button.
 - Coach gives a free account one set of insights a week. The first insight is shown in full and the rest are locked until the next week.
@@ -103,6 +116,7 @@
 - Fixed the live volume counting sets you hadn't checked off.
 - Fixed Home's Cardio This Week card showing "Nothing logged since Monday" in a quiet week.
 - Fixed Home restarting your routine at day 1 every Monday.
+- Fixed the Weekly Goal ring looking empty at the start of a week.
 - Fixed the cardio history on Home and Profile showing about 0 minutes for runs entered afterwards.
 - Fixed Greek Rank percentiles reading "72th".
 - Fixed Personal Records plotting distances and times in the wrong unit, a search with no match saying you have no PRs, and "This Week's PRs" covering the last 7 days.
