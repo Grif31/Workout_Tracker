@@ -532,7 +532,7 @@ def progress_stats():
         for i in range(num_weeks):
             ws = start_monday + timedelta(weeks=i)
             we = ws + timedelta(days=6)
-            buckets.append({'start': ws, 'end': we, 'label': f"{ws.month}/{ws.day}", 'volume': 0.0, 'sets': 0, 'count': 0, 'distance_km': 0.0})
+            buckets.append({'start': ws, 'end': we, 'label': f"{ws.month}/{ws.day}", 'volume': 0.0, 'sets': 0, 'count': 0, 'distance_km': 0.0, 'density_volume': 0.0, 'timed_minutes': 0})
         start = start_monday
         def assign(w, w_date):
             for b in buckets:
@@ -547,7 +547,7 @@ def progress_stats():
             while m <= 0: m += 12; y -= 1
             _, last_day = cal.monthrange(y, m)
             buckets.append({'start': date(y, m, 1), 'end': date(y, m, last_day),
-                            'label': MONTHS[m - 1], 'volume': 0.0, 'sets': 0, 'count': 0, 'distance_km': 0.0})
+                            'label': MONTHS[m - 1], 'volume': 0.0, 'sets': 0, 'count': 0, 'distance_km': 0.0, 'density_volume': 0.0, 'timed_minutes': 0})
         start = buckets[0]['start']
         def assign(w, w_date):
             for b in buckets:
@@ -562,7 +562,7 @@ def progress_stats():
             while m <= 0: m += 12; y -= 1
             _, last_day = cal.monthrange(y, m)
             buckets.append({'start': date(y, m, 1), 'end': date(y, m, last_day),
-                            'label': MONTHS[m - 1], 'volume': 0.0, 'sets': 0, 'count': 0, 'distance_km': 0.0})
+                            'label': MONTHS[m - 1], 'volume': 0.0, 'sets': 0, 'count': 0, 'distance_km': 0.0, 'density_volume': 0.0, 'timed_minutes': 0})
         start = buckets[0]['start']
         def assign(w, w_date):
             for b in buckets:
@@ -580,7 +580,8 @@ def progress_stats():
     return jsonify({
         'buckets': [
             {'label': b['label'], 'volume': round(volume_in_user_unit(b['volume'], weight_unit)), 'sets': b['sets'], 'count': b['count'],
-             'distance_km': round(b['distance_km'], 3)}
+             'distance_km': round(b['distance_km'], 3),
+             'density': round(volume_in_user_unit(b['density_volume'], weight_unit) / b['timed_minutes'], 1) if b['timed_minutes'] else 0.0}
             for b in buckets
         ],
         'metrics_logged': _metrics_logged(user_id),
@@ -609,12 +610,17 @@ def _metrics_logged(user_id):
         'volume': db.session.query(own.filter(Workout.volume > 0).exists()).scalar(),
         'sets': db.session.query(own_sets.filter(Set.reps.isnot(None), Set.reps != 0).exists()).scalar(),
         'distance': db.session.query(own_sets.filter(is_cardio, Set.distance > 0).exists()).scalar(),
+        'density': db.session.query(own.filter(Workout.volume > 0, Workout.duration > 0).exists()).scalar(),
     }
 
 
 def _add_workout(bucket, workout):
     bucket['count'] += 1
     bucket['volume'] += workout.volume or 0.0
+    # Density needs both halves: a workout with no duration (or no volume) would skew it
+    if workout.duration and workout.duration > 0 and workout.volume:
+        bucket['density_volume'] += workout.volume
+        bucket['timed_minutes'] += workout.duration
     for ex in workout.exercises:
         # Same rule as _cardio_totals, so this chart and Home's Cardio This Week
         # agree: cardio exercises only, logged distance normalised to km.
@@ -661,6 +667,58 @@ def recent_exercises():
     return jsonify({'recent': [{'name': r['name'], 'exercise_template_id': r['exercise_template_id']} for r in merged[:10]]})
 
 
+HISTORY_WEEKS = 4
+
+
+def _muscle_sets_by_week(user_id, first_week_start, week_count):
+    """Working sets per muscle for week_count consecutive Monday weeks from
+    first_week_start; the last week has no upper bound, so it is the current one.
+    Secondary movers get half credit: a set still stimulates them, just less
+    directly than the primary target. Each week is {'sets': {muscle: n},
+    'workouts': {muscle: {workout ids}}}."""
+    not_warmup = db.or_(Set.set_type.is_(None), Set.set_type != 'W')
+    not_cardio = db.func.lower(Exercise.exercise_type) != 'cardio'
+    rows = (
+        db.session.query(
+            Exercise.exercise_template_id, Workout.id, Workout.date, db.func.count(Set.id),
+        )
+        .join(Set, Set.exercise_id == Exercise.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .filter(
+            Workout.user_id == user_id,
+            Exercise.exercise_template_id.isnot(None),
+            not_cardio,
+            not_warmup,
+            Workout.date >= first_week_start,
+        )
+        .group_by(Exercise.exercise_template_id, Workout.id, Workout.date)
+        .all()
+    )
+    weeks = [{'sets': {}, 'workouts': {}} for _ in range(week_count)]
+    if not rows:
+        return weeks
+
+    mappings = {}
+    for tmpl_id, muscle, is_primary in (
+        db.session.query(
+            ExerciseMuscleMapping.exercise_template_id,
+            ExerciseMuscleMapping.muscle_group,
+            ExerciseMuscleMapping.is_primary,
+        )
+        .filter(ExerciseMuscleMapping.exercise_template_id.in_({r[0] for r in rows}))
+        .all()
+    ):
+        mappings.setdefault(tmpl_id, []).append((muscle, is_primary))
+
+    for tmpl_id, workout_id, workout_date, set_count in rows:
+        index = min((workout_date.date() - first_week_start).days // 7, week_count - 1)
+        week = weeks[index]
+        for muscle, is_primary in mappings.get(tmpl_id, []):
+            week['sets'][muscle] = week['sets'].get(muscle, 0) + set_count * (1.0 if is_primary else 0.5)
+            week['workouts'].setdefault(muscle, set()).add(workout_id)
+    return weeks
+
+
 @stats_bp.get('/api/stats/muscle-volume')
 @jwt_required()
 def muscle_volume():
@@ -690,47 +748,17 @@ def muscle_volume():
             )
         )
 
-    # Sets this week per muscle group
     not_warmup = db.or_(Set.set_type.is_(None), Set.set_type != 'W')
     not_cardio  = db.func.lower(Exercise.exercise_type) != 'cardio'
 
-    # Step 1: set counts per exercise_template_id this week
-    week_template_rows = (
-        db.session.query(
-            Exercise.exercise_template_id,
-            db.func.count(Set.id).label('set_count'),
-        )
-        .join(Set, Set.exercise_id == Exercise.id)
-        .join(Workout, Exercise.workout_id == Workout.id)
-        .filter(
-            Workout.user_id == user_id,
-            Exercise.exercise_template_id.isnot(None),
-            not_cardio,
-            not_warmup,
-            Workout.date >= week_start,
-        )
-        .group_by(Exercise.exercise_template_id)
-        .all()
-    )
-
-    # Step 2: look up muscle groups for those templates, accumulate in Python.
-    # Secondary movers get half credit — a set still stimulates them, just
-    # less directly than the primary target.
-    template_set_map = {row.exercise_template_id: row.set_count for row in week_template_rows}
-    muscle_sets: dict[str, float] = {}
-    if template_set_map:
-        mappings = (
-            db.session.query(
-                ExerciseMuscleMapping.exercise_template_id,
-                ExerciseMuscleMapping.muscle_group,
-                ExerciseMuscleMapping.is_primary,
-            )
-            .filter(ExerciseMuscleMapping.exercise_template_id.in_(list(template_set_map.keys())))
-            .all()
-        )
-        for tmpl_id, muscle, is_primary in mappings:
-            credit = template_set_map[tmpl_id] * (1.0 if is_primary else 0.5)
-            muscle_sets[muscle] = muscle_sets.get(muscle, 0) + credit
+    # Sets per muscle for this week and the HISTORY_WEEKS before it, with the
+    # distinct workouts that trained each muscle (the weekly frequency).
+    history_start = week_start - timedelta(weeks=HISTORY_WEEKS)
+    weeks = _muscle_sets_by_week(user_id, history_start, HISTORY_WEEKS + 1)
+    muscle_sets = weeks[-1]['sets']
+    session_count = {m: len(ids) for m, ids in weeks[-1]['workouts'].items()}
+    history_muscles = set().union(*(w['sets'] for w in weeks[:-1]))
+    weekly_history = {m: [round(w['sets'].get(m, 0), 1) for w in weeks[:-1]] for m in history_muscles}
 
     # Last trained date per muscle group (all time) — same two-step approach
     last_template_rows = (
@@ -762,31 +790,104 @@ def muscle_volume():
             if muscle not in last_trained or (date_str and (not last_trained[muscle] or date_str > last_trained[muscle])):
                 last_trained[muscle] = date_str
 
-    # Last week's total working sets (for fatigue monitor)
-    last_week_total = (
-        db.session.query(db.func.count(Set.id))
-        .join(Exercise, Set.exercise_id == Exercise.id)
-        .join(Workout, Exercise.workout_id == Workout.id)
-        .filter(
-            Workout.user_id == user_id,
-            Exercise.exercise_template_id.isnot(None),
-            not_cardio,
-            not_warmup,
-            Set.reps.isnot(None),
-            Workout.date >= last_week_start,
-            Workout.date < week_start,
+    # Last week's total working sets (for fatigue monitor), and the part of it up
+    # to the same weekday, since this week is not over: comparing a partial week
+    # with a whole one would read as detraining every Monday.
+    def _total_sets_between(start, stop):
+        return (
+            db.session.query(db.func.count(Set.id))
+            .join(Exercise, Set.exercise_id == Exercise.id)
+            .join(Workout, Exercise.workout_id == Workout.id)
+            .filter(
+                Workout.user_id == user_id,
+                Exercise.exercise_template_id.isnot(None),
+                not_cardio,
+                not_warmup,
+                Set.reps.isnot(None),
+                Workout.date >= start,
+                Workout.date < stop,
+            )
+            .scalar() or 0
         )
-        .scalar() or 0
-    )
 
+    this_week_total = _total_sets_between(week_start, week_start + timedelta(weeks=1))
+    last_week_total = _total_sets_between(last_week_start, week_start)
+    days_in = (today - week_start).days + 1
+    last_week_to_date_total = _total_sets_between(last_week_start, last_week_start + timedelta(days=days_in))
 
     return jsonify({
         'week_start': week_start.strftime('%Y-%m-%d'),
         'muscle_sets': muscle_sets,
+        'session_count': session_count,
+        'weekly_history': weekly_history,
         'last_trained': last_trained,
         'total_sets': sum(muscle_sets.values()),
+        'this_week_total': this_week_total,
         'last_week_total': last_week_total,
+        'last_week_to_date_total': last_week_to_date_total,
     }), 200
+
+
+PR_VELOCITY_WEEKS = 12
+PR_VELOCITY_LIMIT = 20
+
+
+@stats_bp.get('/api/stats/pr-velocity')
+@jwt_required()
+def pr_velocity():
+    """How fast each lift's estimated 1RM has been climbing over the last 12 weeks.
+
+    One point per workout (the day's best Epley estimate), then a linear fit; see
+    utils/pr_velocity.py for the statuses. ?exercise_template_id= returns just
+    that exercise, otherwise the most-trained lifts. Rates are in the user's
+    weight unit, which is how sets are stored."""
+    from datetime import timedelta
+    from utils.lift_progress import _EPLEY_EXPR, _EPLEY_MAX_REPS
+    from utils.pr_velocity import compute_velocity
+
+    user_id = get_jwt_identity()
+    template_id = request.args.get('exercise_template_id', type=int)
+    today = user_today()
+    start = today - timedelta(weeks=PR_VELOCITY_WEEKS)
+
+    rows = (
+        db.session.query(
+            Exercise.exercise_template_id, Workout.id, db.func.max(Workout.date), db.func.max(_EPLEY_EXPR),
+        )
+        .join(Set, Set.exercise_id == Exercise.id)
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .filter(
+            Workout.user_id == user_id,
+            Workout.date >= start,
+            db.or_(Set.set_type.is_(None), Set.set_type != 'W'),
+            db.func.lower(Exercise.exercise_type) != 'cardio',
+            Set.reps.isnot(None), Set.weight.isnot(None),
+            Set.reps <= _EPLEY_MAX_REPS, Set.weight > 0,
+            Exercise.exercise_template_id.isnot(None),
+            *([Exercise.exercise_template_id == template_id] if template_id else []),
+        )
+        .group_by(Exercise.exercise_template_id, Workout.id)
+        .all()
+    )
+    points: dict[int, list] = {}
+    for tid, _workout_id, when, best in rows:
+        points.setdefault(tid, []).append((when.date(), float(best)))
+
+    results = []
+    for tid, pts in points.items():
+        results.append({'exercise_template_id': tid, **compute_velocity(pts, today)})
+    results.sort(key=lambda r: r['sessions'], reverse=True)
+    results = results[:PR_VELOCITY_LIMIT]
+
+    names = dict(
+        db.session.query(ExerciseTemplate.id, ExerciseTemplate.name)
+        .filter(ExerciseTemplate.id.in_([r['exercise_template_id'] for r in results] or [-1]))
+        .all()
+    )
+    for r in results:
+        r['exercise_name'] = names.get(r['exercise_template_id'])
+    weight_unit = db.session.get(User, int(user_id)).weight_unit or 'lbs'
+    return jsonify({'weight_unit': weight_unit, 'exercises': results}), 200
 
 
 @stats_bp.get('/api/stats/exercise/last-session')
@@ -822,6 +923,8 @@ def exercise_last_session():
             'weight': str(s.weight) if s.weight is not None else '',
             'set_type': getattr(s, 'set_type', 'N') or 'N',
             'cardio_duration': str(s.cardio_duration) if s.cardio_duration is not None else '',
+            # Next-session targets read it; empty when RPE was not logged
+            'rpe': str(s.rpe) if s.rpe is not None else '',
         }
         for s in sorted_sets
     ]

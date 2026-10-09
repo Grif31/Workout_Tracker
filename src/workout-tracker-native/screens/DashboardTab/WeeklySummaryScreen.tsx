@@ -19,6 +19,7 @@ import { DashboardStackParamsList, WeeklySummaryData } from '../../navigation/ty
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
+import { CATEGORICAL_COLORS } from '../../constants/categoricalColors';
 import { fmtHold, RPE_KEY } from '../../components/workout/types';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
 import { toLocalDateStr } from '../../utils/date';
@@ -50,16 +51,6 @@ function prWeightValue(pr: { pr_type: string; value: number; weight_context?: nu
 
 const WEEKDAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-// Categorical data-viz palette (CVD-validated), NOT a themed UI color — chart
-// series need fixed, checked hues rather than the accent-derived theme
-// tokens. "Other" (the folded-tail bucket) gets muted gray instead of a 6th
-// hue since it isn't a real distinct entity worth a scarce categorical slot.
-const MUSCLE_PIE_COLORS = {
-  light: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'],
-  dark: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181'],
-  otherLight: '#898781',
-  otherDark: '#898781',
-};
 const MAX_MUSCLE_SLICES = 5;
 
 // Parse a "YYYY-MM-DD" string via local Y/M/D components — never via
@@ -205,8 +196,8 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
   const muscleSlices = useMemo(() => {
     if (!data) return [];
     const sorted = Object.entries(data.muscle_sets).sort((a, b) => b[1] - a[1]);
-    const palette = mode === 'dark' ? MUSCLE_PIE_COLORS.dark : MUSCLE_PIE_COLORS.light;
-    const otherColor = mode === 'dark' ? MUSCLE_PIE_COLORS.otherDark : MUSCLE_PIE_COLORS.otherLight;
+    const palette = mode === 'dark' ? CATEGORICAL_COLORS.dark : CATEGORICAL_COLORS.light;
+    const otherColor = mode === 'dark' ? CATEGORICAL_COLORS.otherDark : CATEGORICAL_COLORS.otherLight;
     const top = sorted.slice(0, MAX_MUSCLE_SLICES).map(([muscle, count], i) => ({
       muscle, count, color: palette[i],
     }));

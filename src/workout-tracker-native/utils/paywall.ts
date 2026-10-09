@@ -8,7 +8,8 @@ const ALL_FEATURES: PaywallFeature[] = [
   { key: 'insights', icon: 'bulb-outline', label: 'Training insights', detail: 'What to push, what to ease off, plus a full weekly review: what went well, what lagged, and one change to make' },
   { key: 'strength_score', icon: 'trophy-outline', label: 'Strength Score', detail: 'A breakdown of where your lifts rank based on your bodyweight, see which are the strongest and weakest' },
   { key: 'endurance_score', icon: 'speedometer-outline', label: 'Endurance Score', detail: 'How your pace ranks from 400 m to the marathon' },
-  { key: 'muscle_volume', icon: 'bar-chart-outline', label: 'Muscle volume zones', detail: 'Whether each muscle gets enough weekly work to grow, or too much to recover from' },
+  { key: 'muscle_volume', icon: 'bar-chart-outline', label: 'Muscle volume zones', detail: 'Whether each muscle gets enough weekly work to grow or too much to recover from, plus weekly frequency, trends, push and pull balance, and a fatigue monitor' },
+  { key: 'analytics', icon: 'analytics-outline', label: 'Progress analytics', detail: 'Workout density, and how fast each lift is gaining' },
   { key: 'unlimited', icon: 'list-outline', label: 'Unlimited templates and routines', detail: 'Free accounts keep 5 templates and 2 routines' },
   ...(APP_ICONS_ENABLED ? [{ key: 'app_icon', icon: 'apps-outline', label: 'Custom app icons', detail: 'Pick the icon on your home screen' }] : []),
 ];
@@ -18,6 +19,8 @@ const ALL_FEATURES: PaywallFeature[] = [
 const SOURCES: Record<string, { feature: string; title: string; subtitle: string }> = {
   ai_coach: { feature: 'ai_coach', title: 'AI Coach is part of Premium', subtitle: 'Programs built around you, in seconds' },
   weekly_review: { feature: 'insights', title: 'The full weekly review is part of Premium', subtitle: 'What went well, what lagged, and one change for next week' },
+  pr_velocity: { feature: 'analytics', title: 'Progress rate is part of Premium', subtitle: 'See how fast each lift is gaining and when it stalls' },
+  density: { feature: 'analytics', title: 'Workout density is part of Premium', subtitle: 'See how much work you fit into each minute' },
   strength_score: { feature: 'strength_score', title: 'Strength Score is part of Premium', subtitle: 'See how your lifts rank and what to work on next' },
   endurance_score: { feature: 'endurance_score', title: 'Endurance Score is part of Premium', subtitle: 'See how your pace ranks at every distance' },
   muscle_volume: { feature: 'muscle_volume', title: 'Volume zones are part of Premium', subtitle: 'See which muscles need more work and which need rest' },

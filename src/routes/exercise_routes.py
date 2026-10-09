@@ -1,10 +1,11 @@
-from models import db, ExerciseTemplate, ExerciseMuscleMapping
+from models import db, ExerciseTemplate, ExerciseMuscleMapping, Exercise, Workout
 from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm import subqueryload
 from schemas import ExerciseSchema
 from utils.validation import validate_body
 from utils.volume import derive_bodyweight_load_factor
+from utils.exercise_alternatives import is_excluded
 
 exercise_bp = Blueprint('exercise_bp', __name__)
 
@@ -47,6 +48,61 @@ def get_exercises():
         ).filter(ExerciseMuscleMapping.muscle_group == muscle)
 
     return jsonify([exercise_to_dict(e) for e in query.order_by(ExerciseTemplate.name).all()])
+
+
+ALTERNATIVES_LIMIT = 12
+
+
+@exercise_bp.get('/api/exercises/<int:template_id>/alternatives')
+@jwt_required()
+def get_alternatives(template_id):
+    """Swap candidates for an exercise: the same primary muscle on different
+    equipment, minus anything that loads an area in ?avoid= (comma-separated
+    coach-profile keys). The same movement on other equipment comes first, then
+    the lifts the user has logged most."""
+    user_id = int(get_jwt_identity())
+    visible = db.or_(ExerciseTemplate.user_id.is_(None), ExerciseTemplate.user_id == user_id)
+    source = ExerciseTemplate.query.filter(ExerciseTemplate.id == template_id, visible).first()
+    if source is None:
+        return jsonify({'message': 'Exercise not found'}), 404
+
+    avoid = [a for a in request.args.get('avoid', '').split(',') if a][:10]
+    source_type = (source.exercise_type or 'strength').lower()
+    primary = next((m.muscle_group for m in source.muscle_mappings if m.is_primary), None)
+    if source_type == 'cardio' or primary is None:
+        return jsonify({'alternatives': []}), 200
+
+    candidates = (
+        ExerciseTemplate.query
+        .options(subqueryload(ExerciseTemplate.muscle_mappings))
+        .join(ExerciseMuscleMapping, ExerciseMuscleMapping.exercise_template_id == ExerciseTemplate.id)
+        .filter(
+            visible,
+            ExerciseTemplate.id != template_id,
+            ExerciseMuscleMapping.muscle_group == primary,
+            ExerciseMuscleMapping.is_primary.is_(True),
+        )
+        .all()
+    )
+    candidates = [
+        c for c in candidates
+        if (c.exercise_type or 'strength').lower() == source_type
+        and (c.equipment or '').lower() != (source.equipment or '').lower()
+        and not is_excluded(c.name, avoid)
+    ]
+
+    logged = dict(
+        db.session.query(Exercise.exercise_template_id, db.func.count(db.func.distinct(Exercise.workout_id)))
+        .join(Workout, Exercise.workout_id == Workout.id)
+        .filter(Workout.user_id == user_id, Exercise.exercise_template_id.in_([c.id for c in candidates] or [-1]))
+        .group_by(Exercise.exercise_template_id)
+        .all()
+    )
+    same_name = {c.id for c in candidates if c.name.lower() == source.name.lower()}
+    candidates.sort(key=lambda c: (c.id not in same_name, -logged.get(c.id, 0), c.name.lower()))
+    return jsonify({'alternatives': [
+        {**exercise_to_dict(c), 'same_movement': c.id in same_name} for c in candidates[:ALTERNATIVES_LIMIT]
+    ]}), 200
 
 
 @exercise_bp.post('/api/exercises')

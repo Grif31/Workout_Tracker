@@ -1,9 +1,13 @@
-export type ChartMetric = 'volume' | 'sets' | 'workouts' | 'distance';
+export type ChartMetric = 'volume' | 'sets' | 'workouts' | 'distance' | 'density';
 
 /** `metrics_logged` from GET /api/stats/progress: what the user has ever logged. */
-export type MetricsLogged = Record<ChartMetric, boolean>;
+// density arrived later than the rest: a backend without it reads as not logged
+export type MetricsLogged = Record<Exclude<ChartMetric, 'density'>, boolean> & { density?: boolean };
 
-export const CHART_METRICS: readonly ChartMetric[] = ['volume', 'sets', 'workouts', 'distance'];
+export const CHART_METRICS: readonly ChartMetric[] = ['volume', 'sets', 'workouts', 'distance', 'density'];
+
+/** Premium chart metrics: the tab shows to everyone who has the data, and opens the paywall for a free account. */
+export const PREMIUM_CHART_METRICS: readonly ChartMetric[] = ['density'];
 
 /**
  * The chart tabs to show. A metric gets a tab only once the user has logged

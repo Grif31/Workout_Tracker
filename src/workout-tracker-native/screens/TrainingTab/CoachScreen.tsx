@@ -32,13 +32,16 @@ import type { GreekRankData } from '../../utils/greekRank';
 import WeeklyGoalModal from '../../components/coach/WeeklyGoalModal';
 import WorkingSetsInfoModal from '../../components/coach/WorkingSetsInfoModal';
 import RangePickerModal, { type ChartRange, type MenuAnchor } from '../../components/coach/RangePickerModal';
-import { hasLoggedNothing, visibleChartMetrics, type ChartMetric, type MetricsLogged } from '../../utils/progressMetrics';
+import { hasLoggedNothing, visibleChartMetrics, PREMIUM_CHART_METRICS, type ChartMetric, type MetricsLogged } from '../../utils/progressMetrics';
 import {
   displayToGoalKm, distanceGoalProgress, formatDistanceValue, goalKmToDisplay,
 } from '../../utils/weeklyDistanceGoal';
 import RoutinePickerModal from '../../components/coach/RoutinePickerModal';
 import MusclePickerModal from '../../components/coach/MusclePickerModal';
 import { MUSCLE_STANDARDS, volumeZone, type VolumeZone } from '../../constants/volumeLandmarks';
+import { muscleTrend, GOOD_WEEKLY_SESSIONS, type Trend } from '../../utils/muscleTrends';
+import MuscleInsightsCard from '../../components/MuscleInsightsCard';
+import PlateauNudge from '../../components/PlateauNudge';
 import { computeBarChartMax } from '../../utils/prFormat';
 import { writeWidgetGreekRank, writeWidgetScore } from '../../utils/widgetData';
 
@@ -52,7 +55,7 @@ type Props = NativeStackScreenProps<TrainingStackParamsList, 'TrainingHome'>;
 // Templates listed before Show All.
 const VISIBLE_TEMPLATES = 5;
 
-type ProgressBucket = { label: string; volume: number; sets: number; count: number; distance_km?: number };
+type ProgressBucket = { label: string; volume: number; sets: number; count: number; distance_km?: number; density?: number };
 type ProgressResponse = { buckets?: ProgressBucket[]; metrics_logged?: MetricsLogged };
 type Exercise = TemplateExercise;
 type MuscleVolumeData = {
@@ -61,6 +64,11 @@ type MuscleVolumeData = {
   total_sets: number;
   last_week_total: number;
   week_start: string;
+  // Added with the trends: absent from a cached response saved by an older build
+  session_count?: Record<string, number>;
+  weekly_history?: Record<string, number[]>;
+  this_week_total?: number;
+  last_week_to_date_total?: number;
 };
 type WeeklySummaryPreview = {
   week_start: string;
@@ -85,6 +93,10 @@ const FREE_TEMPLATE_LIMIT = 5;
 const FREE_ROUTINE_LIMIT = 2;
 
 
+
+const TREND_ICON: Record<Trend, keyof typeof Ionicons.glyphMap> = {
+  up: 'arrow-up', flat: 'arrow-forward', down: 'arrow-down',
+};
 
 const INSIGHT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   deload:      'battery-half-outline',
@@ -672,6 +684,7 @@ export default function CoachScreen({ navigation }: Props) {
   };
 
   const visibleMetrics = useMemo(() => visibleChartMetrics(metricsLogged), [metricsLogged]);
+  const metricLocked = (m: ChartMetric) => !isPremium && PREMIUM_CHART_METRICS.includes(m);
   // Falling back here rather than resetting state keeps the user's pick for
   // when that metric's tab comes back.
   const activeMetric: ChartMetric = visibleMetrics.includes(chartMetric)
@@ -803,6 +816,8 @@ export default function CoachScreen({ navigation }: Props) {
       const sets = muscleVolume.muscle_sets[muscle] ?? 0;
       const std = MUSCLE_STANDARDS[muscle];
       const lastDate = muscleVolume.last_trained[muscle];
+      const sessions = muscleVolume.session_count?.[muscle] ?? 0;
+      const trend = muscleTrend(muscleVolume.weekly_history?.[muscle]);
       const isTrained = sets > 0;
       const freeFillPct = (sets / maxSets) * 100;
       const zone = volumeZone(sets, std, weekOver);
@@ -817,9 +832,28 @@ export default function CoachScreen({ navigation }: Props) {
 
       return (
         <View key={muscle} style={styles.mvRow}>
-          <Text style={[styles.mvMuscle, !isTrained && { color: colors.textSecondary }]} numberOfLines={1}>
-            {muscle}
-          </Text>
+          <View style={styles.mvMuscleWrap}>
+            <Text style={[styles.mvMuscle, !isTrained && { color: colors.textSecondary }]} numberOfLines={1}>
+              {muscle}
+            </Text>
+            {isPremium && (sessions > 0 || trend) && (
+              <View style={styles.mvSubRow}>
+                {sessions > 0 && (
+                  <Text style={[styles.mvSessions, { color: sessions >= GOOD_WEEKLY_SESSIONS ? colors.save : colors.warmup }]}>
+                    {sessions}×
+                  </Text>
+                )}
+                {trend && (
+                  <Ionicons
+                    name={TREND_ICON[trend]}
+                    size={12}
+                    color={trend === 'up' ? colors.save : trend === 'down' ? colors.warmup : colors.textSecondary}
+                    accessibilityLabel={`${muscle} 4-week trend ${trend === 'flat' ? 'steady' : trend}`}
+                  />
+                )}
+              </View>
+            )}
+          </View>
           <View style={styles.mvBarArea}>
             {isPremium ? (
               <View style={styles.mvPremiumTrack}>
@@ -870,6 +904,9 @@ export default function CoachScreen({ navigation }: Props) {
             </View>
           </View>
         )}
+        {isPremium && (
+          <Text style={styles.mvCaption}>Sessions this week and the 4-week trend sit under each muscle. Twice a week gains the most.</Text>
+        )}
 
         {trained.map((m, i) => renderMvRow(m, i))}
         {untrained.length > 0 && (
@@ -888,7 +925,7 @@ export default function CoachScreen({ navigation }: Props) {
           >
             <Ionicons name="lock-closed-outline" size={14} color={colors.accent} />
             <Text style={[styles.mvTotalText, { color: colors.accent }]}>
-              Unlock MEV · MAV · MRV zone bars
+              Unlock volume zones, frequency, trends and balance
             </Text>
           </TouchableOpacity>
         )}
@@ -1036,6 +1073,11 @@ export default function CoachScreen({ navigation }: Props) {
       {/* ── COACH TAB ── */}
       {activeTab === 'coach' && (
         <ScrollView contentContainerStyle={styles.coachContent}>
+          <PlateauNudge
+            isPremium={isPremium}
+            onOpenLift={({ exerciseId, exerciseName }) =>
+              navigation.navigate('ExerciseDetail', { exerciseId, exerciseName, initialTab: 'charts' })}
+          />
           {/* Coach-profile summary — the whole card opens the profile modal */}
           <PressableScale
             style={[styles.coachHero, { backgroundColor: rankColor + '18', borderColor: rankColor + '40' }]}
@@ -1198,11 +1240,13 @@ export default function CoachScreen({ navigation }: Props) {
               activeMetric === 'volume' ? b.volume
                 : activeMetric === 'sets' ? b.sets
                 : activeMetric === 'distance' ? roundTenth(toDisplayDistance(b.distance_km ?? 0, distanceUnit))
+                : activeMetric === 'density' ? Math.round(b.density ?? 0)
                 : b.count;
             const hasData = progressData.some(b => getValue(b) > 0);
             const metricLabel = activeMetric === 'volume' ? `Volume (${weightUnit})`
               : activeMetric === 'sets' ? 'Sets'
               : activeMetric === 'distance' ? `Distance (${distanceUnit})`
+              : activeMetric === 'density' ? `Density (${weightUnit}/min)`
               : 'Workouts';
 
             const BAR_GAP = 6;
@@ -1496,12 +1540,21 @@ export default function CoachScreen({ navigation }: Props) {
                         {idx > 0 && <View style={styles.metricDivider} />}
                         <TouchableOpacity
                           style={styles.metricItem}
-                          onPress={() => handleMetricChange(m)}
+                          onPress={metricLocked(m)
+                            ? () => (navigation as any).navigate('Paywall', { source: m })
+                            : () => handleMetricChange(m)}
                           activeOpacity={0.7}
                         >
-                          <Text style={[styles.metricText, activeMetric === m && { color: colors.accent, fontWeight: '700' }]}>
-                            {m.charAt(0).toUpperCase() + m.slice(1)}
-                          </Text>
+                          <View style={styles.metricLabelRow}>
+                            {metricLocked(m) && <Ionicons name="lock-closed" size={11} color={colors.textSecondary} />}
+                            <Text
+                              style={[styles.metricText, activeMetric === m && { color: colors.accent, fontWeight: '700' }]}
+                              numberOfLines={1}
+                              adjustsFontSizeToFit
+                            >
+                              {m.charAt(0).toUpperCase() + m.slice(1)}
+                            </Text>
+                          </View>
                         </TouchableOpacity>
                       </React.Fragment>
                     ))}
@@ -1518,6 +1571,16 @@ export default function CoachScreen({ navigation }: Props) {
                 )}
 
                 {renderMuscleVolumeCard()}
+                {muscleVolume && (
+                  <MuscleInsightsCard
+                    muscleSets={muscleVolume.muscle_sets}
+                    weeklyHistory={muscleVolume.weekly_history}
+                    setsToDate={muscleVolume.this_week_total ?? 0}
+                    lastWeekSetsToDate={muscleVolume.last_week_to_date_total}
+                    isPremium={isPremium}
+                    onUnlock={() => (navigation as any).navigate('Paywall', { source: 'muscle_volume' })}
+                  />
+                )}
               </>
             );
           })()}
@@ -1673,6 +1736,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   metricItem: { flex: 1, paddingVertical: 9, alignItems: 'center', justifyContent: 'center' },
   metricDivider: { width: 1, backgroundColor: colors.border, marginVertical: spacing.sm },
+  metricLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   metricText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
   metricSlider: { position: 'absolute', bottom: 0, height: 2, backgroundColor: colors.accent, borderRadius: 1 },
   scoreCardTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, marginBottom: 3 },
@@ -1686,7 +1750,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   mvColLabels: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.xs },
   mvColLabel: { fontSize: 9, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
   mvRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, gap: spacing.xs },
-  mvMuscle: { width: 80, fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
+  mvMuscleWrap: { width: 80 },
+  mvSubRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  mvSessions: { fontSize: typography.fontSize.xs, fontWeight: '700' },
+  mvCaption: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginBottom: spacing.xs },
+  mvMuscle: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
   mvBarArea: { flex: 1 },
   mvFreeTrack: { height: 5, backgroundColor: colors.border, borderRadius: 3, overflow: 'hidden' },
   mvFreeFill: { height: '100%', borderRadius: 3 },

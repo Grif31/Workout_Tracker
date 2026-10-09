@@ -224,6 +224,22 @@ describe('CoachScreen', () => {
       expect(values).toEqual([0, 0, 0, 0, 5]);
     });
 
+    it('charts density as whole volume per minute on the Density tab', async () => {
+      installServer({ '/api/stats/progress': progress({ ...ALL, density: true }, { density: 41.6 }) });
+      const r = await renderScreen();
+      await waitFor(() => expect(r.getByText('Density')).toBeTruthy());
+      fireEvent.press(r.getByText('Density'));
+      await waitFor(() => expect(r.getByText('Density (lbs/min)')).toBeTruthy());
+      expect(lastChart().data.map((d: any) => d.value)).toEqual([0, 0, 0, 0, 42]);
+    });
+
+    it('has no Density tab until a workout was both timed and had volume', async () => {
+      installServer({ '/api/stats/progress': progress({ ...ALL, density: false }) });
+      const r = await renderScreen();
+      await waitFor(() => expect(r.getByText('Distance')).toBeTruthy());
+      expect(r.queryByText('Density')).toBeNull();
+    });
+
     it('keeps the original three tabs against a backend without metrics_logged', async () => {
       installServer({ '/api/stats/progress': progress(undefined) });
       const r = await renderScreen();
@@ -347,6 +363,21 @@ describe('CoachScreen', () => {
       withChest(6, daysAgo(6)); // today is the week's seventh day
       const r = await renderScreen();
       expect(await r.findByText('Below target')).toBeTruthy();
+    });
+
+    it('shows how often each muscle was trained and where it is heading', async () => {
+      installServer({
+        '/api/stats/muscle-volume': {
+          muscle_sets: { Chest: 12, Back: 10 }, last_trained: {}, total_sets: 22, last_week_total: 0, week_start: daysAgo(0),
+          session_count: { Chest: 2, Back: 1 },
+          weekly_history: { Chest: [6, 8, 12, 14], Back: [10, 10, 10, 10] },
+        },
+      });
+      const r = await renderScreen();
+      expect(await r.findByText('2×')).toBeTruthy();
+      expect(r.getByText('1×')).toBeTruthy();
+      expect(r.getByLabelText('Chest 4-week trend up')).toBeTruthy();
+      expect(r.getByLabelText('Back 4-week trend steady')).toBeTruthy();
     });
 
     it('calls reaching MRV the limit, and only past it over', async () => {

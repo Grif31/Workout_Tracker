@@ -521,6 +521,56 @@ class TestMuscleVolume:
         assert res.get_json()['muscle_sets'].get('Chest', 0) == 0
 
 
+class TestMuscleVolumeTrends:
+    """session_count, weekly_history and last_week_to_date_total feed the muscle card's
+    frequency, trend and fatigue monitor."""
+
+    def _get(self, client, token, local_date=None):
+        d = local_date or date.today()
+        return client.get(f'/api/stats/muscle-volume?local_date={d.isoformat()}', headers=auth_headers(token))
+
+    def test_counts_the_workouts_that_trained_each_muscle(self, client, auth_token):
+        tid = _create_template(client, auth_token)
+        _create_mapped_workout(client, auth_token, tid, n_sets=3)
+        _create_mapped_workout(client, auth_token, tid, n_sets=2)
+        data = self._get(client, auth_token).get_json()
+        assert data['session_count']['Chest'] == 2
+        assert data['this_week_total'] == 5  # raw sets, not the muscle credits
+        assert data['muscle_sets']['Chest'] == 5
+
+    def test_a_workout_with_only_warmups_is_not_a_session(self, client, auth_token):
+        tid = _create_template(client, auth_token)
+        _create_mapped_workout(client, auth_token, tid, n_sets=2, set_type='W')
+        assert self._get(client, auth_token).get_json()['session_count'] == {}
+
+    def test_history_is_the_four_weeks_before_oldest_first(self, client, app, auth_token):
+        tid = _create_template(client, auth_token)
+        monday = _this_week_monday()
+        _backdate(app, _create_mapped_workout(client, auth_token, tid, n_sets=2), monday - timedelta(weeks=3))
+        _backdate(app, _create_mapped_workout(client, auth_token, tid, n_sets=3), monday - timedelta(days=1))
+        _create_mapped_workout(client, auth_token, tid, n_sets=4)
+        data = self._get(client, auth_token).get_json()
+        assert data['weekly_history']['Chest'] == [0, 2, 0, 3]
+        assert data['muscle_sets']['Chest'] == 4
+
+    def test_muscles_with_no_history_are_left_out(self, client, auth_token):
+        tid = _create_template(client, auth_token)
+        _create_mapped_workout(client, auth_token, tid, n_sets=2)
+        assert self._get(client, auth_token).get_json()['weekly_history'] == {}
+
+    def test_last_week_to_date_stops_at_the_same_weekday(self, client, app, auth_token, monkeypatch):
+        _pin_utc_now(monkeypatch, _this_week_monday() + timedelta(days=2))  # a Wednesday
+        wednesday = _this_week_monday() + timedelta(days=2)
+        last_monday = _this_week_monday() - timedelta(weeks=1)
+        tid = _create_template(client, auth_token)
+        for offset, n in ((0, 3), (2, 2), (6, 4)):  # last Monday, Wednesday and Sunday
+            _backdate(app, _create_mapped_workout(client, auth_token, tid, n_sets=n), last_monday + timedelta(days=offset))
+        data = self._get(client, auth_token, wednesday).get_json()
+        assert data['last_week_total'] == 9
+        assert data['last_week_to_date_total'] == 5
+        assert data['this_week_total'] == 0
+
+
 # ---------------------------------------------------------------------------
 # GET /api/stats/weekly-summary — recap of a completed week
 # ---------------------------------------------------------------------------
@@ -2264,6 +2314,17 @@ class TestExerciseLastSession:
         sets = self._get(client, auth_token, 'Bench Press', tid).get_json()['sets']
         assert [(s['reps'], s['weight']) for s in sets] == [('8', '155.0'), ('6', '165.0')]
 
+    def test_carries_each_sets_rpe_for_the_next_session_target(self, client, auth_token):
+        tid = _create_template(client, auth_token, name='Bench Press')
+        client.post('/api/workouts', json={
+            'workoutName': 'W', 'exercises': [{
+                'name': 'Bench Press', 'exercise_template_id': tid,
+                'sets': [{'reps': 8, 'weight': 155, 'rpe': 7}, {'reps': 8, 'weight': 155}],
+            }],
+        }, headers=auth_headers(auth_token))
+        sets = self._get(client, auth_token, 'Bench Press', tid).get_json()['sets']
+        assert [s['rpe'] for s in sets] == ['7', '']
+
     def test_excludes_warmup_sets(self, client, auth_token):
         tid = _create_template(client, auth_token, name='Bench Press')
         client.post('/api/workouts', json={
@@ -2513,21 +2574,58 @@ class TestProgressDistanceAndRanges:
 
     def test_metrics_logged_all_false_for_new_user(self, client, auth_token):
         assert self._get(client, auth_token)['metrics_logged'] == {
-            'workouts': False, 'volume': False, 'sets': False, 'distance': False,
+            'workouts': False, 'volume': False, 'sets': False, 'distance': False, 'density': False,
         }
 
     def test_metrics_logged_for_cardio_only_user(self, client, auth_token):
         # Cardio sets have no reps, so they aren't "sets" on this chart.
         self._post(client, auth_token, self._run(5))
         assert self._get(client, auth_token)['metrics_logged'] == {
-            'workouts': True, 'volume': False, 'sets': False, 'distance': True,
+            'workouts': True, 'volume': False, 'sets': False, 'distance': True, 'density': False,
         }
 
     def test_metrics_logged_for_strength_only_user(self, client, auth_token):
         self._post(client, auth_token, WORKOUT_PAYLOAD['exercises'])
         assert self._get(client, auth_token)['metrics_logged'] == {
-            'workouts': True, 'volume': True, 'sets': True, 'distance': False,
+            'workouts': True, 'volume': True, 'sets': True, 'distance': False, 'density': False,
         }
+
+    def _post_timed(self, client, token, duration):
+        res = client.post('/api/workouts', json={**WORKOUT_PAYLOAD, 'duration': duration}, headers=auth_headers(token))
+        assert res.status_code == 201, res.get_json()
+        return res.get_json()['id']
+
+    def test_density_is_volume_per_minute_over_timed_workouts(self, client, auth_token):
+        a = self._post_timed(client, auth_token, 30)
+        b = self._post_timed(client, auth_token, 60)
+        with client.application.app_context():
+            volumes = [db.session.get(Workout, i).volume for i in (a, b)]
+        this_week = self._get(client, auth_token)['buckets'][-1]
+        assert this_week['density'] == pytest.approx(sum(volumes) / 90, abs=0.1)
+
+    def test_workouts_without_a_duration_do_not_drag_density_down(self, client, auth_token):
+        self._post_timed(client, auth_token, 45)
+        untimed = self._post(client, auth_token, WORKOUT_PAYLOAD['exercises'])
+        with client.application.app_context():
+            assert db.session.get(Workout, untimed).duration in (None, 0)
+        timed_only = self._get(client, auth_token)['buckets'][-1]['density']
+        assert timed_only > 0
+        assert self._get(client, auth_token)['metrics_logged']['density'] is True
+
+    def test_density_is_zero_when_no_workout_was_timed(self, client, auth_token):
+        self._post(client, auth_token, WORKOUT_PAYLOAD['exercises'])
+        assert self._get(client, auth_token)['buckets'][-1]['density'] == 0
+
+    def test_every_range_has_density_on_every_bucket(self, client, auth_token):
+        for r in ('30d', '3m', '6m', '1y'):
+            assert all('density' in b for b in self._get(client, auth_token, r)['buckets']), r
+
+    def test_density_follows_the_users_weight_unit(self, client, auth_token):
+        self._post_timed(client, auth_token, 45)
+        lbs = self._get(client, auth_token)['buckets'][-1]['density']
+        client.patch('/api/me', json={'weight_unit': 'kg'}, headers=auth_headers(auth_token))
+        kg = self._get(client, auth_token)['buckets'][-1]['density']
+        assert kg == pytest.approx(lbs * 0.45359237, abs=0.2)
 
     def test_metrics_logged_spans_all_time_not_the_range(self, client, auth_token, app):
         # Logged two years ago: nothing in the 1y buckets, but the tab stays.

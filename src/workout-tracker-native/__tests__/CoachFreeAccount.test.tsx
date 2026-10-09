@@ -86,6 +86,28 @@ describe('Coach tab for a free account', () => {
   });
 });
 
+describe('Density chart tab for a free account', () => {
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    appCache.clear();
+    await AsyncStorage.clear();
+  });
+
+  it('is shown with a lock and opens the paywall instead of the chart', async () => {
+    installServer({
+      '/api/stats/progress': {
+        buckets: [{ label: '9/22', volume: 5000, sets: 12, count: 2, distance_km: 0, density: 40 }],
+        metrics_logged: { volume: true, sets: true, workouts: true, distance: false, density: true },
+      },
+    });
+    const nav = createMockNavigation();
+    const r = render(<CoachScreen navigation={nav as any} route={createMockRoute('CoachHome') as any} />);
+    fireEvent.press(await r.findByText('Density'));
+    expect(nav.navigate).toHaveBeenCalledWith('Paywall', { source: 'density' });
+    expect(r.queryByText(/^Density \(/)).toBeNull();
+  });
+});
+
 describe('free template and routine caps', () => {
   beforeEach(async () => {
     jest.clearAllMocks();

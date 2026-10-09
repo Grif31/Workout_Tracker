@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LIVE_WORKOUT_NOTIF_KEY, REST_ALERTS_KEY } from '../constants/storageKeys';
 import { useAuth } from '../context/AuthContext';
+import { usePurchase } from '../context/PurchaseContext';
 import { apiFetch, isNetworkError } from '../utils/api';
 import { toLocalDateStr } from '../utils/date';
 import { useTheme } from '../context/ThemeContext';
@@ -63,6 +64,8 @@ import {
 } from './workout/types';
 import WorkoutHeader from './workout/WorkoutHeader';
 import ExerciseBlock from './workout/ExerciseBlock';
+import SwapExerciseModal from './workout/SwapExerciseModal';
+import NextTargetModal, { targetFor } from './workout/NextTargetModal';
 import DraggableList from './DraggableList';
 import { animateNextRowChange } from '../utils/layoutAnimation';
 import ExerciseReorderRow, { EXERCISE_REORDER_ROW_HEIGHT } from './workout/ExerciseReorderRow';
@@ -131,6 +134,7 @@ type Props = {
 
 export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onCancel, onViewExerciseHistory }: Props) {
   const { user } = useAuth();
+  const { isPremium } = usePurchase();
   const uid = user?.id;
   const restTimerKey       = `${REST_TIMER_KEY}_${uid}`;
   const autoRestKey        = `${AUTO_REST_KEY}_${uid}`;
@@ -289,6 +293,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const [exerciseModalVisible, setExerciseModalVisible] = useState(false);
   const [newExerciseFormVisible, setNewExerciseFormVisible] = useState(false);
   const [replacingExIndex, setReplacingExIndex] = useState<number | null>(null);
+  // The exercise whose alternatives are showing (Premium's swap list)
+  const [swapExIndex, setSwapExIndex] = useState<number | null>(null);
+  // The exercise whose next-session target is showing (Premium)
+  const [targetExIndex, setTargetExIndex] = useState<number | null>(null);
 
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -297,7 +305,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   // one animation — the Modal has to stay mounted a beat longer than
   // "closed" so the close animation has something to play against.
   const [openMenuIdx, setOpenMenuIdx] = useState<number | null>(null);
-  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+  // top is just under the 3-dot button and anchorY the button's own y; the menu's real top is worked out at render, once its height is known
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number; anchorY: number }>({ top: 0, right: 0, anchorY: 0 });
+  const [menuHeight, setMenuHeight] = useState(0);
   const [menuRendered, setMenuRendered] = useState(false);
   // Which exercise the menu belongs to, for rendering — mirrors openMenuIdx
   // but holds its last value through the close animation, since openMenuIdx
@@ -1127,9 +1137,20 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const onOpenExerciseMenu = useCallback((exIndex: number, e: any) => {
     const { pageX, pageY } = e.nativeEvent;
     const screenWidth = Dimensions.get('window').width;
-    setMenuPosition({ top: pageY + 12, right: screenWidth - pageX - 4 });
+    setMenuPosition({ top: pageY + 12, right: screenWidth - pageX - 4, anchorY: pageY });
     toggleExMenu(exIndex);
   }, [toggleExMenu]);
+
+  // The menu opens under its button; near the bottom of the screen that would
+  // cut it off, so it opens above the button instead, or as high as it needs to
+  // be when there is no room above either.
+  const exMenuTop = (() => {
+    const edge = spacing.sm;
+    const lowest = Dimensions.get('window').height - insets.bottom - edge - menuHeight;
+    if (menuPosition.top <= lowest) return menuPosition.top;
+    const above = menuPosition.anchorY - 12 - menuHeight;
+    return above >= insets.top + edge ? above : Math.max(insets.top + edge, lowest);
+  })();
 
   useEffect(() => {
     let alive = true;
@@ -1240,6 +1261,14 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     queueAfterMenuDismiss(() => setExerciseModalVisible(true));
   };
 
+  const startSwapExercise = (exIndex: number) => {
+    queueAfterMenuDismiss(() => setSwapExIndex(exIndex));
+  };
+
+  const showNextTarget = (exIndex: number) => {
+    queueAfterMenuDismiss(() => setTargetExIndex(exIndex));
+  };
+
   // Turn last-session sets into editable set state for this exercise's logging mode
   const prevSetsToEditable = (ex: { exercise_type?: string; equipment?: string }, sets: any[]): WorkoutSet[] =>
     sets.map((s: any) => isDuration(ex)
@@ -1281,7 +1310,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     return merged;
   };
 
-  const addExToWorkout = async (exercise: { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string; bodyweight_load_factor?: number | null }) => {
+  const addExToWorkout = async (
+    exercise: { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string; bodyweight_load_factor?: number | null },
+    replaceAt: number | null = replacingExIndex,
+  ) => {
     const initialSet: WorkoutSet = makeInitialSet(exercise);
 
     const fresh = (uid: string): ExerciseEntry => ({
@@ -1290,8 +1322,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       bodyweight_load_factor: exercise.bodyweight_load_factor, sets: [initialSet],
     });
 
-    if (replacingExIndex !== null) {
-      const targetIdx = replacingExIndex;
+    if (replaceAt !== null) {
+      const targetIdx = replaceAt;
       const target = exercisesRef.current[targetIdx];
       setReplacingExIndex(null);
       setExerciseModalVisible(false);
@@ -1647,12 +1679,26 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         onClose={() => { setExerciseModalVisible(false); setReplacingExIndex(null); }}
         exercises={exerciseList}
         recentExercises={recentExercises}
-        onSelect={addExToWorkout}
+        onSelect={ex => addExToWorkout(ex)}
         onAddExercise={addNewExercise}
         muscleGroups={muscleGroups}
         // Single-select when replacing an exercise; multi-select when adding new ones.
         multiSelect={replacingExIndex === null}
         addedIds={exercises.map(e => e.exercise_template_id)}
+      />
+      <NextTargetModal
+        exercise={targetExIndex !== null ? exercises[targetExIndex] ?? null : null}
+        weightUnit={weightUnit}
+        onClose={() => setTargetExIndex(null)}
+      />
+      <SwapExerciseModal
+        exercise={swapExIndex !== null ? exercises[swapExIndex] ?? null : null}
+        onClose={() => setSwapExIndex(null)}
+        onPick={candidate => {
+          const at = swapExIndex;
+          setSwapExIndex(null);
+          if (at !== null) addExToWorkout(candidate, at);
+        }}
       />
       <NewExerciseForm
         visible={newExerciseFormVisible}
@@ -1847,7 +1893,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             style={[
               styles.exMenu,
               {
-                top: menuPosition.top,
+                top: exMenuTop,
                 right: menuPosition.right,
                 backgroundColor: colors.background,
                 borderColor: colors.border,
@@ -1879,6 +1925,25 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
               <Ionicons name="swap-horizontal-outline" size={15} color={colors.textPrimary} />
               <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>Replace Exercise</Text>
             </TouchableOpacity>
+            {isPremium && exercises[renderedMenuIdx]?.exercise_type !== 'cardio' && !isDuration(exercises[renderedMenuIdx])
+              && targetFor(exercises[renderedMenuIdx]?.previousSets, weightUnit) && (
+              <>
+                <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
+                <TouchableOpacity style={styles.exMenuItem} onPress={() => showNextTarget(renderedMenuIdx!)}>
+                  <Ionicons name="trending-up-outline" size={15} color={colors.textPrimary} />
+                  <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>Today's Target</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {isPremium && !!exercises[renderedMenuIdx]?.exercise_template_id && exercises[renderedMenuIdx].exercise_type !== 'cardio' && (
+              <>
+                <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
+                <TouchableOpacity style={styles.exMenuItem} onPress={() => startSwapExercise(renderedMenuIdx!)}>
+                  <Ionicons name="git-compare-outline" size={15} color={colors.textPrimary} />
+                  <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>Alternatives</Text>
+                </TouchableOpacity>
+              </>
+            )}
             <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
             <TouchableOpacity
               style={[styles.exMenuItem, renderedMenuIdx === 0 && { opacity: 0.35 }]}

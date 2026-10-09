@@ -38,7 +38,7 @@ export type WorkoutSet = {
   intensity?: string;
 };
 
-export type PreviousSet = { reps: string; weight: string; set_type: string; cardio_duration?: string };
+export type PreviousSet = { reps: string; weight: string; set_type: string; cardio_duration?: string; rpe?: string };
 
 export type ExerciseEntry = {
   uid: string;

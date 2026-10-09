@@ -519,19 +519,19 @@ Check off items as you complete them.
   - [x] Zone label (Below target / On track / High / Overreaching) per muscle
   - [x] Free teaser row → Paywall
 
-- [ ] **Muscle training frequency** (premium)
+- [x] **Muscle training frequency** (premium) (built 2026-10-08, see §21 Phase 3)
   > 2×/week per muscle group is optimal for hypertrophy — 1× produces roughly half the gains.
   - [ ] Add `session_count` per muscle group to `GET /api/stats/muscle-volume` (`db.func.count(db.distinct(Workout.id))`)
   - [ ] Show sessions column alongside set count in muscle volume card
   - [ ] Highlight orange if frequency = 1 session this week, green if ≥ 2
 
-- [ ] **4-week muscle volume trend** (premium)
+- [x] **4-week muscle volume trend** (premium) (built 2026-10-08)
   > Consistent volume progression over weeks is the primary hypertrophy driver.
   - [ ] Extend `GET /api/stats/muscle-volume` with `?history=4w` param — return 4-element array of weekly set counts per muscle
   - [ ] Show trend arrow next to each muscle row: ↑ trending up / → stable / ↓ trending down
   - [ ] Arrow color: green for up, textSecondary for stable, orange for down
 
-- [ ] **Weekly volume vs last week — fatigue monitor** (premium)
+- [x] **Weekly volume vs last week — fatigue monitor** (premium) (built 2026-10-08)
   > Volume spikes >15–20% week-over-week are a leading cause of overuse injury.
   - [ ] `GET /api/stats/muscle-volume` already returns `last_week_total` — use it
   - [ ] Show a banner below the muscle card: green "On track ↑8%", yellow "High jump ↑24% — consider recovery", red "⚠️ Potential detraining — 40% of last week"
@@ -541,7 +541,7 @@ Check off items as you complete them.
 
 ### Training Split & Balance
 
-- [ ] **Push / Pull / Legs split balance** (premium)
+- [x] **Push / Pull / Legs split balance** (premium) (built 2026-10-08)
   > Pull:Push ratio should be ≥ 1:1, ideally 1.5:1 to prevent shoulder imbalances.
   - [ ] Pure frontend calculation — group `muscle_sets` from existing endpoint into:
     - Push: Chest + Shoulders + Triceps
@@ -555,13 +555,13 @@ Check off items as you complete them.
 
 ### Strength Progression
 
-- [ ] **PR velocity — strength gain rate** (premium)
+- [x] **PR velocity — strength gain rate** (premium) (built 2026-10-08)
   > Beginners gain 5–10%/month, intermediate 2–5%, advanced <2%. A plateau (<1% over 8 weeks) signals need for program change or deload.
   - [ ] Backend: add `GET /api/stats/pr-velocity` — for each exercise with ≥ 2 PR snapshots over 12 weeks, compute slope of estimated_1rm over time (lbs/month) using linear regression on `PersonalRecord` or existing `exercise_stats` history
   - [ ] Frontend: show "Progress Rate" stat on `ExerciseDetailScreen` stats tab (+X lbs/month)
   - [ ] Color: green if gaining, yellow if plateau (<1%/month for 8 weeks), gray if insufficient data
 
-- [ ] **Workout density — volume per minute** (premium)
+- [x] **Workout density — volume per minute** (premium) (built 2026-10-08)
   > Increasing density (same volume, shorter time) is a form of progressive overload and a proxy for training efficiency.
   - [ ] Backend: extend `GET /api/stats/progress` buckets to include `density` field (total volume ÷ total duration in minutes; skip workouts with no duration)
   - [ ] Frontend: add "Density" as a 4th metric option in the chart metric selector (alongside Volume / Sets / Workouts)
@@ -800,12 +800,12 @@ Check off items as you complete them.
   - [ ] Rounds suggested weights to the user's plate increment (`weightDelta`, already used for the −/+ keyboard buttons)
   - [ ] One-tap "Add warm-ups" action, editable/removable like any other set afterward
 
-- [ ] **Exercise substitution for flagged injuries** (`CoachProfileModal.tsx` injuries field + `ai_routes.py`)
+- [x] **Exercise substitution for flagged injuries** (built 2026-10-08) (`CoachProfileModal.tsx` injuries field + `ai_routes.py`)
   - [ ] `GET /api/exercises/<id>/alternatives` — same primary `muscle_group`, different equipment, excluding exercises that hit the user's flagged injury area (reuse the injury list already collected in the coach profile)
   - [ ] Surface a "Swap exercise" option in `ExerciseBlock`'s 3-dot menu that opens a small picker of alternatives instead of the full exercise library
   - [ ] AI coach already asks about injuries — use the same data here instead of collecting it twice
 
-- [ ] **Plateau / deload nudge** (depends on §10 "PR velocity" being built first)
+- [x] **Plateau / deload nudge** (built 2026-10-08, advice only) (depends on §10 "PR velocity" being built first)
   - [ ] When `GET /api/stats/pr-velocity` reports a plateau (<1%/month over 8 weeks) for a lift the user trains regularly, show a one-time dismissible card on `CoachScreen`: "Bench Press has plateaued — consider a deload week"
   - [ ] Tapping it could pre-fill an AI-generated deload routine via the existing `POST /api/ai/generate` flow (lower volume/intensity for a week)
 
@@ -1171,7 +1171,7 @@ Built 2026-10-08 (tests pass; verified on an iPhone 13 dev build). Deviations fr
 - [ ] **Upsell at the moment it's relevant**, each at most once per event and never mid-workout:
   - [x] After a PR on a ranked lift, the workout summary links to where it ranks (the POST flags `scored` PRs)
   - [x] Weekly Summary: locked parts of "Coach's Read" (built with the weekly coach review below)
-  - [ ] Muscle chart: a muscle sitting below MEV for 2+ weeks gets a "why" link. Needs the multi-week volume data from Phase 3's 4-week trend
+  - [x] Muscle chart: a muscle sitting below MEV for 2+ weeks gets a "why" link (free accounts, `MuscleInsightsCard`)
   - [x] Template and routine headers show "3 of 5 free" before the cap is hit
 - [x] **Premium welcome.** After purchase, a short screen listing what just unlocked with a button to each, instead of a toast
 
@@ -1179,15 +1179,28 @@ Built 2026-10-08 (tests pass; verified on an iPhone 13 dev build). Deviations fr
 
 ### Phase 3 — Reasons to stay subscribed
 > Features that produce something new every week from data the app already has. Most are already specced; this is the order to build them in.
-- [ ] **Next-session targets (progressive overload).** For each exercise in today's workout, suggest reps x weight from the last sessions and RPE ("Last: 8 x 185 @ RPE 7. Try 8 x 190"). It shows up inside every workout, so it is the strongest reason to stay. New; needs a design pass
+- [x] **Next-session targets (progressive overload).** Built 2026-10-08 as rules, no AI: `utils/overloadTarget.ts` reads last session's working sets (`previousSets`, now carrying RPE from `/api/stats/exercise/last-session`) and "Today's Target" in the exercise's 3-dot menu opens a sheet with last session ("8 x 185 lbs @ 7"), the target ("8 x 190 lbs") and a one-line reason. Hold at RPE 9+, add a rep to the weakest set if the sets fell off, add one plate step when every set matched. Premium only, nothing for free accounts (no upsell mid-workout). Not yet seen on a device
 - [x] **Weekly coach review** in Weekly Summary: what went well, what lagged, one change for next week (built 2026-10-08: `POST /api/ai/weekly-review`, `components/WeeklyReviewCard.tsx`). Premium reads all three parts, free the first. Generated by a button (it narrows into a pulsing star while writing), once per week, cached on the device. It reads the summary week exactly (`week_start` + `as_of` in `_build_insights_context`), so any week can be reviewed. Not yet seen on a device
-- [ ] **PR velocity + plateau / deload nudge** (§10 "PR velocity", §14 "Plateau / deload nudge")
-- [ ] **Fatigue monitor: volume vs last week** (§10)
-- [ ] **Muscle training frequency + 4-week volume trend** (§10)
-- [ ] **Push / Pull / Legs balance** (§10)
-- [ ] **Exercise substitution for flagged injuries** (§14)
-- [ ] Workout density metric (§10), lowest priority
-- [ ] Decide for each whether free users get a teaser (Phase 2 pattern) or nothing
+- [x] **PR velocity + plateau / deload nudge** (§10, §14). Built 2026-10-08: `GET /api/stats/pr-velocity` (`utils/pr_velocity.py`), "Progress rate" card on Exercise Detail (locked for free), dismissible `PlateauNudge` on the Coach tab (premium, back after 28 days). The nudge is advice only: the AI deload routine from §14 is not wired
+- [x] **Fatigue monitor: volume vs last week** (§10). Built 2026-10-08 in `MuscleInsightsCard`, comparing with last week up to the same weekday
+- [x] **Muscle training frequency + 4-week volume trend** (§10). Built 2026-10-08 on the muscle volume card rows
+- [x] **Push / Pull / Legs balance** (§10). Built 2026-10-08 in `MuscleInsightsCard`
+- [x] **Exercise substitution for flagged injuries** (§14). Built 2026-10-08: `GET /api/exercises/<id>/alternatives`, "Alternatives" in the workout exercise menu (premium). Injury rules are name based (`utils/exercise_alternatives.py`), so a custom exercise with an unhelpful name can slip through
+- [x] Workout density metric (§10). Built 2026-10-08: `density` on progress buckets and a Density chart tab (locked for free)
+- [x] Decide for each whether free users get a teaser (Phase 2 pattern) or nothing: see the build plan below
+
+**Build plan (written 2026-10-08).** Five batches, in this order. Each ships with backend and frontend tests, and nothing is paywalled inside a workout (the Phase 2 rule), so the two in-workout features show nothing to free accounts.
+
+- **Batch A, muscle chart upgrades** (Coach > Progress, one extension of `GET /api/stats/muscle-volume`, no migration): per-muscle `session_count` this week and `weekly_history` (the 4 weeks before it, oldest first), plus `last_week_to_date_total` (last week's sets up to the same weekday, because this week is partial and comparing it with a full last week would read as detraining every Monday).
+  - Muscle training frequency: a sessions count on each row, orange at 1, green at 2 or more.
+  - 4-week trend: an arrow per muscle (up / flat / down vs the average of the 4 weeks, within 15% is flat).
+  - Fatigue monitor: a banner comparing this week with last week at the same point, using this TODO's thresholds (yellow above +20%, red above +35%, red below 40% of last week). Quiet until the user has 2 workouts this week.
+  - Push / Pull / Legs balance: a stacked bar and a pull:push ratio badge, pure frontend from `muscle_sets`.
+  - Free: sees the card as today plus one locked "Trends and balance" row (`muscle_volume` paywall source), and a muscle under its MEV in each of the last 2 weeks gets a "why" link to it. That finishes the held Phase 2 upsell.
+- **Batch B, workout density**: `density` (volume per minute) on `GET /api/stats/progress` buckets, and a 4th metric in the Progress chart selector. Locked option for free accounts.
+- **Batch C, PR velocity and plateau nudge**: `GET /api/stats/pr-velocity` (best estimated 1RM per session over 12 weeks, linear regression, lbs or kg a month, plateau under 1% a month over 8 weeks with 4+ sessions). "Progress Rate" on Exercise Detail; a dismissible plateau card on Coach with a deload suggestion, shown again after 4 weeks. Free sees a greyed rate with a lock, like the per-lift rank.
+- **Batch D, next-session targets**: rule-based, no AI, so it is instant and works offline. `utils/overloadTarget.ts` (pure): double progression off the last session's working sets, hit the top of the rep range at RPE 8 or below then add the plate increment, otherwise ask for one more rep, hold at RPE 9.5 or above. Opened from "Today's Target" in the exercise menu in WorkoutLog ("Last: 8 x 185 @ RPE 7. Try 8 x 190"). Premium only, nothing for free accounts. Kept out of `WorkoutLog.tsx` where possible (hook plus `ExerciseBlock`).
+- **Batch E, injury-aware substitution**: `GET /api/exercises/<id>/alternatives` (same primary muscle, different equipment, minus exercises that load the flagged injury areas), "Swap exercise" in `ExerciseBlock`'s menu opening a picker. Premium only, hidden for free accounts. Needs a map from the coach profile's injury options to the muscles and movements they exclude.
 
 ### Phase 4 — Enforce it and protect the cost
 - [ ] **Server-side premium** (§5 "Server-side premium enforcement"): `User.is_premium`, RevenueCat webhook, replace the hardcoded `is_pro = True`. Until this ships, anyone calling the API directly gets every premium field
@@ -1205,7 +1218,7 @@ Built 2026-10-08 (tests pass; verified on an iPhone 13 dev build). Deviations fr
 - [ ] A purchase, a restore, a failure and an expiry each behave correctly on a real device with a sandbox account
 - [ ] Every paywall entry point shows a pitch for the thing that was tapped
 - [ ] A free user can see their own Strength Score tier and one real insight without paying
-- [ ] At least two Phase 3 features give a subscriber something new each week
+- [x] At least two Phase 3 features give a subscriber something new each week (weekly review, fatigue monitor, trends, balance, progress rate)
 - [ ] Paywall views and conversions are measured per source
 
 ---

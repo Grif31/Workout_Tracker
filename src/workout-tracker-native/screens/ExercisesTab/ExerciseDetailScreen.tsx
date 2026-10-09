@@ -28,6 +28,7 @@ import { fmtPaceValue } from '../../utils/cardioFormat';
 import { parseApiDate } from '../../utils/date';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import { SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
+import ProgressRateCard from '../../components/ProgressRateCard';
 import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModal';
 import SegmentedControl from '../../components/SegmentedControl';
 import { usePurchase } from '../../context/PurchaseContext';
@@ -895,6 +896,15 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           </TouchableOpacity>
         );
       })()}
+
+      {!isCardio && !!exerciseId && (
+        <ProgressRateCard
+          exerciseId={exerciseId}
+          weightUnit={weightUnit}
+          isPremium={isPremium}
+          onUnlock={() => (navigation as any).navigate('Paywall', { source: 'pr_velocity' })}
+        />
+      )}
 
       {renderStats()}
 
