@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LIVE_WORKOUT_NOTIF_KEY } from '../constants/storageKeys';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { postLiveWorkoutNotification, cancelLiveWorkoutNotification } from '../utils/notifications';
+import { endLiveActivity, isLiveActivityActive } from '../utils/liveActivity';
+import { currentExerciseName } from '../utils/liveActivityProps';
 import { onPendingCountChange, initPendingCount, flushQueue, announceFlushResult } from '../utils/offlineQueue';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
@@ -112,12 +114,12 @@ function MiniWorkoutBar() {
         if (workoutOpenRef.current) return;
         const liveOff = await AsyncStorage.getItem(LIVE_WORKOUT_NOTIF_KEY);
         if (liveOff === 'false') return;
+        // The Live Activity is already on the lock screen; the notification is its fallback
+        if (isLiveActivityActive()) return;
         const done = session.exercises.flatMap(e => e.sets).filter(s => s.done).length;
         const total = session.exercises.flatMap(e => e.sets).length;
         const secs = sessionElapsedSeconds(session);
-        const currentExercise = (
-          session.exercises.find(e => e.sets.some(s => !s.done)) ?? session.exercises[session.exercises.length - 1]
-        )?.name;
+        const currentExercise = currentExerciseName(session.exercises);
         postLiveWorkoutNotification({
           workoutName: session.workoutName || 'Workout',
           elapsed: fmtElapsed(secs),
@@ -137,9 +139,7 @@ function MiniWorkoutBar() {
   const setsDone = session.exercises.flatMap(e => e.sets).filter(s => s.done).length;
   const setsTotal = session.exercises.flatMap(e => e.sets).length;
   const progressPct = setsTotal > 0 ? Math.min(100, (setsDone / setsTotal) * 100) : 0;
-  const currentExercise = (
-    session.exercises.find(e => e.sets.some(s => !s.done)) ?? session.exercises[session.exercises.length - 1]
-  )?.name;
+  const currentExercise = currentExerciseName(session.exercises);
   const subParts = [fmtElapsed(elapsed), currentExercise, `${setsDone}/${setsTotal} sets`].filter(Boolean);
 
   const handleResume = () => {
@@ -183,7 +183,7 @@ function MiniWorkoutBar() {
               'Your logged sets will be lost.',
               [
                 { text: 'Cancel', style: 'cancel' },
-                { text: 'Discard', style: 'destructive', onPress: clearSession },
+                { text: 'Discard', style: 'destructive', onPress: () => { endLiveActivity(); clearSession(); } },
               ]
             );
           }}

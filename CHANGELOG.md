@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### New: Live workout on your lock screen (iPhone)
+- While you train, your lock screen shows your workout: the timer, your current exercise, how many sets you've done, and your next set with its reps and weight.
+- A progress bar fills as you check off sets.
+- Resting shows a countdown, and the timers keep running while your phone is locked.
+- Minimize a workout and it stays on your lock screen. Tap it to jump back in. It goes away when you save or discard.
+- On iPhones with a Dynamic Island, the timer and your rest countdown show there too.
+- Turn it off with Live Workout on Lock Screen in Settings. If Live Activities are off for Aretē in iOS settings, you get the live workout notification as before.
+
 ## 1.1.9 (2026-10-07)
 
 ### New: Home screen widgets

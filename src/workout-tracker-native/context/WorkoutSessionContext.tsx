@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { cancelLiveWorkoutNotification } from '../utils/notifications';
+import { endLiveActivity } from '../utils/liveActivity';
 import { WORKOUT_BACKUP_KEY, TIMER_CHECKPOINT_KEY } from '../components/workout/types';
 
 export type SessionSet = {
@@ -90,12 +91,18 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
       // instead of it silently waiting until WorkoutLog next mounts.
       try {
         const [[, backupRaw], [, cpRaw]] = await AsyncStorage.multiGet([WORKOUT_BACKUP_KEY, TIMER_CHECKPOINT_KEY]);
-        if (!backupRaw) return;
+        if (!backupRaw) {
+          // Cold launch with no workout to resume: a Live Activity still up from
+          // a killed app (or a save that never reached its cleanup) has no owner
+          endLiveActivity();
+          return;
+        }
         const backup = JSON.parse(backupRaw);
         const exercises = backup.exercises ?? [];
         if (exercises.length === 0 && !backup.workoutName) {
           // Nothing worth resurrecting
           await AsyncStorage.multiRemove([WORKOUT_BACKUP_KEY, TIMER_CHECKPOINT_KEY]);
+          endLiveActivity();
           return;
         }
         let baseElapsed = 0;

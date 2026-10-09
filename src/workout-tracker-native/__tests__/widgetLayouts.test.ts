@@ -164,6 +164,43 @@ describe.each([
   });
 });
 
+// A Live Activity layout returns a region per presentation (banner, Dynamic
+// Island) instead of one view, but runs under the same rule as a widget.
+describe('widgets/WorkoutLiveActivity.tsx', () => {
+  const src = compileLayout('widgets/WorkoutLiveActivity.tsx');
+  const base = { name: 'Push Day', exercise: 'Bench Press', sets: '3/12 sets', progress: 0.25, setLine: 'Next set  ·  3 of 4', next: '8 × 185 lbs', startedAt: 1000, accent: '#fff' };
+  const states = {
+    working: base,
+    paused: { ...base, pausedAt: 5000 },
+    resting: { ...base, restEndsAt: 9000 },
+    restPaused: { ...base, restPausedLeft: 42 },
+    withLogo: { ...base, logo: 'file:///g/dark.png' },
+    nothingLeft: { name: 'Push Day', exercise: 'Bench Press', sets: '12/12 sets', progress: 1, startedAt: 1000, accent: '#fff' },
+  };
+
+  it.each(Object.entries(states))('%s: uses only what the widget runtime has', (_, props) => {
+    for (const [colorScheme, isStale] of [['dark', false], ['light', true]] as const) {
+      const { used, tree } = render(src, props, { colorScheme, isStale });
+      const regions = tree as unknown as Record<string, unknown>;
+      expect(Object.keys(regions)).toEqual(expect.arrayContaining(['banner', 'compactLeading', 'compactTrailing', 'minimal', 'expandedBottom']));
+      const unknown = [...used].filter(n => !COMPONENTS.has(n) && !MODIFIERS.has(n) && !JSX.has(n));
+      expect(unknown).toEqual([]);
+      const elements = new Set<string>();
+      (function walk(n: any) {
+        if (Array.isArray(n)) return n.forEach(walk);
+        if (!n || typeof n !== 'object') return;
+        if (n.type) elements.add(n.type);
+        walk(n.props?.children);
+      })(Object.values(regions));
+      expect([...elements].filter(e => !COMPONENTS.has(e))).toEqual([]);
+    }
+  });
+
+  it('what iOS receives has no values a property list refuses', () => {
+    for (const props of Object.values(states)) iosProps(props);
+  });
+});
+
 describe('widgets/UpNextWidget.tsx with its muscle diagram', () => {
   const src = compileLayout('widgets/UpNextWidget.tsx');
   const images: WidgetImages = {

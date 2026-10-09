@@ -402,11 +402,11 @@ export default function SettingsScreen({ navigation }: Props) {
         <View style={styles.row}>
           <View style={styles.rowLeft}>
             <Ionicons name="fitness-outline" size={20} color={colors.textSecondary} />
-            <Text style={styles.rowLabel}>Live Workout Notification</Text>
+            <Text style={styles.rowLabel}>{Platform.OS === 'ios' ? 'Live Workout on Lock Screen' : 'Live Workout Notification'}</Text>
           </View>
           <Switch
             value={liveNotifOn}
-            accessibilityLabel="Live workout notification"
+            accessibilityLabel={Platform.OS === 'ios' ? 'Live workout on lock screen' : 'Live workout notification'}
             onValueChange={async (v) => {
               if (v && !(await ensurePermission())) return;
               setLiveNotifOn(v);

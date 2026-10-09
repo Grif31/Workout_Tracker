@@ -34,6 +34,8 @@ import { useWorkoutSession, sessionElapsedSeconds } from '../context/WorkoutSess
 import { PR_GOLD } from '../constants/prColors';
 import { nearPrHint } from '../utils/prFormat';
 import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../utils/templatePrefill';
+import { endLiveActivity, isLiveActivityActive, startOrUpdateLiveActivity } from '../utils/liveActivity';
+import { currentExerciseName, liveActivityProps, nextSetLines, type LiveRest } from '../utils/liveActivityProps';
 
 import {
   REST_TIMER_KEY,
@@ -218,6 +220,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const [restRemaining, setRestRemaining] = useState(90);
   const [restTotal, setRestTotal] = useState(90);
   const restRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Bumped whenever the rest timer's finish time changes without restActive or
+  // restPaused flipping (restart, adjust), so the Live Activity gets the new time
+  const [liveTick, setLiveTick] = useState(0);
 
   const [autoStartRest, setAutoStartRest] = useState(false);
   const [vibrateOnComplete, setVibrateOnComplete] = useState(true);
@@ -557,6 +562,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     setRestActive(true);
     setRestPaused(false);
     restEndsAtRef.current = Date.now() + duration * 1000;
+    setLiveTick(t => t + 1);
     _runRestInterval();
     const alertsOff = await AsyncStorage.getItem(REST_ALERTS_KEY);
     if (alertsOff !== 'false') scheduleRestTimerAlert(duration);
@@ -574,6 +580,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const resumeRest = async () => {
     setRestPaused(false);
     restEndsAtRef.current = Date.now() + restRemaining * 1000;
+    setLiveTick(t => t + 1);
     _runRestInterval();
     const alertsOff = await AsyncStorage.getItem(REST_ALERTS_KEY);
     if (alertsOff !== 'false') scheduleRestTimerAlert(restRemaining);
@@ -585,6 +592,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     // Keep the ring's denominator in sync when time is added past the original
     // total, so progress never exceeds the full circle
     if (next > restTotal) setRestTotal(next);
+    setLiveTick(t => t + 1);
     // Re-schedule the OS alert to the adjusted finish time (paused timers have
     // no alert scheduled; resumeRest handles them)
     if (!restPaused) {
@@ -629,11 +637,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
         const liveOff = await AsyncStorage.getItem(LIVE_WORKOUT_NOTIF_KEY);
         if (liveOff === 'false') return;
+        // The Live Activity is already on the lock screen; the notification is its fallback
+        if (isLiveActivityActive()) return;
         const setsDone = exercises.flatMap(e => e.sets).filter(s => s.done).length;
         const setsTotal = exercises.flatMap(e => e.sets).length;
-        const currentExercise = (
-          exercises.find(e => e.sets.some(s => !s.done)) ?? exercises[exercises.length - 1]
-        )?.name;
+        const currentExercise = currentExerciseName(exercises);
         postLiveWorkoutNotification({
           workoutName: workoutName || 'Workout',
           elapsed: fmtElapsed(elapsedSecs),
@@ -659,6 +667,47 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     return () => sub.remove();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercises, workoutName, editMode]);
+
+  // iOS Live Activity: the lock screen / Dynamic Island copy of this workout.
+  // Pushed when what it shows changes (not on every keystroke in a set), since
+  // its timers tick natively from the timestamps sent here.
+  const keepLiveActivityRef = useRef(false);
+  const allSets = exercises.flatMap(e => e.sets);
+  const liveTarget = nextSetLines(exercises, weightUnit);
+  const liveKey = `${workoutName}|${currentExerciseName(exercises) ?? ''}|${allSets.filter(s => s.done).length}/${allSets.length}|${liveTarget?.setLine ?? ''}|${liveTarget?.next ?? ''}`;
+  useEffect(() => {
+    if (editMode) return;
+    if (exercises.length === 0) { endLiveActivity(); return; }
+    let cancelled = false;
+    (async () => {
+      if ((await AsyncStorage.getItem(LIVE_WORKOUT_NOTIF_KEY)) === 'false') { endLiveActivity(); return; }
+      if (cancelled) return;
+      const rest: LiveRest = !restActive ? null
+        : restPaused ? { pausedLeft: restRemaining }
+        : restEndsAtRef.current != null ? { endsAt: restEndsAtRef.current } : null;
+      startOrUpdateLiveActivity(liveActivityProps({
+        workoutName,
+        exercises,
+        elapsedSeconds: timerPausedRef.current
+          ? baseRef.current
+          : baseRef.current + Math.floor((Date.now() - startRef.current.getTime()) / 1000),
+        timerPaused: timerPausedRef.current,
+        rest,
+        accent: colors.accent,
+        weightUnit,
+        now: Date.now(),
+      }));
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveKey, timerPaused, restActive, restPaused, liveTick, editMode]);
+
+  // Leaving without minimizing (save and discard end it themselves) must not
+  // strand an activity for a workout that no longer exists. An edit never owns it.
+  useEffect(() => () => {
+    if (!editMode && !keepLiveActivityRef.current) endLiveActivity();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const showPRBanner = useCallback((exerciseName: string, prType: string) => {
     if (prTimerRef.current) clearTimeout(prTimerRef.current);
@@ -1390,6 +1439,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       if (!online) {
         await enqueueWorkout(payload);
         cancelLiveWorkoutNotification();
+        endLiveActivity();
         clearSession();
         AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
         AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
@@ -1417,6 +1467,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       // an old one is edited, and clearing here deleted it.
       if (!isEditing) {
         cancelLiveWorkoutNotification();
+        endLiveActivity();
         clearSession();
         AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
         AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
@@ -1511,6 +1562,20 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   const minimizeWorkout = () => {
     const paused = timerPausedRef.current;
+    // The minimized session carries no rest timer, so the activity drops its
+    // countdown here and stays up for the mini bar to resume.
+    if (!editMode) {
+      keepLiveActivityRef.current = true;
+      if (exercises.length > 0) {
+        startOrUpdateLiveActivity(liveActivityProps({
+          workoutName, exercises,
+          elapsedSeconds: paused
+            ? baseRef.current
+            : baseRef.current + Math.floor((Date.now() - startRef.current.getTime()) / 1000),
+          timerPaused: paused, rest: null, accent: colors.accent, weightUnit, now: Date.now(),
+        }));
+      }
+    }
     saveSession({
       workoutName,
       notes,
@@ -1722,6 +1787,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                     onPress: () => {
                       // See _doSubmitInner: an edit must not clear a minimized live workout
                       if (!editMode) {
+                        endLiveActivity();
                         clearSession();
                         AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
                         AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
@@ -1777,6 +1843,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         )}
         {renderedMenuIdx !== null && (
           <Animated.View
+            onLayout={e => setMenuHeight(e.nativeEvent.layout.height)}
             style={[
               styles.exMenu,
               {

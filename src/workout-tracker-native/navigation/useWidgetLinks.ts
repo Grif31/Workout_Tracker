@@ -49,6 +49,12 @@ function open(url: string | null) {
   if (!route || !navigationRef.isReady()) return;
   if ('start' in route) {
     startRoutineDay(route.start.routineId, route.start.dayIndex);
+  } else if ('resumeWorkout' in route) {
+    // Same as the mini bar's Resume. Already on the log means the tap came
+    // from the lock screen with the workout open: navigating again would reset its params.
+    if (navigationRef.getCurrentRoute()?.name !== 'WorkoutLog') {
+      navigationRef.navigate('DashboardTab', { screen: 'WorkoutLog', params: {}, initial: false });
+    }
   } else if (route.tab === 'ProfileTab') {
     navigationRef.navigate('ProfileTab', { screen: route.screen, initial: false });
   } else {
