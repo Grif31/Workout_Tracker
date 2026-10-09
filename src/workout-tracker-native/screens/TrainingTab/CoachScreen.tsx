@@ -69,25 +69,20 @@ type WeeklySummaryPreview = {
   distance_km?: number;
   weight_unit: string;
 };
-type WorkoutTemplate = { id: number; name: string; exercises: Exercise[]; programming_json?: string | null };
+type WorkoutTemplate = { id: number; name: string; exercises: Exercise[]; programming_json?: string | null; starter?: boolean };
 type RoutineDay = {
   id: number; day_order: number; label: string;
   workout_template: { id: number; name: string; exercises: Exercise[] };
 };
-type Routine = { id: number; name: string; description?: string; day_count: number };
+type Routine = { id: number; name: string; description?: string; day_count: number; starter?: boolean };
 type ActiveRoutine = { id: number; name: string; days: RoutineDay[] };
 type Insight = { type: string; title: string; body: string; priority: 'high' | 'medium' | 'low' };
 type InsightsCache = { insights: Insight[]; fetchedAt: string };
 
-// Per user: `${FREE_INSIGHT_KEY}_${userId}`. A free account gets one set of
-// insights a week and reads the first of them; this is that set and when it
-// was fetched.
-const FREE_INSIGHT_KEY = 'coach_free_insight';
-const FREE_INSIGHT_DAYS = 7;
-// How many a free account can keep; the paywall's wording states the same numbers (utils/paywall.ts)
+// How many a free account can keep; the paywall's wording states the same numbers (utils/paywall.ts).
+// What onboarding generated (`starter`) is not counted.
 const FREE_TEMPLATE_LIMIT = 5;
 const FREE_ROUTINE_LIMIT = 2;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 
 
@@ -278,7 +273,6 @@ export default function CoachScreen({ navigation }: Props) {
   const [insights, setInsights] = useState<Insight[]>([]);
   const [insightsFetchedAt, setInsightsFetchedAt] = useState<string | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
-  const [freeInsight, setFreeInsight] = useState<InsightsCache | null>(null);
   // AI generate muscle picker
   const [aiMusclePickerVisible, setAiMusclePickerVisible] = useState(false);
   const [aiSelectedMuscles, setAiSelectedMuscles] = useState<string[]>([]);
@@ -318,21 +312,11 @@ export default function CoachScreen({ navigation }: Props) {
     });
   }, []);
 
-  useEffect(() => {
-    if (isPremium || !user?.id) return;
-    AsyncStorage.getItem(`${FREE_INSIGHT_KEY}_${user.id}`).then(raw => {
-      if (!raw) return;
-      try {
-        const cache: InsightsCache = JSON.parse(raw);
-        if (cache.insights?.length) setFreeInsight(cache);
-      } catch { }
-    });
-  }, [isPremium, user?.id]);
-
-  // Days until a free account can ask for insights again; 0 when it can now
-  const freeInsightWaitDays = freeInsight
-    ? Math.max(0, Math.ceil((new Date(freeInsight.fetchedAt).getTime() + FREE_INSIGHT_DAYS * DAY_MS - Date.now()) / DAY_MS))
-    : 0;
+  // The caps count what the user made, not the program onboarding generated for them
+  const ownTemplateCount = templates.filter(t => !t.starter).length;
+  const ownRoutineCount = routines.filter(r => !r.starter).length;
+  const templatesAtLimit = !isPremium && ownTemplateCount >= FREE_TEMPLATE_LIMIT;
+  const routinesAtLimit = !isPremium && ownRoutineCount >= FREE_ROUTINE_LIMIT;
 
   const updateWeeklyGoal = (delta: number) => {
     const next = Math.max(1, Math.min(7, weeklyGoal + delta));
@@ -560,14 +544,6 @@ export default function CoachScreen({ navigation }: Props) {
       const data = await res.json();
       if (!res.ok) { Alert.alert("Couldn't Load Insights", data.message || 'Try again in a moment.'); return; }
       const fetchedAt = data.generated_at || new Date().toISOString();
-      if (!isPremium) {
-        const cache: InsightsCache = { insights: data.insights ?? [], fetchedAt };
-        setFreeInsight(cache.insights.length ? cache : null);
-        if (cache.insights.length && user?.id) {
-          await AsyncStorage.setItem(`${FREE_INSIGHT_KEY}_${user.id}`, JSON.stringify(cache));
-        }
-        return;
-      }
       setInsights(data.insights ?? []);
       setInsightsFetchedAt(fetchedAt);
       await AsyncStorage.setItem(COACH_INSIGHTS_KEY, JSON.stringify({ insights: data.insights, fetchedAt }));
@@ -978,16 +954,16 @@ export default function CoachScreen({ navigation }: Props) {
           <View style={styles.sectionHeaderRow}>
             <SectionRule label="Templates" style={{ flex: 1, marginBottom: 0 }} />
             {!isPremium && (
-              <Text style={styles.freeLimitText}>{Math.min(templates.length, FREE_TEMPLATE_LIMIT)} of {FREE_TEMPLATE_LIMIT} free</Text>
+              <Text style={styles.freeLimitText}>{Math.min(ownTemplateCount, FREE_TEMPLATE_LIMIT)} of {FREE_TEMPLATE_LIMIT} free</Text>
             )}
             <TouchableOpacity
-              onPress={!isPremium && templates.length >= FREE_TEMPLATE_LIMIT
+              onPress={templatesAtLimit
                 ? () => (navigation as any).navigate('Paywall', { source: 'templates' })
                 : createTemplate
               }
               style={styles.newTemplateBtn}
             >
-              <Ionicons name={!isPremium && templates.length >= FREE_TEMPLATE_LIMIT ? 'lock-closed-outline' : 'add'} size={16} color={colors.save} />
+              <Ionicons name={templatesAtLimit ? 'lock-closed-outline' : 'add'} size={16} color={colors.save} />
               <Text style={styles.newTemplateBtnText}>New</Text>
             </TouchableOpacity>
           </View>
@@ -1025,16 +1001,16 @@ export default function CoachScreen({ navigation }: Props) {
           <View style={[styles.sectionHeaderRow, { marginTop: spacing.md }]}>
             <SectionRule label="Routines" style={{ flex: 1, marginBottom: 0 }} />
             {!isPremium && (
-              <Text style={styles.freeLimitText}>{Math.min(routines.length, FREE_ROUTINE_LIMIT)} of {FREE_ROUTINE_LIMIT} free</Text>
+              <Text style={styles.freeLimitText}>{Math.min(ownRoutineCount, FREE_ROUTINE_LIMIT)} of {FREE_ROUTINE_LIMIT} free</Text>
             )}
             <TouchableOpacity
-              onPress={!isPremium && routines.length >= FREE_ROUTINE_LIMIT
+              onPress={routinesAtLimit
                 ? () => (navigation as any).navigate('Paywall', { source: 'routines' })
                 : () => navigation.navigate('CreateRoutine')
               }
               style={styles.newTemplateBtn}
             >
-              <Ionicons name={!isPremium && routines.length >= FREE_ROUTINE_LIMIT ? 'lock-closed-outline' : 'add'} size={16} color={colors.save} />
+              <Ionicons name={routinesAtLimit ? 'lock-closed-outline' : 'add'} size={16} color={colors.save} />
               <Text style={styles.newTemplateBtnText}>New</Text>
             </TouchableOpacity>
           </View>
@@ -1186,52 +1162,13 @@ export default function CoachScreen({ navigation }: Props) {
                   )
               ) : (
                 <>
-                  {/* A free account reads one real insight a week; the rest stay locked */}
-                  {freeInsight && renderInsightCard(freeInsight.insights[0], 0)}
-                  {freeInsight && freeInsight.insights.length > 1 && (
-                    <TouchableOpacity
-                      style={[styles.insightCard, styles.moreInsightsRow]}
-                      onPress={() => (navigation as any).navigate('Paywall', { source: 'ai_coach' })}
-                      accessibilityRole="button"
-                    >
-                      <View style={styles.insightIconWrap}>
-                        <Ionicons name="lock-closed" size={18} color={colors.textSecondary} />
-                      </View>
-                      <Text style={styles.moreInsightsText}>
-                        {freeInsight.insights.length - 1} more insight{freeInsight.insights.length - 1 === 1 ? '' : 's'} this week
-                      </Text>
-                      <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
-                    </TouchableOpacity>
-                  )}
-                  {freeInsight && freeInsightWaitDays > 0 && (
-                    <Text style={styles.insightsUpdated}>
-                      Next free insight in {freeInsightWaitDays} day{freeInsightWaitDays === 1 ? '' : 's'}
+                  {/* A free account reads one insight a week, in the Weekly Summary's review */}
+                  <View style={styles.insightsEmpty}>
+                    <Ionicons name="lock-closed-outline" size={32} color={colors.textSecondary} />
+                    <Text style={styles.insightsEmptyText}>
+                      Insights are part of Premium. Your free weekly read is in the Weekly Summary.
                     </Text>
-                  )}
-                  {freeInsightWaitDays === 0 && (
-                    <View style={styles.insightsEmpty}>
-                      <Ionicons name="sparkles-outline" size={32} color={colors.textSecondary} />
-                      <Text style={styles.insightsEmptyText}>
-                        One free insight a week, based on your recent training.
-                      </Text>
-                      <TouchableOpacity
-                        style={[styles.generateInsightsBtn, { backgroundColor: colors.accent }, insightsLoading && { opacity: 0.6 }]}
-                        onPress={fetchInsights}
-                        disabled={insightsLoading}
-                      >
-                        {insightsLoading ? (
-                          <ActivityIndicator size="small" color={colors.accentText} />
-                        ) : (
-                          <>
-                            <Ionicons name="sparkles" size={16} color={colors.accentText} />
-                            <Text style={[styles.generateInsightsBtnText, { color: colors.accentText }]}>
-                              Get This Week's Insight
-                            </Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  )}
+                  </View>
                   <TouchableOpacity
                     style={styles.upgradeBanner}
                     onPress={() => (navigation as any).navigate('Paywall', { source: 'ai_coach' })}
@@ -1239,7 +1176,7 @@ export default function CoachScreen({ navigation }: Props) {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.upgradeBannerTitle}>Unlock AI Coach</Text>
                       <Text style={styles.upgradeBannerSub}>
-                        Every insight, refreshed whenever you want, plus programs built for you.
+                        Insights whenever you want them, the full weekly review, plus programs built for you.
                       </Text>
                     </View>
                     <View style={styles.upgradeBannerCTA}>

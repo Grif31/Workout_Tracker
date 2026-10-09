@@ -3,6 +3,7 @@ Tests for AI generation routes:
   POST /api/ai/generate  — returns a 200 preview, persists nothing
   POST /api/ai/save      — persists a previewed routine/template, returns 201
   POST /api/ai/insights  — returns AI coaching insights, persists nothing
+  POST /api/ai/weekly-review — returns the three-part weekly review, persists nothing
 """
 import sys
 import json
@@ -912,3 +913,176 @@ class TestMrvFlags:
 
     def test_past_mrv_is_a_deload_candidate(self):
         assert 'OVER MRV' in self._lines(21)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/ai/weekly-review
+# ---------------------------------------------------------------------------
+
+def _review_part(title='Three workouts logged', body='You logged 3 workouts.', exercise=None):
+    return {'title': title, 'body': body, 'evidence': {
+        'exercise': exercise, 'metric': None, 'before': None, 'after': None, 'window_days': None}}
+
+
+REVIEW_JSON = {
+    'went_well': _review_part('Three Workouts Logged', 'You logged 3 workouts.'),
+    'lagged': _review_part('Back Volume Was Low', 'Back had 4 sets.'),
+    'next_change': _review_part('Add Two Back Sets', 'Add 2 rows to your next pull day.'),
+}
+
+
+class TestAiWeeklyReview:
+
+    def _post(self, client, token, response_json=None, body=None):
+        mock_ant = _make_anthropic_mock(REVIEW_JSON if response_json is None else response_json)
+        with patch.dict(sys.modules, {'anthropic': mock_ant}):
+            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+                res = client.post('/api/ai/weekly-review', json=body or {}, headers=auth_headers(token))
+        return res, mock_ant
+
+    def test_requires_auth(self, client):
+        assert client.post('/api/ai/weekly-review', json={}).status_code == 401
+
+    def test_returns_503_when_no_api_key(self, client, auth_token):
+        os.environ.pop('ANTHROPIC_API_KEY', None)
+        res = client.post('/api/ai/weekly-review', json={}, headers=auth_headers(auth_token))
+        assert res.status_code == 503
+
+    def test_returns_the_three_parts(self, client, auth_token):
+        res, _ = self._post(client, auth_token)
+        assert res.status_code == 200
+        data = res.get_json()
+        assert set(data['review']) == {'went_well', 'lagged', 'next_change'}
+        assert data['review']['went_well'] == {'title': 'Three Workouts Logged', 'body': 'You logged 3 workouts.'}
+        assert 'generated_at' in data
+
+    def test_asks_for_the_review_schema_and_prompt(self, client, auth_token):
+        _, mock_ant = self._post(client, auth_token)
+        kwargs = mock_ant.Anthropic.return_value.messages.create.call_args[1]
+        assert set(kwargs['output_config']['format']['schema']['properties']) == {'went_well', 'lagged', 'next_change'}
+        assert 'went_well' in kwargs['messages'][0]['content']
+        assert 'haiku' in kwargs['model']
+
+    def test_drops_a_part_citing_a_lift_the_coach_never_saw(self, client, auth_token):
+        made_up = {**REVIEW_JSON, 'lagged': _review_part('Zercher Stalled', 'No change.', exercise='Zercher Squat')}
+        res, _ = self._post(client, auth_token, response_json=made_up)
+        assert set(res.get_json()['review']) == {'went_well', 'next_change'}
+
+    def test_brand_copy_cleans_dashes_and_exclamations(self, client, auth_token):
+        noisy = {**REVIEW_JSON, 'went_well': _review_part('Great Week!', 'Solid week — keep going!')}
+        res, _ = self._post(client, auth_token, response_json=noisy)
+        part = res.get_json()['review']['went_well']
+        assert part['title'] == 'Great Week'
+        assert '—' not in part['body'] and '!' not in part['body']
+
+    def test_works_with_no_workout_history_and_persists_nothing(self, client, auth_token):
+        res, _ = self._post(client, auth_token)
+        assert res.status_code == 200
+        assert client.get('/api/workouts', headers=auth_headers(auth_token)).get_json() == []
+
+    def test_insight_prompt_is_unchanged_without_review(self):
+        from routes.ai_routes import _build_insights_prompt
+        ctx = {'name': 'A', 'now': __import__('datetime').datetime(2026, 10, 7)}
+        assert 'actionable insights' in _build_insights_prompt(ctx)
+        assert 'went_well' in _build_insights_prompt(ctx, review=True)
+        assert 'actionable insights' not in _build_insights_prompt(ctx, review=True)
+
+
+class TestStarterFlag:
+    """What onboarding saves is marked, so the free caps can skip it."""
+
+    DAYS = [{'label': 'Push', 'exercise_ids': []}, {'label': 'Pull', 'exercise_ids': []}]
+
+    def _save(self, client, token, **extra):
+        return client.post('/api/ai/save', json={'type': 'routine', 'name': 'R', 'days': self.DAYS, **extra},
+                           headers=auth_headers(token))
+
+    def test_starter_routine_and_its_templates_are_flagged(self, client, auth_token):
+        assert self._save(client, auth_token, starter=True).status_code == 201
+        routines = client.get('/api/routines', headers=auth_headers(auth_token)).get_json()
+        templates = client.get('/api/workout-templates', headers=auth_headers(auth_token)).get_json()
+        assert [r['starter'] for r in routines] == [True]
+        assert [t['starter'] for t in templates] == [True, True]
+
+    def test_default_is_not_a_starter(self, client, auth_token):
+        self._save(client, auth_token)
+        routines = client.get('/api/routines', headers=auth_headers(auth_token)).get_json()
+        templates = client.get('/api/workout-templates', headers=auth_headers(auth_token)).get_json()
+        assert [r['starter'] for r in routines] == [False]
+        assert [t['starter'] for t in templates] == [False, False]
+
+    def test_a_single_template_save_is_not_a_starter(self, client, auth_token):
+        client.post('/api/ai/save', json={'type': 'template', 'name': 'T'}, headers=auth_headers(auth_token))
+        templates = client.get('/api/workout-templates', headers=auth_headers(auth_token)).get_json()
+        assert templates[0]['starter'] is False
+
+
+class TestWeeklyReviewWeek:
+    """With week_start the review reads that Monday-Sunday week and nothing after it."""
+
+    @staticmethod
+    def _monday(weeks_ago):
+        from datetime import date, timedelta
+        today = date.today()
+        return today - timedelta(days=today.weekday()) - timedelta(weeks=weeks_ago)
+
+    def _post(self, client, token, body):
+        mock_ant = _make_anthropic_mock(REVIEW_JSON)
+        with patch.dict(sys.modules, {'anthropic': mock_ant}):
+            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+                res = client.post('/api/ai/weekly-review', json=body, headers=auth_headers(token))
+        return res, mock_ant
+
+    def test_context_stops_at_the_end_of_the_week(self, app, registered_user):
+        from datetime import datetime, timedelta
+        from models import db, Workout
+        from routes.ai_routes import _build_insights_context
+        uid = registered_user['user']['id']
+        monday = datetime.combine(self._monday(2), datetime.min.time())
+        in_week = monday + timedelta(days=2, hours=9)
+        db.session.add_all([
+            Workout(user_id=uid, name='In week', date=in_week),
+            Workout(user_id=uid, name='After', date=monday + timedelta(days=9)),
+        ])
+        db.session.commit()
+
+        anchored = _build_insights_context(uid, as_of=monday + timedelta(days=7))
+        assert anchored['last_workout'] == in_week
+        assert anchored['avg_workouts_per_week'] == 0.2  # 1 workout over 4 weeks, rounded
+        live = _build_insights_context(uid)
+        assert live['last_workout'] == monday + timedelta(days=9)
+        assert live['avg_workouts_per_week'] == 0.5
+
+    def test_prompt_names_the_week_and_not_today(self):
+        from datetime import datetime
+        from routes.ai_routes import _build_insights_prompt
+        ctx = {'name': 'A', 'now': datetime(2026, 10, 5), 'as_of': datetime(2026, 10, 5), 'today_weekday': 'Monday'}
+        prompt = _build_insights_prompt(ctx, review=True)
+        assert 'Week reviewed: September 28 to October 04' in prompt
+        assert 'Today:' not in prompt
+
+    def test_passes_the_week_through_to_the_prompt(self, client, auth_token):
+        monday = self._monday(2)
+        res, mock_ant = self._post(client, auth_token, {'week_start': monday.isoformat()})
+        assert res.status_code == 200
+        prompt = mock_ant.Anthropic.return_value.messages.create.call_args[1]['messages'][0]['content']
+        assert 'Week reviewed:' in prompt and 'Today:' not in prompt
+
+    def test_without_a_week_it_reads_the_last_seven_days(self, client, auth_token):
+        _, mock_ant = self._post(client, auth_token, {})
+        prompt = mock_ant.Anthropic.return_value.messages.create.call_args[1]['messages'][0]['content']
+        assert 'Today:' in prompt and 'Week reviewed:' not in prompt
+
+    def test_rejects_a_week_that_does_not_start_on_a_monday(self, client, auth_token):
+        from datetime import timedelta
+        res, mock_ant = self._post(client, auth_token, {'week_start': (self._monday(2) + timedelta(days=1)).isoformat()})
+        assert res.status_code == 400
+        mock_ant.Anthropic.assert_not_called()
+
+    def test_rejects_a_week_that_has_not_started(self, client, auth_token):
+        res, _ = self._post(client, auth_token, {'week_start': self._monday(-2).isoformat()})
+        assert res.status_code == 400
+
+    def test_rejects_a_malformed_date(self, client, auth_token):
+        res, _ = self._post(client, auth_token, {'week_start': 'last week'})
+        assert res.status_code == 400

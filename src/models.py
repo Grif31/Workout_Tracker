@@ -188,6 +188,8 @@ class WorkoutTemplate(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     name = db.Column(db.String(250), nullable=False)
     programming_json = db.Column(db.Text, nullable=True)
+    # Made by onboarding's generated routine: free accounts' template cap skips it
+    starter = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
 
     exercises = db.relationship(
         "ExerciseTemplate",
@@ -196,7 +198,7 @@ class WorkoutTemplate(db.Model):
     )
 
     def to_dict(self, include_exercises=False):
-        data = {"id": self.id, "user_id": self.user_id, "name": self.name, "programming_json": self.programming_json}
+        data = {"id": self.id, "user_id": self.user_id, "name": self.name, "programming_json": self.programming_json, "starter": self.starter}
         if include_exercises:
             ordered = (
                 db.session.query(ExerciseTemplate)
@@ -238,6 +240,8 @@ class Routine(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     name = db.Column(db.String(250), nullable=False)
     description = db.Column(db.Text, nullable=True)
+    # Made by onboarding: free accounts' routine cap skips it
+    starter = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     days = db.relationship(
         "RoutineDay",
         backref="routine",
@@ -251,6 +255,7 @@ class Routine(db.Model):
             "name": self.name,
             "description": self.description,
             "day_count": len(self.days),
+            "starter": self.starter,
         }
         if include_days:
             data["days"] = [d.to_dict() for d in self.days]

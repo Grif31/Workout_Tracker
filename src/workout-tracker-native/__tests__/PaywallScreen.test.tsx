@@ -112,6 +112,14 @@ describe('PaywallScreen', () => {
       expect(labels).toHaveLength(5);
     });
 
+    it('pitches the weekly review when that is what was tapped', () => {
+      const { getByText, getAllByText } = renderPaywall('weekly_review');
+      expect(getByText('The full weekly review is part of Premium')).toBeTruthy();
+      const labels = getAllByText(/^(AI Coach|Training insights|Strength Score|Endurance Score|Muscle volume zones)$/)
+        .map(n => n.props.children);
+      expect(labels[0]).toBe('Training insights');
+    });
+
     it('says which free limit was reached for templates and routines', () => {
       expect(renderPaywall('templates').getByText("You've used your 5 free templates")).toBeTruthy();
       expect(renderPaywall('routines').getByText("You've used your 2 free routines")).toBeTruthy();

@@ -5,7 +5,7 @@ export type PaywallFeature = { key: string; icon: string; label: string; detail:
 
 const ALL_FEATURES: PaywallFeature[] = [
   { key: 'ai_coach', icon: 'sparkles', label: 'AI Coach', detail: 'Workouts and full programs built for your goal, schedule and equipment' },
-  { key: 'insights', icon: 'bulb-outline', label: 'Training insights', detail: 'What to push, what to ease off, and what you have been skipping' },
+  { key: 'insights', icon: 'bulb-outline', label: 'Training insights', detail: 'What to push, what to ease off, plus a full weekly review: what went well, what lagged, and one change to make' },
   { key: 'strength_score', icon: 'trophy-outline', label: 'Strength Score', detail: 'A breakdown of where your lifts rank based on your bodyweight, see which are the strongest and weakest' },
   { key: 'endurance_score', icon: 'speedometer-outline', label: 'Endurance Score', detail: 'How your pace ranks from 400 m to the marathon' },
   { key: 'muscle_volume', icon: 'bar-chart-outline', label: 'Muscle volume zones', detail: 'Whether each muscle gets enough weekly work to grow, or too much to recover from' },
@@ -17,6 +17,7 @@ const ALL_FEATURES: PaywallFeature[] = [
 // asking for and the headline that answers it
 const SOURCES: Record<string, { feature: string; title: string; subtitle: string }> = {
   ai_coach: { feature: 'ai_coach', title: 'AI Coach is part of Premium', subtitle: 'Programs built around you, in seconds' },
+  weekly_review: { feature: 'insights', title: 'The full weekly review is part of Premium', subtitle: 'What went well, what lagged, and one change for next week' },
   strength_score: { feature: 'strength_score', title: 'Strength Score is part of Premium', subtitle: 'See how your lifts rank and what to work on next' },
   endurance_score: { feature: 'endurance_score', title: 'Endurance Score is part of Premium', subtitle: 'See how your pace ranks at every distance' },
   muscle_volume: { feature: 'muscle_volume', title: 'Volume zones are part of Premium', subtitle: 'See which muscles need more work and which need rest' },

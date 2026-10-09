@@ -10,7 +10,7 @@ from models import (
     User, Exercise, Set, Workout, PersonalRecord, ExerciseMuscleMapping,
     BodyweightLog, PREvent,
 )
-from schemas import AiGenerateSchema, AiInsightsSchema, AiSaveSchema
+from schemas import AiGenerateSchema, AiInsightsSchema, AiSaveSchema, AiWeeklyReviewSchema
 from utils.validation import validate_body
 from utils.local_date import user_today
 from utils.lift_progress import compute_most_improved_lift
@@ -116,6 +116,26 @@ INSIGHT_SCHEMA = {
     'additionalProperties': False,
 }
 
+_EVIDENCE_SCHEMA = INSIGHT_SCHEMA['properties']['insights']['items']['properties']['evidence']
+_REVIEW_SECTION_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'title': {'type': 'string'},
+        'body': {'type': 'string'},
+        'evidence': _EVIDENCE_SCHEMA,
+    },
+    'required': ['title', 'body', 'evidence'],
+    'additionalProperties': False,
+}
+# The app lays these out in this order (JSON object keys come back sorted); the first is the one a free account reads
+REVIEW_SECTIONS = ('went_well', 'lagged', 'next_change')
+REVIEW_SCHEMA = {
+    'type': 'object',
+    'properties': {key: _REVIEW_SECTION_SCHEMA for key in REVIEW_SECTIONS},
+    'required': list(REVIEW_SECTIONS),
+    'additionalProperties': False,
+}
+
 PRIORITY_ORDER = {'high': 0, 'medium': 1, 'low': 2}
 MAX_INSIGHTS = 5
 
@@ -131,9 +151,8 @@ def _fact_matches(fact, evidence, tolerance=0.5):
     return True
 
 
-def _verify_insights(insights, ctx):
-    """Drops insights citing an exercise or numbers the Coach was never given,
-    then keeps one per insight type, highest priority first."""
+def _known_subjects(ctx):
+    """Lowercased exercise and muscle names the Coach was actually given."""
     facts = ctx.get('recent_pr_facts', [])
     known = {f['exercise'].lower() for f in facts}
     known |= {r['exercise_name'].lower() for r in ctx.get('stalled_lifts', [])}
@@ -147,20 +166,34 @@ def _verify_insights(insights, ctx):
         entry = ctx.get(key)
         if entry:
             known.add(entry['exercise_name'].lower())
+    return known
 
+
+def _is_grounded(insight, ctx, known):
+    """False when the insight is empty, names a subject the Coach never saw, or
+    claims before/after numbers no PR fact for that exercise backs."""
+    if not insight.get('title') or not insight.get('body'):
+        return False
+    evidence = insight.get('evidence') or {}
+    exercise = (evidence.get('exercise') or '').strip()
+    if not exercise:
+        return True
+    if exercise.lower() not in known:
+        return False
+    facts = ctx.get('recent_pr_facts', [])
+    exercise_facts = [f for f in facts if f['exercise'].lower() == exercise.lower()]
+    claims_numbers = evidence.get('before') is not None or evidence.get('after') is not None
+    return not (exercise_facts and claims_numbers and not any(_fact_matches(f, evidence) for f in exercise_facts))
+
+
+def _verify_insights(insights, ctx):
+    """Drops insights citing an exercise or numbers the Coach was never given,
+    then keeps one per insight type, highest priority first."""
+    known = _known_subjects(ctx)
     kept, seen_types = [], set()
     for insight in insights:
-        if not insight.get('title') or not insight.get('body'):
+        if not _is_grounded(insight, ctx, known):
             continue
-        evidence = insight.get('evidence') or {}
-        exercise = (evidence.get('exercise') or '').strip()
-        if exercise:
-            if exercise.lower() not in known:
-                continue
-            exercise_facts = [f for f in facts if f['exercise'].lower() == exercise.lower()]
-            claims_numbers = evidence.get('before') is not None or evidence.get('after') is not None
-            if exercise_facts and claims_numbers and not any(_fact_matches(f, evidence) for f in exercise_facts):
-                continue
         insight_type = insight.get('type')
         if insight_type:
             if insight_type in seen_types:
@@ -232,6 +265,7 @@ ai_bp = Blueprint('ai_bp', __name__)
 
 _ai_generate_schema = AiGenerateSchema()
 _ai_insights_schema = AiInsightsSchema()
+_ai_weekly_review_schema = AiWeeklyReviewSchema()
 
 # Weekly set landmarks (Renaissance Periodization). The app's
 # constants/volumeLandmarks.ts holds the same numbers plus MAV for its zone
@@ -286,7 +320,7 @@ def _avoid_directive(avoid: list[str]) -> str:
 ROTATION_RESTART_DAYS = 14
 
 
-def _routine_rotation_context(user_id: int, routine_id: int) -> dict | None:
+def _routine_rotation_context(user_id: int, routine_id: int, as_of: datetime | None = None) -> dict | None:
     """Where the user sits in their active routine's day rotation.
 
     RoutineDay has no weekday field, so day_order is a rotation (e.g.
@@ -301,6 +335,8 @@ def _routine_rotation_context(user_id: int, routine_id: int) -> dict | None:
     Same algorithm as routineRotation in the app's utils/routineRotation.ts, so
     the Coach and Home always agree on the next day. Returns None with no
     active routine or no history to match against yet.
+
+    as_of places the rotation at the end of a past week (a review of that week).
     """
     days = (
         RoutineDay.query
@@ -315,6 +351,7 @@ def _routine_rotation_context(user_id: int, routine_id: int) -> dict | None:
     recent = (
         db.session.query(Workout.id, Workout.name, Workout.date)
         .filter(Workout.user_id == user_id)
+        .filter(Workout.date < (as_of or datetime.max))
         .order_by(Workout.date.desc(), Workout.id.desc())
         .limit(100)
         .all()
@@ -340,7 +377,7 @@ def _routine_rotation_context(user_id: int, routine_id: int) -> dict | None:
                 break
         last_date = day
 
-    restarted = (user_today() - last_date).days >= ROTATION_RESTART_DAYS
+    restarted = ((as_of.date() if as_of else user_today()) - last_date).days >= ROTATION_RESTART_DAYS
     next_index = 0 if restarted else (pos + 1) % n
 
     return {
@@ -738,9 +775,13 @@ def _build_prompt(data: dict, generate_type: str, user_context: dict | None = No
     )
 
 
-def _build_insights_context(user_id: int, experience: str | None = None, goal: str | None = None, avoid: list[str] | None = None) -> dict:
+def _build_insights_context(user_id: int, experience: str | None = None, goal: str | None = None, avoid: list[str] | None = None, as_of: datetime | None = None) -> dict:
+    """as_of reads the 7 days before that moment instead of the last 7 days, so a
+    review of a finished week sees that week and nothing after it."""
     user = db.session.get(User, user_id)
-    now = datetime.now()
+    now = as_of or datetime.now()
+    # Live reads run a day past now so today's workouts always count
+    end = as_of or now + timedelta(days=1)
     week_start = now - timedelta(days=7)
     last_week_start = now - timedelta(days=14)
     not_warmup = db.or_(Set.set_type.is_(None), Set.set_type != 'W')
@@ -769,7 +810,7 @@ def _build_insights_context(user_id: int, experience: str | None = None, goal: s
         )
         return {r.muscle_group: r.cnt for r in rows}
 
-    muscle_sets_week = _muscle_sets_range(week_start, now + timedelta(days=1))
+    muscle_sets_week = _muscle_sets_range(week_start, end)
     muscle_sets_last = _muscle_sets_range(last_week_start, week_start)
 
     # Avg RPE per muscle group this week — distinct signal from the volume-based
@@ -789,7 +830,7 @@ def _build_insights_context(user_id: int, experience: str | None = None, goal: s
         .filter(
             Workout.user_id == user_id,
             Workout.date >= week_start,
-            Workout.date < now + timedelta(days=1),
+            Workout.date < end,
             ExerciseMuscleMapping.is_primary == True,
             not_warmup, not_cardio,
             Set.reps.isnot(None),
@@ -811,7 +852,7 @@ def _build_insights_context(user_id: int, experience: str | None = None, goal: s
         .filter(
             Workout.user_id == user_id,
             Workout.date >= week_start,
-            Workout.date < now + timedelta(days=1),
+            Workout.date < end,
             db.func.lower(Exercise.exercise_type) == 'cardio',
         )
         .scalar() or 0
@@ -821,7 +862,7 @@ def _build_insights_context(user_id: int, experience: str | None = None, goal: s
     four_weeks_ago = now - timedelta(days=28)
     workout_count = (
         db.session.query(db.func.count(Workout.id))
-        .filter(Workout.user_id == user_id, Workout.date >= four_weeks_ago)
+        .filter(Workout.user_id == user_id, Workout.date >= four_weeks_ago, Workout.date < end)
         .scalar() or 0
     )
     avg_workouts_per_week = workout_count / 4.0
@@ -830,7 +871,7 @@ def _build_insights_context(user_id: int, experience: str | None = None, goal: s
     top_prs = (
         db.session.query(ExerciseTemplate.name, PersonalRecord.value, PersonalRecord.achieved_at)
         .join(ExerciseTemplate, PersonalRecord.exercise_template_id == ExerciseTemplate.id)
-        .filter(PersonalRecord.user_id == user_id, PersonalRecord.pr_type == 'estimated_1rm')
+        .filter(PersonalRecord.user_id == user_id, PersonalRecord.pr_type == 'estimated_1rm', PersonalRecord.achieved_at < end)
         .order_by(PersonalRecord.value.desc())
         .limit(5)
         .all()
@@ -848,6 +889,7 @@ def _build_insights_context(user_id: int, experience: str | None = None, goal: s
         .filter(
             PersonalRecord.user_id == user_id,
             PersonalRecord.pr_type.in_(('best_time', 'best_distance')),
+            PersonalRecord.achieved_at < end,
         )
         .order_by(PersonalRecord.achieved_at.desc())
         .limit(5)
@@ -861,18 +903,18 @@ def _build_insights_context(user_id: int, experience: str | None = None, goal: s
         r = Routine.query.filter_by(id=user.active_routine_id).first()
         if r:
             active_routine = r.name
-            routine_rotation = _routine_rotation_context(user_id, user.active_routine_id)
+            routine_rotation = _routine_rotation_context(user_id, user.active_routine_id, as_of=as_of)
 
     # Most-improved lift/cardio — reuses the same helpers Weekly Summary uses
     # (not just its own PR-noticing pass over top_prs, which only carries
     # estimated_1rm PRs and no cardio PR types at all).
-    most_improved_lift = compute_most_improved_lift(user_id, week_start, now + timedelta(days=1), last_week_start)
-    most_improved_cardio = compute_most_improved_cardio(user_id, week_start, now + timedelta(days=1), last_week_start)
+    most_improved_lift = compute_most_improved_lift(user_id, week_start, end, last_week_start)
+    most_improved_cardio = compute_most_improved_cardio(user_id, week_start, end, last_week_start)
 
     # Bodyweight trend
     bw_logs = (
         BodyweightLog.query
-        .filter_by(user_id=user_id)
+        .filter(BodyweightLog.user_id == user_id, BodyweightLog.date < end)
         .order_by(BodyweightLog.date.desc())
         .limit(3)
         .all()
@@ -886,7 +928,7 @@ def _build_insights_context(user_id: int, experience: str | None = None, goal: s
 
     last_workout = (
         db.session.query(db.func.max(Workout.date))
-        .filter(Workout.user_id == user_id)
+        .filter(Workout.user_id == user_id, Workout.date < end)
         .scalar()
     )
 
@@ -894,12 +936,12 @@ def _build_insights_context(user_id: int, experience: str | None = None, goal: s
     pr_event_rows = (
         db.session.query(PREvent, ExerciseTemplate.name)
         .join(ExerciseTemplate, PREvent.exercise_template_id == ExerciseTemplate.id)
-        .filter(PREvent.user_id == user_id, PREvent.achieved_at >= now - timedelta(days=COACH_PR_WINDOW_DAYS))
+        .filter(PREvent.user_id == user_id, PREvent.achieved_at >= now - timedelta(days=COACH_PR_WINDOW_DAYS), PREvent.achieved_at < end)
         .order_by(PREvent.achieved_at.asc(), PREvent.id.asc())
         .all()
     )
     stalled_lifts = [
-        r for r in compute_days_since_last_pr(user_id, now) if r['days_since_last_pr'] >= STALL_DAYS
+        r for r in compute_days_since_last_pr(user_id, now, before=as_of) if r['days_since_last_pr'] >= STALL_DAYS
     ][:5]
 
     return {
@@ -923,6 +965,7 @@ def _build_insights_context(user_id: int, experience: str | None = None, goal: s
         'active_routine': active_routine,
         'routine_rotation': routine_rotation,
         'today_weekday': now.strftime('%A'),
+        'as_of': as_of,
         'most_improved_lift': most_improved_lift,
         'most_improved_cardio': most_improved_cardio,
         'bw_logs': bw_logs,
@@ -930,13 +973,19 @@ def _build_insights_context(user_id: int, experience: str | None = None, goal: s
     }
 
 
-def _build_insights_prompt(ctx: dict) -> str:
+def _build_insights_prompt(ctx: dict, review: bool = False) -> str:
+    """review=True asks for the three-part weekly review instead of 3-5 insights."""
     unit = ctx.get('weight_unit', 'lbs')
     name = ctx.get('name', 'Athlete')
     now = ctx.get('now') or datetime.now()
     lines = [
         f"You are an elite personal exercise scientist coaching {name}.",
-        "Analyze the training data below and return 3–5 specific, actionable insights.",
+        (
+            "Review the client's week of training from the data below as a weekly review with exactly "
+            "three parts: what went well, what lagged, and the one change to make next week."
+            if review else
+            "Analyze the training data below and return 3–5 specific, actionable insights."
+        ),
         "",
     ]
 
@@ -960,7 +1009,14 @@ def _build_insights_prompt(ctx: dict) -> str:
         days_ago = (now - last_w).days
         lines.append(f"Days since last workout: {days_ago}")
 
-    lines.append(f"Today: {ctx.get('today_weekday', '')}")
+    if ctx.get('as_of'):
+        week_end = (ctx['as_of'] - timedelta(days=1)).strftime('%B %d')
+        lines.append(
+            f"Week reviewed: {(ctx['as_of'] - timedelta(days=7)).strftime('%B %d')} to {week_end}. "
+            "Everything below is as of the end of that week."
+        )
+    else:
+        lines.append(f"Today: {ctx.get('today_weekday', '')}")
 
     if ctx.get('cardio_workouts_week'):
         lines.append(
@@ -1071,6 +1127,23 @@ def _build_insights_prompt(ctx: dict) -> str:
         delta = newest - oldest
         sign = '+' if delta >= 0 else ''
         lines.append(f"\nBodyweight trend (last {len(bw_logs)} logs): {oldest:.1f} → {newest:.1f} {unit} ({sign}{delta:.1f})")
+
+    if review:
+        lines += [
+            "",
+            "Return exactly three parts. Title: 6 words max. Body: 1-2 sentences citing numbers from the data above.",
+            "- went_well: the strongest thing from the week. If nothing improved, name what the client did "
+            "consistently, such as workouts logged or sets completed.",
+            "- lagged: the one thing that fell short or is at risk, such as a muscle below its minimum, a stalled lift, "
+            "or a missed day. If nothing lagged, name the smallest gap you can support with the data.",
+            "- next_change: one concrete change for next week: a lift to add load to, sets to add or remove, or a day to "
+            "train. It must follow from the lagged part.",
+            "Only claim improvements shown in the data above, and name exactly what changed with before and after values and units.",
+            'Fill "evidence" whenever a part cites one lift\'s numbers: "exercise" exactly as written above, '
+            '"metric", "before" and "after" as plain numbers, and "window_days". Leave those null otherwise. '
+            "Parts citing an exercise or numbers that do not appear above are discarded.",
+        ]
+        return '\n'.join(lines)
 
     lines += [
         "",
@@ -1193,6 +1266,62 @@ def get_ai_insights():
         return jsonify({'message': 'Failed to generate insights'}), 500
 
 
+@ai_bp.post('/api/ai/weekly-review')
+@jwt_required()
+@limiter.limit('5 per day', key_func=lambda: f"ai_review:{get_jwt_identity()}")
+@validate_body(_ai_weekly_review_schema)
+def get_weekly_review():
+    """What went well, what lagged and one change for next week, from the same
+    context the insights use. With week_start (the summary week's Monday) it reads
+    that week; without, the last 7 days. A part that cites a lift or numbers the Coach was
+    never given is left out, so the response can carry fewer than three."""
+    user_id = int(get_jwt_identity())
+    data = g.validated
+    week_start = data.get('week_start')
+    as_of = None
+    if week_start:
+        if week_start.weekday() != 0:
+            return jsonify({'message': 'week_start must be a Monday'}), 400
+        if week_start > user_today():
+            return jsonify({'message': 'That week has not started'}), 400
+        # A week still running is read up to now
+        as_of = min(datetime.combine(week_start, datetime.min.time()) + timedelta(days=7), datetime.now())
+    api_key = os.environ.get('ANTHROPIC_API_KEY')
+    if not api_key:
+        return jsonify({'message': 'AI service not configured'}), 503
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        ctx = _build_insights_context(
+            user_id, experience=data.get('experience'), goal=data.get('goal'), avoid=data.get('avoid'), as_of=as_of,
+        )
+        msg = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=1024,
+            system=COACH_VOICE,
+            output_config={'format': {'type': 'json_schema', 'schema': REVIEW_SCHEMA}},
+            messages=[{'role': 'user', 'content': _build_insights_prompt(ctx, review=True)}],
+        )
+        result = _parse_ai_json(msg.content[0].text)
+        known = _known_subjects(ctx)
+        review = {}
+        for key in REVIEW_SECTIONS:
+            part = result.get(key)
+            if not isinstance(part, dict) or not _is_grounded(part, ctx, known):
+                continue
+            review[key] = {'title': _brand_copy(part['title'], heading=True), 'body': _brand_copy(part['body'])}
+        return jsonify({'review': review, 'generated_at': datetime.now().isoformat()}), 200
+
+    except ImportError:
+        return jsonify({'message': 'anthropic package not installed'}), 503
+    except json.JSONDecodeError as e:
+        return jsonify({'message': f'AI returned malformed JSON: {e}'}), 500
+    except Exception:
+        current_app.logger.exception('AI weekly review generation failed')
+        return jsonify({'message': 'Failed to generate review'}), 500
+
+
 @ai_bp.post('/api/ai/save')
 @jwt_required()
 # Save is cheap per call but writes a routine, a template per day and a row
@@ -1211,6 +1340,7 @@ def save_generated_workout():
             user_id=user_id,
             name=data.get('name') or 'My Routine',
             description=data.get('description') or None,
+            starter=data['starter'],
         )
         db.session.add(routine)
         db.session.flush()
@@ -1221,6 +1351,7 @@ def save_generated_workout():
                 user_id=user_id,
                 name=day['label'],
                 programming_json=json.dumps(day_prog) if day_prog else None,
+                starter=data['starter'],
             )
             db.session.add(template)
             db.session.flush()

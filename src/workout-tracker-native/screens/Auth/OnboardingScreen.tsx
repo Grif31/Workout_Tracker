@@ -361,6 +361,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'routine',
+          starter: true,
           name: data.name,
           description: data.description || null,
           days: (data.days ?? []).map((d: any) => ({

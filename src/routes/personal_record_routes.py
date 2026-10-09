@@ -72,7 +72,7 @@ RECENT_FEED_WINDOW_DAYS = 7
 MOST_TRAINED_LIMIT = 10
 
 
-def compute_days_since_last_pr(user_id, now, per_category=False):
+def compute_days_since_last_pr(user_id, now, per_category=False, before=None):
     """Days since the last PR per exercise, longest gap first, for the user's
     10 most-trained exercises. Shared by the PR Dashboard and the AI Coach.
 
@@ -82,6 +82,8 @@ def compute_days_since_last_pr(user_id, now, per_category=False):
     overall top 10, so capping every category there left Time empty despite
     real time PRs. Every row carries most_trained, so the unfiltered view can
     stay the overall top 10. The Coach leaves it off and gets that top 10 only.
+
+    before: ignore workouts and PRs from that moment on, for a review of a past week.
     """
     trained = (
         db.session.query(
@@ -92,6 +94,7 @@ def compute_days_since_last_pr(user_id, now, per_category=False):
         .join(Workout, Exercise.workout_id == Workout.id)
         .join(ExerciseTemplate, Exercise.exercise_template_id == ExerciseTemplate.id)
         .filter(Workout.user_id == user_id, Exercise.exercise_template_id.isnot(None))
+        .filter(Workout.date < (before or datetime.max))
         .group_by(Exercise.exercise_template_id, ExerciseTemplate.name)
         .order_by(func.count(func.distinct(Exercise.workout_id)).desc())
     )
@@ -113,6 +116,7 @@ def compute_days_since_last_pr(user_id, now, per_category=False):
             PREvent.pr_type.in_(FEED_PR_TYPES),
             PREvent.exercise_template_id.in_([t for t, _, _ in trained] or [-1]),
         )
+        .filter(PREvent.achieved_at < (before or datetime.max))
         .group_by(PREvent.exercise_template_id, PREvent.pr_type, PREvent.weight_context)
         .all()
     )

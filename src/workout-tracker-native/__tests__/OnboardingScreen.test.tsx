@@ -125,6 +125,8 @@ describe('OnboardingScreen', () => {
       });
       const saved = bodyOf('/api/ai/save');
       expect(saved.name).toBe('AI Push Pull Legs');
+      // Onboarding's program doesn't count against a free account's template and routine caps
+      expect(saved.starter).toBe(true);
       expect(r.getByText('Your program is ready')).toBeTruthy();
       expect(saved.days[0].programming[0]).toMatchObject({ exercise_template_id: 3, sets: 4, reps: '8', rpe: 8 });
     });

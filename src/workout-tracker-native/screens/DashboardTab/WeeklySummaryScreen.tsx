@@ -12,6 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WEEKLY_GOAL_KEY } from '../../constants/storageKeys';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { usePurchase } from '../../context/PurchaseContext';
 import { apiFetch } from '../../utils/api';
 import { captureAndShare } from '../../utils/shareCapture';
 import { DashboardStackParamsList, WeeklySummaryData } from '../../navigation/types';
@@ -25,6 +26,7 @@ import { LaurelBranch } from '../../components/LaurelWreath';
 import StreakFlame from '../../components/StreakFlame';
 import WeeklySummaryShareCard from '../../components/share/WeeklySummaryShareCard';
 import WeekPickerModal from '../../components/WeekPickerModal';
+import WeeklyReviewCard from '../../components/WeeklyReviewCard';
 import { PR_TYPE_LABELS, PR_TYPE_ORDER } from '../../utils/prFormat';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WeeklySummary'>;
@@ -130,6 +132,7 @@ function formatPrValue(
 export default function WeeklySummaryScreen({ navigation, route }: Props) {
   const { colors, mode } = useTheme();
   const { user } = useAuth();
+  const { isPremium } = usePurchase();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -639,6 +642,14 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
                   </View>
                 </Animated.View>
               )}
+
+              <Animated.View entering={FadeInDown.delay(450).duration(400)}>
+                <WeeklyReviewCard
+                  weekStart={data.week_start}
+                  isPremium={isPremium}
+                  onUnlock={() => (navigation as any).navigate('Paywall', { source: 'weekly_review' })}
+                />
+              </Animated.View>
             </>
           )}
 

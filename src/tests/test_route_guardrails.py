@@ -30,7 +30,7 @@ PUBLIC = {
 
 # Call out to Anthropic, Apple/Google or send email; covered by their own
 # tests with those services mocked.
-EXTERNAL = {'/api/ai/generate', '/api/ai/insights', '/api/ai/save', '/api/auth/social'}
+EXTERNAL = {'/api/ai/generate', '/api/ai/insights', '/api/ai/weekly-review', '/api/ai/save', '/api/auth/social'}
 
 
 def _api_rules(app):

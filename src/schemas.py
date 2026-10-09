@@ -205,8 +205,19 @@ class AiSaveSchema(_Base):
                                validate=validate.Length(max=AI_SAVE_MAX_EXERCISES))
     programming  = fields.List(fields.Dict(), load_default=None, allow_none=True,
                                validate=validate.Length(max=AI_SAVE_MAX_EXERCISES))
+    starter      = fields.Bool(load_default=False)
 
 class AiInsightsSchema(_Base):
     experience = fields.Str(load_default=None, validate=_ai_option)
     goal       = fields.Str(load_default=None, validate=_ai_option)
     avoid      = _AvoidField(load_default=list)
+
+
+class AiWeeklyReviewSchema(AiInsightsSchema):
+    # The Monday of the Weekly Summary week being reviewed; absent = the last 7 days
+    week_start = fields.Date(load_default=None)
+
+
+class AiWeeklyReviewSchema(AiInsightsSchema):
+    # The Monday of the Weekly Summary week being reviewed; absent = the last 7 days
+    week_start = fields.Date(load_default=None)
