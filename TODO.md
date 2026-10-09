@@ -1072,10 +1072,63 @@ Built 2026-10-08 (tests pass; verified on an iPhone 13 dev build). Deviations fr
 
 **Open questions**
 - [ ] A pause whose update fails (throttled / suspended) leaves the lock screen counting. Accept or mitigate?
-- [ ] GPS cardio runs (`GPSCardioScreen`) are a separate in-progress flow with their own timer: v1 or later?
+- [x] GPS cardio runs (`GPSCardioScreen`) are a separate in-progress flow with their own timer: planned as Phase 7 below, together with minimizing a run
 - [ ] Skip edit mode and "Perform Again" prefill; confirm restored sessions follow the same check
 - [ ] Logout mid-workout: WorkoutLog may unmount without an end path, so `AuthContext` ends the activity directly (the orphan sweep is the backstop)
 - [ ] Premium gating: assumed none
+
+### Phase 7 — GPS cardio: minimize and Live Activity (planned 2026-10-08, not started)
+Resolves the GPS question in Phase 6's open questions. Two features that depend on one change: **a run can't be minimized today because `GPSCardioScreen` owns the whole run**, and its unmount cleanup (`stopBackgroundTracking`, `stopLocationWatch`, `clearTimer`) ends tracking. Leaving the screen stops the run, which a `gps_run_checkpoint_${uid}` then lets the user recover on the next visit. A Live Activity can't outlive that either, so the run's state has to move out of the screen first.
+
+**What exists:** the screen holds `trackingState` (idle/running/paused), `coords`, `distanceKm`, `elevationGainM`, the wall-clock timer (`baseElapsedRef` + `segmentStartRef`), and the location pipeline (`utils/gpsTracking.ts`: a background task when "Always" is granted, else a foreground watch + keep-awake). Per-fix logic (accuracy filter, `resumed` gap handling, climb, distance) runs inside `onLocationUpdate`'s `setCoords` updater, which calls `setDistanceKm` from inside the updater. Saving builds the POST body in `handleSave` (best efforts via `extractBestEfforts`, offline queue fallback).
+
+**Decisions (the first two confirmed 2026-10-08)**
+- [x] **One active session at a time.** A lifting workout or a GPS run, not both. Starting one while the other is open or minimized asks to finish or discard the other first. Reason: the mini bar, the Live Activity controller (`getInstances()[0]`) and the "one thing in progress" mental model all assume one; two would need a stacked bar and two activities for a rare case
+- [ ] **Back = minimize while a run is running or paused.** No confirm, the run keeps going. From idle, back just leaves. The mini bar's discard keeps the existing double confirm (`confirmDiscard`), since a route can't be re-walked
+- [x] **The mini bar gets Resume (back to the map) and Discard only**, like a lifting workout. Pause/Stop stay on the screen. Revisit if testers want a Pause on the bar
+- [ ] **Separate Live Activity layout for runs** (`createLiveActivity('GpsLiveActivity', ...)`, its own props), sharing the controller. Distance and pace can't tick natively, so JS updates them (see below)
+- [ ] Android: minimize works the same; no Live Activity (its foreground service notification already shows the run)
+
+**A. Pull the per-fix logic out (no behavior change; do first)**
+- [x] (built 2026-10-08) `utils/gpsRun.ts` (pure): a state shape `{ coords, distanceKm, elevationGainM, climb, skipNext }` and `applyFix(state, loc)` doing the accuracy filter (`MAX_ACCURACY_M`), `resumed`, `addAltitude` and `haversineKm`. No setState inside another setState's updater. Also the elapsed math (`runElapsedSeconds`) and `buildGpsRunBody` (the POST body from `handleSave`)
+- [x] Tests for it (`__tests__/gpsRun.test.ts`, 20 cases; the screen now holds one `RunState` and its 17 existing tests pass unchanged): a fix over 30 m accuracy is dropped; the first fix after a pause adds no distance and is marked `resumed`; climb only from accurate altitudes; elapsed across pause/resume; the body for each activity and unit (including `best_efforts` and the offline path's identical body)
+
+**B. Move the run into a context**
+- [ ] `context/GpsRunContext.tsx`, provided next to `WorkoutSessionProvider`: owns the state above plus the location subscription (`onGpsLocation` / `watchPositionAsync`), the checkpoint writes, and `start` / `pause` / `resume` / `stop` / `discard`. It exposes the state and `runElapsedSeconds`; consumers tick their own 1 s display interval, like `MiniWorkoutBar` does for a workout
+- [ ] `GPSCardioScreen` becomes a view of the context. Its unmount cleanup no longer stops tracking, and `cleanupOrphanedTracking()` moves to the provider's cold launch, run only when there is no run to restore
+- [ ] Keep the crash flow as is: the 10-point checkpoint, and "Review & Save" on the next visit to the screen. Nothing about recovery changes
+- [ ] The screen's saving stays in the screen (modal, name, POST, offline fallback), reading the run from the context and `buildGpsRunBody`; save and discard call the context's `finish()`, which stops tracking and clears the checkpoint
+- [ ] The foreground-only fallback (no "Always" permission) keeps its keep-awake while minimized, since the watch only runs with the screen on; say so in the docs
+- [ ] Logout and login stop an active run (`AuthContext`, like the Live Activity end points) and clear its checkpoint only for the account that owned it
+
+**C. Minimize, in the app**
+- [ ] Back button / swipe-back minimizes a run in progress
+- [ ] `MiniWorkoutBar` shows a run when one is active ("Run · 2.31 mi · 24:10", Resume, Discard), pulling the generalised "what is in progress" out so the bar has one source. The bar and the tab bar behave as for a workout (hidden while the screen is open)
+- [ ] Entry points: Dashboard's Cardio button goes to the screen when a run is already active instead of showing an idle Start; starting a lifting workout while a run is active, and a run while a workout is open or minimized, asks first
+- [ ] Update `__tests__/GPSCardioScreen.test.tsx` (19 cases) for the context, and add context and mini bar tests
+
+**D. Live Activity for runs (after A to C work on a device)**
+- [ ] Generalise `utils/liveActivity.ts` to take the activity kind (one controller, `getInstances()` per factory). `GpsLiveActivity` layout: logo tile, activity name, a native ticking elapsed timer (with `pauseTime` while paused), distance, current and average pace or speed (cycling shows speed), no sets or progress bar
+- [ ] Props builder `utils/gpsLiveActivityProps.ts` (pure, tested): distance and pace in the user's `gps_distance_unit`, reusing `fmtPaceValue`, `toDisplayDistance`, `currentPaceMinPerKm` so it matches the screen
+- [ ] **Updates are JS-driven**: push when the displayed distance changes, at most every ~5 s, and always on pause/resume. `NSSupportsLiveActivitiesFrequentUpdates` is a plugin option (`frequentUpdates`) if the system's budget throttles it on a long run. The background task delivers fixes while the screen is locked, so JS is running; verify that on a device
+- [ ] Start when the run starts (foreground), update from the context, end on save, discard, logout and the cold-launch sweep (extend the sweep to both kinds). A tap opens the screen (`WIDGET_LINKS` entry, like `workout`)
+- [ ] Fallback when no activity can run: nothing extra; the OS's own location indicator and the Android foreground service already cover the run
+
+**E. Docs and release**
+- [ ] CLAUDE.md: a "GPS run session" subsection (the context owns the run, the screen is a view, every end point, the one-at-a-time rule, why distance updates are JS-driven), and update "Workout Session Flow" in the root CLAUDE.md, which only describes lifting
+- [ ] CHANGELOG entry
+
+**Device checklist** (the part tests can't cover)
+- [ ] Start a run, minimize, walk 100 m, resume: distance and route continued, no gap counted
+- [ ] Minimize, lock the phone for 5 minutes, unlock: the run kept recording (background mode), and again with only "While Using" permission
+- [ ] Pause, minimize, resume; stop from the screen after minimizing; save online and offline from a minimized run
+- [ ] Discard from the mini bar: double confirm, tracking stops, the Live Activity goes
+- [ ] Kill the app mid-run: relaunch offers "Review & Save" as today, and no Live Activity is left behind
+- [ ] A lifting workout minimized, then a run started: the prompt appears; and the reverse
+- [ ] Log out mid-run
+- [ ] Battery and a long run (1 h+): update rate holds, memory stays flat (the thinned polyline in `displayCoords` already guards the map)
+
+**Risks:** this is the largest refactor in the app's cardio path, on a screen whose crash-recovery behavior was fixed deliberately (see the 1.1.9 note about an unsaved GPS run being discarded by accident): Phase A's pure extraction and its tests come first for that reason. Two things to prove early on a device: that background fixes keep reaching JS with the app minimized and the phone locked (they do today with the screen open), and that Live Activity updates every few seconds aren't throttled.
 
 ### Done when
 - [ ] CLAUDE.md documents the widget setup, the snapshot schema and every write point (so a new screen that changes widget data knows to write it)

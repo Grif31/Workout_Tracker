@@ -13,7 +13,6 @@ try { _MapsModule = require('react-native-maps'); } catch {}
 const MapView: React.ComponentType<any> | null = _MapsModule?.default ?? null;
 const Polyline: React.ComponentType<any> | null = _MapsModule?.Polyline ?? null;
 const MAPS_AVAILABLE = MapView !== null && Polyline !== null;
-import polylineLib from '@mapbox/polyline';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
@@ -37,43 +36,18 @@ import { typography } from '../../theme/typography';
 import { estimateCalories } from '../../utils/cardioCalories';
 import { fmtPaceValue } from '../../utils/cardioFormat';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayPace } from '../../utils/units';
-import { toLocalDateStr } from '../../utils/date';
-import { extractBestEfforts, haversineKm } from '../../utils/bestEfforts';
 import {
-  addAltitude, currentPaceMinPerKm, isCycling, speedInUnit, speedLabel,
-  MIN_PACE_DISTANCE_KM, type ClimbState,
+  currentPaceMinPerKm, isCycling, speedInUnit, speedLabel, MIN_PACE_DISTANCE_KM,
 } from '../../utils/gpsMetrics';
+import {
+  ACTIVITIES, ACTIVITY_TEMPLATE_NAME, afterGap, applyFix, buildGpsRunBody, emptyRun,
+  runElapsedSeconds, type Activity, type Coord, type RunState,
+} from '../../utils/gpsRun';
 
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'GPSCardio'>;
 
-// timestamp (epoch ms) is what the best-efforts scan reads at save time; it
-// can't be backfilled, since route_polyline encodes latitude/longitude only.
-// `resumed` marks the first fix after a pause or a crash-restore: neither
-// distance nor elapsed time accrues across that gap.
-type Coord = {
-  latitude: number;
-  longitude: number;
-  altitude: number | null;
-  timestamp: number;
-  resumed?: boolean;
-};
-
 type TrackingState = 'idle' | 'running' | 'paused';
-
-const ACTIVITIES = ['Run', 'Cycle', 'Walk', 'Hike'] as const;
-type Activity = typeof ACTIVITIES[number];
-
-// Maps a GPS activity chip to the matching global (outdoor, no-equipment)
-// cardio exercise template from the seeded library, so tracked runs/rides/
-// walks/hikes get exercise_template_id set — required for PR tracking and
-// exercise history (see _compute_and_upsert_cardio_prs in workout_routes.py).
-const ACTIVITY_TEMPLATE_NAME: Record<Activity, string> = {
-  Run: 'Running',
-  Cycle: 'Cycling',
-  Walk: 'Walking',
-  Hike: 'Hiking',
-};
 
 async function resolveCardioTemplateId(
   activity: Activity,
@@ -104,9 +78,6 @@ async function resolveCardioTemplateId(
   return null;
 }
 
-// GPS fixes worse than this add phantom distance and jagged routes — drop them
-const MAX_ACCURACY_M = 30;
-
 function fmtElapsed(totalSec: number): string {
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
@@ -134,10 +105,9 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
   const [activity, setActivity] = useState<Activity>('Run');
   const [trackingState, setTrackingState] = useState<TrackingState>('idle');
-  const [coords, setCoords] = useState<Coord[]>([]);
+  const [run, setRun] = useState<RunState>(emptyRun);
+  const { coords, distanceKm, elevationGainM } = run;
   const [elapsedSec, setElapsedSec] = useState(0);
-  const [distanceKm, setDistanceKm] = useState(0);
-  const [elevationGainM, setElevationGainM] = useState(0);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [workoutName, setWorkoutName] = useState('');
@@ -154,9 +124,6 @@ export default function GPSCardioScreen({ navigation }: Props) {
   const locationSub = useRef<Location.LocationSubscription | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mapRef = useRef<any>(null);
-  // Elevation gain runs through a hysteresis filter (see gpsMetrics.addAltitude)
-  const climbRef = useRef<ClimbState>({ anchor: null });
-  const skipNextDistanceRef = useRef(false);
   const trackingModeRef = useRef<TrackingMode | null>(null);
   const gpsUnsubRef = useRef<(() => void) | null>(null);
   // Wall-clock timer: intervals get throttled/suspended and tick-counting
@@ -182,8 +149,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
       : fmtPaceValue(toDisplayPace(currentPaceKm, distanceUnit));
 
   const computeElapsed = () =>
-    baseElapsedRef.current +
-    (segmentStartRef.current ? Math.floor((Date.now() - segmentStartRef.current.getTime()) / 1000) : 0);
+    runElapsedSeconds(baseElapsedRef.current, segmentStartRef.current?.getTime() ?? null, Date.now());
 
   const clearTimer = () => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -267,15 +233,16 @@ export default function GPSCardioScreen({ navigation }: Props) {
             text: 'Review & Save',
             onPress: () => {
               if (ACTIVITIES.includes(cp.activity)) setActivity(cp.activity);
-              setCoords(cp.coords);
-              setDistanceKm(cp.distanceKm ?? 0);
-              setElevationGainM(cp.elevationGainM ?? 0);
+              // Movement between the crash and the restore must not count
+              setRun(afterGap({
+                ...emptyRun(),
+                coords: cp.coords,
+                distanceKm: cp.distanceKm ?? 0,
+                elevationGainM: cp.elevationGainM ?? 0,
+              }));
               baseElapsedRef.current = cp.elapsedSec ?? 0;
               segmentStartRef.current = null;
               setElapsedSec(cp.elapsedSec ?? 0);
-              climbRef.current = { anchor: null };
-              // Movement between the crash and the restore must not count
-              skipNextDistanceRef.current = true;
               setTrackingState('paused');
               const last = cp.coords[cp.coords.length - 1];
               setInitialRegion({
@@ -328,35 +295,17 @@ export default function GPSCardioScreen({ navigation }: Props) {
     };
   }, []);
 
-  // Shared by start and resume subscriptions. Respects skipNextDistanceRef so
-  // the gap travelled while paused is never counted as distance.
+  // Shared by start and resume subscriptions. The run's own state decides what
+  // a fix is worth (utils/gpsRun.applyFix), including that the gap travelled
+  // while paused is never counted as distance.
   const onLocationUpdate = (loc: Location.LocationObject) => {
-    const accuracy = loc.coords.accuracy;
-    if (accuracy != null && accuracy > MAX_ACCURACY_M) return;
-    const resumed = skipNextDistanceRef.current;
-    const newCoord: Coord = {
+    setRun(prev => applyFix(prev, loc));
+    mapRef.current?.animateToRegion({
       latitude: loc.coords.latitude,
       longitude: loc.coords.longitude,
-      altitude: loc.coords.altitude ?? null,
-      timestamp: loc.timestamp,
-      ...(resumed ? { resumed: true } : {}),
-    };
-    const climbed = addAltitude(climbRef.current, newCoord.altitude, loc.coords.altitudeAccuracy ?? null);
-    if (climbed > 0) setElevationGainM(g => g + climbed);
-    setCoords(prev => {
-      if (prev.length > 0 && !resumed) {
-        setDistanceKm(d => d + haversineKm(prev[prev.length - 1], newCoord));
-      }
-      skipNextDistanceRef.current = false;
-      const updated = [...prev, newCoord];
-      mapRef.current?.animateToRegion({
-        latitude: newCoord.latitude,
-        longitude: newCoord.longitude,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      }, 500);
-      return updated;
-    });
+      latitudeDelta: 0.005,
+      longitudeDelta: 0.005,
+    }, 500);
   };
 
   const WATCH_OPTS = { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 5 };
@@ -391,7 +340,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
       return;
     }
 
-    climbRef.current = { anchor: null };
+    setRun(prev => ({ ...prev, climb: { anchor: null } }));
     await beginLocationUpdates();
     baseElapsedRef.current = 0;
     segmentStartRef.current = new Date();
@@ -407,8 +356,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
   };
 
   const handleResume = async () => {
-    climbRef.current = { anchor: null };
-    skipNextDistanceRef.current = true;
+    setRun(afterGap);
     await beginLocationUpdates();
     segmentStartRef.current = new Date();
     startTimer();
@@ -426,11 +374,8 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
   const handleDiscard = () => {
     setConfirmVisible(false);
-    setCoords([]);
+    setRun(emptyRun());
     setElapsedSec(0);
-    setDistanceKm(0);
-    setElevationGainM(0);
-    climbRef.current = { anchor: null };
     baseElapsedRef.current = 0;
     segmentStartRef.current = null;
     setTrackingState('idle');
@@ -440,47 +385,11 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
   const handleSave = async () => {
     setSaving(true);
-    const durationMin = elapsedSec / 60;
-    const encodedPolyline = coords.length >= 2
-      ? polylineLib.encode(coords.map(c => [c.latitude, c.longitude]))
-      : null;
-    // Must match displayDistance (and the saved distance_unit), not the true-km
-    // distanceKm — otherwise the saved pace silently differs from the live pace
-    // shown on screen whenever the user's unit preference is miles.
-    const avgPace = displayDistance > 0 ? durationMin / displayDistance : null;
-
-    // The whole-run bout the backend derives PRs from averages a track
-    // session's fast reps in with its recovery jogs, so scan the raw points
-    // for the genuine efforts. Timing lives only in this array: the encoded
-    // polyline drops it, so this can never be done after the fact.
-    const bestEfforts = extractBestEfforts(coords);
-
-    const now = new Date();
-    const dateStr = toLocalDateStr(now);
     const exerciseTemplateId = await resolveCardioTemplateId(activity, user?.id);
-
-    const body = {
-      workoutName: workoutName.trim() || activity,
-      date: dateStr,
-      duration: Math.round(durationMin),
-      exercises: [{
-        name: ACTIVITY_TEMPLATE_NAME[activity],
-        exercise_template_id: exerciseTemplateId,
-        exercise_type: 'cardio',
-        route_polyline: encodedPolyline,
-        ...(bestEfforts.length > 0 ? { best_efforts: bestEfforts } : {}),
-        sets: [{
-          cardio_duration: durationMin,
-          distance: displayDistance,
-          distance_unit: distanceUnit,
-          intensity: avgPace,
-          elevation_gain: elevationGainM > 0 ? Math.round(elevationGainM) : null,
-          reps: null,
-          weight: null,
-          set_type: 'N',
-        }],
-      }],
-    };
+    const body = buildGpsRunBody({
+      activity, workoutName, elapsedSec, distanceKm, distanceUnit, elevationGainM, coords,
+      exerciseTemplateId, now: new Date(),
+    });
 
     // A tracked run must never depend on one POST succeeding — queue it for
     // sync when there's no connection. CardioDetails needs a server id, so
