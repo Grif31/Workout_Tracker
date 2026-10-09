@@ -8,6 +8,7 @@ import { needsOnboarding as checkNeedsOnboarding } from '../utils/onboarding';
 import { AppTabs } from './AppTabs';
 import { AuthStackScreen } from './AuthStack';
 import { WorkoutSessionProvider } from '../context/WorkoutSessionContext';
+import { GpsRunProvider } from '../context/GpsRunContext';
 import { navigationRef } from './navigationRef';
 import { OnboardingStackParamsList, RootStackParamsList } from './types';
 import OnboardingScreen from '../screens/Auth/OnboardingScreen';
@@ -89,6 +90,7 @@ export default function RootNavigator() {
   return (
     <NavigationContainer ref={navigationRef} theme={navTheme}>
       <WorkoutSessionProvider>
+        <GpsRunProvider>
         {!user ? (
           <AuthStackScreen />
         ) : !preloaded ? (
@@ -117,6 +119,7 @@ export default function RootNavigator() {
             />
           </RootStack.Navigator>
         )}
+        </GpsRunProvider>
       </WorkoutSessionProvider>
     </NavigationContainer>
   );

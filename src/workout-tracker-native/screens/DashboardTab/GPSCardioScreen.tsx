@@ -16,18 +16,10 @@ const MAPS_AVAILABLE = MapView !== null && Polyline !== null;
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
-import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
 import { enqueueWorkout } from '../../utils/offlineQueue';
 import { getExerciseCache, setExerciseCache } from '../../utils/exerciseCache';
-import {
-  onGpsLocation,
-  startBackgroundTracking,
-  stopBackgroundTracking,
-  cleanupOrphanedTracking,
-  type TrackingMode,
-} from '../../utils/gpsTracking';
 import { showToast } from '../../utils/toast';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { DashboardStackParamsList } from '../../navigation/types';
@@ -40,14 +32,12 @@ import {
   currentPaceMinPerKm, isCycling, speedInUnit, speedLabel, MIN_PACE_DISTANCE_KM,
 } from '../../utils/gpsMetrics';
 import {
-  ACTIVITIES, ACTIVITY_TEMPLATE_NAME, afterGap, applyFix, buildGpsRunBody, emptyRun,
-  runElapsedSeconds, type Activity, type Coord, type RunState,
+  ACTIVITIES, ACTIVITY_TEMPLATE_NAME, buildGpsRunBody, runElapsedSeconds, type Activity,
 } from '../../utils/gpsRun';
+import { useGpsRun } from '../../context/GpsRunContext';
 
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'GPSCardio'>;
-
-type TrackingState = 'idle' | 'running' | 'paused';
 
 async function resolveCardioTemplateId(
   activity: Activity,
@@ -103,33 +93,39 @@ export default function GPSCardioScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const [activity, setActivity] = useState<Activity>('Run');
-  const [trackingState, setTrackingState] = useState<TrackingState>('idle');
-  const [run, setRun] = useState<RunState>(emptyRun);
+  // The run itself (location, timer, checkpoint) lives in GpsRunContext so it
+  // keeps going when this screen is left. This screen only shows and controls it.
+  const {
+    activity, setActivity, trackingState, run, timing,
+    start, pause, resume, stop, clearRun, restore, clearCheckpoint, checkpointKey,
+  } = useGpsRun();
   const { coords, distanceKm, elevationGainM } = run;
-  const [elapsedSec, setElapsedSec] = useState(0);
+  // The clock is a timestamp sum; this just re-renders each second while running
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (trackingState !== 'running') return;
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [trackingState]);
+  const elapsedSec = runElapsedSeconds(timing.base, timing.segmentStart, Date.now());
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [workoutName, setWorkoutName] = useState('');
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
   const [initialRegion, setInitialRegion] = useState<{
     latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number;
-  } | undefined>(undefined);
+  } | undefined>(() => {
+    // Reopened on a run in progress: start where it is
+    const last = coords[coords.length - 1];
+    return last ? { latitude: last.latitude, longitude: last.longitude, latitudeDelta: 0.01, longitudeDelta: 0.01 } : undefined;
+  });
   // Mounting MapView and firing off location-permission/GPS native calls
   // immediately competes with the tab bar's slide-out animation for native
   // rendering resources, cutting it short instead of letting it glide — wait
   // until the screen-transition interaction queue clears first.
   const [ready, setReady] = useState(false);
 
-  const locationSub = useRef<Location.LocationSubscription | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mapRef = useRef<any>(null);
-  const trackingModeRef = useRef<TrackingMode | null>(null);
-  const gpsUnsubRef = useRef<(() => void) | null>(null);
-  // Wall-clock timer: intervals get throttled/suspended and tick-counting
-  // undercounts — elapsed is always recomputed from real timestamps.
-  const baseElapsedRef = useRef(0);
-  const segmentStartRef = useRef<Date | null>(null);
 
   const displayDistance = toDisplayDistance(distanceKm, distanceUnit);
   // Nothing until there's enough distance: the first few meters gave paces like 99:59
@@ -148,56 +144,16 @@ export default function GPSCardioScreen({ navigation }: Props) {
       ? (60 / toDisplayPace(currentPaceKm, distanceUnit)).toFixed(1)
       : fmtPaceValue(toDisplayPace(currentPaceKm, distanceUnit));
 
-  const computeElapsed = () =>
-    runElapsedSeconds(baseElapsedRef.current, segmentStartRef.current?.getTime() ?? null, Date.now());
-
-  const clearTimer = () => {
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-  };
-
-  const startTimer = () => {
-    timerRef.current = setInterval(() => setElapsedSec(computeElapsed()), 1000);
-  };
-
-  // Folds the running segment into the base so the clock freezes correctly
-  const haltTimer = () => {
-    clearTimer();
-    baseElapsedRef.current = computeElapsed();
-    segmentStartRef.current = null;
-    setElapsedSec(baseElapsedRef.current);
-  };
-
-  const stopLocationWatch = async () => {
-    if (locationSub.current) {
-      await locationSub.current.remove();
-      locationSub.current = null;
-    }
-  };
-
-  const checkpointKey = `gps_run_checkpoint_${user?.id}`;
-
-  // Crash insurance: while running, the route is periodically checkpointed so
-  // a killed app can offer to restore the run instead of losing it.
-  const writeCheckpoint = () => {
-    AsyncStorage.setItem(checkpointKey, JSON.stringify({
-      activity,
-      coords,
-      distanceKm,
-      elevationGainM,
-      elapsedSec: computeElapsed(),
-      savedAt: Date.now(),
-    })).catch(() => {});
-  };
-
-  const clearCheckpoint = () => { AsyncStorage.removeItem(checkpointKey).catch(() => {}); };
-
-  // Background fixes arrive in batches, so the length can jump past a multiple
-  // of 10; compare against the last checkpointed length instead.
-  const checkpointedLenRef = useRef(0);
+  // Follows the run on the map as fixes arrive
   useEffect(() => {
-    if (trackingState !== 'running' || coords.length - checkpointedLenRef.current < 10) return;
-    checkpointedLenRef.current = coords.length;
-    writeCheckpoint();
+    const last = coords[coords.length - 1];
+    if (!last || trackingState !== 'running') return;
+    mapRef.current?.animateToRegion({
+      latitude: last.latitude,
+      longitude: last.longitude,
+      latitudeDelta: 0.005,
+      longitudeDelta: 0.005,
+    }, 500);
   }, [coords]);
 
   // A tracked route can't be re-walked, so deleting one always asks twice
@@ -233,17 +189,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
             text: 'Review & Save',
             onPress: () => {
               if (ACTIVITIES.includes(cp.activity)) setActivity(cp.activity);
-              // Movement between the crash and the restore must not count
-              setRun(afterGap({
-                ...emptyRun(),
-                coords: cp.coords,
-                distanceKm: cp.distanceKm ?? 0,
-                elevationGainM: cp.elevationGainM ?? 0,
-              }));
-              baseElapsedRef.current = cp.elapsedSec ?? 0;
-              segmentStartRef.current = null;
-              setElapsedSec(cp.elapsedSec ?? 0);
-              setTrackingState('paused');
+              restore(cp);
               const last = cp.coords[cp.coords.length - 1];
               setInitialRegion({
                 latitude: last.latitude, longitude: last.longitude,
@@ -260,14 +206,16 @@ export default function GPSCardioScreen({ navigation }: Props) {
     } catch {}
   };
 
+  const trackingStateRef = useRef(trackingState);
+  trackingStateRef.current = trackingState;
+
   useEffect(() => {
     // Deferred until the screen-transition interaction queue clears — see
     // the `ready` declaration above for why.
     const task = InteractionManager.runAfterInteractions(() => {
-      // The app may have been killed mid-run — stop any OS task left running,
-      // then offer to restore the checkpointed run
-      cleanupOrphanedTracking();
-      offerCheckpointRestore();
+      // A run in progress has its own checkpoint, which is not an unsaved
+      // activity to offer back; only an idle screen looks for one left by a crash
+      if (trackingStateRef.current === 'idle') offerCheckpointRestore();
       AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user?.id}`).then(v => {
         setDistanceUnit(v === 'km' ? 'km' : 'mi');
       });
@@ -285,102 +233,25 @@ export default function GPSCardioScreen({ navigation }: Props) {
       })();
       setReady(true);
     });
-    return () => {
-      task.cancel();
-      clearTimer();
-      gpsUnsubRef.current?.();
-      stopBackgroundTracking();
-      stopLocationWatch();
-      deactivateKeepAwake();
-    };
+    // Leaving the screen leaves the run going: that is minimizing it
+    return () => task.cancel();
   }, []);
 
-  // Shared by start and resume subscriptions. The run's own state decides what
-  // a fix is worth (utils/gpsRun.applyFix), including that the gap travelled
-  // while paused is never counted as distance.
-  const onLocationUpdate = (loc: Location.LocationObject) => {
-    setRun(prev => applyFix(prev, loc));
-    mapRef.current?.animateToRegion({
-      latitude: loc.coords.latitude,
-      longitude: loc.coords.longitude,
-      latitudeDelta: 0.005,
-      longitudeDelta: 0.005,
-    }, 500);
-  };
-
-  const WATCH_OPTS = { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 5 };
-
-  // Prefers the background task (survives screen lock); falls back to a
-  // foreground watch + keep-awake when background permission is declined.
-  const beginLocationUpdates = async () => {
-    const mode = await startBackgroundTracking();
-    trackingModeRef.current = mode;
-    if (mode === 'background') {
-      gpsUnsubRef.current = onGpsLocation(onLocationUpdate);
-    } else {
-      locationSub.current = await Location.watchPositionAsync(WATCH_OPTS, onLocationUpdate);
-      activateKeepAwakeAsync();
-      showToast('Screen will stay on. Allow "Always" location to track with it off');
-    }
-  };
-
-  const endLocationUpdates = async () => {
-    gpsUnsubRef.current?.();
-    gpsUnsubRef.current = null;
-    await stopBackgroundTracking();
-    await stopLocationWatch();
-    deactivateKeepAwake();
-    trackingModeRef.current = null;
-  };
-
   const handleStart = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
+    if ((await start()) === 'denied') {
       Alert.alert('Permission needed', 'Location access is required to track your activity.');
-      return;
     }
-
-    setRun(prev => ({ ...prev, climb: { anchor: null } }));
-    await beginLocationUpdates();
-    baseElapsedRef.current = 0;
-    segmentStartRef.current = new Date();
-    startTimer();
-    setTrackingState('running');
-  };
-
-  const handlePause = () => {
-    haltTimer();
-    endLocationUpdates();
-    setTrackingState('paused');
-    writeCheckpoint();
-  };
-
-  const handleResume = async () => {
-    setRun(afterGap);
-    await beginLocationUpdates();
-    segmentStartRef.current = new Date();
-    startTimer();
-    setTrackingState('running');
   };
 
   const handleStop = () => {
-    haltTimer();
-    endLocationUpdates();
-    setTrackingState('paused');
+    stop();
     setWorkoutName(activity);
     setConfirmVisible(true);
-    writeCheckpoint();
   };
 
   const handleDiscard = () => {
     setConfirmVisible(false);
-    setRun(emptyRun());
-    setElapsedSec(0);
-    baseElapsedRef.current = 0;
-    segmentStartRef.current = null;
-    setTrackingState('idle');
-    checkpointedLenRef.current = 0;
-    clearCheckpoint();
+    clearRun();
   };
 
   const handleSave = async () => {
@@ -396,7 +267,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
     // offline saves return to the Dashboard instead.
     const saveOffline = async () => {
       await enqueueWorkout(body);
-      clearCheckpoint();
+      clearRun();
       setConfirmVisible(false);
       showToast(
         "It's stored on this phone and will upload automatically when you're back online. It won't show in your history until then.",
@@ -421,7 +292,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
       if (!res.ok) throw new Error('Save failed');
       const data = await res.json();
-      clearCheckpoint();
+      clearRun();
       setConfirmVisible(false);
       navigation.replace('CardioDetails', { workoutId: data.id });
     } catch {
@@ -571,7 +442,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
               </View>
             </View>
             <View style={styles.runningBtns}>
-              <TouchableOpacity style={[styles.secondaryBtn, { backgroundColor: colors.border }]} onPress={handlePause}>
+              <TouchableOpacity style={[styles.secondaryBtn, { backgroundColor: colors.border }]} onPress={pause}>
                 <Ionicons name="pause" size={22} color={colors.textPrimary} />
                 <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Pause</Text>
               </TouchableOpacity>
@@ -602,7 +473,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
               </View>
             </View>
             <View style={styles.runningBtns}>
-              <TouchableOpacity style={[styles.secondaryBtn, { backgroundColor: colors.border }]} onPress={handleResume}>
+              <TouchableOpacity style={[styles.secondaryBtn, { backgroundColor: colors.border }]} onPress={resume}>
                 <Ionicons name="play" size={22} color={colors.textPrimary} />
                 <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Resume</Text>
               </TouchableOpacity>

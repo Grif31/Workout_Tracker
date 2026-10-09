@@ -1093,13 +1093,13 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [x] (built 2026-10-08) `utils/gpsRun.ts` (pure): a state shape `{ coords, distanceKm, elevationGainM, climb, skipNext }` and `applyFix(state, loc)` doing the accuracy filter (`MAX_ACCURACY_M`), `resumed`, `addAltitude` and `haversineKm`. No setState inside another setState's updater. Also the elapsed math (`runElapsedSeconds`) and `buildGpsRunBody` (the POST body from `handleSave`)
 - [x] Tests for it (`__tests__/gpsRun.test.ts`, 20 cases; the screen now holds one `RunState` and its 17 existing tests pass unchanged): a fix over 30 m accuracy is dropped; the first fix after a pause adds no distance and is marked `resumed`; climb only from accurate altitudes; elapsed across pause/resume; the body for each activity and unit (including `best_efforts` and the offline path's identical body)
 
-**B. Move the run into a context**
-- [ ] `context/GpsRunContext.tsx`, provided next to `WorkoutSessionProvider`: owns the state above plus the location subscription (`onGpsLocation` / `watchPositionAsync`), the checkpoint writes, and `start` / `pause` / `resume` / `stop` / `discard`. It exposes the state and `runElapsedSeconds`; consumers tick their own 1 s display interval, like `MiniWorkoutBar` does for a workout
-- [ ] `GPSCardioScreen` becomes a view of the context. Its unmount cleanup no longer stops tracking, and `cleanupOrphanedTracking()` moves to the provider's cold launch, run only when there is no run to restore
-- [ ] Keep the crash flow as is: the 10-point checkpoint, and "Review & Save" on the next visit to the screen. Nothing about recovery changes
-- [ ] The screen's saving stays in the screen (modal, name, POST, offline fallback), reading the run from the context and `buildGpsRunBody`; save and discard call the context's `finish()`, which stops tracking and clears the checkpoint
-- [ ] The foreground-only fallback (no "Always" permission) keeps its keep-awake while minimized, since the watch only runs with the screen on; say so in the docs
-- [ ] Logout and login stop an active run (`AuthContext`, like the Live Activity end points) and clear its checkpoint only for the account that owned it
+**B. Move the run into a context** (built 2026-10-08; 10 new tests in `__tests__/GpsRunMinimize.test.tsx`, and `GPSCardioScreen.test.tsx` now wraps the screen in the provider. Account changes are handled by an effect keyed on the user id inside `GpsRunProvider`, not by `AuthContext`. **Not shippable without C**: until the mini bar exists, leaving a running run's screen keeps it recording with nothing in the app to show it)
+- [x] `context/GpsRunContext.tsx`, provided next to `WorkoutSessionProvider`: owns the state above plus the location subscription (`onGpsLocation` / `watchPositionAsync`), the checkpoint writes, and `start` / `pause` / `resume` / `stop` / `discard`. It exposes the state and `runElapsedSeconds`; consumers tick their own 1 s display interval, like `MiniWorkoutBar` does for a workout
+- [x] `GPSCardioScreen` becomes a view of the context. Its unmount cleanup no longer stops tracking, and `cleanupOrphanedTracking()` moves to the provider's cold launch, run only when there is no run to restore
+- [x] Keep the crash flow as is: the 10-point checkpoint, and "Review & Save" on the next visit to the screen. Nothing about recovery changes
+- [x] The screen's saving stays in the screen (modal, name, POST, offline fallback), reading the run from the context and `buildGpsRunBody`; save and discard call the context's `finish()`, which stops tracking and clears the checkpoint
+- [x] The foreground-only fallback (no "Always" permission) keeps its keep-awake while minimized, since the watch only runs with the screen on; say so in the docs
+- [x] Logout and login stop an active run (`AuthContext`, like the Live Activity end points) and clear its checkpoint only for the account that owned it
 
 **C. Minimize, in the app**
 - [ ] Back button / swipe-back minimizes a run in progress

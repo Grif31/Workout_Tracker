@@ -5,6 +5,7 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import polylineLib from '@mapbox/polyline';
 import { createMockNavigation, createMockRoute } from './testUtils';
 import GPSCardioScreen from '../screens/DashboardTab/GPSCardioScreen';
+import { GpsRunProvider } from '../context/GpsRunContext';
 import { toLocalDateStr } from '../utils/date';
 
 jest.mock('react-native-maps', () => {
@@ -89,7 +90,7 @@ const nav = createMockNavigation();
 const route = createMockRoute('GPSCardio');
 
 async function renderReady() {
-  const r = render(<GPSCardioScreen navigation={nav as any} route={route as any} />);
+  const r = render(<GpsRunProvider><GPSCardioScreen navigation={nav as any} route={route as any} /></GpsRunProvider>);
   await act(async () => { await new Promise(res => setImmediate(res)); });
   await waitFor(() => expect(r.getByText('Start')).toBeTruthy());
   return r;
@@ -331,7 +332,7 @@ describe('GPSCardioScreen', () => {
       alertSpy.mockImplementation((title: string, _m, buttons?: any[]) => {
         if (title === 'Unsaved activity') buttons?.find(b => b.text === 'Review & Save')?.onPress?.();
       });
-      const r = render(<GPSCardioScreen navigation={nav as any} route={route as any} />);
+      const r = render(<GpsRunProvider><GPSCardioScreen navigation={nav as any} route={route as any} /></GpsRunProvider>);
 
       // Lands on the save sheet, not a paused screen that reads as already saved
       await waitFor(() => expect(r.getByText('Save Activity?')).toBeTruthy());
@@ -351,7 +352,7 @@ describe('GPSCardioScreen', () => {
       alertSpy.mockImplementation((title: string, _m, buttons?: any[]) => {
         if (title === 'Unsaved activity') buttons?.find(b => b.text === 'Not Now')?.onPress?.();
       });
-      const r = render(<GPSCardioScreen navigation={nav as any} route={route as any} />);
+      const r = render(<GpsRunProvider><GPSCardioScreen navigation={nav as any} route={route as any} /></GpsRunProvider>);
 
       await waitFor(() => expect(alertSpy).toHaveBeenCalled());
       expect(r.getByText('Start')).toBeTruthy();
@@ -363,7 +364,7 @@ describe('GPSCardioScreen', () => {
       alertSpy.mockImplementation((title: string, _m, buttons?: any[]) => {
         if (title === 'Unsaved activity') buttons?.find(b => b.text === 'Discard')?.onPress?.();
       });
-      render(<GPSCardioScreen navigation={nav as any} route={route as any} />);
+      render(<GpsRunProvider><GPSCardioScreen navigation={nav as any} route={route as any} /></GpsRunProvider>);
 
       await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Discard this activity?', expect.any(String), expect.any(Array)));
       expect(await AsyncStorage.getItem(CHECKPOINT_KEY)).not.toBeNull();
