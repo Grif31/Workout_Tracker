@@ -131,7 +131,7 @@ describe('controller', () => {
     const instances: { update: jest.Mock; end: jest.Mock }[] = [];
     return {
       instances,
-      start: jest.fn((_props?: unknown) => { const a = { update: jest.fn(async () => {}), end: jest.fn(async () => { instances.splice(instances.indexOf(a), 1); }) }; instances.push(a); return a; }),
+      start: jest.fn((_props?: unknown, _url?: string) => { const a = { update: jest.fn(async () => {}), end: jest.fn(async () => { instances.splice(instances.indexOf(a), 1); }) }; instances.push(a); return a; }),
       getInstances: jest.fn(() => [...instances]),
     };
   }
@@ -197,6 +197,36 @@ describe('controller', () => {
     const f2 = fakeFactory();
     expect(await mountWith(failing, f2).startOrUpdateLiveActivity(props)).toBe(true);
     expect(f2.start.mock.calls[0][0]).not.toHaveProperty('logo');
+  });
+
+  it("keeps a run's activity apart from a workout's", async () => {
+    const workoutFactory = fakeFactory();
+    const runFactory = fakeFactory();
+    jest.resetModules();
+    jest.doMock('react-native', () => ({ Platform: { OS: 'ios' } }));
+    jest.doMock('expo-widgets', () => ({ widgetsDirectory: null }));
+    jest.doMock('../utils/widgetImages', () => ({ prepareWidgetImages: async () => ({ logoDark: null, logoLight: null }) }));
+    jest.doMock('../widgets/WorkoutLiveActivity', () => ({ __esModule: true, default: workoutFactory }));
+    jest.doMock('../widgets/GpsLiveActivity', () => ({ __esModule: true, default: runFactory }));
+    const la = require('../utils/liveActivity') as typeof import('../utils/liveActivity');
+
+    const runProps = { activity: 'Run', icon: 'figure.run', startedAt: 1, distance: '1.00', unit: 'mi', avgRate: '9:00', rateUnit: '/mi', accent: '#abc' } as const;
+    expect(await la.startOrUpdateRunActivity(runProps)).toBe(true);
+    expect(runFactory.start).toHaveBeenCalledTimes(1);
+    expect(runFactory.start.mock.calls[0][1]).toBe('aretefitness://widget/run');
+    expect(workoutFactory.start).not.toHaveBeenCalled();
+    // The live workout notification only cares about the workout's
+    expect(la.isLiveActivityActive()).toBe(false);
+
+    await la.startOrUpdateRunActivity(runProps);
+    expect(runFactory.start).toHaveBeenCalledTimes(1);
+    expect(runFactory.instances[0].update).toHaveBeenCalledTimes(1);
+
+    // Ending a workout's activity leaves a run's alone, and the other way round
+    await la.endLiveActivity();
+    expect(runFactory.instances).toHaveLength(1);
+    await la.endRunActivity();
+    expect(runFactory.instances).toHaveLength(0);
   });
 
   it('is a no-op on Android and when the native module is missing', async () => {

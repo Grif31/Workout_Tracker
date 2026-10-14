@@ -165,12 +165,21 @@ return jsonify({ 'message': 'error reason' }), 400   # client error
 
 ## Workout Session Flow
 
+The app has **one session at a time**: a lifting workout or a GPS run, never both. Starting one while the other is open or minimized is refused with a message from `utils/sessionConflict.ts`.
+
+**Lifting workout** (`WorkoutSessionContext`)
 1. User opens WorkoutLog (sets `isWorkoutOpen = true` in WorkoutSessionContext)
 2. MiniWorkoutBar is hidden while WorkoutLog is open
 3. User presses minimize → `saveSession()` → navigates away → MiniWorkoutBar appears
 4. AppState background events: WorkoutLog handles notification when open; MiniWorkoutBar handles it when minimized (never both at once)
-5. Resume → navigate to WorkoutLog → restores from session → `clearSession()`
-6. Discard → `clearSession()` → cancels live notification
+5. Open → navigate to WorkoutLog → restores from session → `clearSession()`. `clearSession` runs on every resume, so it must never end the workout's Live Activity
+6. Discard → `clearSession()` → cancels live notification and ends the Live Activity
+
+**GPS run** (`GpsRunContext`, details in `src/workout-tracker-native/CLAUDE.md`)
+1. The run lives in the provider, not in `GPSCardioScreen`: leaving the screen minimizes it and tracking carries on
+2. MiniRunBar stands in for the screen while it's minimized (Open, Discard); the tab bar is gone while the map shows
+3. Stop asks first, then the save sheet; a save or discard calls `clearRun()`, which stops GPS, clears the checkpoint and ends the Live Activity
+4. A killed app comes back with the run restored from its checkpoint as "Unsaved", for reviewing and saving only
 
 ---
 

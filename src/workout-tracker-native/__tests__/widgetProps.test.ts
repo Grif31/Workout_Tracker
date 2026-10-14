@@ -197,6 +197,7 @@ describe('widget links for Up Next', () => {
     expect(widgetRouteFor(upNextStartLink(12, 2))).toEqual({ tab: 'DashboardTab', start: { routineId: 12, dayIndex: 2 } });
     expect(widgetRouteFor(WIDGET_LINKS.coach)).toEqual({ tab: 'TrainingTab' });
     expect(widgetRouteFor(WIDGET_LINKS.workout)).toEqual({ tab: 'DashboardTab', resumeWorkout: true });
+    expect(widgetRouteFor(WIDGET_LINKS.run)).toEqual({ tab: 'DashboardTab', openRun: true });
   });
 
   it('opens Home for an Up Next link missing its day', () => {

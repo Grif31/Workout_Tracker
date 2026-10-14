@@ -4,10 +4,15 @@ import * as Location from 'expo-location';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useAuth } from './AuthContext';
 import { useWorkoutSession } from './WorkoutSessionContext';
+import { useTheme } from './ThemeContext';
 import {
   onGpsLocation, startBackgroundTracking, stopBackgroundTracking, cleanupOrphanedTracking,
 } from '../utils/gpsTracking';
 import { showToast } from '../utils/toast';
+import { endRunActivity, startOrUpdateRunActivity } from '../utils/liveActivity';
+import { gpsLiveActivityKey, gpsLiveActivityProps } from '../utils/gpsLiveActivityProps';
+import { GPS_DISTANCE_UNIT_KEY, type DistanceUnit } from '../utils/units';
+import { LIVE_WORKOUT_NOTIF_KEY } from '../constants/storageKeys';
 import {
   ACTIVITIES, afterGap, applyFix, emptyRun, runElapsedSeconds, type Activity, type Coord, type RunState,
 } from '../utils/gpsRun';
@@ -83,9 +88,15 @@ const GpsRunContext = createContext<GpsRunCtx>({
 
 const WATCH_OPTS = { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 5 };
 
+// Distance and pace reach the Live Activity only when the app pushes them, and
+// iOS budgets how often an activity may change: a push per GPS fix (every ~2 s)
+// would be throttled on a long run. Start, pause and resume still go at once.
+export const RUN_ACTIVITY_UPDATE_MS = 5000;
+
 export function GpsRunProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { session: workoutSession, isWorkoutOpen } = useWorkoutSession();
+  const { colors } = useTheme();
   const checkpointKey = `gps_run_checkpoint_${user?.id}`;
 
   const [activity, setActivity] = useState<Activity>('Run');
@@ -98,8 +109,10 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
   // Read by callbacks that outlive the render that created them: location
   // fixes, the checkpoint writer, and the cleanup when the account changes.
   const workoutActive = workoutSession != null || isWorkoutOpen;
-  const latest = useRef({ activity, run, trackingState, checkpointKey, workoutActive });
-  latest.current = { activity, run, trackingState, checkpointKey, workoutActive };
+  const userId = user?.id;
+  const accent = colors.accent;
+  const latest = useRef({ activity, run, trackingState, checkpointKey, workoutActive, recovered, userId, accent });
+  latest.current = { activity, run, trackingState, checkpointKey, workoutActive, recovered, userId, accent };
   // Written the moment it changes, not on the next render: pause writes a
   // checkpoint straight after halting the clock.
   const timingRef = useRef<RunTiming>(NOT_RUNNING);
@@ -171,7 +184,12 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
   // The app may have been killed mid-run, leaving the OS task running. Once per
   // launch, when there is certainly no run in memory: a screen opening later
   // must not do this, since it would stop a run that is minimized.
-  useEffect(() => { cleanupOrphanedTracking(); }, []);
+  // Its Live Activity goes too: a run that comes back from a checkpoint has no
+  // GPS, so a lock screen still counting it up would be wrong.
+  useEffect(() => {
+    cleanupOrphanedTracking();
+    endRunActivity();
+  }, []);
 
   // A different account (or none) must not inherit this run. It is kept as a
   // checkpoint under the owner's key, so it is still there to recover when
@@ -182,6 +200,7 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
       if (latest.current.trackingState === 'idle') return;
       writeCheckpoint(ownerKey);
       endLocationUpdates();
+      endRunActivity();
       setRun(emptyRun());
       setTiming(NOT_RUNNING);
       setTrackingState('idle');
@@ -190,13 +209,28 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user?.id]);
 
+  // The unit the map shows distance in, and whether the run goes on the lock
+  // screen at all (the same switch as a workout's: Live Workout on Lock Screen).
+  // Read when a run starts or resumes, so a change in Settings counts from then.
+  const unitRef = useRef<DistanceUnit>('mi');
+  const liveEnabledRef = useRef(true);
+  const readActivityPrefs = useCallback(async () => {
+    try {
+      const [[, unit], [, live]] = await AsyncStorage.multiGet([
+        `${GPS_DISTANCE_UNIT_KEY}_${latest.current.userId}`, LIVE_WORKOUT_NOTIF_KEY,
+      ]);
+      unitRef.current = unit === 'km' ? 'km' : 'mi';
+      liveEnabledRef.current = live !== 'false';
+    } catch {}
+  }, []);
+
   const start = useCallback(async () => {
     if (latest.current.trackingState !== 'idle') return 'started' as const;
     if (latest.current.workoutActive) return 'workout-active' as const;
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return 'denied' as const;
     setRun(emptyRun());
-    await beginLocationUpdates();
+    await Promise.all([beginLocationUpdates(), readActivityPrefs()]);
     setTiming({ base: 0, segmentStart: Date.now() });
     setTrackingState('running');
     return 'started' as const;
@@ -219,7 +253,7 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
 
   const resume = useCallback(async () => {
     setRun(afterGap);
-    await beginLocationUpdates();
+    await Promise.all([beginLocationUpdates(), readActivityPrefs()]);
     setTiming({ base: timingRef.current.base, segmentStart: Date.now() });
     setTrackingState('running');
     setRecovered(false);
@@ -227,6 +261,7 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
 
   const clearRun = useCallback(() => {
     endLocationUpdates();
+    endRunActivity();
     setRun(emptyRun());
     setTiming(NOT_RUNNING);
     setTrackingState('idle');
@@ -265,6 +300,35 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [user?.id]);
+
+  // The run on the lock screen. Not a run brought back after a kill: its GPS is
+  // gone, and it waits on the mini bar to be reviewed.
+  const lastPushRef = useRef(0);
+  const pushRunActivity = useCallback(() => {
+    const { activity: act, run: r, trackingState: st, recovered: rec, accent: acc } = latest.current;
+    if (st === 'idle' || rec || !liveEnabledRef.current) return;
+    lastPushRef.current = Date.now();
+    startOrUpdateRunActivity(gpsLiveActivityProps({
+      activity: act, run: r, timing: timingRef.current, running: st === 'running',
+      unit: unitRef.current, accent: acc, now: Date.now(),
+    }));
+  }, []);
+
+  // Start, pause, resume and stop change the clock: those go at once
+  useEffect(() => { pushRunActivity(); }, [trackingState, timing, recovered]);
+
+  // Distance and pace: when what the lock screen shows changes, no more often than RUN_ACTIVITY_UPDATE_MS
+  const runActivityKey = trackingState === 'running' && !recovered
+    ? gpsLiveActivityKey(gpsLiveActivityProps({ activity, run, timing, running: true, unit: unitRef.current, accent, now: Date.now() }))
+    : '';
+  useEffect(() => {
+    if (!runActivityKey) return;
+    const wait = RUN_ACTIVITY_UPDATE_MS - (Date.now() - lastPushRef.current);
+    if (wait <= 0) { pushRunActivity(); return; }
+    // A trailing push, so the last change before a quiet spell still arrives
+    const t = setTimeout(pushRunActivity, wait);
+    return () => clearTimeout(t);
+  }, [runActivityKey]);
 
   const value = useMemo(() => ({
     activity, setActivity, trackingState, run, timing,

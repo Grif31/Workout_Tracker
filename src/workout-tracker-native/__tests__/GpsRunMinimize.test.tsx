@@ -55,6 +55,14 @@ jest.mock('../navigation/navigationRef', () => ({
   navigationRef: { isReady: () => true, navigate: (...a: any[]) => mockNavigate(...a) },
 }));
 
+// The run's Live Activity, as the provider drives it
+const mockStartRunActivity = jest.fn(async (_props: any) => true);
+const mockEndRunActivity = jest.fn(async () => {});
+jest.mock('../utils/liveActivity', () => ({
+  startOrUpdateRunActivity: (p: any) => mockStartRunActivity(p),
+  endRunActivity: () => mockEndRunActivity(),
+}));
+
 // Mutable so a test can sign in as someone else
 let mockUser: any = { id: 1, bodyweight: 185, weight_unit: 'lbs' };
 jest.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: mockUser }) }));
@@ -416,4 +424,119 @@ describe('minimizing a GPS run', () => {
       expect(r.getByText('0.07')).toBeTruthy();
     });
   });
+
+  describe('the Live Activity', () => {
+    const pushes = () => mockStartRunActivity.mock.calls.map(c => c[0]);
+    // advanceTimersByTime moves Date.now too: setting the system time as well would count it twice
+    const tick = (ms: number) => act(async () => { jest.advanceTimersByTime(ms); });
+
+    it('goes on the lock screen when the run starts, in the unit the map uses', async () => {
+      await AsyncStorage.setItem('gps_distance_unit_1', 'km');
+      const r = await startedRun([0, 1]);
+      await waitFor(() => expect(mockStartRunActivity).toHaveBeenCalled());
+      expect(pushes()[0]).toMatchObject({ activity: 'Run', icon: 'figure.run', unit: 'km', accent: '#30D158' });
+      expect(pushes()[0]).not.toHaveProperty('pausedAt');
+      r.unmount();
+    });
+
+    it('stays off the lock screen when Live Workout on Lock Screen is off', async () => {
+      await AsyncStorage.setItem('live_workout_notif_enabled', 'false');
+      const r = await startedRun([0, 1, 2]);
+      await tick(6000);
+      expect(mockStartRunActivity).not.toHaveBeenCalled();
+      r.unmount();
+    });
+
+    it('sends distance at most every 5 seconds, not on every fix, and the last change still arrives', async () => {
+      const r = await startedRun([]);
+      await waitFor(() => expect(mockStartRunActivity).toHaveBeenCalledTimes(1));
+      // A fix a second for 12 seconds
+      for (let i = 0; i < 12; i += 1) {
+        await feed(point(i));
+        await tick(1000);
+      }
+      const during = mockStartRunActivity.mock.calls.length;
+      expect(during).toBeGreaterThanOrEqual(2);
+      expect(during).toBeLessThanOrEqual(4);
+
+      // Quiet now: the trailing push brings the lock screen up to the last fix
+      await tick(5000);
+      const last = pushes().at(-1);
+      expect(r.getByText(`${last.distance}`)).toBeTruthy();
+      r.unmount();
+    });
+
+    it('changes at once on pause and on resume, with the clock frozen and then running', async () => {
+      const r = await startedRun([0, 1]);
+      await waitFor(() => expect(mockStartRunActivity).toHaveBeenCalled());
+      mockStartRunActivity.mockClear();
+
+      await act(async () => { fireEvent.press(r.getByText('Pause')); });
+      expect(pushes().at(-1)).toHaveProperty('pausedAt');
+      expect(pushes().at(-1).activity).toBe('Run');
+
+      mockStartRunActivity.mockClear();
+      await act(async () => { fireEvent.press(r.getByText('Resume')); });
+      await waitFor(() => expect(mockStartRunActivity).toHaveBeenCalled());
+      expect(pushes().at(-1)).not.toHaveProperty('pausedAt');
+      r.unmount();
+    });
+
+    it('ends when the run is discarded', async () => {
+      const r = render(<BarHarnessForActivity show />);
+      await settle();
+      await act(async () => { fireEvent.press(r.getByText('Start')); });
+      await waitFor(() => expect(mockStartRunActivity).toHaveBeenCalled());
+      mockEndRunActivity.mockClear();
+      r.rerender(<BarHarnessForActivity show={false} />);
+      await settle();
+      await act(async () => { fireEvent.press(r.getByLabelText('Discard activity')); });
+      await act(async () => { alertSpy.mock.calls.at(-1)![2].find((b: any) => b.text === 'Discard').onPress(); });
+      expect(mockEndRunActivity).toHaveBeenCalled();
+      r.unmount();
+    });
+
+    it('ends when the run is saved', async () => {
+      const r = await startedRun([0, 1, 2]);
+      mockEndRunActivity.mockClear();
+      await act(async () => { fireEvent.press(r.getByText('Stop')); });
+      await act(async () => {
+        alertSpy.mock.calls.filter(c => c[0] === 'End this activity?').at(-1)![2].find((b: any) => b.text === 'End Activity').onPress();
+      });
+      await act(async () => { fireEvent.press(r.getByText('Save')); });
+      await waitFor(() => expect(nav.replace).toHaveBeenCalled());
+      expect(mockEndRunActivity).toHaveBeenCalled();
+    });
+
+    it('ends one a killed app left behind, and puts no activity up for the run that comes back', async () => {
+      await AsyncStorage.setItem('gps_run_checkpoint_1', JSON.stringify({
+        activity: 'Run', coords: [0, 1, 2].map(i => ({ ...point(i).coords, timestamp: point(i).timestamp })),
+        distanceKm: 0.22, elevationGainM: 0, elapsedSec: 90, savedAt: T0,
+      }));
+      const r = render(<BarHarnessForActivity show={false} />);
+      await settle();
+      await waitFor(() => expect(r.getByText('Unsaved Run')).toBeTruthy());
+      expect(mockEndRunActivity).toHaveBeenCalled();
+      await tick(6000);
+      expect(mockStartRunActivity).not.toHaveBeenCalled();
+      r.unmount();
+    });
+
+    it('ends when the account signs out mid-run', async () => {
+      const r = await startedRun([0, 1]);
+      mockEndRunActivity.mockClear();
+      mockUser = null;
+      r.rerender(<Harness show />);
+      await settle();
+      expect(mockEndRunActivity).toHaveBeenCalled();
+      r.unmount();
+    });
+  });
 });
+
+const BarHarnessForActivity = ({ show }: { show: boolean }) => (
+  <GpsRunProvider>
+    <MiniRunBar />
+    {show ? <GPSCardioScreen navigation={nav as any} route={route as any} /> : null}
+  </GpsRunProvider>
+);

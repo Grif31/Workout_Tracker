@@ -73,13 +73,24 @@ The lock screen / Dynamic Island copy of the workout in progress (TODO.md sectio
 - A tap opens `WIDGET_LINKS.workout`, handled in `useWidgetLinks` like the mini bar's Resume.
 - The Dynamic Island layouts can't be seen on an iPhone 13 (no Island); only the banner has been checked on a device.
 
+### GPS run session (`GpsRunContext`)
+
+A tracked run (`GPSCardioScreen`) lives in `context/GpsRunContext.tsx`, mounted in `RootNav` next to `WorkoutSessionProvider`, not in the screen (TODO.md section 19, Phase 7). The provider owns the route (`RunState`), the clock (`RunTiming`, timestamps, never counted ticks), the location pipeline (`utils/gpsTracking.ts`: the background task with "Always" permission, else a foreground watch plus keep-awake) and the crash checkpoint. The screen is only a view: leaving it is minimizing the run, and its unmount stops nothing. The arithmetic is pure in `utils/gpsRun.ts` (`applyFix`, `afterGap`, `runElapsedSeconds`, `buildGpsRunBody`) and tested there.
+- **One session at a time.** A lifting workout or a run, never both: the mini bar, the one-instance Live Activity controllers and the user's sense of "what's in progress" all assume one. `GpsRunProvider.start()` refuses while a workout is open or minimized, and `WorkoutLogScreen` refuses a new workout while a run is active. Home's Log Workout and Track Activity buttons check first and show the same message instead of opening a screen that would close itself. All three use `utils/sessionConflict.ts`. A new way to start either session must go through one of those checks.
+- **The mini bar** (`components/MiniRunBar.tsx`, mounted beside the workout bar in `AppTabs`) stands in for the screen: activity, distance, time, Open and Discard (behind a confirm, since a route can't be re-walked). Pause and Stop stay on the map. It hides while the screen shows (`screenOpen`, set by the screen and cleared the moment Back is pressed) and slides up like the workout bar.
+- **The tab bar** is removed outright while the map is open, as for an open workout. `CustomTabBar` reads `focusedRoute === 'GPSCardio'` from navigation state, which changes in the render that starts the push; the screen's own flag only arrives once it has mounted, and the bar's space lingered on screen until then. The screen slides from the bottom with no swipe-back, like WorkoutLog (`DashboardStack`).
+- **End points.** `clearRun()` after a save or a discard (from the save sheet or the bar); an account change (an effect keyed on the user id stops the run, ends its activity, and keeps the run as that account's checkpoint); and, once per launch, `cleanupOrphanedTracking()`. That cleanup must never run when a screen opens: it would stop a minimized run.
+- **After a kill** the GPS is gone but the checkpoint (written every 10 fixes and on pause or stop) isn't. The provider restores it at launch and on sign-in as a paused run with `recovered: true`. The bar says "Unsaved Run" with Review rather than Open, and the screen opens straight onto the save sheet: a restored run left on the paused screen reads as already saved (the 1.1.9 lesson). Up to 10 fixes and the time since the last checkpoint are lost.
+- **Stop** asks "End this activity?" first: it goes on to saving and the run can't be picked back up. Pause asks nothing.
+- **Its Live Activity** (`widgets/GpsLiveActivity.tsx`, props from `utils/gpsLiveActivityProps.ts` built with the map screen's own formatters) follows the same Live Workout on Lock Screen switch, read with the distance unit when a run starts or resumes. The elapsed time ticks natively; distance and pace can't, so the provider pushes them: at once on start, pause, resume and stop, and otherwise when `gpsLiveActivityKey` changes, at most every `RUN_ACTIVITY_UPDATE_MS` (5 s) with a trailing push. A push per GPS fix (every ~2 s) would run into iOS's update budget on a long run. Fixes keep reaching JS with the phone locked in background mode, so this kept up on a device without `frequentUpdates`. A recovered run gets no activity, and launch ends any left by a killed app. `utils/liveActivity.ts` runs one controller per kind; `isLiveActivityActive` is the workout's only, since it gates the workout's notification.
+
 ### AsyncStorage keys
 
 **Device-level (shared across all accounts on the device):**
 | Key | Default | Controls |
 |---|---|---|
 | `rest_timer_alerts_enabled` | true | Rest timer local notification |
-| `live_workout_notif_enabled` | true | Live workout system notification |
+| `live_workout_notif_enabled` | true | Live Workout on Lock Screen: the workout's and the GPS run's Live Activities on iOS, and the live workout notification where no activity can run |
 | `minimized_workout_session` | — | Serialized minimized workout state (WorkoutSessionContext) |
 | `greek_rank_cached` | — | Cached current Greek rank name (avoids fetch on cold open) |
 | `coach_insights_cache` | — | Cached AI coach insights JSON |
@@ -118,7 +129,7 @@ The lock screen / Dynamic Island copy of the workout in progress (TODO.md sectio
 | `weekly_summary_last_shown_${uid}` | — | Monday date-string of the last week the Weekly Summary auto-popup was checked/shown for, so it only appears once per week |
 | `exercise_list_cache_${uid}` | — | Exercise list cache, 24h TTL (`utils/exerciseCache.ts`; falls back to un-suffixed key when no userId passed) |
 | `offline_workout_queue_${uid}` | — | Offline workout queue (`utils/offlineQueue.ts`) — deliberately NOT cleared on logout; each user's queue waits for them and is only flushed while they are logged in |
-| `gps_run_checkpoint_${uid}` | — | In-progress GPS run checkpoint (route/distance/elapsed) written every ~10 points; restore offered on next screen open after a crash |
+| `gps_run_checkpoint_${uid}` | — | In-progress GPS run checkpoint (route/distance/elapsed), written every 10 fixes and on pause or stop. `GpsRunProvider` restores it at launch and on sign-in as a recovered run on the mini bar (see GPS run session); cleared on save or discard |
 | `coach_settings_${uid}` | — | Legacy onboarding settings (migrated to coach_profile on first open) |
 | `coach_insights_cache` | — | Cached AI coaching insights JSON + fetchedAt timestamp |
 | `coach_settings` | — | Legacy key — migrated to `coach_profile` on first CoachProfileModal open |

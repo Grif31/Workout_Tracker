@@ -201,6 +201,42 @@ describe('widgets/WorkoutLiveActivity.tsx', () => {
   });
 });
 
+describe('widgets/GpsLiveActivity.tsx', () => {
+  const src = compileLayout('widgets/GpsLiveActivity.tsx');
+  const base = {
+    activity: 'Run', icon: 'figure.run', startedAt: 1000, distance: '2.31', unit: 'mi',
+    avgRate: '8:42', rateUnit: '/mi', accent: '#fff',
+  };
+  const states = {
+    running: { ...base, nowRate: '8:10' },
+    earlyNoPace: { ...base, avgRate: '--:--' },
+    paused: { ...base, pausedAt: 5000 },
+    ride: { ...base, activity: 'Cycle', icon: 'figure.outdoor.cycle', avgRate: '18.4', rateUnit: 'mph', nowRate: '19.0' },
+    withLogo: { ...base, logo: 'file:///g/dark.png' },
+  };
+
+  it.each(Object.entries(states))('%s: uses only what the widget runtime has', (_, props) => {
+    for (const colorScheme of ['dark', 'light']) {
+      const { used, tree } = render(src, props, { colorScheme });
+      const regions = tree as unknown as Record<string, unknown>;
+      expect(Object.keys(regions)).toEqual(expect.arrayContaining(['banner', 'compactLeading', 'compactTrailing', 'minimal', 'expandedBottom']));
+      expect([...used].filter(n => !COMPONENTS.has(n) && !MODIFIERS.has(n) && !JSX.has(n))).toEqual([]);
+      const elements = new Set<string>();
+      (function walk(n: any) {
+        if (Array.isArray(n)) return n.forEach(walk);
+        if (!n || typeof n !== 'object') return;
+        if (n.type) elements.add(n.type);
+        walk(n.props?.children);
+      })(Object.values(regions));
+      expect([...elements].filter(e => !COMPONENTS.has(e))).toEqual([]);
+    }
+  });
+
+  it('what iOS receives has no values a property list refuses', () => {
+    for (const props of Object.values(states)) iosProps(props);
+  });
+});
+
 describe('widgets/UpNextWidget.tsx with its muscle diagram', () => {
   const src = compileLayout('widgets/UpNextWidget.tsx');
   const images: WidgetImages = {

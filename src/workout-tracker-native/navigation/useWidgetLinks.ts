@@ -49,6 +49,11 @@ function open(url: string | null) {
   if (!route || !navigationRef.isReady()) return;
   if ('start' in route) {
     startRoutineDay(route.start.routineId, route.start.dayIndex);
+  } else if ('openRun' in route) {
+    // Like the run's mini bar; already on the map means the tap came from the lock screen with it open
+    if (navigationRef.getCurrentRoute()?.name !== 'GPSCardio') {
+      navigationRef.navigate('DashboardTab', { screen: 'GPSCardio', initial: false });
+    }
   } else if ('resumeWorkout' in route) {
     // Same as the mini bar's Resume. Already on the log means the tap came
     // from the lock screen with the workout open: navigating again would reset its params.

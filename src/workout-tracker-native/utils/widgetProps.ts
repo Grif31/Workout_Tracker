@@ -14,8 +14,9 @@ export const WIDGET_LINKS = {
   greekRank: 'aretefitness://widget/greek-rank',
   coach: 'aretefitness://widget/coach',
   upNext: 'aretefitness://widget/up-next',
-  // Not a widget: the Live Activity's tap, which reopens the workout in progress
+  // Not widgets: the Live Activities' taps, which reopen the workout or run in progress
   workout: 'aretefitness://widget/workout',
+  run: 'aretefitness://widget/run',
 } as const;
 
 /** Up Next's Start: a new workout with this routine day filled in. */
@@ -28,7 +29,8 @@ export type WidgetRoute =
   | { tab: 'ProfileTab'; screen: 'GreekRank' }
   | { tab: 'TrainingTab' }
   | { tab: 'DashboardTab'; start: { routineId: number; dayIndex: number } }
-  | { tab: 'DashboardTab'; resumeWorkout: true };
+  | { tab: 'DashboardTab'; resumeWorkout: true }
+  | { tab: 'DashboardTab'; openRun: true };
 
 // By hand: React Native's URLSearchParams throws "not implemented" on get()
 function queryNumber(url: string, name: string): number | null {
@@ -43,6 +45,7 @@ export function widgetRouteFor(url: string | null | undefined): WidgetRoute | nu
   if (link === WIDGET_LINKS.greekRank) return { tab: 'ProfileTab', screen: 'GreekRank' };
   if (link === WIDGET_LINKS.coach) return { tab: 'TrainingTab' };
   if (link === WIDGET_LINKS.workout) return { tab: 'DashboardTab', resumeWorkout: true };
+  if (link === WIDGET_LINKS.run) return { tab: 'DashboardTab', openRun: true };
   if (link === WIDGET_LINKS.upNext) {
     const routineId = queryNumber(url!, 'routine');
     const dayIndex = queryNumber(url!, 'day');

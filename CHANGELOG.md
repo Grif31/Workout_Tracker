@@ -10,6 +10,22 @@
 - On iPhones with a Dynamic Island, the timer and your rest countdown show there too.
 - Turn it off with Live Workout on Lock Screen in Settings. If Live Activities are off for Aretē in iOS settings, you get the live workout notification as before.
 
+### New: Minimize a tracked activity
+- Tap the down arrow on the map to minimize a run, ride, walk or hike. Tracking carries on, and a bar above the tabs shows your distance and time.
+- Tap Open on the bar to go back to the map, or discard the activity from there.
+- If Aretē is closed in the middle of an activity, it comes back as an unsaved activity on that bar, ready to review and save.
+- Stopping an activity now asks first, since a stopped activity can't be picked back up. Use Pause for a break.
+
+### New: Your activity on the lock screen (iPhone)
+- A tracked run, ride, walk or hike shows on your lock screen: the time, your distance, your average pace (or speed on a ride) and your pace right now.
+- It keeps updating while your phone is locked, and shows when you've paused.
+- Tap it to go back to the map. It goes away when you save or discard.
+- It follows the same Live Workout on Lock Screen setting as workouts.
+
+### Improved: One workout or activity at a time
+- While a workout is minimized, Home's button reads Resume Workout. Starting an activity tells you to finish the workout first, and starting a workout during an activity does the same.
+- The minimized bar for a workout says Open instead of Resume, since your workout isn't paused.
+
 ## 1.1.9 (2026-10-07)
 
 ### New: Home screen widgets
