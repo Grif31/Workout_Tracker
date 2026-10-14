@@ -8,6 +8,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { DashboardStackParamsList } from '../../navigation/types';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
+import { useGpsRun } from '../../context/GpsRunContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -279,6 +280,7 @@ const AVATAR_SIZE = 38;
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function DashboardScreen({ navigation }: Props) {
   const { user: authUser } = useAuth();
+  const { trackingState: gpsTrackingState } = useGpsRun();
   const { colors, accentPreset } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
@@ -737,7 +739,7 @@ export default function DashboardScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('GPSCardio')}
           >
             <Ionicons name="location-outline" size={16} color={colors.accent} style={{ marginRight: spacing.xs }} />
-            <Text style={styles.trackButtonText}>Track Activity</Text>
+            <Text style={styles.trackButtonText}>{gpsTrackingState === 'idle' ? 'Track Activity' : 'Resume Activity'}</Text>
           </TouchableOpacity>
 
           {/* Explains the dot on the Home tab icon: queued workouts aren't in the list below yet */}

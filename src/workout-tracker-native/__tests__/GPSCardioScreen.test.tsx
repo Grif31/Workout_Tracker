@@ -327,16 +327,13 @@ describe('GPSCardioScreen', () => {
       savedAt: T0,
     };
 
-    it('offers to restore an interrupted run and resumes it paused', async () => {
+    it('brings an interrupted run back to the save sheet, with no alert first', async () => {
       await AsyncStorage.setItem(CHECKPOINT_KEY, JSON.stringify(checkpoint));
-      alertSpy.mockImplementation((title: string, _m, buttons?: any[]) => {
-        if (title === 'Unsaved activity') buttons?.find(b => b.text === 'Review & Save')?.onPress?.();
-      });
       const r = render(<GpsRunProvider><GPSCardioScreen navigation={nav as any} route={route as any} /></GpsRunProvider>);
 
       // Lands on the save sheet, not a paused screen that reads as already saved
       await waitFor(() => expect(r.getByText('Save Activity?')).toBeTruthy());
-      expect(alertSpy.mock.calls[0][1]).toContain('Cycle');
+      expect(alertSpy).not.toHaveBeenCalledWith('Unsaved activity', expect.anything(), expect.anything());
       expect(r.getAllByText('15:00').length).toBeGreaterThan(0);
       expect(r.getByText(`${(3.2 * MI_PER_KM).toFixed(2)} mi`)).toBeTruthy();
 
@@ -345,36 +342,22 @@ describe('GPSCardioScreen', () => {
       const body = JSON.parse(posts()[0][1].body);
       expect(body.exercises[0].name).toBe('Cycling');
       expect(body.exercises[0].sets[0].cardio_duration).toBeCloseTo(15, 5);
+      expect(await AsyncStorage.getItem(CHECKPOINT_KEY)).toBeNull();
     });
 
-    it('keeps the checkpoint when the user picks Not Now', async () => {
+    it('asks again before discarding a recovered run', async () => {
       await AsyncStorage.setItem(CHECKPOINT_KEY, JSON.stringify(checkpoint));
-      alertSpy.mockImplementation((title: string, _m, buttons?: any[]) => {
-        if (title === 'Unsaved activity') buttons?.find(b => b.text === 'Not Now')?.onPress?.();
-      });
       const r = render(<GpsRunProvider><GPSCardioScreen navigation={nav as any} route={route as any} /></GpsRunProvider>);
+      await waitFor(() => expect(r.getByText('Save Activity?')).toBeTruthy());
 
-      await waitFor(() => expect(alertSpy).toHaveBeenCalled());
-      expect(r.getByText('Start')).toBeTruthy();
-      expect(await AsyncStorage.getItem(CHECKPOINT_KEY)).not.toBeNull();
-    });
-
-    it('asks again before discarding the checkpoint', async () => {
-      await AsyncStorage.setItem(CHECKPOINT_KEY, JSON.stringify(checkpoint));
-      alertSpy.mockImplementation((title: string, _m, buttons?: any[]) => {
-        if (title === 'Unsaved activity') buttons?.find(b => b.text === 'Discard')?.onPress?.();
-      });
-      render(<GpsRunProvider><GPSCardioScreen navigation={nav as any} route={route as any} /></GpsRunProvider>);
-
-      await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Discard this activity?', expect.any(String), expect.any(Array)));
-      expect(await AsyncStorage.getItem(CHECKPOINT_KEY)).not.toBeNull();
-
+      await act(async () => { fireEvent.press(r.getByText('Discard')); });
       const confirm = alertSpy.mock.calls.find(c => c[0] === 'Discard this activity?')![2];
       await act(async () => { confirm.find((b: any) => b.text === 'Keep It').onPress?.(); });
       expect(await AsyncStorage.getItem(CHECKPOINT_KEY)).not.toBeNull();
 
       await act(async () => { confirm.find((b: any) => b.text === 'Discard').onPress(); });
       await waitFor(async () => expect(await AsyncStorage.getItem(CHECKPOINT_KEY)).toBeNull());
+      await waitFor(() => expect(r.getByText('Start')).toBeTruthy());
     });
 
     it('silently drops a checkpoint too short to be a route', async () => {

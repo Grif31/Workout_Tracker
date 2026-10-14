@@ -1101,11 +1101,12 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [x] The foreground-only fallback (no "Always" permission) keeps its keep-awake while minimized, since the watch only runs with the screen on; say so in the docs
 - [x] Logout and login stop an active run (`AuthContext`, like the Live Activity end points) and clear its checkpoint only for the account that owned it
 
-**C. Minimize, in the app**
-- [ ] Back button / swipe-back minimizes a run in progress
-- [ ] `MiniWorkoutBar` shows a run when one is active ("Run · 2.31 mi · 24:10", Resume, Discard), pulling the generalised "what is in progress" out so the bar has one source. The bar and the tab bar behave as for a workout (hidden while the screen is open)
-- [ ] Entry points: Dashboard's Cardio button goes to the screen when a run is already active instead of showing an idle Start; starting a lifting workout while a run is active, and a run while a workout is open or minimized, asks first
-- [ ] Update `__tests__/GPSCardioScreen.test.tsx` (19 cases) for the context, and add context and mini bar tests
+**C. Minimize, in the app** (built 2026-10-08. Deviations: the bar is its own component, `components/MiniRunBar.tsx`, rather than a generalised `MiniWorkoutBar`, since the two share only a look; the one-session rule lives in `GpsRunProvider.start()` (refuses while a workout is open or minimized) and `WorkoutLogScreen` (refuses a new workout while a run is active), the two places every start goes through; the bar hides while the map screen is open via `screenOpen` in the context. Back needed no code: since B, leaving the screen is minimizing)
+- [x] Back button / swipe-back minimizes a run in progress
+- [x] `MiniWorkoutBar` shows a run when one is active ("Run · 2.31 mi · 24:10", Resume, Discard), pulling the generalised "what is in progress" out so the bar has one source. The bar and the tab bar behave as for a workout (hidden while the screen is open)
+- [x] Entry points: Dashboard's Cardio button goes to the screen when a run is already active instead of showing an idle Start; starting a lifting workout while a run is active, and a run while a workout is open or minimized, asks first
+- [x] Update `__tests__/GPSCardioScreen.test.tsx` (19 cases) for the context, and add context and mini bar tests
+- [x] **A killed app brings the run back** (found on a device 2026-10-09): `GpsRunProvider` restores the account's checkpoint at launch and on sign-in as a paused, `recovered` run. The mini bar says "Unsaved Run" with Review (its GPS died with the app, so there is nothing to resume), and the screen opens on the save sheet. This replaced the "Unsaved activity" alert the screen used to show. Up to 10 points and the time since the last checkpoint can be lost. The bar also slides up like the workout bar
 
 **D. Live Activity for runs (after A to C work on a device)**
 - [ ] Generalise `utils/liveActivity.ts` to take the activity kind (one controller, `getInstances()` per factory). `GpsLiveActivity` layout: logo tile, activity name, a native ticking elapsed timer (with `pauseTime` while paused), distance, current and average pace or speed (cycling shows speed), no sets or progress bar

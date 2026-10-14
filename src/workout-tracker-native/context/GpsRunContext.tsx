@@ -3,12 +3,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useAuth } from './AuthContext';
+import { useWorkoutSession } from './WorkoutSessionContext';
 import {
   onGpsLocation, startBackgroundTracking, stopBackgroundTracking, cleanupOrphanedTracking,
 } from '../utils/gpsTracking';
 import { showToast } from '../utils/toast';
 import {
-  afterGap, applyFix, emptyRun, runElapsedSeconds, type Activity, type Coord, type RunState,
+  ACTIVITIES, afterGap, applyFix, emptyRun, runElapsedSeconds, type Activity, type Coord, type RunState,
 } from '../utils/gpsRun';
 
 // The GPS run in progress. It lives here, above every screen, so leaving
@@ -38,18 +39,28 @@ type GpsRunCtx = {
   trackingState: TrackingState;
   run: RunState;
   timing: RunTiming;
-  /** 'denied' when location permission is refused, and nothing starts */
-  start: () => Promise<'started' | 'denied'>;
+  /**
+   * 'denied' when location permission is refused, and 'workout-active' while a
+   * lifting workout is open or minimized: the app has one session at a time.
+   * Nothing starts in either case.
+   */
+  start: () => Promise<'started' | 'denied' | 'workout-active'>;
   pause: () => void;
   resume: () => Promise<void>;
   /** Halts the clock and location updates, leaving the run paused for saving */
   stop: () => void;
   /** Ends the run and forgets it: a discard, or after it was saved. Also clears the checkpoint. */
   clearRun: () => void;
-  /** Puts a checkpointed run back, paused */
-  restore: (cp: RunCheckpoint) => void;
+  /**
+   * The run came back from a checkpoint after the app was killed, not from this
+   * session. Its GPS is gone, so it is only for reviewing and saving.
+   */
+  recovered: boolean;
   clearCheckpoint: () => void;
   checkpointKey: string;
+  /** The map screen is showing, so the mini bar stays hidden, as with an open workout */
+  screenOpen: boolean;
+  setScreenOpen: (open: boolean) => void;
 };
 
 const GpsRunContext = createContext<GpsRunCtx>({
@@ -63,26 +74,32 @@ const GpsRunContext = createContext<GpsRunCtx>({
   resume: async () => {},
   stop: () => {},
   clearRun: () => {},
-  restore: () => {},
+  recovered: false,
   clearCheckpoint: () => {},
   checkpointKey: '',
+  screenOpen: false,
+  setScreenOpen: () => {},
 });
 
 const WATCH_OPTS = { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 5 };
 
 export function GpsRunProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const { session: workoutSession, isWorkoutOpen } = useWorkoutSession();
   const checkpointKey = `gps_run_checkpoint_${user?.id}`;
 
   const [activity, setActivity] = useState<Activity>('Run');
   const [trackingState, setTrackingState] = useState<TrackingState>('idle');
   const [run, setRun] = useState<RunState>(emptyRun);
   const [timing, setTimingState] = useState<RunTiming>(NOT_RUNNING);
+  const [screenOpen, setScreenOpen] = useState(false);
+  const [recovered, setRecovered] = useState(false);
 
   // Read by callbacks that outlive the render that created them: location
   // fixes, the checkpoint writer, and the cleanup when the account changes.
-  const latest = useRef({ activity, run, trackingState, checkpointKey });
-  latest.current = { activity, run, trackingState, checkpointKey };
+  const workoutActive = workoutSession != null || isWorkoutOpen;
+  const latest = useRef({ activity, run, trackingState, checkpointKey, workoutActive });
+  latest.current = { activity, run, trackingState, checkpointKey, workoutActive };
   // Written the moment it changes, not on the next render: pause writes a
   // checkpoint straight after halting the clock.
   const timingRef = useRef<RunTiming>(NOT_RUNNING);
@@ -168,12 +185,14 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
       setRun(emptyRun());
       setTiming(NOT_RUNNING);
       setTrackingState('idle');
+      setRecovered(false);
       checkpointedLenRef.current = 0;
     };
   }, [user?.id]);
 
   const start = useCallback(async () => {
     if (latest.current.trackingState !== 'idle') return 'started' as const;
+    if (latest.current.workoutActive) return 'workout-active' as const;
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return 'denied' as const;
     setRun(emptyRun());
@@ -203,6 +222,7 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
     await beginLocationUpdates();
     setTiming({ base: timingRef.current.base, segmentStart: Date.now() });
     setTrackingState('running');
+    setRecovered(false);
   }, [beginLocationUpdates, setTiming]);
 
   const clearRun = useCallback(() => {
@@ -210,11 +230,12 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
     setRun(emptyRun());
     setTiming(NOT_RUNNING);
     setTrackingState('idle');
+    setRecovered(false);
     checkpointedLenRef.current = 0;
     clearCheckpoint();
   }, [endLocationUpdates, setTiming, clearCheckpoint]);
 
-  const restore = useCallback((cp: RunCheckpoint) => {
+  const applyCheckpoint = useCallback((cp: RunCheckpoint) => {
     // Movement between the crash and the restore must not count
     setRun(afterGap({
       ...emptyRun(),
@@ -226,10 +247,30 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
     setTrackingState('paused');
   }, [setTiming]);
 
+  // A killed app took the GPS with it, but the route so far is checkpointed.
+  // Bringing it back here, rather than when the map screen next opens, is what
+  // keeps it on the mini bar after a relaunch the way a minimized workout is.
+  // Also runs when an account signs back in: its checkpoint waits under its key.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    AsyncStorage.getItem(checkpointKey).then(raw => {
+      if (cancelled || !raw || latest.current.trackingState !== 'idle') return;
+      const cp = JSON.parse(raw);
+      // Too short to be a route
+      if (!Array.isArray(cp.coords) || cp.coords.length < 2) { clearCheckpoint(); return; }
+      if (ACTIVITIES.includes(cp.activity)) setActivity(cp.activity);
+      applyCheckpoint(cp);
+      setRecovered(true);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
   const value = useMemo(() => ({
     activity, setActivity, trackingState, run, timing,
-    start, pause, resume, stop, clearRun, restore, clearCheckpoint, checkpointKey,
-  }), [activity, trackingState, run, timing, start, pause, resume, stop, clearRun, restore, clearCheckpoint, checkpointKey]);
+    start, pause, resume, stop, clearRun, clearCheckpoint, checkpointKey,
+    screenOpen, setScreenOpen, recovered,
+  }), [activity, trackingState, run, timing, start, pause, resume, stop, clearRun, clearCheckpoint, checkpointKey, screenOpen, recovered]);
 
   return <GpsRunContext.Provider value={value}>{children}</GpsRunContext.Provider>;
 }

@@ -35,6 +35,7 @@ import {
   ACTIVITIES, ACTIVITY_TEMPLATE_NAME, buildGpsRunBody, runElapsedSeconds, type Activity,
 } from '../../utils/gpsRun';
 import { useGpsRun } from '../../context/GpsRunContext';
+import { navigationRef } from '../../navigation/navigationRef';
 
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'GPSCardio'>;
@@ -97,8 +98,13 @@ export default function GPSCardioScreen({ navigation }: Props) {
   // keeps going when this screen is left. This screen only shows and controls it.
   const {
     activity, setActivity, trackingState, run, timing,
-    start, pause, resume, stop, clearRun, restore, clearCheckpoint, checkpointKey,
+    start, pause, resume, stop, clearRun, setScreenOpen, recovered,
   } = useGpsRun();
+  // The mini bar stands in for this screen when it is left, so it hides while this shows
+  useEffect(() => {
+    setScreenOpen(true);
+    return () => setScreenOpen(false);
+  }, []);
   const { coords, distanceKm, elevationGainM } = run;
   // The clock is a timestamp sum; this just re-renders each second while running
   const [, setTick] = useState(0);
@@ -168,54 +174,18 @@ export default function GPSCardioScreen({ navigation }: Props) {
     );
   };
 
-  const offerCheckpointRestore = async () => {
-    try {
-      const raw = await AsyncStorage.getItem(checkpointKey);
-      if (!raw) return;
-      const cp = JSON.parse(raw);
-      if (!Array.isArray(cp.coords) || cp.coords.length < 2) {
-        clearCheckpoint();
-        return;
-      }
-      const when = new Date(cp.savedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      Alert.alert(
-        'Unsaved activity',
-        `A ${cp.activity ?? 'workout'} from around ${when} was never saved. Review it and save it to your history?`,
-        [
-          // Leaving the checkpoint alone keeps the run recoverable on the next visit
-          { text: 'Not Now', style: 'cancel' },
-          { text: 'Discard', style: 'destructive', onPress: () => confirmDiscard(clearCheckpoint) },
-          {
-            text: 'Review & Save',
-            onPress: () => {
-              if (ACTIVITIES.includes(cp.activity)) setActivity(cp.activity);
-              restore(cp);
-              const last = cp.coords[cp.coords.length - 1];
-              setInitialRegion({
-                latitude: last.latitude, longitude: last.longitude,
-                latitudeDelta: 0.01, longitudeDelta: 0.01,
-              });
-              // Straight to the save sheet: a restored run left on the paused
-              // screen reads as already saved, and was discarded as lost
-              setWorkoutName(ACTIVITIES.includes(cp.activity) ? cp.activity : 'Workout');
-              setConfirmVisible(true);
-            },
-          },
-        ],
-      );
-    } catch {}
-  };
-
-  const trackingStateRef = useRef(trackingState);
-  trackingStateRef.current = trackingState;
+  // A run brought back after the app was killed is finished: straight to the
+  // save sheet, since on the paused screen it reads as already saved
+  useEffect(() => {
+    if (!recovered || trackingState !== 'paused') return;
+    setWorkoutName(activity);
+    setConfirmVisible(true);
+  }, [recovered]);
 
   useEffect(() => {
     // Deferred until the screen-transition interaction queue clears — see
     // the `ready` declaration above for why.
     const task = InteractionManager.runAfterInteractions(() => {
-      // A run in progress has its own checkpoint, which is not an unsaved
-      // activity to offer back; only an idle screen looks for one left by a crash
-      if (trackingStateRef.current === 'idle') offerCheckpointRestore();
       AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user?.id}`).then(v => {
         setDistanceUnit(v === 'km' ? 'km' : 'mi');
       });
@@ -238,8 +208,24 @@ export default function GPSCardioScreen({ navigation }: Props) {
   }, []);
 
   const handleStart = async () => {
-    if ((await start()) === 'denied') {
+    const result = await start();
+    if (result === 'denied') {
       Alert.alert('Permission needed', 'Location access is required to track your activity.');
+    } else if (result === 'workout-active') {
+      Alert.alert(
+        'Workout in progress',
+        'Finish or discard your workout before tracking an activity.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Go to Workout',
+            onPress: () => {
+              navigation.goBack();
+              navigationRef.navigate('DashboardTab', { screen: 'WorkoutLog', params: {}, initial: false });
+            },
+          },
+        ],
+      );
     }
   };
 

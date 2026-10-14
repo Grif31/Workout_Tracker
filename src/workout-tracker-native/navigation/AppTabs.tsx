@@ -5,6 +5,7 @@ import { LIVE_WORKOUT_NOTIF_KEY } from '../constants/storageKeys';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { postLiveWorkoutNotification, cancelLiveWorkoutNotification } from '../utils/notifications';
 import { endLiveActivity, isLiveActivityActive } from '../utils/liveActivity';
+import MiniRunBar from '../components/MiniRunBar';
 import { currentExerciseName } from '../utils/liveActivityProps';
 import { onPendingCountChange, initPendingCount, flushQueue, announceFlushResult } from '../utils/offlineQueue';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -331,6 +332,7 @@ function CustomTabBar(props: BottomTabBarProps) {
   return (
     <View style={{ backgroundColor: colors.surface }}>
       <MiniWorkoutBar />
+      <MiniRunBar />
       <Animated.View
         onLayout={e => { heightRef.current = e.nativeEvent.layout.height; }}
         style={{ opacity, transform: [{ translateY }], display: collapsed ? 'none' : 'flex' }}

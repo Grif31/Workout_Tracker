@@ -5,6 +5,7 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { createMockNavigation, createMockRoute } from './testUtils';
 import GPSCardioScreen from '../screens/DashboardTab/GPSCardioScreen';
 import { GpsRunProvider } from '../context/GpsRunContext';
+import MiniRunBar from '../components/MiniRunBar';
 
 // A GPS run lives in GpsRunContext, not in the screen, so leaving the screen
 // (minimizing the run) must not stop it. These tests unmount the screen and
@@ -43,6 +44,16 @@ jest.mock('../utils/offlineQueue', () => ({ enqueueWorkout: jest.fn(() => Promis
 jest.mock('../utils/toast', () => ({ showToast: jest.fn() }));
 jest.mock('../theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 jest.mock('../theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));
+
+// A lifting workout the user may have minimized; the app allows one session at a time
+let mockWorkoutSession: any = null;
+jest.mock('../context/WorkoutSessionContext', () => ({
+  useWorkoutSession: () => ({ session: mockWorkoutSession, isWorkoutOpen: false }),
+}));
+const mockNavigate = jest.fn();
+jest.mock('../navigation/navigationRef', () => ({
+  navigationRef: { isReady: () => true, navigate: (...a: any[]) => mockNavigate(...a) },
+}));
 
 // Mutable so a test can sign in as someone else
 let mockUser: any = { id: 1, bodyweight: 185, weight_unit: 'lbs' };
@@ -90,6 +101,7 @@ describe('minimizing a GPS run', () => {
     jest.clearAllMocks();
     mockGpsListener = null;
     mockUser = { id: 1, bodyweight: 185, weight_unit: 'lbs' };
+    mockWorkoutSession = null;
     await AsyncStorage.clear();
     Location.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
     mockNetInfoFetch.mockResolvedValue({ isConnected: true, isInternetReachable: true });
@@ -153,27 +165,6 @@ describe('minimizing a GPS run', () => {
     expect(stopBackgroundTracking).not.toHaveBeenCalled();
   });
 
-  it('does not offer a run in progress back as an unsaved activity', async () => {
-    const r = await startedRun([0, 1, 2]);
-    await act(async () => { fireEvent.press(r.getByText('Pause')); });
-    expect(await AsyncStorage.getItem('gps_run_checkpoint_1')).not.toBeNull();
-
-    await leaveScreen(r);
-    await reopenScreen(r);
-    expect(alertSpy).not.toHaveBeenCalledWith('Unsaved activity', expect.anything(), expect.anything());
-  });
-
-  it('still offers a crashed run back on an idle screen', async () => {
-    await AsyncStorage.setItem('gps_run_checkpoint_1', JSON.stringify({
-      activity: 'Run', coords: [point(0), point(1)].map(p => ({ ...p.coords, timestamp: p.timestamp })),
-      distanceKm: 0.11, elevationGainM: 0, elapsedSec: 60, savedAt: T0,
-    }));
-    const r = render(<Harness show />);
-    await settle();
-    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Unsaved activity', expect.any(String), expect.any(Array)));
-    r.unmount();
-  });
-
   it('resumes into a live run after being away, counting no distance across the pause', async () => {
     const r = await startedRun([0, 1]);
     await act(async () => { fireEvent.press(r.getByText('Pause')); });
@@ -221,5 +212,191 @@ describe('minimizing a GPS run', () => {
     await settle();
     expect(stopBackgroundTracking).toHaveBeenCalled();
     expect(r.getByText('Start')).toBeTruthy();
+  });
+
+  describe('one active session at a time', () => {
+    it('does not start a run while a workout is minimized', async () => {
+      mockWorkoutSession = { workoutName: 'Push', exercises: [] };
+      const r = render(<Harness show />);
+      await settle();
+      await waitFor(() => expect(r.getByText('Start')).toBeTruthy());
+      // The screen asks for permission itself when it opens, to centre the map
+      const promptsBefore = Location.requestForegroundPermissionsAsync.mock.calls.length;
+      await act(async () => { fireEvent.press(r.getByText('Start')); });
+
+      expect(alertSpy).toHaveBeenCalledWith('Workout in progress', expect.any(String), expect.any(Array));
+      // Starting didn't even ask for permission: nothing starts
+      expect(Location.requestForegroundPermissionsAsync).toHaveBeenCalledTimes(promptsBefore);
+      expect(startBackgroundTracking).not.toHaveBeenCalled();
+      expect(r.getByText('Start')).toBeTruthy();
+    });
+
+    it('offers to go to the workout, leaving this screen first', async () => {
+      mockWorkoutSession = { workoutName: 'Push', exercises: [] };
+      const r = render(<Harness show />);
+      await settle();
+      await act(async () => { fireEvent.press(r.getByText('Start')); });
+      const goTo = alertSpy.mock.calls.find(c => c[0] === 'Workout in progress')![2].find((b: any) => b.text === 'Go to Workout');
+      goTo.onPress();
+      expect(nav.goBack).toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith('DashboardTab', { screen: 'WorkoutLog', params: {}, initial: false });
+    });
+
+    it('starts once the workout is gone', async () => {
+      mockWorkoutSession = { workoutName: 'Push', exercises: [] };
+      const r = render(<Harness show />);
+      await settle();
+      await act(async () => { fireEvent.press(r.getByText('Start')); });
+      mockWorkoutSession = null;
+      r.rerender(<Harness show />);
+      await act(async () => { fireEvent.press(r.getByText('Start')); });
+      await waitFor(() => expect(r.getByText('Pause')).toBeTruthy());
+    });
+  });
+
+  describe('after the app is killed', () => {
+    const cp = (over: any = {}) => JSON.stringify({
+      activity: 'Cycle',
+      coords: [0, 1, 2].map(i => ({ ...point(i).coords, timestamp: point(i).timestamp })),
+      distanceKm: 0.22, elevationGainM: 0, elapsedSec: 90, savedAt: T0, ...over,
+    });
+    const BarHarness = ({ show }: { show: boolean }) => (
+      <GpsRunProvider>
+        <MiniRunBar />
+        {show ? <GPSCardioScreen navigation={nav as any} route={route as any} /> : null}
+      </GpsRunProvider>
+    );
+
+    it('brings the run back on the mini bar, to review and not resume', async () => {
+      await AsyncStorage.setItem('gps_run_checkpoint_1', cp());
+      const r = render(<BarHarness show={false} />);
+      await settle();
+
+      await waitFor(() => expect(r.getByText('Unsaved Cycle')).toBeTruthy());
+      expect(r.getByText('Review')).toBeTruthy();
+      expect(r.queryByText('Resume')).toBeNull();
+      // No GPS: the killed app's tracking is gone, and nothing restarts it
+      expect(startBackgroundTracking).not.toHaveBeenCalled();
+      expect(alertSpy).not.toHaveBeenCalled();
+    });
+
+    it('opens the save sheet when the bar is followed to the screen', async () => {
+      await AsyncStorage.setItem('gps_run_checkpoint_1', cp());
+      const r = render(<BarHarness show={false} />);
+      await settle();
+      await waitFor(() => expect(r.getByText('Unsaved Cycle')).toBeTruthy());
+
+      r.rerender(<BarHarness show />);
+      await settle();
+      await waitFor(() => expect(r.getByText('Save Activity?')).toBeTruthy());
+      expect(r.queryByText('Unsaved Cycle')).toBeNull();
+    });
+
+    it('keeps it on the bar until it is saved or discarded', async () => {
+      await AsyncStorage.setItem('gps_run_checkpoint_1', cp());
+      const r = render(<BarHarness show={false} />);
+      await settle();
+      await waitFor(() => expect(r.getByText('Unsaved Cycle')).toBeTruthy());
+      expect(await AsyncStorage.getItem('gps_run_checkpoint_1')).not.toBeNull();
+
+      await act(async () => { fireEvent.press(r.getByLabelText('Discard activity')); });
+      await act(async () => { alertSpy.mock.calls.at(-1)![2].find((b: any) => b.text === 'Discard').onPress(); });
+      expect(r.queryByText('Unsaved Cycle')).toBeNull();
+      expect(await AsyncStorage.getItem('gps_run_checkpoint_1')).toBeNull();
+    });
+
+    it('drops a checkpoint too short to be a route, quietly', async () => {
+      await AsyncStorage.setItem('gps_run_checkpoint_1', cp({ coords: [{ ...point(0).coords, timestamp: T0 }] }));
+      const r = render(<BarHarness show={false} />);
+      await settle();
+      await waitFor(async () => expect(await AsyncStorage.getItem('gps_run_checkpoint_1')).toBeNull());
+      expect(r.queryByText(/Unsaved/)).toBeNull();
+    });
+
+    it("does not restore another account's run", async () => {
+      await AsyncStorage.setItem('gps_run_checkpoint_2', cp());
+      const r = render(<BarHarness show={false} />);
+      await settle();
+      expect(r.queryByText(/Unsaved/)).toBeNull();
+      expect(await AsyncStorage.getItem('gps_run_checkpoint_2')).not.toBeNull();
+    });
+
+    it('brings it back for an account that signs in later', async () => {
+      mockUser = null;
+      await AsyncStorage.setItem('gps_run_checkpoint_1', cp());
+      const r = render(<BarHarness show={false} />);
+      await settle();
+      expect(r.queryByText(/Unsaved/)).toBeNull();
+
+      mockUser = { id: 1, bodyweight: 185, weight_unit: 'lbs' };
+      r.rerender(<BarHarness show={false} />);
+      await settle();
+      await waitFor(() => expect(r.getByText('Unsaved Cycle')).toBeTruthy());
+    });
+  });
+
+  describe('the mini bar', () => {
+    const BarHarness = ({ show }: { show: boolean }) => (
+      <GpsRunProvider>
+        <MiniRunBar />
+        {show ? <GPSCardioScreen navigation={nav as any} route={route as any} /> : null}
+      </GpsRunProvider>
+    );
+
+    it('stands in for the screen: hidden while it is open, there once it is left', async () => {
+      const r = render(<BarHarness show />);
+      await settle();
+      await act(async () => { fireEvent.press(r.getByText('Start')); });
+      await waitFor(() => expect(mockGpsListener).not.toBeNull());
+      await feed(point(0), point(1));
+      expect(r.queryByLabelText('Discard activity')).toBeNull();
+
+      r.rerender(<BarHarness show={false} />);
+      await settle();
+      expect(r.getByLabelText('Discard activity')).toBeTruthy();
+      expect(r.getByText('0.07 mi · 0:00')).toBeTruthy();
+
+      r.rerender(<BarHarness show />);
+      await settle();
+      expect(r.queryByLabelText('Discard activity')).toBeNull();
+    });
+
+    it('discarding from the bar stops the run, and the next visit starts clean', async () => {
+      const r = render(<BarHarness show />);
+      await settle();
+      await act(async () => { fireEvent.press(r.getByText('Start')); });
+      await waitFor(() => expect(mockGpsListener).not.toBeNull());
+      await feed(point(0), point(1), point(2));
+      r.rerender(<BarHarness show={false} />);
+      await settle();
+
+      await act(async () => { fireEvent.press(r.getByLabelText('Discard activity')); });
+      await act(async () => { alertSpy.mock.calls.at(-1)![2].find((b: any) => b.text === 'Discard').onPress(); });
+
+      expect(stopBackgroundTracking).toHaveBeenCalled();
+      expect(mockGpsListener).toBeNull();
+      expect(r.queryByLabelText('Discard activity')).toBeNull();
+      expect(await AsyncStorage.getItem('gps_run_checkpoint_1')).toBeNull();
+      r.rerender(<BarHarness show />);
+      await settle();
+      expect(r.getByText('Start')).toBeTruthy();
+    });
+
+    it('resumes the run from the bar without losing what was recorded', async () => {
+      const r = render(<BarHarness show />);
+      await settle();
+      await act(async () => { fireEvent.press(r.getByText('Start')); });
+      await waitFor(() => expect(mockGpsListener).not.toBeNull());
+      await feed(point(0), point(1));
+      r.rerender(<BarHarness show={false} />);
+      await settle();
+
+      await act(async () => { fireEvent.press(r.getByText('Resume')); });
+      expect(mockNavigate).toHaveBeenCalledWith('DashboardTab', { screen: 'GPSCardio', initial: false });
+      r.rerender(<BarHarness show />);
+      await settle();
+      expect(r.getByText('Pause')).toBeTruthy();
+      expect(r.getByText('0.07')).toBeTruthy();
+    });
   });
 });
