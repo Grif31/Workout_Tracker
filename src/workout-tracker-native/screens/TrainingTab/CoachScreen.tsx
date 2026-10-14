@@ -32,16 +32,19 @@ import type { GreekRankData } from '../../utils/greekRank';
 import WeeklyGoalModal from '../../components/coach/WeeklyGoalModal';
 import WorkingSetsInfoModal from '../../components/coach/WorkingSetsInfoModal';
 import RangePickerModal, { type ChartRange, type MenuAnchor } from '../../components/coach/RangePickerModal';
-import { hasLoggedNothing, visibleChartMetrics, PREMIUM_CHART_METRICS, type ChartMetric, type MetricsLogged } from '../../utils/progressMetrics';
+import { hasLoggedNothing, visibleChartMetrics, type ChartMetric, type MetricsLogged } from '../../utils/progressMetrics';
 import {
   displayToGoalKm, distanceGoalProgress, formatDistanceValue, goalKmToDisplay,
 } from '../../utils/weeklyDistanceGoal';
 import RoutinePickerModal from '../../components/coach/RoutinePickerModal';
 import MusclePickerModal from '../../components/coach/MusclePickerModal';
-import { MUSCLE_STANDARDS, volumeZone, type VolumeZone } from '../../constants/volumeLandmarks';
-import { muscleTrend, GOOD_WEEKLY_SESSIONS, type Trend } from '../../utils/muscleTrends';
-import MuscleInsightsCard from '../../components/MuscleInsightsCard';
+import { MUSCLE_STANDARDS } from '../../constants/volumeLandmarks';
+import { fatigueBanner, pplBalance } from '../../utils/muscleTrends';
+import MuscleVolumeCard, { type MuscleVolumeData } from '../../components/MuscleVolumeCard';
+import AdvancedStatsCard from '../../components/AdvancedStatsCard';
 import PlateauNudge from '../../components/PlateauNudge';
+import GenerateAction from '../../components/GenerateAction';
+import PremiumTeaser from '../../components/PremiumTeaser';
 import { computeBarChartMax } from '../../utils/prFormat';
 import { writeWidgetGreekRank, writeWidgetScore } from '../../utils/widgetData';
 
@@ -58,18 +61,6 @@ const VISIBLE_TEMPLATES = 5;
 type ProgressBucket = { label: string; volume: number; sets: number; count: number; distance_km?: number; density?: number };
 type ProgressResponse = { buckets?: ProgressBucket[]; metrics_logged?: MetricsLogged };
 type Exercise = TemplateExercise;
-type MuscleVolumeData = {
-  muscle_sets: Record<string, number>;
-  last_trained: Record<string, string>;
-  total_sets: number;
-  last_week_total: number;
-  week_start: string;
-  // Added with the trends: absent from a cached response saved by an older build
-  session_count?: Record<string, number>;
-  weekly_history?: Record<string, number[]>;
-  this_week_total?: number;
-  last_week_to_date_total?: number;
-};
 type WeeklySummaryPreview = {
   week_start: string;
   workouts: number;
@@ -93,10 +84,6 @@ const FREE_TEMPLATE_LIMIT = 5;
 const FREE_ROUTINE_LIMIT = 2;
 
 
-
-const TREND_ICON: Record<Trend, keyof typeof Ionicons.glyphMap> = {
-  up: 'arrow-up', flat: 'arrow-forward', down: 'arrow-down',
-};
 
 const INSIGHT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   deload:      'battery-half-outline',
@@ -128,14 +115,6 @@ function onColor(hex: string): string {
   const c = hex.replace('#', '');
   const r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16);
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#1a1a1a' : '#fff';
-}
-
-function daysAgoStr(iso: string | undefined): string {
-  if (!iso) return 'Never';
-  const days = Math.floor((Date.now() - new Date(iso + 'T12:00:00').getTime()) / 86_400_000);
-  if (days === 0) return 'Today';
-  if (days === 1) return '1d ago';
-  return `${days}d ago`;
 }
 
 function fmtUpdatedAgo(iso: string): string {
@@ -172,10 +151,6 @@ export default function CoachScreen({ navigation }: Props) {
 
   const metricAnimRef = useRef(new Animated.Value(0)).current;
   const barsAnim = useRef(new Animated.Value(0)).current;
-  const ZONE_COLOR: Record<VolumeZone['kind'], string> = useMemo(() => ({
-    over: colors.danger, atLimit: colors.warmup, high: colors.warmup,
-    onTrack: colors.accent, toGo: colors.textSecondary, below: colors.textSecondary, none: colors.border,
-  }), [colors]);
   const { width: SCREEN_WIDTH } = Dimensions.get('window');
   const METRIC_BAR_WIDTH = SCREEN_WIDTH - spacing.lg * 2 - spacing.md * 2;
 
@@ -684,7 +659,12 @@ export default function CoachScreen({ navigation }: Props) {
   };
 
   const visibleMetrics = useMemo(() => visibleChartMetrics(metricsLogged), [metricsLogged]);
-  const metricLocked = (m: ChartMetric) => !isPremium && PREMIUM_CHART_METRICS.includes(m);
+  // Whether the advanced stats below the muscle card have anything to show; the lock only covers real content
+  const hasAdvancedStats = !!muscleVolume && (
+    !!metricsLogged?.density
+    || fatigueBanner(muscleVolume.this_week_total ?? 0, muscleVolume.last_week_to_date_total ?? 0) != null
+    || pplBalance(muscleVolume.muscle_sets) != null
+  );
   // Falling back here rather than resetting state keeps the user's pick for
   // when that metric's tab comes back.
   const activeMetric: ChartMetric = visibleMetrics.includes(chartMetric)
@@ -797,140 +777,6 @@ export default function CoachScreen({ navigation }: Props) {
       return `${dateRange} · ${workoutsStr} · ${dist.toFixed(2)} ${distanceUnit}`;
     }
     return `${dateRange} · ${workoutsStr}`;
-  };
-
-  const renderMuscleVolumeCard = () => {
-    if (!muscleVolume) return null;
-    // Sunday is the week's last day: from then on, a muscle short of MEV gets
-    // its verdict instead of a countdown
-    const weekEnd = new Date(muscleVolume.week_start + 'T12:00:00');
-    weekEnd.setDate(weekEnd.getDate() + 6);
-    const weekOver = toLocalDateStr(new Date()) >= toLocalDateStr(weekEnd);
-    const allMuscles = Object.keys(MUSCLE_STANDARDS);
-    const trained = allMuscles.filter(m => (muscleVolume.muscle_sets[m] ?? 0) > 0)
-      .sort((a, b) => (muscleVolume.muscle_sets[b] ?? 0) - (muscleVolume.muscle_sets[a] ?? 0));
-    const untrained = allMuscles.filter(m => !(muscleVolume.muscle_sets[m] ?? 0));
-    const maxSets = Math.max(1, ...trained.map(m => muscleVolume.muscle_sets[m] ?? 0));
-
-    const renderMvRow = (muscle: string, rowIndex: number) => {
-      const sets = muscleVolume.muscle_sets[muscle] ?? 0;
-      const std = MUSCLE_STANDARDS[muscle];
-      const lastDate = muscleVolume.last_trained[muscle];
-      const sessions = muscleVolume.session_count?.[muscle] ?? 0;
-      const trend = muscleTrend(muscleVolume.weekly_history?.[muscle]);
-      const isTrained = sets > 0;
-      const freeFillPct = (sets / maxSets) * 100;
-      const zone = volumeZone(sets, std, weekOver);
-      const zoneColor = ZONE_COLOR[zone.kind];
-      const premiumFillPct = Math.min((sets / std.mrv) * 100, 100);
-      const mevPct = (std.mev / std.mrv) * 100;
-      const mavPct = (std.mav / std.mrv) * 100;
-      const zoneLabel = zone.label;
-      // Bars grow from the left one after another when the card appears
-      const start = Math.min(rowIndex * 0.04, 0.4);
-      const barGrow = { transform: [{ scaleX: barsAnim.interpolate({ inputRange: [start, start + 0.6], outputRange: [0, 1], extrapolate: 'clamp' }) }], transformOrigin: 'left' as const };
-
-      return (
-        <View key={muscle} style={styles.mvRow}>
-          <View style={styles.mvMuscleWrap}>
-            <Text style={[styles.mvMuscle, !isTrained && { color: colors.textSecondary }]} numberOfLines={1}>
-              {muscle}
-            </Text>
-            {isPremium && (sessions > 0 || trend) && (
-              <View style={styles.mvSubRow}>
-                {sessions > 0 && (
-                  <Text style={[styles.mvSessions, { color: sessions >= GOOD_WEEKLY_SESSIONS ? colors.save : colors.warmup }]}>
-                    {sessions}×
-                  </Text>
-                )}
-                {trend && (
-                  <Ionicons
-                    name={TREND_ICON[trend]}
-                    size={12}
-                    color={trend === 'up' ? colors.save : trend === 'down' ? colors.warmup : colors.textSecondary}
-                    accessibilityLabel={`${muscle} 4-week trend ${trend === 'flat' ? 'steady' : trend}`}
-                  />
-                )}
-              </View>
-            )}
-          </View>
-          <View style={styles.mvBarArea}>
-            {isPremium ? (
-              <View style={styles.mvPremiumTrack}>
-                <Animated.View style={[styles.mvPremiumFill, { width: `${premiumFillPct}%` as any, backgroundColor: zoneColor }, barGrow]} />
-                <View style={[styles.mvTick, { left: `${mevPct}%` as any }]} />
-                <View style={[styles.mvTick, { left: `${mavPct}%` as any }]} />
-              </View>
-            ) : (
-              <View style={styles.mvFreeTrack}>
-                <Animated.View style={[styles.mvFreeFill, { width: `${freeFillPct}%` as any, backgroundColor: isTrained ? colors.accent : colors.border }, barGrow]} />
-              </View>
-            )}
-          </View>
-          <Text style={[styles.mvCount, !isTrained && { color: colors.textSecondary }]} numberOfLines={1}>
-            {isTrained ? sets : '–'}
-          </Text>
-          {isPremium && zoneLabel ? (
-            <Text style={[styles.mvZoneLabel, { color: zoneColor }]} numberOfLines={1}>{zoneLabel}</Text>
-          ) : (
-            <Text style={styles.mvLastTrained} numberOfLines={1}>
-              {isTrained ? daysAgoStr(lastDate) : lastDate ? daysAgoStr(lastDate) : ''}
-            </Text>
-          )}
-        </View>
-      );
-    };
-
-    return (
-      <View style={styles.mvCard}>
-        <View style={styles.mvHeader}>
-          <View>
-            <Text style={styles.scoreCardTitle}>This Week</Text>
-            <Text style={styles.mvWeekRange}>{weekRangeLabel(muscleVolume.week_start)}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-            <Text style={styles.mvTotalText}>{muscleVolume.total_sets} working sets</Text>
-            <TouchableOpacity onPress={() => setWorkingSetsInfoVisible(true)}>
-              <Ionicons name="information-circle-outline" size={15} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {isPremium && (
-          <View style={styles.mvColLabels}>
-            <View style={{ width: 88 }} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.mvColLabel}>MEV → MAV → MRV</Text>
-            </View>
-          </View>
-        )}
-        {isPremium && (
-          <Text style={styles.mvCaption}>Sessions this week and the 4-week trend sit under each muscle. Twice a week gains the most.</Text>
-        )}
-
-        {trained.map((m, i) => renderMvRow(m, i))}
-        {untrained.length > 0 && (
-          <>
-            <View style={styles.mvDivider}>
-              <Text style={styles.mvDividerText}>Not trained this week</Text>
-            </View>
-            {untrained.map((m, i) => renderMvRow(m, trained.length + i))}
-          </>
-        )}
-
-        {!isPremium && (
-          <TouchableOpacity
-            style={styles.mvPremiumTeaser}
-            onPress={() => (navigation as any).navigate('Paywall', { source: 'muscle_volume' })}
-          >
-            <Ionicons name="lock-closed-outline" size={14} color={colors.accent} />
-            <Text style={[styles.mvTotalText, { color: colors.accent }]}>
-              Unlock volume zones, frequency, trends and balance
-            </Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
   };
 
   // ── JSX ─────────────────────────────────────────────────────────────────────
@@ -1179,28 +1025,13 @@ export default function CoachScreen({ navigation }: Props) {
                 insights.length > 0
                   ? insights.map(renderInsightCard)
                   : (
-                    <View style={styles.insightsEmpty}>
-                      <Ionicons name="sparkles-outline" size={32} color={colors.textSecondary} />
-                      <Text style={styles.insightsEmptyText}>
-                        Personalized coaching based on your recent training.
-                      </Text>
-                      <TouchableOpacity
-                        style={[styles.generateInsightsBtn, { backgroundColor: colors.accent }, insightsLoading && { opacity: 0.6 }]}
-                        onPress={fetchInsights}
-                        disabled={insightsLoading}
-                      >
-                        {insightsLoading ? (
-                          <ActivityIndicator size="small" color={colors.accentText} />
-                        ) : (
-                          <>
-                            <Ionicons name="sparkles" size={16} color={colors.accentText} />
-                            <Text style={[styles.generateInsightsBtnText, { color: colors.accentText }]}>
-                              Generate Insights
-                            </Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    </View>
+                    <GenerateAction
+                      message="Personalized coaching based on your recent training."
+                      label="Generate Insights"
+                      loading={insightsLoading}
+                      onPress={fetchInsights}
+                      loadingAccessibilityLabel="Writing insights"
+                    />
                   )
               ) : (
                 <>
@@ -1240,13 +1071,11 @@ export default function CoachScreen({ navigation }: Props) {
               activeMetric === 'volume' ? b.volume
                 : activeMetric === 'sets' ? b.sets
                 : activeMetric === 'distance' ? roundTenth(toDisplayDistance(b.distance_km ?? 0, distanceUnit))
-                : activeMetric === 'density' ? Math.round(b.density ?? 0)
                 : b.count;
             const hasData = progressData.some(b => getValue(b) > 0);
             const metricLabel = activeMetric === 'volume' ? `Volume (${weightUnit})`
               : activeMetric === 'sets' ? 'Sets'
               : activeMetric === 'distance' ? `Distance (${distanceUnit})`
-              : activeMetric === 'density' ? `Density (${weightUnit}/min)`
               : 'Workouts';
 
             const BAR_GAP = 6;
@@ -1540,21 +1369,12 @@ export default function CoachScreen({ navigation }: Props) {
                         {idx > 0 && <View style={styles.metricDivider} />}
                         <TouchableOpacity
                           style={styles.metricItem}
-                          onPress={metricLocked(m)
-                            ? () => (navigation as any).navigate('Paywall', { source: m })
-                            : () => handleMetricChange(m)}
+                          onPress={() => handleMetricChange(m)}
                           activeOpacity={0.7}
                         >
-                          <View style={styles.metricLabelRow}>
-                            {metricLocked(m) && <Ionicons name="lock-closed" size={11} color={colors.textSecondary} />}
-                            <Text
-                              style={[styles.metricText, activeMetric === m && { color: colors.accent, fontWeight: '700' }]}
-                              numberOfLines={1}
-                              adjustsFontSizeToFit
-                            >
-                              {m.charAt(0).toUpperCase() + m.slice(1)}
-                            </Text>
-                          </View>
+                          <Text style={[styles.metricText, activeMetric === m && { color: colors.accent, fontWeight: '700' }]}>
+                            {m.charAt(0).toUpperCase() + m.slice(1)}
+                          </Text>
                         </TouchableOpacity>
                       </React.Fragment>
                     ))}
@@ -1570,16 +1390,33 @@ export default function CoachScreen({ navigation }: Props) {
                 </View>
                 )}
 
-                {renderMuscleVolumeCard()}
                 {muscleVolume && (
-                  <MuscleInsightsCard
-                    muscleSets={muscleVolume.muscle_sets}
-                    weeklyHistory={muscleVolume.weekly_history}
-                    setsToDate={muscleVolume.this_week_total ?? 0}
-                    lastWeekSetsToDate={muscleVolume.last_week_to_date_total}
+                  <MuscleVolumeCard
+                    data={muscleVolume}
                     isPremium={isPremium}
+                    barsAnim={barsAnim}
+                    onInfo={() => setWorkingSetsInfoVisible(true)}
                     onUnlock={() => (navigation as any).navigate('Paywall', { source: 'muscle_volume' })}
                   />
+                )}
+                {hasAdvancedStats && muscleVolume && (
+                  <PremiumTeaser
+                    locked={!isPremium}
+                    largeLock
+                    source="muscle_volume"
+                    title="Advanced stats"
+                    body="A fatigue monitor that compares this week with last, your push, pull and legs balance, and how much work you fit into each minute."
+                    onUnlock={() => (navigation as any).navigate('Paywall', { source: 'muscle_volume' })}
+                  >
+                    <AdvancedStatsCard
+                      muscleSets={muscleVolume.muscle_sets}
+                      setsToDate={muscleVolume.this_week_total ?? 0}
+                      lastWeekSetsToDate={muscleVolume.last_week_to_date_total}
+                      densityBuckets={progressData}
+                      hasDensity={!!metricsLogged?.density}
+                      weightUnit={weightUnit}
+                    />
+                  </PremiumTeaser>
                 )}
               </>
             );
@@ -1736,39 +1573,13 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   metricItem: { flex: 1, paddingVertical: 9, alignItems: 'center', justifyContent: 'center' },
   metricDivider: { width: 1, backgroundColor: colors.border, marginVertical: spacing.sm },
-  metricLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   metricText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
   metricSlider: { position: 'absolute', bottom: 0, height: 2, backgroundColor: colors.accent, borderRadius: 1 },
   scoreCardTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, marginBottom: 3 },
   axisLabel: { fontSize: 9, color: colors.textSecondary },
 
-  // Muscle volume card
-  mvCard: { backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border },
-  mvHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: spacing.sm },
-  mvWeekRange: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 1 },
-  mvTotalText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontWeight: '500' },
-  mvColLabels: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.xs },
-  mvColLabel: { fontSize: 9, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
-  mvRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, gap: spacing.xs },
-  mvMuscleWrap: { width: 80 },
-  mvSubRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  mvSessions: { fontSize: typography.fontSize.xs, fontWeight: '700' },
-  mvCaption: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginBottom: spacing.xs },
-  mvMuscle: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
-  mvBarArea: { flex: 1 },
-  mvFreeTrack: { height: 5, backgroundColor: colors.border, borderRadius: 3, overflow: 'hidden' },
-  mvFreeFill: { height: '100%', borderRadius: 3 },
-  mvPremiumTrack: { height: 7, backgroundColor: colors.border, borderRadius: 3, overflow: 'visible', position: 'relative' },
-  mvPremiumFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 3 },
-  mvTick: { position: 'absolute', top: -2, bottom: -2, width: 1.5, backgroundColor: colors.background },
-  mvCount: { width: 30, fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, textAlign: 'right' },
-  mvZoneLabel: { width: 78, fontSize: typography.fontSize.xs, fontWeight: '600', textAlign: 'right' },
-  mvLastTrained: { width: 78, fontSize: typography.fontSize.xs, color: colors.textSecondary, textAlign: 'right' },
   barTopLabel: { fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textPrimary, marginBottom: 2, textAlign: 'center' },
   insightsUpdated: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: spacing.xs },
-  mvDivider: { paddingVertical: spacing.xs, marginVertical: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  mvDividerText: { fontSize: typography.fontSize.xs, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 },
-  mvPremiumTeaser: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
 
   emptyText: { textAlign: 'center', color: colors.textSecondary, marginVertical: spacing.sm, fontSize: typography.fontSize.sm },
 
@@ -1868,12 +1679,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   moreInsightsText: { flex: 1, fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
   insightsEmpty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
   insightsEmptyText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center', maxWidth: 240 },
-  generateInsightsBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: spacing.xs, borderRadius: 20, minWidth: 180,
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, marginTop: spacing.xs,
-  },
-  generateInsightsBtnText: { fontSize: typography.fontSize.md, fontWeight: '700' },
   upgradeBanner: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     backgroundColor: colors.accent + '15', borderRadius: spacing.sm,

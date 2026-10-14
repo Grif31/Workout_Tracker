@@ -1,5 +1,3 @@
-import { MUSCLE_STANDARDS } from '../constants/volumeLandmarks';
-
 export type Trend = 'up' | 'flat' | 'down';
 
 const TREND_CHANGE = 0.15;
@@ -24,7 +22,7 @@ export function muscleTrend(history: number[] | undefined): Trend | null {
 export const GOOD_WEEKLY_SESSIONS = 2;
 
 export type FatigueKind = 'ok' | 'high' | 'spike' | 'drop';
-export type FatigueBanner = { kind: FatigueKind; pct: number; title: string; detail: string };
+export type FatigueBanner = { kind: FatigueKind; pct: number; headline: string; title: string; detail: string };
 
 // Under this, last week's baseline is too thin for a percentage to mean anything
 const MIN_BASELINE_SETS = 8;
@@ -39,16 +37,16 @@ export function fatigueBanner(thisToDate: number, lastToDate: number): FatigueBa
   if (lastToDate < MIN_BASELINE_SETS) return null;
   const pct = Math.round(((thisToDate - lastToDate) / lastToDate) * 100);
   if (pct > 35) {
-    return { kind: 'spike', pct, title: `Volume is up ${pct}% on last week`, detail: 'A jump this size is a common cause of overuse injuries. Hold your sets steady or add a rest day.' };
+    return { kind: 'spike', pct, headline: 'Big jump this week', title: `Volume is up ${pct}% on last week`, detail: 'A jump this size is a common cause of overuse injuries. Hold your sets steady or add a rest day.' };
   }
   if (pct > 20) {
-    return { kind: 'high', pct, title: `Volume is up ${pct}% on last week`, detail: 'A fast climb. Keep an eye on recovery and sleep.' };
+    return { kind: 'high', pct, headline: 'Climbing fast', title: `Volume is up ${pct}% on last week`, detail: 'A fast climb. Keep an eye on recovery and sleep.' };
   }
   if (thisToDate < lastToDate * 0.4) {
-    return { kind: 'drop', pct, title: `Volume is ${Math.abs(pct)}% below last week`, detail: 'If that is not a planned lighter week, a missed session now keeps your progress from carrying over.' };
+    return { kind: 'drop', pct, headline: 'Well below last week', title: `Volume is ${Math.abs(pct)}% below last week`, detail: 'If that is not a planned lighter week, a missed session now keeps your progress from carrying over.' };
   }
   return {
-    kind: 'ok', pct,
+    kind: 'ok', pct, headline: 'On track',
     title: pct >= 0 ? `On track, up ${pct}% on last week` : `On track, ${Math.abs(pct)}% below last week`,
     detail: 'This week matches last week so far.',
   };
@@ -83,23 +81,4 @@ export function pplBalance(muscleSets: Record<string, number>): PplBalance | nul
   if (groups.Push === 0 || groups.Pull === 0) return { groups, total, ratio: null, tone: null };
   const ratio = groups.Pull / groups.Push;
   return { groups, total, ratio, tone: ratio >= 1 ? 'good' : ratio >= 0.7 ? 'watch' : 'low' };
-}
-
-/**
- * The muscle that has sat between zero and its minimum effective volume for
- * each of the last two weeks, furthest below first. Not a muscle at zero: that
- * can be a choice. Null when there is none.
- */
-export function longBelowMev(history: Record<string, number[]> | undefined): string | null {
-  if (!history) return null;
-  let worst: { muscle: string; ratio: number } | null = null;
-  for (const [muscle, weeks] of Object.entries(history)) {
-    const std = MUSCLE_STANDARDS[muscle];
-    if (!std || weeks.length < 2) continue;
-    const lastTwo = weeks.slice(-2);
-    if (!lastTwo.every(n => n > 0 && n < std.mev)) continue;
-    const ratio = Math.max(...lastTwo) / std.mev;
-    if (!worst || ratio < worst.ratio) worst = { muscle, ratio };
-  }
-  return worst?.muscle ?? null;
 }

@@ -6,6 +6,7 @@
  */
 jest.mock('../constants/purchaseConfig', () => ({ REVENUECAT_IOS_KEY: 'test-key', BETA_PREMIUM: false }));
 jest.mock('../utils/notifications', () => ({ cancelTrialReminder: jest.fn() }));
+jest.mock('../utils/premiumSync', () => ({ syncServerPremium: jest.fn() }));
 jest.mock('react-native-purchases', () => ({
   __esModule: true,
   default: {
@@ -28,6 +29,7 @@ import { renderHook, waitFor, act } from '@testing-library/react-native';
 import Purchases from 'react-native-purchases';
 import { useAuth } from '../context/AuthContext';
 import { PurchaseProvider, usePurchase } from '../context/PurchaseContext';
+import { syncServerPremium } from '../utils/premiumSync';
 
 const rc = Purchases as unknown as Record<string, jest.Mock>;
 const mockUseAuth = useAuth as jest.Mock;
@@ -121,6 +123,49 @@ describe('premium status with RevenueCat configured', () => {
     await waitFor(() => expect(rc.logIn).toHaveBeenCalledWith('8'));
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.isPremium).toBe(false);
+  });
+
+  describe('telling the server', () => {
+    it('syncs once at sign-in, and again only when the answer changes', async () => {
+      rc.logIn.mockResolvedValue({ customerInfo: FREE });
+      signIn(7);
+      const { result } = renderPurchase();
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(syncServerPremium).toHaveBeenCalledTimes(1);
+
+      // Refreshes that say the same thing don't ask again
+      act(() => sdkListener()(FREE));
+      act(() => sdkListener()(FREE));
+      expect(syncServerPremium).toHaveBeenCalledTimes(1);
+
+      act(() => sdkListener()(PREMIUM));
+      expect(syncServerPremium).toHaveBeenCalledTimes(2);
+      act(() => sdkListener()(FREE));
+      expect(syncServerPremium).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not report a failed lookup as an answer', async () => {
+      rc.logIn.mockRejectedValue(new Error('offline'));
+      signIn(7);
+      const { result } = renderPurchase();
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(syncServerPremium).not.toHaveBeenCalled();
+    });
+
+    it('asks again for the next account after a sign-out', async () => {
+      rc.logIn.mockResolvedValue({ customerInfo: FREE });
+      signIn(7);
+      const { result, rerender } = renderPurchase();
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(syncServerPremium).toHaveBeenCalledTimes(1);
+
+      signIn(null);
+      rerender({});
+      await waitFor(() => expect(rc.logOut).toHaveBeenCalled());
+      signIn(8);
+      rerender({});
+      await waitFor(() => expect(syncServerPremium).toHaveBeenCalledTimes(2));
+    });
   });
 
   it('describes the plan held, for Account Settings', async () => {

@@ -86,25 +86,36 @@ describe('Coach tab for a free account', () => {
   });
 });
 
-describe('Density chart tab for a free account', () => {
+describe('Advanced stats lock for a free account', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     appCache.clear();
     await AsyncStorage.clear();
   });
 
-  it('is shown with a lock and opens the paywall instead of the chart', async () => {
-    installServer({
-      '/api/stats/progress': {
-        buckets: [{ label: '9/22', volume: 5000, sets: 12, count: 2, distance_km: 0, density: 40 }],
-        metrics_logged: { volume: true, sets: true, workouts: true, distance: false, density: true },
-      },
-    });
+  const progress = {
+    buckets: [{ label: '9/22', volume: 5000, sets: 12, count: 2, distance_km: 0, density: 40 }],
+    metrics_logged: { volume: true, sets: true, workouts: true, distance: false, density: true },
+  };
+
+  it('puts one lock over the fatigue, balance and density cards and opens the paywall', async () => {
+    installServer({ '/api/stats/progress': progress });
     const nav = createMockNavigation();
     const r = render(<CoachScreen navigation={nav as any} route={createMockRoute('CoachHome') as any} />);
-    fireEvent.press(await r.findByText('Density'));
-    expect(nav.navigate).toHaveBeenCalledWith('Paywall', { source: 'density' });
-    expect(r.queryByText(/^Density \(/)).toBeNull();
+    expect(await r.findByText('Advanced stats')).toBeTruthy();
+    expect(r.getByTestId('premium-teaser')).toBeTruthy();
+    fireEvent.press(r.getByText('Unlock with Premium'));
+    expect(nav.navigate).toHaveBeenCalledWith('Paywall', { source: 'muscle_volume' });
+  });
+
+  it('is not there when there is nothing yet to unlock', async () => {
+    installServer({
+      '/api/stats/progress': { buckets: [], metrics_logged: { volume: false, sets: false, workouts: false, distance: false, density: false } },
+      '/api/stats/muscle-volume': { muscle_sets: {}, last_trained: {}, total_sets: 0, last_week_total: 0, this_week_total: 0, last_week_to_date_total: 0, week_start: '2026-09-21' },
+    });
+    const r = render(<CoachScreen navigation={createMockNavigation() as any} route={createMockRoute('CoachHome') as any} />);
+    await act(async () => {});
+    expect(r.queryByText('Advanced stats')).toBeNull();
   });
 });
 

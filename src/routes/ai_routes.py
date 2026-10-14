@@ -13,6 +13,7 @@ from models import (
 from schemas import AiGenerateSchema, AiInsightsSchema, AiSaveSchema, AiWeeklyReviewSchema
 from utils.validation import validate_body
 from utils.local_date import user_today
+from utils.premium import has_premium, free_onboarding_allowed, premium_required_response
 from utils.lift_progress import compute_most_improved_lift
 from utils.exercise_access import add_template_exercises
 from utils.cardio_progress import compute_most_improved_cardio, _MILESTONE_LABELS
@@ -1164,15 +1165,25 @@ def _build_insights_prompt(ctx: dict, review: bool = False) -> str:
     return '\n'.join(lines)
 
 
+def _generate_limit():
+    """Premium gets 10 previews a day; a free account is only generating its onboarding program."""
+    user = db.session.get(User, int(get_jwt_identity()))
+    return '10 per day' if has_premium(user) else '3 per day'
+
+
 @ai_bp.post('/api/ai/generate')
 @jwt_required()
-@limiter.limit('10 per day', key_func=lambda: f"ai_gen:{get_jwt_identity()}")
+@limiter.limit(_generate_limit, key_func=lambda: f"ai_gen:{get_jwt_identity()}")
 @validate_body(_ai_generate_schema)
 def generate_workout():
-    """Generate a workout plan and return a preview — does NOT save to DB."""
+    """Generate a workout plan and return a preview — does NOT save to DB.
+    Premium, except that a free account may generate the program onboarding
+    builds for it until it has saved one."""
     data = g.validated
     generate_type = data['generate_type']
     user_id = int(get_jwt_identity())
+    if not has_premium(db.session.get(User, user_id)) and not free_onboarding_allowed(user_id):
+        return premium_required_response()
 
     api_key = os.environ.get('ANTHROPIC_API_KEY')
     if not api_key:
@@ -1234,6 +1245,8 @@ def get_ai_insights():
     """
     user_id = int(get_jwt_identity())
     data = g.validated
+    if not has_premium(db.session.get(User, user_id)):
+        return premium_required_response()
     api_key = os.environ.get('ANTHROPIC_API_KEY')
     if not api_key:
         return jsonify({'message': 'AI service not configured'}), 503
@@ -1311,7 +1324,13 @@ def get_weekly_review():
             if not isinstance(part, dict) or not _is_grounded(part, ctx, known):
                 continue
             review[key] = {'title': _brand_copy(part['title'], heading=True), 'body': _brand_copy(part['body'])}
-        return jsonify({'review': review, 'generated_at': datetime.now().isoformat()}), 200
+        # Free accounts read the first part; the rest are named so the app can show them locked
+        locked = []
+        if not has_premium(db.session.get(User, user_id)):
+            keys = [key for key in REVIEW_SECTIONS if key in review]
+            locked = keys[1:]
+            review = {key: review[key] for key in keys[:1]}
+        return jsonify({'review': review, 'locked': locked, 'generated_at': datetime.now().isoformat()}), 200
 
     except ImportError:
         return jsonify({'message': 'anthropic package not installed'}), 503
@@ -1334,6 +1353,10 @@ def save_generated_workout():
     user_id = get_jwt_identity()
     data = g.validated
     gen_type = data['type']
+    if not has_premium(db.session.get(User, int(user_id))):
+        onboarding_routine = gen_type == 'routine' and data['starter'] and free_onboarding_allowed(int(user_id))
+        if not onboarding_routine:
+            return premium_required_response()
 
     if gen_type == 'routine':
         routine = Routine(

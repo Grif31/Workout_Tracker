@@ -1,4 +1,4 @@
-import { muscleTrend, fatigueBanner, pplBalance, longBelowMev } from '../utils/muscleTrends';
+import { muscleTrend, fatigueBanner, pplBalance } from '../utils/muscleTrends';
 
 describe('muscleTrend', () => {
   it('compares the last two weeks with the first two', () => {
@@ -31,8 +31,8 @@ describe('fatigueBanner', () => {
   });
 
   it('names a big jump', () => {
-    expect(fatigueBanner(41, 30)).toMatchObject({ kind: 'spike', pct: 37 });
-    expect(fatigueBanner(37, 30)).toMatchObject({ kind: 'high', pct: 23 });
+    expect(fatigueBanner(41, 30)).toMatchObject({ kind: 'spike', pct: 37, headline: 'Big jump this week' });
+    expect(fatigueBanner(37, 30)).toMatchObject({ kind: 'high', pct: 23, headline: 'Climbing fast' });
   });
 
   it('uses 20 and 35 percent as the edges', () => {
@@ -48,14 +48,14 @@ describe('fatigueBanner', () => {
   });
 
   it('flags well under last week, from 40% of it down', () => {
-    expect(fatigueBanner(11, 30)).toMatchObject({ kind: 'drop', pct: -63 });
+    expect(fatigueBanner(11, 30)).toMatchObject({ kind: 'drop', pct: -63, headline: 'Well below last week' });
     expect(fatigueBanner(12, 30)?.kind).toBe('ok');
   });
 
   it('has no em dashes or exclamation marks in its copy', () => {
     for (const [a, b] of [[41, 30], [37, 30], [11, 30], [30, 30]]) {
       const banner = fatigueBanner(a, b)!;
-      expect(banner.title + banner.detail).not.toMatch(/[—!]/);
+      expect(banner.headline + banner.title + banner.detail).not.toMatch(/[—!]/);
     }
   });
 });
@@ -81,24 +81,5 @@ describe('pplBalance', () => {
   it('waits for a few sets before judging a week', () => {
     expect(pplBalance({ Chest: 2, Back: 2 })).toBeNull();
     expect(pplBalance({})).toBeNull();
-  });
-});
-
-describe('longBelowMev', () => {
-  it('finds a muscle under its minimum for both of the last two weeks', () => {
-    expect(longBelowMev({ Chest: [10, 12, 5, 6], Back: [12, 12, 12, 12] })).toBe('Chest');
-  });
-
-  it('picks the one furthest below', () => {
-    expect(longBelowMev({ Chest: [0, 0, 6, 7], Triceps: [0, 0, 1, 2] })).toBe('Triceps');
-  });
-
-  it('ignores a muscle at zero, which can be a choice, and one that recovered', () => {
-    expect(longBelowMev({ Calves: [0, 0, 0, 0], Chest: [4, 4, 4, 9], Back: [4, 4, 0, 4] })).toBeNull();
-  });
-
-  it('copes with no data or an unknown muscle', () => {
-    expect(longBelowMev(undefined)).toBeNull();
-    expect(longBelowMev({ Wings: [1, 1, 1, 1] })).toBeNull();
   });
 });

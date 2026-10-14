@@ -26,11 +26,14 @@ PUBLIC = {
     '/static/<path:filename>', '/brand/<path:filename>',
     '/api/signup', '/api/login', '/api/refresh', '/api/auth/social',
     '/api/forgot-password', '/api/verify-otp', '/api/reset-password',
+    # RevenueCat's servers call this, authenticated by a shared secret header
+    '/api/webhooks/revenuecat',
 }
 
 # Call out to Anthropic, Apple/Google or send email; covered by their own
 # tests with those services mocked.
-EXTERNAL = {'/api/ai/generate', '/api/ai/insights', '/api/ai/weekly-review', '/api/ai/save', '/api/auth/social'}
+EXTERNAL = {'/api/ai/generate', '/api/ai/insights', '/api/ai/weekly-review', '/api/ai/save', '/api/auth/social',
+            '/api/premium/sync'}
 
 
 def _api_rules(app):
