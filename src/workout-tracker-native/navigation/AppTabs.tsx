@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { postLiveWorkoutNotification, cancelLiveWorkoutNotification } from '../utils/notifications';
 import { endLiveActivity, isLiveActivityActive } from '../utils/liveActivity';
 import MiniRunBar from '../components/MiniRunBar';
+import { useGpsRun } from '../context/GpsRunContext';
 import { currentExerciseName } from '../utils/liveActivityProps';
 import { onPendingCountChange, initPendingCount, flushQueue, announceFlushResult } from '../utils/offlineQueue';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -173,8 +174,8 @@ function MiniWorkoutBar() {
           </Text>
         </View>
         <View style={[styles.miniBtn, { backgroundColor: colors.accent }]}>
-          <Ionicons name="play" size={14} color={colors.accentText} />
-          <Text style={[styles.miniBtnText, { color: colors.accentText }]}>Resume</Text>
+          <Ionicons name="chevron-up" size={14} color={colors.accentText} />
+          <Text style={[styles.miniBtnText, { color: colors.accentText }]}>Open</Text>
         </View>
         <TouchableOpacity
           style={[styles.miniBtn, { borderWidth: 1, borderColor: colors.border }]}
@@ -289,6 +290,7 @@ function AnimatedTabBar({ state, navigation, colors, pendingCount }: {
 function CustomTabBar(props: BottomTabBarProps) {
   const { colors } = useTheme();
   const { isWorkoutOpen } = useWorkoutSession();
+  const { screenOpen: gpsScreenOpen } = useGpsRun();
   const translateY = useRef(new Animated.Value(0)).current;
   const opacity    = useRef(new Animated.Value(1)).current;
   const heightRef  = useRef(0);
@@ -328,7 +330,11 @@ function CustomTabBar(props: BottomTabBarProps) {
     }
   }, [isOnSubScreen]);
 
-  if (isWorkoutOpen) return null;
+  // Gone at once rather than collapsing, so it doesn't hang on screen as the map
+  // slides up. The route name comes from navigation state, which changes in the
+  // render that starts the push; the screen's own flag is only set once it has
+  // mounted, a few frames later, and its space lingered until then.
+  if (isWorkoutOpen || gpsScreenOpen || focusedRoute === 'GPSCardio') return null;
   return (
     <View style={{ backgroundColor: colors.surface }}>
       <MiniWorkoutBar />

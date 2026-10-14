@@ -12,7 +12,7 @@ import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../utils/units';
 import { runElapsedSeconds } from '../utils/gpsRun';
 
 // Stands in for GPSCardioScreen while a run is minimized, the way the workout
-// mini bar stands in for WorkoutLog. Resume goes back to the map; Discard asks
+// mini bar stands in for WorkoutLog. Open goes back to the map; Discard asks
 // first, since a tracked route can't be re-walked. Pause and Stop stay on the
 // screen.
 
@@ -95,7 +95,7 @@ export default function MiniRunBar() {
         onPress={resume}
         style={[styles.bar, { backgroundColor: colors.surface, borderTopColor: colors.border }]}
         accessibilityRole="button"
-        accessibilityLabel={recovered ? `Unsaved ${activity}. Review` : `${activity} in progress. Resume`}
+        accessibilityLabel={recovered ? `Unsaved ${activity}. Review` : `${activity} in progress. Open`}
       >
         <View style={styles.left}>
           <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>
@@ -106,8 +106,8 @@ export default function MiniRunBar() {
           </Text>
         </View>
         <View style={[styles.btn, { backgroundColor: colors.accent }]}>
-          <Ionicons name="play" size={14} color={colors.accentText} />
-          <Text style={[styles.btnText, { color: colors.accentText }]}>{recovered ? 'Review' : 'Resume'}</Text>
+          <Ionicons name={recovered ? 'play' : 'chevron-up'} size={14} color={colors.accentText} />
+          <Text style={[styles.btnText, { color: colors.accentText }]}>{recovered ? 'Review' : 'Open'}</Text>
         </View>
         <TouchableOpacity
           style={[styles.btn, { borderWidth: 1, borderColor: colors.border }]}

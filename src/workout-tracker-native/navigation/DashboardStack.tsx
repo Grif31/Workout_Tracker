@@ -28,7 +28,11 @@ export function DashboardStack() {
         component={LogWorkoutScreen}
         options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
       />
-      <Stack.Screen name="GPSCardio" component={GPSCardioScreen} options={{ contentStyle: { paddingTop: 0 } }} />
+      <Stack.Screen
+        name="GPSCardio"
+        component={GPSCardioScreen}
+        options={{ contentStyle: { paddingTop: 0 }, animation: 'slide_from_bottom', gestureEnabled: false }}
+      />
       <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen as any} options={{ presentation: 'modal', contentStyle: { paddingTop: 0 } }} />
       <Stack.Screen name="GreekRankIntro" component={GreekRankIntroScreen} options={{ contentStyle: { paddingTop: 0 }, animation: 'fade' }} />
       <Stack.Screen name="WeeklySummary" component={WeeklySummaryScreen} options={{ contentStyle: { paddingTop: 0 } }} />

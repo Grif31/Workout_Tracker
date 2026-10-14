@@ -93,6 +93,7 @@ describe('MiniRunBar', () => {
     expect(r.getByText('Unsaved Run')).toBeTruthy();
     expect(r.getByText('Review')).toBeTruthy();
     expect(r.queryByText('Resume')).toBeNull();
+    expect(r.queryByText('Open')).toBeNull();
     fireEvent.press(r.getByText('Review'));
     expect(mockNavigate).toHaveBeenCalledWith('DashboardTab', { screen: 'GPSCardio', initial: false });
   });
@@ -125,9 +126,15 @@ describe('MiniRunBar', () => {
     expect((await renderBar()).getByText('Cycle')).toBeTruthy();
   });
 
-  it('goes back to the map on Resume, without stranding the stack', async () => {
+  it('says Open, not Resume: a run in progress is not paused', async () => {
     const r = await renderBar();
-    fireEvent.press(r.getByText('Resume'));
+    expect(r.queryByText('Resume')).toBeNull();
+    expect(r.getByText('Open')).toBeTruthy();
+  });
+
+  it('goes back to the map on Open, without stranding the stack', async () => {
+    const r = await renderBar();
+    fireEvent.press(r.getByText('Open'));
     expect(mockNavigate).toHaveBeenCalledWith('DashboardTab', { screen: 'GPSCardio', initial: false });
   });
 

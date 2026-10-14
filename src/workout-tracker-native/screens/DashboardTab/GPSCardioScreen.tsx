@@ -35,7 +35,7 @@ import {
   ACTIVITIES, ACTIVITY_TEMPLATE_NAME, buildGpsRunBody, runElapsedSeconds, type Activity,
 } from '../../utils/gpsRun';
 import { useGpsRun } from '../../context/GpsRunContext';
-import { navigationRef } from '../../navigation/navigationRef';
+import { alertWorkoutInProgress } from '../../utils/sessionConflict';
 
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'GPSCardio'>;
@@ -212,20 +212,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
     if (result === 'denied') {
       Alert.alert('Permission needed', 'Location access is required to track your activity.');
     } else if (result === 'workout-active') {
-      Alert.alert(
-        'Workout in progress',
-        'Finish or discard your workout before tracking an activity.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Go to Workout',
-            onPress: () => {
-              navigation.goBack();
-              navigationRef.navigate('DashboardTab', { screen: 'WorkoutLog', params: {}, initial: false });
-            },
-          },
-        ],
-      );
+      alertWorkoutInProgress({ beforeGo: () => navigation.goBack() });
     }
   };
 
@@ -233,6 +220,26 @@ export default function GPSCardioScreen({ navigation }: Props) {
     stop();
     setWorkoutName(activity);
     setConfirmVisible(true);
+  };
+
+  // Stop is the end: it goes on to saving, and the run can't be picked back up.
+  // Pause is the break, so say which this is.
+  const confirmStop = () => {
+    Alert.alert(
+      'End this activity?',
+      "Stopping ends the activity and takes you to save it. You won't be able to resume it. To take a break, use Pause.",
+      [
+        { text: 'Keep Going', style: 'cancel' },
+        { text: 'End Activity', style: 'destructive', onPress: handleStop },
+      ],
+    );
+  };
+
+  // Hides the mini bar's stand-in early: the bar belongs from the moment the map
+  // starts sliding away, not after it has gone
+  const leaveScreen = () => {
+    setScreenOpen(false);
+    navigation.goBack();
   };
 
   const handleDiscard = () => {
@@ -375,11 +382,12 @@ export default function GPSCardioScreen({ navigation }: Props) {
       {/* Back button */}
       <TouchableOpacity
         style={[styles.backBtn, { top: insets.top + spacing.sm }]}
-        onPress={() => navigation.goBack()}
+        onPress={leaveScreen}
         accessibilityRole="button"
-        accessibilityLabel="Go back"
+        accessibilityLabel={trackingState === 'idle' ? 'Close' : 'Minimize'}
       >
-        <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+        {/* Down, like the workout log's minimize: the screen slides down out of the way */}
+        <Ionicons name="chevron-down" size={24} color={colors.textPrimary} />
       </TouchableOpacity>
 
       {/* Controls */}
@@ -432,7 +440,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
                 <Ionicons name="pause" size={22} color={colors.textPrimary} />
                 <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Pause</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.mainBtn, { backgroundColor: colors.danger }]} onPress={handleStop}>
+              <TouchableOpacity style={[styles.mainBtn, { backgroundColor: colors.danger }]} onPress={confirmStop}>
                 <Ionicons name="stop" size={28} color={colors.accentText} />
                 <Text style={styles.mainBtnText}>Stop</Text>
               </TouchableOpacity>
@@ -463,7 +471,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
                 <Ionicons name="play" size={22} color={colors.textPrimary} />
                 <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Resume</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.mainBtn, { backgroundColor: colors.danger }]} onPress={handleStop}>
+              <TouchableOpacity style={[styles.mainBtn, { backgroundColor: colors.danger }]} onPress={confirmStop}>
                 <Ionicons name="stop" size={28} color={colors.accentText} />
                 <Text style={styles.mainBtnText}>Stop</Text>
               </TouchableOpacity>

@@ -9,6 +9,8 @@ import { DashboardStackParamsList } from '../../navigation/types';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useGpsRun } from '../../context/GpsRunContext';
+import { useWorkoutSession } from '../../context/WorkoutSessionContext';
+import { alertActivityInProgress, alertWorkoutInProgress } from '../../utils/sessionConflict';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -281,6 +283,7 @@ const AVATAR_SIZE = 38;
 export default function DashboardScreen({ navigation }: Props) {
   const { user: authUser } = useAuth();
   const { trackingState: gpsTrackingState } = useGpsRun();
+  const { session: minimizedWorkout } = useWorkoutSession();
   const { colors, accentPreset } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
@@ -728,15 +731,23 @@ export default function DashboardScreen({ navigation }: Props) {
 
           <TouchableOpacity
             style={styles.logButton}
-            onPress={() => navigation.navigate('WorkoutLog', { prefill: undefined, editMode: false })}
+            onPress={() => {
+              // A minimized workout is resumed; a run in progress is said so here, not
+              // by opening a screen that closes itself
+              if (!minimizedWorkout && gpsTrackingState !== 'idle') { alertActivityInProgress(); return; }
+              navigation.navigate('WorkoutLog', { prefill: undefined, editMode: false });
+            }}
           >
-            <Ionicons name="add-circle" size={20} color={colors.accentText} />
-            <Text style={styles.logButtonText}>Log Workout</Text>
+            <Ionicons name={minimizedWorkout ? 'play-circle' : 'add-circle'} size={20} color={colors.accentText} />
+            <Text style={styles.logButtonText}>{minimizedWorkout ? 'Resume Workout' : 'Log Workout'}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.trackButton}
-            onPress={() => navigation.navigate('GPSCardio')}
+            onPress={() => {
+              if (minimizedWorkout) { alertWorkoutInProgress(); return; }
+              navigation.navigate('GPSCardio');
+            }}
           >
             <Ionicons name="location-outline" size={16} color={colors.accent} style={{ marginRight: spacing.xs }} />
             <Text style={styles.trackButtonText}>{gpsTrackingState === 'idle' ? 'Track Activity' : 'Resume Activity'}</Text>

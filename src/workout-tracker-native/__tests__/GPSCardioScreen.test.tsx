@@ -109,12 +109,19 @@ const advance = async (ms: number) => {
   });
 };
 
+// Stop asks first: it ends the run for good, so the test confirms
+async function pressStop(r: ReturnType<typeof render>) {
+  await act(async () => { fireEvent.press(r.getByText('Stop')); });
+  const ask = (Alert.alert as jest.Mock).mock.calls.filter(c => c[0] === 'End this activity?').at(-1);
+  await act(async () => { ask![2].find((b: any) => b.text === 'End Activity').onPress(); });
+}
+
 async function runAndStop(r: ReturnType<typeof render>, points: any[], durationMs = 10 * 60_000) {
   await act(async () => { fireEvent.press(r.getByText('Start')); });
   await waitFor(() => expect(mockGpsListener).not.toBeNull());
   await feed(...points);
   await advance(durationMs);
-  await act(async () => { fireEvent.press(r.getByText('Stop')); });
+  await pressStop(r);
   await waitFor(() => expect(r.getByText('Save Activity?')).toBeTruthy());
 }
 
@@ -200,7 +207,7 @@ describe('GPSCardioScreen', () => {
       await waitFor(() => expect(mockGpsListener).not.toBeNull());
       // Resumes 40 points away and 20 minutes later; neither gap may count
       await feed(point(40), point(41), point(42), point(43));
-      await act(async () => { fireEvent.press(r.getByText('Stop')); });
+      await pressStop(r);
       await act(async () => { fireEvent.press(r.getByText('Save')); });
 
       await waitFor(() => expect(posts()).toHaveLength(1));
@@ -258,7 +265,7 @@ describe('GPSCardioScreen', () => {
       await waitFor(() => expect(mockGpsListener).not.toBeNull());
       // First fix after resuming is 9 points (~1 km) away: that gap must not count.
       await feed(point(10), point(11));
-      await act(async () => { fireEvent.press(r.getByText('Stop')); });
+      await pressStop(r);
       await act(async () => { fireEvent.press(r.getByText('Save')); });
 
       await waitFor(() => expect(posts()).toHaveLength(1));
@@ -311,6 +318,46 @@ describe('GPSCardioScreen', () => {
       await act(async () => { buttons.find((b: any) => b.text === 'Save Offline').onPress(); });
       await waitFor(() => expect(mockEnqueueWorkout).toHaveBeenCalledTimes(1));
       expect(nav.goBack).toHaveBeenCalled();
+    });
+  });
+
+  describe('stopping', () => {
+    it('warns that it ends the activity, and keeps going if asked to', async () => {
+      const r = await renderReady();
+      await act(async () => { fireEvent.press(r.getByText('Start')); });
+      await waitFor(() => expect(mockGpsListener).not.toBeNull());
+      await feed(point(0), point(1));
+
+      await act(async () => { fireEvent.press(r.getByText('Stop')); });
+      const [title, message, buttons] = alertSpy.mock.calls.find(c => c[0] === 'End this activity?')!;
+      expect(title).toBe('End this activity?');
+      expect(message).toMatch(/ends the activity/);
+      expect(message).toMatch(/Pause/);
+      expect(buttons.map((b: any) => b.text)).toEqual(['Keep Going', 'End Activity']);
+
+      // Nothing has stopped yet, and Keep Going leaves it that way
+      expect(r.queryByText('Save Activity?')).toBeNull();
+      buttons.find((b: any) => b.text === 'Keep Going').onPress?.();
+      expect(r.getByText('Pause')).toBeTruthy();
+      expect(r.queryByText('Save Activity?')).toBeNull();
+      expect(mockGpsListener).not.toBeNull();
+    });
+
+    it('goes on to the save sheet once the user confirms', async () => {
+      const r = await renderReady();
+      await runAndStop(r, [point(0), point(1)]);
+      expect(r.getByText('Save Activity?')).toBeTruthy();
+    });
+
+    it('warns from a paused run too, but pausing itself asks nothing', async () => {
+      const r = await renderReady();
+      await act(async () => { fireEvent.press(r.getByText('Start')); });
+      await waitFor(() => expect(mockGpsListener).not.toBeNull());
+      await act(async () => { fireEvent.press(r.getByText('Pause')); });
+      expect(alertSpy).not.toHaveBeenCalledWith('End this activity?', expect.anything(), expect.anything());
+
+      await act(async () => { fireEvent.press(r.getByText('Stop')); });
+      expect(alertSpy).toHaveBeenCalledWith('End this activity?', expect.any(String), expect.any(Array));
     });
   });
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { render, waitFor, fireEvent, act, cleanup } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { enqueueWorkout, flushQueue, initPendingCount } from '../utils/offlineQueue';
@@ -10,6 +11,20 @@ import ProfileAvatarFrame from '../components/ProfileAvatarFrame';
 
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 jest.mock('theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));
+
+// The app has one session at a time: these decide what the two start buttons do
+let mockMinimizedWorkout: any = null;
+jest.mock('../context/WorkoutSessionContext', () => ({
+  useWorkoutSession: () => ({
+    session: mockMinimizedWorkout, saveSession: jest.fn(), clearSession: jest.fn(), isWorkoutOpen: false, setWorkoutOpen: jest.fn(),
+  }),
+  WorkoutSessionProvider: ({ children }: any) => children,
+  SESSION_KEY: 'minimized_workout_session',
+}));
+let mockGpsTracking = 'idle';
+jest.mock('../context/GpsRunContext', () => ({ useGpsRun: () => ({ trackingState: mockGpsTracking }) }));
+const mockRefNavigate = jest.fn();
+jest.mock('../navigation/navigationRef', () => ({ navigationRef: { navigate: (...a: any[]) => mockRefNavigate(...a) } }));
 
 const nav = createMockNavigation();
 const route = createMockRoute('DashboardHome');
@@ -160,6 +175,78 @@ describe('DashboardScreen', () => {
   it('shows recent workout name after fetch', async () => {
     const { getByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Push Day')).toBeTruthy());
+  });
+
+  describe('one session at a time', () => {
+    let alertSpy: jest.SpyInstance;
+    beforeEach(() => {
+      jest.clearAllMocks();
+      mockMinimizedWorkout = null;
+      mockGpsTracking = 'idle';
+      alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      mockMinimizedWorkout = null;
+      mockGpsTracking = 'idle';
+      alertSpy.mockRestore();
+    });
+
+    const renderHome = async () => {
+      const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(r.getByText(/Log Workout|Resume Workout/)).toBeTruthy());
+      return r;
+    };
+
+    it('says Resume Workout while a workout is minimized, and goes back to it', async () => {
+      mockMinimizedWorkout = { workoutName: 'Push', exercises: [] };
+      const r = await renderHome();
+      expect(r.queryByText('Log Workout')).toBeNull();
+      fireEvent.press(r.getByText('Resume Workout'));
+      expect(nav.navigate).toHaveBeenCalledWith('WorkoutLog', expect.objectContaining({ editMode: false }));
+      expect(alertSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not open the activity screen over a minimized workout, it says why', async () => {
+      mockMinimizedWorkout = { workoutName: 'Push', exercises: [] };
+      const r = await renderHome();
+      fireEvent.press(r.getByText('Track Activity'));
+      expect(alertSpy).toHaveBeenCalledWith('Workout in progress', expect.any(String), expect.any(Array));
+      expect(nav.navigate).not.toHaveBeenCalledWith('GPSCardio');
+    });
+
+    it('offers to go to the workout from that message', async () => {
+      mockMinimizedWorkout = { workoutName: 'Push', exercises: [] };
+      const r = await renderHome();
+      fireEvent.press(r.getByText('Track Activity'));
+      alertSpy.mock.calls[0][2].find((b: any) => b.text === 'Go to Workout').onPress();
+      expect(mockRefNavigate).toHaveBeenCalledWith('DashboardTab', { screen: 'WorkoutLog', params: {}, initial: false });
+    });
+
+    it('does not open a new workout over a run in progress, it says why', async () => {
+      mockGpsTracking = 'running';
+      const r = await renderHome();
+      fireEvent.press(r.getByText('Log Workout'));
+      expect(alertSpy).toHaveBeenCalledWith('Activity in progress', expect.any(String), expect.any(Array), expect.anything());
+      expect(nav.navigate).not.toHaveBeenCalledWith('WorkoutLog', expect.anything());
+    });
+
+    it('goes back into a run in progress from Resume Activity', async () => {
+      mockGpsTracking = 'paused';
+      const r = await renderHome();
+      expect(r.queryByText('Track Activity')).toBeNull();
+      fireEvent.press(r.getByText('Resume Activity'));
+      expect(nav.navigate).toHaveBeenCalledWith('GPSCardio');
+      expect(alertSpy).not.toHaveBeenCalled();
+    });
+
+    it('starts both normally when nothing is in progress', async () => {
+      const r = await renderHome();
+      fireEvent.press(r.getByText('Track Activity'));
+      expect(nav.navigate).toHaveBeenCalledWith('GPSCardio');
+      fireEvent.press(r.getByText('Log Workout'));
+      expect(nav.navigate).toHaveBeenCalledWith('WorkoutLog', expect.anything());
+      expect(alertSpy).not.toHaveBeenCalled();
+    });
   });
 
   it('shows the Track Activity button', async () => {

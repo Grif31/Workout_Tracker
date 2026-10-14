@@ -181,6 +181,9 @@ describe('minimizing a GPS run', () => {
   it('forgets a saved run, so the next visit starts from Start', async () => {
     const r = await startedRun([0, 1, 2, 3]);
     await act(async () => { fireEvent.press(r.getByText('Stop')); });
+    await act(async () => {
+      alertSpy.mock.calls.filter(c => c[0] === 'End this activity?').at(-1)![2].find((b: any) => b.text === 'End Activity').onPress();
+    });
     await waitFor(() => expect(r.getByText('Save Activity?')).toBeTruthy());
     await act(async () => { fireEvent.press(r.getByText('Save')); });
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('CardioDetails', { workoutId: 77 }));
@@ -361,6 +364,20 @@ describe('minimizing a GPS run', () => {
       expect(r.queryByLabelText('Discard activity')).toBeNull();
     });
 
+    it('hands over to the bar the moment Back is pressed, not once the map has slid away', async () => {
+      const r = render(<BarHarness show />);
+      await settle();
+      await act(async () => { fireEvent.press(r.getByText('Start')); });
+      await waitFor(() => expect(mockGpsListener).not.toBeNull());
+      await feed(point(0), point(1));
+      expect(r.queryByLabelText('Discard activity')).toBeNull();
+
+      // The screen is still mounted, as it is while it slides out
+      await act(async () => { fireEvent.press(r.getByLabelText('Minimize')); });
+      expect(nav.goBack).toHaveBeenCalled();
+      expect(r.getByLabelText('Discard activity')).toBeTruthy();
+    });
+
     it('discarding from the bar stops the run, and the next visit starts clean', async () => {
       const r = render(<BarHarness show />);
       await settle();
@@ -391,7 +408,7 @@ describe('minimizing a GPS run', () => {
       r.rerender(<BarHarness show={false} />);
       await settle();
 
-      await act(async () => { fireEvent.press(r.getByText('Resume')); });
+      await act(async () => { fireEvent.press(r.getByText('Open')); });
       expect(mockNavigate).toHaveBeenCalledWith('DashboardTab', { screen: 'GPSCardio', initial: false });
       r.rerender(<BarHarness show />);
       await settle();
