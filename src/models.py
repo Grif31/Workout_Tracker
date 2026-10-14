@@ -29,6 +29,9 @@ class User(db.Model):
     # unproven password account for someone else's address must not survive
     # that address's real owner signing in (see social_auth).
     email_verified     = db.Column(db.Boolean,    default=False, nullable=False, server_default=db.false())
+    # Set by the RevenueCat webhook and POST /api/premium/sync, never by the app
+    # itself. Only read when PREMIUM_ENFORCED is on (see utils/premium.py).
+    is_premium         = db.Column(db.Boolean,    default=False, nullable=False, server_default=db.false())
     gender            = db.Column(db.String(10),  nullable=True)   # 'male' | 'female' | None
     birth_date        = db.Column(db.Date,          nullable=True)
     workouts = db.relationship('Workout', backref='user', lazy=True)

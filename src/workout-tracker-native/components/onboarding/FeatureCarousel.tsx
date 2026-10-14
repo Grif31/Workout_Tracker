@@ -15,9 +15,10 @@ type Slide =
 
 const PREMIUM_FEATURES = [
   'AI Coach: personalized programs in seconds',
-  'Personalized training insights',
+  'Weekly review and training insights',
+  "Today's Target and injury-aware exercise swaps",
   'Strength Score & Endurance Score',
-  'Muscle volume zones',
+  'Advanced stats: zones, trends and balance',
   'Unlimited templates & routines',
   ...(APP_ICONS_ENABLED ? ['Custom app icons'] : []),
 ];

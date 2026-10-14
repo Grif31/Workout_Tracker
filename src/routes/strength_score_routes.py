@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from utils.local_date import user_today
+from utils.premium import has_premium
 from models import db, Exercise, Set, Workout, User, ExerciseTemplate, PersonalRecord, StrengthScoreSnapshot, BodyweightLog
 
 strength_score_bp = Blueprint('strength_score_bp', __name__)
@@ -477,10 +478,9 @@ def strength_score():
             db.session.commit()
 
     # Build response
-    # TODO(post-launch): server-side premium — RevenueCat webhook sets
-    # user.is_premium and this reads it. Until then the API over-serves
-    # premium fields and gating is client-only (see TODO.md).
-    is_pro = True
+    # The score breakdown for old builds is premium; has_premium is True for everyone
+    # until PREMIUM_ENFORCED is switched on (utils/premium.py)
+    is_pro = has_premium(user)
 
     def _ex_entry(name):
         pct = exercise_percentiles.get(name)

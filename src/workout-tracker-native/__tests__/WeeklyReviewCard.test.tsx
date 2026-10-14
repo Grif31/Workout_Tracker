@@ -9,7 +9,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { mockUser } from './testUtils';
 import WeeklyReviewCard, { WEEKLY_REVIEW_KEY } from '../components/WeeklyReviewCard';
 import { COACH_PROFILE_KEY } from '../components/coach/CoachProfileModal';
+import { syncServerPremium } from '../utils/premiumSync';
 
+jest.mock('../utils/premiumSync', () => ({ syncServerPremium: jest.fn() }));
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 
@@ -47,7 +49,7 @@ describe('WeeklyReviewCard', () => {
     expect(await r.findByText('Three Workouts Logged')).toBeTruthy();
     expect(r.getByText('Back Volume Was Low')).toBeTruthy();
     expect(r.getByText('Add Two Back Sets')).toBeTruthy();
-    expect(JSON.parse((await AsyncStorage.getItem(KEY))!)).toEqual({ weekStart: WEEK, review: REVIEW });
+    expect(JSON.parse((await AsyncStorage.getItem(KEY))!)).toEqual({ weekStart: WEEK, review: REVIEW, locked: [] });
   });
 
   it('shows a free account the first part in full and the rest locked', async () => {
@@ -82,6 +84,37 @@ describe('WeeklyReviewCard', () => {
     const premium = await renderCard(true);
     expect(await premium.findByText('Add Two Back Sets')).toBeTruthy();
     expect(reviewCalls()).toHaveLength(0);
+  });
+
+  it('shows the parts a server held back for a free account as locked rows', async () => {
+    installServer({ body: { review: { went_well: REVIEW.went_well }, locked: ['lagged', 'next_change'] } });
+    const r = await renderCard(false);
+    await act(async () => { fireEvent.press(r.getByText("Get Coach's Read")); });
+    expect(await r.findByText('Three Workouts Logged')).toBeTruthy();
+    expect(r.getByLabelText('Lagged, part of Premium')).toBeTruthy();
+    expect(r.getByLabelText('Change for next week, part of Premium')).toBeTruthy();
+    expect(r.queryByText('Back Volume Was Low')).toBeNull();
+  });
+
+  it('asks again after an upgrade, since the saved review was trimmed', async () => {
+    await AsyncStorage.setItem(KEY, JSON.stringify({ weekStart: WEEK, review: { went_well: REVIEW.went_well }, locked: ['lagged', 'next_change'] }));
+    const free = await renderCard(false);
+    expect(await free.findByLabelText('Lagged, part of Premium')).toBeTruthy();
+    free.unmount();
+    const premium = await renderCard(true);
+    expect(premium.getByText("Get Coach's Read")).toBeTruthy();
+    expect(premium.queryByText('Three Workouts Logged')).toBeNull();
+  });
+
+  it('tells the server and says to retry when Premium has not reached it yet', async () => {
+    const alertSpy = jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => {});
+    installServer({ body: { review: { went_well: REVIEW.went_well }, locked: ['lagged', 'next_change'] } });
+    const r = await renderCard(true);
+    await act(async () => { fireEvent.press(r.getByText("Get Coach's Read")); });
+    expect(syncServerPremium).toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Almost There', expect.stringContaining('Premium'));
+    expect(await AsyncStorage.getItem(KEY)).toBeNull();
+    alertSpy.mockRestore();
   });
 
   it('ignores a review saved for another week', async () => {

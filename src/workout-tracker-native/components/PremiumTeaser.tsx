@@ -13,6 +13,10 @@ type Props = {
   source: string;
   title: string;
   body: string;
+  /** Opens the paywall some other way than this screen's own navigator */
+  onUnlock?: () => void;
+  /** A bigger lock, for a teaser that covers a whole block of cards */
+  largeLock?: boolean;
   children: React.ReactNode;
 };
 
@@ -24,7 +28,7 @@ const PREVIEW_HEIGHT = 440;
  * unlock it. A locked screen sells a description; the shape of your own data
  * behind glass sells itself. Unlocked, it renders its children untouched.
  */
-export default function PremiumTeaser({ locked, source, title, body, children }: Props) {
+export default function PremiumTeaser({ locked, source, title, body, onUnlock, largeLock, children }: Props) {
   const { colors, mode } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const navigation = useNavigation<any>();
@@ -47,14 +51,14 @@ export default function PremiumTeaser({ locked, source, title, body, children }:
       <View style={[StyleSheet.absoluteFill, styles.veil]} />
       <View style={styles.cardWrap}>
         <View style={styles.card}>
-          <View style={styles.lockCircle}>
-            <Ionicons name="lock-closed" size={18} color={colors.accent} />
+          <View style={[styles.lockCircle, largeLock && styles.lockCircleLarge]}>
+            <Ionicons name="lock-closed" size={largeLock ? 32 : 18} color={colors.accent} />
           </View>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.body}>{body}</Text>
           <TouchableOpacity
             style={styles.button}
-            onPress={() => navigation.navigate('Paywall', { source })}
+            onPress={onUnlock ?? (() => navigation.navigate('Paywall', { source }))}
             accessibilityRole="button"
           >
             <Text style={styles.buttonText}>Unlock with Premium</Text>
@@ -92,6 +96,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  lockCircleLarge: { width: 72, height: 72, borderRadius: 36 },
   title: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
   body: { fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
   button: {

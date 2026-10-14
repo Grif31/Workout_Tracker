@@ -4,6 +4,7 @@ import Purchases, {
   INTRO_ELIGIBILITY_STATUS, type CustomerInfo, type PurchasesOfferings, type PurchasesPackage,
 } from 'react-native-purchases';
 import { useAuth } from './AuthContext';
+import { syncServerPremium } from '../utils/premiumSync';
 import { REVENUECAT_IOS_KEY, BETA_PREMIUM } from '../constants/purchaseConfig';
 import { PAYWALL_PREVIEW } from '../constants/featureFlags';
 import { PREVIEW_OFFERINGS } from '../constants/paywallPreview';
@@ -100,8 +101,16 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
   // Whether RevenueCat currently holds one of our user ids rather than an anonymous one
   const identified = useRef(false);
 
+  // The last answer the server was told, so it hears about a change and not every refresh
+  const syncedPremium = useRef<boolean | null>(null);
+
   const applyInfo = useCallback((info: CustomerInfo | null) => {
     const premium = hasPremium(info);
+    // A failed lookup (null) isn't an answer, so it never reaches the server
+    if (info && syncedPremium.current !== premium) {
+      syncedPremium.current = premium;
+      syncServerPremium();
+    }
     setIsPremium(premium);
     setSubscription(subscriptionOf(info));
     // A trial that was cancelled or lapsed has nothing left to be reminded about
@@ -156,6 +165,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
       // status check can't leave it on the next account
       if (identified.current) {
         identified.current = false;
+        syncedPremium.current = null;
         Purchases.logOut().catch(() => {});
       }
       setIsPremium(BETA_PREMIUM);

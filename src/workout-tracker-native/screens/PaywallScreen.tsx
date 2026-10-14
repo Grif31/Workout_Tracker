@@ -54,7 +54,9 @@ const PURCHASE_PROBLEMS: Partial<Record<PurchaseOutcome, [string, string]>> = {
 const UNLOCKED: { icon: string; label: string; detail: string; screen: string }[] = [
   { icon: 'trophy-outline', label: 'Strength Score', detail: 'See how every lift ranks', screen: 'StrengthScore' },
   { icon: 'speedometer-outline', label: 'Endurance Score', detail: 'See your rank at every distance', screen: 'EnduranceScore' },
-  { icon: 'sparkles', label: 'AI Coach', detail: 'Insights, programs and volume zones', screen: 'TrainingHome' },
+  { icon: 'bulb-outline', label: 'Weekly review', detail: 'What went well, what lagged, what to change', screen: 'WeeklySummary' },
+  { icon: 'bar-chart-outline', label: 'Advanced stats', detail: 'Zones, trends, balance and density', screen: 'TrainingHome' },
+  { icon: 'sparkles', label: 'AI Coach', detail: 'Programs and insights', screen: 'TrainingHome' },
 ];
 
 export default function PaywallScreen({ navigation, route }: Props) {
@@ -345,7 +347,7 @@ export default function PaywallScreen({ navigation, route }: Props) {
           <Text style={styles.subtitle}>Here is what you can open now</Text>
           <View style={[styles.featuresCard, styles.welcomeList]}>
             {UNLOCKED.map((u, i) => (
-              <Animated.View key={u.screen} entering={FadeInDown.delay(250 + i * 80).duration(260)}>
+              <Animated.View key={u.label} entering={FadeInDown.delay(250 + i * 80).duration(260)}>
                 <TouchableOpacity
                   style={[styles.featureRow, i < UNLOCKED.length - 1 && styles.featureRowBorder]}
                   onPress={() => openUnlocked(u.screen)}

@@ -224,20 +224,19 @@ describe('CoachScreen', () => {
       expect(values).toEqual([0, 0, 0, 0, 5]);
     });
 
-    it('charts density as whole volume per minute on the Density tab', async () => {
+    it('gives density its own card instead of a chart tab', async () => {
       installServer({ '/api/stats/progress': progress({ ...ALL, density: true }, { density: 41.6 }) });
       const r = await renderScreen();
-      await waitFor(() => expect(r.getByText('Density')).toBeTruthy());
-      fireEvent.press(r.getByText('Density'));
-      await waitFor(() => expect(r.getByText('Density (lbs/min)')).toBeTruthy());
-      expect(lastChart().data.map((d: any) => d.value)).toEqual([0, 0, 0, 0, 42]);
+      expect(await r.findByText('Workout density')).toBeTruthy();
+      expect(r.getByText(/lbs lifted per minute, timed workouts only. Latest 42, average 42./)).toBeTruthy();
+      expect(r.queryByText('Density')).toBeNull();
     });
 
-    it('has no Density tab until a workout was both timed and had volume', async () => {
+    it('has no density card until a workout was both timed and had volume', async () => {
       installServer({ '/api/stats/progress': progress({ ...ALL, density: false }) });
       const r = await renderScreen();
       await waitFor(() => expect(r.getByText('Distance')).toBeTruthy());
-      expect(r.queryByText('Density')).toBeNull();
+      expect(r.queryByText('Workout density')).toBeNull();
     });
 
     it('keeps the original three tabs against a backend without metrics_logged', async () => {
@@ -365,19 +364,46 @@ describe('CoachScreen', () => {
       expect(await r.findByText('Below target')).toBeTruthy();
     });
 
-    it('shows how often each muscle was trained and where it is heading', async () => {
-      installServer({
+    describe('premium views of the muscle chart', () => {
+      const trends = () => installServer({
         '/api/stats/muscle-volume': {
           muscle_sets: { Chest: 12, Back: 10 }, last_trained: {}, total_sets: 22, last_week_total: 0, week_start: daysAgo(0),
           session_count: { Chest: 2, Back: 1 },
           weekly_history: { Chest: [6, 8, 12, 14], Back: [10, 10, 10, 10] },
         },
       });
-      const r = await renderScreen();
-      expect(await r.findByText('2×')).toBeTruthy();
-      expect(r.getByText('1×')).toBeTruthy();
-      expect(r.getByLabelText('Chest 4-week trend up')).toBeTruthy();
-      expect(r.getByLabelText('Back 4-week trend steady')).toBeTruthy();
+
+      it('opens on Zones, with no explanatory sentence over the chart', async () => {
+        trends();
+        const r = await renderScreen();
+        expect(await r.findByText('Zones')).toBeTruthy();
+        expect(r.getByText('Frequency')).toBeTruthy();
+        expect(r.getByText('Trend')).toBeTruthy();
+        expect(r.queryByText(/Twice a week gains the most/)).toBeNull();
+        expect(r.queryByText(/MEV/)).toBeNull();
+      });
+
+      it('shows how often each muscle was trained on Frequency', async () => {
+        trends();
+        const r = await renderScreen();
+        fireEvent.press(await r.findByText('Frequency'));
+        expect(await r.findByText('2×')).toBeTruthy();
+        expect(r.getByText('1×')).toBeTruthy();
+        expect(r.getByText('On target')).toBeTruthy();
+        expect(r.getByText('Add a day')).toBeTruthy();
+        expect(r.getByLabelText('Chest trained 2 days this week')).toBeTruthy();
+        expect(r.getByLabelText('Back trained 1 day this week')).toBeTruthy();
+      });
+
+      it('shows where each muscle is heading on Trend', async () => {
+        trends();
+        const r = await renderScreen();
+        fireEvent.press(await r.findByText('Trend'));
+        expect(await r.findByText('Up')).toBeTruthy();
+        expect(r.getByText('Steady')).toBeTruthy();
+        expect(r.getByLabelText('Chest trend Up')).toBeTruthy();
+        expect(r.getByLabelText('Back trend Steady')).toBeTruthy();
+      });
     });
 
     it('calls reaching MRV the limit, and only past it over', async () => {
