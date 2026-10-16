@@ -8,9 +8,9 @@ from sqlalchemy.orm import aliased
 from models import (
     db, WorkoutTemplate, ExerciseTemplate, Routine, RoutineDay,
     User, Exercise, Set, Workout, PersonalRecord, ExerciseMuscleMapping,
-    BodyweightLog, PREvent,
+    BodyweightLog, PREvent, InsightFeedback,
 )
-from schemas import AiGenerateSchema, AiInsightsSchema, AiSaveSchema, AiWeeklyReviewSchema
+from schemas import AiGenerateSchema, AiInsightsSchema, AiInsightFeedbackSchema, AiSaveSchema, AiWeeklyReviewSchema
 from utils.validation import validate_body
 from utils.local_date import user_today
 from utils.premium import has_premium, free_onboarding_allowed, premium_required_response
@@ -58,6 +58,10 @@ def _brand_copy(text, heading=False):
 
 
 COACH_PR_WINDOW_DAYS = 28
+# Old votes stop steering: what a user wanted to hear three months ago may not
+# fit their training now
+FEEDBACK_WINDOW_DAYS = 90
+FEEDBACK_LIMIT = 20
 STALL_DAYS = 21
 STALLED_CATEGORY_LABELS = {'weight': 'max weight', 'reps': 'rep', 'time': 'time', 'distance': 'distance'}
 
@@ -266,6 +270,7 @@ ai_bp = Blueprint('ai_bp', __name__)
 
 _ai_generate_schema = AiGenerateSchema()
 _ai_insights_schema = AiInsightsSchema()
+_ai_insight_feedback_schema = AiInsightFeedbackSchema()
 _ai_weekly_review_schema = AiWeeklyReviewSchema()
 
 # Weekly set landmarks (Renaissance Periodization). The app's
@@ -1146,6 +1151,19 @@ def _build_insights_prompt(ctx: dict, review: bool = False) -> str:
         ]
         return '\n'.join(lines)
 
+    feedback = ctx.get('insight_feedback', [])
+    if feedback:
+        lines.append("\nThe client's votes on recent insights (newest first):")
+        for vote in feedback:
+            verdict = 'Helpful' if vote['helpful'] else 'Not helpful'
+            type_str = f"[{vote['type']}] " if vote.get('type') else ''
+            lines.append(f"  {verdict}: {type_str}{vote['title']}")
+        lines.append(
+            "  → Write more insights like the helpful ones and fewer like the ones marked not helpful, in topic, "
+            "type and style. Don't repeat an insight marked not helpful. The votes never outweigh the data: still "
+            "flag anything marked OVER MRV or HIGH FATIGUE."
+        )
+
     lines += [
         "",
         "Insight types: deload, rest, frequency, routine, achievement, suggestion",
@@ -1255,6 +1273,7 @@ def get_ai_insights():
         import anthropic
         client = anthropic.Anthropic(api_key=api_key)
         ctx = _build_insights_context(user_id, experience=data.get('experience'), goal=data.get('goal'), avoid=data.get('avoid'))
+        ctx['insight_feedback'] = _recent_insight_feedback(user_id, ctx['now'])
         prompt = _build_insights_prompt(ctx)
         msg = client.messages.create(
             model='claude-haiku-4-5-20251001',
@@ -1277,6 +1296,44 @@ def get_ai_insights():
     except Exception:
         current_app.logger.exception('AI insights generation failed')
         return jsonify({'message': 'Failed to generate insights'}), 500
+
+
+def _recent_insight_feedback(user_id: int, now: datetime) -> list[dict]:
+    rows = (
+        InsightFeedback.query
+        .filter(InsightFeedback.user_id == user_id,
+                InsightFeedback.created_at >= now - timedelta(days=FEEDBACK_WINDOW_DAYS))
+        .order_by(InsightFeedback.created_at.desc(), InsightFeedback.id.desc())
+        .limit(FEEDBACK_LIMIT)
+        .all()
+    )
+    return [{'type': r.insight_type, 'title': r.title, 'helpful': r.helpful} for r in rows]
+
+
+@ai_bp.post('/api/ai/insights/feedback')
+@jwt_required()
+@limiter.limit('60 per hour', key_func=lambda: f"ai_insight_feedback:{get_jwt_identity()}")
+@validate_body(_ai_insight_feedback_schema)
+def post_insight_feedback():
+    """Records a helpful / not helpful vote on one insight, keyed by its text
+    since insights aren't stored. A second vote on the same insight replaces
+    the first, and helpful=null takes it back."""
+    user_id = int(get_jwt_identity())
+    data = g.validated
+    existing = InsightFeedback.query.filter_by(user_id=user_id, title=data['title'], body=data['body']).first()
+    if data['helpful'] is None:
+        if existing:
+            db.session.delete(existing)
+    elif existing:
+        existing.helpful = data['helpful']
+        existing.insight_type = data.get('type')
+    else:
+        db.session.add(InsightFeedback(
+            user_id=user_id, insight_type=data.get('type'),
+            title=data['title'], body=data['body'], helpful=data['helpful'],
+        ))
+    db.session.commit()
+    return jsonify({'message': 'ok', 'helpful': data['helpful']}), 200
 
 
 @ai_bp.post('/api/ai/weekly-review')

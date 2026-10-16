@@ -584,3 +584,18 @@ class StrengthScoreSnapshot(db.Model):
             'score_type': self.score_type,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
+
+
+# ── InsightFeedback ───────────────────────────────────────────
+# A user's helpful / not helpful vote on one Coach insight. Insights aren't
+# stored, so the vote keeps the insight's own text: the next insights prompt
+# quotes recent votes back to the Coach.
+class InsightFeedback(db.Model):
+    __tablename__ = 'insight_feedback'
+    id           = db.Column(db.Integer, primary_key=True)
+    user_id      = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    insight_type = db.Column(db.String(32), nullable=True)
+    title        = db.Column(db.String(200), nullable=False)
+    body         = db.Column(db.String(1000), nullable=False)
+    helpful      = db.Column(db.Boolean, nullable=False)
+    created_at   = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)

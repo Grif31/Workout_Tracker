@@ -637,6 +637,81 @@ class TestAiInsights:
 
 
 # ---------------------------------------------------------------------------
+# POST /api/ai/insights/feedback
+# ---------------------------------------------------------------------------
+
+class TestInsightFeedback:
+
+    VOTE = {'type': 'frequency', 'title': 'Hamstring Sets Lagging', 'body': 'You logged 3 hamstring sets.'}
+
+    def _vote(self, client, token, helpful, **overrides):
+        return client.post('/api/ai/insights/feedback', json={**self.VOTE, 'helpful': helpful, **overrides},
+                           headers=auth_headers(token))
+
+    def _rows(self):
+        from models import InsightFeedback
+        return InsightFeedback.query.all()
+
+    def _insights_prompt(self, client, token):
+        mock_ant = _make_anthropic_mock(INSIGHTS_JSON)
+        with patch.dict(sys.modules, {'anthropic': mock_ant}):
+            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+                client.post('/api/ai/insights', json={}, headers=auth_headers(token))
+        return mock_ant.Anthropic.return_value.messages.create.call_args[1]['messages'][0]['content']
+
+    def test_requires_auth(self, client):
+        assert client.post('/api/ai/insights/feedback', json={**self.VOTE, 'helpful': True}).status_code == 401
+
+    def test_rejects_missing_text_or_vote(self, client, auth_token):
+        assert self._vote(client, auth_token, True, title='').status_code == 400
+        res = client.post('/api/ai/insights/feedback', json=self.VOTE, headers=auth_headers(auth_token))
+        assert res.status_code == 400
+
+    def test_second_vote_replaces_the_first_and_null_takes_it_back(self, client, auth_token):
+        assert self._vote(client, auth_token, True).status_code == 200
+        assert self._vote(client, auth_token, False).status_code == 200
+        rows = self._rows()
+        assert len(rows) == 1 and rows[0].helpful is False and rows[0].insight_type == 'frequency'
+
+        assert self._vote(client, auth_token, None).status_code == 200
+        assert self._rows() == []
+
+    def test_votes_reach_the_next_insights_prompt(self, client, auth_token):
+        self._vote(client, auth_token, False)
+        self._vote(client, auth_token, True, type='achievement', title='Bench Press Max Weight Up', body='225 to 235.')
+        prompt = self._insights_prompt(client, auth_token)
+        assert "votes on recent insights" in prompt
+        assert '  Helpful: [achievement] Bench Press Max Weight Up' in prompt
+        assert '  Not helpful: [frequency] Hamstring Sets Lagging' in prompt
+        assert prompt.index('Helpful: [achievement]') < prompt.index('Not helpful: [frequency]')
+
+    def test_no_votes_no_feedback_section(self, client, auth_token):
+        assert 'votes on recent insights' not in self._insights_prompt(client, auth_token)
+
+    def test_old_votes_and_other_users_votes_are_left_out(self, client, auth_token, auth_token2):
+        from datetime import datetime, timedelta
+        from models import db
+        self._vote(client, auth_token, True)
+        self._rows()[0].created_at = datetime.now() - timedelta(days=91)
+        db.session.commit()
+        self._vote(client, auth_token2, False, title='Someone Else Insight')
+        prompt = self._insights_prompt(client, auth_token)
+        assert 'Hamstring Sets Lagging' not in prompt and 'Someone Else Insight' not in prompt
+
+    def test_review_prompt_ignores_feedback(self):
+        from routes.ai_routes import _build_insights_prompt
+        ctx = {'insight_feedback': [{'type': 'rest', 'title': 'Take A Rest Day', 'helpful': True}]}
+        assert 'Take A Rest Day' in _build_insights_prompt(ctx)
+        assert 'Take A Rest Day' not in _build_insights_prompt(ctx, review=True)
+
+    def test_account_deletion_removes_feedback(self, client, auth_token):
+        self._vote(client, auth_token, True)
+        res = client.delete('/api/me', json={'password': 'password123'}, headers=auth_headers(auth_token))
+        assert res.status_code == 200
+        assert self._rows() == []
+
+
+# ---------------------------------------------------------------------------
 # Coach voice — brand system prompt and copy cleanup
 # ---------------------------------------------------------------------------
 

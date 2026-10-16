@@ -213,6 +213,14 @@ class AiInsightsSchema(_Base):
     avoid      = _AvoidField(load_default=list)
 
 
+class AiInsightFeedbackSchema(_Base):
+    type    = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=32))
+    title   = fields.Str(required=True, validate=validate.Length(min=1, max=200))
+    body    = fields.Str(required=True, validate=validate.Length(min=1, max=1000))
+    # null takes a vote back
+    helpful = fields.Bool(required=True, allow_none=True)
+
+
 class AiWeeklyReviewSchema(AiInsightsSchema):
     # The Monday of the Weekly Summary week being reviewed; absent = the last 7 days
     week_start = fields.Date(load_default=None)

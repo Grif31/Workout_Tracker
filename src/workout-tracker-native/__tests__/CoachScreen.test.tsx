@@ -339,6 +339,40 @@ describe('CoachScreen', () => {
       const [, init] = (global.fetch as jest.Mock).mock.calls.find(([u]) => String(u).includes('/api/ai/insights'));
       expect(JSON.parse(init.body).avoid).toEqual(['knees', 'lower_back']);
     });
+
+    const feedbackBodies = () => (global.fetch as jest.Mock).mock.calls
+      .filter(([u]) => String(u).includes('/api/ai/insights/feedback'))
+      .map(([, init]) => JSON.parse(init.body));
+
+    it('sends a vote with the insight it is about, and a second press takes it back', async () => {
+      installServer({ '/api/ai/insights/feedback': { message: 'ok' } });
+      await AsyncStorage.setItem(COACH_INSIGHTS_KEY, JSON.stringify(cached));
+      const r = await renderScreen();
+      fireEvent.press(r.getByText('Coach'));
+      const helpful = await r.findByLabelText('Helpful');
+
+      await act(async () => { fireEvent.press(helpful); });
+      expect(feedbackBodies()).toEqual([
+        { type: 'achievement', title: 'Bench is climbing', body: 'Up 15 lbs in 3 weeks.', helpful: true },
+      ]);
+      expect(r.getByLabelText('Helpful').props.accessibilityState.selected).toBe(true);
+      await waitFor(async () => expect(JSON.parse((await AsyncStorage.getItem(COACH_INSIGHTS_KEY))!).insights[0].helpful).toBe(true));
+
+      await act(async () => { fireEvent.press(r.getByLabelText('Helpful')); });
+      expect(feedbackBodies()[1].helpful).toBeNull();
+      expect(r.getByLabelText('Helpful').props.accessibilityState.selected).toBe(false);
+    });
+
+    it('puts the vote back when the server refuses it', async () => {
+      installServer({ '/api/ai/insights/feedback': null });
+      await AsyncStorage.setItem(COACH_INSIGHTS_KEY, JSON.stringify(cached));
+      const r = await renderScreen();
+      fireEvent.press(r.getByText('Coach'));
+      const notHelpful = await r.findByLabelText('Not helpful');
+      await act(async () => { fireEvent.press(notHelpful); });
+      expect(feedbackBodies()[0].helpful).toBe(false);
+      expect(r.getByLabelText('Not helpful').props.accessibilityState.selected).toBe(false);
+    });
   });
 
   describe('muscle volume zones (Monday to Sunday)', () => {

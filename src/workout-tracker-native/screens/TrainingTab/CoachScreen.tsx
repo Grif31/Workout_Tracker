@@ -75,7 +75,7 @@ type RoutineDay = {
 };
 type Routine = { id: number; name: string; description?: string; day_count: number; starter?: boolean };
 type ActiveRoutine = { id: number; name: string; days: RoutineDay[] };
-type Insight = { type: string; title: string; body: string; priority: 'high' | 'medium' | 'low' };
+type Insight = { type: string; title: string; body: string; priority: 'high' | 'medium' | 'low'; helpful?: boolean | null };
 type InsightsCache = { insights: Insight[]; fetchedAt: string };
 
 // How many a free account can keep; the paywall's wording states the same numbers (utils/paywall.ts).
@@ -541,6 +541,33 @@ export default function CoachScreen({ navigation }: Props) {
     }
   };
 
+  // Optimistic, since a vote shouldn't wait on the network. Pressing the chosen
+  // thumb again takes the vote back.
+  const voteOnInsight = async (idx: number, helpful: boolean) => {
+    const ins = insights[idx];
+    if (!ins) return;
+    const previous = ins.helpful ?? null;
+    const next = previous === helpful ? null : helpful;
+    const withVote = (vote: boolean | null) => setInsights(current => {
+      const updated = current.map((it, i) => (i === idx ? { ...it, helpful: vote } : it));
+      if (insightsFetchedAt) {
+        AsyncStorage.setItem(COACH_INSIGHTS_KEY, JSON.stringify({ insights: updated, fetchedAt: insightsFetchedAt })).catch(() => {});
+      }
+      return updated;
+    });
+    withVote(next);
+    try {
+      const res = await apiFetch('/api/ai/insights/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: ins.type, title: ins.title, body: ins.body, helpful: next }),
+      });
+      if (!res.ok) withVote(previous);
+    } catch {
+      withVote(previous);
+    }
+  };
+
   const handleGenerateTemplate = async () => {
     const muscles = aiSelectedMuscles;
     setAiMusclePickerVisible(false);
@@ -759,6 +786,35 @@ export default function CoachScreen({ navigation }: Props) {
           <View style={{ flex: 1 }}>
             <Text style={styles.insightTitle}>{ins.title}</Text>
             <Text style={styles.insightBody}>{ins.body}</Text>
+            <View style={styles.insightFeedbackRow}>
+              <Text style={styles.insightFeedbackLabel}>Helpful?</Text>
+              <TouchableOpacity
+                onPress={() => voteOnInsight(idx, true)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Helpful"
+                accessibilityState={{ selected: ins.helpful === true }}
+              >
+                <Ionicons
+                  name={ins.helpful === true ? 'thumbs-up' : 'thumbs-up-outline'}
+                  size={16}
+                  color={ins.helpful === true ? colors.accent : colors.textSecondary}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => voteOnInsight(idx, false)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Not helpful"
+                accessibilityState={{ selected: ins.helpful === false }}
+              >
+                <Ionicons
+                  name={ins.helpful === false ? 'thumbs-down' : 'thumbs-down-outline'}
+                  size={16}
+                  color={ins.helpful === false ? colors.textPrimary : colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Animated.View>
@@ -1675,6 +1731,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   insightIconWrap: { width: 32, alignItems: 'center', paddingTop: 2 },
   insightTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs },
   insightBody: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 18 },
+  insightFeedbackRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm },
+  insightFeedbackLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
   freeLimitText: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
   moreInsightsText: { flex: 1, fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
   insightsEmpty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },

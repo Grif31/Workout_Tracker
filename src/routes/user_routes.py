@@ -5,7 +5,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime
 from models import (
     db, User, Workout, Exercise, Set, DeviceToken, PersonalRecord, PREvent,
-    StrengthScoreSnapshot, BodyweightLog, BodyMeasurement, ProgressPhoto,
+    StrengthScoreSnapshot, BodyweightLog, BodyMeasurement, ProgressPhoto, InsightFeedback,
     Routine, RoutineDay, WorkoutTemplate, WorkoutTemplateExercise,
     ExerciseTemplate, ExerciseMuscleMapping,
 )
@@ -258,7 +258,7 @@ def _delete_all_user_data(user_id: int) -> None:
     # PREvent also cascades from workouts in Postgres, but deleting it here
     # doesn't rely on DB-level cascades (SQLite, which tests use, skips them).
     for model in (PersonalRecord, PREvent, StrengthScoreSnapshot, DeviceToken,
-                  BodyweightLog, BodyMeasurement, ProgressPhoto):
+                  BodyweightLog, BodyMeasurement, ProgressPhoto, InsightFeedback):
         model.query.filter_by(user_id=user_id).delete(synchronize_session=False)
 
     # Sets → Exercises → Workouts
