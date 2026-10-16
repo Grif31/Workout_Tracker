@@ -611,4 +611,6 @@ class InsightFeedback(db.Model):
     title        = db.Column(db.String(200), nullable=False)
     body         = db.Column(db.String(1000), nullable=False)
     helpful      = db.Column(db.Boolean, nullable=False)
+    # Why a not-helpful vote: one of INSIGHT_FEEDBACK_REASONS in schemas.py
+    reason       = db.Column(db.String(32), nullable=True)
     created_at   = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)

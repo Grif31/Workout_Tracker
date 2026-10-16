@@ -353,14 +353,68 @@ describe('CoachScreen', () => {
 
       await act(async () => { fireEvent.press(helpful); });
       expect(feedbackBodies()).toEqual([
-        { type: 'achievement', title: 'Bench is climbing', body: 'Up 15 lbs in 3 weeks.', helpful: true },
+        { type: 'achievement', title: 'Bench is climbing', body: 'Up 15 lbs in 3 weeks.', helpful: true, reason: null },
       ]);
+      expect(r.getByText('Thanks. The Coach will use this.')).toBeTruthy();
       expect(r.getByLabelText('Helpful').props.accessibilityState.selected).toBe(true);
       await waitFor(async () => expect(JSON.parse((await AsyncStorage.getItem(COACH_INSIGHTS_KEY))!).insights[0].helpful).toBe(true));
 
       await act(async () => { fireEvent.press(r.getByLabelText('Helpful')); });
       expect(feedbackBodies()[1].helpful).toBeNull();
       expect(r.getByLabelText('Helpful').props.accessibilityState.selected).toBe(false);
+    });
+
+    it('asks what was off after a thumbs down, and sends the reason picked', async () => {
+      installServer({ '/api/ai/insights/feedback': { message: 'ok' } });
+      await AsyncStorage.setItem(COACH_INSIGHTS_KEY, JSON.stringify(cached));
+      const r = await renderScreen();
+      fireEvent.press(r.getByText('Coach'));
+      await r.findByLabelText('Not helpful');
+      expect(r.queryByText('Too vague')).toBeNull();
+
+      await act(async () => { fireEvent.press(r.getByLabelText('Not helpful')); });
+      await act(async () => { fireEvent.press(r.getByText('Too vague')); });
+      expect(feedbackBodies()[1]).toMatchObject({ helpful: false, reason: 'vague' });
+
+      // Back to a thumbs up drops the reason and the chips
+      await act(async () => { fireEvent.press(r.getByLabelText('Helpful')); });
+      expect(feedbackBodies()[2]).toMatchObject({ helpful: true, reason: null });
+      expect(r.queryByText('Too vague')).toBeNull();
+    });
+
+    it('keeps a vote the server sends back with a repeated insight, and says votes shaped the batch', async () => {
+      installServer({
+        '/api/ai/insights': {
+          insights: [{ type: 'suggestion', title: 'T', body: 'B', priority: 'low', helpful: false, reason: 'known' }],
+          shaped_by_feedback: true,
+          generated_at: new Date().toISOString(),
+        },
+      });
+      const r = await renderScreen();
+      fireEvent.press(r.getByText('Coach'));
+      const button = await r.findByText('Generate Insights');
+      await act(async () => { fireEvent.press(button); });
+
+      expect(r.getByLabelText('Not helpful').props.accessibilityState.selected).toBe(true);
+      expect(r.getByText('Already knew this')).toBeTruthy();
+      expect(r.getByText(/Shaped by your feedback/)).toBeTruthy();
+    });
+
+    it('does not replay the cards entrance on a vote or a reason', async () => {
+      const { Animated } = require('react-native');
+      installServer({ '/api/ai/insights/feedback': { message: 'ok' } });
+      await AsyncStorage.setItem(COACH_INSIGHTS_KEY, JSON.stringify(cached));
+      const r = await renderScreen();
+      fireEvent.press(r.getByText('Coach'));
+      await r.findByLabelText('Not helpful');
+      const stagger = jest.spyOn(Animated, 'stagger');
+      try {
+        await act(async () => { fireEvent.press(r.getByLabelText('Not helpful')); });
+        await act(async () => { fireEvent.press(r.getByText('Too vague')); });
+        expect(stagger).not.toHaveBeenCalled();
+      } finally {
+        stagger.mockRestore();
+      }
     });
 
     it('puts the vote back when the server refuses it', async () => {

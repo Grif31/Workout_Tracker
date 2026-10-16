@@ -688,6 +688,43 @@ class TestInsightFeedback:
     def test_no_votes_no_feedback_section(self, client, auth_token):
         assert 'votes on recent insights' not in self._insights_prompt(client, auth_token)
 
+    def test_reason_is_stored_and_quoted_to_the_coach(self, client, auth_token):
+        res = self._vote(client, auth_token, False, reason='known')
+        assert res.status_code == 200 and res.get_json()['reason'] == 'known'
+        assert self._rows()[0].reason == 'known'
+        assert '  Not helpful (already knew this): [frequency] Hamstring Sets Lagging' in self._insights_prompt(client, auth_token)
+
+    def test_reason_only_goes_with_a_not_helpful_vote(self, client, auth_token):
+        self._vote(client, auth_token, False, reason='vague')
+        self._vote(client, auth_token, True, reason='vague')
+        assert self._rows()[0].reason is None
+
+    def test_rejects_an_unknown_reason(self, client, auth_token):
+        assert self._vote(client, auth_token, False, reason='boring').status_code == 400
+
+    def test_an_insight_that_comes_back_word_for_word_keeps_its_vote(self, client, auth_token):
+        self._vote(client, auth_token, False, title='Add pulling volume',
+                   body='Your back sets are below MEV this week.', reason='vague')
+        self._vote(client, auth_token, True, title='Deload soon', body='Different wording last time.')
+        mock_ant = _make_anthropic_mock(INSIGHTS_JSON)
+        with patch.dict(sys.modules, {'anthropic': mock_ant}):
+            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+                insights = client.post('/api/ai/insights', json={}, headers=auth_headers(auth_token)).get_json()['insights']
+        by_title = {i['title']: i for i in insights}
+        assert by_title['Add pulling volume']['helpful'] is False
+        assert by_title['Add pulling volume']['reason'] == 'vague'
+        assert 'helpful' not in by_title['Deload soon']
+
+    def test_insights_say_whether_votes_shaped_them(self, client, auth_token):
+        def shaped():
+            mock_ant = _make_anthropic_mock(INSIGHTS_JSON)
+            with patch.dict(sys.modules, {'anthropic': mock_ant}):
+                with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+                    return client.post('/api/ai/insights', json={}, headers=auth_headers(auth_token)).get_json()['shaped_by_feedback']
+        assert shaped() is False
+        self._vote(client, auth_token, True)
+        assert shaped() is True
+
     def test_old_votes_and_other_users_votes_are_left_out(self, client, auth_token, auth_token2):
         from datetime import datetime, timedelta
         from models import db

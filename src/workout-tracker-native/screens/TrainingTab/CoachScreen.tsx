@@ -75,8 +75,18 @@ type RoutineDay = {
 };
 type Routine = { id: number; name: string; description?: string; day_count: number; starter?: boolean };
 type ActiveRoutine = { id: number; name: string; days: RoutineDay[] };
-type Insight = { type: string; title: string; body: string; priority: 'high' | 'medium' | 'low'; helpful?: boolean | null };
-type InsightsCache = { insights: Insight[]; fetchedAt: string };
+type InsightReason = 'known' | 'irrelevant' | 'wrong' | 'vague';
+type Insight = {
+  type: string; title: string; body: string; priority: 'high' | 'medium' | 'low';
+  helpful?: boolean | null; reason?: InsightReason | null;
+};
+type InsightsCache = { insights: Insight[]; fetchedAt: string; shapedByFeedback?: boolean };
+const INSIGHT_REASONS: { key: InsightReason; label: string }[] = [
+  { key: 'known', label: 'Already knew this' },
+  { key: 'irrelevant', label: 'Not for my goal' },
+  { key: 'wrong', label: 'Looks wrong' },
+  { key: 'vague', label: 'Too vague' },
+];
 
 // How many a free account can keep; the paywall's wording states the same numbers (utils/paywall.ts).
 // What onboarding generated (`starter`) is not counted.
@@ -259,6 +269,7 @@ export default function CoachScreen({ navigation }: Props) {
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [insights, setInsights] = useState<Insight[]>([]);
   const [insightsFetchedAt, setInsightsFetchedAt] = useState<string | null>(null);
+  const [insightsShaped, setInsightsShaped] = useState(false);
   const [insightsLoading, setInsightsLoading] = useState(false);
   // AI generate muscle picker
   const [aiMusclePickerVisible, setAiMusclePickerVisible] = useState(false);
@@ -294,6 +305,7 @@ export default function CoachScreen({ navigation }: Props) {
         if (ageMs < 3_600_000 && cache.insights?.length) {
           setInsights(cache.insights);
           setInsightsFetchedAt(cache.fetchedAt);
+          setInsightsShaped(!!cache.shapedByFeedback);
         }
       } catch { }
     });
@@ -364,6 +376,8 @@ export default function CoachScreen({ navigation }: Props) {
     if (prog30) applyThisWeek(prog30);
   }, []);
 
+  // Keyed on the batch, not the array: a vote replaces the array, and replaying
+  // the entrance then flashes every card
   useEffect(() => {
     if (insights.length === 0) return;
     while (insightAnimsRef.current.length < insights.length) {
@@ -374,7 +388,7 @@ export default function CoachScreen({ navigation }: Props) {
     Animated.stagger(60, anims.map(a =>
       Animated.timing(a, { toValue: 1, duration: 280, useNativeDriver: true })
     )).start();
-  }, [insights]);
+  }, [insightsFetchedAt, insights.length]);
 
   const fetchProgressData = async (range: ChartRange) => {
     try {
@@ -531,9 +545,11 @@ export default function CoachScreen({ navigation }: Props) {
       const data = await res.json();
       if (!res.ok) { Alert.alert("Couldn't Load Insights", data.message || 'Try again in a moment.'); return; }
       const fetchedAt = data.generated_at || new Date().toISOString();
+      const shapedByFeedback = !!data.shaped_by_feedback;
       setInsights(data.insights ?? []);
       setInsightsFetchedAt(fetchedAt);
-      await AsyncStorage.setItem(COACH_INSIGHTS_KEY, JSON.stringify({ insights: data.insights, fetchedAt }));
+      setInsightsShaped(shapedByFeedback);
+      await AsyncStorage.setItem(COACH_INSIGHTS_KEY, JSON.stringify({ insights: data.insights, fetchedAt, shapedByFeedback }));
     } catch (err) {
       if (!isNetworkError(err)) Alert.alert("Couldn't Load Insights", 'Try again in a moment.');
     } finally {
@@ -541,31 +557,40 @@ export default function CoachScreen({ navigation }: Props) {
     }
   };
 
-  // Optimistic, since a vote shouldn't wait on the network. Pressing the chosen
-  // thumb again takes the vote back.
-  const voteOnInsight = async (idx: number, helpful: boolean) => {
+  // Optimistic, since a vote shouldn't wait on the network
+  const sendInsightVote = async (idx: number, helpful: boolean | null, reason: InsightReason | null) => {
     const ins = insights[idx];
     if (!ins) return;
-    const previous = ins.helpful ?? null;
-    const next = previous === helpful ? null : helpful;
-    const withVote = (vote: boolean | null) => setInsights(current => {
-      const updated = current.map((it, i) => (i === idx ? { ...it, helpful: vote } : it));
+    const previous = { helpful: ins.helpful ?? null, reason: ins.reason ?? null };
+    const withVote = (vote: { helpful: boolean | null; reason: InsightReason | null }) => setInsights(current => {
+      const updated = current.map((it, i) => (i === idx ? { ...it, ...vote } : it));
       if (insightsFetchedAt) {
-        AsyncStorage.setItem(COACH_INSIGHTS_KEY, JSON.stringify({ insights: updated, fetchedAt: insightsFetchedAt })).catch(() => {});
+        AsyncStorage.setItem(COACH_INSIGHTS_KEY, JSON.stringify({
+          insights: updated, fetchedAt: insightsFetchedAt, shapedByFeedback: insightsShaped,
+        })).catch(() => {});
       }
       return updated;
     });
-    withVote(next);
+    withVote({ helpful, reason });
     try {
       const res = await apiFetch('/api/ai/insights/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: ins.type, title: ins.title, body: ins.body, helpful: next }),
+        body: JSON.stringify({ type: ins.type, title: ins.title, body: ins.body, helpful, reason }),
       });
       if (!res.ok) withVote(previous);
     } catch {
       withVote(previous);
     }
+  };
+
+  // Pressing the chosen thumb or reason again takes it back
+  const voteOnInsight = (idx: number, helpful: boolean) => {
+    const current = insights[idx]?.helpful ?? null;
+    sendInsightVote(idx, current === helpful ? null : helpful, null);
+  };
+  const giveInsightReason = (idx: number, reason: InsightReason) => {
+    sendInsightVote(idx, false, insights[idx]?.reason === reason ? null : reason);
   };
 
   const handleGenerateTemplate = async () => {
@@ -787,7 +812,9 @@ export default function CoachScreen({ navigation }: Props) {
             <Text style={styles.insightTitle}>{ins.title}</Text>
             <Text style={styles.insightBody}>{ins.body}</Text>
             <View style={styles.insightFeedbackRow}>
-              <Text style={styles.insightFeedbackLabel}>Helpful?</Text>
+              <Text style={styles.insightFeedbackLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+                {ins.helpful == null ? 'Helpful?' : 'Thanks. The Coach will use this.'}
+              </Text>
               <TouchableOpacity
                 onPress={() => voteOnInsight(idx, true)}
                 hitSlop={8}
@@ -797,7 +824,7 @@ export default function CoachScreen({ navigation }: Props) {
               >
                 <Ionicons
                   name={ins.helpful === true ? 'thumbs-up' : 'thumbs-up-outline'}
-                  size={16}
+                  size={20}
                   color={ins.helpful === true ? colors.accent : colors.textSecondary}
                 />
               </TouchableOpacity>
@@ -810,11 +837,29 @@ export default function CoachScreen({ navigation }: Props) {
               >
                 <Ionicons
                   name={ins.helpful === false ? 'thumbs-down' : 'thumbs-down-outline'}
-                  size={16}
+                  size={20}
                   color={ins.helpful === false ? colors.textPrimary : colors.textSecondary}
                 />
               </TouchableOpacity>
             </View>
+            {ins.helpful === false && (
+              <View style={styles.insightReasonRow}>
+                {INSIGHT_REASONS.map(({ key, label }) => {
+                  const selected = ins.reason === key;
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      onPress={() => giveInsightReason(idx, key)}
+                      style={[styles.insightReasonChip, selected && styles.insightReasonChipSelected]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                    >
+                      <Text style={[styles.insightReasonText, selected && { color: colors.textPrimary }]}>{label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
           </View>
         </View>
       </Animated.View>
@@ -1074,7 +1119,9 @@ export default function CoachScreen({ navigation }: Props) {
             </View>
 
             {isPremium && insights.length > 0 && insightsFetchedAt && (
-              <Text style={styles.insightsUpdated}>{fmtUpdatedAgo(insightsFetchedAt)}</Text>
+              <Text style={styles.insightsUpdated}>
+                {fmtUpdatedAgo(insightsFetchedAt)}{insightsShaped ? '  ·  Shaped by your feedback' : ''}
+              </Text>
             )}
             <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
               {isPremium ? (
@@ -1732,7 +1779,15 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   insightTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs },
   insightBody: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 18 },
   insightFeedbackRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm },
-  insightFeedbackLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
+  // flex: 1 keeps the thumbs pinned right while the label swaps to the longer thanks
+  insightFeedbackLabel: { flex: 1, fontSize: typography.fontSize.sm, color: colors.textSecondary },
+  insightReasonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
+  insightReasonChip: {
+    borderWidth: 1, borderColor: colors.border, borderRadius: spacing.md,
+    paddingHorizontal: spacing.sm, paddingVertical: spacing.xs,
+  },
+  insightReasonChipSelected: { borderColor: colors.accent, backgroundColor: colors.accent + '15' },
+  insightReasonText: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
   freeLimitText: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
   moreInsightsText: { flex: 1, fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
   insightsEmpty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },

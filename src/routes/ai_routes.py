@@ -62,6 +62,12 @@ COACH_PR_WINDOW_DAYS = 28
 # fit their training now
 FEEDBACK_WINDOW_DAYS = 90
 FEEDBACK_LIMIT = 20
+FEEDBACK_REASON_LABELS = {
+    'known': 'already knew this',
+    'irrelevant': 'not relevant to their goal',
+    'wrong': 'looks wrong',
+    'vague': 'too vague',
+}
 STALL_DAYS = 21
 STALLED_CATEGORY_LABELS = {'weight': 'max weight', 'reps': 'rep', 'time': 'time', 'distance': 'distance'}
 
@@ -1156,12 +1162,17 @@ def _build_insights_prompt(ctx: dict, review: bool = False) -> str:
         lines.append("\nThe client's votes on recent insights (newest first):")
         for vote in feedback:
             verdict = 'Helpful' if vote['helpful'] else 'Not helpful'
+            if vote.get('reason') in FEEDBACK_REASON_LABELS:
+                verdict += f" ({FEEDBACK_REASON_LABELS[vote['reason']]})"
             type_str = f"[{vote['type']}] " if vote.get('type') else ''
             lines.append(f"  {verdict}: {type_str}{vote['title']}")
         lines.append(
             "  → Write more insights like the helpful ones and fewer like the ones marked not helpful, in topic, "
-            "type and style. Don't repeat an insight marked not helpful. The votes never outweigh the data: still "
-            "flag anything marked OVER MRV or HIGH FATIGUE."
+            "type and style. Don't repeat an insight marked not helpful. Where a reason is given: \"already knew "
+            "this\" means go a level deeper on that topic, \"not relevant to their goal\" means drop the topic, "
+            "\"looks wrong\" means check that kind of claim against the data twice, and \"too vague\" means cite "
+            "more of the client's numbers. The votes never outweigh the data: still flag anything marked OVER MRV "
+            "or HIGH FATIGUE."
         )
 
     lines += [
@@ -1287,7 +1298,11 @@ def get_ai_insights():
             {**i, 'title': _brand_copy(i.get('title'), heading=True), 'body': _brand_copy(i.get('body'))}
             for i in result.get('insights', [])
         ]
-        return jsonify({'insights': _verify_insights(insights, ctx), 'generated_at': datetime.now().isoformat()}), 200
+        return jsonify({
+            'insights': _with_past_votes(user_id, _verify_insights(insights, ctx)),
+            'generated_at': datetime.now().isoformat(),
+            'shaped_by_feedback': bool(ctx['insight_feedback']),
+        }), 200
 
     except ImportError:
         return jsonify({'message': 'anthropic package not installed'}), 503
@@ -1307,7 +1322,24 @@ def _recent_insight_feedback(user_id: int, now: datetime) -> list[dict]:
         .limit(FEEDBACK_LIMIT)
         .all()
     )
-    return [{'type': r.insight_type, 'title': r.title, 'helpful': r.helpful} for r in rows]
+    return [{'type': r.insight_type, 'title': r.title, 'helpful': r.helpful, 'reason': r.reason} for r in rows]
+
+
+def _with_past_votes(user_id: int, insights: list[dict]) -> list[dict]:
+    """Attaches the user's stored vote to any insight that comes back word for
+    word, so its thumb stays filled after a refresh."""
+    titles = {i.get('title') for i in insights if i.get('title')}
+    if not titles:
+        return insights
+    votes = {
+        (r.title, r.body): r
+        for r in InsightFeedback.query.filter(InsightFeedback.user_id == user_id, InsightFeedback.title.in_(titles))
+    }
+    out = []
+    for insight in insights:
+        vote = votes.get((insight.get('title'), insight.get('body')))
+        out.append({**insight, 'helpful': vote.helpful, 'reason': vote.reason} if vote else insight)
+    return out
 
 
 @ai_bp.post('/api/ai/insights/feedback')
@@ -1317,9 +1349,11 @@ def _recent_insight_feedback(user_id: int, now: datetime) -> list[dict]:
 def post_insight_feedback():
     """Records a helpful / not helpful vote on one insight, keyed by its text
     since insights aren't stored. A second vote on the same insight replaces
-    the first, and helpful=null takes it back."""
+    the first, and helpful=null takes it back. A reason only goes with a
+    not-helpful vote."""
     user_id = int(get_jwt_identity())
     data = g.validated
+    reason = data['reason'] if data['helpful'] is False else None
     existing = InsightFeedback.query.filter_by(user_id=user_id, title=data['title'], body=data['body']).first()
     if data['helpful'] is None:
         if existing:
@@ -1327,13 +1361,14 @@ def post_insight_feedback():
     elif existing:
         existing.helpful = data['helpful']
         existing.insight_type = data.get('type')
+        existing.reason = reason
     else:
         db.session.add(InsightFeedback(
             user_id=user_id, insight_type=data.get('type'),
-            title=data['title'], body=data['body'], helpful=data['helpful'],
+            title=data['title'], body=data['body'], helpful=data['helpful'], reason=reason,
         ))
     db.session.commit()
-    return jsonify({'message': 'ok', 'helpful': data['helpful']}), 200
+    return jsonify({'message': 'ok', 'helpful': data['helpful'], 'reason': reason}), 200
 
 
 @ai_bp.post('/api/ai/weekly-review')

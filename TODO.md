@@ -1336,3 +1336,25 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [ ] No path deletes a tracked activity without a second confirmation
 - [ ] A workout the server rejects stays on the phone and is visible
 - [ ] A hike's elevation gain is in the right range
+
+---
+
+## 🧠 23. A Coach That Learns
+> Ongoing (owner, 2026-10-16): keep making insights and the Coach better as the app grows. Insights today are generated fresh each refresh and never stored; the only memory the Coach has of a user is their training data plus `insight_feedback` votes. The order below measures first, then gives the Coach memory, then uses it.
+
+### Built
+- [x] Helpful / not helpful thumbs on each insight, stored in `insight_feedback` and quoted into the next insights prompt (last 20 votes, 90 days); MRV and fatigue flags still win (2026-10-15)
+- [x] Reason chips on a thumbs down (`known` / `irrelevant` / `wrong` / `vague`), each with its own instruction to the Coach; "Thanks. The Coach will use this." after a vote; "Shaped by your feedback" on a batch the votes steered; a word-for-word repeat insight keeps its vote (2026-10-16)
+- [ ] On a device: vote, pick a reason, refresh, and check nothing flashes or shifts
+
+### Next, in order
+- [ ] **Measure before tuning.** An `/admin` page with the helpful rate per insight type and per reason, and the most voted-down titles. Without it no prompt change can be judged
+- [ ] **A prompt check to run before any prompt or model change.** A handful of fixture users (new, plateaued, overreaching, cardio-only, kg) through `_build_insights_context` → the model → `_verify_insights`, reporting how many insights `_is_grounded` drops, length, and banned copy (em dashes, exclamation marks). Not in the pytest suite, since it calls the API
+- [ ] **Treat "Looks wrong" votes as bugs.** List them on the admin page with the insight text, so a misread of the data becomes a fix to the context or `_is_grounded` rather than only a nudge to one user's prompt
+- [ ] **Store generated insights** (an `insights` table, one row per insight per batch). Votes then key on an id instead of the title and body text, and the Coach can see what it said before
+- [ ] **Follow-through.** With stored insights, tell the Coach last batch's suggestions and let it check them against the data ("Last week: add 2 sets of rows. You added 3."). The biggest step from a report toward a coach
+- [ ] **A hard rule under the soft nudge.** 3+ not-helpful votes on a type with no helpful ones → `_verify_insights` ranks that type last. Warnings (deload, MRV, fatigue) exempt
+- [ ] **Votes in the weekly review prompt** (`_build_insights_prompt(review=True)` skips them today)
+- [ ] **CoachProfile on the server.** Goal, experience, injuries and notes live only in AsyncStorage (`coach_profile_${uid}`), so a reinstall loses them and nothing server-side (scheduled insights, notifications) can read them
+- [ ] **Implicit signals.** Opening a suggested exercise or starting the routine an insight pointed at counts as a strong helpful. Needs insights to carry an action first
+- [ ] **Re-evaluate the model.** Insights and the review run on `claude-haiku-4-5-20251001`; compare newer models through the prompt check above before switching
