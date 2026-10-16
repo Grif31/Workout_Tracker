@@ -16,12 +16,15 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { toDisplayVolume, WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toKm, roundTenth, type DistanceUnit } from '../../utils/units';
 import { fmtDuration } from '../../utils/cardioFormat';
-import { toLocalDateStr } from '../../utils/date';
+import { parseApiDate, toLocalDateStr } from '../../utils/date';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { HOME_STREAK_TYPE_KEY, PROFILE_FRAME_RANK_KEY, WEEKLY_GOAL_KEY } from '../../constants/storageKeys';
 import { apiFetch, isNetworkError, resolveMediaUrl } from '../../utils/api';
-import { announceFlushResult, flushQueue, getPendingCount, onPendingCountChange } from '../../utils/offlineQueue';
+import {
+  announceFlushResult, discardStuckWorkout, flushQueue, getPendingCount, getStuckCount, getStuckWorkouts,
+  onPendingCountChange, onStuckCountChange, retryStuckWorkout, type StuckWorkout,
+} from '../../utils/offlineQueue';
 import { showToast } from '../../utils/toast';
 import { appCache, useRefetchGate } from '../../utils/appCache';
 import { LaurelBranch } from '../../components/LaurelWreath';
@@ -312,6 +315,46 @@ export default function DashboardScreen({ navigation }: Props) {
   const [pendingSyncCount, setPendingSyncCount] = useState(getPendingCount);
   useEffect(() => onPendingCountChange(setPendingSyncCount), []);
   const [retryingSync, setRetryingSync] = useState(false);
+  // Workouts the server keeps refusing: never deleted for the user, kept here
+  // to retry or delete (TODO.md section 22)
+  const [stuckCount, setStuckCount] = useState(getStuckCount);
+  useEffect(() => onStuckCountChange(setStuckCount), []);
+  const [stuckWorkouts, setStuckWorkouts] = useState<StuckWorkout[]>([]);
+  useEffect(() => {
+    let alive = true;
+    getStuckWorkouts().then(list => { if (alive) setStuckWorkouts(list); }).catch(() => {});
+    return () => { alive = false; };
+  }, [stuckCount, pendingSyncCount]);
+  const [retryingStuckId, setRetryingStuckId] = useState<string | null>(null);
+  const retryStuck = async (w: StuckWorkout) => {
+    setRetryingStuckId(w.id);
+    try {
+      const outcome = await retryStuckWorkout(w.id);
+      if (outcome === 'synced') showToast(`${w.name} synced`);
+      else if (outcome === 'rejected') showToast(`${w.name} still couldn't sync. It's kept here.`);
+      else showToast("Couldn't reach the server. Try again when you're online.");
+    } finally {
+      setRetryingStuckId(null);
+      // Refused again changes the reason, not the count, so the list is re-read here
+      getStuckWorkouts().then(setStuckWorkouts).catch(() => {});
+    }
+  };
+  const deleteStuck = (w: StuckWorkout) => Alert.alert(
+    'Delete this workout?',
+    `${w.name} never reached your history, and deleting it can't be undone.`,
+    [
+      { text: 'Keep It', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => { discardStuckWorkout(w.id); } },
+    ],
+  );
+  // mm/dd/yyyy, the app's date style for logged things
+  const stuckDate = (d: string | null) => {
+    if (!d) return '';
+    const day = parseApiDate(d);
+    return isNaN(day.getTime()) ? '' : `${day.getMonth() + 1}/${day.getDate()}/${day.getFullYear()}`;
+  };
+  // Waiting to upload, as opposed to stuck: those have their own card
+  const waitingCount = Math.max(0, pendingSyncCount - stuckCount);
   // Automatic flushes only run on reconnect or login, so a workout that failed
   // while online (e.g. the server was down) would otherwise sit here until then.
   const retrySync = async () => {
@@ -756,15 +799,60 @@ export default function DashboardScreen({ navigation }: Props) {
           </PressableScale>
 
           {/* Explains the dot on the Home tab icon: queued workouts aren't in the list below yet */}
-          {pendingSyncCount > 0 && (
+          {stuckWorkouts.length > 0 && (
+            <View style={styles.stuckCard} accessibilityRole="summary">
+              <View style={styles.stuckHeader}>
+                <Ionicons name="alert-circle-outline" size={24} color={colors.danger} />
+                <View style={styles.pendingSyncTextBlock}>
+                  <Text style={styles.pendingSyncTitle}>
+                    {stuckWorkouts.length === 1 ? "1 workout couldn't sync" : `${stuckWorkouts.length} workouts couldn't sync`}
+                  </Text>
+                  <Text style={styles.pendingSyncBody}>
+                    The server turned {stuckWorkouts.length === 1 ? 'it' : 'them'} down, so {stuckWorkouts.length === 1 ? "it's" : "they're"} kept on this phone. Retry, or delete one you don't need.
+                  </Text>
+                </View>
+              </View>
+              {stuckWorkouts.map(w => (
+                <View key={w.id} style={styles.stuckRow}>
+                  <View style={styles.pendingSyncTextBlock}>
+                    <Text style={styles.stuckName} numberOfLines={1}>
+                      {[w.name, stuckDate(w.date)].filter(Boolean).join('  ·  ')}
+                    </Text>
+                    {w.reason ? <Text style={styles.stuckReason} numberOfLines={2}>{w.reason}</Text> : null}
+                  </View>
+                  <TouchableOpacity
+                    style={styles.pendingSyncButton}
+                    onPress={() => retryStuck(w)}
+                    disabled={retryingStuckId != null}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Retry ${w.name}`}
+                  >
+                    {retryingStuckId === w.id
+                      ? <ActivityIndicator size="small" color={colors.textPrimary} />
+                      : <Text style={styles.pendingSyncButtonText}>Retry</Text>}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.stuckDelete}
+                    onPress={() => deleteStuck(w)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete ${w.name}`}
+                  >
+                    <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {waitingCount > 0 && (
             <View style={styles.pendingSyncCard} accessibilityRole="summary">
               <Ionicons name="cloud-upload-outline" size={24} color={colors.warmup} />
               <View style={styles.pendingSyncTextBlock}>
                 <Text style={styles.pendingSyncTitle}>
-                  {pendingSyncCount === 1 ? '1 workout waiting to upload' : `${pendingSyncCount} workouts waiting to upload`}
+                  {waitingCount === 1 ? '1 workout waiting to upload' : `${waitingCount} workouts waiting to upload`}
                 </Text>
                 <Text style={styles.pendingSyncBody}>
-                  {pendingSyncCount === 1
+                  {waitingCount === 1
                     ? "Saved on this phone while you were offline. It will upload automatically when you're back online, then show up in your history."
                     : "Saved on this phone while you were offline. They will upload automatically when you're back online, then show up in your history."}
                 </Text>
@@ -1326,6 +1414,27 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderColor: colors.warmup,
   },
   pendingSyncButtonText: { color: colors.textPrimary, fontSize: typography.fontSize.sm, fontWeight: '700' },
+  stuckCard: {
+    backgroundColor: colors.danger + '14',
+    borderWidth: 1,
+    borderColor: colors.danger + '59',
+    borderRadius: spacing.sm,
+    padding: spacing.sm + spacing.xs,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  stuckHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + spacing.xs },
+  stuckRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  stuckName: { color: colors.textPrimary, fontSize: typography.fontSize.sm, fontWeight: '700' },
+  stuckReason: { color: colors.textSecondary, fontSize: typography.fontSize.xs, marginTop: 2 },
+  stuckDelete: { padding: spacing.sm },
 
   // Active Routine
   activeBlock: {

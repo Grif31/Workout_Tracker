@@ -282,6 +282,82 @@ describe('DashboardScreen', () => {
       expect(queryByText(/waiting to upload/)).toBeNull();
     });
 
+    // Section 22: a workout the server refuses is kept here, never deleted for the user
+    describe("workouts that couldn't sync", () => {
+      const toasts: string[] = [];
+      let alertSpy: jest.SpyInstance;
+      const stuckItem = (over: any = {}) => ({
+        id: 'stuck1', enqueuedAt: '2026-10-14T18:00:00.000Z', attempts: 3,
+        payload: { workoutName: 'Leg Day', date: '2026-10-14', exercises: [] },
+        rejected: { status: 400, message: 'Exercise name too long', at: '2026-10-14T18:05:00.000Z' },
+        ...over,
+      });
+      const seed = async (items: any[]) => {
+        await AsyncStorage.setItem('user', JSON.stringify({ id: 1 }));
+        await AsyncStorage.setItem('offline_workout_queue_1', JSON.stringify(items));
+        await initPendingCount();
+      };
+      const postsReturn = (resp: any) => {
+        (global.fetch as jest.Mock) = jest.fn((url: string, init: any = {}) =>
+          String(url).endsWith('/api/workouts') && init.method === 'POST'
+            ? Promise.resolve(resp)
+            : Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) }));
+      };
+      beforeEach(() => {
+        toasts.length = 0;
+        registerToastCallback(msg => toasts.push(msg));
+        alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      });
+      afterEach(() => { registerToastCallback(() => {}); alertSpy.mockRestore(); });
+
+      it('lists each one with its date and the reason, apart from those waiting', async () => {
+        await seed([stuckItem(), { id: 'w1', enqueuedAt: '2026-10-15T08:00:00.000Z', payload: { workoutName: 'Push Day 2' } }]);
+        const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+        await waitFor(() => expect(r.getByText("1 workout couldn't sync")).toBeTruthy());
+        expect(r.getByText('Leg Day  ·  10/14/2026')).toBeTruthy();
+        expect(r.getByText('Exercise name too long')).toBeTruthy();
+        // The waiting card counts only the one still waiting
+        expect(r.getByText('1 workout waiting to upload')).toBeTruthy();
+      });
+
+      it('goes away when Retry gets it through', async () => {
+        await seed([stuckItem()]);
+        const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+        await waitFor(() => expect(r.getByLabelText('Retry Leg Day')).toBeTruthy());
+        postsReturn({ ok: true, status: 201, json: () => Promise.resolve({ id: 9 }) });
+        await act(async () => { fireEvent.press(r.getByLabelText('Retry Leg Day')); });
+        await waitFor(() => expect(r.queryByText(/couldn't sync/)).toBeNull());
+        expect(toasts).toContain('Leg Day synced');
+      });
+
+      it('stays, with the new reason, when Retry is refused again', async () => {
+        await seed([stuckItem()]);
+        const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+        await waitFor(() => expect(r.getByLabelText('Retry Leg Day')).toBeTruthy());
+        postsReturn({ ok: false, status: 400, json: () => Promise.resolve({ message: 'Date is in the future' }) });
+        await act(async () => { fireEvent.press(r.getByLabelText('Retry Leg Day')); });
+        await waitFor(() => expect(r.getByText('Date is in the future')).toBeTruthy());
+        expect(toasts).toContain("Leg Day still couldn't sync. It's kept here.");
+      });
+
+      it('asks before Delete, and keeps it on Keep It', async () => {
+        await seed([stuckItem()]);
+        const r = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+        await waitFor(() => expect(r.getByLabelText('Delete Leg Day')).toBeTruthy());
+        fireEvent.press(r.getByLabelText('Delete Leg Day'));
+        const [title, message, buttons] = alertSpy.mock.calls.at(-1)!;
+        expect(title).toBe('Delete this workout?');
+        expect(message).toMatch(/can't be undone/);
+
+        buttons.find((b: any) => b.text === 'Keep It').onPress?.();
+        expect(JSON.parse((await AsyncStorage.getItem('offline_workout_queue_1'))!)).toHaveLength(1);
+
+        await act(async () => { await buttons.find((b: any) => b.text === 'Delete').onPress(); });
+        await waitFor(() => expect(r.queryByText(/couldn't sync/)).toBeNull());
+        expect(JSON.parse((await AsyncStorage.getItem('offline_workout_queue_1'))!)).toHaveLength(0);
+      });
+    });
+
     describe('Try Now', () => {
       const toasts: string[] = [];
       beforeEach(async () => {
