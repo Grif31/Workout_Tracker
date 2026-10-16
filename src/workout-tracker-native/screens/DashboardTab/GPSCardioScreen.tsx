@@ -35,6 +35,7 @@ import {
   ACTIVITIES, ACTIVITY_TEMPLATE_NAME, buildGpsRunBody, runElapsedSeconds, type Activity,
 } from '../../utils/gpsRun';
 import { useGpsRun } from '../../context/GpsRunContext';
+import { useAppActive } from '../../hooks/useAppActive';
 import { alertWorkoutInProgress } from '../../utils/sessionConflict';
 
 
@@ -106,13 +107,18 @@ export default function GPSCardioScreen({ navigation }: Props) {
     return () => setScreenOpen(false);
   }, []);
   const { coords, distanceKm, elevationGainM } = run;
+  // With the phone locked on this screen the run keeps recording in GpsRunProvider,
+  // but nothing here needs to move: re-rendering the map every second and on
+  // every fix while locked is the kind of background work iOS ends apps for
+  // (TODO.md section 22). It all catches up the moment the app is back.
+  const appActive = useAppActive();
   // The clock is a timestamp sum; this just re-renders each second while running
   const [, setTick] = useState(0);
   useEffect(() => {
-    if (trackingState !== 'running') return;
+    if (trackingState !== 'running' || !appActive) return;
     const id = setInterval(() => setTick(t => t + 1), 1000);
     return () => clearInterval(id);
-  }, [trackingState]);
+  }, [trackingState, appActive]);
   const elapsedSec = runElapsedSeconds(timing.base, timing.segmentStart, Date.now());
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -150,17 +156,17 @@ export default function GPSCardioScreen({ navigation }: Props) {
       ? (60 / toDisplayPace(currentPaceKm, distanceUnit)).toFixed(1)
       : fmtPaceValue(toDisplayPace(currentPaceKm, distanceUnit));
 
-  // Follows the run on the map as fixes arrive
+  // Follows the run on the map as fixes arrive, and jumps to where it is on return
   useEffect(() => {
     const last = coords[coords.length - 1];
-    if (!last || trackingState !== 'running') return;
+    if (!last || trackingState !== 'running' || !appActive) return;
     mapRef.current?.animateToRegion({
       latitude: last.latitude,
       longitude: last.longitude,
       latitudeDelta: 0.005,
       longitudeDelta: 0.005,
     }, 500);
-  }, [coords]);
+  }, [coords, appActive]);
 
   // A tracked route can't be re-walked, so deleting one always asks twice
   const confirmDiscard = (onDiscard: () => void) => {
@@ -328,6 +334,11 @@ export default function GPSCardioScreen({ navigation }: Props) {
     if (thinned[thinned.length - 1] !== last) thinned.push(last);
     return thinned;
   }, [coords]);
+  // The line on the map holds still in the background: the same array means the
+  // native overlay isn't rebuilt
+  const mapCoordsRef = useRef(displayCoords);
+  if (appActive) mapCoordsRef.current = displayCoords;
+  const mapCoords = mapCoordsRef.current;
 
   if (!MAPS_AVAILABLE) {
     return (
@@ -367,11 +378,11 @@ export default function GPSCardioScreen({ navigation }: Props) {
             ref={mapRef}
             style={styles.map}
             initialRegion={initialRegion}
-            showsUserLocation
-            followsUserLocation={trackingState === 'running'}
+            showsUserLocation={appActive}
+            followsUserLocation={trackingState === 'running' && appActive}
           >
             {coords.length >= 2 && (
-              <Polyline coordinates={displayCoords} strokeColor={colors.accent} strokeWidth={4} />
+              <Polyline coordinates={mapCoords} strokeColor={colors.accent} strokeWidth={4} />
             )}
           </MapView>
         </MapErrorBoundary>

@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useGpsRun } from '../context/GpsRunContext';
+import { useAppActive } from '../hooks/useAppActive';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { navigationRef } from '../navigation/navigationRef';
 import { spacing, radius } from '../theme/spacing';
@@ -39,11 +40,13 @@ export default function MiniRunBar() {
     AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user?.id}`).then(v => setUnit(v === 'km' ? 'km' : 'mi')).catch(() => {});
   }, [active, user?.id]);
 
+  // No ticking with the phone locked, as on the map screen; the time is right again on return
+  const appActive = useAppActive();
   useEffect(() => {
-    if (trackingState !== 'running' || screenOpen) return;
+    if (trackingState !== 'running' || screenOpen || !appActive) return;
     const id = setInterval(() => setTick(t => t + 1), 1000);
     return () => clearInterval(id);
-  }, [trackingState, screenOpen]);
+  }, [trackingState, screenOpen, appActive]);
 
   // Slides up each time it appears, as the workout bar does: on minimizing the
   // run, and when a run comes back after a relaunch

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { createMockNavigation, createMockRoute } from './testUtils';
@@ -532,7 +532,76 @@ describe('minimizing a GPS run', () => {
       r.unmount();
     });
   });
+
+  // Section 22: iOS can end an app for what it does in the background, so with
+  // the phone locked on the map the screen does nothing visible, while the run
+  // itself keeps recording in the provider
+  describe('with the phone locked on the map', () => {
+    let appStateHandlers: ((s: string) => void)[] = [];
+    let appStateSpy: jest.SpyInstance;
+    beforeEach(() => {
+      appStateHandlers = [];
+      appStateSpy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_type: string, h: (s: string) => void) => {
+        appStateHandlers.push(h);
+        return { remove: () => { appStateHandlers = appStateHandlers.filter(x => x !== h); } };
+      }) as any);
+    });
+    afterEach(() => appStateSpy.mockRestore());
+
+    const setAppState = (state: string) => act(async () => { appStateHandlers.forEach(h => h(state)); });
+    const routeOnMap = (r: ReturnType<typeof render>) => r.UNSAFE_getAllByProps({ strokeWidth: 4 })[0].props.coordinates as unknown[];
+
+    it('stops moving the map and redrawing the route, then catches up when the app is back', async () => {
+      const animate = jest.spyOn(require('react-native-maps').default.prototype, 'animateToRegion');
+      const r = await startedRun([0, 1]);
+      expect(routeOnMap(r)).toHaveLength(2);
+
+      await setAppState('background');
+      animate.mockClear();
+      await feed(point(2), point(3));
+      expect(animate).not.toHaveBeenCalled();
+      // The same line as before the lock: the native overlay isn't rebuilt
+      expect(routeOnMap(r)).toHaveLength(2);
+
+      await setAppState('active');
+      expect(routeOnMap(r)).toHaveLength(4);
+      expect(animate).toHaveBeenCalledTimes(1);
+      expect(animate.mock.calls[0][0]).toMatchObject({ latitude: point(3).coords.latitude });
+      animate.mockRestore();
+    });
+
+    it('keeps recording while locked: nothing that arrived is lost', async () => {
+      const r = await startedRun([0, 1]);
+      await setAppState('background');
+      await feed(point(2), point(3));
+      await setAppState('active');
+      // Three legs of about 111 m is 0.333 km, 0.21 mi
+      expect(r.getByText('0.21')).toBeTruthy();
+    });
+
+    it('stops the clock re-rendering while locked, and shows the right time on return', async () => {
+      const r = await startedRun([0, 1]);
+      await setAppState('background');
+      // advanceTimersByTime moves Date.now too
+      await act(async () => { jest.advanceTimersByTime(10_000); });
+      expect(r.queryByText('0:10')).toBeNull();
+
+      await setAppState('active');
+      expect(r.getByText('0:10')).toBeTruthy();
+    });
+
+    it('stops showing and following the location while locked', async () => {
+      const r = await startedRun([0, 1]);
+      const mapProps = () => r.UNSAFE_getByType(require('react-native-maps').default).props;
+      expect(mapProps()).toMatchObject({ showsUserLocation: true, followsUserLocation: true });
+      await setAppState('background');
+      expect(mapProps()).toMatchObject({ showsUserLocation: false, followsUserLocation: false });
+      await setAppState('active');
+      expect(mapProps()).toMatchObject({ showsUserLocation: true, followsUserLocation: true });
+    });
+  });
 });
+
 
 const BarHarnessForActivity = ({ show }: { show: boolean }) => (
   <GpsRunProvider>

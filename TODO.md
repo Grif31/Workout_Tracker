@@ -1292,40 +1292,47 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 > 4. The offline queue deletes a workout after 3 rejected attempts (4xx), and the GPS save has no request timeout.
 > 5. A GPS save never writes to Apple Health or attaches heart rate (only `WorkoutLog` and the queue flush do).
 
-### Phase 0: Shipped in the working tree (needs commit, in 1.1.9)
-- [x] Restore prompt reads "Unsaved activity" with Not Now / Discard / Review & Save; Review & Save opens the save sheet straight away
-- [x] Every discard (restore prompt and save sheet) asks again; Not Now keeps the checkpoint
-- [x] Checkpoint written whenever 10+ new points have arrived, not only at exact multiples of 10
-- [x] Tests updated in `__tests__/GPSCardioScreen.test.tsx`
-- [ ] Commit it, and add a 1.1.9 CHANGELOG bullet (an unsaved GPS activity opens straight to Save after a crash, and discarding one asks first)
+**Status after section 19 Phase 7 (2026-10-14).** Root causes 1 and 2 are fixed in code, not yet released: the run lives in `GpsRunProvider`, so minimizing keeps recording; the checkpoint is written after 10+ new fixes; a killed app's run comes back at launch on the mini bar; and orphaned-task cleanup runs once per launch. Causes 3 to 5 are still open, and nothing yet explains why iOS ends the app.
 
-### Phase 1: Confirm the cause (before building)
-- [ ] Read-only check of the affected account's past routes (workouts 443, 439, 386, and any others) for long jumps between consecutive points. Reduced version only: point count, total km, median segment, flagged-gap count, 5 longest segments in metres and percent of route, no coordinates. This tells us if iOS suspends tracking even with Always on, or if the app is simply being killed. Result pending from the ops-maintainer agent
-- [ ] Ask the user: iOS version, Low Power Mode on or off, and whether they opened Aretē around 10:41am. The prod logs show GET 401s at 14:41 UTC and cancelled requests at 14:45 UTC, which fits a reopen but cannot be tied to the account (HTTP logs carry no user id)
+> **Second report (2026-10-14, a hike at Mohonk, build with the old back arrow, so 1.1.9 or earlier).** "Always" location, started a hike, turned the screen off without closing the app, and came back to the recovery screen showing **0:37 and 0.03 mi**: iOS ended the app about 40 s in, right after the 10-fix checkpoint. The saved hike (33m 6s, 1.07 mi) starts at the lodge where the 37 s run was, then draws one long straight line to the trail: 0:37 plus about 32.5 min is the saved time, so the recovered run was most likely resumed from the trail (to confirm with the user). `resumed` left the jump out of the distance, but the route is saved as one line, so the map joins it. It also showed **2,477 ft of elevation gain on a 1.07 mi hike**: GPS altitude noise getting past the 5 m hysteresis.
+
+### Phase 0 (old): superseded
+- [x] The "Unsaved activity" prompt shipped in 1.1.9 (commit 5a98b05). Section 19 Phase 7 replaced it with the mini bar's Unsaved run, which the Unreleased CHANGELOG covers, so its 1.1.9 bullet is no longer worth adding
+
+### Phase 1: Why does iOS end the app with the screen off? (started 2026-10-14)
+- [ ] From the user: Settings > Privacy & Security > Analytics & Improvements > Analytics Data, any `JetsamEvent` (memory kill) or Aretē crash log around the hike; their iOS version, Low Power Mode, and whether they tapped Resume after the recovery screen
+- [ ] Sentry and TestFlight crash reports for that window (no Sentry token on this machine, so this one is yours)
+- [x] Code review of everything that runs while the app is in the background during a run (2026-10-14). Ruled out: background location is configured in the 1.1.9 build (`UIBackgroundModes: ['location']`, the Always permission text); the app has no over-the-air updates or JS reloads that could restart it; a failed token refresh on bad signal does not sign out (only a genuinely invalid refresh token does, and that would show the login screen, not a recovery prompt). **Leading suspect: iOS ending the app for what it does in the background.** With the phone locked on the map screen, 1.1.9 re-renders the whole screen, map included, every second (its clock), moves the map and rebuilds the route on every fix, and has no `AppState` handling at all. That is enough work to draw a memory or CPU termination, and possibly a background-rendering one. The current code still does the same while the run is on the map screen (the 1 s tick and the map follow); only a minimized run avoids it, which is Phase 2
+  - Note: Sentry (production DSN is set in `eas.json`) only sees JS errors and native crashes. An OS termination for memory, CPU or background work is not reported there; only the phone's Analytics Data has it, so the user's logs are the deciding evidence
+- [ ] Reproduce on the dev build: start a hike on the map screen, lock the phone for 10+ minutes while moving, then check Analytics Data for a kill
+- [ ] Optional: read-only check of past GPS routes (ops-maintainer agent, reduced stats only: point count, longest segments, no coordinates) for straight jumps, to see how often this happens
 - [ ] Decide whether to add the user id to request logs so a future report can be traced
 
-### Phase 2: Never drop a point (target 1.1.10, needs a device test)
-- [ ] Move the accumulation rules (distance, elevation, accuracy filter, gap detection) out of `GPSCardioScreen` into a pure helper in `utils/` that the screen and the background task both call, with Jest tests
-- [ ] The background task appends every fix to disk before notifying the screen, in chunks (about 100 points per key) so a 2 hour walk does not rewrite one big JSON blob per fix
-- [ ] Persist an active session `{activity, startedAt, state}` at Start. Add the key to `constants/storageKeys.ts` and the AsyncStorage table in `src/workout-tracker-native/CLAUDE.md`
-- [ ] `cleanupOrphanedTracking()` stops the OS task only when no live session exists
-- [ ] Resume the session on app launch, not only when the GPS screen opens. Home shows an "Activity in progress" card that opens it
-- [ ] Restored runs open on the save sheet (done in Phase 0); add a "keep recording" option for a session that is still live
+### Phase 2: No map work while the app is in the background
+- [x] (built 2026-10-14, not yet on a device) `GPSCardioScreen` makes no map calls (`animateToRegion`, polyline updates) while `AppState` isn't `active`, and catches up when the app comes back. Also stops its 1 s clock re-render and turns off the map's own location dot and follow while backgrounded; the run bar stops ticking too. New `hooks/useAppActive.ts`; 4 tests in `GpsRunMinimize.test.tsx`. Cheap, and worth doing whatever Phase 1 finds: the screen stays mounted when the phone is locked on the map
 
 ### Phase 3: No straight lines across gaps
-- [ ] After a gap in fixes (about 15 s with none, a pause, or a restore), skip the distance and mark the next point as a segment start
-- [ ] Save the route as separate segments so the map, Cardio Details and share cards show no connecting line. Decision needed on the format: segments joined by a character that never appears in an encoded polyline (no migration, but older app builds show garbled lines for new routes), or a new column with a migration
-- [ ] Best-effort scan must not span a gap (it already skips paused time; make the gap rule the same)
-- [ ] Show a banner on return to the app if a gap was recorded
+- [ ] A time-gap rule in `applyFix`: a fix more than about 15 s after the previous one starts a new segment, adds no distance and is marked `resumed` (fixes only come every 5 m, so a gap after standing still costs a few metres at most)
+- [ ] **Decided: a new `Exercise.route_segments` column** (JSON list of encoded polylines, one per segment; migration with the chain check). Keep writing `route_polyline` as the full joined line so builds from before this still draw a route
+- [ ] The live map, Cardio Details and Workout Details draw one line per segment
+- [ ] Test that best efforts never span a gap (they already skip `resumed` points)
+- [ ] Optional: "GPS signal was lost for 2 min" on the save sheet when a gap was recorded
 
-### Phase 4: A save that cannot lose the workout
-- [ ] On Stop, write the final payload to the offline queue first, POST second, and remove it from the queue only on success
-- [ ] Never delete a GPS workout the server rejects. Keep it flagged "needs attention" on Home with a retry
-- [ ] Request timeout on the GPS save so a bad connection falls back to the queue quickly
-- [ ] Idempotency: a client-generated id the server de-duplicates on, so a lost response followed by a queue flush does not create two workouts (schema change, needs a migration and the migration-chain check)
-- [ ] Write a successful GPS workout to Apple Health and attach heart rate, reusing `syncWorkoutToHealthKit` and `attachHeartRateToWorkout`
+### Phase 4: Believable elevation gain
+- [ ] Use the barometer's relative altitude on iOS where available (far steadier than GPS altitude), or a much stronger filter on GPS altitude; plus a cap on implausible gain per minute. The Mohonk hike's 2,477 ft becomes a test case
+
+### Phase 5: A save that can't lose the workout
+- [ ] **Decided: never drop a rejected workout, lifting or GPS.** The offline queue keeps it flagged "Couldn't sync" on Home, with Retry, or Delete behind a confirm, instead of deleting it after `MAX_REJECTED_ATTEMPTS`
+- [ ] A `timeoutMs` option on `apiFetch` (it has none today), used by the GPS and WorkoutLog saves, so a bad connection falls back to the queue in about 15 s
+- [ ] Idempotency: a client-generated `client_id` per workout and a nullable `Workout.client_id` column, unique per user (migration). A repeat POST returns the existing workout, so a timed-out save followed by a queue flush can't make two
+- [ ] Write GPS saves to Apple Health and Health Connect with the right activity type (running, cycling, walking, hiking; today every cardio workout goes in as running) and the distance, and attach heart rate as WorkoutLog does
+
+### Phase 6: Pick a run back up after a kill
+- [ ] **Decided: Keep Recording.** A recovered run gets Keep Recording next to Save and Discard, continuing as a new segment through `afterGap` (after Phase 3, or it draws a line from the kill point)
+- [ ] Checkpoint every 5 s while running and when the app goes to the background, instead of every 10 fixes, so a kill loses at most about 5 s
 
 ### Done when
-- [ ] On a real EAS build: walk with the phone locked, force-quit the app mid-walk and reopen, drop to airplane mode at Stop, and pause/resume. In every case the full route is recoverable and none show a straight line across the gap
-- [ ] No path deletes a tracked activity without an explicit second confirmation
-- [ ] A GPS workout the server rejects stays on the phone and is visible
+- [ ] On a device: walk with the phone locked on the map screen and minimized, force-quit mid-walk and Keep Recording, pause and resume, and switch to airplane mode before Stop. The full route is recoverable in every case, with no straight line across a gap, pause or resume
+- [ ] No path deletes a tracked activity without a second confirmation
+- [ ] A workout the server rejects stays on the phone and is visible
+- [ ] A hike's elevation gain is in the right range
