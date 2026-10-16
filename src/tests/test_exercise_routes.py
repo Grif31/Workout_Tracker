@@ -44,6 +44,24 @@ class TestGetExercises:
         assert 'name' in exercise
         assert 'muscle_group' in exercise
 
+    def test_primary_muscles_names_every_primary(self, client, auth_token, app):
+        """muscle_group lists primaries first but can't say where they end, so
+        the workout log's per-muscle set counts read primary_muscles."""
+        from models import db, ExerciseMuscleMapping
+        with app.app_context():
+            tmpl_id = seed_global_exercise('Romanian Deadlift', 'Barbell')
+            db.session.add_all([
+                ExerciseMuscleMapping(exercise_template_id=tmpl_id, muscle_group='Hamstrings', is_primary=True),
+                ExerciseMuscleMapping(exercise_template_id=tmpl_id, muscle_group='Glutes', is_primary=True),
+                ExerciseMuscleMapping(exercise_template_id=tmpl_id, muscle_group='Lower Back', is_primary=False),
+            ])
+            db.session.commit()
+
+        res = client.get('/api/exercises', headers=auth_headers(auth_token))
+        exercise = res.get_json()[0]
+        assert exercise['muscle_group'].split(', ')[2] == 'Lower Back'
+        assert sorted(exercise['primary_muscles']) == ['Glutes', 'Hamstrings']
+
     def test_requires_auth(self, client):
         res = client.get('/api/exercises')
         assert res.status_code == 401

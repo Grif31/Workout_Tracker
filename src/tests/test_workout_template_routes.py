@@ -72,6 +72,18 @@ class TestCreateWorkoutTemplate:
         assert res.status_code == 201
         assert res.get_json()['exercises'] == []
 
+    def test_create_rejects_duplicate_name(self, client, auth_token):
+        create_template(client, auth_token, 'Push Day')
+        res = create_template(client, auth_token, '  push day ')
+        assert res.status_code == 409
+        names = [t['name'] for t in client.get('/api/workout-templates',
+                 headers={'Authorization': f'Bearer {auth_token}'}).get_json()]
+        assert names == ['Push Day']
+
+    def test_create_allows_name_another_user_has(self, client, auth_token, auth_token2):
+        create_template(client, auth_token, 'Push Day')
+        assert create_template(client, auth_token2, 'Push Day').status_code == 201
+
 
 class TestListWorkoutTemplates:
 
@@ -121,6 +133,25 @@ class TestUpdateWorkoutTemplate:
                            headers={'Authorization': f'Bearer {auth_token}'})
         assert res.status_code == 200
         assert res.get_json()['name'] == 'New Name'
+
+    def test_rename_to_existing_name_rejected(self, client, auth_token):
+        create_template(client, auth_token, 'Push Day')
+        template_id = create_template(client, auth_token, 'Pull Day').get_json()['id']
+        res = client.patch(f'/api/workout-templates/{template_id}',
+                           json={'name': 'PUSH DAY'},
+                           headers={'Authorization': f'Bearer {auth_token}'})
+        assert res.status_code == 409
+        got = client.get(f'/api/workout-templates/{template_id}',
+                         headers={'Authorization': f'Bearer {auth_token}'}).get_json()
+        assert got['name'] == 'Pull Day'
+
+    def test_saving_under_own_name_allowed(self, client, auth_token):
+        # The app sends the name on every save, changed or not.
+        template_id = create_template(client, auth_token, 'Push Day').get_json()['id']
+        res = client.patch(f'/api/workout-templates/{template_id}',
+                           json={'name': 'Push Day', 'exercise_template_ids': []},
+                           headers={'Authorization': f'Bearer {auth_token}'})
+        assert res.status_code == 200
 
     def test_update_exercises(self, client, auth_token):
         ex_id = create_exercise(client, auth_token, 'Deadlift', 'Back')

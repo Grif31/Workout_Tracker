@@ -3,12 +3,13 @@ import { View, StyleSheet } from 'react-native';
 import Body, { ExtendedBodyPart, Slug } from 'react-native-body-highlighter';
 import { MUSCLE_SLUGS, muscleKey } from '../utils/muscleDiagramSvg';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { spacing } from '../theme/spacing';
 
 type Props = {
   muscles?: string[];
   primaryMuscle?: string | null;
-  // Per-muscle rank colors for strength score screen; falls back to colors.accent if absent
+  // Per-muscle colors (strength score rank colors, workout set-count shades); falls back to colors.accent if absent
   muscleColors?: Record<string, string>;
   scale?: number;
 };
@@ -16,6 +17,8 @@ type Props = {
 
 export default function MuscleDiagram({ muscles, primaryMuscle, muscleColors, scale = 0.65 }: Props) {
   const { colors } = useTheme();
+  // A profile with no gender set keeps the male figure the diagram always drew
+  const gender = useAuth()?.user?.gender === 'female' ? 'female' : 'male';
 
   const bodyFill   = colors.surface;
   const bodyStroke = colors.border;
@@ -43,6 +46,7 @@ export default function MuscleDiagram({ muscles, primaryMuscle, muscleColors, sc
       <Body
         data={frontData}
         side="front"
+        gender={gender}
         scale={scale}
         defaultFill={bodyFill}
         defaultStroke={bodyStroke}
@@ -51,6 +55,7 @@ export default function MuscleDiagram({ muscles, primaryMuscle, muscleColors, sc
       <Body
         data={backData}
         side="back"
+        gender={gender}
         scale={scale}
         defaultFill={bodyFill}
         defaultStroke={bodyStroke}

@@ -7,6 +7,7 @@ export type TemplateExercise = {
   name: string;
   // nullable=False on ExerciseTemplate, so the API always sends one.
   muscle_group: string;
+  primary_muscles?: string[];
   equipment?: string;
   exercise_type?: string;
   image_url?: string;
@@ -71,6 +72,7 @@ export function buildTemplatePrefill(
         exercise_template_id: ex.id,
         exercise_type: ex.exercise_type ?? 'strength',
         muscle_group: ex.muscle_group,
+        primary_muscles: ex.primary_muscles,
         equipment: ex.equipment,
         image_url: ex.image_url,
         bodyweight_load_factor: ex.bodyweight_load_factor,

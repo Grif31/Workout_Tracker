@@ -1,6 +1,8 @@
 import json
 
 from flask import Blueprint, request, jsonify, g
+from sqlalchemy import func
+
 from models import db, WorkoutTemplate, WorkoutTemplateExercise
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from schemas import WorkoutTemplateSchema, UpdateWorkoutTemplateSchema
@@ -13,6 +15,20 @@ _workout_template_schema = WorkoutTemplateSchema()
 _update_workout_template_schema = UpdateWorkoutTemplateSchema()
 
 
+def _name_taken(user_id, name, exclude_id=None):
+    q = WorkoutTemplate.query.filter(
+        WorkoutTemplate.user_id == user_id,
+        func.lower(func.trim(WorkoutTemplate.name)) == name.lower(),
+    )
+    if exclude_id is not None:
+        q = q.filter(WorkoutTemplate.id != exclude_id)
+    return db.session.query(q.exists()).scalar()
+
+
+def _name_taken_response(name):
+    return jsonify({'message': f'You already have a template named "{name}". Pick a different name.'}), 409
+
+
 @workout_template_bp.post('/api/workout-templates')
 @jwt_required()
 @validate_body(_workout_template_schema)
@@ -23,6 +39,8 @@ def create_workout_template():
     name = data.get('name', '').strip()
     if not name:
         return jsonify({'message': 'Name is required'}), 400
+    if _name_taken(user_id, name):
+        return _name_taken_response(name)
 
     template = WorkoutTemplate(user_id=user_id, name=name)
     prog = data.get('programming')
@@ -64,7 +82,10 @@ def update_workout_template(template_id):
 
     data = g.validated
     if 'name' in data:
-        template.name = data['name'].strip() or template.name
+        name = data['name'].strip()
+        if name and _name_taken(user_id, name, exclude_id=template.id):
+            return _name_taken_response(name)
+        template.name = name or template.name
     if 'exercise_template_ids' in data:
         WorkoutTemplateExercise.query.filter_by(workout_template_id=template.id).delete()
         add_template_exercises(template.id, user_id, data['exercise_template_ids'])

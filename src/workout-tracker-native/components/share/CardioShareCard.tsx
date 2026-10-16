@@ -1,6 +1,7 @@
 import React, { forwardRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import RouteTrace, { type LatLng } from './RouteTrace';
+import { asSegments } from '../../utils/routeSegments';
 import {
   ShareCardFrame,
   ShareCardHeader,
@@ -24,8 +25,8 @@ type CardioShareCardProps = {
   durationMin: number;
   /** metres of ascent; omitted from the card when null/0 */
   elevationM?: number | null;
-  /** decoded GPS route; card renders stats-only when absent */
-  coords?: LatLng[];
+  /** decoded GPS route, one line or segments; card renders stats-only when absent */
+  coords?: LatLng[] | LatLng[][];
   accentColor: string;
 };
 
@@ -34,7 +35,7 @@ const TRACE_HEIGHT = 210;
 
 const CardioShareCard = forwardRef<View, CardioShareCardProps>(
   ({ activityName, date, distance, distanceUnit, durationMin, elevationM, coords, accentColor }, ref) => {
-    const hasRoute = (coords?.length ?? 0) >= 2;
+    const hasRoute = asSegments(coords).length > 0;
 
     // Machine cardio is often logged as time alone: lead with the time then,
     // rather than "0.00 km" and a pace that can't be worked out

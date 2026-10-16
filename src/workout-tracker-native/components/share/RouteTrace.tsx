@@ -1,20 +1,25 @@
 import React from 'react';
 import Svg, { Path, Circle } from 'react-native-svg';
+import { asSegments, type LatLng } from '../../utils/routeSegments';
 
-export type LatLng = { latitude: number; longitude: number };
+export type { LatLng };
 
 type Projected = { path: string; start: { x: number; y: number }; end: { x: number; y: number } } | null;
 
 // Projects GPS coords into an SVG path that fits a width×height box.
 // Equirectangular projection with latitude correction so routes keep their
 // real-world shape; aspect preserved and centered; y flipped (north = up).
+// A route in segments (utils/routeSegments.ts) is one path with a fresh M per
+// segment, so a gap in the recording stays a gap instead of a straight line.
 export function projectRoute(
-  coords: LatLng[],
+  route: LatLng[] | LatLng[][],
   width: number,
   height: number,
   padding = 16,
 ): Projected {
-  if (coords.length < 2) return null;
+  const segments = asSegments(route);
+  if (segments.length === 0) return null;
+  const coords = segments.flat();
 
   const midLat = coords.reduce((s, c) => s + c.latitude, 0) / coords.length;
   const lngScale = Math.cos((midLat * Math.PI) / 180);
@@ -42,15 +47,18 @@ export function projectRoute(
     y: height - (offsetY + (ys[i] - minY) * safeScale),
   }));
 
+  // Where each segment begins in the flattened list
+  const starts = new Set<number>();
+  segments.reduce((at, seg) => { starts.add(at); return at + seg.length; }, 0);
   const path = points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+    .map((p, i) => `${starts.has(i) ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
     .join(' ');
 
   return { path, start: points[0], end: points[points.length - 1] };
 }
 
 type Props = {
-  coords: LatLng[];
+  coords: LatLng[] | LatLng[][];
   width: number;
   height: number;
   strokeColor: string;

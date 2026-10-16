@@ -12,6 +12,14 @@ import CardioDetailsScreen from '../screens/DashboardTab/CardioDetailsScreen';
 
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
+jest.mock('react-native-maps', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  class MapView extends React.Component<any> {
+    render() { return <View>{this.props.children}</View>; }
+  }
+  return { __esModule: true, default: MapView, Polyline: (props: any) => <View {...props} /> };
+});
 // The options menu is a native action sheet: pick an entry by index.
 let mockSheetChoice = 2;  // Cancel
 jest.mock('@expo/react-native-action-sheet', () => ({
@@ -167,6 +175,36 @@ describe('CardioDetailsScreen', () => {
     await waitFor(() => expect(slow.getAllByText('Morning Run').length).toBeGreaterThan(0));
     const slowKcal = kcalFrom(slow);
     expect(fastKcal).toBeGreaterThan(slowKcal);
+  });
+
+  describe('the route', () => {
+    const polyline = require('@mapbox/polyline');
+    const a = [[40, -74], [40.001, -74], [40.002, -74]];
+    const b = [[40.006, -74.001], [40.007, -74.001]];
+    const lines = (r: any) => r.UNSAFE_queryAllByType(require('react-native-maps').Polyline);
+
+    it('draws one line per segment, so a gap in the recording stays a gap', async () => {
+      installServer(workout({ exercises: [{
+        name: 'Walking', exercise_type: 'cardio',
+        route_polyline: polyline.encode([...a, ...b]),
+        route_segments: [polyline.encode(a), polyline.encode(b)],
+        sets: [{ cardio_duration: 30, distance: 2, distance_unit: 'km' }],
+      }] }));
+      const r = await renderScreen();
+      await waitFor(() => expect(lines(r)).toHaveLength(2));
+      expect(lines(r)[0].props.coordinates).toHaveLength(3);
+      expect(lines(r)[1].props.coordinates).toHaveLength(2);
+    });
+
+    it('still draws a route saved before segments, as one line', async () => {
+      installServer(workout({ exercises: [{
+        name: 'Walking', exercise_type: 'cardio', route_polyline: polyline.encode([...a, ...b]),
+        sets: [{ cardio_duration: 30, distance: 2, distance_unit: 'km' }],
+      }] }));
+      const r = await renderScreen();
+      await waitFor(() => expect(lines(r)).toHaveLength(1));
+      expect(lines(r)[0].props.coordinates).toHaveLength(5);
+    });
   });
 
   it('says when no route was recorded', async () => {

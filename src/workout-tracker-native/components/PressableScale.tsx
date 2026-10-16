@@ -1,17 +1,20 @@
 import React, { useRef } from 'react';
-import { Animated, TouchableWithoutFeedback, ViewStyle, StyleProp } from 'react-native';
+import { Animated, TouchableWithoutFeedback, ViewStyle, StyleProp, AccessibilityRole } from 'react-native';
 
 type Props = {
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
   children: React.ReactNode;
+  accessibilityRole?: AccessibilityRole;
+  accessibilityLabel?: string;
+  testID?: string;
 };
 
 // Scale-down-on-press feedback for tappable cards — smoother than the flat
 // opacity flash of TouchableOpacity's default activeOpacity. Nested
 // TouchableOpacity children (e.g. a Log button inside a card) still capture
 // their own presses independently via RN's responder system.
-export default function PressableScale({ onPress, style, children }: Props) {
+export default function PressableScale({ onPress, style, children, accessibilityRole, accessibilityLabel, testID }: Props) {
   const scale = useRef(new Animated.Value(1)).current;
 
   const pressIn = () => {
@@ -22,7 +25,10 @@ export default function PressableScale({ onPress, style, children }: Props) {
   };
 
   return (
-    <TouchableWithoutFeedback onPress={onPress} onPressIn={pressIn} onPressOut={pressOut}>
+    <TouchableWithoutFeedback
+      onPress={onPress} onPressIn={pressIn} onPressOut={pressOut}
+      accessibilityRole={accessibilityRole} accessibilityLabel={accessibilityLabel} testID={testID}
+    >
       <Animated.View style={[style, { transform: [{ scale }] }]}>
         {children}
       </Animated.View>

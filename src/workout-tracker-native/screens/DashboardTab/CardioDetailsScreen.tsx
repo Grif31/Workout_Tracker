@@ -7,7 +7,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import polylineLib from '@mapbox/polyline';
+import { decodeRouteSegments, regionFor, thinSegments } from '../../utils/routeSegments';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useActionSheet } from '@expo/react-native-action-sheet';
 import { useAuth } from '../../context/AuthContext';
@@ -33,7 +33,6 @@ const MAP_HEIGHT = Dimensions.get('window').height * 0.65;
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'CardioDetails'>;
 
-type Coord = { latitude: number; longitude: number };
 
 interface CardioSet {
   cardio_duration: string | number | null;
@@ -105,8 +104,8 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
     return (user as any).weight_unit === 'lbs' ? bw / 2.205 : bw;
   }, [user]);
 
-  const { exercise, coords, mapRegion, durationMin, distanceKm, elevationGainM, calories, bestEfforts } = useMemo(() => {
-    if (!workout) return { exercise: null, coords: [], mapRegion: null, durationMin: 0, distanceKm: 0, elevationGainM: null, calories: 0, bestEfforts: [] as BestEffort[] };
+  const { exercise, segments, mapRegion, durationMin, distanceKm, elevationGainM, calories, bestEfforts } = useMemo(() => {
+    if (!workout) return { exercise: null, segments: [] as ReturnType<typeof decodeRouteSegments>, mapRegion: null, durationMin: 0, distanceKm: 0, elevationGainM: null, calories: 0, bestEfforts: [] as BestEffort[] };
 
     // Every cardio exercise and bout, not exercises[0].sets[0]: intervals are
     // several bouts, and a lifting session reached from a cardio PR has its
@@ -129,28 +128,9 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
     const speedKmH = dur > 0 && distKm > 0 ? distKm / (dur / 60) : 0;
     const kcal = estimateCalories(ex?.name ?? '', dur, weightKg, speedKmH);
 
-    let decodedCoords: Coord[] = [];
-    let region = null;
-    if (ex?.route_polyline) {
-      try {
-        decodedCoords = polylineLib.decode(ex.route_polyline).map(([lat, lng]: [number, number]) => ({
-          latitude: lat, longitude: lng,
-        }));
-        if (decodedCoords.length >= 2) {
-          const lats = decodedCoords.map(c => c.latitude);
-          const lngs = decodedCoords.map(c => c.longitude);
-          const minLat = Math.min(...lats), maxLat = Math.max(...lats);
-          const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
-          const pad = 0.002;
-          region = {
-            latitude: (minLat + maxLat) / 2,
-            longitude: (minLng + maxLng) / 2,
-            latitudeDelta: Math.max(maxLat - minLat + pad, 0.005),
-            longitudeDelta: Math.max(maxLng - minLng + pad, 0.005),
-          };
-        }
-      } catch {}
-    }
+    // Segments, so a pause or a stretch with no GPS isn't drawn as a straight line
+    const segments = decodeRouteSegments(ex);
+    const region = regionFor(segments);
 
     // Shortest first within each kind, so the chips read as a natural ladder
     // (400m, 1K, 1 Mile...) rather than in whatever order the scan emitted.
@@ -161,7 +141,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
         : a.duration_min - b.duration_min;
     });
 
-    return { exercise: ex, coords: decodedCoords, mapRegion: region, durationMin: dur, distanceKm: distKm, elevationGainM: elev, calories: kcal, bestEfforts: efforts };
+    return { exercise: ex, segments, mapRegion: region, durationMin: dur, distanceKm: distKm, elevationGainM: elev, calories: kcal, bestEfforts: efforts };
   }, [workout, weightKg]);
 
   // This screen renders the route twice at once — the static map below, and
@@ -171,15 +151,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
   // fixed-size, non-interactive thumbnail (scrollEnabled/zoomEnabled false),
   // so thinning it costs nothing visually. Mirrors GPSCardioScreen's live-map
   // thinning.
-  const MAX_POLYLINE_POINTS = 500;
-  const displayCoords = useMemo(() => {
-    if (coords.length <= MAX_POLYLINE_POINTS) return coords;
-    const step = Math.ceil(coords.length / MAX_POLYLINE_POINTS);
-    const thinned = coords.filter((_, i) => i % step === 0);
-    const last = coords[coords.length - 1];
-    if (thinned[thinned.length - 1] !== last) thinned.push(last);
-    return thinned;
-  }, [coords]);
+  const displaySegments = useMemo(() => thinSegments(segments), [segments]);
 
   const handleRename = async () => {
     const name = renameText.trim();
@@ -282,7 +254,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
           distanceUnit={distanceUnit}
           durationMin={durationMin}
           elevationM={elevationGainM}
-          coords={displayCoords}
+          coords={displaySegments}
           accentColor={colors.accentDark}
         />
       </View>
@@ -291,15 +263,15 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
       <View style={[styles.mapContainer, { height: MAP_HEIGHT }]}>
         {MapView && mapRegion ? (
           <MapView style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} initialRegion={mapRegion} scrollEnabled={false} zoomEnabled={false}>
-            {coords.length >= 2 && Polyline && (
-              <Polyline coordinates={displayCoords} strokeColor={colors.accent} strokeWidth={4} />
-            )}
+            {Polyline && displaySegments.map((seg, i) => (
+              <Polyline key={i} coordinates={seg} strokeColor={colors.accent} strokeWidth={4} />
+            ))}
           </MapView>
         ) : (
           <View style={styles.mapPlaceholder}>
             <Ionicons name="map-outline" size={48} color={colors.textSecondary} />
             <Text style={[styles.mapPlaceholderText, { color: colors.textSecondary }]}>
-              {coords.length < 2 ? 'No route recorded' : 'Map unavailable'}
+              {segments.length === 0 ? 'No route recorded' : 'Map unavailable'}
             </Text>
           </View>
         )}

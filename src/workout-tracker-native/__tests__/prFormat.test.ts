@@ -203,6 +203,15 @@ describe('computeChartYAxisRange', () => {
     }
   });
 
+  it('keeps the peak under the top when flooring the offset would lower it', () => {
+    // 135-185 over 3 sections used to give 110-176, drawing the line off the chart
+    for (const values of [[135, 185], [235, 245, 285], [288, 309], [180, 256]]) {
+      const { maxValue, yAxisOffset } = computeChartYAxisRange(values, 3);
+      expect(yAxisOffset + maxValue).toBeGreaterThanOrEqual(Math.max(...values));
+      expect(yAxisOffset).toBeLessThanOrEqual(Math.min(...values));
+    }
+  });
+
   it('returns a whole-number offset and a span evenly divisible by the section count', () => {
     const { maxValue, yAxisOffset } = computeChartYAxisRange([7, 8], 4);
     expect(Number.isInteger(maxValue)).toBe(true);

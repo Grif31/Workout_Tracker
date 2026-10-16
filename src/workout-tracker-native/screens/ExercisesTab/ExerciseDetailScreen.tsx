@@ -22,7 +22,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { toDisplayWeight, toDisplayVolume, convertWeight, WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayPace, toKm } from '../../utils/units';
-import { computeChartYAxisRange, computeBarChartMax, fmtMinSec } from '../../utils/prFormat';
+import { computeChartYAxisRange, computeBarChartMax, computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH, fmtMinSec } from '../../utils/prFormat';
 import { fmtHold } from '../../components/workout/types';
 import { fmtPaceValue } from '../../utils/cardioFormat';
 import { parseApiDate } from '../../utils/date';
@@ -37,6 +37,14 @@ const RANGE_SEGMENTS = (['1M', '3M', '6M', 'All'] as const).map(r => ({ key: r, 
 
 const SCREEN_WIDTH  = Dimensions.get('window').width;
 const CHART_WIDTH   = SCREEN_WIDTH - spacing.md * 4;
+// gifted-charts draws the y-axis gutter in addition to `width`, so the plot
+// gets CHART_WIDTH minus the gutter or it overflows the card's right edge
+const CHART_Y_LABEL_W = 40;
+// Room past the first and last points for the latest value's label, which
+// the library draws starting just left of its point
+const CHART_EDGE_SPACING = 20;
+const BAR_Y_LABEL_W = 36;
+const BAR_EDGE_SPACING = 10;
 
 
 type Props = {
@@ -75,7 +83,7 @@ type HistorySession = {
   notes?: string;
 };
 
-type ChartPoint = { value: number; label: string; dataPointText: string; date: string };
+type ChartPoint = { value: number; dataPointText: string; date: string };
 
 type CardioStats = {
   total_distance: number;
@@ -346,24 +354,36 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     return d;
   }, [chartRange]);
 
-  // Oldest-first points for a series; x labels thinned to ~4, and only the
-  // peak and latest points carry a value label
+  // Oldest-first points for a series; only the peak and latest points carry a
+  // value label. X labels are picked at render time, from the fitted spacing
   const toPoints = (rows: { date: string; value: number }[], fmt: (v: number) => string, lowerIsBetter = false): ChartPoint[] => {
     const pts = rows.map(r => {
       const d = parseApiDate(r.date);
       return { value: r.value, date: `${d.getMonth() + 1}/${d.getDate()}` };
     });
-    const step = Math.max(1, Math.ceil(pts.length / 4));
     let bestIdx = 0;
     pts.forEach((p, i) => {
       if (lowerIsBetter ? p.value < pts[bestIdx].value : p.value > pts[bestIdx].value) bestIdx = i;
     });
     return pts.map((p, i) => ({
       ...p,
-      label: i % step === 0 ? p.date : '',
       dataPointText: i === bestIdx || i === pts.length - 1 ? fmt(p.value) : '',
     }));
   };
+
+  // The library boxes each date to the point (or bar) slot, which truncates it
+  // to "5..." once points crowd; draw shown dates a full label wide, centered
+  const withDateLabels = (points: ChartPoint[], slot: number, labelEvery: number) =>
+    points.map((p, i) => ({
+      ...p,
+      labelComponent: showChartXLabel(i, points.length, labelEvery)
+        ? () => (
+          <Text numberOfLines={1} style={[styles.axisLabel, styles.xAxisDate, { marginLeft: (slot - CHART_X_LABEL_WIDTH) / 2 }]}>
+            {p.date}
+          </Text>
+        )
+        : undefined,
+    }));
 
   useEffect(() => {
     if (historySessions.length === 0) return;
@@ -502,7 +522,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     // Snapped to whole, evenly spaced ticks (CLAUDE.md, Charts): padding raw
     // min/max let adjacent tick labels round to the same number
     const { maxValue, yAxisOffset } = computeChartYAxisRange(points.map(p => p.value), 3);
-    const spacing = Math.max(12, Math.floor((CHART_WIDTH - 40) / (points.length - 1)));
+    const fit = computeChartXFit(points.length, CHART_WIDTH, CHART_Y_LABEL_W, CHART_EDGE_SPACING);
     return (
       <View style={styles.chartCard}>
         <View style={styles.chartHeaderRow}>
@@ -510,10 +530,12 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           {renderDelta(points, spec)}
         </View>
         <LineChart
-          data={points}
-          width={CHART_WIDTH}
+          data={withDateLabels(points, fit.spacing, fit.labelEvery)}
+          width={fit.plotWidth}
           height={150}
-          spacing={spacing}
+          spacing={fit.spacing}
+          disableScroll
+          overflowTop={16}
           color={color}
           thickness={2}
           dataPointsColor={color}
@@ -527,14 +549,14 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           rulesColor={colors.border}
           rulesThickness={1}
           yAxisTextStyle={styles.axisLabel}
-          yAxisLabelWidth={40}
+          yAxisLabelWidth={CHART_Y_LABEL_W}
           formatYLabel={(label: string) => spec.fmt(Number(label))}
           xAxisLabelTextStyle={styles.axisLabel}
           noOfSections={3}
           maxValue={maxValue}
           yAxisOffset={yAxisOffset}
-          initialSpacing={10}
-          endSpacing={10}
+          initialSpacing={CHART_EDGE_SPACING}
+          endSpacing={CHART_EDGE_SPACING}
           textShiftY={-8}
           textFontSize={10}
           textColor={colors.textSecondary}
@@ -570,9 +592,14 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
       );
     }
     const maxVal = Math.max(...points.map(p => p.value));
-    const slot = Math.floor((CHART_WIDTH - 46) / points.length);
-    const barSpacing = Math.max(2, Math.floor(slot * 0.3));
-    const barWidth = Math.min(26, Math.max(6, slot - barSpacing));
+    const plotWidth = CHART_WIDTH - BAR_Y_LABEL_W;
+    // Each bar takes barWidth + spacing; no floor on either, so a long range
+    // narrows the bars instead of running past the card
+    const slot = (plotWidth - BAR_EDGE_SPACING * 2) / points.length;
+    const barSpacing = Math.min(slot * 0.3, slot - 2);
+    const barWidth = Math.min(26, slot - barSpacing);
+    const labelSlot = barWidth + barSpacing;
+    const labelEvery = Math.max(points.length <= 6 ? 1 : Math.ceil(points.length / 5), Math.ceil(CHART_X_LABEL_WIDTH / labelSlot));
     return (
       <View style={styles.chartCard}>
         <View style={styles.chartHeaderRow}>
@@ -580,11 +607,12 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           {renderDelta(points, spec)}
         </View>
         <BarChart
-          data={points}
-          width={CHART_WIDTH}
+          data={withDateLabels(points, labelSlot, labelEvery)}
+          width={plotWidth}
           height={150}
           barWidth={barWidth}
           spacing={barSpacing}
+          disableScroll
           frontColor={colors.accent}
           barBorderTopLeftRadius={3}
           barBorderTopRightRadius={3}
@@ -592,13 +620,13 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           rulesColor={colors.border}
           rulesThickness={1}
           yAxisTextStyle={styles.axisLabel}
-          yAxisLabelWidth={36}
+          yAxisLabelWidth={BAR_Y_LABEL_W}
           formatYLabel={(label: string) => spec.fmt(Number(label))}
           xAxisLabelTextStyle={styles.axisLabel}
           noOfSections={3}
           maxValue={computeBarChartMax(maxVal * 1.1, 3)}
-          initialSpacing={10}
-          endSpacing={10}
+          initialSpacing={BAR_EDGE_SPACING}
+          endSpacing={BAR_EDGE_SPACING}
           xAxisThickness={1}
           xAxisColor={colors.border}
           yAxisThickness={0}
@@ -1407,6 +1435,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textPrimary,
   },
   axisLabel: { fontSize: 9, color: colors.textSecondary },
+  xAxisDate: { width: CHART_X_LABEL_WIDTH, textAlign: 'center' },
   deleteBtn: {
     alignItems: 'center',
     paddingVertical: spacing.md,

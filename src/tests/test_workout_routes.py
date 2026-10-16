@@ -214,6 +214,7 @@ class TestGetWorkoutDetails:
         ex = res.get_json()['exercises'][0]
         assert ex['image_url'] == '/media/push-up.gif'
         assert ex['muscle_group'] == 'Chest'
+        assert ex['primary_muscles'] == ['Chest']
         assert ex['equipment'] == 'Bodyweight'
         assert ex['bodyweight_load_factor'] == 0.6
 

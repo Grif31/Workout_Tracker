@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Easing } from 'react-native';
+import { View, StyleSheet, Animated, Easing, type StyleProp, type ViewStyle } from 'react-native';
 
 type Props = {
   percent: number;
@@ -12,6 +12,8 @@ type Props = {
    * distance (0) stays empty, rather than both reading as "no data".
    */
   minPercent?: number;
+  /** Track overrides (height, radius, flex) for bars thicker than the 4px default */
+  style?: StyleProp<ViewStyle>;
 };
 
 /**
@@ -21,7 +23,7 @@ type Props = {
  * by exercise or muscle-group name.
  */
 export default function PercentileBar({
-  percent, color, trackColor, delay = 0, minPercent = 0,
+  percent, color, trackColor, delay = 0, minPercent = 0, style,
 }: Props) {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -35,7 +37,7 @@ export default function PercentileBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [percent]);
   return (
-    <View style={[styles.track, { backgroundColor: trackColor }]}>
+    <View style={[styles.track, style, { backgroundColor: trackColor }]}>
       <Animated.View
         style={[
           styles.fill,

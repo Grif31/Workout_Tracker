@@ -22,7 +22,7 @@ export function DashboardStack() {
       <Stack.Screen name="DashboardHome" component={DashboardScreen} />
       <Stack.Screen name="WorkoutDetails" component={WorkoutDetailScreen} />
       <Stack.Screen name="CardioDetails" component={CardioDetailsScreen} options={{ contentStyle: { paddingTop: 0 } }} />
-      <Stack.Screen name="WorkoutSummary" component={WorkoutSummaryScreen} options={{ contentStyle: { paddingTop: 0 } }} />
+      <Stack.Screen name="WorkoutSummary" component={WorkoutSummaryScreen} options={{ contentStyle: { paddingTop: 0 }, animation: 'fade' }} />
       <Stack.Screen
         name="WorkoutLog"
         component={LogWorkoutScreen}

@@ -1,11 +1,11 @@
 import  { StatusBar }  from 'expo-status-bar';
 import React, { JSX, useEffect } from 'react';
-import { View } from 'react-native';
+import { AppState, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import NetInfo from '@react-native-community/netinfo';
-import { setUpLiveWorkoutCategory } from './utils/notifications';
+import { dismissDeliveredRestTimerAlerts, setUpLiveWorkoutCategory } from './utils/notifications';
 import { announceFlushResult, flushQueue, initPendingCount } from './utils/offlineQueue';
 import  RootNav  from '../workout-tracker-native/navigation/RootNav'
 import { AuthProvider } from './context/AuthContext';
@@ -36,11 +36,12 @@ Notifications.setNotificationHandler({
     // since JS timers freeze once backgrounded. Showing its system banner
     // too while the app is already open is a jarring duplicate, so suppress
     // it here; backgrounded delivery is unaffected since this handler only
-    // runs while the app is active.
+    // runs while the app is active. Nor list it: it would sit in Notification
+    // Center after the rest it announced was over.
     const isRestTimer = (notification.request.content.data as any)?.type === 'rest_timer';
     return {
       shouldShowBanner: !isRestTimer,
-      shouldShowList: true,
+      shouldShowList: !isRestTimer,
       shouldPlaySound: !isRestTimer,
       shouldSetBadge: false,
     };
@@ -56,6 +57,14 @@ function App(): JSX.Element {
       }
     });
     return () => netUnsub();
+  }, []);
+
+  useEffect(() => {
+    dismissDeliveredRestTimerAlerts();
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') dismissDeliveredRestTimerAlerts();
+    });
+    return () => sub.remove();
   }, []);
 
   useEffect(() => {

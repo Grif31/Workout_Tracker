@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { Animated, PanResponder, StyleSheet, View } from 'react-native';
+import React, { useLayoutEffect, useRef, useState } from 'react';
+import { unstable_batchedUpdates, Animated, PanResponder, StyleSheet, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
 // Long-press-drag reorder list for short, fixed-height rows.
@@ -9,17 +9,13 @@ import * as Haptics from 'expo-haptics';
 // died the same way). Rows must all be `rowHeight` tall. No autoscroll —
 // intended for lists that fit on screen.
 //
-// Only the actively-dragged row is ever transformed — it floats above the
-// list (elevated shadow/zIndex) and follows the finger; every other row
-// stays put in normal flex flow the whole time and simply appears in its
-// new spot once the array reorders on drop. An earlier version animated
-// every row's position live during the drag (a continuous "neighbors slide
-// out of the way" preview) via a persistent Animated.Value per item, reset
-// through a layout effect once the reorder committed — that reset proved
-// unreliable in practice (rows could end up visually stuck mid-transform,
-// overlapping a neighbor). This design has nothing to reset: at most one
-// row ever has a transform applied, and it's torn down the instant the drag
-// ends, in the same state update that clears "active".
+// Every row owns an Animated.Value offset (kept per key). The dragged row
+// follows the finger; as it crosses a neighbor, that neighbor eases one step
+// out of the way. On drop the dragged row eases into its slot, then in one
+// update the array reorders, the active flag clears and a layout effect zeroes
+// every offset before paint, so the final positions match what was animated
+// and nothing visibly jumps. A short timeout re-zeroes in case the parent
+// declines the reorder (keys unchanged, so the layout effect never fires).
 
 type Props<T> = {
   data: T[];
@@ -48,12 +44,10 @@ function DraggableList<T>({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStart = useRef({ x: 0, y: 0 });
 
-  // Single shared value, reused for whichever row is currently active — only
-  // one row is ever transformed at a time, so there's no per-item lifecycle
-  // to manage. dragYRef mirrors it synchronously for endDrag's slot math
-  // (Animated.Value has no synchronous getter).
-  const dragY = useRef(new Animated.Value(0)).current;
+  const offsets = useRef<Record<string, Animated.Value>>({});
+  const offsetFor = (key: string) => (offsets.current[key] ??= new Animated.Value(0));
   const dragYRef = useRef(0);
+  const targetRef = useRef(-1);
 
   const clearTimer = () => {
     if (longPressTimer.current) {
@@ -62,11 +56,39 @@ function DraggableList<T>({
     }
   };
 
+  const resetOffsets = () => {
+    Object.values(offsets.current).forEach(v => { v.stopAnimation(); v.setValue(0); });
+  };
+
+  // Runs after the reordered rows commit and before paint.
+  const keyOrder = keys.join('|');
+  useLayoutEffect(() => {
+    resetOffsets();
+    const live = new Set(keys);
+    Object.keys(offsets.current).forEach(k => { if (!live.has(k)) delete offsets.current[k]; });
+  }, [keyOrder]);
+
+  const slide = (value: Animated.Value, toValue: number) => {
+    Animated.timing(value, { toValue, duration: 160, useNativeDriver: false }).start();
+  };
+
+  // Sets each neighbor's resting offset for the slot the dragged row hovers over.
+  const shiftNeighbors = (from: number, target: number) => {
+    keys.forEach((k, i) => {
+      if (i === from) return;
+      let off = 0;
+      if (from < target && i > from && i <= target) off = -step;
+      else if (target < from && i >= target && i < from) off = step;
+      slide(offsetFor(k), off);
+    });
+  };
+
   const startDrag = (index: number) => {
     draggingRef.current = true;
     activeIndexRef.current = index;
+    targetRef.current = index;
     dragYRef.current = 0;
-    dragY.setValue(0);
+    resetOffsets();
     setActiveIndex(index);
     onDragActiveChange?.(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -76,15 +98,21 @@ function DraggableList<T>({
     if (!draggingRef.current) return;
     draggingRef.current = false;
     const from = activeIndexRef.current;
-    const delta = Math.round(dragYRef.current / step);
-    const to = Math.max(0, Math.min(count - 1, from + delta));
-    activeIndexRef.current = -1;
-    dragY.stopAnimation();
-    dragY.setValue(0);
-    dragYRef.current = 0;
-    setActiveIndex(-1);
+    const to = targetRef.current;
     onDragActiveChange?.(false);
-    if (from >= 0 && from !== to) onReorder(from, to);
+    const finish = () => {
+      activeIndexRef.current = -1;
+      targetRef.current = -1;
+      dragYRef.current = 0;
+      unstable_batchedUpdates(() => {
+        setActiveIndex(-1);
+        if (from >= 0 && from !== to) onReorder(from, to);
+      });
+      setTimeout(resetOffsets, 80);
+    };
+    Animated.timing(offsetFor(keys[from]), {
+      toValue: (to - from) * step, duration: 160, useNativeDriver: false,
+    }).start(finish);
   };
 
   const makeResponder = (index: number) => PanResponder.create({
@@ -97,7 +125,13 @@ function DraggableList<T>({
       const maxDown = (count - 1 - active) * step;
       const clamped = Math.max(maxUp, Math.min(maxDown, g.dy));
       dragYRef.current = clamped;
-      dragY.setValue(clamped);
+      offsetFor(keys[active]).setValue(clamped);
+      const target = Math.max(0, Math.min(count - 1, active + Math.round(clamped / step)));
+      if (target !== targetRef.current) {
+        targetRef.current = target;
+        shiftNeighbors(active, target);
+        Haptics.selectionAsync();
+      }
     },
     onPanResponderRelease: endDrag,
     onPanResponderTerminate: endDrag,
@@ -132,7 +166,7 @@ function DraggableList<T>({
               styles.rowWrap,
               { height: rowHeight, marginBottom: index < count - 1 ? gap : 0 },
               isActive && styles.rowActive,
-              isActive && { transform: [{ translateY: dragY }, { scale: 1.02 }] },
+              { transform: [{ translateY: offsetFor(key) }, { scale: isActive ? 1.02 : 1 }] },
             ]}
           >
             {renderItem(item, index)}

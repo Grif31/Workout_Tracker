@@ -729,7 +729,8 @@ export default function DashboardScreen({ navigation }: Props) {
             );
           })()}
 
-          <TouchableOpacity
+          <PressableScale
+            accessibilityRole="button"
             style={styles.logButton}
             onPress={() => {
               // A minimized workout is resumed; a run in progress is said so here, not
@@ -740,9 +741,10 @@ export default function DashboardScreen({ navigation }: Props) {
           >
             <Ionicons name={minimizedWorkout ? 'play-circle' : 'add-circle'} size={20} color={colors.accentText} />
             <Text style={styles.logButtonText}>{minimizedWorkout ? 'Resume Workout' : 'Log Workout'}</Text>
-          </TouchableOpacity>
+          </PressableScale>
 
-          <TouchableOpacity
+          <PressableScale
+            accessibilityRole="button"
             style={styles.trackButton}
             onPress={() => {
               if (minimizedWorkout) { alertWorkoutInProgress(); return; }
@@ -751,7 +753,7 @@ export default function DashboardScreen({ navigation }: Props) {
           >
             <Ionicons name="location-outline" size={16} color={colors.accent} style={{ marginRight: spacing.xs }} />
             <Text style={styles.trackButtonText}>{gpsTrackingState === 'idle' ? 'Track Activity' : 'Resume Activity'}</Text>
-          </TouchableOpacity>
+          </PressableScale>
 
           {/* Explains the dot on the Home tab icon: queued workouts aren't in the list below yet */}
           {pendingSyncCount > 0 && (

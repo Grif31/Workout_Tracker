@@ -21,11 +21,12 @@ type Props = {
 
 /**
  * An AI "generate" button that owns its whole space. While loading, the icon
- * and blurb fade out and collapse, the button narrows into a circle, and a star
- * pulses alone in the middle; when loading ends it all comes back. Width and
- * height are layout props so they run on the JS driver; the pulse is
- * transform/opacity only and runs native, on its own views (one view can't be
- * driven by both).
+ * and blurb fade out and collapse, the button narrows into a circle, and the
+ * circle shrinks into the star, which is the same accent color so it reads as
+ * the button condensing into it; the star then pulses alone with no button left.
+ * When loading ends it all comes back. Width and height are layout props so the
+ * morph runs on the JS driver; the pulse is transform/opacity only and runs
+ * native, on its own views (one view can't be driven by both).
  */
 export default function GenerateAction({ message, label, loading, onPress, accessibilityLabel, loadingAccessibilityLabel }: Props) {
   const { colors } = useTheme();
@@ -37,7 +38,7 @@ export default function GenerateAction({ message, label, loading, onPress, acces
 
   useEffect(() => {
     Animated.timing(morph, {
-      toValue: loading ? 1 : 0, duration: loading ? 280 : 220,
+      toValue: loading ? 1 : 0, duration: loading ? 420 : 300,
       easing: Easing.out(Easing.cubic), useNativeDriver: false,
     }).start();
     if (!loading) return;
@@ -49,9 +50,12 @@ export default function GenerateAction({ message, label, loading, onPress, acces
     return () => { loop.stop(); pulse.setValue(0); };
   }, [loading, morph, pulse]);
 
-  const buttonWidth = morph.interpolate({ inputRange: [0, 1], outputRange: [BUTTON_WIDTH, BUTTON_HEIGHT] });
-  const labelOpacity = morph.interpolate({ inputRange: [0, 0.5], outputRange: [1, 0], extrapolate: 'clamp' });
-  const starOpacity = morph.interpolate({ inputRange: [0.5, 1], outputRange: [0, 1], extrapolate: 'clamp' });
+  // First half: the pill narrows to a circle. Second half: the circle shrinks into the star and is gone
+  const buttonWidth = morph.interpolate({ inputRange: [0, 0.5], outputRange: [BUTTON_WIDTH, BUTTON_HEIGHT], extrapolate: 'clamp' });
+  const labelOpacity = morph.interpolate({ inputRange: [0, 0.3], outputRange: [1, 0], extrapolate: 'clamp' });
+  const fillScale = morph.interpolate({ inputRange: [0.5, 1], outputRange: [1, 0.3], extrapolate: 'clamp' });
+  const fillOpacity = morph.interpolate({ inputRange: [0.75, 1], outputRange: [1, 0], extrapolate: 'clamp' });
+  const starOpacity = morph.interpolate({ inputRange: [0.45, 0.7], outputRange: [0, 1], extrapolate: 'clamp' });
   const introOpacity = morph.interpolate({ inputRange: [0, 0.6], outputRange: [1, 0], extrapolate: 'clamp' });
   const introMaxHeight = morph.interpolate({ inputRange: [0, 1], outputRange: [introHeight, 0] });
   const starScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.3] });
@@ -76,12 +80,13 @@ export default function GenerateAction({ message, label, loading, onPress, acces
         accessibilityLabel={loading ? (loadingAccessibilityLabel ?? 'Working, please wait') : (accessibilityLabel ?? label)}
       >
         <Animated.View style={[styles.button, { width: buttonWidth }]}>
+          <Animated.View style={[styles.fill, { opacity: fillOpacity, transform: [{ scale: fillScale }] }]} />
           <Animated.Text style={[styles.buttonText, { opacity: labelOpacity }]} numberOfLines={1}>
             {label}
           </Animated.Text>
           <Animated.View pointerEvents="none" style={[styles.star, { opacity: starOpacity }]}>
             <Animated.View style={{ opacity: glowOpacity, transform: [{ scale: starScale }] }}>
-              <Ionicons name="sparkles" size={24} color={colors.accentText} />
+              <Ionicons name="sparkles" size={32} color={colors.accent} />
             </Animated.View>
           </Animated.View>
         </Animated.View>
@@ -96,10 +101,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   intro: { overflow: 'hidden' },
   introContent: { alignItems: 'center', gap: spacing.sm, paddingBottom: spacing.md },
   message: { fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center', maxWidth: 260 },
-  button: {
-    height: BUTTON_HEIGHT, borderRadius: BUTTON_HEIGHT / 2, backgroundColor: colors.accent,
-    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-  },
+  button: { height: BUTTON_HEIGHT, alignItems: 'center', justifyContent: 'center' },
+  // The pill's color lives on its own layer so it can shrink away while the star stays
+  fill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, borderRadius: BUTTON_HEIGHT / 2, backgroundColor: colors.accent },
   buttonText: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.accentText },
   star: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
 });

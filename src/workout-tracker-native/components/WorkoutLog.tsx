@@ -35,6 +35,7 @@ import { useWorkoutSession, sessionElapsedSeconds } from '../context/WorkoutSess
 import { PR_GOLD } from '../constants/prColors';
 import { nearPrHint } from '../utils/prFormat';
 import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../utils/templatePrefill';
+import { muscleSetCounts, sameMuscleCounts, type MuscleSetCount } from '../utils/muscleSetCounts';
 import { endLiveActivity, isLiveActivityActive, startOrUpdateLiveActivity } from '../utils/liveActivity';
 import { currentExerciseName, liveActivityProps, nextSetLines, type LiveRest } from '../utils/liveActivityProps';
 
@@ -67,7 +68,7 @@ import ExerciseBlock from './workout/ExerciseBlock';
 import SwapExerciseModal from './workout/SwapExerciseModal';
 import NextTargetModal, { targetFor } from './workout/NextTargetModal';
 import DraggableList from './DraggableList';
-import { animateNextRowChange } from '../utils/layoutAnimation';
+import { animateNextLayout, animateNextRowChange } from '../utils/layoutAnimation';
 import ExerciseReorderRow, { EXERCISE_REORDER_ROW_HEIGHT } from './workout/ExerciseReorderRow';
 import RestTimer from './workout/RestTimer';
 import PlateCalculatorModal from './PlateCalculatorModal';
@@ -90,6 +91,7 @@ const prefillToEntries = (prefill: PrefillWorkoutData): ExerciseEntry[] =>
     exercise_type: ex.exercise_type,
     name: ex.name,
     muscle_group: ex.muscle_group,
+    primary_muscles: ex.primary_muscles,
     equipment: ex.equipment,
     image_url: ex.image_url,
     bodyweight_load_factor: ex.bodyweight_load_factor,
@@ -173,16 +175,14 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   // keystroke, since exercises changes on every keystroke.
   const exercisesRef = useRef(exercises);
   exercisesRef.current = exercises;
-  const activeMuscles = useMemo(() => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const ex of exercises) {
-      if (!ex.muscle_group) continue;
-      for (const m of ex.muscle_group.split(',').map(s => s.trim()).filter(Boolean)) {
-        if (!seen.has(m)) { seen.add(m); out.push(m); }
-      }
-    }
-    return out;
+  // `exercises` changes on every keystroke but the counts only when a set is
+  // added, removed, retyped or checked off: keeping the previous array while
+  // they match is what lets the memo'd WorkoutHeader skip those renders.
+  const muscleCountsRef = useRef<MuscleSetCount[]>([]);
+  const muscleCounts = useMemo(() => {
+    const next = muscleSetCounts(exercises);
+    if (!sameMuscleCounts(next, muscleCountsRef.current)) muscleCountsRef.current = next;
+    return muscleCountsRef.current;
   }, [exercises]);
   // Computed here (not inside WorkoutHeader) so WorkoutHeader can be
   // React.memo'd on primitive totals instead of needing the whole
@@ -1056,6 +1056,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   const moveExercise = (exIndex: number, direction: 'up' | 'down') => {
     const swapIdx = direction === 'up' ? exIndex - 1 : exIndex + 1;
+    // The two blocks visibly trade places, so the user can follow where theirs went
+    animateNextLayout();
     setExercises(prev => {
       if (swapIdx < 0 || swapIdx >= prev.length) return prev;
       const next = [...prev];
@@ -1311,14 +1313,14 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   };
 
   const addExToWorkout = async (
-    exercise: { id: number; name: string; muscle_group?: string; equipment?: string; image_url?: string; exercise_type?: string; bodyweight_load_factor?: number | null },
+    exercise: { id: number; name: string; muscle_group?: string; primary_muscles?: string[]; equipment?: string; image_url?: string; exercise_type?: string; bodyweight_load_factor?: number | null },
     replaceAt: number | null = replacingExIndex,
   ) => {
     const initialSet: WorkoutSet = makeInitialSet(exercise);
 
     const fresh = (uid: string): ExerciseEntry => ({
       uid, name: exercise.name, exercise_template_id: exercise.id, exercise_type: exercise.exercise_type as ExerciseEntry['exercise_type'],
-      muscle_group: exercise.muscle_group, equipment: exercise.equipment, image_url: exercise.image_url,
+      muscle_group: exercise.muscle_group, primary_muscles: exercise.primary_muscles, equipment: exercise.equipment, image_url: exercise.image_url,
       bodyweight_load_factor: exercise.bodyweight_load_factor, sets: [initialSet],
     });
 
@@ -1335,6 +1337,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     }
 
     const added = fresh(makeUid());
+    animateNextRowChange();
     setExercises(prev => [...prev, added]);
     setExerciseModalVisible(false);
     enrichWithHistory([added]);
@@ -1786,7 +1789,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             totalSets={workoutTotals.totalSets}
             totalVolume={workoutTotals.totalVolume}
             weightUnit={weightUnit}
-            activeMuscles={activeMuscles}
+            muscleCounts={muscleCounts}
           />
         )}
         ListFooterComponent={(

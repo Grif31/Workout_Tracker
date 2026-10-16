@@ -1,5 +1,7 @@
 import React from 'react';
 import { render, waitFor, fireEvent } from '@testing-library/react-native';
+import { AccessibilityInfo } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createMockNavigation } from './testUtils';
 import WorkoutSummaryScreen from '../screens/DashboardTab/WorkoutSummaryScreen';
@@ -9,6 +11,10 @@ jest.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 1, username: 't', weight_unit: mockWeightUnit } }),
 }));
 jest.mock('react-native-confetti-cannon', () => () => null);
+jest.mock('expo-haptics', () => ({
+  impactAsync: jest.fn(), notificationAsync: jest.fn(),
+  ImpactFeedbackStyle: { Light: 'light' }, NotificationFeedbackType: { Success: 'success' },
+}));
 jest.mock('../utils/shareCapture', () => ({ captureAndShare: jest.fn() }));
 jest.mock('../components/MuscleDiagram', () => () => null);
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22 } } }), { virtual: true });
@@ -122,6 +128,7 @@ describe('WorkoutSummaryScreen', () => {
   });
 
   describe('rank-up', () => {
+    afterEach(() => { jest.restoreAllMocks(); jest.clearAllMocks(); });
     const rank = (name: string) => ({ greek_rank: name, greek_score: 13, held_by_gate: false });
 
     it('celebrates a rank reached by this workout and updates the cache', async () => {
@@ -131,6 +138,59 @@ describe('WorkoutSummaryScreen', () => {
 
       expect(await findByText('Ranked up')).toBeTruthy();
       await waitFor(async () => expect(await AsyncStorage.getItem('greek_rank_cached')).toBe('Athlete'));
+    });
+
+    it('plays the promotion: the old rank first, then the new one', async () => {
+      await AsyncStorage.setItem('greek_rank_cached', 'Neophyte');
+      mockServer({ workout: strengthWorkout, rank: rank('Athlete') });
+      const { findByText } = renderSummary();
+
+      expect(await findByText('Keep training to reach Athlete')).toBeTruthy();
+      expect(await findByText('You reached Athlete. This workout pushed you over.', {}, { timeout: 3000 })).toBeTruthy();
+      expect(await findByText('15 points to Hero')).toBeTruthy();
+      expect(Haptics.impactAsync).toHaveBeenCalled();
+      expect(Haptics.notificationAsync).toHaveBeenCalledWith('success');
+    });
+
+    it('moves a rank-up above the PRs, and leaves an unchanged rank below them', async () => {
+      const prs = [{ exercise_name: 'Bench Press', pr_type: 'max_weight', value: 185, weight_context: null, exercise_template_id: 1 }];
+      const order = (json: unknown) => {
+        const text = JSON.stringify(json);
+        return text.indexOf('Personal Record') < text.indexOf('training to reach') ? 'prs first' : 'rank first';
+      };
+
+      await AsyncStorage.setItem('greek_rank_cached', 'Neophyte');
+      mockServer({ workout: strengthWorkout, rank: rank('Athlete') });
+      const up = renderSummary({ prs });
+      await up.findByText('Ranked up');
+      expect(order(up.toJSON())).toBe('rank first');
+      up.unmount();
+
+      await AsyncStorage.setItem('greek_rank_cached', 'Athlete');
+      mockServer({ workout: strengthWorkout, rank: rank('Athlete') });
+      const same = renderSummary({ prs });
+      await same.findByText('Keep training to reach Hero');
+      expect(order(same.toJSON())).toBe('prs first');
+    });
+
+    it('with Reduce Motion, swaps the rank without the fill ticks', async () => {
+      jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+      await AsyncStorage.setItem('greek_rank_cached', 'Neophyte');
+      mockServer({ workout: strengthWorkout, rank: rank('Athlete') });
+      const { findByText } = renderSummary();
+
+      expect(await findByText('You reached Athlete. This workout pushed you over.', {}, { timeout: 3000 })).toBeTruthy();
+      expect(Haptics.notificationAsync).toHaveBeenCalledWith('success');
+      expect(Haptics.impactAsync).not.toHaveBeenCalled();
+    });
+
+    it('still shows the cached rank when the live one fails to load', async () => {
+      await AsyncStorage.setItem('greek_rank_cached', 'Hero');
+      mockServer({ workout: strengthWorkout, rank: null });
+      const { findByText, queryByText } = renderSummary();
+
+      expect(await findByText('Keep training to reach Demigod')).toBeTruthy();
+      expect(queryByText('Ranked up')).toBeNull();
     });
 
     it('stays quiet when the rank is unchanged', async () => {

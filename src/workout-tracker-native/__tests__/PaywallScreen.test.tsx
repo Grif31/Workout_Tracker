@@ -76,12 +76,14 @@ describe('PaywallScreen', () => {
     renderPaywall();
   });
 
-  it('lists each feature with what it does for you', () => {
-    const { getByText } = renderPaywall();
-    expect(getByText('Strength Score')).toBeTruthy();
-    expect(getByText(/where your lifts rank based on your bodyweight/)).toBeTruthy();
+  it('lists a short set of grouped features, each with what it does for you', () => {
+    const { getByText, getAllByText } = renderPaywall();
+    expect(getByText('Strength and Endurance Scores')).toBeTruthy();
+    expect(getByText('See where every lift and every pace ranks')).toBeTruthy();
     expect(getByText('AI Coach')).toBeTruthy();
     expect(getByText('Unlimited templates and routines')).toBeTruthy();
+    const labels = getAllByText(/^(AI Coach|Smarter workouts|Strength and Endurance Scores|Advanced stats|Unlimited templates and routines)$/);
+    expect(labels).toHaveLength(5);
   });
 
   it('shows each plan price once offerings load', () => {
@@ -106,24 +108,24 @@ describe('PaywallScreen', () => {
     it('names the locked feature and lists it first', () => {
       const { getByText, getAllByText } = renderPaywall('endurance_score');
       expect(getByText('Endurance Score is part of Premium')).toBeTruthy();
-      const labels = getAllByText(/^(AI Coach|Weekly review and insights|Smarter workouts|Strength Score|Endurance Score|Advanced stats|Lift progress rate)$/)
+      const labels = getAllByText(/^(AI Coach|Smarter workouts|Strength and Endurance Scores|Advanced stats|Unlimited templates and routines)$/)
         .map(n => n.props.children);
-      expect(labels[0]).toBe('Endurance Score');
-      expect(labels).toHaveLength(7);
+      expect(labels[0]).toBe('Strength and Endurance Scores');
+      expect(labels).toHaveLength(5);
     });
 
     it('pitches the weekly review when that is what was tapped', () => {
       const { getByText, getAllByText } = renderPaywall('weekly_review');
       expect(getByText('The full weekly review is part of Premium')).toBeTruthy();
-      const labels = getAllByText(/^(AI Coach|Weekly review and insights|Smarter workouts|Strength Score|Endurance Score|Advanced stats|Lift progress rate)$/)
+      const labels = getAllByText(/^(AI Coach|Smarter workouts|Strength and Endurance Scores|Advanced stats|Unlimited templates and routines)$/)
         .map(n => n.props.children);
-      expect(labels[0]).toBe('Weekly review and insights');
+      expect(labels[0]).toBe('AI Coach');
     });
 
     it('pitches advanced stats for the muscle chart lock, and progress rate for a lift', () => {
       const stats = renderPaywall('muscle_volume');
       expect(stats.getByText('Advanced stats are part of Premium')).toBeTruthy();
-      expect(stats.getAllByText(/^(AI Coach|Weekly review and insights|Smarter workouts|Strength Score|Endurance Score|Advanced stats|Lift progress rate)$/)[0].props.children).toBe('Advanced stats');
+      expect(stats.getAllByText(/^(AI Coach|Smarter workouts|Strength and Endurance Scores|Advanced stats|Unlimited templates and routines)$/)[0].props.children).toBe('Advanced stats');
       const rate = renderPaywall('pr_velocity');
       expect(rate.getByText('Progress rate is part of Premium')).toBeTruthy();
     });

@@ -36,6 +36,7 @@ import {
 } from '../../utils/gpsRun';
 import { useGpsRun } from '../../context/GpsRunContext';
 import { useAppActive } from '../../hooks/useAppActive';
+import { splitAtGaps, thinSegments } from '../../utils/routeSegments';
 import { alertWorkoutInProgress } from '../../utils/sessionConflict';
 
 
@@ -325,20 +326,13 @@ export default function GPSCardioScreen({ navigation }: Props) {
   // ever-growing array here is a real (and growing) memory cost over the
   // course of a tracked activity. `coords` itself stays full-resolution for
   // distance/elevation math, checkpointing, and the saved route_polyline.
-  const MAX_POLYLINE_POINTS = 500;
-  const displayCoords = useMemo(() => {
-    if (coords.length <= MAX_POLYLINE_POINTS) return coords;
-    const step = Math.ceil(coords.length / MAX_POLYLINE_POINTS);
-    const thinned = coords.filter((_, i) => i % step === 0);
-    const last = coords[coords.length - 1];
-    if (thinned[thinned.length - 1] !== last) thinned.push(last);
-    return thinned;
-  }, [coords]);
+  // In segments: a pause or a stretch with no GPS leaves a gap rather than a straight line
+  const displaySegments = useMemo(() => thinSegments(splitAtGaps(coords)), [coords]);
   // The line on the map holds still in the background: the same array means the
   // native overlay isn't rebuilt
-  const mapCoordsRef = useRef(displayCoords);
-  if (appActive) mapCoordsRef.current = displayCoords;
-  const mapCoords = mapCoordsRef.current;
+  const mapSegmentsRef = useRef(displaySegments);
+  if (appActive) mapSegmentsRef.current = displaySegments;
+  const mapSegments = mapSegmentsRef.current;
 
   if (!MAPS_AVAILABLE) {
     return (
@@ -381,9 +375,9 @@ export default function GPSCardioScreen({ navigation }: Props) {
             showsUserLocation={appActive}
             followsUserLocation={trackingState === 'running' && appActive}
           >
-            {coords.length >= 2 && (
-              <Polyline coordinates={mapCoords} strokeColor={colors.accent} strokeWidth={4} />
-            )}
+            {mapSegments.filter(seg => seg.length >= 2).map((seg, i) => (
+              <Polyline key={i} coordinates={seg} strokeColor={colors.accent} strokeWidth={4} />
+            ))}
           </MapView>
         </MapErrorBoundary>
       ) : (
@@ -538,7 +532,9 @@ export default function GPSCardioScreen({ navigation }: Props) {
                     longitudeDelta: 0.01,
                   }}
                 >
-                  <Polyline coordinates={displayCoords} strokeColor={colors.accent} strokeWidth={3} />
+                  {displaySegments.filter(seg => seg.length >= 2).map((seg, i) => (
+                    <Polyline key={i} coordinates={seg} strokeColor={colors.accent} strokeWidth={3} />
+                  ))}
                 </MapView>
               )}
             </ScrollView>

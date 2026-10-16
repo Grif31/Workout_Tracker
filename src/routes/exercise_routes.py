@@ -17,6 +17,7 @@ def exercise_to_dict(exercise):
         'id': exercise.id,
         'name': exercise.name,
         'muscle_group': exercise.muscle_group,  # assembled from muscle_mappings by the property
+        'primary_muscles': exercise.primary_muscles,
         'equipment': exercise.equipment,
         'image_url': exercise.image_url,
         'exercise_type': (exercise.exercise_type or 'strength').lower(),

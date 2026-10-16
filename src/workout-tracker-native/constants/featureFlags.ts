@@ -21,4 +21,4 @@ export const FORCE_ONBOARDING = __DEV__ && false;
 // real App Store products (see "Testing in-app purchases" in CLAUDE.md).
 // "Buying" a sample plan just unlocks premium until the app restarts.
 // Ignored when a RevenueCat key is set, and never on in release builds.
-export const PAYWALL_PREVIEW = __DEV__ && false;
+export const PAYWALL_PREVIEW = __DEV__ && true;

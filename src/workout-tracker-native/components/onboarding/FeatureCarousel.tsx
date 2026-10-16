@@ -14,11 +14,10 @@ type Slide =
   | { type: 'premium'; title: string; body: string };
 
 const PREMIUM_FEATURES = [
-  'AI Coach: personalized programs in seconds',
-  'Weekly review and training insights',
-  "Today's Target and injury-aware exercise swaps",
-  'Strength Score & Endurance Score',
-  'Advanced stats: zones, trends and balance',
+  'AI Coach: programs, a weekly review and insights',
+  "Today's Target and injury-aware swaps",
+  'Strength & Endurance Scores',
+  'Advanced stats',
   'Unlimited templates & routines',
   ...(APP_ICONS_ENABLED ? ['Custom app icons'] : []),
 ];

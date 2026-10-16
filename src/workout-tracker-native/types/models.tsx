@@ -30,8 +30,11 @@ export type Exercise = {
   exercise_template_id?: number
   exercise_type?: 'strength' | 'cardio' | 'duration'
   route_polyline?: string
+  /** One encoded polyline per segment of a GPS route; null on workouts saved before segments existed */
+  route_segments?: string[] | null
   equipment?: string
   muscle_group?: string
+  primary_muscles?: string[]
   image_url?: string
   bodyweight_load_factor?: number | null
   notes?: string

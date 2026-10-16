@@ -47,6 +47,8 @@ export type ExerciseEntry = {
   exercise_template_id?: number;
   exercise_type?: 'strength' | 'cardio' | 'duration';
   muscle_group?: string;
+  /** Which of muscle_group's entries are primary movers; missing on sessions saved before the API sent it. */
+  primary_muscles?: string[];
   equipment?: string;
   image_url?: string;
   /** Fraction of bodyweight this movement shifts (Bodyweight/Weighted only). null/undefined -> 1. */

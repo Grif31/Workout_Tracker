@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useActionSheet } from '@expo/react-native-action-sheet';
-import polylineLib from '@mapbox/polyline';
+import { decodeRouteSegments, thinSegments } from '../utils/routeSegments';
 
 // react-native-maps is only available in dev/production builds, not Expo Go.
 // Guard the require so a missing native module never crashes the app at startup.
@@ -27,7 +27,8 @@ import { fmtMinSec, PR_TYPE_LABELS } from '../utils/prFormat';
 import { PR_GOLD } from '../constants/prColors';
 import Collapsible, { useCollapseAnim } from './Collapsible';
 import { captureAndShare } from '../utils/shareCapture';
-import MuscleDiagram from './MuscleDiagram';
+import MuscleSetBreakdown from './MuscleSetBreakdown';
+import { muscleSetCounts } from '../utils/muscleSetCounts';
 import { fmtHold } from './workout/types';
 import WorkoutShareCard, { type ShareExercise } from './share/WorkoutShareCard';
 import CardioShareCard from './share/CardioShareCard';
@@ -48,6 +49,7 @@ export type PrefillWorkoutData = {
     exercise_type?: string;
     equipment?: string;
     muscle_group?: string;
+    primary_muscles?: string[];
     // Drives the exercise GIF in WorkoutLog. Optional, but callers that have
     // it must pass it: a .map() result is checked for assignability, not for
     // excess properties, so an omitted field here fails silently.
@@ -144,6 +146,7 @@ export default function WorkoutDetailsScreen({
         exercise_type: e.exercise_type,
         equipment: e.equipment,
         muscle_group: e.muscle_group,
+        primary_muscles: e.primary_muscles,
         image_url: e.image_url,
         bodyweight_load_factor: e.bodyweight_load_factor,
         notes: mode === 'edit' ? (e.notes ?? '') : undefined,
@@ -202,6 +205,9 @@ export default function WorkoutDetailsScreen({
       if (res.ok) {
         Alert.alert('Template Saved', `"${name}" saved as a template.`);
         onSaveAsTemplate?.();
+      } else if (res.status === 409) {
+        const data = await res.json();
+        Alert.alert('Name Already Used', data.message);
       } else {
         Alert.alert("Couldn't Save Template", 'Try again in a moment.');
       }
@@ -229,15 +235,8 @@ export default function WorkoutDetailsScreen({
     // lifting session with a treadmill warm-up shares as a workout. Distance
     // and time are the backend's totals across every bout, not the first set.
     if (workout.workout_type === 'cardio') {
-      const routed = workout.exercises.find(e => e.route_polyline);
-      let coords: { latitude: number; longitude: number }[] = [];
-      if (routed?.route_polyline) {
-        try {
-          coords = polylineLib
-            .decode(routed.route_polyline)
-            .map(([lat, lng]: [number, number]) => ({ latitude: lat, longitude: lng }));
-        } catch {}
-      }
+      const routed = workout.exercises.find(e => e.route_polyline || e.route_segments?.length);
+      const coords = thinSegments(decodeRouteSegments(routed));
       const elevated: any = workout.exercises.flatMap(e => e.sets).find((st: any) => st.elevation_gain != null);
       return {
         kind: 'cardio' as const,
@@ -349,18 +348,10 @@ export default function WorkoutDetailsScreen({
     );
   };
 
-  const activeMuscles = useMemo(() => {
-    if (!workout) return [];
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const ex of workout.exercises) {
-      if (!ex.muscle_group) continue;
-      for (const m of ex.muscle_group.split(',').map(s => s.trim()).filter(Boolean)) {
-        if (!seen.has(m)) { seen.add(m); out.push(m); }
-      }
-    }
-    return out;
-  }, [workout]);
+  const muscleCounts = useMemo(
+    () => (workout ? muscleSetCounts(workout.exercises, { logged: true }) : []),
+    [workout],
+  );
 
   // One row per exercise+type, counting every PR (two rep records at two
   // weights are two) and listing what each was, as on the workout summary.
@@ -576,11 +567,10 @@ export default function WorkoutDetailsScreen({
           )}
 
           {/* Muscle diagram */}
-          {activeMuscles.length > 0 && (
+          {muscleCounts.length > 0 && (
             <View style={styles.diagramCard}>
               <Text style={styles.diagramLabel}>Muscles Targeted</Text>
-              <MuscleDiagram muscles={activeMuscles} />
-              <Text style={styles.diagramMuscleList}>{activeMuscles.join(' · ')}</Text>
+              <MuscleSetBreakdown counts={muscleCounts} logged />
             </View>
           )}
 
@@ -602,17 +592,13 @@ export default function WorkoutDetailsScreen({
           const speedKmH = totalDur > 0 && totalDistKm > 0 ? totalDistKm / (totalDur / 60) : undefined;
           const kcal = estimateCalories(exercise.name, totalDur, bodyKg, speedKmH);
 
-          let routeCoords: { latitude: number; longitude: number }[] | null = null;
-          if (exercise.route_polyline) {
-            try {
-              const decoded = polylineLib.decode(exercise.route_polyline);
-              routeCoords = decoded.map(([lat, lng]: [number, number]) => ({ latitude: lat, longitude: lng }));
-            } catch {}
-          }
+          // Segments, so a pause or a stretch with no GPS isn't drawn as a straight line
+          const routeSegments = thinSegments(decodeRouteSegments(exercise));
+          const routePoints = routeSegments.flat();
 
-          const region = routeCoords && routeCoords.length > 0 ? (() => {
-            const lats = routeCoords!.map(c => c.latitude);
-            const lngs = routeCoords!.map(c => c.longitude);
+          const region = routePoints.length > 0 ? (() => {
+            const lats = routePoints.map(c => c.latitude);
+            const lngs = routePoints.map(c => c.longitude);
             const minLat = Math.min(...lats), maxLat = Math.max(...lats);
             const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
             return {
@@ -627,7 +613,7 @@ export default function WorkoutDetailsScreen({
             <View style={styles.exerciseCard}>
               <Text style={styles.exerciseName}>{exercise.name}</Text>
 
-              {MapView && Polyline && routeCoords && region && (
+              {MapView && Polyline && region && (
                 <MapView
                   style={styles.routeMap}
                   region={region}
@@ -636,11 +622,14 @@ export default function WorkoutDetailsScreen({
                   pitchEnabled={false}
                   rotateEnabled={false}
                 >
-                  <Polyline
-                    coordinates={routeCoords}
-                    strokeColor={colors.accent}
-                    strokeWidth={3}
-                  />
+                  {routeSegments.map((seg, i) => (
+                    <Polyline
+                      key={i}
+                      coordinates={seg}
+                      strokeColor={colors.accent}
+                      strokeWidth={3}
+                    />
+                  ))}
                 </MapView>
               )}
 
@@ -1054,11 +1043,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     alignSelf: 'flex-start',
-  },
-  diagramMuscleList: {
-    fontSize: typography.fontSize.sm,
-    color: colors.textSecondary,
-    textAlign: 'center',
   },
   prSection: { paddingHorizontal: spacing.md, marginBottom: spacing.md },
   // Gold outline on a surface fill, matching WorkoutLog's PR banner and the

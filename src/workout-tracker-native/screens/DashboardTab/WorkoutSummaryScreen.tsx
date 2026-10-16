@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Dimensions, ActivityIndicator,
   // Aliased: `Animated` in this file is Reanimated (for the entering
-  // animations). The count-ups, chevron and rank-up pop use RN's own Animated.
+  // animations). The count-ups, chevron and trophy pop use RN's own Animated.
   Animated as RNAnimated, Easing,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -17,18 +17,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
-import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
 import { GREEK_RANKS } from '../../constants/greekRanks';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import WorkoutShareCard from '../../components/share/WorkoutShareCard';
 import { LaurelBranch } from '../../components/LaurelWreath';
-import { PR_GOLD } from '../../constants/prColors';
+import { PR_GOLD, PR_GOLD_BG, PR_GOLD_TEXT } from '../../constants/prColors';
+import { useReduceMotion } from '../../hooks/useReduceMotion';
+import RankUpCard from '../../components/RankUpCard';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import { DashboardStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { GREEK_RANK_CACHED_KEY, PROFILE_FRAME_RANK_KEY } from '../../constants/storageKeys';
-import { type GreekRankData, gateRequirementText } from '../../utils/greekRank';
+import { type GreekRankData } from '../../utils/greekRank';
 import { PR_TYPE_LABELS, PR_TYPE_ORDER, fmtMinSec } from '../../utils/prFormat';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toExactVolume, toKm, type DistanceUnit, type WeightUnit } from '../../utils/units';
 import { fmtHold } from '../../components/workout/types';
@@ -123,9 +124,13 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const [sharing, setSharing] = useState(false);
   const [greekRank, setGreekRank] = useState<string | null>(null);
   const [rankData, setRankData] = useState<GreekRankData | null>(null);
-  const [rankedUp, setRankedUp] = useState(false);
-  const rankPop = useRef(new RNAnimated.Value(1)).current;
-  const greekScore = rankData?.greek_score ?? null;
+  // The rank before this workout, set only when this workout moved it up
+  const [previousRank, setPreviousRank] = useState<string | null>(null);
+  // The card waits for the live rank, so it never jumps to the top mid-view on a rank-up
+  const [rankSettled, setRankSettled] = useState(false);
+  const mountedAt = useRef(Date.now()).current;
+  const trophyPop = useRef(new RNAnimated.Value(1)).current;
+  const reduceMotion = useReduceMotion();
   const [selectedFrame, setSelectedFrame] = useState('Neophyte');
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>('mi');
 
@@ -173,34 +178,27 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
       if (rankBefore) setGreekRank(rankBefore);
       if (frameRaw) setSelectedFrame(frameRaw);
       try {
-        // Live score (for the rank-up progress bar): the cached name renders
-        // the badge instantly, but the numeric score isn't cached
+        // The live rank and score: whether this workout moved the rank, and
+        // where the progress bar stands. The card waits for it
         const res = await apiFetch('/api/stats/greek-rank');
         const data: GreekRankData | null = res.ok ? await res.json() : null;
-        if (!alive || !data) return;
-        setRankData(data);
-        setGreekRank(data.greek_rank);
-        // Right after a save is when the rank most often moves
-        writeWidgetGreekRank(user?.id, data);
-        // The cache holds the rank from before this workout, unless something
-        // already refreshed it. No cache (fresh login) means nothing to compare.
-        const before = GREEK_RANKS.findIndex(r => r.name === rankBefore);
-        const after = GREEK_RANKS.findIndex(r => r.name === data.greek_rank);
-        if (rankBefore && before >= 0 && after > before) setRankedUp(true);
-        if (data.greek_rank) AsyncStorage.setItem(GREEK_RANK_CACHED_KEY, data.greek_rank).catch(() => {});
+        if (alive && data) {
+          setRankData(data);
+          setGreekRank(data.greek_rank);
+          // Right after a save is when the rank most often moves
+          writeWidgetGreekRank(user?.id, data);
+          // The cache holds the rank from before this workout, unless something
+          // already refreshed it. No cache (fresh login) means nothing to compare.
+          const before = GREEK_RANKS.findIndex(r => r.name === rankBefore);
+          const after = GREEK_RANKS.findIndex(r => r.name === data.greek_rank);
+          if (rankBefore && before >= 0 && after > before) setPreviousRank(rankBefore);
+          if (data.greek_rank) AsyncStorage.setItem(GREEK_RANK_CACHED_KEY, data.greek_rank).catch(() => {});
+        }
       } catch {}
+      if (alive) setRankSettled(true);
     })();
     return () => { alive = false; };
   }, []);
-
-  useEffect(() => {
-    if (!rankedUp) return;
-    rankPop.setValue(0.9);
-    RNAnimated.spring(rankPop, { toValue: 1, friction: 4, tension: 160, useNativeDriver: true }).start();
-    // After the PR haptic (600ms), so the two read as separate moments
-    const t = setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success), 1100);
-    return () => clearTimeout(t);
-  }, [rankedUp, rankPop]);
 
   const loadWorkout = () => {
     setLoading(true);
@@ -215,14 +213,40 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   };
   useEffect(loadWorkout, [workoutId]);
 
+  // Waits for the Reduce Motion answer (a tick), so the confetti and the
+  // trophy pop are either played whole or skipped, never cut off midway
+  const celebrated = useRef(false);
   useEffect(() => {
+    if (reduceMotion === null || celebrated.current) return;
+    celebrated.current = true;
     const timers: ReturnType<typeof setTimeout>[] = [];
-    if (isFirstWorkout) timers.push(setTimeout(() => confettiRef.current?.start(), 300));
+    if (isFirstWorkout && !reduceMotion) timers.push(setTimeout(() => confettiRef.current?.start(), 300));
     if (filteredPrs.length > 0) {
-      timers.push(setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success), 600));
+      if (!reduceMotion) trophyPop.setValue(0);
+      timers.push(setTimeout(() => {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        if (reduceMotion) return;
+        if (!isFirstWorkout) confettiRef.current?.start();
+        RNAnimated.spring(trophyPop, { toValue: 1, friction: 4, tension: 160, useNativeDriver: true }).start();
+      }, 600));
     }
     return () => timers.forEach(clearTimeout);
-  }, []);
+  }, [reduceMotion]);
+
+  // The promotion waits for the card's entrance and, with PRs, for the PR
+  // haptic (600ms), so the moments land one after the other
+  const rankCard = greekRank && !isFirstWorkout && rankSettled && reduceMotion !== null && (
+    <Animated.View entering={FadeInDown.delay(150).duration(400)} style={s.section}>
+      <RankUpCard
+        rank={greekRank}
+        previousRank={previousRank}
+        rankData={rankData}
+        selectedFrame={selectedFrame}
+        reduceMotion={reduceMotion}
+        startDelay={Math.max(550, (filteredPrs.length > 0 ? 1100 : 0) - (Date.now() - mountedAt))}
+      />
+    </Animated.View>
+  );
 
   function goToDetails() {
     navigation.replace('WorkoutDetails', { workoutId });
@@ -328,11 +352,21 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
         />
       </View>
 
-      {isFirstWorkout && (
+      {isFirstWorkout ? (
         <ConfettiCannon
           ref={confettiRef}
           count={200}
           origin={{ x: SCREEN_WIDTH / 2, y: -20 }}
+          fadeOut
+          autoStart={false}
+        />
+      ) : hasPrs && (
+        // A smaller burst in PR gold, on the PR haptic
+        <ConfettiCannon
+          ref={confettiRef}
+          count={60}
+          origin={{ x: SCREEN_WIDTH / 2, y: -20 }}
+          colors={[PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG]}
           fadeOut
           autoStart={false}
         />
@@ -355,7 +389,14 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <Animated.View entering={FadeInDown.duration(400)} style={s.hero}>
-          <Ionicons name="trophy" size={52} color={hasPrs ? PR_GOLD : colors.accent} style={s.trophy} />
+          <RNAnimated.View style={{
+            transform: [
+              { scale: trophyPop.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) },
+              { rotate: trophyPop.interpolate({ inputRange: [0, 0.6, 1], outputRange: ['-12deg', '8deg', '0deg'] }) },
+            ],
+          }}>
+            <Ionicons name="trophy" size={52} color={hasPrs ? PR_GOLD : colors.accent} style={s.trophy} />
+          </RNAnimated.View>
           <Text style={s.headline}>
             {isFirstWorkout
               ? 'Your first workout. The pursuit starts here.'
@@ -371,6 +412,9 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
             "{workoutName}"{durationMin ? ` · ${fmtMinutes(durationMin)}` : ''}
           </Text>
         </Animated.View>
+
+        {/* A rank-up outranks the PRs, so it moves above them where it can't be scrolled past */}
+        {previousRank != null && rankCard}
 
         {hasPrs && (
           <Animated.View entering={FadeInDown.delay(100).duration(400)} style={s.section}>
@@ -421,65 +465,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           </Animated.View>
         )}
 
-        {greekRank && !isFirstWorkout && (() => {
-          const rankColor = GREEK_RANK_COLORS[greekRank] ?? GREEK_RANK_COLORS.Neophyte;
-          const rankIdx = GREEK_RANKS.findIndex(r => r.name === greekRank);
-          const currentRank = rankIdx >= 0 ? GREEK_RANKS[rankIdx] : GREEK_RANKS[0];
-          const nextRank = GREEK_RANKS[rankIdx + 1];
-          const progress = greekScore != null && nextRank
-            ? Math.min(1, Math.max(0, (greekScore - currentRank.low) / (currentRank.high - currentRank.low)))
-            : null;
-          const ptsToNext = greekScore != null && nextRank
-            ? Math.max(0, Math.ceil(nextRank.low - greekScore))
-            : null;
-          return (
-            <Animated.View entering={FadeInDown.delay(150).duration(400)} style={s.section}>
-              <RNAnimated.View
-                style={[
-                  s.rankBadgeCard,
-                  { backgroundColor: rankColor + '15', borderColor: rankedUp ? rankColor : rankColor + '44', transform: [{ scale: rankPop }] },
-                ]}
-              >
-                {rankedUp && (
-                  <View style={[s.rankUpPill, { backgroundColor: rankColor + '26' }]}>
-                    <Ionicons name="arrow-up" size={12} color={rankColor} />
-                    <Text style={[s.rankUpText, { color: rankColor }]}>Ranked up</Text>
-                  </View>
-                )}
-                <View style={s.rankBadgeLeft}>
-                  <View style={s.rankAvatarWrap}>
-                    <View style={s.rankAvatarDisc} />
-                    <ProfileAvatarFrame rankName={selectedFrame} size={44} avatarSize={36} />
-                  </View>
-                  <View style={s.rankBadgeText}>
-                    <Text style={[s.rankBadgeName, { color: rankColor }]}>{greekRank}</Text>
-                    <Text style={s.rankBadgeSub}>
-                      {rankedUp
-                        ? `You reached ${greekRank}. This workout pushed you over.`
-                        : nextRank
-                        ? `Keep training to reach ${nextRank.name}`
-                        : "You've reached the highest rank."}
-                    </Text>
-                  </View>
-                </View>
-                {progress != null && nextRank && (
-                  <View style={s.rankProgressWrap}>
-                    <View style={s.progressTrack}>
-                      <View style={[s.progressFill, { width: `${Math.round(progress * 100)}%`, backgroundColor: rankColor }]} />
-                    </View>
-                    <Text style={s.progressLabel}>
-                      {/* At 0 points the score already earns the next rank, so a
-                          top-rank gate is what's holding it back */}
-                      {ptsToNext === 0 && rankData
-                        ? gateRequirementText(rankData, nextRank.name) ?? `Keep training to reach ${nextRank.name}`
-                        : `${ptsToNext} point${ptsToNext !== 1 ? 's' : ''} to ${nextRank.name}`}
-                    </Text>
-                  </View>
-                )}
-              </RNAnimated.View>
-            </Animated.View>
-          );
-        })()}
+        {previousRank == null && rankCard}
 
         <Animated.View entering={FadeInDown.delay(200).duration(400)} style={s.section}>
           {/* Waits for the workout: whether it's cardio decides which stats
@@ -651,23 +637,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   loadErrorText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center' },
   retryBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border },
   retryText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
-  rankBadgeCard: { borderRadius: radius.md, padding: spacing.md, borderWidth: 1 },
-  rankUpPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start',
-    borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 2, marginBottom: spacing.sm,
-  },
-  rankUpText: { fontSize: typography.fontSize.xs, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6 },
-  rankBadgeLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + spacing.xs },
-  rankBadgeText: { flex: 1 },
-  rankAvatarWrap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  // own layer so the rounded disc never clips the Aretē frame's wreath, which bleeds past 44px
-  rankAvatarDisc: { position: 'absolute', width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface },
-  rankBadgeName: { fontSize: typography.fontSize.md, fontWeight: '800', letterSpacing: 0.5 },
-  rankBadgeSub: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
-  rankProgressWrap: { marginTop: spacing.sm },
-  progressTrack: { height: 8, backgroundColor: colors.border, borderRadius: 4, overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: 4 },
-  progressLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: spacing.xs },
   detailsBtn: { backgroundColor: colors.accent, borderRadius: radius.md, marginHorizontal: SIDE, marginBottom: spacing.sm, padding: spacing.md, alignItems: 'center' },
   detailsBtnText: { color: colors.accentText, fontSize: typography.fontSize.md, fontWeight: '600' },
   shareBtn: {

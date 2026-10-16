@@ -69,3 +69,27 @@ describe('projectRoute', () => {
     expect(w / h).toBeCloseTo(1, 1);
   });
 });
+
+describe('projectRoute with segments', () => {
+  const W2 = 300, H2 = 200;
+  const a = [{ latitude: 40, longitude: -75 }, { latitude: 40.001, longitude: -75 }];
+  const b = [{ latitude: 40.004, longitude: -75.002 }, { latitude: 40.005, longitude: -75.002 }];
+
+  it('starts each segment with a fresh move, so no line joins them', () => {
+    const result = projectRoute([a, b], W2, H2)!;
+    expect(result.path.match(/M/g)).toHaveLength(2);
+    expect(result.path.match(/L/g)).toHaveLength(2);
+  });
+
+  it('marks the start of the first segment and the end of the last', () => {
+    const joined = projectRoute([...a, ...b], W2, H2)!;
+    const split = projectRoute([a, b], W2, H2)!;
+    expect(split.start).toEqual(joined.start);
+    expect(split.end).toEqual(joined.end);
+  });
+
+  it('skips a segment too short to draw', () => {
+    expect(projectRoute([a, [b[0]]], W2, H2)!.path.match(/M/g)).toHaveLength(1);
+    expect(projectRoute([[a[0]], [b[0]]], W2, H2)).toBeNull();
+  });
+});

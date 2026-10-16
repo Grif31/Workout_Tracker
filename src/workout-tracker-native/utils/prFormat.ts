@@ -169,7 +169,10 @@ export function computeChartYAxisRange(values: number[], sections: number): { ma
   const pad = Math.max((max - min) * 0.15, 1);
   const rawMin = Math.max(0, min - pad);
   const rawMax = max + pad;
-  const step = Math.max(1, Math.ceil((rawMax - rawMin) / sections));
+  let step = Math.max(1, Math.ceil((rawMax - rawMin) / sections));
+  // Flooring the offset to a step lowers the top too, which could leave the
+  // peak above the axis (135-185 gave 110-176); widen the step until it fits
+  while (Math.floor(rawMin / step) * step + step * sections < rawMax) step++;
   const yAxisOffset = Math.floor(rawMin / step) * step;
   return { maxValue: step * sections, yAxisOffset };
 }

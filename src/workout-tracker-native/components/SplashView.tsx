@@ -6,13 +6,14 @@ import { spacing } from '../theme/spacing';
 // #141416) so the handoff from the OS splash into in-app loading screens is
 // seamless. The background must match the splash config exactly, which is
 // theme-independent — hence the fixed color instead of theme tokens.
-const SPLASH_BG = '#141416';
+export const SPLASH_BG = '#141416';
+export const SPLASH_IMAGE = require('../assets/Arete_splash.png');
 
 export default function SplashView({ children }: { children?: React.ReactNode }) {
   return (
     <View style={styles.container}>
       <Image
-        source={require('../assets/Arete_splash.png')}
+        source={SPLASH_IMAGE}
         style={styles.image}
         resizeMode="contain"
       />

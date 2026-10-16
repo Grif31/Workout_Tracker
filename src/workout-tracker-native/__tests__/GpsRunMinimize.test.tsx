@@ -539,14 +539,23 @@ describe('minimizing a GPS run', () => {
   describe('with the phone locked on the map', () => {
     let appStateHandlers: ((s: string) => void)[] = [];
     let appStateSpy: jest.SpyInstance;
+    // React Native's jest setup already mocks addEventListener, so spyOn hands back
+    // that same mock and mockRestore would wipe its implementation for every later
+    // test: put the previous one back instead
+    let previousImpl: ((...args: any[]) => any) | undefined;
     beforeEach(() => {
       appStateHandlers = [];
-      appStateSpy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_type: string, h: (s: string) => void) => {
+      appStateSpy = jest.spyOn(AppState, 'addEventListener');
+      previousImpl = appStateSpy.getMockImplementation();
+      appStateSpy.mockImplementation(((_type: string, h: (s: string) => void) => {
         appStateHandlers.push(h);
         return { remove: () => { appStateHandlers = appStateHandlers.filter(x => x !== h); } };
       }) as any);
     });
-    afterEach(() => appStateSpy.mockRestore());
+    afterEach(() => {
+      if (previousImpl) appStateSpy.mockImplementation(previousImpl);
+      else appStateSpy.mockRestore();
+    });
 
     const setAppState = (state: string) => act(async () => { appStateHandlers.forEach(h => h(state)); });
     const routeOnMap = (r: ReturnType<typeof render>) => r.UNSAFE_getAllByProps({ strokeWidth: 4 })[0].props.coordinates as unknown[];
@@ -598,6 +607,21 @@ describe('minimizing a GPS run', () => {
       expect(mapProps()).toMatchObject({ showsUserLocation: false, followsUserLocation: false });
       await setAppState('active');
       expect(mapProps()).toMatchObject({ showsUserLocation: true, followsUserLocation: true });
+    });
+  });
+
+  describe('gaps on the live map', () => {
+    const lines = (r: ReturnType<typeof render>) => r.UNSAFE_queryAllByType(require('react-native-maps').Polyline);
+
+    it('draws a pause and resume as two lines, not one joined across the gap', async () => {
+      const r = await startedRun([0, 1, 2]);
+      expect(lines(r)).toHaveLength(1);
+      await act(async () => { fireEvent.press(r.getByText('Pause')); });
+      await act(async () => { fireEvent.press(r.getByText('Resume')); });
+      await waitFor(() => expect(mockGpsListener).not.toBeNull());
+      await feed({ ...point(20), timestamp: T0 + 900_000 }, { ...point(21), timestamp: T0 + 930_000 });
+      expect(lines(r)).toHaveLength(2);
+      expect(lines(r)[1].props.coordinates).toHaveLength(2);
     });
   });
 });

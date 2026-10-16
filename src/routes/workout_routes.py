@@ -659,6 +659,7 @@ def add_workout():
                 order=ex.get('order', ex_index),
                 exercise_type=ex.get('exercise_type', 'strength'),
                 route_polyline=ex.get('route_polyline'),
+                route_segments=ex.get('route_segments'),
                 notes=ex.get('notes'),
             )
             new_ex.best_efforts = _build_best_efforts(ex)
@@ -829,6 +830,8 @@ def update_workout(workout_id):
                     ex.exercise_type = exData["exercise_type"]
                 if "route_polyline" in exData:
                     ex.route_polyline = exData["route_polyline"]
+                if "route_segments" in exData:
+                    ex.route_segments = exData["route_segments"]
                 if "notes" in exData:
                     ex.notes = exData.get("notes")
                 ex.order = exData.get('order', ex_index)
@@ -903,6 +906,7 @@ def update_workout(workout_id):
                     order=exData.get('order', ex_index),
                     exercise_type=exData.get('exercise_type', 'strength'),
                     route_polyline=exData.get('route_polyline'),
+                    route_segments=exData.get('route_segments'),
                     notes=exData.get('notes'),
                 )
                 new_ex.best_efforts = _build_best_efforts(exData)

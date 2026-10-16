@@ -69,6 +69,13 @@ class ExerciseSchema(_Base):
     exercise_type = fields.Str(load_default='strength', validate=validate.OneOf(['strength', 'cardio', 'duration']))
 
 # ── Workout ───────────────────────────────────────────────────
+# Generous bounds on a GPS route's segments: one per gap in the recording, so
+# hundreds would mean a broken client; a segment of a long ride encodes to tens
+# of kilobytes at most
+MAX_ROUTE_SEGMENTS = 500
+MAX_SEGMENT_LENGTH = 500_000
+
+
 def _validate_exercises(exercises):
     # The routes index ex['name'] and iterate ex['sets'] directly, so a
     # malformed exercise has to fail here as a 400 rather than there as a 500.
@@ -78,6 +85,13 @@ def _validate_exercises(exercises):
         sets = ex.get('sets', [])
         if not isinstance(sets, list) or not all(isinstance(s, dict) for s in sets):
             raise ValidationError(f'exercise {i + 1} sets must be a list of objects')
+        segments = ex.get('route_segments')
+        if segments is not None and not (
+            isinstance(segments, list)
+            and len(segments) <= MAX_ROUTE_SEGMENTS
+            and all(isinstance(seg, str) and len(seg) <= MAX_SEGMENT_LENGTH for seg in segments)
+        ):
+            raise ValidationError(f'exercise {i + 1} route_segments must be a list of encoded polylines')
 
 
 class WorkoutSchema(_Base):

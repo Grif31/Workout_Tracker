@@ -158,7 +158,10 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
           programming: exercises.filter(e => progMap[e.id]).map(e => progMap[e.id]),
         }),
       });
-      if (!res.ok) {
+      if (res.status === 409) {
+        const data = await res.json();
+        Alert.alert('Name Already Used', data.message);
+      } else if (!res.ok) {
         Alert.alert(isNew ? "Couldn't Create Template" : "Couldn't Save Template", 'Try again in a moment.');
       } else if (isNew) {
         const data = await res.json();

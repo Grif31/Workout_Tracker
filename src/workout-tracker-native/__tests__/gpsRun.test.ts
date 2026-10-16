@@ -1,3 +1,4 @@
+import polylineLib from '@mapbox/polyline';
 import { haversineKm } from '../utils/bestEfforts';
 import {
   afterGap, applyFix, buildGpsRunBody, emptyRun, runElapsedSeconds, MAX_ACCURACY_M, type Fix, type RunState,
@@ -153,5 +154,74 @@ describe('buildGpsRunBody', () => {
   it('is the same body for the online and the offline save: plain JSON', () => {
     const body = buildGpsRunBody({ ...base, coords: walk(45).coords });
     expect(JSON.parse(JSON.stringify(body))).toEqual(body);
+  });
+});
+
+describe('a stretch with no GPS fixes', () => {
+  // 0.0004 degrees of latitude is about 44.5 m
+  const at = (i: number, secondsAfterStart: number, over: Partial<Fix['coords']> = {}): Fix => ({
+    coords: { latitude: i * 0.0004, longitude: 0, altitude: null, accuracy: 5, altitudeAccuracy: null, ...over },
+    timestamp: T0 + secondsAfterStart * 1000,
+  });
+
+  it('starts a new segment and adds no distance when the next fix is long after and far away', () => {
+    let s = applyFix(applyFix(emptyRun(), at(0, 0)), at(1, 2));
+    const before = s.distanceKm;
+    // 90 s later and about 445 m on: nobody recorded the path between
+    s = applyFix(s, at(11, 92));
+    expect(s.coords[2]).toMatchObject({ resumed: true });
+    expect(s.distanceKm).toBe(before);
+  });
+
+  it('keeps a slow stretch joined: a long wait but a short hop is standing still', () => {
+    let s = applyFix(emptyRun(), at(0, 0));
+    s = applyFix(s, at(1, 300)); // five minutes, 44 m
+    expect(s.coords[1]).not.toHaveProperty('resumed');
+    expect(s.distanceKm).toBeGreaterThan(0);
+  });
+
+  it('keeps a quick long hop joined: fixes dropped under trees for under a minute', () => {
+    let s = applyFix(emptyRun(), at(0, 0));
+    s = applyFix(s, at(4, 40)); // 40 s, 178 m
+    expect(s.coords[1]).not.toHaveProperty('resumed');
+  });
+
+  it('counts no climb across the gap', () => {
+    let s = applyFix(emptyRun(), at(0, 0, { altitude: 100, altitudeAccuracy: 3 }));
+    s = applyFix(s, at(11, 90, { altitude: 160, altitudeAccuracy: 3 }));
+    expect(s.elevationGainM).toBe(0);
+  });
+
+  it('sends the route split at the gap, and the joined line for older builds', () => {
+    let s = emptyRun();
+    [at(0, 0), at(1, 2), at(2, 4), at(12, 100), at(13, 102)].forEach(f => { s = applyFix(s, f); });
+    const body = buildGpsRunBody({
+      activity: 'Hike', workoutName: '', elapsedSec: 102, distanceKm: s.distanceKm, distanceUnit: 'mi',
+      elevationGainM: 0, coords: s.coords, exerciseTemplateId: null, now: new Date(T0),
+    });
+    const ex = body.exercises[0] as { route_polyline: string | null; route_segments?: string[] };
+    expect(ex.route_segments).toHaveLength(2);
+    expect(polylineLib.decode(ex.route_segments![0])).toHaveLength(3);
+    expect(polylineLib.decode(ex.route_segments![1])).toHaveLength(2);
+    expect(polylineLib.decode(ex.route_polyline!)).toHaveLength(5);
+  });
+
+  it('never lets a best effort span the gap', () => {
+    // 40 s per 44.5 m is about 15 min/km; the gap would make it look far faster
+    let s = emptyRun();
+    for (let i = 0; i < 12; i += 1) s = applyFix(s, at(i, i * 40));
+    // 70 s and about 310 m on: a pace a runner could manage (so the plausibility
+    // filter alone wouldn't catch it), and far quicker than this walk
+    s = applyFix(s, at(18, 12 * 40 + 70));
+    for (let i = 19; i < 30; i += 1) s = applyFix(s, at(i, 12 * 40 + 70 + (i - 18) * 40));
+    const body = buildGpsRunBody({
+      activity: 'Hike', workoutName: '', elapsedSec: 1000, distanceKm: s.distanceKm, distanceUnit: 'km',
+      elevationGainM: 0, coords: s.coords, exerciseTemplateId: null, now: new Date(T0),
+    });
+    const efforts = (body.exercises[0] as { best_efforts?: { milestone_type: string; distance_km: number; duration_min: number }[] }).best_efforts ?? [];
+    for (const e of efforts.filter(x => x.milestone_type === 'distance')) {
+      // Never quicker than the pace actually walked
+      expect(e.duration_min / e.distance_km).toBeGreaterThan(12);
+    }
   });
 });

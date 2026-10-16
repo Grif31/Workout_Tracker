@@ -358,7 +358,7 @@ Check off items as you complete them.
   > Premium is currently enforced only on the client: `is_pro = True` is hardcoded in `stats_routes.py` `strength_score`, so the API serves premium fields (greek score breakdown, big6, muscle groups) to any authenticated request. Decision (2026-06-12): launch iOS-only with client gating (PurchaseContext fails closed — no key / Android → not premium), do real enforcement after launch.
   - [x] Add `is_premium` (Boolean, default False) to `User` + migration
   - [x] `POST /api/webhooks/revenuecat` — verify the `Authorization` header against a `REVENUECAT_WEBHOOK_SECRET` env var; set `user.is_premium` from `INITIAL_PURCHASE` / `RENEWAL` / `EXPIRATION` / `CANCELLATION` events (`app_user_id` = our user id, set via `Purchases.logIn`)
-  - [ ] Configure the webhook URL + secret in the RevenueCat dashboard
+  - [x] Configure the webhook URL + secret in the RevenueCat dashboard (2026-10-14: test event answered 200; both secrets set on Railway)
   - [x] Replace `is_pro = True` in `strength_score` with `user.is_premium`
 
 - [ ] **Per-set payload validation on workout routes**
@@ -1311,11 +1311,11 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 ### Phase 2: No map work while the app is in the background
 - [x] (built 2026-10-14, not yet on a device) `GPSCardioScreen` makes no map calls (`animateToRegion`, polyline updates) while `AppState` isn't `active`, and catches up when the app comes back. Also stops its 1 s clock re-render and turns off the map's own location dot and follow while backgrounded; the run bar stops ticking too. New `hooks/useAppActive.ts`; 4 tests in `GpsRunMinimize.test.tsx`. Cheap, and worth doing whatever Phase 1 finds: the screen stays mounted when the phone is locked on the map
 
-### Phase 3: No straight lines across gaps
-- [ ] A time-gap rule in `applyFix`: a fix more than about 15 s after the previous one starts a new segment, adds no distance and is marked `resumed` (fixes only come every 5 m, so a gap after standing still costs a few metres at most)
-- [ ] **Decided: a new `Exercise.route_segments` column** (JSON list of encoded polylines, one per segment; migration with the chain check). Keep writing `route_polyline` as the full joined line so builds from before this still draw a route
-- [ ] The live map, Cardio Details and Workout Details draw one line per segment
-- [ ] Test that best efforts never span a gap (they already skip `resumed` points)
+### Phase 3: No straight lines across gaps (built 2026-10-16, not yet on a device)
+- [x] A time-gap rule in `applyFix` (built 2026-10-16): a fix more than **60 s and 100 m** after the previous one starts a new segment, adds no distance, counts no climb, and is marked `resumed` (`GAP_SECONDS`, `GAP_MIN_METRES`). Raised from the planned 15 s: under trees the accuracy filter drops fixes for tens of seconds, and splitting there would have cut a wooded hike into pieces and lost real distance
+- [x] **Decided: a new `Exercise.route_segments` column** (JSON list of encoded polylines, one per segment; migration `u9v0w1x2y3z4`, applied locally, production gets it on deploy). Keep writing `route_polyline` as the full joined line so builds from before this still draw a route. Validated in `_validate_exercises` (a list of strings, at most 500, each at most 500 KB); kept on an edit that doesn't send it. `tests/test_route_segments.py`
+- [x] The live map, Cardio Details, Workout Details and the share card's trace draw one line per segment, all through `utils/routeSegments.ts` (falls back to `route_polyline` as one line for older routes)
+- [x] Test that best efforts never span a gap (they already skip `resumed` points; the test uses a jump fast enough to fool them but not the plausibility filter)
 - [ ] Optional: "GPS signal was lost for 2 min" on the save sheet when a gap was recorded
 
 ### Phase 4: Believable elevation gain

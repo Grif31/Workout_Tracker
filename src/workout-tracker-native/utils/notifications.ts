@@ -76,6 +76,17 @@ export async function cancelRestTimerAlert(): Promise<void> {
   }
 }
 
+// Cancelling only stops an alert that hasn't fired; a delivered one stays in
+// Notification Center until dismissed, so the app clears them on foreground.
+export async function dismissDeliveredRestTimerAlerts(): Promise<void> {
+  const presented = await Notifications.getPresentedNotificationsAsync().catch(() => []);
+  for (const n of presented) {
+    if ((n.request.content.data as any)?.type === 'rest_timer') {
+      await Notifications.dismissNotificationAsync(n.request.identifier).catch(() => {});
+    }
+  }
+}
+
 // ── Live Workout Notification ────────────────────────────────
 
 const LIVE_WORKOUT_CATEGORY = 'live_workout';

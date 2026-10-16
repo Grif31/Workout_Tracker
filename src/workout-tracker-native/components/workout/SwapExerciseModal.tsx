@@ -13,6 +13,7 @@ export type SwapCandidate = {
   id: number;
   name: string;
   muscle_group?: string;
+  primary_muscles?: string[];
   equipment?: string;
   image_url?: string;
   exercise_type?: string;

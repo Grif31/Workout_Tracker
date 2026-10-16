@@ -3,14 +3,13 @@ import { APP_ICONS_ENABLED } from '../constants/featureFlags';
 
 export type PaywallFeature = { key: string; icon: string; label: string; detail: string };
 
+// Kept to a handful of grouped rows so the plans stay on screen; each locked
+// entry point maps to the row that covers it (SOURCES below)
 const ALL_FEATURES: PaywallFeature[] = [
-  { key: 'ai_coach', icon: 'sparkles', label: 'AI Coach', detail: 'Workouts and full programs built for your goal, schedule and equipment' },
-  { key: 'insights', icon: 'bulb-outline', label: 'Weekly review and insights', detail: 'A full read on your week: what went well, what lagged, and one change to make. Plus insights whenever you want them' },
-  { key: 'workout_tools', icon: 'trending-up-outline', label: 'Smarter workouts', detail: "Today's Target from your last session, and exercise swaps that fit your injuries" },
-  { key: 'strength_score', icon: 'trophy-outline', label: 'Strength Score', detail: 'A breakdown of where your lifts rank based on your bodyweight, see which are the strongest and weakest' },
-  { key: 'endurance_score', icon: 'speedometer-outline', label: 'Endurance Score', detail: 'How your pace ranks from 400 m to the marathon' },
-  { key: 'muscle_volume', icon: 'bar-chart-outline', label: 'Advanced stats', detail: 'Volume zones for every muscle, weekly frequency and trends, push and pull balance, a fatigue monitor and workout density' },
-  { key: 'analytics', icon: 'analytics-outline', label: 'Lift progress rate', detail: 'How fast each lift is gaining, and when it stalls' },
+  { key: 'ai_coach', icon: 'sparkles', label: 'AI Coach', detail: 'Programs built for you, a weekly review and insights on demand' },
+  { key: 'workout_tools', icon: 'trending-up-outline', label: 'Smarter workouts', detail: "Today's Target and exercise swaps that fit your injuries" },
+  { key: 'scores', icon: 'trophy-outline', label: 'Strength and Endurance Scores', detail: 'See where every lift and every pace ranks' },
+  { key: 'stats', icon: 'bar-chart-outline', label: 'Advanced stats', detail: 'Volume zones, trends, balance and how fast each lift is gaining' },
   { key: 'unlimited', icon: 'list-outline', label: 'Unlimited templates and routines', detail: 'Free accounts keep 5 templates and 2 routines' },
   ...(APP_ICONS_ENABLED ? [{ key: 'app_icon', icon: 'apps-outline', label: 'Custom app icons', detail: 'Pick the icon on your home screen' }] : []),
 ];
@@ -19,11 +18,11 @@ const ALL_FEATURES: PaywallFeature[] = [
 // asking for and the headline that answers it
 const SOURCES: Record<string, { feature: string; title: string; subtitle: string }> = {
   ai_coach: { feature: 'ai_coach', title: 'AI Coach is part of Premium', subtitle: 'Programs built around you, in seconds' },
-  weekly_review: { feature: 'insights', title: 'The full weekly review is part of Premium', subtitle: 'What went well, what lagged, and one change for next week' },
-  pr_velocity: { feature: 'analytics', title: 'Progress rate is part of Premium', subtitle: 'See how fast each lift is gaining and when it stalls' },
-  strength_score: { feature: 'strength_score', title: 'Strength Score is part of Premium', subtitle: 'See how your lifts rank and what to work on next' },
-  endurance_score: { feature: 'endurance_score', title: 'Endurance Score is part of Premium', subtitle: 'See how your pace ranks at every distance' },
-  muscle_volume: { feature: 'muscle_volume', title: 'Advanced stats are part of Premium', subtitle: 'See which muscles need more work, how you split push and pull, and how hard this week is' },
+  weekly_review: { feature: 'ai_coach', title: 'The full weekly review is part of Premium', subtitle: 'What went well, what lagged, and one change for next week' },
+  pr_velocity: { feature: 'stats', title: 'Progress rate is part of Premium', subtitle: 'See how fast each lift is gaining and when it stalls' },
+  strength_score: { feature: 'scores', title: 'Strength Score is part of Premium', subtitle: 'See how your lifts rank and what to work on next' },
+  endurance_score: { feature: 'scores', title: 'Endurance Score is part of Premium', subtitle: 'See how your pace ranks at every distance' },
+  muscle_volume: { feature: 'stats', title: 'Advanced stats are part of Premium', subtitle: 'See which muscles need more work, how you split push and pull, and how hard this week is' },
   templates: { feature: 'unlimited', title: "You've used your 5 free templates", subtitle: 'Premium removes the limit' },
   routines: { feature: 'unlimited', title: "You've used your 2 free routines", subtitle: 'Premium removes the limit' },
   app_icon: { feature: 'app_icon', title: 'Custom icons are part of Premium', subtitle: 'Unlock every tool Aretē has to offer' },

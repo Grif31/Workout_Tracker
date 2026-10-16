@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { ActivityIndicator } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { needsOnboarding as checkNeedsOnboarding } from '../utils/onboarding';
 import { AppTabs } from './AppTabs';
 import { AuthStackScreen } from './AuthStack';
@@ -16,6 +16,7 @@ import OnboardingAboutYouScreen from '../screens/Auth/OnboardingAboutYouScreen';
 import PaywallScreen from '../screens/PaywallScreen';
 import PreloadScreen from '../screens/PreloadScreen';
 import SplashView from '../components/SplashView';
+import SplashExit from '../components/SplashExit';
 import { appCache } from '../utils/appCache';
 
 const OnboardingStack = createNativeStackNavigator<OnboardingStackParamsList>();
@@ -65,6 +66,19 @@ export default function RootNavigator() {
     setNeedsOnboarding(false);
   }, []);
 
+  // Every splash phase (auth load, preload, onboarding check) reads as one
+  // screen; the zoom out plays once, when the last of them gives way. A layout
+  // effect, so the overlay is up before the first frame of what's underneath.
+  const splashUp = loading || (!!user && (!preloaded || !onboardingChecked));
+  const [splashExiting, setSplashExiting] = useState(false);
+  const wasSplashUp = useRef(splashUp);
+  useLayoutEffect(() => {
+    if (wasSplashUp.current && !splashUp) setSplashExiting(true);
+    wasSplashUp.current = splashUp;
+  }, [splashUp]);
+  const endSplashExit = useCallback(() => setSplashExiting(false), []);
+  const splashExit = splashExiting && <SplashExit onDone={endSplashExit} />;
+
   if (loading) {
     // Same look as the native splash so launch reads as one continuous screen
     return (
@@ -88,6 +102,7 @@ export default function RootNavigator() {
   };
 
   return (
+    <View style={{ flex: 1 }}>
     <NavigationContainer ref={navigationRef} theme={navTheme}>
       <WorkoutSessionProvider>
         <GpsRunProvider>
@@ -122,5 +137,7 @@ export default function RootNavigator() {
         </GpsRunProvider>
       </WorkoutSessionProvider>
     </NavigationContainer>
+    {splashExit}
+    </View>
   );
 }

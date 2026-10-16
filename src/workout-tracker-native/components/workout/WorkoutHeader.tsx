@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, Switch, StyleSheet, Platform, Modal, Animated,
+  View, Text, TextInput, TouchableOpacity, Switch, StyleSheet, Platform, Modal, Animated, ScrollView,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,8 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { fmtElapsed } from './types';
 import MuscleDiagram from '../MuscleDiagram';
+import MuscleSetBreakdown from '../MuscleSetBreakdown';
+import { muscleShading, type MuscleSetCount } from '../../utils/muscleSetCounts';
 
 type Props = {
   workoutName: string;
@@ -39,7 +41,7 @@ type Props = {
   totalSets: number;
   totalVolume: number;
   weightUnit: string;
-  activeMuscles: string[];
+  muscleCounts: MuscleSetCount[];
 };
 
 function WorkoutHeader({
@@ -71,10 +73,11 @@ function WorkoutHeader({
   totalSets,
   totalVolume,
   weightUnit,
-  activeMuscles,
+  muscleCounts,
 }: Props) {
   const { colors, mode } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const thumbShading = useMemo(() => muscleShading(muscleCounts, colors.accent), [muscleCounts, colors.accent]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [diagramModalVisible, setDiagramModalVisible] = useState(false);
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
@@ -169,7 +172,7 @@ function WorkoutHeader({
           >
             <Text style={styles.diagramThumbLabel}>Muscles</Text>
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-start', marginTop: -spacing.sm }}>
-              <MuscleDiagram muscles={activeMuscles} scale={0.18} />
+              <MuscleDiagram muscles={thumbShading.muscles} muscleColors={thumbShading.muscleColors} scale={0.18} />
             </View>
           </TouchableOpacity>
         </View>
@@ -180,11 +183,10 @@ function WorkoutHeader({
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Muscles Targeted</Text>
-            {activeMuscles.length > 0 ? (
-              <>
-                <MuscleDiagram muscles={activeMuscles} />
-                <Text style={styles.modalMuscleList}>{activeMuscles.join(' · ')}</Text>
-              </>
+            {muscleCounts.length > 0 ? (
+              <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
+                <MuscleSetBreakdown counts={muscleCounts} />
+              </ScrollView>
             ) : (
               <Text style={styles.modalEmpty}>Add exercises to see targeted muscles</Text>
             )}
@@ -470,6 +472,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingBottom: spacing.xl * 2,
     alignItems: 'center',
     gap: spacing.sm,
+    maxHeight: '85%',
   },
   modalHandle: {
     width: 40, height: 4, backgroundColor: colors.border,
@@ -480,11 +483,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
   },
-  modalMuscleList: {
-    fontSize: typography.fontSize.sm,
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
+  modalScroll: { alignSelf: 'stretch', flexGrow: 0, flexShrink: 1 },
+  modalScrollContent: { paddingBottom: spacing.sm },
   modalEmpty: {
     fontSize: typography.fontSize.sm,
     color: colors.textSecondary,

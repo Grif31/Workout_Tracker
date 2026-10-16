@@ -1,4 +1,5 @@
 ﻿import React from 'react';
+import { Alert } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { mockFetchSequence, createMockNavigation, createMockRoute } from './testUtils';
 import TemplateDetailScreen from '../screens/TrainingTab/TemplateDetailScreen';
@@ -128,5 +129,26 @@ describe('TemplateDetailScreen (new template)', () => {
     await act(async () => { mockPickerProps.onSelect({ id: 2, name: 'Squat' }); });
     await act(async () => { mockPickerProps.onSelect({ id: 2, name: 'Squat' }); });
     expect(getAllByText('Squat')).toHaveLength(1);
+  });
+
+  it('names the clash when a template with that name already exists', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const message = 'You already have a template named "New Template". Pick a different name.';
+    (global.fetch as jest.Mock) = jest.fn((url: string, init?: RequestInit) => {
+      const isCreate = String(url).endsWith('/api/workout-templates') && init?.method === 'POST';
+      return Promise.resolve({
+        ok: !isCreate,
+        status: isCreate ? 409 : 200,
+        json: () => Promise.resolve(isCreate ? { message } : []),
+      });
+    });
+    const navigation = createMockNavigation({ setParams: jest.fn() });
+    const { getByText } = render(
+      <TemplateDetailScreen navigation={navigation as any} route={createMockRoute('TemplateDetail', {}) as any} />,
+    );
+    await waitFor(() => fireEvent.press(getByText('Save Template')));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Name Already Used', message));
+    expect(navigation.setParams).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
   });
 });

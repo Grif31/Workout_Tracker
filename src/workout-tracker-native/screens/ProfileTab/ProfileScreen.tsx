@@ -331,9 +331,8 @@ export default function ProfileScreen({ navigation }: Props) {
   const renderPRBar = () => {
     if (prs.length === 0) return null;
     return (
-      <TouchableOpacity
+      <PressableScale
         style={styles.prSectionBox}
-        activeOpacity={0.85}
         onPress={() => navigation.navigate('PRDashboard')}
       >
         <View style={styles.prSectionHeader}>
@@ -388,7 +387,7 @@ export default function ProfileScreen({ navigation }: Props) {
             );
           })}
         </View>
-      </TouchableOpacity>
+      </PressableScale>
     );
   };
 
@@ -419,7 +418,8 @@ export default function ProfileScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
+      <PressableScale
+        accessibilityRole="button"
         style={[styles.card, { backgroundColor: colors.surface, padding: spacing.md }]}
         onPress={() => navigation.navigate('EditProfile')}
       >
@@ -438,7 +438,7 @@ export default function ProfileScreen({ navigation }: Props) {
             <Text style={styles.workoutCount} numberOfLines={2}>{user.bio}</Text>
           )}
         </View>
-      </TouchableOpacity>
+      </PressableScale>
 
       {/* Stats: one card, with the cardio totals as a second row when there are any */}
       <View

@@ -156,6 +156,11 @@ class Exercise(db.Model):
     exercise_type = db.Column(db.String(10), nullable=False, server_default='strength')
     route_polyline = db.Column(db.Text, nullable=True)
     notes = db.Column(db.Text, nullable=True)
+    # A GPS route split where the recording had a gap (a pause, a resume after
+    # the app was killed, a stretch with no fixes): a list of encoded polylines,
+    # so nothing draws a straight line across ground nobody recorded.
+    # route_polyline keeps the whole joined line for app builds from before this.
+    route_segments = db.Column(db.JSON, nullable=True)
     sets = db.relationship('Set', backref='exercises', cascade="all, delete-orphan", lazy=True, order_by='Set.order')
     best_efforts = db.relationship('CardioBestEffort', backref='exercise', cascade="all, delete-orphan", lazy=True)
 
@@ -172,6 +177,7 @@ class Exercise(db.Model):
             "notes": self.notes,
             "equipment": tmpl.equipment if tmpl else None,
             "muscle_group": tmpl.muscle_group if tmpl else None,
+            "primary_muscles": tmpl.primary_muscles if tmpl else [],
             "image_url": tmpl.image_url if tmpl else None,
             "bodyweight_load_factor": tmpl.bodyweight_load_factor if tmpl else None,
         }
@@ -179,6 +185,7 @@ class Exercise(db.Model):
             data["sets"] = [s.to_dict() for s in self.sets]
         if self.best_efforts:
             data["best_efforts"] = [b.to_dict() for b in self.best_efforts]
+        data["route_segments"] = self.route_segments
         return data
 
 # ── WorkoutTemplate ─────────────────────────────────────────
@@ -215,6 +222,7 @@ class WorkoutTemplate(db.Model):
                     "id": e.id,
                     "name": e.name,
                     "muscle_group": e.muscle_group,
+                    "primary_muscles": e.primary_muscles,
                     "equipment": e.equipment,
                     "exercise_type": e.exercise_type,
                     "image_url": e.image_url,
@@ -322,6 +330,11 @@ class ExerciseTemplate(db.Model):
         primaries = [m.muscle_group for m in self.muscle_mappings if m.is_primary]
         secondaries = [m.muscle_group for m in self.muscle_mappings if not m.is_primary]
         return ', '.join(primaries + secondaries)
+
+    @property
+    def primary_muscles(self) -> list[str]:
+        """The muscle_group entries that are primary movers. The string alone can't say where they end."""
+        return [m.muscle_group for m in self.muscle_mappings if m.is_primary]
 
 
 # ── ExerciseMuscleMapping ─────────────────────────────────────

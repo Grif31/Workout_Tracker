@@ -26,7 +26,7 @@ export function TrainingStack() {
       <Stack.Screen name="RoutineDetail" component={RoutineDetailScreen} />
       <Stack.Screen name="TemplateDetail" component={TemplateDetailScreen} />
       <Stack.Screen name="WorkoutDetails" component={WorkoutDetailScreen} />
-      <Stack.Screen name="WorkoutSummary" component={WorkoutSummaryScreen} options={{ contentStyle: { paddingTop: 0 } }} />
+      <Stack.Screen name="WorkoutSummary" component={WorkoutSummaryScreen} options={{ contentStyle: { paddingTop: 0 }, animation: 'fade' }} />
       <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen} options={{ presentation: 'modal', contentStyle: { paddingTop: 0 } }} />
       <Stack.Screen name="StrengthScore" component={StrengthScoreScreen} />
       <Stack.Screen name="EnduranceScore" component={EnduranceScoreScreen} />

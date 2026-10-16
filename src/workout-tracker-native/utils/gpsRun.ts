@@ -3,6 +3,7 @@ import { extractBestEfforts, haversineKm, type BestEffort, type TrackPoint } fro
 import { addAltitude, type ClimbState } from './gpsMetrics';
 import { toDisplayDistance, type DistanceUnit } from './units';
 import { toLocalDateStr } from './date';
+import { encodeSegments, splitAtGaps } from './routeSegments';
 
 // The state and arithmetic of a GPS run, kept out of the screen so it can be
 // tested without a device and so the run can live outside the screen (a run
@@ -24,6 +25,17 @@ export const ACTIVITY_TEMPLATE_NAME: Record<Activity, string> = {
 
 // GPS fixes worse than this add phantom distance and jagged routes: drop them
 export const MAX_ACCURACY_M = 30;
+
+// A fix this long after the last one, and this far from it, follows a stretch
+// with no GPS (iOS stopped delivering, or the app was suspended): nobody knows
+// the path between, so it starts a new segment instead of a straight line that
+// also counted as distance. Both, because fixes only come every 5 m: starting
+// to walk again after standing still is a long wait but a short hop. Generous
+// on purpose: under trees the accuracy filter drops fixes for tens of seconds,
+// and a line across that is close to the real path. A minute and 100 m is
+// where a straight line stops being a fair guess.
+export const GAP_SECONDS = 60;
+export const GAP_MIN_METRES = 100;
 
 // timestamp (epoch ms) is what the best-efforts scan reads at save time; it
 // can't be backfilled, since route_polyline encodes latitude/longitude only.
@@ -65,18 +77,22 @@ export function applyFix(state: RunState, loc: Fix): RunState {
   const accuracy = loc.coords.accuracy;
   if (accuracy != null && accuracy > MAX_ACCURACY_M) return state;
 
-  const resumed = state.skipNext;
+  const prev = state.coords[state.coords.length - 1];
+  const at = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+  const gap = !!prev
+    && (loc.timestamp - prev.timestamp) / 1000 > GAP_SECONDS
+    && haversineKm(prev, at) * 1000 > GAP_MIN_METRES;
+  const resumed = state.skipNext || gap;
   const next: Coord = {
-    latitude: loc.coords.latitude,
-    longitude: loc.coords.longitude,
+    ...at,
     altitude: loc.coords.altitude ?? null,
     timestamp: loc.timestamp,
     ...(resumed ? { resumed: true } : {}),
   };
-  // addAltitude moves the anchor in place, so it gets a copy
-  const climb = { ...state.climb };
+  // addAltitude moves the anchor in place, so it gets a copy. Across a gap the
+  // altitude change isn't a climb anyone recorded, so the anchor starts over.
+  const climb = gap ? { anchor: null } : { ...state.climb };
   const climbed = addAltitude(climb, next.altitude, loc.coords.altitudeAccuracy ?? null);
-  const prev = state.coords[state.coords.length - 1];
   return {
     coords: [...state.coords, next],
     distanceKm: state.distanceKm + (prev && !resumed ? haversineKm(prev, next) : 0),
@@ -112,9 +128,11 @@ export function buildGpsRunBody(input: {
 }) {
   const durationMin = input.elapsedSec / 60;
   const displayDistance = toDisplayDistance(input.distanceKm, input.distanceUnit);
+  // The joined line stays for app builds from before route_segments, which draw only it
   const encodedPolyline = input.coords.length >= 2
     ? polylineLib.encode(input.coords.map(c => [c.latitude, c.longitude]))
     : null;
+  const segments = encodeSegments(splitAtGaps(input.coords));
   // Must match the distance shown (and the saved distance_unit), not the true-km
   // distance: otherwise the saved pace silently differs from the live pace
   // whenever the user's unit preference is miles.
@@ -134,6 +152,7 @@ export function buildGpsRunBody(input: {
       exercise_template_id: input.exerciseTemplateId,
       exercise_type: 'cardio',
       route_polyline: encodedPolyline,
+      ...(segments.length > 0 ? { route_segments: segments } : {}),
       ...(bestEfforts.length > 0 ? { best_efforts: bestEfforts } : {}),
       sets: [{
         cardio_duration: durationMin,

@@ -1,8 +1,8 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Image,
   ActivityIndicator, Dimensions, FlatList, RefreshControl,
-  NativeSyntheticEvent, NativeScrollEvent,
+  NativeSyntheticEvent, NativeScrollEvent, Animated, Easing,
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,6 +24,8 @@ import { resolveMediaUrl } from '../../utils/api';
 import { type GreekRankData, bestPerformanceLeg, gateRequirementText } from '../../utils/greekRank';
 import { fmtOrdinal } from '../../utils/prFormat';
 import { writeWidgetGreekRank } from '../../utils/widgetData';
+import PercentileBar from '../../components/PercentileBar';
+import { AnimatedPercentText } from '../../components/ScoreRing';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'GreekRank'>;
 
@@ -232,6 +234,15 @@ export default function GreekRankScreen({ navigation }: Props) {
   const ptsToNext   = nextRank ? Math.max(0, Math.ceil(nextRank.low - greekScore)) : 0;
   const nextGateText = rankData && nextRank ? gateRequirementText(rankData, nextRank.name) : null;
 
+  // The score counts up with the bars below, as the Strength and Endurance
+  // rings do. AnimatedPercentText shows value × 100, so it's fed score / 100.
+  const scoreAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(scoreAnim, {
+      toValue: greekScore / 100, duration: 700, easing: Easing.out(Easing.cubic), useNativeDriver: false,
+    }).start();
+  }, [greekScore, scoreAnim]);
+
   // Half the leftover width on each side puts a circle dead center when the
   // scroll offset is exactly ITEM_WIDTH * index, which is also where
   // snapToInterval stops.
@@ -366,7 +377,9 @@ export default function GreekRankScreen({ navigation }: Props) {
             <Text style={[styles.rankNameLarge, { color: heldRank.color }]}>
               {rankData?.greek_rank ?? 'Neophyte'}
             </Text>
-            <Text style={styles.scoreSubtitle}>Score: {greekScore.toFixed(0)} / 100</Text>
+            <Text style={styles.scoreSubtitle}>
+              Score: <AnimatedPercentText anim={scoreAnim} style={styles.scoreSubtitle} /> / 100
+            </Text>
           </View>
 
           {/* The score earned more than the rank held */}
@@ -440,12 +453,10 @@ export default function GreekRankScreen({ navigation }: Props) {
           {rankData && (
             <View style={[styles.card, { marginHorizontal: spacing.md }]}>
               <Text style={styles.cardTitle}>Progress to {nextRank?.name ?? 'Max Rank'}</Text>
-              <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, {
-                  width: `${Math.round(progress * 100)}%` as any,
-                  backgroundColor: heldRank.color,
-                }]} />
-              </View>
+              <PercentileBar
+                percent={Math.round(progress * 100)} color={heldRank.color} trackColor={colors.border}
+                style={styles.progressTrack}
+              />
               {progressLabel && <Text style={styles.progressLabel}>{progressLabel}</Text>}
 
               {components && (
@@ -456,15 +467,16 @@ export default function GreekRankScreen({ navigation }: Props) {
                     { label: 'Consistency', value: components.consistency, icon: 'calendar-outline' as const },
                     { label: 'Dedication',  value: components.dedication,  icon: 'trophy-outline' as const },
                     { label: 'Volume',      value: components.volume,      icon: 'flame-outline' as const },
-                  ].map(comp => (
+                  ].map((comp, i) => (
                     <View key={comp.label} style={styles.compRow}>
                       <View style={styles.compLeft}>
                         <Ionicons name={comp.icon} size={16} color={colors.textSecondary} />
                         <Text style={styles.compLabel}>{comp.label}</Text>
                       </View>
-                      <View style={styles.compBarTrack}>
-                        <View style={[styles.compBarFill, { width: `${comp.value}%` as any, backgroundColor: heldRank.color }]} />
-                      </View>
+                      <PercentileBar
+                        percent={comp.value} color={heldRank.color} trackColor={colors.border}
+                        delay={80 * (i + 1)} style={styles.compBarTrack}
+                      />
                       <Text style={styles.compValue}>{Math.round(comp.value)}</Text>
                     </View>
                   ))}
@@ -477,7 +489,7 @@ export default function GreekRankScreen({ navigation }: Props) {
                       {([
                         { key: 'strength' as const,  label: 'Strength',  value: performance.strength },
                         { key: 'endurance' as const, label: 'Endurance', value: performance.endurance },
-                      ]).map(leg => {
+                      ]).map((leg, i) => {
                         const counts = bestLeg === leg.key;
                         return (
                           <View
@@ -488,16 +500,10 @@ export default function GreekRankScreen({ navigation }: Props) {
                             <View style={styles.compLeft}>
                               <Text style={[styles.legLabel, counts && styles.legTextCounts]}>{leg.label}</Text>
                             </View>
-                            <View style={styles.compBarTrack}>
-                              {leg.value != null && (
-                                <View
-                                  style={[
-                                    styles.compBarFill,
-                                    { width: `${leg.value}%` as any, backgroundColor: counts ? heldRank.color : colors.textSecondary },
-                                  ]}
-                                />
-                              )}
-                            </View>
+                            <PercentileBar
+                              percent={leg.value ?? 0} color={counts ? heldRank.color : colors.textSecondary}
+                              trackColor={colors.border} delay={80 * (i + 4)} style={styles.compBarTrack}
+                            />
                             <Text style={[styles.compValue, counts && styles.legTextCounts]}>
                               {leg.value != null ? Math.round(leg.value) : '\u2013'}
                             </Text>
@@ -620,16 +626,14 @@ const createStyles = (colors: Colors) =>
       padding: spacing.md, gap: spacing.sm,
     },
     cardTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
-    progressTrack: { height: 8, backgroundColor: colors.border, borderRadius: 4, overflow: 'hidden' },
-    progressFill: { height: '100%', borderRadius: 4 },
+    progressTrack: { height: 8, borderRadius: 4 },
     progressLabel: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
     divider: { height: 1, backgroundColor: colors.border },
     componentTitle: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.6 },
     compRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     compLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, width: 110 },
     compLabel: { fontSize: typography.fontSize.sm, color: colors.textPrimary },
-    compBarTrack: { flex: 1, height: 6, backgroundColor: colors.border, borderRadius: 3, overflow: 'hidden' },
-    compBarFill: { height: '100%', borderRadius: 3 },
+    compBarTrack: { flex: 1, height: 6, borderRadius: 3 },
     compValue: { fontSize: typography.fontSize.sm, color: colors.textSecondary, width: 28, textAlign: 'right' },
     equipBtn: {
       alignSelf: 'center', flexDirection: 'row', alignItems: 'center',
