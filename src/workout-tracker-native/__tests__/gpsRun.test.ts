@@ -69,10 +69,14 @@ describe('a gap (pause, resume or a crash restore)', () => {
   });
 
   it('starts the climb anchor over, so the jump while away is not elevation gain', () => {
-    const climbing = applyFix(applyFix(emptyRun(), fix(0, { altitude: 10, altitudeAccuracy: 3 })), fix(1, { altitude: 20, altitudeAccuracy: 3 }));
-    expect(climbing.elevationGainM).toBe(10);
-    const resumed = applyFix(afterGap(climbing), fix(2, { altitude: 80, altitudeAccuracy: 3 }));
-    expect(resumed.elevationGainM).toBe(10);
+    // A real climb first: 10 fixes 44.5 m apart rising 3 m each
+    let climbing = emptyRun();
+    for (let i = 0; i < 10; i += 1) climbing = applyFix(climbing, fix(i, { altitude: 10 + i * 3, altitudeAccuracy: 3 }));
+    const gained = climbing.elevationGainM;
+    expect(gained).toBeGreaterThan(0);
+    let resumed = afterGap(climbing);
+    for (let i = 10; i < 14; i += 1) resumed = applyFix(resumed, fix(i, { altitude: 200, altitudeAccuracy: 3 }));
+    expect(resumed.elevationGainM).toBe(gained);
   });
 });
 
@@ -82,7 +86,8 @@ describe('elevation gain', () => {
 
   it('ignores wobble inside the threshold and counts a real rise', () => {
     expect(alt(100, 102, 99, 103, 101).elevationGainM).toBe(0);
-    expect(alt(100, 106).elevationGainM).toBe(6);
+    // A sustained 20 m rise over fixes 44.5 m apart, held long enough for the average to settle
+    expect(alt(...Array(5).fill(100), ...Array(15).fill(120)).elevationGainM).toBe(20);
   });
 
   it('skips an altitude the OS rates as inaccurate', () => {

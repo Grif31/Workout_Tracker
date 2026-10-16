@@ -1318,14 +1318,15 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [x] Test that best efforts never span a gap (they already skip `resumed` points; the test uses a jump fast enough to fool them but not the plausibility filter)
 - [ ] Optional: "GPS signal was lost for 2 min" on the save sheet when a gap was recorded
 
-### Phase 4: Believable elevation gain
-- [ ] Use the barometer's relative altitude on iOS where available (far steadier than GPS altitude), or a much stronger filter on GPS altitude; plus a cap on implausible gain per minute. The Mohonk hike's 2,477 ft becomes a test case
+### Phase 4: Believable elevation gain (filter built 2026-10-16; barometer later)
+- [x] **Decided (2026-10-16): a stronger GPS altitude filter now, the barometer later.** Built 2026-10-16 in `utils/gpsMetrics.ts`, not yet on a device: only altitudes rated within 10 m, a **trimmed average of the last 15** (the planned median of 5 still read a flat noisy mile as 157 m), a 10 m threshold, and climb capped at half the ground covered (`MAX_CLIMB_GRADE`), so standing still counts nothing. Tuned on synthetic 1 mile tracks with 15 m jitter and 10 m drift: flat ground 10 to 30 m instead of 120+, a 60 m climb 60 to 75 m. **Trade-off taken:** short hills undercount by about half (two 30 m hills read about 30 m); an 8 m threshold got more back but read 20 to 50 m on the flat, and invented climb was the reported bug. Hikes already saved can't be corrected: routes keep no altitudes
+- [ ] Later, with the next native build: the barometer's relative altitude on iOS (`expo-sensors`, a Motion & Fitness permission prompt; check it keeps reporting with the phone locked), falling back to the filter
 
 ### Phase 5: A save that can't lose the workout
 - [ ] **Decided: never drop a rejected workout, lifting or GPS.** The offline queue keeps it flagged "Couldn't sync" on Home, with Retry, or Delete behind a confirm, instead of deleting it after `MAX_REJECTED_ATTEMPTS`
-- [ ] A `timeoutMs` option on `apiFetch` (it has none today), used by the GPS and WorkoutLog saves, so a bad connection falls back to the queue in about 15 s
+- [ ] A `timeoutMs` option on `apiFetch` (it has none today), used by the GPS and WorkoutLog saves, so a bad connection falls back to the queue. 15 s recommended over 30: a save is small, and with the client_id below a save cut off early is retried, not lost or doubled. One constant, so easy to change
 - [ ] Idempotency: a client-generated `client_id` per workout and a nullable `Workout.client_id` column, unique per user (migration). A repeat POST returns the existing workout, so a timed-out save followed by a queue flush can't make two
-- [ ] Write GPS saves to Apple Health and Health Connect with the right activity type (running, cycling, walking, hiking; today every cardio workout goes in as running) and the distance, and attach heart rate as WorkoutLog does
+- [ ] **Decided: activity type and distance only** (no calories, no route). Write GPS saves to Apple Health and Health Connect with the right activity type (running, cycling, walking, hiking; today every cardio workout goes in as running) and the distance, with the run's real start time, and attach heart rate as WorkoutLog does, including for workouts uploaded later from the queue
 
 ### Phase 6: Pick a run back up after a kill
 - [ ] **Decided: Keep Recording.** A recovered run gets Keep Recording next to Save and Discard, continuing as a new segment through `afterGap` (after Phase 3, or it draws a line from the kill point)

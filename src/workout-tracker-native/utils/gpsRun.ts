@@ -1,6 +1,6 @@
 import polylineLib from '@mapbox/polyline';
 import { extractBestEfforts, haversineKm, type BestEffort, type TrackPoint } from './bestEfforts';
-import { addAltitude, type ClimbState } from './gpsMetrics';
+import { addAltitude, freshClimb, type ClimbState } from './gpsMetrics';
 import { toDisplayDistance, type DistanceUnit } from './units';
 import { toLocalDateStr } from './date';
 import { encodeSegments, splitAtGaps } from './routeSegments';
@@ -53,7 +53,7 @@ export type RunState = {
 };
 
 export const emptyRun = (): RunState => ({
-  coords: [], distanceKm: 0, elevationGainM: 0, climb: { anchor: null }, skipNext: false,
+  coords: [], distanceKm: 0, elevationGainM: 0, climb: freshClimb(), skipNext: false,
 });
 
 /** The parts of an expo-location fix the run reads. */
@@ -91,8 +91,10 @@ export function applyFix(state: RunState, loc: Fix): RunState {
   };
   // addAltitude moves the anchor in place, so it gets a copy. Across a gap the
   // altitude change isn't a climb anyone recorded, so the anchor starts over.
-  const climb = gap ? { anchor: null } : { ...state.climb };
-  const climbed = addAltitude(climb, next.altitude, loc.coords.altitudeAccuracy ?? null);
+  const climb = gap ? freshClimb() : { ...state.climb };
+  // Ground covered, for the climb filter's grade cap; nothing across a pause or gap
+  const movedM = prev && !resumed ? haversineKm(prev, next) * 1000 : 0;
+  const climbed = addAltitude(climb, next.altitude, loc.coords.altitudeAccuracy ?? null, movedM);
   return {
     coords: [...state.coords, next],
     distanceKm: state.distanceKm + (prev && !resumed ? haversineKm(prev, next) : 0),
@@ -103,7 +105,7 @@ export function applyFix(state: RunState, loc: Fix): RunState {
 }
 
 /** The run after a pause or resume: the next fix is across a gap and the climb anchor starts over. */
-export const afterGap = (state: RunState): RunState => ({ ...state, skipNext: true, climb: { anchor: null } });
+export const afterGap = (state: RunState): RunState => ({ ...state, skipNext: true, climb: freshClimb() });
 
 /**
  * Wall-clock elapsed seconds: the time banked before the running segment plus
