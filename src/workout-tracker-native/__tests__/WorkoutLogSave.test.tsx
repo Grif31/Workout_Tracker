@@ -195,18 +195,70 @@ describe('WorkoutLog save', () => {
     await waitFor(() => expect(getByText('Save')).toBeTruthy());
   });
 
-  it('keeps the session without a second alert when the save hits a network error', async () => {
+  it('queues a new workout, without a second alert, when the save hits a network error', async () => {
+    // NetInfo said online but the request died or timed out: rather than a Save
+    // that keeps failing, the queue takes it (TODO.md section 22, Phase 5)
     mockServer(new TypeError('Network request failed'));
     const onSubmit = jest.fn();
-    const { getByText } = render(<WorkoutLog prefill={prefill as any} onSubmit={onSubmit} onCancel={jest.fn()} />);
+    const onCancel = jest.fn();
+    const { getByText } = render(<WorkoutLog prefill={prefill as any} onSubmit={onSubmit} onCancel={onCancel} />);
 
     fireEvent.press(getByText('Save'));
-    await waitFor(() => expect(showToast).toHaveBeenCalled());
-    await waitFor(() => expect(getByText('Save')).toBeTruthy());
+    await waitFor(() => expect(onCancel).toHaveBeenCalled());
 
     expect(alertSpy.mock.calls.map(c => c[0])).toEqual(['Unchecked Sets']);
-    expect(mockClearSession).not.toHaveBeenCalled();
+    expect(mockEnqueueWorkout).toHaveBeenCalledTimes(1);
+    expect(mockClearSession).toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('queues the same client_id it tried to post, so the server can tell if that save landed', async () => {
+    mockServer(new TypeError('Network request failed'));
+    const onCancel = jest.fn();
+    const { getByText } = render(<WorkoutLog prefill={prefill as any} onSubmit={jest.fn()} onCancel={onCancel} />);
+    fireEvent.press(getByText('Save'));
+    await waitFor(() => expect(onCancel).toHaveBeenCalled());
+
+    const posted = JSON.parse(saveCalls()[0][1].body);
+    const queued = mockEnqueueWorkout.mock.calls[0][0] as any;
+    expect(posted.client_id).toMatch(/^[a-z0-9]+-[a-z0-9]{20}$/);
+    expect(queued.client_id).toBe(posted.client_id);
+  });
+
+  it('sends the same client_id on a second try after a failure', async () => {
+    mockServer({ status: 500, body: { message: 'Server hiccup' } });
+    const { getByText } = render(<WorkoutLog prefill={prefill as any} onSubmit={jest.fn()} onCancel={jest.fn()} />);
+    fireEvent.press(getByText('Save'));
+    await waitFor(() => expect(saveCalls()).toHaveLength(1));
+    await waitFor(() => expect(getByText('Save')).toBeTruthy());
+    fireEvent.press(getByText('Save'));
+    await waitFor(() => expect(saveCalls()).toHaveLength(2));
+    const [a, b] = saveCalls().map(c => JSON.parse(c[1].body).client_id);
+    expect(a).toBeTruthy();
+    expect(b).toBe(a);
+  });
+
+  it('keeps an edit open on a network error: the queue only takes new workouts', async () => {
+    mockServer(new TypeError('Network request failed'));
+    const onCancel = jest.fn();
+    const { getByText } = render(
+      <WorkoutLog prefill={prefill as any} editMode workoutId={55} onSubmit={jest.fn()} onCancel={onCancel} />,
+    );
+    fireEvent.press(getByText('Update'));
+    await waitFor(() => expect(showToast).toHaveBeenCalled());
+    expect(mockEnqueueWorkout).not.toHaveBeenCalled();
+    expect(mockClearSession).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+    // And an edit sends no client_id: it isn't a new workout
+    expect(JSON.parse(saveCalls()[0][1].body)).not.toHaveProperty('client_id');
+  });
+
+  it('gives the save a deadline, so a hung connection falls back to the queue', async () => {
+    mockServer({ status: 201, body: { id: 1 } });
+    const { getByText } = render(<WorkoutLog prefill={prefill as any} onSubmit={jest.fn()} onCancel={jest.fn()} />);
+    fireEvent.press(getByText('Save'));
+    await waitFor(() => expect(saveCalls()).toHaveLength(1));
+    expect(saveCalls()[0][1].signal).toBeDefined();
   });
 
   it('queues a new workout offline instead of posting it', async () => {

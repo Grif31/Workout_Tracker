@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { USER_KEY } from '../constants/storageKeys';
-import { apiFetch } from './api';
+import { SAVE_TIMEOUT_MS, apiFetch } from './api';
 import { syncWorkoutToHealthKit } from './healthKit';
 import { syncWorkoutToHealthConnect } from './healthConnect';
 import { showToast } from './toast';
@@ -160,6 +160,8 @@ export async function flushQueue(): Promise<FlushResult> {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(item.payload),
+          // A hung upload must not hold the rest of the queue
+          timeoutMs: SAVE_TIMEOUT_MS,
         });
         if (res.ok) {
           synced++;

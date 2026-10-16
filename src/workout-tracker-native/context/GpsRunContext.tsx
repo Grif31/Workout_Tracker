@@ -13,6 +13,7 @@ import { endRunActivity, startOrUpdateRunActivity } from '../utils/liveActivity'
 import { gpsLiveActivityKey, gpsLiveActivityProps } from '../utils/gpsLiveActivityProps';
 import { GPS_DISTANCE_UNIT_KEY, type DistanceUnit } from '../utils/units';
 import { LIVE_WORKOUT_NOTIF_KEY } from '../constants/storageKeys';
+import { newClientId } from '../utils/clientId';
 import {
   ACTIVITIES, afterGap, applyFix, emptyRun, runElapsedSeconds, type Activity, type Coord, type RunState,
 } from '../utils/gpsRun';
@@ -31,6 +32,8 @@ export type RunCheckpoint = {
   elevationGainM?: number;
   elapsedSec?: number;
   savedAt: number;
+  /** The run's id for the server's duplicate check; absent in checkpoints from older builds */
+  clientId?: string;
 };
 
 // Wall-clock timer: intervals get throttled or suspended and counting ticks
@@ -63,6 +66,12 @@ type GpsRunCtx = {
   recovered: boolean;
   clearCheckpoint: () => void;
   checkpointKey: string;
+  /**
+   * The run's id for the server's duplicate check (Workout.client_id), made when
+   * it starts and kept in the checkpoint: a run saved after a kill is still the
+   * same workout if the save before the kill did land
+   */
+  clientId: string | null;
   /** The map screen is showing, so the mini bar stays hidden, as with an open workout */
   screenOpen: boolean;
   setScreenOpen: (open: boolean) => void;
@@ -82,6 +91,7 @@ const GpsRunContext = createContext<GpsRunCtx>({
   recovered: false,
   clearCheckpoint: () => {},
   checkpointKey: '',
+  clientId: null,
   screenOpen: false,
   setScreenOpen: () => {},
 });
@@ -105,6 +115,10 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
   const [timing, setTimingState] = useState<RunTiming>(NOT_RUNNING);
   const [screenOpen, setScreenOpen] = useState(false);
   const [recovered, setRecovered] = useState(false);
+  const [clientId, setClientIdState] = useState<string | null>(null);
+  // Read by the checkpoint writer, which runs between renders
+  const clientIdRef = useRef<string | null>(null);
+  const setClientId = useCallback((id: string | null) => { clientIdRef.current = id; setClientIdState(id); }, []);
 
   // Read by callbacks that outlive the render that created them: location
   // fixes, the checkpoint writer, and the cleanup when the account changes.
@@ -134,6 +148,7 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
       elevationGainM: r.elevationGainM,
       elapsedSec: elapsedNow(),
       savedAt: Date.now(),
+      ...(clientIdRef.current ? { clientId: clientIdRef.current } : {}),
     })).catch(() => {});
   }, []);
 
@@ -230,6 +245,7 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return 'denied' as const;
     setRun(emptyRun());
+    setClientId(newClientId());
     await Promise.all([beginLocationUpdates(), readActivityPrefs()]);
     setTiming({ base: 0, segmentStart: Date.now() });
     setTrackingState('running');
@@ -266,9 +282,10 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
     setTiming(NOT_RUNNING);
     setTrackingState('idle');
     setRecovered(false);
+    setClientId(null);
     checkpointedLenRef.current = 0;
     clearCheckpoint();
-  }, [endLocationUpdates, setTiming, clearCheckpoint]);
+  }, [endLocationUpdates, setTiming, clearCheckpoint, setClientId]);
 
   const applyCheckpoint = useCallback((cp: RunCheckpoint) => {
     // Movement between the crash and the restore must not count
@@ -280,7 +297,9 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
     }));
     setTiming({ base: cp.elapsedSec ?? 0, segmentStart: null });
     setTrackingState('paused');
-  }, [setTiming]);
+    // An older build's checkpoint has none: from here on it gets one
+    setClientId(cp.clientId ?? newClientId());
+  }, [setTiming, setClientId]);
 
   // A killed app took the GPS with it, but the route so far is checkpointed.
   // Bringing it back here, rather than when the map screen next opens, is what
@@ -333,8 +352,8 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(() => ({
     activity, setActivity, trackingState, run, timing,
     start, pause, resume, stop, clearRun, clearCheckpoint, checkpointKey,
-    screenOpen, setScreenOpen, recovered,
-  }), [activity, trackingState, run, timing, start, pause, resume, stop, clearRun, clearCheckpoint, checkpointKey, screenOpen, recovered]);
+    screenOpen, setScreenOpen, recovered, clientId,
+  }), [activity, trackingState, run, timing, start, pause, resume, stop, clearRun, clearCheckpoint, checkpointKey, screenOpen, recovered, clientId]);
 
   return <GpsRunContext.Provider value={value}>{children}</GpsRunContext.Provider>;
 }

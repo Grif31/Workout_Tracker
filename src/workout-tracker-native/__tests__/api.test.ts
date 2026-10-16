@@ -189,3 +189,57 @@ describe('apiFetch', () => {
     expect(isNetworkError('NetworkError')).toBe(false);
   });
 });
+
+describe('apiFetch with a deadline', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    setTokens('a1', 'r1');
+  });
+  afterAll(() => clearTokens());
+
+  // A server that never answers, but notices being given up on
+  const hangingFetch = () => jest.fn((_url: string, init: any) => new Promise((_res, reject) => {
+    init?.signal?.addEventListener('abort', () => reject(Object.assign(new Error('Aborted'), { name: 'AbortError' })));
+  }));
+
+  it('gives up at the deadline and fails the way a dropped connection does', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+    try {
+      (global.fetch as jest.Mock) = hangingFetch();
+      let settled = false;
+      const outcome = apiFetch('/api/workouts', { method: 'POST', timeoutMs: 15_000 })
+        .then(() => 'answered', e => e)
+        .finally(() => { settled = true; });
+
+      jest.advanceTimersByTime(14_999);
+      await Promise.resolve();
+      expect(settled).toBe(false);
+
+      jest.advanceTimersByTime(1);
+      const err = await outcome;
+      expect(isNetworkError(err)).toBe(true);
+      expect(showToast).toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('has no deadline unless asked for one', async () => {
+    const fetchMock = queueFetch({ status: 200 });
+    await apiFetch('/api/workouts');
+    expect(fetchMock.mock.calls[0][1].signal).toBeUndefined();
+  });
+
+  it('clears its timer once the answer arrives', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+    try {
+      queueFetch({ status: 201, body: { id: 1 } });
+      const r = await apiFetch('/api/workouts', { method: 'POST', timeoutMs: 15_000 });
+      expect(r.status).toBe(201);
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+

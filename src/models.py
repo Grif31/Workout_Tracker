@@ -69,10 +69,16 @@ class Workout(db.Model):
     # off -- never defaulted to 0, since 0 bpm would read as a real measurement.
     avg_heart_rate = db.Column(db.Integer)
     max_heart_rate = db.Column(db.Integer)
+    # The app's own id for a workout, sent with every save. A save that timed out
+    # may still have landed, and the offline queue then sends it again: the same
+    # client_id returns the workout already saved instead of a second copy.
+    # NULL for workouts from builds before it; NULLs never collide.
+    client_id = db.Column(db.String(64), nullable=True)
     exercises = db.relationship('Exercise', backref='workouts', cascade="all, delete-orphan", lazy=True)
 
     __table_args__ = (
         db.Index('ix_workouts_user_date', 'user_id', 'date'),
+        db.UniqueConstraint('user_id', 'client_id', name='uq_workouts_user_client_id'),
     )
 
     def to_dict(self, include_exercises=False):

@@ -106,12 +106,35 @@ async function doRefresh(): Promise<RefreshOutcome> {
   }
 }
 
+/**
+ * How long a workout save waits before giving up and going to the offline
+ * queue. A save is small, so on a working connection it lands in a second or
+ * two; past this the connection isn't working. Giving up early is safe: the
+ * workout's client_id makes the server ignore it if it did land.
+ */
+export const SAVE_TIMEOUT_MS = 15_000;
+
+// fetch with an optional deadline. A request past it is aborted and fails the
+// same way a dropped connection does.
+async function fetchWithin(url: string, init: RequestInit, timeoutMs?: number): Promise<Response> {
+  if (!timeoutMs) return fetch(url, init);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Drop-in replacement for fetch() that handles auth transparently:
 //   • Injects the Authorization header automatically
 //   • On 401: silently refreshes the access token and retries once
 //   • If refresh fails: wipes tokens and fires the unauthenticated callback
 //   • On network failure: shows a toast and throws (callers should catch)
-export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+//   • `timeoutMs`: gives up after that long, failing as a network failure
+export async function apiFetch(path: string, options: RequestInit & { timeoutMs?: number } = {}): Promise<Response> {
+  const { timeoutMs, ...init } = options;
   const headers = new Headers(init.headers as HeadersInit | undefined);
   if (_access) headers.set('Authorization', `Bearer ${_access}`);
   // The server runs on UTC; this lets "this week" stats and streaks roll over
@@ -120,7 +143,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 
   let res: Response;
   try {
-    res = await fetch(`${BASE}${path}`, { ...init, headers });
+    res = await fetchWithin(`${BASE}${path}`, { ...init, headers }, timeoutMs);
   } catch {
     // Network unreachable — no HTTP response at all.
     showToast(NETWORK_ERROR_MSG);
@@ -133,7 +156,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
       // Retry the original request with the refreshed token.
       headers.set('Authorization', `Bearer ${outcome.token}`);
       try {
-        res = await fetch(`${BASE}${path}`, { ...init, headers });
+        res = await fetchWithin(`${BASE}${path}`, { ...init, headers }, timeoutMs);
       } catch {
         showToast(NETWORK_ERROR_MSG);
         throw networkError();

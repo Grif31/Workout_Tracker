@@ -624,6 +624,72 @@ describe('minimizing a GPS run', () => {
       expect(lines(r)[1].props.coordinates).toHaveLength(2);
     });
   });
+
+  describe("a run's client_id", () => {
+    const { enqueueWorkout } = require('../utils/offlineQueue');
+    const postedBodies = () => (global.fetch as jest.Mock).mock.calls
+      .filter(([u, init]) => String(u).endsWith('/api/workouts') && init?.method === 'POST')
+      .map(([, init]) => JSON.parse(init.body));
+    const stopAndConfirm = async (r: ReturnType<typeof render>) => {
+      await act(async () => { fireEvent.press(r.getByText('Stop')); });
+      await act(async () => {
+        alertSpy.mock.calls.filter(c => c[0] === 'End this activity?').at(-1)![2].find((b: any) => b.text === 'End Activity').onPress();
+      });
+    };
+
+    it('is sent with the save, and the same id goes to the queue when the save fails', async () => {
+      const r = await startedRun([0, 1, 2]);
+      (global.fetch as jest.Mock).mockImplementation((url: string, init: any = {}) =>
+        String(url).endsWith('/api/workouts') && init.method === 'POST'
+          ? Promise.reject(new TypeError('Network request failed'))
+          : Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) }));
+      await stopAndConfirm(r);
+      await act(async () => { fireEvent.press(r.getByText('Save')); });
+      await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Save Failed', expect.any(String), expect.any(Array)));
+
+      const sent = postedBodies()[0];
+      expect(sent.client_id).toMatch(/^[a-z0-9]+-[a-z0-9]{20}$/);
+      const offline = alertSpy.mock.calls.find(c => c[0] === 'Save Failed')![2].find((b: any) => b.text === 'Save Offline');
+      await act(async () => { await offline.onPress(); });
+      expect(enqueueWorkout).toHaveBeenCalledWith(expect.objectContaining({ client_id: sent.client_id }));
+    });
+
+    it('is new for each run', async () => {
+      const r = await startedRun([0, 1, 2]);
+      await stopAndConfirm(r);
+      await act(async () => { fireEvent.press(r.getByText('Save')); });
+      await waitFor(() => expect(nav.replace).toHaveBeenCalled());
+      r.rerender(<Harness show={false} />);
+      r.rerender(<Harness show />);
+      await settle();
+      await act(async () => { fireEvent.press(r.getByText('Start')); });
+      await waitFor(() => expect(mockGpsListener).not.toBeNull());
+      await feed(point(10), point(11));
+      await stopAndConfirm(r);
+      await act(async () => { fireEvent.press(r.getByText('Save')); });
+      await waitFor(() => expect(postedBodies()).toHaveLength(2));
+      const [a, b] = postedBodies().map(x => x.client_id);
+      expect(a).toBeTruthy();
+      expect(b).toBeTruthy();
+      expect(b).not.toBe(a);
+    });
+
+    it('survives a kill in the checkpoint, so a save before the kill and one after are the same workout', async () => {
+      const r = await startedRun([0, 1, 2]);
+      await act(async () => { fireEvent.press(r.getByText('Pause')); });
+      const cp = JSON.parse((await AsyncStorage.getItem('gps_run_checkpoint_1'))!);
+      expect(cp.clientId).toMatch(/^[a-z0-9]+-[a-z0-9]{20}$/);
+      r.unmount();
+
+      // The relaunch: a new provider brings the run back from the checkpoint
+      const again = render(<Harness show />);
+      await settle();
+      await waitFor(() => expect(again.getByText('Save Activity?')).toBeTruthy());
+      await act(async () => { fireEvent.press(again.getByText('Save')); });
+      await waitFor(() => expect(postedBodies()).toHaveLength(1));
+      expect(postedBodies()[0].client_id).toBe(cp.clientId);
+    });
+  });
 });
 
 

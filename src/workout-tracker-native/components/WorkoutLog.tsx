@@ -22,7 +22,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LIVE_WORKOUT_NOTIF_KEY, REST_ALERTS_KEY } from '../constants/storageKeys';
 import { useAuth } from '../context/AuthContext';
 import { usePurchase } from '../context/PurchaseContext';
-import { apiFetch, isNetworkError } from '../utils/api';
+import { SAVE_TIMEOUT_MS, apiFetch, isNetworkError } from '../utils/api';
+import { newClientId } from '../utils/clientId';
 import { toLocalDateStr } from '../utils/date';
 import { useTheme } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
@@ -156,6 +157,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const weightUnit = user?.weight_unit === 'kg' ? 'kg' : 'lbs';
   const insets = useSafeAreaInsets();
   const { session, saveSession, clearSession, setWorkoutOpen } = useWorkoutSession();
+  // This workout's id for the server's duplicate check (Workout.client_id)
+  const [clientId] = useState(newClientId);
 
   const [workoutName, setWorkoutName] = useState('');
   const [notes, setNotes] = useState('');
@@ -1397,6 +1400,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   }));
 
   const buildPayload = (exercisesToSave: ExerciseEntry[]) => ({
+    // One id for every attempt at saving this workout, so a save that timed
+    // out but landed isn't saved again by the retry or the offline queue
+    ...(editMode ? {} : { client_id: clientId }),
     workoutName,
     notes,
     date: toLocalDateStr(selectedDate),
@@ -1467,22 +1473,28 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     const payload = buildPayload(exercisesToSave);
     const isEditing = Boolean(editMode && workoutId);
 
+    // The queue uploads it later. The client_id in the payload makes that safe
+    // even when the save that just failed did reach the server.
+    const saveOffline = async () => {
+      await enqueueWorkout(payload);
+      cancelLiveWorkoutNotification();
+      endLiveActivity();
+      clearSession();
+      AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
+      AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
+      showToast(
+        "It's stored on this phone and will upload automatically when you're back online. It won't show in your history until then.",
+        { title: 'Workout saved offline', icon: 'cloud-offline-outline', tone: 'warning', durationMs: 6500 },
+      );
+      onCancel?.();
+    };
+
     // Offline path: only applies to new workouts, not edits
     if (!isEditing) {
       const net = await NetInfo.fetch();
       const online = net.isConnected && net.isInternetReachable !== false;
       if (!online) {
-        await enqueueWorkout(payload);
-        cancelLiveWorkoutNotification();
-        endLiveActivity();
-        clearSession();
-        AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
-        AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
-        showToast(
-          "It's stored on this phone and will upload automatically when you're back online. It won't show in your history until then.",
-          { title: 'Workout saved offline', icon: 'cloud-offline-outline', tone: 'warning', durationMs: 6500 },
-        );
-        onCancel?.();
+        await saveOffline();
         return;
       }
     }
@@ -1494,6 +1506,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           method: isEditing ? 'PATCH' : 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
+          timeoutMs: SAVE_TIMEOUT_MS,
         }
       );
       const data = await res.json();
@@ -1535,7 +1548,16 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           isBestReps: data.is_best_reps ?? false,
         }
       );
-    } catch (err) { if (!isNetworkError(err)) Alert.alert("Couldn't Save Workout", 'Try again in a moment.'); }
+    } catch (err) {
+      // A dropped or timed-out connection while NetInfo still said online: a new
+      // workout goes to the queue rather than waiting on a Save that keeps failing.
+      // An edit stays put (the queue only takes new workouts), with apiFetch's toast.
+      if (isNetworkError(err)) {
+        if (!isEditing) await saveOffline();
+      } else {
+        Alert.alert("Couldn't Save Workout", 'Try again in a moment.');
+      }
+    }
   };
 
   const submitWorkout = () => {

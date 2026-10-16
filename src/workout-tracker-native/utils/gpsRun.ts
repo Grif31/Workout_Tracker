@@ -127,6 +127,8 @@ export function buildGpsRunBody(input: {
   coords: Coord[];
   exerciseTemplateId: number | null;
   now: Date;
+  /** The run's id for the server's duplicate check (Workout.client_id) */
+  clientId?: string | null;
 }) {
   const durationMin = input.elapsedSec / 60;
   const displayDistance = toDisplayDistance(input.distanceKm, input.distanceUnit);
@@ -146,6 +148,7 @@ export function buildGpsRunBody(input: {
   const bestEfforts: BestEffort[] = extractBestEfforts(input.coords);
 
   return {
+    ...(input.clientId ? { client_id: input.clientId } : {}),
     workoutName: input.workoutName.trim() || input.activity,
     date: toLocalDateStr(input.now),
     duration: Math.round(durationMin),

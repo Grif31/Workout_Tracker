@@ -162,7 +162,7 @@ _FIELDS = [
     'weight_unit', 'waist', 'chest', 'days', 'day_number', 'template_id',
     'exercise_template_id', 'muscle_group', 'equipment', 'token', 'platform',
     'current_password', 'new_password', 'otp', 'rpe', 'set_type', 'distance',
-    'cardio_duration', 'exercise_type', 'route_polyline', 'route_segments', 'start_time', 'end_time',
+    'cardio_duration', 'exercise_type', 'route_polyline', 'route_segments', 'client_id', 'start_time', 'end_time',
 ]
 
 

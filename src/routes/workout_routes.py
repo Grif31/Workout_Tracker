@@ -3,6 +3,7 @@ from datetime import datetime
 from io import StringIO
 from flask import Blueprint, request, jsonify, current_app, g, make_response
 from models import db, Workout, Set, Exercise, PersonalRecord, PREvent, ExerciseTemplate, User, CardioBestEffort
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 from flask_jwt_extended import  jwt_required, get_jwt_identity
@@ -615,6 +616,25 @@ def _allowed_template_ids(user_id, exercises):
     return set(visible_exercise_ids(user_id, ids))
 
 
+def _already_saved(workout):
+    """The answer to a repeated save: the same keys as a new one, so the app's
+    summary reads it unchanged, but no PRs: they were announced the first time."""
+    sets = [s for ex in workout.exercises for s in ex.sets]
+    return {
+        'id': workout.id,
+        'message': 'Already saved',
+        'already_saved': True,
+        'new_prs': [],
+        'total_volume': round(workout.volume or 0.0),
+        'total_reps': sum(s.reps or 0 for s in sets),
+        'total_sets': len(sets),
+        'muscles': [],
+        'is_first_workout': False,
+        'is_best_volume': False,
+        'is_best_reps': False,
+    }
+
+
 @workout_bp.post('/api/workouts')
 @jwt_required()
 @validate_body(_workout_schema)
@@ -631,6 +651,14 @@ def add_workout():
         if not name:
             return jsonify({'message': 'Name required'}),400
 
+        # A save the app already made (it timed out, or the offline queue is
+        # sending it again): return that workout, never a second copy
+        client_id = data.get('client_id')
+        if client_id:
+            existing = Workout.query.filter_by(user_id=current_user_id, client_id=client_id).first()
+            if existing:
+                return jsonify(_already_saved(existing)), 200
+
         workout_date = datetime.now()
         if date_str:
             try:
@@ -641,6 +669,7 @@ def add_workout():
         new_workout = Workout(
             user_id=current_user_id, name=name, notes=notes, date=workout_date, duration=duration,
             avg_heart_rate=data.get('avg_heart_rate'), max_heart_rate=data.get('max_heart_rate'),
+            client_id=client_id,
         )
         db.session.add(new_workout)
         db.session.flush()
@@ -748,6 +777,18 @@ def add_workout():
             'is_best_volume': is_best_volume,
             'is_best_reps': is_best_reps,
         }), 201
+    except IntegrityError:
+        # Two saves with the same client_id at once: the first won the unique
+        # constraint, and this one returns its workout
+        db.session.rollback()
+        existing = (
+            Workout.query.filter_by(user_id=get_jwt_identity(), client_id=g.validated.get('client_id')).first()
+            if g.validated.get('client_id') else None
+        )
+        if existing:
+            return jsonify(_already_saved(existing)), 200
+        current_app.logger.exception('POST /api/workouts failed')
+        return jsonify({'message': 'Internal server error'}), 500
     except Exception:
         db.session.rollback()
         current_app.logger.exception('POST /api/workouts failed')

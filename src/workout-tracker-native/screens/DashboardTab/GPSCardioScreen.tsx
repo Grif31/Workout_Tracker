@@ -17,7 +17,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
 import { useAuth } from '../../context/AuthContext';
-import { apiFetch } from '../../utils/api';
+import { SAVE_TIMEOUT_MS, apiFetch } from '../../utils/api';
 import { enqueueWorkout } from '../../utils/offlineQueue';
 import { getExerciseCache, setExerciseCache } from '../../utils/exerciseCache';
 import { showToast } from '../../utils/toast';
@@ -100,7 +100,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
   // keeps going when this screen is left. This screen only shows and controls it.
   const {
     activity, setActivity, trackingState, run, timing,
-    start, pause, resume, stop, clearRun, setScreenOpen, recovered,
+    start, pause, resume, stop, clearRun, setScreenOpen, recovered, clientId,
   } = useGpsRun();
   // The mini bar stands in for this screen when it is left, so it hides while this shows
   useEffect(() => {
@@ -259,7 +259,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
     const exerciseTemplateId = await resolveCardioTemplateId(activity, user?.id);
     const body = buildGpsRunBody({
       activity, workoutName, elapsedSec, distanceKm, distanceUnit, elevationGainM, coords,
-      exerciseTemplateId, now: new Date(),
+      exerciseTemplateId, now: new Date(), clientId,
     });
 
     // A tracked run must never depend on one POST succeeding — queue it for
@@ -288,6 +288,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        timeoutMs: SAVE_TIMEOUT_MS,
       });
 
       if (!res.ok) throw new Error('Save failed');

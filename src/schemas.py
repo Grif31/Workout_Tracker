@@ -104,6 +104,8 @@ class WorkoutSchema(_Base):
     # HealthKit will hand back stray samples from a loose strap.
     avg_heart_rate = fields.Int(load_default=None, allow_none=True, validate=validate.Range(min=20, max=260))
     max_heart_rate = fields.Int(load_default=None, allow_none=True, validate=validate.Range(min=20, max=260))
+    # The app's id for this workout, so a repeated save returns the first one
+    client_id = fields.Str(load_default=None, allow_none=True, validate=validate.Length(min=8, max=64))
 
 # No load_default — missing fields excluded to preserve 'if field in data' PATCH semantics.
 class UpdateWorkoutSchema(_Base):
