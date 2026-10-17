@@ -29,6 +29,26 @@ def test_holds_report_time_not_reps(client, auth_token):
     assert [s['cardio_duration'] for s in data['history'][0]['sets']] == [0.5, 1.5, 1.0]
 
 
+def test_hold_that_used_to_be_logged_as_reps_charts_only_the_holds(client, auth_token):
+    # Library Plank was 'strength' until migration z4a5b6c7d8e9: the older row
+    # has reps and no hold time, and must not decide the layout or join the chart
+    from models import db, ExerciseTemplate
+    tmpl = ExerciseTemplate(name='Plank', equipment='Bodyweight', exercise_type='duration')
+    db.session.add(tmpl)
+    db.session.commit()
+    _log(client, auth_token, 5, {'name': 'Plank', 'exercise_template_id': tmpl.id, 'exercise_type': 'strength',
+                                 'sets': [{'reps': 1, 'weight': 0}]})
+    _log(client, auth_token, 1, {'name': 'Plank', 'exercise_template_id': tmpl.id, 'exercise_type': 'duration',
+                                 'sets': [{'cardio_duration': 1.0}]})
+
+    data = client.get(f'/api/stats/exercise?name=Plank&exercise_template_id={tmpl.id}',
+                      headers=_h(auth_token)).get_json()
+
+    assert data['exercise_type'] == 'duration'
+    assert data['totals'] == {'total_workouts': 1, 'total_sets': 1, 'total_duration': 1.0}
+    assert data['personal_bests']['longest_hold'] == 1.0
+
+
 def test_average_pace_is_total_time_over_total_distance(client, auth_token):
     # 10 km in 50 min, then 1 km in 4 min plus a 10 min walk logged without distance
     _log(client, auth_token, 2, {'name': 'Run X', 'exercise_type': 'cardio', 'sets': [

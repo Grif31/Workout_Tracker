@@ -21,16 +21,22 @@ def derive_bodyweight_load_factor(name, equipment):
     if equipment not in BODYWEIGHT_VOLUME_EQUIPMENT:
         return None
     n = (name or '').lower()
-    if any(k in n for k in ('clamshell', 'fire hydrant', 'donkey kick', 'bird dog')):
+    if any(k in n for k in ('clamshell', 'fire hydrant', 'donkey kick', 'bird dog',
+                            'dead bug', 'tibialis')):
         return 0.0
+    # Feet on the floor carry about half, so this must beat the 'dip' match below
+    if 'bench dip' in n:
+        return 0.50
     if any(k in n for k in ('pull up', 'pull-up', 'pullup', 'chin up', 'chin-up', 'chinup',
-                            'dip', 'muscle up', 'pistol', 'dead hang', 'calf raise')):
+                            'dip', 'muscle up', 'pistol', 'dead hang', 'calf raise', 'handstand')):
         return 1.0
-    if any(k in n for k in ('squat', 'lunge', 'split squat', 'step up', 'step-up', 'nordic')):
+    if any(k in n for k in ('squat', 'lunge', 'split squat', 'step up', 'step-up', 'nordic',
+                            'box jump', 'glute ham')):
         return 0.85
     if any(k in n for k in ('crunch', 'sit up', 'sit-up', 'situp', 'leg raise', 'knee raise',
                             'hyperextension', 'back extension', 'glute bridge', 'bridge',
-                            'flutter', 'russian twist', 'superman')):
+                            'flutter', 'russian twist', 'superman', 'hip thrust', 'frog pump',
+                            'toes to bar')):
         return 0.35
     if any(k in n for k in ('push up', 'push-up', 'pushup', 'row', 'rollout', 'ab wheel',
                             'pike', 'plank')):

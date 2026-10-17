@@ -7,4 +7,6 @@ export const equipmentTypes = [
   'Machine',
   'Bodyweight',
   'Weighted',
+  'Kettlebell',
+  'Other',
 ];

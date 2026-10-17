@@ -68,6 +68,19 @@ EXERCISES = [
     ('Chest Fly',               'Chest, Shoulders',          'Cable'),
     ('Chest Fly',               'Chest, Shoulders',          'Machine'),
     ('Cable Crossover',         'Chest, Shoulders',          'Cable'),
+    ('Pec Deck',                'Chest, Shoulders',          'Machine'),
+    ('Chest Press',             'Chest, Triceps, Shoulders', 'Machine'),
+    ('Incline Chest Press',     'Chest, Triceps, Shoulders', 'Machine'),
+    ('Incline Chest Fly',       'Chest, Shoulders',          'Dumbbell'),
+    ('Incline Chest Fly',       'Chest, Shoulders',          'Cable'),
+    ('Low to High Cable Fly',   'Chest, Shoulders',          'Cable'),
+    ('Floor Press',             'Chest, Triceps',            'Barbell'),
+    ('Floor Press',             'Chest, Triceps',            'Dumbbell'),
+    ('Incline Push Up',         'Chest, Triceps, Shoulders', 'Bodyweight'),
+    ('Decline Push Up',         'Chest, Triceps, Shoulders', 'Bodyweight'),
+    ('Diamond Push Up',         'Triceps, Chest',            'Bodyweight'),
+    ('Push Up',                 'Chest, Triceps, Shoulders', 'Weighted'),
+    ('Pullover',                'Chest, Back',               'Dumbbell'),
 
     # Back
     ('Pull Up',                 'Back, Biceps',              'Bodyweight'),
@@ -83,6 +96,26 @@ EXERCISES = [
     ('Deadlift',                'Back, Hamstrings, Quads',   'Smith Machine'),
     ('T-Bar Row',               'Back, Biceps',              'Barbell'),
     ('Single Arm Row',          'Back, Biceps',              'Dumbbell'),
+    ('Single Arm Row',          'Back, Biceps',              'Cable'),
+    ('Chin Up',                 'Back, Biceps',              'Weighted'),
+    ('Neutral Grip Pull Up',    'Back, Biceps',              'Bodyweight'),
+    ('Inverted Row',            'Back, Biceps',              'Bodyweight'),
+    ('Chest Supported Row',     'Back, Biceps',              'Dumbbell'),
+    ('Chest Supported Row',     'Back, Biceps',              'Machine'),
+    ('Pendlay Row',             'Back, Biceps',              'Barbell'),
+    ('Meadows Row',             'Back, Biceps',              'Barbell'),
+    ('Seal Row',                'Back, Biceps',              'Barbell'),
+    ('Straight Arm Pulldown',   'Back',                      'Cable'),
+    ('Single Arm Lat Pulldown', 'Back, Biceps',              'Cable'),
+    ('Trap Bar Deadlift',       'Quads, Glutes, Back, Hamstrings', 'Other'),
+    ('Rack Pull',               'Back, Glutes, Hamstrings',  'Barbell'),
+    ('Deficit Deadlift',        'Back, Hamstrings, Glutes, Quads', 'Barbell'),
+    ('Back Extension',          'Back, Glutes, Hamstrings',  'Bodyweight'),
+    ('Back Extension',          'Back, Glutes, Hamstrings',  'Weighted'),
+    ('Shrug',                   'Back',                      'Barbell'),
+    ('Shrug',                   'Back',                      'Dumbbell'),
+    ('Shrug',                   'Back',                      'Smith Machine'),
+    ('Shrug',                   'Back',                      'Machine'),
 
     # Shoulders
     ('Overhead Press',          'Shoulders, Triceps',        'Barbell'),
@@ -100,6 +133,16 @@ EXERCISES = [
     ('Rear Delt Fly',           'Shoulders, Back',           'Dumbbell'),
     ('Rear Delt Fly',           'Shoulders, Back',           'Cable'),
     ('Rear Delt Fly',           'Shoulders, Back',           'Machine'),
+    ('Overhead Press',          'Shoulders, Triceps',        'Kettlebell'),
+    ('Upright Row',             'Shoulders, Back',           'Barbell'),
+    ('Upright Row',             'Shoulders, Back',           'Dumbbell'),
+    ('Upright Row',             'Shoulders, Back',           'Cable'),
+    ('Push Press',              'Shoulders, Triceps, Quads', 'Barbell'),
+    ('Z Press',                 'Shoulders, Triceps',        'Barbell'),
+    ('Landmine Press',          'Shoulders, Chest, Triceps', 'Barbell'),
+    ('Pike Push Up',            'Shoulders, Triceps',        'Bodyweight'),
+    ('Handstand Push Up',       'Shoulders, Triceps',        'Bodyweight'),
+    ('Y Raise',                 'Shoulders, Back',           'Dumbbell'),
 
     # Biceps
     ('Bicep Curl',              'Biceps, Forearms',          'Barbell'),
@@ -115,6 +158,12 @@ EXERCISES = [
     ('Preacher Curl',           'Biceps',                    'Machine'),
     ('Concentration Curl',      'Biceps',                    'Dumbbell'),
     ('Incline Curl',            'Biceps',                    'Dumbbell'),
+    ('Spider Curl',             'Biceps',                    'Dumbbell'),
+    ('Spider Curl',             'Biceps',                    'EZ Bar'),
+    ('Bayesian Curl',           'Biceps',                    'Cable'),
+    ('Drag Curl',               'Biceps',                    'Barbell'),
+    ('Cross Body Hammer Curl',  'Biceps, Forearms',          'Dumbbell'),
+    ('Zottman Curl',            'Biceps, Forearms',          'Dumbbell'),
 
     # Forearms
     ('Wrist Curl',              'Forearms',                  'Barbell'),
@@ -132,6 +181,7 @@ EXERCISES = [
     ('Dead Hang',               'Forearms, Back',            'Bodyweight'),
     ('Wrist Roller',            'Forearms',                  'Other'),
     ('Plate Pinch',             'Forearms',                  'Other'),
+    ('Behind the Back Wrist Curl', 'Forearms',               'Barbell'),
 
     # Triceps
     ('Tricep Pushdown',         'Triceps',                   'Cable'),
@@ -149,6 +199,9 @@ EXERCISES = [
     ('Dips',                    'Triceps, Chest, Shoulders', 'Weighted'),
     ('Tricep Kickback',         'Triceps',                   'Dumbbell'),
     ('Tricep Kickback',         'Triceps',                   'Cable'),
+    ('JM Press',                'Triceps, Chest',            'Barbell'),
+    ('Tate Press',              'Triceps',                   'Dumbbell'),
+    ('Bench Dip',               'Triceps, Chest',            'Bodyweight'),
 
     # Quads
     ('Squat',                   'Quads, Hamstrings, Glutes', 'Barbell'),
@@ -168,6 +221,25 @@ EXERCISES = [
     ('Bulgarian Split Squat',   'Quads, Hamstrings, Glutes', 'Dumbbell'),
     ('Bulgarian Split Squat',   'Quads, Hamstrings, Glutes', 'Smith Machine'),
     ('Bulgarian Split Squat',   'Quads, Hamstrings, Glutes', 'Bodyweight'),
+    ('Front Squat',             'Quads, Glutes, Core',       'Barbell'),
+    ('Front Squat',             'Quads, Glutes, Core',       'Smith Machine'),
+    ('Goblet Squat',            'Quads, Glutes',             'Dumbbell'),
+    ('Goblet Squat',            'Quads, Glutes',             'Kettlebell'),
+    ('Box Squat',               'Quads, Glutes, Hamstrings', 'Barbell'),
+    ('Pause Squat',             'Quads, Glutes, Hamstrings', 'Barbell'),
+    ('Pendulum Squat',          'Quads, Glutes',             'Machine'),
+    ('Belt Squat',              'Quads, Glutes',             'Machine'),
+    ('Single Leg Press',        'Quads, Glutes',             'Machine'),
+    ('Walking Lunge',           'Quads, Glutes, Hamstrings', 'Dumbbell'),
+    ('Walking Lunge',           'Quads, Glutes, Hamstrings', 'Bodyweight'),
+    ('Reverse Lunge',           'Quads, Glutes, Hamstrings', 'Dumbbell'),
+    ('Reverse Lunge',           'Quads, Glutes, Hamstrings', 'Barbell'),
+    ('Lateral Lunge',           'Quads, Glutes',             'Dumbbell'),
+    ('Split Squat',             'Quads, Glutes',             'Dumbbell'),
+    ('Pistol Squat',            'Quads, Glutes',             'Bodyweight'),
+    ('Jump Squat',              'Quads, Glutes, Calves',     'Bodyweight'),
+    ('Box Jump',                'Quads, Glutes, Calves',     'Bodyweight'),
+    ('Wall Sit',                'Quads, Glutes',             'Bodyweight'),
 
     # Hamstrings
     ('Romanian Deadlift',       'Hamstrings, Glutes, Back',  'Barbell'),
@@ -177,6 +249,14 @@ EXERCISES = [
     ('Sumo Deadlift',           'Hamstrings, Glutes, Back, Quads', 'Barbell'),
     ('Sumo Deadlift',           'Hamstrings, Glutes, Back, Quads', 'Dumbbell'),
     ('Good Morning',            'Hamstrings, Glutes, Back',  'Barbell'),
+    ('Seated Leg Curl',         'Hamstrings',                'Machine'),
+    ('Lying Leg Curl',          'Hamstrings',                'Machine'),
+    ('Leg Curl',                'Hamstrings',                'Cable'),
+    ('Nordic Curl',             'Hamstrings',                'Bodyweight'),
+    ('Romanian Deadlift',       'Hamstrings, Glutes, Back',  'Smith Machine'),
+    ('Romanian Deadlift',       'Hamstrings, Glutes, Back',  'Kettlebell'),
+    ('Stiff Leg Deadlift',      'Hamstrings, Glutes, Back',  'Barbell'),
+    ('Glute Ham Raise',         'Hamstrings, Glutes',        'Bodyweight'),
 
     # Calves
     ('Calf Raise',              'Calves',                    'Barbell'),
@@ -188,6 +268,8 @@ EXERCISES = [
     ('Seated Calf Raise',       'Calves',                    'Dumbbell'),
     ('Donkey Calf Raise',       'Calves',                    'Machine'),
     ('Donkey Calf Raise',       'Calves',                    'Bodyweight'),
+    ('Single Leg Calf Raise',   'Calves',                    'Dumbbell'),
+    ('Tibialis Raise',          'Calves',                    'Bodyweight'),
 
     # Glutes
     ('Hip Thrust',              'Glutes, Hamstrings',        'Barbell'),
@@ -209,6 +291,14 @@ EXERCISES = [
     ('Single Leg Deadlift',     'Glutes, Hamstrings',        'Barbell'),
     ('Single Leg Deadlift',     'Glutes, Hamstrings',        'Dumbbell'),
     ('Single Leg Deadlift',     'Glutes, Hamstrings',        'Kettlebell'),
+    ('Adductor Machine',        'Glutes',                    'Machine'),
+    ('Copenhagen Plank',        'Glutes, Core',              'Bodyweight'),
+    ('Cable Pull Through',      'Glutes, Hamstrings',        'Cable'),
+    ('Kettlebell Swing',        'Glutes, Hamstrings, Back',  'Kettlebell'),
+    ('Frog Pump',               'Glutes',                    'Bodyweight'),
+    ('Single Leg Hip Thrust',   'Glutes, Hamstrings',        'Bodyweight'),
+    ('Glute Bridge',            'Glutes, Hamstrings',        'Dumbbell'),
+    ('Reverse Hyperextension',  'Glutes, Hamstrings',        'Machine'),
 
     # Core
     ('Plank',                   'Core, Shoulders',           'Bodyweight'),
@@ -220,7 +310,28 @@ EXERCISES = [
     ('Cable Crunch',            'Core',                      'Cable'),
     ('Machine Crunch',          'Core',                      'Machine'),
     ('Decline Crunch',          'Core',                      'Bodyweight'),
+    ('Side Plank',              'Core',                      'Bodyweight'),
+    ('Hollow Hold',             'Core',                      'Bodyweight'),
+    ('L-Sit',                   'Core',                      'Bodyweight'),
+    ('Hanging Knee Raise',      'Core',                      'Bodyweight'),
+    ('Toes to Bar',             'Core, Back',                'Bodyweight'),
+    ("Captain's Chair Leg Raise", 'Core',                    'Machine'),
+    ('Lying Leg Raise',         'Core',                      'Bodyweight'),
+    ('Bicycle Crunch',          'Core',                      'Bodyweight'),
+    ('Sit Up',                  'Core',                      'Bodyweight'),
+    ('Dead Bug',                'Core',                      'Bodyweight'),
+    ('Bird Dog',                'Core, Back',                'Bodyweight'),
+    ('Mountain Climber',        'Core, Shoulders',           'Bodyweight'),
+    ('Pallof Press',            'Core',                      'Cable'),
+    ('Woodchopper',             'Core',                      'Cable'),
+    ('Suitcase Carry',          'Core, Forearms',            'Dumbbell'),
+    ('Turkish Get Up',          'Core, Shoulders',           'Kettlebell'),
 ]
+
+# Timed holds: sets store the hold in cardio_duration, no reps or weight.
+# Plank and Dead Hang were 'strength' until migration z4a5b6c7d8e9, so users
+# can have reps-logged rows for them; exercise stats skip those on the hold chart.
+DURATION_EXERCISES = {'Plank', 'Dead Hang', 'Side Plank', 'Hollow Hold', 'L-Sit', 'Wall Sit', 'Copenhagen Plank'}
 
 # Exercises where more than one muscle group is genuinely co-primary — the
 # default mapping rule (first-listed muscle in EXERCISES = primary, rest =
@@ -242,6 +353,25 @@ MULTI_PRIMARY_OVERRIDES = {
     # glutes all fairly primary, quads more secondary (drive off the floor only)
     'Deadlift':                {'Back', 'Hamstrings', 'Glutes'},
     'Sumo Deadlift':           {'Back', 'Hamstrings', 'Glutes'},
+    'Deficit Deadlift':        {'Back', 'Hamstrings', 'Glutes'},
+    'Front Squat':             {'Quads', 'Glutes'},
+    'Goblet Squat':            {'Quads', 'Glutes'},
+    'Box Squat':               {'Quads', 'Glutes'},
+    'Pause Squat':             {'Quads', 'Glutes'},
+    'Pendulum Squat':          {'Quads', 'Glutes'},
+    'Belt Squat':              {'Quads', 'Glutes'},
+    'Single Leg Press':        {'Quads', 'Glutes'},
+    'Walking Lunge':           {'Quads', 'Glutes'},
+    'Reverse Lunge':           {'Quads', 'Glutes'},
+    'Lateral Lunge':           {'Quads', 'Glutes'},
+    'Split Squat':             {'Quads', 'Glutes'},
+    'Pistol Squat':            {'Quads', 'Glutes'},
+    'Stiff Leg Deadlift':      {'Hamstrings', 'Glutes'},
+    # Trap bar sits between a squat and a hinge; rack pull is a top-half hinge
+    'Trap Bar Deadlift':       {'Quads', 'Glutes', 'Back'},
+    'Rack Pull':               {'Back', 'Glutes'},
+    'Kettlebell Swing':        {'Glutes', 'Hamstrings'},
+    'Cable Pull Through':      {'Glutes', 'Hamstrings'},
 }
 
 # Cardio exercises: (name, equipment)
@@ -258,6 +388,28 @@ CARDIO_EXERCISES = [
     ('Walking', None),
     ('Walking', 'Treadmill'),
     ('Hiking', None),
+    ('Rowing', None),
+    ('Assault Bike', 'Machine'),
+    ('Ski Erg', 'Machine'),
+    ('Trail Running', None),
+    ('Sprints', None),
+    ('Rucking', None),
+    ('Burpees', None),
+    ('Battle Ropes', None),
+    ('Sled Push', None),
+    ('Boxing', None),
+    ('Basketball', None),
+    ('Soccer', None),
+    ('Tennis', None),
+    ('Pickleball', None),
+    ('Yoga', None),
+    ('Pilates', None),
+    ('HIIT', None),
+    ('Dance', None),
+    ('Rock Climbing', None),
+    ('Skiing', None),
+    ('Snowboarding', None),
+    ('Kayaking', None),
 ]
 
 
@@ -504,7 +656,7 @@ def main():
                 name=name,
                 equipment=equipment,
                 image_url=image_url,
-                exercise_type='strength',
+                exercise_type='duration' if name in DURATION_EXERCISES else 'strength',
                 standards_key=sk,
                 description=EXERCISE_DESCRIPTIONS.get(name),
                 bodyweight_load_factor=derive_bodyweight_load_factor(name, equipment),

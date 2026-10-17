@@ -46,8 +46,13 @@ def exercise_stats():
     if not rows:
         return jsonify({'exercise_name': name, 'description': description, 'personal_bests': {}, 'totals': {}, 'history': []})
 
-    # Determine exercise type from first row
     exercise_type = (rows[0][0].exercise_type or 'strength').lower()
+    # Plank and Dead Hang became timed after people had logged them as reps
+    # (migration z4a5b6c7d8e9), so for a hold the template's current type wins
+    # and the old rep rows, which have no hold time, stay off the chart.
+    if template_id and tmpl is not None and (tmpl.exercise_type or '').lower() == 'duration':
+        exercise_type = 'duration'
+        rows = [r for r in rows if (r[0].exercise_type or '').lower() == 'duration']
 
     if exercise_type == 'cardio':
         return _cardio_exercise_stats(name, rows, description)

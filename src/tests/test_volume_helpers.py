@@ -76,6 +76,14 @@ class TestDeriveBodyweightLoadFactor:
     def test_negligible_load_movements(self):
         assert derive_bodyweight_load_factor('Clamshell', 'Bodyweight') == 0.0
         assert derive_bodyweight_load_factor('Fire Hydrant', 'Bodyweight') == 0.0
+        assert derive_bodyweight_load_factor('Dead Bug', 'Bodyweight') == 0.0
+
+    def test_names_that_would_hit_the_wrong_keyword(self):
+        # 'bench dip' contains 'dip', 'handstand push up' contains 'push up'
+        assert derive_bodyweight_load_factor('Bench Dip', 'Bodyweight') == 0.5
+        assert derive_bodyweight_load_factor('Handstand Push Up', 'Bodyweight') == 1.0
+        assert derive_bodyweight_load_factor('Single Leg Hip Thrust', 'Bodyweight') == 0.35
+        assert derive_bodyweight_load_factor('Box Jump', 'Bodyweight') == 0.85
 
     def test_unrecognized_bodyweight_movement_defaults_to_middle(self):
         assert derive_bodyweight_load_factor('Some Novel Calisthenic', 'Bodyweight') == 0.6
