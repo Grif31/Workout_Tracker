@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, Modal, StyleSheet, Switch, TextInput,
+  View, Text, TouchableOpacity, Modal, StyleSheet, TextInput,
   KeyboardAvoidingView, Pressable, Platform, Keyboard,
 } from 'react-native';
+import ThemedSwitch from '../ThemedSwitch';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -101,15 +102,13 @@ export default function WeeklyGoalModal({
                 Track how far you run, walk or ride each week.
               </Text>
             </View>
-            <Switch
+            <ThemedSwitch
               testID="distance-goal-switch"
               value={distanceGoal != null}
               onValueChange={on => {
                 editingRef.current = false;
                 onChangeDistanceGoal(on ? DISTANCE_GOAL_DEFAULT : null);
               }}
-              trackColor={{ false: colors.border, true: colors.accent }}
-              thumbColor="#fff"
             />
           </View>
 

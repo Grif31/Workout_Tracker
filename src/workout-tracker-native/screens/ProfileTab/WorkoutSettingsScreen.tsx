@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, Switch, ScrollView, StyleSheet, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Modal } from 'react-native';
+import ThemedSwitch from '../../components/ThemedSwitch';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -93,12 +94,10 @@ export default function WorkoutSettingsScreen({ navigation }: Props) {
             <Text style={styles.rowHint}>{t.hint}</Text>
           </View>
         </View>
-        <Switch
+        <ThemedSwitch
           value={toggles[t.key]}
           onValueChange={v => setToggle(t.key, v)}
           accessibilityLabel={t.label}
-          trackColor={{ false: colors.border, true: colors.accent }}
-          thumbColor="#fff"
         />
       </View>
     </React.Fragment>

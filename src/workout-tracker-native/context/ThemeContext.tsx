@@ -31,6 +31,7 @@ export type Colors = {
   background: string;
   surface: string;
   border: string;
+  switchTrack: string; // off-state switch track; border is too faint against a white thumb in light mode
   textPrimary: string;
   textSecondary: string;
   placeholder: string;
@@ -49,10 +50,11 @@ export const LIGHT_BASE = {
   background:    '#F2F2F7',
   surface:       '#FFFFFF',
   border:        '#E5E5EA',
+  switchTrack:   '#8E8E93',
   textPrimary:   '#000000',
   textSecondary: '#6C6C70',
   placeholder:   '#AEAEB2',
-  danger:        '#FF3B30',
+  danger:        '#D70015', // iOS's #FF3B30 is 3.5:1 on white, too faint for error text
   warmup:        '#FF9500',
   dropset:       '#AF52DE',
 };
@@ -61,6 +63,7 @@ export const DARK_BASE = {
   background:    '#141416',
   surface:       '#1C1C1E',
   border:        '#38383A',
+  switchTrack:   '#38383A',
   textPrimary:   '#FFFFFF',
   textSecondary: '#8E8E93',
   placeholder:   '#636366',

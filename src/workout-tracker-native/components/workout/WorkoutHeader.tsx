@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, Switch, StyleSheet, Platform, Modal, Animated, ScrollView,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Modal, Animated, ScrollView,
 } from 'react-native';
+import ThemedSwitch from '../ThemedSwitch';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
@@ -204,11 +205,9 @@ function WorkoutHeader({
                 <Text style={styles.settingsLabel}>Auto-start rest timer</Text>
                 <Text style={styles.settingsHint}>Start rest countdown when a set is checked off</Text>
               </View>
-              <Switch
+              <ThemedSwitch
                 value={autoStartRest}
                 onValueChange={onAutoStartRestChange}
-                trackColor={{ false: colors.border, true: colors.save }}
-                thumbColor="#fff"
               />
             </View>
             <View style={styles.settingsDivider} />
@@ -217,11 +216,9 @@ function WorkoutHeader({
                 <Text style={styles.settingsLabel}>Vibrate when rest ends</Text>
                 <Text style={styles.settingsHint}>Vibrate the phone when the rest countdown completes</Text>
               </View>
-              <Switch
+              <ThemedSwitch
                 value={vibrateOnComplete}
                 onValueChange={onVibrateChange}
-                trackColor={{ false: colors.border, true: colors.save }}
-                thumbColor="#fff"
               />
             </View>
             <View style={styles.settingsDivider} />
@@ -230,11 +227,9 @@ function WorkoutHeader({
                 <Text style={styles.settingsLabel}>Track RPE</Text>
                 <Text style={styles.settingsHint}>Show an RPE input column on each strength set</Text>
               </View>
-              <Switch
+              <ThemedSwitch
                 value={showRpe}
                 onValueChange={onShowRpeChange}
-                trackColor={{ false: colors.border, true: colors.save }}
-                thumbColor="#fff"
               />
             </View>
             <View style={styles.settingsDivider} />
@@ -243,11 +238,9 @@ function WorkoutHeader({
                 <Text style={styles.settingsLabel}>Show plate calculator</Text>
                 <Text style={styles.settingsHint}>Show a plate calculator button while logging sets</Text>
               </View>
-              <Switch
+              <ThemedSwitch
                 value={showPlateCalc}
                 onValueChange={onShowPlateCalcChange}
-                trackColor={{ false: colors.border, true: colors.save }}
-                thumbColor="#fff"
               />
             </View>
             <View style={styles.settingsDivider} />
@@ -256,11 +249,9 @@ function WorkoutHeader({
                 <Text style={styles.settingsLabel}>Repeat last set</Text>
                 <Text style={styles.settingsHint}>Automatically repeat the last set when adding new sets</Text>
               </View>
-              <Switch
+              <ThemedSwitch
                 value={repeatLastSet}
                 onValueChange={onRepeatLastSetChange}
-                trackColor={{ false: colors.border, true: colors.save }}
-                thumbColor="#fff"
               />
             </View>
             <View style={styles.settingsDivider} />
@@ -269,11 +260,9 @@ function WorkoutHeader({
                 <Text style={styles.settingsLabel}>Prefill previous sets</Text>
                 <Text style={styles.settingsHint}>Pre-fill a new exercise's sets with your last session's reps and weight</Text>
               </View>
-              <Switch
+              <ThemedSwitch
                 value={prefillPreviousSets}
                 onValueChange={onPrefillPreviousSetsChange}
-                trackColor={{ false: colors.border, true: colors.save }}
-                thumbColor="#fff"
               />
             </View>
           </View>

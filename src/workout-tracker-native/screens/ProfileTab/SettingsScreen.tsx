@@ -4,13 +4,13 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Switch,
   ScrollView,
   StyleSheet,
   Alert,
   Modal,
   Platform,
 } from 'react-native';
+import ThemedSwitch from '../../components/ThemedSwitch';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -274,14 +274,12 @@ export default function SettingsScreen({ navigation }: Props) {
           </View>
           <View style={styles.unitToggle}>
             <Text style={[styles.unitLabel, !unitIsKg && styles.unitActive]}>lbs</Text>
-            <Switch
+            <ThemedSwitch
               testID="weight-unit-switch"
               value={unitIsKg}
               onValueChange={confirmUnitToggle}
               accessibilityLabel="Weight unit kilograms"
               disabled={savingUnit}
-              trackColor={{ false: colors.border, true: colors.accent }}
-              thumbColor="#fff"
             />
             <Text style={[styles.unitLabel, unitIsKg && styles.unitActive]}>kg</Text>
           </View>
@@ -296,7 +294,7 @@ export default function SettingsScreen({ navigation }: Props) {
           </View>
           <View style={styles.unitToggle}>
             <Text style={[styles.unitLabel, !distanceIsKm && styles.unitActive]}>mi</Text>
-            <Switch
+            <ThemedSwitch
               value={distanceIsKm}
               accessibilityLabel="Distance unit kilometers"
               onValueChange={async (isKm) => {
@@ -304,8 +302,6 @@ export default function SettingsScreen({ navigation }: Props) {
                 setDistanceIsKm(isKm);
                 await AsyncStorage.setItem(perUserGpsKey, unit);
               }}
-              trackColor={{ false: colors.border, true: colors.accent }}
-              thumbColor="#fff"
             />
             <Text style={[styles.unitLabel, distanceIsKm && styles.unitActive]}>km</Text>
           </View>
@@ -334,7 +330,7 @@ export default function SettingsScreen({ navigation }: Props) {
             <Ionicons name="notifications-outline" size={20} color={colors.textSecondary} />
             <Text style={styles.rowLabel}>Workout Reminders</Text>
           </View>
-          <Switch
+          <ThemedSwitch
             value={remindersOn}
             accessibilityLabel="Workout reminders"
             onValueChange={async (v) => {
@@ -351,8 +347,6 @@ export default function SettingsScreen({ navigation }: Props) {
                 cancelWorkoutReminder();
               }
             }}
-            trackColor={{ false: colors.border, true: colors.accent }}
-            thumbColor="#fff"
           />
         </View>
         {remindersOn && (
@@ -383,7 +377,7 @@ export default function SettingsScreen({ navigation }: Props) {
             <Ionicons name="alarm-outline" size={20} color={colors.textSecondary} />
             <Text style={styles.rowLabel}>Rest Timer Alerts</Text>
           </View>
-          <Switch
+          <ThemedSwitch
             value={restAlertsOn}
             accessibilityLabel="Rest timer alerts"
             onValueChange={async (v) => {
@@ -391,8 +385,6 @@ export default function SettingsScreen({ navigation }: Props) {
               setRestAlertsOn(v);
               await AsyncStorage.setItem(REST_ALERTS_KEY, String(v));
             }}
-            trackColor={{ false: colors.border, true: colors.accent }}
-            thumbColor="#fff"
           />
         </View>
 
@@ -404,7 +396,7 @@ export default function SettingsScreen({ navigation }: Props) {
             <Ionicons name="fitness-outline" size={20} color={colors.textSecondary} />
             <Text style={styles.rowLabel}>{Platform.OS === 'ios' ? 'Live Workout on Lock Screen' : 'Live Workout Notification'}</Text>
           </View>
-          <Switch
+          <ThemedSwitch
             value={liveNotifOn}
             accessibilityLabel={Platform.OS === 'ios' ? 'Live workout on lock screen' : 'Live workout notification'}
             onValueChange={async (v) => {
@@ -412,8 +404,6 @@ export default function SettingsScreen({ navigation }: Props) {
               setLiveNotifOn(v);
               await AsyncStorage.setItem(LIVE_WORKOUT_NOTIF_KEY, String(v));
             }}
-            trackColor={{ false: colors.border, true: colors.accent }}
-            thumbColor="#fff"
           />
         </View>
 
@@ -431,7 +421,7 @@ export default function SettingsScreen({ navigation }: Props) {
                   {Platform.OS === 'ios' ? 'Sync to Apple Health' : 'Sync to Health Connect'}
                 </Text>
               </View>
-              <Switch
+              <ThemedSwitch
                 value={healthSyncOn}
                 accessibilityLabel={Platform.OS === 'ios' ? 'Sync to Apple Health' : 'Sync to Health Connect'}
                 onValueChange={async (v) => {
@@ -450,8 +440,6 @@ export default function SettingsScreen({ navigation }: Props) {
                   setHealthSyncOn(v);
                   await AsyncStorage.setItem(perUserHealthSyncKey, String(v));
                 }}
-                trackColor={{ false: colors.border, true: colors.accent }}
-                thumbColor="#fff"
               />
             </View>
           </View>

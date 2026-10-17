@@ -33,6 +33,7 @@ export const mockThemeColors = {
   background: '#000000',
   surface: '#1C1C1E',
   border: '#3A3A3C',
+  switchTrack: '#3A3A3C',
   textPrimary: '#FFFFFF',
   textSecondary: '#AEAEB2',
   placeholder: '#636366',

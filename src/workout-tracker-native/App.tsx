@@ -9,7 +9,7 @@ import { dismissDeliveredRestTimerAlerts, setUpLiveWorkoutCategory } from './uti
 import { announceFlushResult, flushQueue, initPendingCount } from './utils/offlineQueue';
 import  RootNav  from '../workout-tracker-native/navigation/RootNav'
 import { AuthProvider } from './context/AuthContext';
-import { ThemeProvider } from './context/ThemeContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { PurchaseProvider } from './context/PurchaseContext';
 import { ActionSheetProvider } from '@expo/react-native-action-sheet';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -47,6 +47,13 @@ Notifications.setNotificationHandler({
     };
   },
 });
+
+// The app can pin a mode the phone isn't in, so the bar must follow the app, not the system.
+// Auth screens mount their own light-content bar, which stacks over this one.
+function ThemedStatusBar() {
+  const { mode } = useTheme();
+  return <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />;
+}
 
 function App(): JSX.Element {
   useEffect(() => {
@@ -111,6 +118,7 @@ function App(): JSX.Element {
     <ErrorBoundary>
       <SafeAreaProvider>
         <ThemeProvider>
+          <ThemedStatusBar />
           <ActionSheetProvider>
             <GestureHandlerRootView style={{ flex: 1 }}>
               <AuthProvider>
