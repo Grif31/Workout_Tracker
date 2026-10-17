@@ -74,9 +74,7 @@ import ExerciseReorderRow, { EXERCISE_REORDER_ROW_HEIGHT } from './workout/Exerc
 import RestTimer from './workout/RestTimer';
 import PlateCalculatorModal from './PlateCalculatorModal';
 import UndoBar from './UndoBar';
-import { syncWorkoutToHealthKit } from '../utils/healthKit';
-import { attachHeartRateToWorkout } from '../utils/heartRateSync';
-import { syncWorkoutToHealthConnect } from '../utils/healthConnect';
+import { syncFinishedWorkout } from '../utils/healthSync';
 
 type EditableSetField = 'reps' | 'weight';
 
@@ -1473,10 +1471,18 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     const payload = buildPayload(exercisesToSave);
     const isEditing = Boolean(editMode && workoutId);
 
+    const workoutType: 'strength' | 'cardio' =
+      exercisesToSave.some(ex => (ex.exercise_type || 'strength') !== 'cardio') ? 'strength' : 'cardio';
+
     // The queue uploads it later. The client_id in the payload makes that safe
     // even when the save that just failed did reach the server.
     const saveOffline = async () => {
-      await enqueueWorkout(payload);
+      const endedAt = new Date();
+      await enqueueWorkout(payload, {
+        type: workoutType,
+        startedAt: new Date(endedAt.getTime() - elapsed * 1000).toISOString(),
+        endedAt: endedAt.toISOString(),
+      });
       cancelLiveWorkoutNotification();
       endLiveActivity();
       clearSession();
@@ -1522,18 +1528,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       }
       const endDate = new Date();
       const startDate = new Date(endDate.getTime() - elapsed * 1000);
-      const workoutType = exercisesToSave.some(ex => (ex.exercise_type || 'strength') !== 'cardio') ? 'strength' : 'cardio';
-      if (Platform.OS === 'ios') {
-        syncWorkoutToHealthKit({ type: workoutType, startDate, endDate, userId: uid });
-        // Not awaited: enriching the saved workout with heart rate must not
-        // hold up the summary screen.
-        attachHeartRateToWorkout({
-          workoutId: isEditing ? workoutId : data.id,
-          startDate, endDate, userId: uid,
-        });
-      } else if (Platform.OS === 'android') {
-        syncWorkoutToHealthConnect({ type: workoutType, startDate, endDate, userId: uid });
-      }
+      // Not awaited: Health and heart rate must not hold up the summary screen
+      syncFinishedWorkout({
+        type: workoutType, startDate, endDate, userId: uid, workoutId: isEditing ? workoutId : data.id,
+      });
       if (onSubmit) onSubmit(
         isEditing ? workoutId : data.id,
         isEditing ? undefined : {

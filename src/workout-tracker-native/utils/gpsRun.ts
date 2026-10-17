@@ -4,6 +4,7 @@ import { addAltitude, freshClimb, type ClimbState } from './gpsMetrics';
 import { toDisplayDistance, type DistanceUnit } from './units';
 import { toLocalDateStr } from './date';
 import { encodeSegments, splitAtGaps } from './routeSegments';
+import type { CardioActivity } from './healthKit';
 
 // The state and arithmetic of a GPS run, kept out of the screen so it can be
 // tested without a device and so the run can live outside the screen (a run
@@ -22,6 +23,35 @@ export const ACTIVITY_TEMPLATE_NAME: Record<Activity, string> = {
   Walk: 'Walking',
   Hike: 'Hiking',
 };
+
+/** How each activity is recorded in Apple Health and Health Connect */
+export const HEALTH_ACTIVITY: Record<Activity, CardioActivity> = {
+  Run: 'running',
+  Cycle: 'cycling',
+  Walk: 'walking',
+  Hike: 'hiking',
+};
+
+/** The activity a saved GPS exercise was, from its library name ("Running"), if it was one */
+export function activityForExerciseName(name: string | undefined): Activity | null {
+  const found = (Object.keys(ACTIVITY_TEMPLATE_NAME) as Activity[]).find(a => ACTIVITY_TEMPLATE_NAME[a] === name);
+  return found ?? null;
+}
+
+/**
+ * When a run actually happened, for Health: its first and last fix. The save
+ * can come long after the run stopped (the save sheet waited, or the app was
+ * killed and the run came back), so "now" would be wrong. Falls back to the
+ * clock for a run with no fixes.
+ */
+export function runWindow(coords: Coord[], elapsedSec: number, now: number): { startDate: Date; endDate: Date } {
+  const first = coords[0];
+  const last = coords[coords.length - 1];
+  if (first && last && last.timestamp > first.timestamp) {
+    return { startDate: new Date(first.timestamp), endDate: new Date(last.timestamp) };
+  }
+  return { startDate: new Date(now - elapsedSec * 1000), endDate: new Date(now) };
+}
 
 // GPS fixes worse than this add phantom distance and jagged routes: drop them
 export const MAX_ACCURACY_M = 30;

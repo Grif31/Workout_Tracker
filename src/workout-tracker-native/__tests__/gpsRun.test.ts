@@ -1,6 +1,7 @@
 import polylineLib from '@mapbox/polyline';
 import { haversineKm } from '../utils/bestEfforts';
 import {
+  activityForExerciseName, HEALTH_ACTIVITY, runWindow,
   afterGap, applyFix, buildGpsRunBody, emptyRun, runElapsedSeconds, MAX_ACCURACY_M, type Fix, type RunState,
 } from '../utils/gpsRun';
 
@@ -230,3 +231,27 @@ describe('a stretch with no GPS fixes', () => {
     }
   });
 });
+
+describe('runWindow, for Health', () => {
+  it('is the first fix to the last, not the moment of saving', () => {
+    const coords = walk(5).coords;
+    const w = runWindow(coords, 999, T0 + 3_600_000);
+    expect(w.startDate.getTime()).toBe(coords[0].timestamp);
+    expect(w.endDate.getTime()).toBe(coords[4].timestamp);
+  });
+
+  it('falls back to the clock for a run without fixes', () => {
+    const w = runWindow([], 600, T0);
+    expect(w.endDate.getTime()).toBe(T0);
+    expect(w.startDate.getTime()).toBe(T0 - 600_000);
+  });
+});
+
+describe('activities in Health', () => {
+  it('maps each activity to its Health kind, and back from a saved exercise name', () => {
+    expect(HEALTH_ACTIVITY).toEqual({ Run: 'running', Cycle: 'cycling', Walk: 'walking', Hike: 'hiking' });
+    expect(activityForExerciseName('Hiking')).toBe('Hike');
+    expect(activityForExerciseName('Bench Press')).toBeNull();
+  });
+});
+

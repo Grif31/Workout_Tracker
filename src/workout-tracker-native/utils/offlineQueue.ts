@@ -1,9 +1,7 @@
-import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { USER_KEY } from '../constants/storageKeys';
 import { SAVE_TIMEOUT_MS, apiFetch } from './api';
-import { syncWorkoutToHealthKit } from './healthKit';
-import { syncWorkoutToHealthConnect } from './healthConnect';
+import { syncFinishedWorkout, type HealthWorkout } from './healthSync';
 import { showToast } from './toast';
 
 // Per-user queue: workouts queued offline by user A must never be posted with
@@ -15,7 +13,22 @@ const queueKey = (userId: number | string) => `offline_workout_queue_${userId}`;
 // Why the server turned a workout away, kept once it is stuck
 type Rejection = { status: number; message: string; at: string };
 
-type QueueItem = { id: string; payload: object; enqueuedAt: string; attempts?: number; rejected?: Rejection };
+/**
+ * What Health needs about a queued workout, kept beside the payload (never sent
+ * to the server): the real start and end, and for a GPS activity its kind and
+ * distance. Items queued by builds before this have none and fall back to an
+ * estimate from the payload.
+ */
+export type QueuedHealth = Omit<HealthWorkout, 'startDate' | 'endDate'> & { startedAt: string; endedAt: string };
+
+type QueueItem = {
+  id: string;
+  payload: object;
+  enqueuedAt: string;
+  attempts?: number;
+  rejected?: Rejection;
+  health?: QueuedHealth;
+};
 
 /** A workout the server keeps refusing, kept on the phone for the user to retry or delete */
 export type StuckWorkout = { id: string; name: string; date: string | null; reason: string; status: number };
@@ -95,19 +108,34 @@ async function _currentQueueKey(): Promise<string | null> {
 }
 
 // The live save path syncs to Apple Health / Health Connect on success; do
-// the same when a queued workout finally lands. The workout ended roughly
-// when it was enqueued; the sync helpers no-op if the user's toggle is off.
-function _syncToHealth(item: QueueItem, userId: number | string) {
+// the same when a queued workout finally lands, heart rate included now that
+// the server has given it an id. The sync helpers no-op if the user's toggle is off.
+function _syncToHealth(item: QueueItem, userId: number | string, workoutId: number | string | null) {
   try {
+    if (item.health) {
+      const { startedAt, endedAt, ...rest } = item.health;
+      syncFinishedWorkout({ ...rest, startDate: new Date(startedAt), endDate: new Date(endedAt), userId, workoutId });
+      return;
+    }
+    // Queued by an older build: the workout ended roughly when it was enqueued
     const p = item.payload as any;
     const endDate = new Date(item.enqueuedAt);
     const startDate = new Date(endDate.getTime() - (p.duration ?? 0) * 60000);
     const type: 'strength' | 'cardio' =
       (p.exercises ?? []).some((ex: any) => (ex.exercise_type || 'strength') !== 'cardio')
         ? 'strength' : 'cardio';
-    if (Platform.OS === 'ios') syncWorkoutToHealthKit({ type, startDate, endDate, userId });
-    else if (Platform.OS === 'android') syncWorkoutToHealthConnect({ type, startDate, endDate, userId });
+    syncFinishedWorkout({ type, startDate, endDate, userId, workoutId });
   } catch {}
+}
+
+// The new workout's id from a successful save, for attaching heart rate
+async function _savedId(res: Response): Promise<number | string | null> {
+  try {
+    const body = await res.json();
+    return body?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // Pre-per-user builds stored the queue under one device-level key. Fold any
@@ -176,14 +204,17 @@ export async function getStuckWorkouts(): Promise<StuckWorkout[]> {
   return (await readQueue(key)).filter(i => i.rejected).map(_stuckView);
 }
 
-export async function enqueueWorkout(payload: object): Promise<void> {
+export async function enqueueWorkout(payload: object, health?: QueuedHealth): Promise<void> {
   const key = await _currentQueueKey();
   if (!key) return; // logged out — nowhere safe to queue
   const q = await readQueue(key);
   // A double-tapped Save enqueues byte-identical payloads — one copy is enough
   const json = JSON.stringify(payload);
   if (q.some(item => JSON.stringify(item.payload) === json)) return;
-  q.push({ id: Date.now().toString(36), payload, enqueuedAt: new Date().toISOString() });
+  // Time alone collided: two workouts queued in the same millisecond shared an
+  // id, so retrying or deleting one acted on the other
+  const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  q.push({ id, payload, enqueuedAt: new Date().toISOString(), ...(health ? { health } : {}) });
   await writeQueue(key, q);
 }
 
@@ -224,7 +255,7 @@ export async function flushQueue(): Promise<FlushResult> {
         });
         if (res.ok) {
           synced++;
-          _syncToHealth(item, userId);
+          _syncToHealth(item, userId, await _savedId(res));
         } else if (isPermanentRejection(res.status)) {
           const attempts = (item.attempts ?? 0) + 1;
           if (attempts >= MAX_REJECTED_ATTEMPTS) {
@@ -283,7 +314,7 @@ export async function retryStuckWorkout(id: string): Promise<'synced' | 'rejecte
     }
     const latest = await readQueue(key);
     if (res.ok) {
-      _syncToHealth(item, userId);
+      _syncToHealth(item, userId, await _savedId(res));
       await writeQueue(key, latest.filter(i => i.id !== id));
       return 'synced';
     }

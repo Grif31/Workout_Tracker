@@ -24,6 +24,16 @@ const WORKOUT_TYPE = 'HKWorkoutTypeIdentifier' as const;
 const ACTIVITY_RUNNING = 37;
 const ACTIVITY_STRENGTH = 50;
 
+/** The kinds of tracked GPS activity Health tells apart */
+export type CardioActivity = 'running' | 'cycling' | 'walking' | 'hiking';
+
+const CARDIO_ACTIVITY_TYPES: Record<CardioActivity, number> = {
+  running: ACTIVITY_RUNNING,
+  cycling: 13,
+  walking: 52,
+  hiking: 24,
+};
+
 async function syncEnabled(userId?: number | string): Promise<boolean> {
   const key = userId ? `${HEALTH_SYNC_KEY}_${userId}` : HEALTH_SYNC_KEY;
   return (await AsyncStorage.getItem(key)) === 'true';
@@ -73,6 +83,9 @@ export async function readWorkoutHeartRate(params: {
 
 export async function syncWorkoutToHealthKit(params: {
   type: 'strength' | 'cardio';
+  /** A tracked activity's kind; cardio without one goes in as running */
+  activity?: CardioActivity;
+  distanceKm?: number;
   startDate: Date;
   endDate: Date;
   userId?: number | string;
@@ -80,12 +93,18 @@ export async function syncWorkoutToHealthKit(params: {
   if (!HealthKit?.isHealthDataAvailable?.()) return;
   if (!(await syncEnabled(params.userId))) return;
 
+  const activityType = params.type === 'strength'
+    ? ACTIVITY_STRENGTH
+    : CARDIO_ACTIVITY_TYPES[params.activity ?? 'running'];
+  // The workout's own total, in metres; it needs no permission beyond the workout's
+  const totals = params.distanceKm && params.distanceKm > 0 ? { distance: params.distanceKm * 1000 } : undefined;
   try {
     await HealthKit.saveWorkoutSample(
-      params.type === 'cardio' ? ACTIVITY_RUNNING : ACTIVITY_STRENGTH,
+      activityType as any,
       [],
       params.startDate,
       params.endDate,
+      totals,
     );
   } catch {
     // Health writes are best-effort: a denied permission or a revoked

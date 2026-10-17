@@ -6,6 +6,8 @@ import {
 import { apiFetch } from '../utils/api';
 
 jest.mock('../utils/api', () => ({ apiFetch: jest.fn() }));
+const mockSyncFinishedWorkout = jest.fn();
+jest.mock('../utils/healthSync', () => ({ syncFinishedWorkout: (w: any) => mockSyncFinishedWorkout(w) }));
 
 const mockApiFetch = apiFetch as jest.Mock;
 
@@ -180,6 +182,60 @@ describe('offlineQueue', () => {
       expect(q.map((i: any) => i.payload.workoutName)).toEqual(['Push Day']);
       expect(getStuckCount()).toBe(0);
     });
+  });
+
+  describe('reaching Health once uploaded', () => {
+    beforeEach(() => mockSyncFinishedWorkout.mockClear());
+
+    it('uses the details queued with it, and the new id for heart rate', async () => {
+      await loginAs(7);
+      await enqueueWorkout({ workoutName: 'Hike' }, {
+        type: 'cardio', activity: 'hiking', distanceKm: 1.72,
+        startedAt: '2026-10-14T17:00:00.000Z', endedAt: '2026-10-14T17:33:06.000Z',
+      });
+      mockApiFetch.mockResolvedValue({ ok: true, status: 201, json: () => Promise.resolve({ id: 99 }) });
+      await flushQueue();
+      expect(mockSyncFinishedWorkout).toHaveBeenCalledWith({
+        type: 'cardio', activity: 'hiking', distanceKm: 1.72,
+        startDate: new Date('2026-10-14T17:00:00.000Z'), endDate: new Date('2026-10-14T17:33:06.000Z'),
+        userId: 7, workoutId: 99,
+      });
+    });
+
+    it('estimates for a workout queued by an older build, without details', async () => {
+      await loginAs(7);
+      await AsyncStorage.setItem('offline_workout_queue_7', JSON.stringify([{
+        id: 'old1', enqueuedAt: '2026-10-14T18:00:00.000Z',
+        payload: { workoutName: 'Legs', duration: 45, exercises: [{ name: 'Squat', exercise_type: 'strength' }] },
+      }]));
+      mockApiFetch.mockResolvedValue({ ok: true, status: 201, json: () => Promise.resolve({ id: 5 }) });
+      await flushQueue();
+      expect(mockSyncFinishedWorkout).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'strength', endDate: new Date('2026-10-14T18:00:00.000Z'),
+        startDate: new Date('2026-10-14T17:15:00.000Z'), workoutId: 5,
+      }));
+    });
+
+    it('waits for the upload to work', async () => {
+      await loginAs(7);
+      await enqueueWorkout({ workoutName: 'Hike' }, { type: 'cardio', startedAt: '2026-10-14T17:00:00.000Z', endedAt: '2026-10-14T17:30:00.000Z' });
+      mockApiFetch.mockResolvedValue({ ok: false, status: 503 });
+      await flushQueue();
+      expect(mockSyncFinishedWorkout).not.toHaveBeenCalled();
+    });
+  });
+
+  it('gives two workouts queued in the same millisecond different ids', async () => {
+    await loginAs(7);
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_760_000_000_000);
+    try {
+      await enqueueWorkout({ workoutName: 'A' });
+      await enqueueWorkout({ workoutName: 'B' });
+    } finally {
+      now.mockRestore();
+    }
+    const ids = (await readKey('offline_workout_queue_7')).map((i: any) => i.id);
+    expect(new Set(ids).size).toBe(2);
   });
 
   it('treats 401 as transient and keeps retrying', async () => {

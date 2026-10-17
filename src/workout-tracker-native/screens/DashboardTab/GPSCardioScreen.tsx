@@ -32,8 +32,9 @@ import {
   currentPaceMinPerKm, isCycling, speedInUnit, speedLabel, MIN_PACE_DISTANCE_KM,
 } from '../../utils/gpsMetrics';
 import {
-  ACTIVITIES, ACTIVITY_TEMPLATE_NAME, buildGpsRunBody, runElapsedSeconds, type Activity,
+  ACTIVITIES, ACTIVITY_TEMPLATE_NAME, HEALTH_ACTIVITY, buildGpsRunBody, runElapsedSeconds, runWindow, type Activity,
 } from '../../utils/gpsRun';
+import { syncFinishedWorkout } from '../../utils/healthSync';
 import { useGpsRun } from '../../context/GpsRunContext';
 import { useAppActive } from '../../hooks/useAppActive';
 import { splitAtGaps, thinSegments } from '../../utils/routeSegments';
@@ -262,11 +263,19 @@ export default function GPSCardioScreen({ navigation }: Props) {
       exerciseTemplateId, now: new Date(), clientId,
     });
 
+    // Apple Health / Health Connect get the activity's kind, distance and the
+    // time it actually happened, not the moment of saving
+    const ranAt = runWindow(coords, elapsedSec, Date.now());
+    const health = { type: 'cardio' as const, activity: HEALTH_ACTIVITY[activity], distanceKm, ...ranAt };
+
     // A tracked run must never depend on one POST succeeding — queue it for
     // sync when there's no connection. CardioDetails needs a server id, so
     // offline saves return to the Dashboard instead.
     const saveOffline = async () => {
-      await enqueueWorkout(body);
+      await enqueueWorkout(body, {
+        type: 'cardio', activity: health.activity, distanceKm,
+        startedAt: ranAt.startDate.toISOString(), endedAt: ranAt.endDate.toISOString(),
+      });
       clearRun();
       setConfirmVisible(false);
       showToast(
@@ -293,6 +302,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
       if (!res.ok) throw new Error('Save failed');
       const data = await res.json();
+      syncFinishedWorkout({ ...health, userId: user?.id, workoutId: data.id });
       clearRun();
       setConfirmVisible(false);
       navigation.replace('CardioDetails', { workoutId: data.id });

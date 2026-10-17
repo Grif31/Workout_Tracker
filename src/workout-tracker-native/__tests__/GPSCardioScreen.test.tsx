@@ -40,6 +40,8 @@ jest.mock('@react-native-community/netinfo', () => ({
 const mockEnqueueWorkout = jest.fn((_payload: any) => Promise.resolve());
 jest.mock('../utils/offlineQueue', () => ({ enqueueWorkout: (p: any) => mockEnqueueWorkout(p) }));
 jest.mock('../utils/toast', () => ({ showToast: jest.fn() }));
+const mockSyncFinishedWorkout = jest.fn();
+jest.mock('../utils/healthSync', () => ({ syncFinishedWorkout: (w: any) => mockSyncFinishedWorkout(w) }));
 jest.mock('../theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 jest.mock('../theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));
 
@@ -168,6 +170,32 @@ describe('GPSCardioScreen', () => {
       expect(set.intensity).toBeCloseTo(set.cardio_duration / set.distance, 6);
       expect(set).toMatchObject({ reps: null, weight: null, set_type: 'N' });
       expect(await AsyncStorage.getItem(CHECKPOINT_KEY)).toBeNull();
+    });
+
+    it('tells Health what the activity was, how far, when it happened, and which workout it is', async () => {
+      const r = await renderReady();
+      await act(async () => { fireEvent.press(r.getByText('Hike')); });
+      await runAndStop(r, [point(0), point(1), point(2), point(3)]);
+      await act(async () => { fireEvent.press(r.getByText('Save')); });
+      await waitFor(() => expect(mockSyncFinishedWorkout).toHaveBeenCalled());
+
+      const w = mockSyncFinishedWorkout.mock.calls[0][0];
+      expect(w).toMatchObject({ type: 'cardio', activity: 'hiking', workoutId: 77, userId: USER_ID });
+      const latLngs: [number, number][] = [0, 1, 2, 3].map(i => [40 + i * 0.001, -74]);
+      const km = latLngs.slice(1).reduce((sum, p, i) => sum + haversineKm(latLngs[i], p), 0);
+      expect(w.distanceKm).toBeCloseTo(km, 6);
+      // The run's own first and last fix, not the save
+      expect(w.startDate.getTime()).toBe(point(0).timestamp);
+      expect(w.endDate.getTime()).toBe(point(3).timestamp);
+    });
+
+    it('tells Health nothing until the save has worked', async () => {
+      mockServer({ status: 500 });
+      const r = await renderReady();
+      await runAndStop(r, [point(0), point(1)]);
+      await act(async () => { fireEvent.press(r.getByText('Save')); });
+      await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Save Failed', expect.any(String), expect.any(Array)));
+      expect(mockSyncFinishedWorkout).not.toHaveBeenCalled();
     });
 
     it('sends the best efforts scanned out of the track', async () => {

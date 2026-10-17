@@ -651,7 +651,11 @@ describe('minimizing a GPS run', () => {
       expect(sent.client_id).toMatch(/^[a-z0-9]+-[a-z0-9]{20}$/);
       const offline = alertSpy.mock.calls.find(c => c[0] === 'Save Failed')![2].find((b: any) => b.text === 'Save Offline');
       await act(async () => { await offline.onPress(); });
-      expect(enqueueWorkout).toHaveBeenCalledWith(expect.objectContaining({ client_id: sent.client_id }));
+      const [queuedPayload, queuedHealth] = enqueueWorkout.mock.calls[0];
+      expect(queuedPayload).toMatchObject({ client_id: sent.client_id });
+      // Health details travel with it, for when the queue uploads it later
+      expect(queuedHealth).toMatchObject({ type: 'cardio', activity: 'running' });
+      expect(queuedHealth.distanceKm).toBeGreaterThan(0);
     });
 
     it('is new for each run', async () => {
