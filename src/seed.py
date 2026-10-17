@@ -437,27 +437,20 @@ def _load_exercisedb() -> list:
             print(f'Using cached ExerciseDB data ({len(_exercisedb_cache)} exercises).\n', flush=True)
             return _exercisedb_cache
 
-    import requests as http_requests
+    from utils.exercisedb import PAGE_SIZE, fetch_page
     api_key = os.environ.get('RAPIDAPI_KEY', '')
     if not api_key:
         raise RuntimeError(
             'RAPIDAPI_KEY not set. Add it to .env or export it before running seed.py.'
         )
 
-    headers = {
-        'X-RapidAPI-Key':  api_key,
-        'X-RapidAPI-Host': 'exercisedb.p.rapidapi.com',
-    }
+    # RapidAPI returns at most PAGE_SIZE rows whatever `limit` asks for, about
+    # 135 calls for the whole catalog out of the plan's 690 a month.
     exercises: list = []
-    limit, offset = 1300, 0
+    offset = 0
     print('Fetching all ExerciseDB exercises (this may take a moment)…', flush=True)
     while True:
-        url = f'{EXERCISEDB_BASE}/exercises?limit={limit}&offset={offset}'
-        resp = http_requests.get(url, headers=headers, timeout=30)
-        resp.raise_for_status()
-        batch = resp.json()
-        if not batch:
-            break
+        batch = fetch_page(api_key, offset)
         for item in batch:
             exercises.append({
                 'name':      item['name'],
@@ -466,10 +459,10 @@ def _load_exercisedb() -> list:
                 'target':    item['target'],
                 'gifUrl':    f'https://v2.exercisedb.io/image/{item["id"]}',
             })
-        if len(batch) < limit:
+        if len(batch) < PAGE_SIZE:
             break
-        offset += limit
-        time.sleep(0.5)
+        offset += PAGE_SIZE
+        time.sleep(0.2)
 
     print(f'  {len(exercises)} exercises fetched.', flush=True)
     with open(EXERCISEDB_CACHE, 'w') as f:

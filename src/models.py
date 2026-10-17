@@ -313,6 +313,9 @@ class ExerciseTemplate(db.Model):
     # NULL = global library exercise visible to all users
     # Set = custom exercise created by that user, only visible to them
     user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=True, index=True)
+    # ExerciseDB id the image came from, set when the admin picks one. NULL for
+    # images added before this existed or pasted by URL.
+    image_source_id = db.Column(db.String(16), nullable=True)
 
     __table_args__ = (
         db.UniqueConstraint('name', 'equipment', 'user_id', name='uq_exercise_name_equipment_user'),
@@ -635,3 +638,27 @@ class AdminAuditLog(db.Model):
     after       = db.Column(db.JSON, nullable=True)
     ip          = db.Column(db.String(64), nullable=True)
     created_at  = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+# ── ExerciseDB catalog ───────────────────────────────────────
+# A local copy of ExerciseDB's exercise list, so the admin's GIF search runs
+# here instead of spending RapidAPI calls (690 a month, 10 rows a page).
+class ExerciseDBEntry(db.Model):
+    __tablename__ = 'exercisedb_catalog'
+    id                = db.Column(db.String(16), primary_key=True)
+    name              = db.Column(db.String(250), nullable=False)
+    equipment         = db.Column(db.String(64), nullable=False)
+    body_part         = db.Column(db.String(64), nullable=False)
+    target            = db.Column(db.String(64), nullable=False)
+    secondary_muscles = db.Column(db.JSON, nullable=True)
+    description       = db.Column(db.Text, nullable=True)
+    fetched_at        = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+# Each thumbnail costs one RapidAPI call, so one fetched is kept for good.
+class ExerciseDBThumbnail(db.Model):
+    __tablename__ = 'exercisedb_thumbnails'
+    exercisedb_id = db.Column(db.String(16), primary_key=True)
+    content       = db.Column(db.LargeBinary, nullable=False)
+    content_type  = db.Column(db.String(64), nullable=False)
+    fetched_at    = db.Column(db.DateTime, default=datetime.now, nullable=False)

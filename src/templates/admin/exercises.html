@@ -122,38 +122,93 @@
     }
     .btn-suggest:hover { background: rgba(10,132,255,0.1); }
     .btn-suggest:disabled { opacity: 0.5; cursor: default; }
-    .gif-search {
-      background: #1C1C1E; border: 1px solid #3A3A3C; border-radius: 7px;
-      color: #F2F2F7; font-size: 12px; padding: 7px 10px;
-      width: 130px;
-    }
-    .gif-search:focus { outline: none; border-color: #0A84FF; }
     .status { font-size: 11px; }
     .status.ok  { color: #30D158; }
     .status.err { color: #FF453A; }
-    .suggest-row {
-      display: flex;
-      gap: 8px;
-      padding: 0 12px 10px;
-      flex-wrap: wrap;
-    }
-    .sug-thumb {
-      flex-shrink: 0;
-      width: 90px;
-      cursor: pointer;
-      border: 2px solid transparent;
-      border-radius: 6px;
-      overflow: hidden;
-      background: #2C2C2E;
-    }
-    .sug-thumb:hover { border-color: #30D158; }
-    .sug-thumb img { width: 90px; height: 70px; object-fit: cover; display: block; }
-    .sug-label {
-      font-size: 9px; color: #8E8E93; padding: 3px 4px;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .no-suggest { font-size: 11px; color: #636366; padding: 4px 0; }
     .empty { text-align: center; padding: 80px 24px; color: #636366; grid-column: 1/-1; }
+
+    /* GIF search panel */
+    .backdrop {
+      position: fixed; inset: 0; z-index: 50;
+      background: rgba(0,0,0,0.6);
+      display: none; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .backdrop.open { display: flex; }
+    .panel {
+      background: #1C1C1E; border: 1px solid #2C2C2E; border-radius: 14px;
+      width: min(1100px, 100%); height: min(860px, 100%);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .panel-head {
+      display: flex; gap: 14px; align-items: center;
+      padding: 14px 18px; border-bottom: 1px solid #2C2C2E;
+    }
+    .panel-head .current {
+      width: 64px; height: 50px; border-radius: 6px; background: #2C2C2E;
+      overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 10px; color: #636366;
+    }
+    .panel-head .current img { width: 100%; height: 100%; object-fit: cover; }
+    .panel-head .title { font-size: 16px; font-weight: 700; }
+    .panel-head .sub { font-size: 12px; color: #8E8E93; margin-top: 2px; }
+    .panel-close {
+      margin-left: auto; background: transparent; border: 1px solid #3A3A3C; color: #8E8E93;
+      border-radius: 7px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+    }
+    .panel-close:hover { color: #F2F2F7; }
+    .catalog-bar {
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      padding: 8px 18px; font-size: 12px; color: #8E8E93; border-bottom: 1px solid #2C2C2E;
+    }
+    .catalog-bar .warn { color: #FF9F0A; }
+    .btn-small {
+      background: transparent; color: #0A84FF; border: 1px solid #0A84FF; border-radius: 6px;
+      padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .btn-small:disabled { opacity: 0.5; cursor: default; }
+    .search-row {
+      display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 18px; border-bottom: 1px solid #2C2C2E;
+    }
+    .search-row .search { min-width: 220px; }
+    .facet {
+      background: #2C2C2E; border: 1px solid #3A3A3C; border-radius: 8px;
+      color: #F2F2F7; font-size: 13px; padding: 7px 8px; max-width: 200px;
+    }
+    .panel-body { flex: 1; overflow-y: auto; padding: 14px 18px 18px; }
+    .result-count { font-size: 12px; color: #8E8E93; margin-bottom: 10px; }
+    .section-label { font-size: 12px; font-weight: 700; color: #8E8E93; margin: 18px 0 10px; }
+    .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+    .tile {
+      background: #2C2C2E; border: 2px solid transparent; border-radius: 10px;
+      overflow: hidden; cursor: pointer; display: flex; flex-direction: column;
+    }
+    .tile:hover { border-color: #0A84FF; }
+    .tile.current { border-color: #30D158; }
+    .tile img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; background: #fff; display: block; }
+    .tile .t-body { padding: 7px 8px 8px; }
+    .tile .t-name { font-size: 12px; line-height: 1.3; color: #C7C7CC; }
+    .tile .t-name b { color: #F2F2F7; }
+    .tile .t-meta { font-size: 10px; color: #8E8E93; margin-top: 3px; }
+    .tile .t-used { font-size: 10px; color: #FF9F0A; margin-top: 3px; }
+    .tile .t-current { font-size: 10px; color: #30D158; margin-top: 3px; font-weight: 700; }
+    .more-row { text-align: center; margin-top: 14px; }
+    .preview {
+      display: grid; grid-template-columns: minmax(240px, 360px) 1fr; gap: 20px; align-items: start;
+    }
+    .preview img { width: 100%; aspect-ratio: 1 / 1; object-fit: contain; background: #fff; border-radius: 10px; }
+    .preview h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+    .preview .p-meta { font-size: 13px; color: #8E8E93; margin-bottom: 4px; }
+    .preview .p-desc { font-size: 13px; color: #C7C7CC; line-height: 1.5; margin: 12px 0; }
+    .preview .p-used { font-size: 12px; color: #FF9F0A; margin-bottom: 12px; }
+    .preview .p-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .msg { font-size: 13px; color: #8E8E93; padding: 30px 0; text-align: center; }
+    .msg.err { color: #FF453A; }
+    @media (max-width: 700px) {
+      .backdrop { padding: 0; }
+      .panel { border-radius: 0; width: 100%; height: 100%; border: none; }
+      .preview { grid-template-columns: 1fr; }
+    }
   </style>
 {% endblock %}
 {% block content %}
@@ -168,9 +223,32 @@
     </div>
   </div>
   <div class="grid" id="grid"></div>
+
+  <div class="backdrop" id="gif-backdrop" onclick="if (event.target === this) closePanel()">
+    <div class="panel" role="dialog" aria-modal="true" aria-labelledby="panel-title">
+      <div class="panel-head">
+        <div class="current" id="panel-current">No image</div>
+        <div>
+          <div class="title" id="panel-title"></div>
+          <div class="sub" id="panel-sub"></div>
+        </div>
+        <button class="panel-close" onclick="closePanel()">Close</button>
+      </div>
+      <div class="catalog-bar" id="catalog-bar">Loading catalog…</div>
+      <div class="search-row">
+        <input class="search" type="text" id="gif-q" placeholder="Search the catalog, any word order…"
+               oninput="queueSearch()" autocomplete="off">
+        <select class="facet" id="f-equipment" onchange="runSearch()"></select>
+        <select class="facet" id="f-body_part" onchange="runSearch()"></select>
+        <select class="facet" id="f-target" onchange="runSearch()"></select>
+      </div>
+      <div class="panel-body" id="panel-body"></div>
+    </div>
+  </div>
 {% endblock %}
 {% block scripts %}
   <script>
+    const EQUIPMENT_MAP = {{ equipment_map | tojson }};
     let exercises = [];
     let filter = 'all';
     let search = '';
@@ -230,15 +308,11 @@
                  placeholder="Paste image URL to preview…"
                  value="${url}"
                  oninput="previewUrl(${ex.id}, this.value)">
-          <div class="suggest-row" id="suggest-${ex.id}"></div>
           <div class="btn-row">
             <button class="btn-save" onclick="save(${ex.id})">Save</button>
             <button class="btn-clear" onclick="doClear(${ex.id})">Clear</button>
             <span class="status" id="status-${ex.id}"></span>
-            <input class="gif-search" type="text" id="gifq-${ex.id}" placeholder="Search ExerciseDB…"
-                   onkeydown="if(event.key==='Enter'){event.preventDefault(); suggest(${ex.id}, this.value);}">
-            <button class="btn-suggest" id="suggest-btn-${ex.id}"
-                    onclick="suggest(${ex.id}, document.getElementById('gifq-${ex.id}').value)">Suggest</button>
+            <button class="btn-suggest" onclick="openPanel(${ex.id})">Find GIF</button>
           </div>
         </div>`;
     }
@@ -265,6 +339,17 @@
       previewUrl(id, '');
     }
 
+    function flashSaved(id) {
+      const card = document.getElementById('card-' + id);
+      if (card) { card.classList.add('saved'); setTimeout(() => card.classList.remove('saved'), 1500); }
+      const status = document.getElementById('status-' + id);
+      if (status) {
+        status.textContent = '✓ Saved';
+        status.className = 'status ok';
+        setTimeout(() => { status.textContent = ''; }, 2500);
+      }
+    }
+
     async function save(id) {
       const input = document.getElementById('input-' + id);
       const status = document.getElementById('status-' + id);
@@ -277,12 +362,8 @@
         });
         if (res.ok) {
           const ex = exercises.find(e => e.id === id);
-          if (ex) ex.image_url = url;
-          const card = document.getElementById('card-' + id);
-          if (card) { card.classList.add('saved'); setTimeout(() => card.classList.remove('saved'), 1500); }
-          status.textContent = '✓ Saved';
-          status.className = 'status ok';
-          setTimeout(() => { status.textContent = ''; }, 2500);
+          if (ex && ex.image_url !== url) { ex.image_url = url; ex.image_source_id = null; }
+          flashSaved(id);
         } else {
           status.textContent = '✗ Error';
           status.className = 'status err';
@@ -293,47 +374,244 @@
       }
     }
 
-    async function suggest(id, query) {
-      const btn = document.getElementById('suggest-btn-' + id);
-      const row = document.getElementById('suggest-' + id);
-      btn.textContent = 'Loading…';
-      btn.disabled = true;
-      row.innerHTML = '';
+    // ── GIF search panel ──────────────────────────────────────
+    // Searches our copy of ExerciseDB's catalog (no API call). Only thumbnails
+    // not seen before, the catalog fetch, and the final save use the quota.
+
+    let panelEx = null;
+    let catalog = null;
+    let results = [];
+    let nextOffset = null;
+    let searchTimer = null;
+    let searchSeq = 0;
+
+    function openPanel(id) {
+      panelEx = exercises.find(e => e.id === id);
+      if (!panelEx) return;
+      document.getElementById('panel-title').textContent = panelEx.name;
+      document.getElementById('panel-sub').textContent =
+        [panelEx.equipment, panelEx.muscle_group].filter(Boolean).join(' · ');
+      const cur = document.getElementById('panel-current');
+      cur.innerHTML = panelEx.image_url ? `<img src="${esc(panelEx.image_url)}" alt="">` : 'No image';
+      document.getElementById('gif-q').value = panelEx.name;
+      document.getElementById('gif-backdrop').classList.add('open');
+      document.body.style.overflow = 'hidden';
+      loadCatalog(true);
+      document.getElementById('gif-q').focus();
+    }
+
+    function closePanel() {
+      document.getElementById('gif-backdrop').classList.remove('open');
+      document.body.style.overflow = '';
+      panelEx = null;
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && panelEx) closePanel();
+    });
+
+    function quotaText(q) {
+      if (!q || q.remaining == null) return 'API calls left this month: unknown until the next call';
+      return 'API calls left this month: ' + q.remaining + (q.limit ? ' of ' + q.limit : '');
+    }
+
+    async function loadCatalog(thenSearch) {
       try {
-        const q = (query || '').trim();
-        const qs = q ? '?q=' + encodeURIComponent(q) : '';
-        const res = await fetch('/admin/exercises/' + id + '/suggest' + qs);
-        const data = await res.json();
-        if (!res.ok) {
-          row.innerHTML = '<span class="no-suggest">' + esc(data.message || 'Error loading suggestions.') + '</span>';
-          return;
-        }
-        if (!data.length) {
-          row.innerHTML = '<span class="no-suggest">No suggestions found.</span>';
-          return;
-        }
-        row.innerHTML = data.map(s => {
-          const safeGif = esc(s.gifUrl);
-          const safeEquip = esc(s.equipment);
-          const safeLabel = esc(s.name);
-          const safeDbId = esc(s.exercisedbId);
-          return `<div class="sug-thumb" title="${safeLabel}" onclick="selectSuggest(${id}, '${safeDbId}')">
-            <img src="${safeGif}" loading="lazy">
-            <div class="sug-label">${safeEquip}</div>
-          </div>`;
-        }).join('');
+        const res = await fetch('/admin/exercises/catalog');
+        catalog = await res.json();
       } catch {
-        row.innerHTML = '<span class="no-suggest">Error loading suggestions.</span>';
-      } finally {
-        btn.textContent = 'Suggest';
-        btn.disabled = false;
+        document.getElementById('catalog-bar').innerHTML = '<span class="warn">Could not load the catalog.</span>';
+        return;
+      }
+      renderCatalogBar();
+      fillFacets(thenSearch);
+      if (thenSearch) runSearch();
+    }
+
+    function renderCatalogBar(progress) {
+      const bar = document.getElementById('catalog-bar');
+      const c = catalog;
+      if (progress) {
+        bar.innerHTML = `<span>Fetching catalog… ${progress.count} exercises so far.</span>
+          <span>${esc(quotaText(progress.quota))}</span>`;
+        return;
+      }
+      const fetchLabel = !c.count ? 'Fetch catalog' : c.complete ? 'Refresh catalog' : 'Continue fetch';
+      const note = !c.count
+        ? '<span class="warn">The catalog hasn&#39;t been fetched yet. Search needs it.</span>'
+        : c.complete
+          ? `Catalog: ${c.count} exercises, fetched ${esc(c.fetched_at || '')}.`
+          : `<span class="warn">Catalog stopped partway at ${c.count} exercises.</span>`;
+      bar.innerHTML = `<span>${note}</span><span>${esc(quotaText(c.quota))}</span>
+        ${c.api_key_set
+          ? `<button class="btn-small" onclick="fetchCatalog()">${fetchLabel}</button>`
+          : '<span class="warn">RAPIDAPI_KEY is not set on the server.</span>'}`;
+    }
+
+    function fillFacets(preselect) {
+      const labels = { equipment: 'Any equipment', body_part: 'Any body part', target: 'Any target muscle' };
+      for (const field of ['equipment', 'body_part', 'target']) {
+        const sel = document.getElementById('f-' + field);
+        const keep = preselect ? null : sel.value;
+        const values = (catalog && catalog.facets[field]) || [];
+        sel.innerHTML = `<option value="">${labels[field]}</option>` +
+          values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+        if (keep && values.includes(keep)) sel.value = keep;
+      }
+      if (preselect && panelEx) {
+        const mapped = EQUIPMENT_MAP[panelEx.equipment];
+        const sel = document.getElementById('f-equipment');
+        if (mapped && [...sel.options].some(o => o.value === mapped)) sel.value = mapped;
       }
     }
 
-    async function selectSuggest(id, exercisedbId) {
-      const row = document.getElementById('suggest-' + id);
-      const status = document.getElementById('status-' + id);
-      if (row) row.innerHTML = '<span class="no-suggest">Saving…</span>';
+    async function fetchCatalog() {
+      // Rows arrive in catalog order, so a copy that stopped partway carries on from its row count
+      let offset = catalog.count && !catalog.complete ? catalog.count : 0;
+      const what = offset
+        ? `Carries on from exercise ${offset}, at 10 exercises per API call.`
+        : catalog.count
+          ? 'Refreshing re-reads the whole catalog: about 135 API calls (10 exercises per call).'
+          : 'Fetching the catalog uses about 135 API calls (10 exercises per call).';
+      if (!confirm(what + '\n\n' + quotaText(catalog.quota) + '\n\nIf it stops partway, what was fetched is kept.')) return;
+      renderCatalogBar({ count: catalog.count, quota: catalog.quota });
+      while (true) {
+        let res, data;
+        try {
+          res = await fetch('/admin/exercises/catalog/fetch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ offset }),
+          });
+          data = await res.json();
+        } catch {
+          data = { message: 'Network error.' };
+        }
+        if (data.count != null) catalog = data;
+        if (!res || !res.ok) {
+          renderCatalogBar();
+          document.getElementById('catalog-bar').insertAdjacentHTML('beforeend',
+            `<span class="warn">Stopped at ${offset}: ${esc(data.message || 'error')}</span>`);
+          break;
+        }
+        offset = data.next_offset;
+        if (data.done) { renderCatalogBar(); break; }
+        renderCatalogBar({ count: data.count, quota: data.quota });
+      }
+      fillFacets(false);
+      runSearch();
+    }
+
+    function queueSearch() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(runSearch, 220);
+    }
+
+    function searchParams(offset) {
+      const p = new URLSearchParams({
+        q: document.getElementById('gif-q').value,
+        exercise_id: panelEx ? panelEx.id : '',
+        offset: offset || 0,
+      });
+      for (const f of ['equipment', 'body_part', 'target']) {
+        const v = document.getElementById('f-' + f).value;
+        if (v) p.set(f, v);
+      }
+      return p;
+    }
+
+    async function runSearch(append) {
+      if (!panelEx) return;
+      const body = document.getElementById('panel-body');
+      if (!catalog || !catalog.count) {
+        body.innerHTML = '<div class="msg">Fetch the catalog to search it.</div>';
+        return;
+      }
+      const seq = ++searchSeq;
+      let data;
+      try {
+        const res = await fetch('/admin/exercises/catalog/search?' + searchParams(append ? nextOffset : 0));
+        data = await res.json();
+        if (!res.ok) throw new Error(data.message);
+      } catch (e) {
+        if (seq === searchSeq) body.innerHTML = `<div class="msg err">${esc(e.message || 'Search failed.')}</div>`;
+        return;
+      }
+      if (seq !== searchSeq) return;
+      results = append ? results.concat(data.results) : data.results;
+      nextOffset = data.next_offset;
+      if (!append) lastSearch = data;
+      renderResults();
+    }
+
+    let lastSearch = null;
+
+    function tileHtml(r) {
+      const name = r.name_parts.map(([w, bold]) => bold ? `<b>${esc(w)}</b>` : esc(w)).join(' ');
+      const isCurrent = panelEx && panelEx.image_source_id === r.id;
+      return `<div class="tile${isCurrent ? ' current' : ''}" onclick="showPreview('${esc(r.id)}')">
+        <img src="${esc(r.thumb_url)}" loading="lazy" alt="">
+        <div class="t-body">
+          <div class="t-name">${name}</div>
+          <div class="t-meta">${esc(r.equipment)} · ${esc(r.target)}</div>
+          ${isCurrent ? '<div class="t-current">Current image</div>' : ''}
+          ${r.used_by.length ? `<div class="t-used">Used by ${esc(r.used_by.join(', '))}</div>` : ''}
+        </div>
+      </div>`;
+    }
+
+    function renderResults() {
+      const body = document.getElementById('panel-body');
+      const d = lastSearch;
+      let html = `<div class="result-count">${d.total} match${d.total === 1 ? '' : 'es'}` +
+        (d.total ? `, showing ${results.length}` : '') + '</div>';
+      if (results.length) html += `<div class="tiles">${results.map(tileHtml).join('')}</div>`;
+      if (nextOffset != null) {
+        html += `<div class="more-row"><button class="btn-small" onclick="runSearch(true)">Show more</button></div>`;
+      }
+      if (d.close.length) {
+        html += `<div class="section-label">Close matches (one word missing)</div>
+          <div class="tiles">${d.close.map(tileHtml).join('')}</div>`;
+      }
+      if (!results.length && !d.close.length) {
+        html += '<div class="msg">Nothing matches. Try fewer words, or set a filter back to Any.</div>';
+      }
+      body.innerHTML = html;
+    }
+
+    function findResult(id) {
+      return results.find(r => r.id === id) || (lastSearch && lastSearch.close.find(r => r.id === id));
+    }
+
+    function showPreview(id) {
+      const r = findResult(id);
+      if (!r) return;
+      const body = document.getElementById('panel-body');
+      const secondary = r.secondary_muscles.length ? ' · also ' + r.secondary_muscles.join(', ') : '';
+      body.innerHTML = `<div class="preview">
+        <img src="${esc(r.thumb_url)}" alt="">
+        <div>
+          <h2>${esc(r.name)}</h2>
+          <div class="p-meta">${esc(r.equipment)} · ${esc(r.body_part)}</div>
+          <div class="p-meta">Target: ${esc(r.target)}${esc(secondary)}</div>
+          ${r.description ? `<div class="p-desc">${esc(r.description)}</div>` : ''}
+          ${r.used_by.length ? `<div class="p-used">Already used by ${esc(r.used_by.join(', '))}</div>` : ''}
+          <div class="p-actions">
+            <button class="btn-save" id="use-btn" onclick="useGif('${esc(r.id)}')">Use this GIF</button>
+            <button class="btn-clear" onclick="renderResults()">Back to results</button>
+            <span class="status" id="use-status"></span>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    async function useGif(exercisedbId) {
+      const id = panelEx.id;
+      const btn = document.getElementById('use-btn');
+      const status = document.getElementById('use-status');
+      btn.disabled = true;
+      status.textContent = 'Saving…';
+      status.className = 'status';
       try {
         const res = await fetch('/admin/exercises/' + id + '/apply-suggestion', {
           method: 'POST',
@@ -342,24 +620,24 @@
         });
         const data = await res.json();
         if (!res.ok) {
-          if (row) row.innerHTML = '<span class="no-suggest">' + esc(data.message || 'Error saving image.') + '</span>';
+          status.textContent = data.message || 'Error saving image.';
+          status.className = 'status err';
+          btn.disabled = false;
           return;
         }
+        // Same file path as before, so bust the browser's copy of the old GIF
+        const fresh = data.image_url + '?v=' + Date.now();
+        const ex = exercises.find(e => e.id === id);
+        if (ex) { ex.image_url = data.image_url; ex.image_source_id = data.image_source_id; }
         const input = document.getElementById('input-' + id);
         if (input) input.value = data.image_url;
-        previewUrl(id, data.image_url);
-        const ex = exercises.find(e => e.id === id);
-        if (ex) ex.image_url = data.image_url;
-        const card = document.getElementById('card-' + id);
-        if (card) { card.classList.add('saved'); setTimeout(() => card.classList.remove('saved'), 1500); }
-        if (status) {
-          status.textContent = '✓ Saved';
-          status.className = 'status ok';
-          setTimeout(() => { status.textContent = ''; }, 2500);
-        }
-        if (row) row.innerHTML = '';
+        previewUrl(id, fresh);
+        closePanel();
+        flashSaved(id);
       } catch {
-        if (row) row.innerHTML = '<span class="no-suggest">Network error.</span>';
+        status.textContent = 'Network error.';
+        status.className = 'status err';
+        btn.disabled = false;
       }
     }
 

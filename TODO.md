@@ -1424,7 +1424,7 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [ ] **The admin is the source of truth** for library fields (decided 2026-10-17). `seed.py` still creates new exercises, but `--update-muscles`, `--refetch-images` and any other flag that rewrites an existing row skip fields the admin has edited. "Edited" is read from `admin_audit_log` (any `exercise.*` row for that exercise and field), so no extra column. A field is overwritten only when specifically noted: `seed.py --update-muscles --force-admin-edits`, which prints each field it overrides first. Test: an admin-edited `muscle_group` survives `--update-muscles` and is replaced with the force flag
 - [ ] Custom-exercise candidates: users' custom exercises grouped by trimmed lowercase name + equipment, count of distinct users, most common first, with the closest global exercise beside each (same matcher as §2b) so near-duplicates are obvious. Read-only: promoting one is still a hand edit of `seed.py`
 
-### 2b. Exercise image search (PR 2)
+### 2b. Exercise image search (PR 2), built 2026-10-17
 **Why finding the right GIF is hard today**
 - The search box calls ExerciseDB's `/exercises/name/{q}`, a substring match on the whole name. Word order and spelling must match ExerciseDB's exactly: "incline dumbbell press" misses "dumbbell incline bench press", "pull down" misses "pulldown", "rdl" or "skull crusher" find nothing
 - Only the first 20 come back, ranked by nothing except "same equipment first"
@@ -1432,24 +1432,18 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - Every thumbnail is a fresh RapidAPI call through the uncached proxy: up to 20 quota calls per search, every time
 - Clicking a thumbnail saves it at once; a misclick overwrites the current image
 
-**Plan**
-- [ ] **Local catalog.** `exercisedb_catalog` table + migration: `id` (ExerciseDB id, PK), `name`, `equipment`, `body_part`, `target`, `secondary_muscles` (JSON), `fetched_at`. A table, not a file, because Railway's disk resets on deploy. Move `seed.py`'s paging fetch into `utils/exercisedb.py` and have both `seed.py` and the admin use it. "Refresh catalog" button on the page (2 API calls, shows the date of the last refresh); the search reads only the table, so searching costs no quota
-- [ ] **Matcher** `search_catalog(query, equipment=None, body_part=None, target=None)` in `utils/exercisedb.py`, pure and unit-tested:
-  - Normalize both sides: lowercase, drop punctuation, hyphens to spaces, trailing plural `s`, join split words (`pull down` → `pulldown`, `push up` → `pushup`, `chin up`, `sit up`, `step up`)
-  - Synonyms: `db` dumbbell, `bb` barbell, `kb` kettlebell, `ez` ez barbell, `bw` body weight, `ohp` overhead press, `rdl` romanian deadlift, `sldl` stiff leg deadlift, `skull crusher` lying triceps extension, `fly` / `flye`, `military press` / `overhead press`, `lat` / `latissimus`. A plain dict, so a miss found while working gets one line added
-  - Every query word must appear, in any order. Ranked by: fewest extra words in the candidate (so "bench press" puts "barbell bench press" above "barbell incline bench press"), then equipment match with this exercise, then target muscle matching its `muscle_group` (map ours to ExerciseDB's: Chest → pectorals, Back → lats / upper back, Shoulders → delts, Quads → quads, and so on)
-  - Fewer than 5 full matches: also return "close matches" missing one word, under their own heading
-- [ ] **Search panel.** Clicking "Find GIF" on a card opens one wide panel (modal on desktop, full screen on a phone) instead of the cramped row inside the card:
-  - Search box prefilled with the exercise's name and editable, results update as you type (debounced, server-side search against the table)
-  - Filter chips: equipment (preselected to this exercise's, one click for "Any"), body part, target muscle; values come from the catalog
-  - Results grid of 24 with "Show more"; each tile shows the full name with matched words in bold, equipment and target muscle
-  - Click a tile for a large animated preview with name, target, secondary muscles, and **Use this GIF** / Back. Nothing saves until that button
-  - The current image sits pinned at the panel's top for comparison
-  - Tiles already used by another exercise say so ("Used by Bench Press (Dumbbell)"), which needs the next item
-- [ ] `ExerciseTemplate.image_source_id` (ExerciseDB id, nullable) + migration, set by apply-suggestion; also lets a GIF be re-downloaded later. Existing images stay NULL (their source is unknown). Not a weight column, so the unit registry test doesn't need it
-- [ ] **Quota.** Thumbnails at ExerciseDB's 180 resolution (the saved file stays 360); the proxy sends `Cache-Control: private, max-age=604800` so the browser keeps them; a per-process in-memory LRU of ~200 thumbnails on the server. Check 180 is on the current RapidAPI plan first
-- [ ] Apply-suggestion goes through the write guard and the audit log (before / after `image_url`)
-- [ ] Tests: matcher (word order, plurals, joined words, each synonym, extra-word ranking, equipment and muscle ranking, close-match fallback), catalog refresh with RapidAPI mocked (paging stops on a short page, upsert not duplicate), search route with no catalog yet returns a clear message, apply-suggestion sets `image_source_id` and writes an audit row
+**What the RapidAPI plan allows** (found 2026-10-17, from the response headers): 690 calls a month, and every list endpoint returns at most 10 rows whatever `limit` asks for. So the old search only ever showed 10, a full catalog copy costs about 135 calls, and each thumbnail is one call. `seed.py`'s fetch asked for 1300 a page, got 10, and stopped there (now fixed, see below).
+
+**Built (PR 2, 2026-10-17)**
+- [x] **Local catalog.** `exercisedb_catalog` table (migration `b6c7d8e9f0a1`). Fetched in steps from the page: each `POST /admin/exercises/catalog/fetch` reads 5 pages (about 50 rows, a few seconds, well under gunicorn's 30s on its one worker), the page loops until a short page. A run that stops partway keeps its rows, and the button becomes "Continue fetch" from where it stopped. A finished run is audit-logged with its row count, which is how the page knows the copy is complete. Search reads only the table: no API call
+- [x] **Matcher** `search()` in `utils/exercisedb.py`, pure, tested in `tests/test_exercisedb_search.py`: any word order, plurals, punctuation, joined words (pull up / pull down / push down / dead lift / skull crusher...), word aliases (db, bb, kb, flye, latissimus), query shorthand followed through chains (rdl, sldl, ohp, military press → overhead press → shoulder press, lat pulldown → pulldown). Ranked by fewest extra words, then target muscle matching our primary muscle group. Last word matches as a prefix while typing. Fewer than 5 full matches adds close matches missing one word. `ez` and `bw` aliases from the plan left out: ExerciseDB's names already say "ez barbell" and "body weight" is the equipment, not in names
+- [x] **Search panel**: "Find GIF" on each card opens a wide panel (full screen on a phone). Search box prefilled with the exercise name, debounced; selects for equipment (preselected to this exercise's), body part and target muscle; 12 tiles a page with "Show more" (12, not 24, since each new thumbnail costs a call); full name with matched words bold, equipment and target; current image in the header and its tile marked; "Used by ..." on GIFs other exercises have. A tile opens a preview with description, secondary muscles and **Use this GIF**; nothing saves until then. Esc or the backdrop closes it
+- [x] `ExerciseTemplate.image_source_id`, set by "Use this GIF", cleared when a different URL is pasted and saved; saving the same URL is a no-op (no audit row)
+- [x] **Quota.** Thumbnails at 180 (checked: works on this plan), stored in `exercisedb_thumbnails` after the first fetch so each costs one call ever, plus a week of browser cache. The saved file stays 360. Calls left this month shown on the panel, read from the headers of the last upstream call (unknown after a restart until the next call)
+- [x] The old `/admin/exercises/<id>/suggest` route (ExerciseDB's name search) is gone
+- [x] `seed.py` pages through the catalog 10 at a time via `utils.exercisedb.fetch_page`. Left as is: it still builds `gifUrl` on `v2.exercisedb.io`, which the admin's comments say these ids don't resolve on
+- [ ] On prod after deploy: press "Fetch catalog" once (about 135 of the month's calls), then try a few hard searches. The preview shows the 180 thumbnail scaled up, so it's soft; the saved 360 file is sharper
+- [ ] Add aliases as misses turn up: `_WORD_ALIASES`, `_JOINS` and `_PHRASE_ALIASES` in `utils/exercisedb.py`, one line each, plus a test case
 
 ### 3. User lookup / support (PR 6)
 - [ ] `/admin/users?q=`: search by email or username (`ilike`, 50 results max)

@@ -1,47 +1,22 @@
 import os
+import re
 import secrets
 import urllib.parse
+from datetime import datetime
 from functools import wraps
-import requests as http_requests
 from flask import Blueprint, Response, current_app, jsonify, redirect, render_template, request, url_for
 from limiter import limiter
-from models import db, AdminAuditLog, ExerciseTemplate
+from models import db, AdminAuditLog, ExerciseDBEntry, ExerciseDBThumbnail, ExerciseTemplate
+from utils import exercisedb
 from utils.admin_audit import audit
 
-_RAPIDAPI_HOST = 'exercisedb.p.rapidapi.com'
-_RAPIDAPI_IMAGE_HEADERS = {'User-Agent': 'Mozilla/5.0 (compatible; AreteAdmin/1.0)'}
-# Cloudflare's bot-fight-mode 403s (error 1010) requests with no User-Agent,
-# so every RapidAPI call here sends one alongside the API key headers.
-
-
-def _rapidapi_headers(api_key: str) -> dict:
-    return {'X-RapidAPI-Key': api_key, 'X-RapidAPI-Host': _RAPIDAPI_HOST, **_RAPIDAPI_IMAGE_HEADERS}
-
-
-def _rapidapi_error_message(exc: Exception) -> str:
-    """RapidAPI puts the actually-useful text (e.g. "monthly quota exceeded")
-    in the response body's JSON, not in the exception string — surface that
-    instead of a raw "429 Client Error: ..." message that just looks like a
-    generic failure."""
-    response = getattr(exc, 'response', None)
-    if response is not None:
-        try:
-            return response.json().get('message', str(exc))
-        except Exception:
-            pass
-    return str(exc)
-
-_OUR_TO_EXERCISEDB_EQUIP = {
-    'Barbell':       'barbell',
-    'Dumbbell':      'dumbbell',
-    'Cable':         'cable',
-    'Machine':       'leverage machine',
-    'Bodyweight':    'body weight',
-    'Smith Machine': 'smith machine',
-    'EZ Bar':        'ez barbell',
-    'Kettlebell':    'kettlebell',
-    'Weighted':      'weighted',
-}
+# Thumbnails on the search panel are small; the saved file stays at 360, what
+# the app has always shown.
+_THUMB_RESOLUTION = '180'
+_SAVE_RESOLUTION = '360'
+_PAGES_PER_FETCH_STEP = 5   # ~50 rows in a few seconds, well under gunicorn's 30s on its one worker
+_SEARCH_PAGE = 12           # each thumbnail not yet cached costs a call, so a small page
+_EXERCISEDB_ID = re.compile(r'^[A-Za-z0-9]{1,16}$')
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -82,6 +57,10 @@ def _admin_write(f):
     return decorated
 
 
+def _api_key():
+    return os.environ.get('RAPIDAPI_KEY', '')
+
+
 @admin_bp.get('/')
 @_require_admin
 def admin_home():
@@ -96,11 +75,11 @@ def admin_audit():
     return render_template('admin/audit.html', active='audit', rows=rows, limit=limit)
 
 
-
 @admin_bp.get('/exercises')
 @_require_admin
 def admin_exercises():
-    return render_template('admin/exercises.html', active='exercises')
+    return render_template('admin/exercises.html', active='exercises',
+                           equipment_map=exercisedb.OUR_TO_EXERCISEDB_EQUIP)
 
 
 @admin_bp.get('/exercises/data')
@@ -114,6 +93,7 @@ def admin_exercises_data():
         'muscle_group': ex.muscle_group or '',
         'exercise_type': ex.exercise_type or 'strength',
         'image_url': ex.image_url or '',
+        'image_source_id': ex.image_source_id,
         'is_custom': ex.user_id is not None,
     } for ex in exercises])
 
@@ -126,85 +106,176 @@ def update_exercise_image(exercise_id):
     if not ex:
         return jsonify({'message': 'Not found'}), 404
     data = request.get_json(silent=True) or {}
+    new_url = data.get('image_url') or None
+    if new_url == ex.image_url:
+        return jsonify({'message': 'ok'})
     before = ex.image_url
-    ex.image_url = data.get('image_url') or None
+    ex.image_url = new_url
+    # A pasted URL didn't come from ExerciseDB, so the exercise no longer uses that GIF
+    ex.image_source_id = None
     audit('exercise.image.set', 'exercise', ex.id, {'image_url': before}, {'image_url': ex.image_url})
     db.session.commit()
     return jsonify({'message': 'ok'})
 
 
-@admin_bp.get('/exercises/<int:exercise_id>/suggest')
+# ── ExerciseDB catalog and GIF search ─────────────────────────
+
+def _catalog_status():
+    q = exercisedb.quota
+    newest = db.session.query(db.func.max(ExerciseDBEntry.fetched_at)).scalar()
+    facets = {}
+    for field in ('equipment', 'body_part', 'target'):
+        col = getattr(ExerciseDBEntry, field)
+        facets[field] = [v for (v,) in db.session.query(col).distinct().order_by(col)]
+    count = ExerciseDBEntry.query.count()
+    # A run that reached the last page logs the row count; anything else means
+    # the copy stopped partway and the next fetch should carry on, not restart.
+    last_run = (AdminAuditLog.query.filter_by(action='exercisedb.catalog.fetch')
+                .order_by(AdminAuditLog.id.desc()).first())
+    complete = bool(count and last_run and (last_run.after or {}).get('rows') == count)
+    return {
+        'count': count,
+        'complete': complete,
+        'fetched_at': newest.isoformat(timespec='minutes') if newest else None,
+        'facets': facets,
+        'quota': {'remaining': q['remaining'], 'limit': q['limit'],
+                  'at': q['at'].isoformat(timespec='minutes') if q['at'] else None},
+        'api_key_set': bool(_api_key()),
+    }
+
+
+@admin_bp.get('/exercises/catalog')
 @_require_admin
-def suggest_exercise_image(exercise_id):
-    """Search ExerciseDB for GIFs matching this exercise's name + equipment.
+def exercisedb_catalog_status():
+    return jsonify(_catalog_status())
 
-    Defaults to searching by this exercise's own name, but accepts an
-    optional ?q= override so the admin page can search ExerciseDB directly
-    when the auto-match misses a GIF that exists under a different name.
-    """
-    ex = db.session.get(ExerciseTemplate, exercise_id)
-    if not ex:
-        return jsonify({'message': 'Not found'}), 404
 
-    api_key = os.environ.get('RAPIDAPI_KEY', '')
+@admin_bp.post('/exercises/catalog/fetch')
+@_require_admin
+@_admin_write
+def exercisedb_catalog_fetch():
+    """One step of copying ExerciseDB's catalog: a few pages from `offset`,
+    upserted. The page calls again with `next_offset` until `done`, so a run
+    that stops partway (quota, a network error) keeps what it got and can
+    carry on from there."""
+    api_key = _api_key()
     if not api_key:
         return jsonify({'message': 'RAPIDAPI_KEY not configured on server'}), 503
+    offset = (request.get_json(silent=True) or {}).get('offset', 0)
+    if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0:
+        return jsonify({'message': 'offset must be a non-negative integer'}), 400
 
-    query = (request.args.get('q') or ex.name).strip().lower()
-    if not query:
-        return jsonify({'message': 'Search query required'}), 400
-    # safe='' so a '/' in the query can't walk the upstream path.
-    name_encoded = urllib.parse.quote(query, safe='')
-    url = f'https://exercisedb.p.rapidapi.com/exercises/name/{name_encoded}?limit=30'
+    now = datetime.now()
+    fetched, done, error = 0, False, None
+    for _ in range(_PAGES_PER_FETCH_STEP):
+        try:
+            page = exercisedb.fetch_page(api_key, offset)
+        except Exception as exc:
+            error = exercisedb.error_message(exc)
+            break
+        for item in page:
+            entry_id = str(item['id'])
+            entry = db.session.get(ExerciseDBEntry, entry_id) or ExerciseDBEntry(id=entry_id)
+            entry.name = item.get('name') or ''
+            entry.equipment = item.get('equipment') or ''
+            entry.body_part = item.get('bodyPart') or ''
+            entry.target = item.get('target') or ''
+            entry.secondary_muscles = item.get('secondaryMuscles') or []
+            entry.description = item.get('description')
+            entry.fetched_at = now
+            db.session.add(entry)
+        fetched += len(page)
+        offset += len(page)
+        if len(page) < exercisedb.PAGE_SIZE:
+            done = True
+            break
+    db.session.flush()
+    if done:
+        audit('exercisedb.catalog.fetch', 'exercisedb_catalog', None, None,
+              {'rows': ExerciseDBEntry.query.count()})
+    db.session.commit()
+    body = {'fetched': fetched, 'next_offset': offset, 'done': done, **_catalog_status()}
+    if error:
+        return jsonify({**body, 'message': error}), 502
+    return jsonify(body)
+
+
+def _entry_dict(e):
+    return {'id': e.id, 'name': e.name, 'equipment': e.equipment, 'body_part': e.body_part,
+            'target': e.target, 'secondary_muscles': e.secondary_muscles or [],
+            'description': e.description or ''}
+
+
+@admin_bp.get('/exercises/catalog/search')
+@_require_admin
+def exercisedb_catalog_search():
+    """Searches our copy of the catalog, so it costs no RapidAPI call.
+    ?exercise_id= ranks by that exercise's muscle group and leaves it out of
+    the "used by" labels."""
+    args = request.args
     try:
-        resp = http_requests.get(url, headers=_rapidapi_headers(api_key), timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as exc:
-        return jsonify({'message': _rapidapi_error_message(exc)}), 502
+        offset = max(int(args.get('offset', 0)), 0)
+    except ValueError:
+        return jsonify({'message': 'offset must be an integer'}), 400
+    ours = None
+    if args.get('exercise_id', '').isdigit():
+        ours = db.session.get(ExerciseTemplate, int(args['exercise_id']))
 
-    target_equip = _OUR_TO_EXERCISEDB_EQUIP.get(ex.equipment or '', '').lower()
+    entries = [_entry_dict(e) for e in ExerciseDBEntry.query.all()]
+    matches, close, tokens = exercisedb.search(
+        entries, args.get('q', ''),
+        equipment=args.get('equipment') or None,
+        body_part=args.get('body_part') or None,
+        target=args.get('target') or None,
+        our_muscle_group=ours.muscle_group if ours else None,
+    )
 
-    # Sort: equipment-matching results first
-    data.sort(key=lambda item: 0 if item['equipment'] == target_equip else 1)
+    used_by = {}
+    for ex in ExerciseTemplate.query.filter(ExerciseTemplate.image_source_id.isnot(None)).all():
+        if ours and ex.id == ours.id:
+            continue
+        label = f'{ex.name} ({ex.equipment})' if ex.equipment else ex.name
+        used_by.setdefault(ex.image_source_id, []).append(label)
 
-    # This dataset's ids (e.g. "0025") only resolve through RapidAPI's own
-    # /image endpoint, which requires the API key as a header — they are NOT
-    # valid on the public v2.exercisedb.io CDN (that's a different, newer
-    # dataset with its own id scheme; hitting it with these ids 422s). So the
-    # thumbnail src has to go through our own proxy route, which holds the key
-    # server-side, rather than pointing straight at ExerciseDB.
-    results = [
-        {
-            'name': item['name'],
-            'equipment': item['equipment'],
-            'exercisedbId': item['id'],
-            'gifUrl': f'/admin/exercises/image-proxy/{item["id"]}',
-        }
-        for item in data[:20]
-    ]
-    return jsonify(results)
+    def shape(e):
+        return {**e, 'name_parts': exercisedb.highlight(e['name'], tokens),
+                'used_by': used_by.get(e['id'], []),
+                'thumb_url': url_for('admin.exercise_image_proxy', exercisedb_id=e['id'])}
+
+    page = matches[offset:offset + _SEARCH_PAGE]
+    end = offset + len(page)
+    return jsonify({
+        'total': len(matches),
+        'results': [shape(e) for e in page],
+        'next_offset': end if end < len(matches) else None,
+        'close': [shape(e) for e in close[:_SEARCH_PAGE]] if offset == 0 else [],
+        'catalog_count': len(entries),
+        'current_source_id': ours.image_source_id if ours else None,
+    })
 
 
 @admin_bp.get('/exercises/image-proxy/<exercisedb_id>')
 @_require_admin
 def exercise_image_proxy(exercisedb_id):
-    """Streams a suggestion thumbnail through the server so the admin page can
-    render it without exposing the RapidAPI key to the browser."""
-    api_key = os.environ.get('RAPIDAPI_KEY', '')
-    if not api_key:
-        return Response(status=503)
-    try:
-        resp = http_requests.get(
-            f'https://{_RAPIDAPI_HOST}/image',
-            params={'exerciseId': exercisedb_id, 'resolution': '360'},
-            headers=_rapidapi_headers(api_key),
-            timeout=15,
-        )
-        resp.raise_for_status()
-    except Exception:
-        return Response(status=502)
-    return Response(resp.content, mimetype=resp.headers.get('Content-Type', 'image/gif'))
+    """A search thumbnail, through the server so the RapidAPI key stays here.
+    Stored after the first fetch: each one costs a call of the month's 690,
+    and the browser's cache alone forgets them."""
+    if not _EXERCISEDB_ID.match(exercisedb_id):
+        return Response(status=404)
+    cached = db.session.get(ExerciseDBThumbnail, exercisedb_id)
+    if not cached:
+        api_key = _api_key()
+        if not api_key:
+            return Response(status=503)
+        try:
+            content, content_type = exercisedb.fetch_image(api_key, exercisedb_id, _THUMB_RESOLUTION)
+        except Exception:
+            return Response(status=502)
+        cached = ExerciseDBThumbnail(exercisedb_id=exercisedb_id, content=content, content_type=content_type)
+        db.session.add(cached)
+        db.session.commit()
+    return Response(cached.content, mimetype=cached.content_type,
+                    headers={'Cache-Control': 'private, max-age=604800'})
 
 
 @admin_bp.post('/exercises/<int:exercise_id>/apply-suggestion')
@@ -212,9 +283,9 @@ def exercise_image_proxy(exercisedb_id):
 @_admin_write
 def apply_exercise_suggestion(exercise_id):
     """Downloads the chosen ExerciseDB GIF server-side and re-hosts it under
-    our own /static path — the mobile app's <Image> can't attach the
-    RapidAPI key header, so the final image_url can never point directly at
-    ExerciseDB; it has to be a file we actually store, same as avatars."""
+    our own /static path: the mobile app's <Image> can't attach the RapidAPI
+    key header, so the final image_url has to be a file we store, same as
+    avatars."""
     ex = db.session.get(ExerciseTemplate, exercise_id)
     if not ex:
         return jsonify({'message': 'Not found'}), 404
@@ -223,31 +294,28 @@ def apply_exercise_suggestion(exercise_id):
     exercisedb_id = data.get('exercisedb_id')
     if not exercisedb_id:
         return jsonify({'message': 'exercisedb_id required'}), 400
+    if not isinstance(exercisedb_id, str) or not _EXERCISEDB_ID.match(exercisedb_id):
+        return jsonify({'message': 'exercisedb_id is not an ExerciseDB id'}), 400
 
-    api_key = os.environ.get('RAPIDAPI_KEY', '')
+    api_key = _api_key()
     if not api_key:
         return jsonify({'message': 'RAPIDAPI_KEY not configured on server'}), 503
 
     try:
-        resp = http_requests.get(
-            f'https://{_RAPIDAPI_HOST}/image',
-            params={'exerciseId': exercisedb_id, 'resolution': '360'},
-            headers=_rapidapi_headers(api_key),
-            timeout=15,
-        )
-        resp.raise_for_status()
+        content, _ = exercisedb.fetch_image(api_key, exercisedb_id, _SAVE_RESOLUTION)
     except Exception as exc:
-        return jsonify({'message': f'Could not fetch image: {_rapidapi_error_message(exc)}'}), 502
+        return jsonify({'message': f'Could not fetch image: {exercisedb.error_message(exc)}'}), 502
 
     images_dir = os.path.join(current_app.static_folder, 'exercise_images')
     os.makedirs(images_dir, exist_ok=True)
     filename = f'{exercise_id}.gif'
     with open(os.path.join(images_dir, filename), 'wb') as f:
-        f.write(resp.content)
+        f.write(content)
 
-    before = ex.image_url
+    before = {'image_url': ex.image_url, 'image_source_id': ex.image_source_id}
     ex.image_url = f'/static/exercise_images/{filename}'
+    ex.image_source_id = exercisedb_id
     audit('exercise.image.apply_suggestion', 'exercise', ex.id,
-          {'image_url': before}, {'image_url': ex.image_url, 'exercisedb_id': exercisedb_id})
+          before, {'image_url': ex.image_url, 'image_source_id': exercisedb_id})
     db.session.commit()
-    return jsonify({'image_url': ex.image_url})
+    return jsonify({'image_url': ex.image_url, 'image_source_id': exercisedb_id})
