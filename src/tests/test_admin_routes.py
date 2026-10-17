@@ -5,9 +5,11 @@ itself, the RapidAPI/ExerciseDB integration, and the file-write path in
 apply-suggestion were all previously unverified.
 """
 import base64
+
+import pytest
 from unittest.mock import patch, MagicMock
 
-from models import db, ExerciseTemplate
+from models import db, AdminAuditLog, ExerciseTemplate
 
 
 def _basic_auth(password):
@@ -15,7 +17,14 @@ def _basic_auth(password):
     return {'Authorization': f'Basic {token}'}
 
 
+def _write_auth(password):
+    # Writes also need our own Origin (the test client's host is localhost)
+    return {**_basic_auth(password), 'Origin': 'http://localhost'}
+
+
 ADMIN_ROUTES = [
+    ('get', '/admin/'),
+    ('get', '/admin/audit'),
     ('get', '/admin/exercises'),
     ('get', '/admin/exercises/data'),
     ('post', '/admin/exercises/1/image'),
@@ -102,7 +111,7 @@ class TestUpdateExerciseImage:
     def test_returns_404_for_missing_exercise(self, client, monkeypatch):
         monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
         res = client.post('/admin/exercises/99999/image', json={'image_url': 'http://x/y.gif'},
-                           headers=_basic_auth('pw'))
+                           headers=_write_auth('pw'))
         assert res.status_code == 404
 
     def test_sets_image_url(self, app, client, monkeypatch):
@@ -110,7 +119,7 @@ class TestUpdateExerciseImage:
         ex_id = _make_exercise(app)
 
         res = client.post(f'/admin/exercises/{ex_id}/image', json={'image_url': 'http://x/y.gif'},
-                           headers=_basic_auth('pw'))
+                           headers=_write_auth('pw'))
         assert res.status_code == 200
         with app.app_context():
             ex = db.session.get(ExerciseTemplate, ex_id)
@@ -121,7 +130,7 @@ class TestUpdateExerciseImage:
         ex_id = _make_exercise(app, image_url='http://old/img.gif')
 
         res = client.post(f'/admin/exercises/{ex_id}/image', json={'image_url': ''},
-                           headers=_basic_auth('pw'))
+                           headers=_write_auth('pw'))
         assert res.status_code == 200
         with app.app_context():
             ex = db.session.get(ExerciseTemplate, ex_id)
@@ -265,13 +274,13 @@ class TestApplyExerciseSuggestion:
     def test_returns_404_for_missing_exercise(self, client, monkeypatch):
         monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
         res = client.post('/admin/exercises/99999/apply-suggestion', json={'exercisedb_id': '0025'},
-                           headers=_basic_auth('pw'))
+                           headers=_write_auth('pw'))
         assert res.status_code == 404
 
     def test_requires_exercisedb_id(self, app, client, monkeypatch):
         monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
         ex_id = _make_exercise(app)
-        res = client.post(f'/admin/exercises/{ex_id}/apply-suggestion', json={}, headers=_basic_auth('pw'))
+        res = client.post(f'/admin/exercises/{ex_id}/apply-suggestion', json={}, headers=_write_auth('pw'))
         assert res.status_code == 400
 
     def test_returns_503_when_rapidapi_key_not_configured(self, app, client, monkeypatch):
@@ -279,7 +288,7 @@ class TestApplyExerciseSuggestion:
         monkeypatch.delenv('RAPIDAPI_KEY', raising=False)
         ex_id = _make_exercise(app)
         res = client.post(f'/admin/exercises/{ex_id}/apply-suggestion', json={'exercisedb_id': '0025'},
-                           headers=_basic_auth('pw'))
+                           headers=_write_auth('pw'))
         assert res.status_code == 503
 
     def test_returns_502_when_the_download_fails(self, app, client, monkeypatch):
@@ -288,7 +297,7 @@ class TestApplyExerciseSuggestion:
         ex_id = _make_exercise(app)
         with patch('routes.admin_routes.http_requests.get', side_effect=Exception('timeout')):
             res = client.post(f'/admin/exercises/{ex_id}/apply-suggestion', json={'exercisedb_id': '0025'},
-                               headers=_basic_auth('pw'))
+                               headers=_write_auth('pw'))
         assert res.status_code == 502
 
     def test_downloads_and_saves_the_image_and_updates_the_exercise(self, app, client, monkeypatch, tmp_path):
@@ -302,7 +311,7 @@ class TestApplyExerciseSuggestion:
         fake_response.content = b'gif-bytes'
         with patch('routes.admin_routes.http_requests.get', return_value=fake_response):
             res = client.post(f'/admin/exercises/{ex_id}/apply-suggestion', json={'exercisedb_id': '0025'},
-                               headers=_basic_auth('pw'))
+                               headers=_write_auth('pw'))
 
         assert res.status_code == 200
         expected_url = f'/static/exercise_images/{ex_id}.gif'
@@ -314,3 +323,172 @@ class TestApplyExerciseSuggestion:
         with app.app_context():
             ex = db.session.get(ExerciseTemplate, ex_id)
             assert ex.image_url == expected_url
+
+
+class TestAdminHome:
+
+    def test_redirects_to_the_exercises_page(self, client, monkeypatch):
+        monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
+        res = client.get('/admin/', headers=_basic_auth('pw'))
+        assert res.status_code == 302
+        assert res.headers['Location'].endswith('/admin/exercises')
+
+    def test_pages_share_the_nav(self, client, monkeypatch):
+        monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
+        for path in ('/admin/exercises', '/admin/audit'):
+            html = client.get(path, headers=_basic_auth('pw')).get_data(as_text=True)
+            assert 'href="/admin/exercises"' in html and 'href="/admin/audit"' in html, path
+
+
+class TestAdminWriteGuard:
+
+    WRITES = ['/admin/exercises/{id}/image', '/admin/exercises/{id}/apply-suggestion']
+
+    def test_rejects_a_foreign_origin(self, app, client, monkeypatch):
+        monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
+        ex_id = _make_exercise(app, image_url='http://old/img.gif')
+        for path in self.WRITES:
+            res = client.post(path.format(id=ex_id), json={'image_url': 'http://evil/x.gif', 'exercisedb_id': '1'},
+                              headers={**_basic_auth('pw'), 'Origin': 'https://evil.example'})
+            assert res.status_code == 403, path
+        with app.app_context():
+            assert db.session.get(ExerciseTemplate, ex_id).image_url == 'http://old/img.gif'
+
+    def test_rejects_a_missing_origin(self, app, client, monkeypatch):
+        monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
+        ex_id = _make_exercise(app)
+        res = client.post(f'/admin/exercises/{ex_id}/image', json={'image_url': 'http://x/y.gif'},
+                          headers=_basic_auth('pw'))
+        assert res.status_code == 403
+
+    def test_rejects_a_form_body_from_our_own_origin(self, app, client, monkeypatch):
+        monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
+        ex_id = _make_exercise(app, image_url='http://old/img.gif')
+        res = client.post(f'/admin/exercises/{ex_id}/image', data={'image_url': 'http://x/y.gif'},
+                          headers=_write_auth('pw'))
+        assert res.status_code == 403
+        with app.app_context():
+            assert db.session.get(ExerciseTemplate, ex_id).image_url == 'http://old/img.gif'
+
+    def test_an_https_origin_matches_behind_the_proxy(self, app, client, monkeypatch):
+        monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
+        ex_id = _make_exercise(app)
+        res = client.post(f'/admin/exercises/{ex_id}/image', json={'image_url': 'http://x/y.gif'},
+                          headers={**_basic_auth('pw'), 'Origin': 'https://localhost'})
+        assert res.status_code == 200
+
+    def test_auth_is_checked_before_the_origin(self, app, client):
+        ex_id = _make_exercise(app)
+        res = client.post(f'/admin/exercises/{ex_id}/image', data='x')
+        assert res.status_code == 401
+
+
+class TestAdminAuditLog:
+
+    def test_image_save_writes_before_and_after(self, app, client, monkeypatch):
+        monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
+        ex_id = _make_exercise(app, image_url='http://old/img.gif')
+        client.post(f'/admin/exercises/{ex_id}/image', json={'image_url': 'http://new/img.gif'},
+                    headers=_write_auth('pw'))
+        with app.app_context():
+            row = AdminAuditLog.query.one()
+            assert (row.action, row.target_type, row.target_id) == ('exercise.image.set', 'exercise', ex_id)
+            assert row.before == {'image_url': 'http://old/img.gif'}
+            assert row.after == {'image_url': 'http://new/img.gif'}
+
+    def test_applied_suggestion_records_the_exercisedb_id(self, app, client, monkeypatch, tmp_path):
+        monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
+        monkeypatch.setenv('RAPIDAPI_KEY', 'rk')
+        monkeypatch.setattr(app, 'static_folder', str(tmp_path))
+        ex_id = _make_exercise(app)
+        fake_response = MagicMock()
+        fake_response.raise_for_status = MagicMock()
+        fake_response.content = b'gif-bytes'
+        with patch('routes.admin_routes.http_requests.get', return_value=fake_response):
+            client.post(f'/admin/exercises/{ex_id}/apply-suggestion', json={'exercisedb_id': '0025'},
+                        headers=_write_auth('pw'))
+        with app.app_context():
+            row = AdminAuditLog.query.one()
+            assert row.action == 'exercise.image.apply_suggestion'
+            assert row.before == {'image_url': None}
+            assert row.after == {'image_url': f'/static/exercise_images/{ex_id}.gif', 'exercisedb_id': '0025'}
+
+    def test_refused_and_failed_writes_leave_no_row(self, app, client, monkeypatch):
+        monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
+        monkeypatch.setenv('RAPIDAPI_KEY', 'rk')
+        ex_id = _make_exercise(app)
+        client.post(f'/admin/exercises/{ex_id}/image', json={'image_url': 'x'}, headers=_basic_auth('pw'))
+        client.post('/admin/exercises/99999/image', json={'image_url': 'x'}, headers=_write_auth('pw'))
+        with patch('routes.admin_routes.http_requests.get', side_effect=Exception('timeout')):
+            client.post(f'/admin/exercises/{ex_id}/apply-suggestion', json={'exercisedb_id': '1'},
+                        headers=_write_auth('pw'))
+        with app.app_context():
+            assert AdminAuditLog.query.count() == 0
+
+    def test_audit_page_lists_rows_newest_first(self, app, client, monkeypatch):
+        monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
+        # Two exercises, so neither row's "before" holds the other's URL
+        for name, url in (('First', 'http://first/a.gif'), ('Second', 'http://second/b.gif')):
+            ex_id = _make_exercise(app, name=name)
+            client.post(f'/admin/exercises/{ex_id}/image', json={'image_url': url}, headers=_write_auth('pw'))
+        html = client.get('/admin/audit', headers=_basic_auth('pw')).get_data(as_text=True)
+        assert 'exercise.image.set' in html
+        assert html.index('second/b.gif') < html.index('first/a.gif')
+
+    def test_audit_page_escapes_stored_values(self, app, client, monkeypatch):
+        monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
+        ex_id = _make_exercise(app)
+        client.post(f'/admin/exercises/{ex_id}/image', json={'image_url': '<script>alert(1)</script>'},
+                    headers=_write_auth('pw'))
+        html = client.get('/admin/audit', headers=_basic_auth('pw')).get_data(as_text=True)
+        assert '<script>alert(1)</script>' not in html
+
+    def test_empty_audit_page(self, client, monkeypatch):
+        monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
+        res = client.get('/admin/audit', headers=_basic_auth('pw'))
+        assert res.status_code == 200
+        assert 'No admin writes yet' in res.get_data(as_text=True)
+
+
+class TestAdminLoginRateLimit:
+    """The shared suite app starts with limiting off, and Flask-Limiter only
+    installs its request hooks (which blueprint limits run in) when it starts
+    on. So these build their own app with limiting on."""
+
+    @pytest.fixture
+    def limited_client(self, monkeypatch):
+        from app import create_app
+        from limiter import limiter
+        monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
+        limited_app = create_app(test_config={
+            'TESTING': True,
+            'RATELIMIT_ENABLED': True,
+            'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
+            'JWT_SECRET_KEY': 'test-secret-key',
+        })
+        limiter.reset()
+        with limited_app.app_context():
+            db.create_all()
+            yield limited_app.test_client()
+            db.session.remove()
+            db.drop_all()
+        limiter.enabled = False
+        limiter.reset()
+
+    def test_twenty_failed_logins_lock_the_admin(self, limited_client):
+        codes = [limited_client.get('/admin/exercises', headers=_basic_auth('wrong')).status_code for _ in range(21)]
+        assert codes[:20] == [401] * 20
+        assert codes[20] == 429
+        # The right password is locked out too until the window passes
+        assert limited_client.get('/admin/exercises', headers=_basic_auth('pw')).status_code == 429
+
+    def test_successful_requests_are_not_counted(self, limited_client):
+        for _ in range(25):
+            assert limited_client.get('/admin/exercises/data', headers=_basic_auth('pw')).status_code == 200
+        assert limited_client.get('/admin/exercises', headers=_basic_auth('wrong')).status_code == 401
+
+    def test_failures_on_different_admin_routes_share_one_counter(self, limited_client):
+        for i in range(20):
+            path = '/admin/exercises' if i % 2 else '/admin/audit'
+            assert limited_client.get(path, headers=_basic_auth('wrong')).status_code == 401
+        assert limited_client.get('/admin/exercises/data', headers=_basic_auth('wrong')).status_code == 429

@@ -1351,7 +1351,7 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [ ] On a device: vote, pick a reason, refresh, and check nothing flashes or shifts
 
 ### Next, in order
-- [ ] **Measure before tuning.** An `/admin` page with the helpful rate per insight type and per reason, and the most voted-down titles. Without it no prompt change can be judged
+- [ ] **Measure before tuning.** An `/admin` page with the helpful rate per insight type and per reason, and the most voted-down titles. Without it no prompt change can be judged (planned in §24, part 1)
 - [ ] **A prompt check to run before any prompt or model change.** A handful of fixture users (new, plateaued, overreaching, cardio-only, kg) through `_build_insights_context` → the model → `_verify_insights`, reporting how many insights `_is_grounded` drops, length, and banned copy (em dashes, exclamation marks). Not in the pytest suite, since it calls the API
 - [ ] **Treat "Looks wrong" votes as bugs.** List them on the admin page with the insight text, so a misread of the data becomes a fix to the context or `_is_grounded` rather than only a nudge to one user's prompt
 - [ ] **Store generated insights** (an `insights` table, one row per insight per batch). Votes then key on an id instead of the title and body text, and the Coach can see what it said before
@@ -1361,3 +1361,116 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [ ] **CoachProfile on the server.** Goal, experience, injuries and notes live only in AsyncStorage (`coach_profile_${uid}`), so a reinstall loses them and nothing server-side (scheduled insights, notifications) can read them
 - [ ] **Implicit signals.** Opening a suggested exercise or starting the routine an insight pointed at counts as a strong helpful. Needs insights to carry an action first
 - [ ] **Re-evaluate the model.** Insights and the review run on `claude-haiku-4-5-20251001`; compare newer models through the prompt check above before switching
+
+---
+
+## 🛠️ 24. Admin Console
+> Planned (owner, 2026-10-16; detailed 2026-10-17): grow `/admin` from the one exercise-images page into a console the owner uses day to day. Order follows what gets opened most: Coach & AI, then ops & content, then user lookup, then growth. Mostly read-only: the only writes are RevenueCat re-sync, force sign-out and exercise library edits (images included), each one audit-logged. Premium still comes only from RevenueCat. Desktop first, but the layout shouldn't break on a phone.
+>
+> Shipping order, one PR each: **Foundation → Exercise image search (§2b) → Coach & AI → System → Library editing → User lookup → Growth.** Image search jumps ahead of Coach because images are being added by hand right now and it only needs the Foundation.
+
+### Where things stand
+- `routes/admin_routes.py` (584 lines): the whole page is one `ADMIN_PAGE` string, served by `GET /admin/exercises`; data from `/admin/exercises/data`; writes are `POST /admin/exercises/<id>/image` and `POST /admin/exercises/<id>/apply-suggestion` (downloads the GIF to `static/exercise_images/<id>.gif`)
+- Auth is `_require_admin` (HTTP Basic, `ADMIN_PASSWORD`, `secrets.compare_digest`). No rate limit, no audit trail, writes accept any body
+- `test_route_guardrails.py` skips `/admin*` rules ("checked separately")
+- `flask-limiter` is already wired (`limiter.py`, `limiter.init_app` in `app.py`); `CORS(app, origins=_origins)` covers every route
+- `seed.py` already pages through the full ExerciseDB catalog (`_load_exercisedb`, `/exercises?limit=1300&offset=`), into a git-ignored `exercisedb_cache.json` that only exists on whoever ran it
+
+### Foundation (PR 1), built 2026-10-17
+- [x] `templates/admin/base.html`: shared layout, dark palette, top nav. The nav lists only pages that exist (Exercises, Audit log); each later PR adds its own link
+- [x] `templates/admin/exercises.html`: today's page moved over unchanged (same JS, markup and CSS, checked against the old string)
+- [x] `GET /admin/` redirects to `/admin/exercises` for now; point it at `/admin/coach` when PR 3 lands
+- [x] Failed-login limit: `limiter.shared_limit("20 per 15 minutes", scope='admin-login', deduct_when=401)` on the blueprint, one counter across every admin route, successful requests not counted. There's no `ProxyFix`, so on Railway every request has the proxy's address and this is one counter for everyone: a guessing run locks the owner out for the window too. (The app's login limits share that problem; worth a `ProxyFix(x_for=1)` on its own)
+- [x] Write guard `_admin_write` under `_require_admin` on both POSTs: 403 unless the body is JSON and the `Origin` host matches. Compares host only, since behind Railway's TLS proxy Flask sees http while the browser's Origin says https. CORS left as is: the Origin check is what refuses a cross-site write
+- [x] `admin_audit_log` table + migration `a5b6c7d8e9f0`; `audit()` in `utils/admin_audit.py` adds the row to the write's own commit. Both image writes record before / after (apply-suggestion also the ExerciseDB id)
+- [x] `GET /admin/audit`: last 200 rows, newest first
+- [x] Tests: `test_route_guardrails.py` walks every `/admin` rule (wrong password 401, right password with no body and no `RAPIDAPI_KEY` never 500); `test_admin_routes.py` covers the redirect, nav, write guard (foreign / missing Origin, form body, https Origin), audit rows and escaping, and the limiter (on its own app, since Flask-Limiter only installs its hooks when it starts enabled). Guard and limiter tests checked to fail with the code removed
+- [ ] Deploy and check on prod: log in, save an image, see it on the audit page
+
+### 1. Coach & AI (PR 3, covers §23's "Measure before tuning" step)
+**`/admin/coach`**, all from `insight_feedback` (votes are keyed by title + body, since insights aren't stored yet, §23)
+- [ ] Range picker: 30 days / 90 days / all
+- [ ] Per insight type: votes, helpful %, and the split of thumbs-down reasons (`known` / `irrelevant` / `wrong` / `vague`)
+- [ ] Helpful rate per week for the last 12 weeks, as one line: a prompt change shows up as a step in it. Mark the weeks a prompt changed by hand (a constant list of dates in the route is enough)
+- [ ] Most voted-down titles: grouped by title, at least 2 not-helpful votes, with the helpful count beside it
+- [ ] "Looks wrong" list: every `reason = 'wrong'` vote, newest first, with type, full title and body, user id (links to user detail once PR 6 lands) and date. Each one is a bug candidate in `_build_insights_context` or `_is_grounded` (§23)
+
+**`ai_call_log`** table + migration
+- [ ] Columns: `endpoint` (insights / weekly-review / generate), `user_id` (FK, `SET NULL`), `model`, `input_tokens`, `output_tokens`, `latency_ms`, `ok`, `error` (str 200), `created_at` (indexed)
+- [ ] One helper `create_message(endpoint, user_id, **kwargs)` in `utils/ai_client.py` replaces the three `client.messages.create` calls in `ai_routes.py` (~L1228, ~L1289, ~L1404) and logs in a `finally`. A failed log write is caught and dropped, never fails the user's request
+- [ ] Price table per model (dollars per million input / output tokens) next to the helper; cost on the page is labelled "estimated"
+- [ ] Tests: success and API failure both write a row with the right token counts and `ok`; a broken log insert still returns the insight
+
+**`/admin/ai`**
+- [ ] Calls and estimated cost per day, per endpoint, last 30 days; this month's total
+- [ ] Failure rate and p50 / p95 latency per endpoint
+- [ ] Top 10 users this month by calls and by cost
+- [ ] Last 50 failures with the error text
+
+### 2. Ops & content
+**`/admin/system`** (PR 4)
+- [ ] DB ping (the `SELECT 1` from `health_routes.py`)
+- [ ] Migration state: the revision in `alembic_version` against the head of `migrations/versions`, red when they differ
+- [ ] Deployed commit from Railway's `RAILWAY_GIT_COMMIT_SHA`
+- [ ] Env vars as set / not set, names only, never values: the fixed list from CLAUDE.md's "Backend env vars"
+- [ ] `PREMIUM_ENFORCED` on or off
+- [ ] Premium turn-on checklist as live status: both RevenueCat vars set, count of premium users (beta grants run if it's above zero), and a "Test sync" button that asks RevenueCat about one user via `fetch_entitlement_active` and shows the answer without writing anything
+- [ ] App versions in use: `apiFetch` sends `X-App-Version` (from `expo-application`), stored with the daily activity row (see §4), so it only counts builds from then on. Table: version → users seen on it in the last 30 days
+
+**Library editing** (PR 5)
+- [ ] `/admin/exercises/<id>` detail page for global exercises (custom ones are read-only): `muscle_group`, `ExerciseMuscleMapping` rows (muscle + primary / secondary, add and remove), `description`, `bodyweight_load_factor` (shown for Bodyweight / Weighted only), `standards_key` shown read-only
+- [ ] Every save audit-logged with before / after
+- [ ] After a `bodyweight_load_factor` change, a banner: "Run `flask backfill-workout-volume --apply`"
+- [ ] **The admin is the source of truth** for library fields (decided 2026-10-17). `seed.py` still creates new exercises, but `--update-muscles`, `--refetch-images` and any other flag that rewrites an existing row skip fields the admin has edited. "Edited" is read from `admin_audit_log` (any `exercise.*` row for that exercise and field), so no extra column. A field is overwritten only when specifically noted: `seed.py --update-muscles --force-admin-edits`, which prints each field it overrides first. Test: an admin-edited `muscle_group` survives `--update-muscles` and is replaced with the force flag
+- [ ] Custom-exercise candidates: users' custom exercises grouped by trimmed lowercase name + equipment, count of distinct users, most common first, with the closest global exercise beside each (same matcher as §2b) so near-duplicates are obvious. Read-only: promoting one is still a hand edit of `seed.py`
+
+### 2b. Exercise image search (PR 2)
+**Why finding the right GIF is hard today**
+- The search box calls ExerciseDB's `/exercises/name/{q}`, a substring match on the whole name. Word order and spelling must match ExerciseDB's exactly: "incline dumbbell press" misses "dumbbell incline bench press", "pull down" misses "pulldown", "rdl" or "skull crusher" find nothing
+- Only the first 20 come back, ranked by nothing except "same equipment first"
+- A thumbnail shows only its equipment; the name is a hover tooltip and the target muscle isn't shown at all, so near-identical variants (close grip, wide grip, decline) can't be told apart
+- Every thumbnail is a fresh RapidAPI call through the uncached proxy: up to 20 quota calls per search, every time
+- Clicking a thumbnail saves it at once; a misclick overwrites the current image
+
+**Plan**
+- [ ] **Local catalog.** `exercisedb_catalog` table + migration: `id` (ExerciseDB id, PK), `name`, `equipment`, `body_part`, `target`, `secondary_muscles` (JSON), `fetched_at`. A table, not a file, because Railway's disk resets on deploy. Move `seed.py`'s paging fetch into `utils/exercisedb.py` and have both `seed.py` and the admin use it. "Refresh catalog" button on the page (2 API calls, shows the date of the last refresh); the search reads only the table, so searching costs no quota
+- [ ] **Matcher** `search_catalog(query, equipment=None, body_part=None, target=None)` in `utils/exercisedb.py`, pure and unit-tested:
+  - Normalize both sides: lowercase, drop punctuation, hyphens to spaces, trailing plural `s`, join split words (`pull down` → `pulldown`, `push up` → `pushup`, `chin up`, `sit up`, `step up`)
+  - Synonyms: `db` dumbbell, `bb` barbell, `kb` kettlebell, `ez` ez barbell, `bw` body weight, `ohp` overhead press, `rdl` romanian deadlift, `sldl` stiff leg deadlift, `skull crusher` lying triceps extension, `fly` / `flye`, `military press` / `overhead press`, `lat` / `latissimus`. A plain dict, so a miss found while working gets one line added
+  - Every query word must appear, in any order. Ranked by: fewest extra words in the candidate (so "bench press" puts "barbell bench press" above "barbell incline bench press"), then equipment match with this exercise, then target muscle matching its `muscle_group` (map ours to ExerciseDB's: Chest → pectorals, Back → lats / upper back, Shoulders → delts, Quads → quads, and so on)
+  - Fewer than 5 full matches: also return "close matches" missing one word, under their own heading
+- [ ] **Search panel.** Clicking "Find GIF" on a card opens one wide panel (modal on desktop, full screen on a phone) instead of the cramped row inside the card:
+  - Search box prefilled with the exercise's name and editable, results update as you type (debounced, server-side search against the table)
+  - Filter chips: equipment (preselected to this exercise's, one click for "Any"), body part, target muscle; values come from the catalog
+  - Results grid of 24 with "Show more"; each tile shows the full name with matched words in bold, equipment and target muscle
+  - Click a tile for a large animated preview with name, target, secondary muscles, and **Use this GIF** / Back. Nothing saves until that button
+  - The current image sits pinned at the panel's top for comparison
+  - Tiles already used by another exercise say so ("Used by Bench Press (Dumbbell)"), which needs the next item
+- [ ] `ExerciseTemplate.image_source_id` (ExerciseDB id, nullable) + migration, set by apply-suggestion; also lets a GIF be re-downloaded later. Existing images stay NULL (their source is unknown). Not a weight column, so the unit registry test doesn't need it
+- [ ] **Quota.** Thumbnails at ExerciseDB's 180 resolution (the saved file stays 360); the proxy sends `Cache-Control: private, max-age=604800` so the browser keeps them; a per-process in-memory LRU of ~200 thumbnails on the server. Check 180 is on the current RapidAPI plan first
+- [ ] Apply-suggestion goes through the write guard and the audit log (before / after `image_url`)
+- [ ] Tests: matcher (word order, plurals, joined words, each synonym, extra-word ranking, equipment and muscle ranking, close-match fallback), catalog refresh with RapidAPI mocked (paging stops on a short page, upsert not duplicate), search route with no catalog yet returns a clear message, apply-suggestion sets `image_source_id` and writes an audit row
+
+### 3. User lookup / support (PR 6)
+- [ ] `/admin/users?q=`: search by email or username (`ilike`, 50 results max)
+- [ ] `/admin/users/<id>`: sign-in method (password / Apple / Google, `is_social_only`), `email_verified`, unit, gender set or not, premium state and source, counts of workouts / routines / templates / PRs, last workout date, last seen and app version (once §4 lands), insight votes, AI calls this month (from `ai_call_log`)
+- [ ] Actions, both behind the write guard and audit-logged: RevenueCat re-sync (the same code path as `POST /api/premium/sync`, pulled into a helper if it isn't one) and force sign-out (bump `token_version`). No manual premium grants, no account deletion
+- [ ] Never show progress photos or body measurements
+- [ ] Tests: search, detail for a fresh user (no 500s with no data), sign-out bumps `token_version` and an old token is rejected, re-sync with RevenueCat mocked
+
+### 4. Growth dashboard (PR 7)
+- [ ] `User.created_at` (server default `now()`) + migration. Existing accounts stay NULL and use the first workout date, shown as "est."
+- [ ] **`user_activity_day` table** + migration (decided 2026-10-17): `user_id`, `day`, `app_version`; PK on user + day. It replaces the first draft's `last_seen_at`; "last seen" is the user's latest `day`. A single `last_seen_at` can say who was active today but not who was active last week, so DAU history and retention can't be drawn from it. Written by `INSERT ... ON CONFLICT DO NOTHING` on a user's first authenticated request of the day; an in-process `{user_id: day}` dict skips the insert after that, so it's about one write per user per day. Uses `user_today()`, not `date.today()`
+- [ ] Signups per week, DAU / WAU / MAU over time, workouts per day, premium count, week-1 and week-4 retention by signup week (retention counts from the day activity rows start, and says so)
+- [ ] Charts as server-rendered inline SVG from one Jinja macro (bar and line), no frontend build step
+
+### Decisions (owner, 2026-10-17)
+- [x] The admin is the source of truth for library edits; `seed.py` overwrites one only when specifically told to (PR 5)
+- [x] Activity is tracked in a `user_activity_day` table, not a single `last_seen_at` column (§4)
+
+### Later, not planned
+- Push notification broadcast from the admin (uses `DeviceToken`)
+- Running the backfill CLI commands from the browser
+- Error tracking (Sentry or a small error log table)
+- Editing user records
+- Marking "Looks wrong" votes as triaged (needs a column; the list is sorted by date for now)

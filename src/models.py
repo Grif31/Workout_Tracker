@@ -620,3 +620,18 @@ class InsightFeedback(db.Model):
     # Why a not-helpful vote: one of INSIGHT_FEEDBACK_REASONS in schemas.py
     reason       = db.Column(db.String(32), nullable=True)
     created_at   = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+# ── AdminAuditLog ─────────────────────────────────────────────
+# One row per write made from /admin, so a bad edit can be traced and undone
+# by hand. Written in the same commit as the change it records.
+class AdminAuditLog(db.Model):
+    __tablename__ = 'admin_audit_log'
+    id          = db.Column(db.Integer, primary_key=True)
+    action      = db.Column(db.String(64), nullable=False)
+    target_type = db.Column(db.String(64), nullable=False)
+    target_id   = db.Column(db.Integer, nullable=True)
+    before      = db.Column(db.JSON, nullable=True)
+    after       = db.Column(db.JSON, nullable=True)
+    ip          = db.Column(db.String(64), nullable=True)
+    created_at  = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)

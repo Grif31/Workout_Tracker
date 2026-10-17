@@ -77,6 +77,35 @@ def test_every_non_public_route_requires_auth(app, client):
     )
 
 
+def _basic(password):
+    import base64
+    return {'Authorization': 'Basic ' + base64.b64encode(f'admin:{password}'.encode()).decode()}
+
+
+def _admin_rules(app):
+    return [(rule, method) for rule, method in _api_rules(app) if rule.startswith('/admin')]
+
+
+def test_every_admin_route_rejects_a_wrong_password(app, client, monkeypatch):
+    monkeypatch.setenv('ADMIN_PASSWORD', 'right-password')
+    accepted = [f'{m} {r} -> {res.status_code}' for r, m in _admin_rules(app)
+                if (res := _call(client, m, _fill(r), json={}, headers=_basic('wrong'))).status_code != 401]
+    assert not accepted, f'/admin routes accepted a wrong password: {accepted}'
+
+
+def test_admin_routes_never_500_with_the_right_password(app, client, monkeypatch):
+    """No RAPIDAPI_KEY, an empty body, ids that don't exist: every admin route
+    answers with a 4xx/503 or a page, never a crash. Writes get our Origin so
+    they reach the code past the write guard."""
+    monkeypatch.setenv('ADMIN_PASSWORD', 'right-password')
+    monkeypatch.delenv('RAPIDAPI_KEY', raising=False)
+    headers = {**_basic('right-password'), 'Origin': 'http://localhost'}
+    crashed = [f'{m} {r} -> {res.status_code}' for r, m in _admin_rules(app)
+               if (res := _call(client, m, _fill(r), json={}, headers=headers)).status_code >= 500
+               and res.status_code != 503]
+    assert not crashed, crashed
+
+
 def test_garbage_bearer_token_is_rejected_not_crashing(app, client):
     bad = []
     for rule, method in _api_rules(app):
