@@ -694,6 +694,140 @@ describe('minimizing a GPS run', () => {
       expect(postedBodies()[0].client_id).toBe(cp.clientId);
     });
   });
+
+  // Section 22, Phase 6
+  describe('picking a run back up after a kill', () => {
+    const cp = () => JSON.stringify({
+      activity: 'Hike',
+      coords: [0, 1, 2].map(i => ({ ...point(i).coords, timestamp: point(i).timestamp })),
+      distanceKm: 0.222, elevationGainM: 0, elapsedSec: 90, savedAt: T0, clientId: 'kept-from-before-1234',
+    });
+    const lines = (r: ReturnType<typeof render>) => r.UNSAFE_queryAllByType(require('react-native-maps').Polyline);
+
+    it('Keep Recording restarts GPS and carries on from where the run was, as a new segment', async () => {
+      await AsyncStorage.setItem('gps_run_checkpoint_1', cp());
+      const r = render(<BarHarnessForActivity show />);
+      await settle();
+      await waitFor(() => expect(r.getByText('Keep Recording')).toBeTruthy());
+
+      await act(async () => { fireEvent.press(r.getByText('Keep Recording')); });
+      await waitFor(() => expect(mockGpsListener).not.toBeNull());
+      expect(startBackgroundTracking).toHaveBeenCalled();
+      expect(r.queryByText('Save Activity?')).toBeNull();
+      expect(r.getByText('Pause')).toBeTruthy();
+
+      // Close to where the app was killed and soon after, so the time-gap rule
+      // can't be what breaks the line: the recovered run itself marks the gap
+      const near = (lat: number, sec: number) => ({
+        coords: { latitude: lat, longitude: -74, altitude: 10, accuracy: 5 }, timestamp: point(2).timestamp + sec * 1000,
+      });
+      await feed(near(40.0024, 20), near(40.0034, 40));
+      // 0.222 km kept, the 44 m hop across the gap not counted, then one new 111 m leg: 0.333 km, 0.21 mi
+      expect(r.getByText('0.21')).toBeTruthy();
+      expect(lines(r)).toHaveLength(2);
+    });
+
+    it('is a normal run again afterwards: the bar says Run, and it goes on the lock screen', async () => {
+      await AsyncStorage.setItem('gps_run_checkpoint_1', cp());
+      const r = render(<BarHarnessForActivity show />);
+      await settle();
+      await waitFor(() => expect(r.getByText('Keep Recording')).toBeTruthy());
+      await act(async () => { fireEvent.press(r.getByText('Keep Recording')); });
+      await waitFor(() => expect(mockStartRunActivity).toHaveBeenCalled());
+
+      r.rerender(<BarHarnessForActivity show={false} />);
+      await settle();
+      expect(r.getByText('Hike')).toBeTruthy();
+      expect(r.queryByText(/Unsaved/)).toBeNull();
+    });
+
+    it('keeps the run\'s client_id, so a save from before the kill still counts as this workout', async () => {
+      await AsyncStorage.setItem('gps_run_checkpoint_1', cp());
+      const r = render(<BarHarnessForActivity show />);
+      await settle();
+      await waitFor(() => expect(r.getByText('Keep Recording')).toBeTruthy());
+      await act(async () => { fireEvent.press(r.getByText('Keep Recording')); });
+      await waitFor(() => expect(mockGpsListener).not.toBeNull());
+      await feed({ ...point(20), timestamp: T0 + 900_000 });
+      await act(async () => { fireEvent.press(r.getByText('Pause')); });
+      expect(JSON.parse((await AsyncStorage.getItem('gps_run_checkpoint_1'))!).clientId).toBe('kept-from-before-1234');
+    });
+
+    it('a short pause still breaks the line and counts nothing across it', async () => {
+      // Under a minute and under 100 m: only resume's own gap marker protects this
+      const r = await startedRun([0, 1]);
+      await act(async () => { fireEvent.press(r.getByText('Pause')); });
+      await act(async () => { fireEvent.press(r.getByText('Resume')); });
+      await waitFor(() => expect(mockGpsListener).not.toBeNull());
+      const near = (lat: number, sec: number) => ({
+        coords: { latitude: lat, longitude: -74, altitude: 10, accuracy: 5 }, timestamp: point(1).timestamp + sec * 1000,
+      });
+      await feed(near(40.0014, 20), near(40.0024, 40));
+      // One leg before (111 m), one after (111 m), the 44 m hop across the pause not counted: 0.222 km, 0.14 mi
+      expect(r.getByText('0.14')).toBeTruthy();
+      expect(lines(r)).toHaveLength(2);
+    });
+
+    it('is not offered after Stop: a run ended on purpose stays ended', async () => {
+      const r = await startedRun([0, 1, 2]);
+      await act(async () => { fireEvent.press(r.getByText('Stop')); });
+      await act(async () => {
+        alertSpy.mock.calls.filter(c => c[0] === 'End this activity?').at(-1)![2].find((b: any) => b.text === 'End Activity').onPress();
+      });
+      expect(r.getByText('Save Activity?')).toBeTruthy();
+      expect(r.queryByText('Keep Recording')).toBeNull();
+    });
+  });
+
+  describe('the crash checkpoint', () => {
+    // AsyncStorage is already a mock in the test setup: count its calls rather than
+    // spying, since restoring a spy on an existing mock wipes its implementation
+    const setItemCalls = () => (AsyncStorage.setItem as jest.Mock).mock.calls;
+    const checkpointWritesSince = (from: number) => setItemCalls().slice(from).filter(c => c[0] === 'gps_run_checkpoint_1').length;
+    // advanceTimersByTime moves Date.now too
+    const tick = (ms: number) => act(async () => { jest.advanceTimersByTime(ms); });
+
+    it('is on disk from the first fix, not the tenth', async () => {
+      const r = await startedRun([0]);
+      const cpNow = JSON.parse((await AsyncStorage.getItem('gps_run_checkpoint_1'))!);
+      expect(cpNow.coords).toHaveLength(1);
+      r.unmount();
+    });
+
+    it('is written at most every 5 seconds while fixes arrive, not on every fix', async () => {
+      const r = await startedRun([]);
+      const from = setItemCalls().length;
+      for (let i = 0; i < 12; i += 1) {
+        await feed(point(i));
+        await tick(1000);
+      }
+      const writes = checkpointWritesSince(from);
+      expect(writes).toBeGreaterThanOrEqual(2);
+      expect(writes).toBeLessThanOrEqual(4);
+      // And it holds nearly all of the run, not the state of 10 fixes ago
+      expect(JSON.parse((await AsyncStorage.getItem('gps_run_checkpoint_1'))!).coords.length).toBeGreaterThanOrEqual(8);
+      r.unmount();
+    });
+
+    it('is written the moment the app goes to the background', async () => {
+      const handlers: ((s: string) => void)[] = [];
+      const appStateSpy = jest.spyOn(AppState, 'addEventListener');
+      const previous = appStateSpy.getMockImplementation();
+      appStateSpy.mockImplementation(((_t: string, h: (s: string) => void) => { handlers.push(h); return { remove: () => {} }; }) as any);
+      try {
+        const r = await startedRun([0]);
+        await feed(point(1));
+        const from = setItemCalls().length;
+        await act(async () => { handlers.forEach(h => h('background')); });
+        expect(checkpointWritesSince(from)).toBeGreaterThanOrEqual(1);
+        expect(JSON.parse((await AsyncStorage.getItem('gps_run_checkpoint_1'))!).coords).toHaveLength(2);
+        r.unmount();
+      } finally {
+        if (previous) appStateSpy.mockImplementation(previous);
+        else appStateSpy.mockRestore();
+      }
+    });
+  });
 });
 
 

@@ -255,6 +255,16 @@ export default function GPSCardioScreen({ navigation }: Props) {
     clearRun();
   };
 
+  // Only for a run brought back after the app was killed: its GPS stopped with
+  // the app, and this picks it back up. The time between is a gap, so the route
+  // starts a new segment there (resume -> afterGap) rather than a straight line,
+  // and no distance or time is counted across it. A run ended with Stop stays
+  // ended: Stop already asked.
+  const keepRecording = async () => {
+    setConfirmVisible(false);
+    await resume();
+  };
+
   const handleSave = async () => {
     setSaving(true);
     const exerciseTemplateId = await resolveCardioTemplateId(activity, user?.id);
@@ -550,6 +560,17 @@ export default function GPSCardioScreen({ navigation }: Props) {
               )}
             </ScrollView>
 
+            {recovered && (
+              <TouchableOpacity
+                style={[styles.keepRecordingBtn, { borderColor: colors.accent }]}
+                onPress={keepRecording}
+                disabled={saving}
+                accessibilityRole="button"
+              >
+                <Ionicons name="play" size={18} color={colors.accent} />
+                <Text style={[styles.modalBtnText, { color: colors.accent }]}>Keep Recording</Text>
+              </TouchableOpacity>
+            )}
             <View style={styles.modalActions}>
               <TouchableOpacity style={[styles.modalBtn, { backgroundColor: colors.border }]} onPress={() => confirmDiscard(handleDiscard)}>
                 <Text style={[styles.modalBtnText, { color: colors.textPrimary }]}>Discard</Text>
@@ -702,4 +723,13 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     justifyContent: 'center',
   },
   modalBtnText: { fontSize: typography.fontSize.md, fontWeight: '700' },
+  keepRecordingBtn: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

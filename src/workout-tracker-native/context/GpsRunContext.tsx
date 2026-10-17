@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -103,6 +104,11 @@ const WATCH_OPTS = { accuracy: Location.Accuracy.BestForNavigation, timeInterval
 // would be throttled on a long run. Start, pause and resume still go at once.
 export const RUN_ACTIVITY_UPDATE_MS = 5000;
 
+// How much of a run a kill can cost: the checkpoint is written at least this
+// often while fixes arrive, so a killed app loses this much at most
+// (it was every 10 fixes, up to about a minute, and nothing before the 10th).
+export const CHECKPOINT_EVERY_MS = 5000;
+
 export function GpsRunProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { session: workoutSession, isWorkoutOpen } = useWorkoutSession();
@@ -132,6 +138,8 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
   const timingRef = useRef<RunTiming>(NOT_RUNNING);
   const setTiming = useCallback((t: RunTiming) => { timingRef.current = t; setTimingState(t); }, []);
 
+  // When the checkpoint was last written, for CHECKPOINT_EVERY_MS
+  const lastCheckpointAtRef = useRef(0);
   const locationSub = useRef<Location.LocationSubscription | null>(null);
   const gpsUnsubRef = useRef<(() => void) | null>(null);
 
@@ -150,20 +158,30 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
       savedAt: Date.now(),
       ...(clientIdRef.current ? { clientId: clientIdRef.current } : {}),
     })).catch(() => {});
+    lastCheckpointAtRef.current = Date.now();
   }, []);
 
   const clearCheckpoint = useCallback(() => {
     AsyncStorage.removeItem(latest.current.checkpointKey).catch(() => {});
   }, []);
 
-  // Background fixes arrive in batches, so the length can jump past a multiple
-  // of 10; compare against the last checkpointed length instead.
-  const checkpointedLenRef = useRef(0);
+  // Driven by fixes rather than a timer: fixes keep coming with the phone locked
+  // (background location keeps JS running), where an interval may not fire.
+  // The first fix of a run writes at once, since the clock starts at 0.
   useEffect(() => {
-    if (trackingState !== 'running' || run.coords.length - checkpointedLenRef.current < 10) return;
-    checkpointedLenRef.current = run.coords.length;
+    if (trackingState !== 'running' || run.coords.length === 0) return;
+    if (Date.now() - lastCheckpointAtRef.current < CHECKPOINT_EVERY_MS) return;
     writeCheckpoint();
   }, [run.coords]);
+
+  // iOS may end an app any time after it leaves the foreground, so the run is
+  // on disk the moment it does
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'background' && latest.current.trackingState !== 'idle') writeCheckpoint();
+    });
+    return () => sub.remove();
+  }, []);
 
   // Shared by the start and resume subscriptions. The run's own state decides
   // what a fix is worth (utils/gpsRun.applyFix), including that the gap
@@ -220,7 +238,7 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
       setTiming(NOT_RUNNING);
       setTrackingState('idle');
       setRecovered(false);
-      checkpointedLenRef.current = 0;
+      lastCheckpointAtRef.current = 0;
     };
   }, [user?.id]);
 
@@ -283,7 +301,7 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
     setTrackingState('idle');
     setRecovered(false);
     setClientId(null);
-    checkpointedLenRef.current = 0;
+    lastCheckpointAtRef.current = 0;
     clearCheckpoint();
   }, [endLocationUpdates, setTiming, clearCheckpoint, setClientId]);
 
