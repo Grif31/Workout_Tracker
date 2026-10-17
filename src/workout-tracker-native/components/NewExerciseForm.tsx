@@ -181,8 +181,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     minWidth: 52,
     textAlign: 'right',
   },
+  // Faded accent dropped to 1.4:1 with some presets; gray stays findable in both modes
   saveTextDisabled: {
-    opacity: 0.35,
+    color: colors.placeholder,
   },
   input: {
     borderWidth: 1,

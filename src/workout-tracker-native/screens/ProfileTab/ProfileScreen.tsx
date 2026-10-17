@@ -524,7 +524,7 @@ export default function ProfileScreen({ navigation }: Props) {
         ListEmptyComponent={
           <Text style={styles.emptyText}>No workouts logged yet</Text>
         }
-        ListFooterComponent={loadingMore ? <ActivityIndicator style={{ marginVertical: spacing.md }} /> : null}
+        ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.md }} /> : null}
         refreshing={refreshing}
         onRefresh={handleRefresh}
         onEndReached={fetchMoreWorkouts}

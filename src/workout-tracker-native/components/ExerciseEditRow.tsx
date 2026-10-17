@@ -56,12 +56,12 @@ export default function ExerciseEditRow({
         return (
           <Animated.View style={[styles.actionsRow, { transform: [{ translateX }] }]}>
             <TouchableOpacity style={[styles.action, { backgroundColor: colors.accent }]} onPress={closeThen(onEdit)}>
-              <Ionicons name="create-outline" size={18} color="#fff" />
-              <Text style={styles.actionText}>Edit</Text>
+              <Ionicons name="create-outline" size={18} color={colors.accentText} />
+              <Text style={[styles.actionText, { color: colors.accentText }]}>Edit</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.action, { backgroundColor: colors.save }]} onPress={closeThen(onSwitch)}>
-              <Ionicons name="swap-horizontal" size={18} color="#fff" />
-              <Text style={styles.actionText}>Switch</Text>
+              <Ionicons name="swap-horizontal" size={18} color={colors.accentText} />
+              <Text style={[styles.actionText, { color: colors.accentText }]}>Switch</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.action, styles.actionLast, { backgroundColor: colors.danger }]} onPress={closeThen(onDelete)}>
               <Ionicons name="trash-outline" size={18} color="#fff" />

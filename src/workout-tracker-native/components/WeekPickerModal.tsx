@@ -173,7 +173,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   dayText: { fontSize: typography.fontSize.sm, color: colors.textPrimary },
   dayTextWorkout: { color: colors.accentText, fontWeight: '700' },
   dayTextToday: { color: colors.accent, fontWeight: '700' },
-  dayTextFuture: { color: colors.border },
+  dayTextFuture: { color: colors.placeholder },
   legend: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm },
   legendDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent },
   legendText: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
