@@ -64,6 +64,12 @@ module.exports = {
         'android.permission.POST_NOTIFICATIONS',
         'android.permission.RECEIVE_BOOT_COMPLETED',
         'android.permission.VIBRATE',
+        // Health Connect only offers what the manifest declares, and the
+        // react-native-health-connect plugin declares nothing (it adds the
+        // rationale screen only). Without these the Health switch could never
+        // be granted. Each needs Google's Health Connect declaration in the Play Console.
+        'android.permission.health.WRITE_EXERCISE',
+        'android.permission.health.WRITE_DISTANCE',
       ],
       // Nothing records audio (image picker is photos-only), and App Review and
       // the Play listing both surface a mic permission. Blocked rather than just
@@ -183,6 +189,7 @@ module.exports = {
         },
       ],
       'react-native-health-connect',
+      './plugins/withHealthConnect',
       'expo-apple-authentication',
       ['@react-native-google-signin/google-signin', { iosUrlScheme: GOOGLE_IOS_URL_SCHEME }],
       [
