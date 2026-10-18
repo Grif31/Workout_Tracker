@@ -25,6 +25,8 @@ def _write_auth(password):
 ADMIN_ROUTES = [
     ('get', '/admin/'),
     ('get', '/admin/audit'),
+    ('get', '/admin/coach'),
+    ('get', '/admin/ai'),
     ('get', '/admin/exercises'),
     ('get', '/admin/exercises/data'),
     ('post', '/admin/exercises/1/image'),
@@ -228,17 +230,18 @@ class TestApplyExerciseSuggestion:
 
 class TestAdminHome:
 
-    def test_redirects_to_the_exercises_page(self, client, monkeypatch):
+    def test_redirects_to_the_coach_page(self, client, monkeypatch):
         monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
         res = client.get('/admin/', headers=_basic_auth('pw'))
         assert res.status_code == 302
-        assert res.headers['Location'].endswith('/admin/exercises')
+        assert res.headers['Location'].endswith('/admin/coach')
 
     def test_pages_share_the_nav(self, client, monkeypatch):
         monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
-        for path in ('/admin/exercises', '/admin/audit'):
+        links = ('/admin/coach', '/admin/ai', '/admin/exercises', '/admin/audit')
+        for path in links:
             html = client.get(path, headers=_basic_auth('pw')).get_data(as_text=True)
-            assert 'href="/admin/exercises"' in html and 'href="/admin/audit"' in html, path
+            assert all(f'href="{link}"' in html for link in links), path
 
 
 class TestAdminWriteGuard:

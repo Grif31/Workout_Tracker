@@ -662,3 +662,23 @@ class ExerciseDBThumbnail(db.Model):
     content       = db.Column(db.LargeBinary, nullable=False)
     content_type  = db.Column(db.String(64), nullable=False)
     fetched_at    = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+# ── AiCallLog ─────────────────────────────────────────────────
+# One row per Anthropic call, written by utils/ai_client.py, so the admin can
+# see cost, failures and latency. user_id survives as NULL when the account
+# is deleted, so totals don't shrink.
+class AiCallLog(db.Model):
+    __tablename__ = 'ai_call_log'
+    id            = db.Column(db.Integer, primary_key=True)
+    endpoint      = db.Column(db.String(32), nullable=False)
+    user_id       = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+    model         = db.Column(db.String(64), nullable=False)
+    input_tokens  = db.Column(db.Integer, nullable=True)
+    output_tokens = db.Column(db.Integer, nullable=True)
+    cache_read_tokens  = db.Column(db.Integer, nullable=True)
+    cache_write_tokens = db.Column(db.Integer, nullable=True)
+    latency_ms    = db.Column(db.Integer, nullable=False)
+    ok            = db.Column(db.Boolean, nullable=False)
+    error         = db.Column(db.String(200), nullable=True)
+    created_at    = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)

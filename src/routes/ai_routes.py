@@ -12,6 +12,7 @@ from models import (
 )
 from schemas import AiGenerateSchema, AiInsightsSchema, AiInsightFeedbackSchema, AiSaveSchema, AiWeeklyReviewSchema
 from utils.validation import validate_body
+from utils.ai_client import create_message
 from utils.local_date import user_today
 from utils.premium import has_premium, free_onboarding_allowed, premium_required_response
 from utils.lift_progress import compute_most_improved_lift
@@ -1219,13 +1220,11 @@ def generate_workout():
         return jsonify({'message': 'AI service not configured. Add ANTHROPIC_API_KEY to .env'}), 503
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
 
         user_context = _build_user_context(user_id)
         prompt = _build_prompt(data, generate_type, user_context)
 
-        msg = client.messages.create(
+        msg = create_message('generate', user_id, api_key,
             model="claude-haiku-4-5-20251001",
             max_tokens=4096,
             system=COACH_VOICE,
@@ -1281,12 +1280,10 @@ def get_ai_insights():
         return jsonify({'message': 'AI service not configured'}), 503
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
         ctx = _build_insights_context(user_id, experience=data.get('experience'), goal=data.get('goal'), avoid=data.get('avoid'))
         ctx['insight_feedback'] = _recent_insight_feedback(user_id, ctx['now'])
         prompt = _build_insights_prompt(ctx)
-        msg = client.messages.create(
+        msg = create_message('insights', user_id, api_key,
             model='claude-haiku-4-5-20251001',
             max_tokens=2048,
             system=COACH_VOICE,
@@ -1396,12 +1393,10 @@ def get_weekly_review():
         return jsonify({'message': 'AI service not configured'}), 503
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
         ctx = _build_insights_context(
             user_id, experience=data.get('experience'), goal=data.get('goal'), avoid=data.get('avoid'), as_of=as_of,
         )
-        msg = client.messages.create(
+        msg = create_message('weekly-review', user_id, api_key,
             model='claude-haiku-4-5-20251001',
             max_tokens=1024,
             system=COACH_VOICE,

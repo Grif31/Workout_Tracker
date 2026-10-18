@@ -44,12 +44,41 @@
     td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-word; }
     td.nowrap { white-space: nowrap; }
     .muted { color: #636366; }
+    .page h2 { font-size: 16px; font-weight: 700; margin: 28px 0 8px; }
+    .page h2 + .sub { margin-top: -4px; }
+    .page code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #C7C7CC; }
+    th.num, td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    td.bad { color: #FF453A; }
+    .range { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+    .range a {
+      color: #8E8E93; text-decoration: none; font-size: 12px; font-weight: 600;
+      padding: 6px 12px; border: 1px solid #3A3A3C; border-radius: 8px;
+    }
+    .range a.active { color: #000; background: #30D158; border-color: #30D158; }
+    .tiles-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+    .stat { background: #1C1C1E; border: 1px solid #2C2C2E; border-radius: 12px; padding: 12px 14px; }
+    .stat-label { font-size: 12px; color: #8E8E93; }
+    .stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    td.bar-cell { min-width: 160px; position: relative; }
+    .bar {
+      display: inline-block; height: 8px; border-radius: 4px; background: #30D158;
+      vertical-align: middle; max-width: calc(100% - 44px);
+    }
+    .bar-label { font-size: 12px; margin-left: 8px; vertical-align: middle; font-variant-numeric: tabular-nums; }
+    td.changes { font-size: 12px; color: #FF9F0A; }
+    .wrong-list { display: flex; flex-direction: column; gap: 10px; }
+    .wrong { background: #1C1C1E; border: 1px solid #2C2C2E; border-radius: 12px; padding: 12px 14px; }
+    .wrong-head { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; font-size: 12px; }
+    .wrong-title { font-size: 14px; font-weight: 700; color: #F2F2F7; }
+    .wrong-body { font-size: 13px; color: #C7C7CC; line-height: 1.5; margin-top: 6px; }
   </style>
   {% block head %}{% endblock %}
 </head>
 <body>
   <nav class="nav">
     <span class="brand">Aretē Admin</span>
+    <a href="{{ url_for('admin.admin_coach') }}" class="{{ 'active' if active == 'coach' }}">Coach</a>
+    <a href="{{ url_for('admin.admin_ai') }}" class="{{ 'active' if active == 'ai' }}">AI usage</a>
     <a href="{{ url_for('admin.admin_exercises') }}" class="{{ 'active' if active == 'exercises' }}">Exercises</a>
     <a href="{{ url_for('admin.admin_audit') }}" class="{{ 'active' if active == 'audit' }}">Audit log</a>
   </nav>

@@ -1387,25 +1387,28 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [x] Tests: `test_route_guardrails.py` walks every `/admin` rule (wrong password 401, right password with no body and no `RAPIDAPI_KEY` never 500); `test_admin_routes.py` covers the redirect, nav, write guard (foreign / missing Origin, form body, https Origin), audit rows and escaping, and the limiter (on its own app, since Flask-Limiter only installs its hooks when it starts enabled). Guard and limiter tests checked to fail with the code removed
 - [ ] Deploy and check on prod: log in, save an image, see it on the audit page
 
-### 1. Coach & AI (PR 3, covers §23's "Measure before tuning" step)
-**`/admin/coach`**, all from `insight_feedback` (votes are keyed by title + body, since insights aren't stored yet, §23)
-- [ ] Range picker: 30 days / 90 days / all
-- [ ] Per insight type: votes, helpful %, and the split of thumbs-down reasons (`known` / `irrelevant` / `wrong` / `vague`)
-- [ ] Helpful rate per week for the last 12 weeks, as one line: a prompt change shows up as a step in it. Mark the weeks a prompt changed by hand (a constant list of dates in the route is enough)
-- [ ] Most voted-down titles: grouped by title, at least 2 not-helpful votes, with the helpful count beside it
-- [ ] "Looks wrong" list: every `reason = 'wrong'` vote, newest first, with type, full title and body, user id (links to user detail once PR 6 lands) and date. Each one is a bug candidate in `_build_insights_context` or `_is_grounded` (§23)
+### 1. Coach & AI (PR 3, covers §23's "Measure before tuning" step), built 2026-10-18
+**`/admin/coach`** (now where `/admin/` lands), from `insight_feedback`
+- [x] Range: 30 days / 90 days (default) / all
+- [x] Totals, then per insight type: votes, helpful %, and each thumbs-down reason, labelled as the app's chips are
+- [x] Helpful rate per week for the last 12 weeks, with prompt changes marked on the week they shipped. The dates are `PROMPT_CHANGES` in `utils/admin_stats.py`: **add a line there with every prompt or model change**, or the trend can't be read
+- [x] Most voted-down titles (2+ not-helpful votes)
+- [x] "Looks wrong" list, all time, newest first, with the full insight text, type, user and date
 
-**`ai_call_log`** table + migration
-- [ ] Columns: `endpoint` (insights / weekly-review / generate), `user_id` (FK, `SET NULL`), `model`, `input_tokens`, `output_tokens`, `latency_ms`, `ok`, `error` (str 200), `created_at` (indexed)
-- [ ] One helper `create_message(endpoint, user_id, **kwargs)` in `utils/ai_client.py` replaces the three `client.messages.create` calls in `ai_routes.py` (~L1228, ~L1289, ~L1404) and logs in a `finally`. A failed log write is caught and dropped, never fails the user's request
-- [ ] Price table per model (dollars per million input / output tokens) next to the helper; cost on the page is labelled "estimated"
-- [ ] Tests: success and API failure both write a row with the right token counts and `ok`; a broken log insert still returns the insight
+**`ai_call_log`** (migration `e9f0a1b2c3d4`)
+- [x] Endpoint, user (`SET NULL` on account deletion so totals don't shrink), model, input / output / cache tokens, latency, success, error (200 chars)
+- [x] `create_message()` in `utils/ai_client.py` wraps the three calls in `ai_routes.py` and logs in a `finally`; a failed log write is rolled back and logged, never fails the request
+- [x] List prices in `PRICES` there (Haiku 4.5: $1 / $5 per million tokens; cache reads 0.1x, writes 1.25x). A model missing from it shows as $0, so add a row when the model changes
 
 **`/admin/ai`**
-- [ ] Calls and estimated cost per day, per endpoint, last 30 days; this month's total
-- [ ] Failure rate and p50 / p95 latency per endpoint
-- [ ] Top 10 users this month by calls and by cost
-- [ ] Last 50 failures with the error text
+- [x] This month's calls and cost, last 30 days' calls, failures and cost
+- [x] Per endpoint: calls, failure rate, p50 / p95 latency (successful calls only), tokens, cost
+- [x] Per day for 30 days, with the endpoint split
+- [x] Top 10 users this month; last 50 failures with the error
+- [x] Only counts calls from this deploy on
+
+- [x] `tests/test_migration_chain.py`: unique revision ids, every `down_revision` exists, one head. The first draft of this migration reused `c7d8e9f0a1b2`, an old revision's id, which only showed as "multiple heads" at `flask db upgrade`, the step that runs before gunicorn on deploy
+- [ ] On prod after deploy: open both pages; after the next insight refresh, check its row shows tokens and cost
 
 ### 2. Ops & content
 **`/admin/system`** (PR 4)

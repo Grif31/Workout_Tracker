@@ -1,0 +1,109 @@
+{% extends "admin/base.html" %}
+{% block title %}Coach{% endblock %}
+{% block content %}
+  <div class="page">
+    <h1>Coach insights</h1>
+    <p class="sub">From users' helpful / not helpful votes. Votes key on an insight's title and body, since insights aren't stored.</p>
+
+    <div class="range">
+      {% for key, label in [('30', 'Last 30 days'), ('90', 'Last 90 days'), ('all', 'All time')] %}
+        <a href="?range={{ key }}" class="{{ 'active' if range_key == key }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+
+    <div class="tiles-row">
+      <div class="stat"><div class="stat-label">Votes</div><div class="stat-value">{{ total.votes }}</div></div>
+      <div class="stat"><div class="stat-label">Helpful</div>
+        <div class="stat-value">{{ '%d%%' % total.rate if total.rate is not none else '–' }}</div></div>
+      {% for reason, count in reasons.items() %}
+        <div class="stat"><div class="stat-label">{{ reason_labels[reason] }}</div><div class="stat-value">{{ count }}</div></div>
+      {% endfor %}
+    </div>
+
+    <h2>By insight type</h2>
+    {% if by_type %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Type</th><th class="num">Votes</th><th>Helpful</th>
+            {% for reason in reason_keys %}<th class="num">{{ reason_labels[reason] }}</th>{% endfor %}
+            <th class="num">No reason</th>
+          </tr></thead>
+          <tbody>
+            {% for g in by_type %}
+              <tr>
+                <td class="nowrap">{{ g.type }}</td>
+                <td class="num">{{ g.votes }}</td>
+                <td class="bar-cell"><span class="bar" style="width: {{ g.rate }}%"></span><span class="bar-label">{{ g.rate }}%</span></td>
+                {% for reason in reason_keys %}<td class="num">{{ g.reasons[reason] or '' }}</td>{% endfor %}
+                <td class="num">{{ g.no_reason or '' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted">No votes in this range.</p>
+    {% endif %}
+
+    <h2>Helpful rate by week</h2>
+    <p class="sub">Last 12 weeks, Monday start, whatever the range above. Prompt changes are marked on the week they shipped.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Week of</th><th class="num">Votes</th><th>Helpful</th><th>Changed</th></tr></thead>
+        <tbody>
+          {% for w in weekly|reverse %}
+            <tr>
+              <td class="nowrap">{{ w.week.strftime('%m/%d/%Y') }}</td>
+              <td class="num">{{ w.votes or '' }}</td>
+              <td class="bar-cell">
+                {% if w.rate is not none %}<span class="bar" style="width: {{ w.rate }}%"></span><span class="bar-label">{{ w.rate }}%</span>{% endif %}
+              </td>
+              <td class="changes">{{ w.changes|join('; ') }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Most voted down</h2>
+    {% if voted_down %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Title</th><th>Type</th><th class="num">Not helpful</th><th class="num">Helpful</th><th>Last vote</th></tr></thead>
+          <tbody>
+            {% for g in voted_down %}
+              <tr>
+                <td>{{ g.title }}</td>
+                <td class="nowrap">{{ g.type or '' }}</td>
+                <td class="num">{{ g.not_helpful }}</td>
+                <td class="num">{{ g.helpful or '' }}</td>
+                <td class="nowrap">{{ g.last.strftime('%m/%d/%Y') }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted">No title has 2 or more not-helpful votes in this range.</p>
+    {% endif %}
+
+    <h2>Voted "Looks wrong"</h2>
+    <p class="sub">Each one may be a misread in <code>_build_insights_context</code> or a gap in <code>_is_grounded</code>. Newest first, all time.</p>
+    {% if wrong %}
+      <div class="wrong-list">
+        {% for r in wrong %}
+          <div class="wrong">
+            <div class="wrong-head">
+              <span class="wrong-title">{{ r.title }}</span>
+              <span class="muted">{{ r.insight_type or 'untyped' }} · user #{{ r.user_id }}{% if usernames.get(r.user_id) %} ({{ usernames[r.user_id] }}){% endif %} · {{ r.created_at.strftime('%m/%d/%Y') }}</span>
+            </div>
+            <div class="wrong-body">{{ r.body }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">No "Looks wrong" votes yet.</p>
+    {% endif %}
+  </div>
+{% endblock %}

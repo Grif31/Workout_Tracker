@@ -1,0 +1,112 @@
+{% extends "admin/base.html" %}
+{% block title %}AI Usage{% endblock %}
+{% macro money(v) %}${{ '%.2f' % v if v >= 0.01 or v == 0 else '%.4f' % v }}{% endmacro %}
+{% block content %}
+  <div class="page">
+    <h1>AI usage</h1>
+    <p class="sub">
+      Every Anthropic call, from <code>ai_call_log</code>.
+      {% if first_logged %}Logged since {{ first_logged.strftime('%m/%d/%Y') }}; nothing before that shows.{% else %}Nothing logged yet.{% endif %}
+      Cost is estimated from list prices.
+    </p>
+
+    <div class="tiles-row">
+      <div class="stat"><div class="stat-label">{{ month_label }} calls</div><div class="stat-value">{{ month_totals.calls }}</div></div>
+      <div class="stat"><div class="stat-label">{{ month_label }} est. cost</div><div class="stat-value">{{ money(month_totals.cost) }}</div></div>
+      <div class="stat"><div class="stat-label">30-day calls</div><div class="stat-value">{{ window_totals.calls }}</div></div>
+      <div class="stat"><div class="stat-label">30-day failures</div><div class="stat-value">{{ window_totals.failures }}</div></div>
+      <div class="stat"><div class="stat-label">30-day est. cost</div><div class="stat-value">{{ money(window_totals.cost) }}</div></div>
+    </div>
+
+    <h2>By endpoint, last 30 days</h2>
+    {% if by_endpoint %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Endpoint</th><th class="num">Calls</th><th class="num">Failed</th><th class="num">p50</th><th class="num">p95</th>
+            <th class="num">Input tokens</th><th class="num">Output tokens</th><th class="num">Est. cost</th>
+          </tr></thead>
+          <tbody>
+            {% for e in by_endpoint %}
+              <tr>
+                <td class="nowrap">{{ e.endpoint }}</td>
+                <td class="num">{{ e.calls }}</td>
+                <td class="num{{ ' bad' if e.failures }}">{{ e.failures }} ({{ e.failure_rate }}%)</td>
+                <td class="num">{{ '%.1fs' % (e.p50 / 1000) if e.p50 is not none else '–' }}</td>
+                <td class="num">{{ '%.1fs' % (e.p95 / 1000) if e.p95 is not none else '–' }}</td>
+                <td class="num">{{ '{:,}'.format(e.input_tokens) }}</td>
+                <td class="num">{{ '{:,}'.format(e.output_tokens) }}</td>
+                <td class="num">{{ money(e.cost) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted">No calls in the last 30 days.</p>
+    {% endif %}
+
+    <h2>By day</h2>
+    {% set busiest = by_day|map(attribute='calls')|max %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Day</th><th>Calls</th><th>Split</th><th class="num">Failed</th><th class="num">Est. cost</th></tr></thead>
+        <tbody>
+          {% for d in by_day %}
+            <tr>
+              <td class="nowrap">{{ d.day.strftime('%a %m/%d') }}</td>
+              <td class="bar-cell">
+                {% if d.calls %}<span class="bar" style="width: {{ (100 * d.calls / busiest)|round|int }}%"></span><span class="bar-label">{{ d.calls }}</span>{% endif %}
+              </td>
+              <td class="muted nowrap">{% for ep, n in d.by_endpoint|dictsort %}{{ ep }} {{ n }}{{ ', ' if not loop.last }}{% endfor %}</td>
+              <td class="num{{ ' bad' if d.failures }}">{{ d.failures or '' }}</td>
+              <td class="num">{{ money(d.cost) if d.calls else '' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Top users, {{ month_label }}</h2>
+    {% if top_users %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>User</th><th class="num">Calls</th><th class="num">Est. cost</th></tr></thead>
+          <tbody>
+            {% for u in top_users %}
+              <tr>
+                <td>#{{ u.user_id }}{% if u.username %} {{ u.username }}{% endif %}</td>
+                <td class="num">{{ u.calls }}</td>
+                <td class="num">{{ money(u.cost) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted">No calls this month.</p>
+    {% endif %}
+
+    <h2>Recent failures</h2>
+    {% if failures %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>When (server time)</th><th>Endpoint</th><th>User</th><th class="num">After</th><th>Error</th></tr></thead>
+          <tbody>
+            {% for f in failures %}
+              <tr>
+                <td class="nowrap">{{ f.created_at.strftime('%m/%d/%Y %H:%M') }}</td>
+                <td class="nowrap">{{ f.endpoint }}</td>
+                <td class="nowrap">{% if f.user_id %}#{{ f.user_id }}{% if usernames.get(f.user_id) %} {{ usernames[f.user_id] }}{% endif %}{% endif %}</td>
+                <td class="num">{{ '%.1fs' % (f.latency_ms / 1000) }}</td>
+                <td class="mono">{{ f.error }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted">No failed calls.</p>
+    {% endif %}
+  </div>
+{% endblock %}

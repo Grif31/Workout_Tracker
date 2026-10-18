@@ -2,12 +2,12 @@ import os
 import re
 import secrets
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 from flask import Blueprint, Response, current_app, jsonify, redirect, render_template, request, url_for
 from limiter import limiter
-from models import db, AdminAuditLog, ExerciseDBEntry, ExerciseDBThumbnail, ExerciseTemplate
-from utils import exercisedb
+from models import db, AdminAuditLog, AiCallLog, ExerciseDBEntry, ExerciseDBThumbnail, ExerciseTemplate, InsightFeedback, User
+from utils import admin_stats, exercisedb
 from utils.admin_audit import audit
 
 # Thumbnails on the search panel are small; the saved file stays at 360, what
@@ -64,7 +64,7 @@ def _api_key():
 @admin_bp.get('/')
 @_require_admin
 def admin_home():
-    return redirect(url_for('admin.admin_exercises'))
+    return redirect(url_for('admin.admin_coach'))
 
 
 @admin_bp.get('/audit')
@@ -73,6 +73,75 @@ def admin_audit():
     limit = 200
     rows = AdminAuditLog.query.order_by(AdminAuditLog.created_at.desc(), AdminAuditLog.id.desc()).limit(limit).all()
     return render_template('admin/audit.html', active='audit', rows=rows, limit=limit)
+
+
+_COACH_RANGES = {'30': 30, '90': 90, 'all': None}
+
+
+def _usernames(user_ids):
+    ids = {i for i in user_ids if i is not None}
+    if not ids:
+        return {}
+    return {u.id: u.username for u in User.query.filter(User.id.in_(ids))}
+
+
+@admin_bp.get('/coach')
+@_require_admin
+def admin_coach():
+    """How the Coach's insights land, from users' thumbs. Votes key on the
+    insight's title and body, since insights themselves aren't stored."""
+    range_key = request.args.get('range', '90')
+    if range_key not in _COACH_RANGES:
+        range_key = '90'
+    now = datetime.now()
+    query = InsightFeedback.query
+    if _COACH_RANGES[range_key]:
+        query = query.filter(InsightFeedback.created_at >= now - timedelta(days=_COACH_RANGES[range_key]))
+    rows = query.all()
+    weekly_rows = InsightFeedback.query.filter(
+        InsightFeedback.created_at >= datetime.combine(now.date() - timedelta(weeks=12), datetime.min.time())).all()
+    wrong = (InsightFeedback.query.filter_by(helpful=False, reason='wrong')
+             .order_by(InsightFeedback.created_at.desc(), InsightFeedback.id.desc()).limit(100).all())
+    helpful = sum(1 for r in rows if r.helpful)
+    return render_template(
+        'admin/coach.html', active='coach', range_key=range_key,
+        total={'votes': len(rows), 'helpful': helpful,
+               'rate': round(100 * helpful / len(rows)) if rows else None},
+        by_type=admin_stats.votes_by_type(rows),
+        reasons=admin_stats.reason_totals(rows),
+        weekly=admin_stats.weekly_helpful_rate(weekly_rows, now.date()),
+        voted_down=admin_stats.most_voted_down(rows),
+        wrong=wrong, usernames=_usernames(r.user_id for r in wrong),
+        reason_labels=admin_stats.REASON_LABELS,
+        reason_keys=[k for k in admin_stats.REASON_LABELS if k],
+    )
+
+
+@admin_bp.get('/ai')
+@_require_admin
+def admin_ai():
+    """Anthropic calls from ai_call_log: logged from the 2026-10-18 deploy on,
+    so nothing before it shows."""
+    now = datetime.now()
+    since = datetime.combine(now.date() - timedelta(days=29), datetime.min.time())
+    month_start = admin_stats.month_start(now)
+    rows = AiCallLog.query.filter(AiCallLog.created_at >= min(since, month_start)).all()
+    window = [r for r in rows if r.created_at >= since]
+    month = [r for r in rows if r.created_at >= month_start]
+    failures = (AiCallLog.query.filter_by(ok=False)
+                .order_by(AiCallLog.created_at.desc(), AiCallLog.id.desc()).limit(50).all())
+    first = db.session.query(db.func.min(AiCallLog.created_at)).scalar()
+    return render_template(
+        'admin/ai.html', active='ai',
+        window_totals=admin_stats.ai_totals(window),
+        month_totals=admin_stats.ai_totals(month),
+        month_label=month_start.strftime('%B'),
+        by_endpoint=admin_stats.ai_by_endpoint(window),
+        by_day=admin_stats.ai_by_day(window, now.date()),
+        top_users=admin_stats.ai_top_users(month, _usernames(r.user_id for r in month)),
+        failures=failures, usernames=_usernames(r.user_id for r in failures),
+        first_logged=first,
+    )
 
 
 @admin_bp.get('/exercises')
