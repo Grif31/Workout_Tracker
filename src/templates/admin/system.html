@@ -57,6 +57,17 @@
         </ol>
         <div class="sync">
           <div class="sync-row">
+            <button type="button" class="btn" id="sync-all-btn">Sync everyone from RevenueCat</button>
+            <span class="sub">One RevenueCat call per account ({{ checklist.premium_users }} premium here now).</span>
+          </div>
+          <p class="sub" id="sync-all-result" role="status">
+            {% if checklist.reconcile %}{% set t = checklist.reconcile.totals %}Last run {{ checklist.reconcile.at.strftime('%m/%d/%Y %H:%M') }}:
+              <span class="status {{ 'good' if checklist.reconcile.ok else 'bad' }}">{{ t.get('checked', 0) }} checked, {{ t.get('granted', 0) }} granted, {{ t.get('revoked', 0) }} revoked, {{ t.get('unknown', 0) }} unanswered</span>
+            {% else %}Never run. Sets each account's stored premium to RevenueCat's answer; an account RevenueCat can't answer for is left alone.{% endif %}
+          </p>
+        </div>
+        <div class="sync">
+          <div class="sync-row">
             <label for="sync-user">Test sync for user #</label>
             <input id="sync-user" type="number" min="1" inputmode="numeric" value="{{ premium_users[0].id if premium_users else '' }}">
             <button type="button" class="btn" id="sync-btn">Test sync</button>
@@ -70,7 +81,7 @@
       </section>
 
       <section class="card">
-        <div class="card-head"><div><h2>Premium accounts</h2><p class="sub">The first 20 by id, as stored here.</p></div></div>
+        <div class="card-head"><div><h2>Premium in our database</h2><p class="sub">The first 20 by id. Written by the RevenueCat webhook, the sync in the app, and "Sync everyone".</p></div></div>
         {% if premium_users %}
           <div class="table-wrap">
             <table>
@@ -145,6 +156,34 @@
 {% endblock %}
 {% block scripts %}
   <script>
+    document.getElementById('sync-all-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('sync-all-btn');
+      const out = document.getElementById('sync-all-result');
+      if (!confirm('Ask RevenueCat about every account and set stored premium to its answer?')) return;
+      btn.disabled = true;
+      let afterId = 0;
+      try {
+        while (true) {
+          const res = await fetch('/admin/system/sync-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ after_id: afterId }),
+          });
+          const data = await res.json();
+          if (!res.ok) { out.textContent = data.message || 'Failed.'; return; }
+          const t = data.totals;
+          out.textContent = (data.done ? 'Done: ' : 'Working: ') + t.checked + ' checked, ' + t.granted + ' granted, '
+            + t.revoked + ' revoked, ' + t.unknown + ' unanswered';
+          if (data.done) { setTimeout(() => location.reload(), 1500); return; }
+          afterId = data.next_after_id;
+        }
+      } catch {
+        out.textContent = 'Network error. Run it again; it starts over and changes only what differs.';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
     document.getElementById('sync-btn').addEventListener('click', async () => {
       const btn = document.getElementById('sync-btn');
       const out = document.getElementById('sync-result');

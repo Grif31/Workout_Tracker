@@ -1444,7 +1444,8 @@ One screen that says whether anything needs attention today, then links into the
 - [x] Dashboard alerts added: database behind the code's migration head, a required env var missing, and "PREMIUM_ENFORCED can be turned on" once the checklist is green
 - [x] Tests: `tests/test_admin_system.py`
 - [ ] App versions in use: `apiFetch` sends `X-App-Version` (from `expo-application`), stored with the daily activity row (see §4), so it only counts builds from then on. Moved to PR 8 with the table it needs
-- [ ] On prod: run "Test sync" on a beta tester; the checklist's fourth step should turn green
+- [x] **Fix (2026-10-18): stored premium was behind RevenueCat.** The page showed 3 premium accounts; RevenueCat has 31 beta testers on lifetime promotional grants (2026-10-01) plus purchasers. The grants predate the webhook and the sync (2026-10-13), the live App Store build (`51c0879`, 10/08) has no sync, and the app only syncs when its own answer changes, so testers were never written. Added "Sync everyone from RevenueCat" on the page (batches of 25, a no-answer never revokes, each change audit-logged), and the checklist's third step is now "every account checked against RevenueCat in the last 7 days, none unanswered", replacing "premium count above zero", so enforcement can't go on while testers would be refused
+- [ ] On prod: press "Sync everyone from RevenueCat"; expect about 28 granted and the checklist's third step to turn green
 
 **Library editing** (PR 6)
 - [ ] `/admin/exercises/<id>` detail page for global exercises (custom ones are read-only): `muscle_group`, `ExerciseMuscleMapping` rows (muscle + primary / secondary, add and remove), `description`, `bodyweight_load_factor` (shown for Bodyweight / Weighted only), `standards_key` shown read-only

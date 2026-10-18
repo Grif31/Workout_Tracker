@@ -270,6 +270,29 @@ def admin_test_sync():
                     'detail': detail})
 
 
+@admin_bp.post('/system/sync-all')
+@_require_admin
+@_admin_write
+def admin_sync_all_premium():
+    """One batch of "Sync everyone from RevenueCat": sets each account's
+    is_premium to what RevenueCat says, the same answer POST
+    /api/premium/sync records for one user. The page loops with
+    next_after_id until done. Each batch that changes anyone is audit-logged
+    with who changed."""
+    if not os.environ.get('REVENUECAT_SECRET_KEY'):
+        return jsonify({'message': 'REVENUECAT_SECRET_KEY not configured on server'}), 503
+    after_id = (request.get_json(silent=True) or {}).get('after_id', 0)
+    if not isinstance(after_id, int) or isinstance(after_id, bool) or after_id < 0:
+        return jsonify({'message': 'after_id must be a non-negative integer'}), 400
+    result = system_status.reconcile_batch(after_id)
+    if result['changed']:
+        audit('premium.revenuecat_sync', 'users', None,
+              [{'user_id': c['user_id'], 'is_premium': not c['is_premium']} for c in result['changed']],
+              result['changed'])
+    db.session.commit()
+    return jsonify({'message': 'ok', **result})
+
+
 @admin_bp.get('/exercises')
 @_require_admin
 def admin_exercises():

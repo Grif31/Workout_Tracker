@@ -54,9 +54,9 @@
         <div class="tile-note">{{ delta(active_users.change) }}</div>
       </div>
       <div class="tile">
-        <div class="tile-label">Premium users</div>
+        <div class="tile-label">Premium in our database</div>
         <div class="tile-value">{{ premium.count }}</div>
-        <div class="tile-note">of {{ premium.users }} accounts</div>
+        <div class="tile-note">of {{ premium.users }} accounts · <a href="{{ url_for('admin.admin_system') }}">sync from RevenueCat</a></div>
       </div>
     </div>
 

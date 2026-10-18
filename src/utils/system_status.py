@@ -1,6 +1,7 @@
 """What the admin's System page and dashboard report about the running
 server: the database, migrations, the deploy, env vars (names only, never
 values) and the premium turn-on checklist."""
+import json
 import os
 import time
 from datetime import datetime, timedelta
@@ -41,7 +42,10 @@ ENV_VARS = {
 }
 
 SYNC_CHECK_KEY = 'revenuecat_sync_check'
-SYNC_CHECK_FRESH = timedelta(days=7)
+RECONCILE_KEY = 'revenuecat_reconcile'          # the last complete run's result
+RECONCILE_RUN_KEY = 'revenuecat_reconcile_run'  # totals of the run in progress
+RECONCILE_FRESH = timedelta(days=7)
+RECONCILE_BATCH = 25  # about 25 RevenueCat calls a request, well under gunicorn's 30s
 
 
 def env_status():
@@ -106,24 +110,89 @@ def record_sync_check(ok, detail):
     db.session.commit()
 
 
+def _state(key):
+    row = db.session.get(AdminState, key)
+    return row
+
+
+def _set_state(key, value, now=None):
+    row = db.session.get(AdminState, key) or AdminState(key=key)
+    row.value = value[:255]
+    row.updated_at = now or datetime.now()
+    db.session.add(row)
+
+
+def reconcile_batch(after_id, now=None):
+    """Sets is_premium to RevenueCat's answer for the next RECONCILE_BATCH
+    users after `after_id`. RevenueCat is the only source of premium; a user
+    it can't answer for (None) is left as is and counted as unknown, so a
+    failed call never revokes. The page calls again with next_after_id until
+    done; after_id 0 starts a fresh run."""
+    users = User.query.filter(User.id > after_id).order_by(User.id).limit(RECONCILE_BATCH).all()
+    batch = {'checked': 0, 'granted': 0, 'revoked': 0, 'unchanged': 0, 'unknown': 0}
+    changed = []
+    for user in users:
+        active = premium.fetch_entitlement_active(user.id)
+        batch['checked'] += 1
+        if active is None:
+            batch['unknown'] += 1
+        elif active == bool(user.is_premium):
+            batch['unchanged'] += 1
+        else:
+            batch['granted' if active else 'revoked'] += 1
+            changed.append({'user_id': user.id, 'is_premium': active})
+            user.is_premium = active
+
+    run_row = _state(RECONCILE_RUN_KEY)
+    totals = dict.fromkeys(batch, 0)
+    if after_id and run_row and run_row.value:
+        try:
+            totals.update(json.loads(run_row.value))
+        except ValueError:
+            pass
+    for k, v in batch.items():
+        totals[k] += v
+    done = len(users) < RECONCILE_BATCH
+    next_after_id = users[-1].id if users else after_id
+    _set_state(RECONCILE_RUN_KEY, json.dumps(totals), now)
+    if done:
+        ok = totals['unknown'] == 0
+        _set_state(RECONCILE_KEY, f"{'ok' if ok else 'failed'}|{json.dumps(totals)}", now)
+    return {'batch': batch, 'totals': totals, 'changed': changed, 'done': done, 'next_after_id': next_after_id}
+
+
+def last_reconcile():
+    row = _state(RECONCILE_KEY)
+    if not row or not row.value:
+        return None
+    ok, _, totals = row.value.partition('|')
+    try:
+        totals = json.loads(totals)
+    except ValueError:
+        totals = {}
+    return {'ok': ok == 'ok', 'at': row.updated_at, 'totals': totals}
+
+
 def premium_checklist(now=None):
     """The turn-on steps from CLAUDE.md (Server-side premium), each with
     whether it's done. `ready` is every step but the last: the point at which
-    PREMIUM_ENFORCED can be flipped."""
+    PREMIUM_ENFORCED can be flipped. The third step is what keeps enforcement
+    from refusing a paying or beta account: every stored flag must have been
+    checked against RevenueCat recently, with no account it couldn't answer."""
     now = now or datetime.now()
-    sync = last_sync_check()
-    sync_fresh = bool(sync and sync['ok'] and now - sync['at'] <= SYNC_CHECK_FRESH)
+    rec = last_reconcile()
+    rec_fresh = bool(rec and rec['ok'] and now - rec['at'] <= RECONCILE_FRESH)
     premium_users = User.query.filter_by(is_premium=True).count()
     steps = [
         {'key': 'webhook', 'done': bool(os.environ.get('REVENUECAT_WEBHOOK_SECRET')),
          'text': 'REVENUECAT_WEBHOOK_SECRET set on Railway'},
         {'key': 'secret', 'done': bool(os.environ.get('REVENUECAT_SECRET_KEY')),
          'text': 'REVENUECAT_SECRET_KEY set on Railway'},
-        {'key': 'beta', 'done': premium_users > 0,
-         'text': f'Beta testers granted premium (flask grant-beta-premium --apply): {premium_users} premium now'},
-        {'key': 'sync', 'done': sync_fresh,
-         'text': 'RevenueCat answers a sync for a real account (Test sync below, within the last 7 days)'},
+        {'key': 'reconcile', 'done': rec_fresh,
+         'text': 'Every account checked against RevenueCat in the last 7 days, none unanswered '
+                 '("Sync everyone" below; beta grants and purchases then count here)'},
     ]
     ready = all(s['done'] for s in steps)
     steps.append({'key': 'enforce', 'done': premium.enforced(), 'text': 'PREMIUM_ENFORCED=true on Railway'})
-    return {'steps': steps, 'ready': ready, 'enforced': premium.enforced(), 'sync': sync}
+    return {'steps': steps, 'ready': ready, 'enforced': premium.enforced(), 'sync': last_sync_check(),
+            'reconcile': rec, 'premium_users': premium_users}
