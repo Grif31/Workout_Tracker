@@ -230,15 +230,15 @@ class TestApplyExerciseSuggestion:
 
 class TestAdminHome:
 
-    def test_redirects_to_the_coach_page(self, client, monkeypatch):
+    def test_lands_on_the_dashboard(self, client, monkeypatch):
         monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
         res = client.get('/admin/', headers=_basic_auth('pw'))
-        assert res.status_code == 302
-        assert res.headers['Location'].endswith('/admin/coach')
+        assert res.status_code == 200
+        assert '<h1>Dashboard</h1>' in res.get_data(as_text=True)
 
     def test_pages_share_the_nav(self, client, monkeypatch):
         monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
-        links = ('/admin/coach', '/admin/ai', '/admin/exercises', '/admin/audit')
+        links = ('/admin/', '/admin/coach', '/admin/ai', '/admin/exercises', '/admin/audit')
         for path in links:
             html = client.get(path, headers=_basic_auth('pw')).get_data(as_text=True)
             assert all(f'href="{link}"' in html for link in links), path

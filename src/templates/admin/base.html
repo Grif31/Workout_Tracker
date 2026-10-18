@@ -261,6 +261,7 @@
 <body>
   <nav class="nav">
     <span class="brand">Aretē Admin</span>
+    <a href="{{ url_for('admin.admin_home') }}" class="{{ 'active' if active == 'dashboard' }}">Dashboard</a>
     <a href="{{ url_for('admin.admin_coach') }}" class="{{ 'active' if active == 'coach' }}">Coach</a>
     <a href="{{ url_for('admin.admin_ai') }}" class="{{ 'active' if active == 'ai' }}">AI usage</a>
     <a href="{{ url_for('admin.admin_exercises') }}" class="{{ 'active' if active == 'exercises' }}">Exercises</a>

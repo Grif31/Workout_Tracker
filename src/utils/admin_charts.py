@@ -147,3 +147,19 @@ def _column_path(x, y, w, h, rounded):
     return (f'M{x:.1f},{y + h:.1f} L{x:.1f},{y + r:.1f} Q{x:.1f},{y:.1f} {x + r:.1f},{y:.1f} '
             f'L{x + w - r:.1f},{y:.1f} Q{x + w:.1f},{y:.1f} {x + w:.1f},{y + r:.1f} '
             f'L{x + w:.1f},{y + h:.1f} Z')
+
+
+def sparkline(values, width=120, height=32):
+    """A small trend line for a stat tile: path plus the last point, which
+    the tile marks as "now". All-zero data sits on the baseline."""
+    if not values:
+        return None
+    top = max(values) or 1
+    pad = 3
+    step = (width - 2 * pad) / max(len(values) - 1, 1)
+    pts = [(pad + i * step, height - pad - (height - 2 * pad) * v / top) for i, v in enumerate(values)]
+    return {
+        'width': width, 'height': height,
+        'd': ' '.join(('M' if i == 0 else 'L') + f'{x:.1f},{y:.1f}' for i, (x, y) in enumerate(pts)),
+        'last': {'x': pts[-1][0], 'y': pts[-1][1]},
+    }

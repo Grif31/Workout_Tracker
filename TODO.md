@@ -1397,22 +1397,20 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [x] Screenshotted in both themes, at desktop and phone width, with realistic sample data
 - [x] Tests: `tests/test_admin_charts.py` (ticks, gaps in a line, slot order, rounded tops, marker placement, money ticks, page chart data), tooltip escaping on the Coach page
 
-### 0. Dashboard (PR 4, owner 2026-10-18), the page `/admin/` lands on
-One screen that says whether anything needs attention today, then links into the page that explains it. Every tile is a number from a page that already exists or is planned; the dashboard computes nothing of its own, so a tile and its page can't disagree.
-- [ ] **Needs attention** row first, empty when all is well, each item an icon, a sentence and a link:
-  - AI failures in the last 24 hours above 5% (or any, while volume is low) → `/admin/ai`
-  - New "Looks wrong" votes since the last time the Coach page was opened → `/admin/coach` (needs a "last opened" timestamp, kept in a one-row admin state table or the audit log)
-  - RapidAPI calls left under 100 → exercises
-  - Migration in the DB behind the code's head, or a required env var missing → `/admin/system` (once PR 5 lands)
-  - `PREMIUM_ENFORCED` still off while the turn-on checklist is all green → `/admin/system`
-- [ ] **Today and this week**, as tiles with a 7-day sparkline and the change against the week before: workouts logged, active users (from `user_activity_day` once §4 lands; until then, users who logged a workout), new accounts, premium users
-- [ ] **Coach**: helpful rate over 30 days and its change, votes this week, the newest "Looks wrong" title
-- [ ] **AI**: month-to-date estimated cost and calls, p95 latency of insights, failures in 24 hours
-- [ ] **Content**: library exercises without an image (links to the exercise page's "No Image" filter), catalog fetched or not, custom-exercise candidates waiting (once PR 6 lands)
-- [ ] **Recent admin activity**: the last 5 audit-log rows
-- [ ] Tiles for pages not built yet don't render, rather than showing zeros
-- [ ] One query per tile family, cheap enough to load on every visit (indexed `created_at` columns; no full-table Python loops over workouts)
-- [ ] Tests: a fresh DB renders with nothing in "Needs attention"; each attention rule fires on the data that should trip it and stays quiet just under it
+### 0. Dashboard (PR 4, owner 2026-10-18), built 2026-10-18: the page `/admin/` opens on
+One screen that says whether anything needs attention today, then links into the page that explains it. Figures come from the same helpers as the pages they link to (`utils/admin_stats.py`), and the rules live in `utils/admin_dashboard.py`.
+- [x] **Needs attention**, an "All clear" line when nothing trips; each item an icon, a word ("Check" / "Problem") and a linked sentence:
+  - AI failures in the last 24 hours: any while there are under 20 calls, above 5% after that; "Problem" from 20%
+  - New "Looks wrong" votes since the Coach page was last opened (the visit is kept in a new key-value `admin_state` table, migration `a7b8c9d0e1f2`)
+  - RapidAPI calls left under 100 ("Problem" under 20). Only known once a call has been made since the last restart
+- [x] **This week**: workouts logged in 7 days, users who logged a workout in 7 days (the stand-in for active users until §4's `user_activity_day`), each with a 7-day sparkline and the change against the 7 days before; premium users out of all accounts
+- [x] **Coach** card: helpful rate over 30 days against the 30 before, votes in 7 days, the newest "Looks wrong" title
+- [x] **AI** card: month-to-date estimated cost and calls, failures in 24 hours, insights p95
+- [x] **Exercise library** card: library exercises without an image (users' custom ones left out), catalog fetched or not, RapidAPI calls left
+- [x] **Recent admin activity**: the last 5 audit-log rows
+- [x] Screenshotted with and without alerts, light and dark
+- [x] Tests: `tests/test_admin_dashboard.py`, each rule on the data that trips it and just under it, a fresh DB is "All clear", a Coach visit clears the "Looks wrong" alert
+- [ ] Waiting on later PRs: migration or env var out of line, `PREMIUM_ENFORCED` still off with the checklist green (PR 5, System); custom-exercise candidates (PR 6); new accounts and real active users (PR 8, Growth)
 
 ### 1. Coach & AI (PR 3, covers §23's "Measure before tuning" step), built 2026-10-18
 **`/admin/coach`** (now where `/admin/` lands), from `insight_feedback`

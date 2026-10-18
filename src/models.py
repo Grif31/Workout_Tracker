@@ -682,3 +682,13 @@ class AiCallLog(db.Model):
     ok            = db.Column(db.Boolean, nullable=False)
     error         = db.Column(db.String(200), nullable=True)
     created_at    = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+# ── AdminState ────────────────────────────────────────────────
+# Small facts the admin remembers between visits, such as when the Coach
+# page was last opened (so the dashboard can count what's new since).
+class AdminState(db.Model):
+    __tablename__ = 'admin_state'
+    key        = db.Column(db.String(64), primary_key=True)
+    value      = db.Column(db.String(255), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)

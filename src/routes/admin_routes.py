@@ -4,10 +4,11 @@ import secrets
 import urllib.parse
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Blueprint, Response, current_app, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, Response, current_app, jsonify, render_template, request, url_for
 from limiter import limiter
-from models import db, AdminAuditLog, AiCallLog, ExerciseDBEntry, ExerciseDBThumbnail, ExerciseTemplate, InsightFeedback, User
-from utils import admin_stats, exercisedb
+from models import (db, AdminAuditLog, AdminState, AiCallLog, ExerciseDBEntry, ExerciseDBThumbnail,
+                    ExerciseTemplate, InsightFeedback, User, Workout)
+from utils import admin_charts, admin_dashboard, admin_stats, exercisedb
 from utils.admin_audit import audit
 
 # Thumbnails on the search panel are small; the saved file stays at 360, what
@@ -61,10 +62,77 @@ def _api_key():
     return os.environ.get('RAPIDAPI_KEY', '')
 
 
+_COACH_LAST_OPENED = 'coach_last_opened'
+
+
 @admin_bp.get('/')
 @_require_admin
 def admin_home():
-    return redirect(url_for('admin.admin_coach'))
+    """The dashboard: anything that needs attention, then this week at a glance.
+    Every figure comes from the same helpers as the page it links to, so the
+    two can't disagree."""
+    now = datetime.now()
+    today = now.date()
+    day_start = lambda d: datetime.combine(d, datetime.min.time())
+
+    # Workouts and the users logging them, two weeks for this-vs-last-week
+    since14 = day_start(today - timedelta(days=13))
+    workout_rows = db.session.query(Workout.date, Workout.user_id).filter(Workout.date >= since14).all()
+    per_day = admin_dashboard.daily_counts([d.date() for d, _ in workout_rows], today)
+    active_per_day = admin_dashboard.daily_distinct([(d.date(), u) for d, u in workout_rows], today)
+    week_start = day_start(today - timedelta(days=6))
+    active_now = len({u for d, u in workout_rows if d >= week_start})
+    active_before = len({u for d, u in workout_rows if d < week_start})
+
+    # Coach: 30 days against the 30 before
+    votes60 = InsightFeedback.query.filter(InsightFeedback.created_at >= now - timedelta(days=60)).all()
+    recent = [v for v in votes60 if v.created_at >= now - timedelta(days=30)]
+    earlier = [v for v in votes60 if v.created_at < now - timedelta(days=30)]
+    rate_now = admin_dashboard.rate(sum(v.helpful for v in recent), len(recent))
+    rate_before = admin_dashboard.rate(sum(v.helpful for v in earlier), len(earlier))
+    last_opened = db.session.get(AdminState, _COACH_LAST_OPENED)
+    wrong_q = InsightFeedback.query.filter_by(helpful=False, reason='wrong')
+    if last_opened:
+        wrong_q = wrong_q.filter(InsightFeedback.created_at > last_opened.updated_at)
+    newest_wrong = (InsightFeedback.query.filter_by(helpful=False, reason='wrong')
+                    .order_by(InsightFeedback.created_at.desc()).first())
+
+    # AI
+    month_start = admin_stats.month_start(now)
+    since30 = day_start(today - timedelta(days=29))
+    ai_rows = AiCallLog.query.filter(AiCallLog.created_at >= min(since30, month_start)).all()
+    last24 = [r for r in ai_rows if r.created_at >= now - timedelta(hours=24)]
+    insights = next((e for e in admin_stats.ai_by_endpoint([r for r in ai_rows if r.created_at >= since30])
+                     if e['endpoint'] == 'insights'), None)
+
+    alerts = [a for a in (
+        admin_dashboard.ai_failure_alert(len(last24), sum(1 for r in last24 if not r.ok)),
+        admin_dashboard.looks_wrong_alert(wrong_q.count()),
+        admin_dashboard.quota_alert(exercisedb.quota['remaining']),
+    ) if a]
+
+    missing_images = ExerciseTemplate.query.filter(
+        ExerciseTemplate.user_id.is_(None),
+        (ExerciseTemplate.image_url.is_(None)) | (ExerciseTemplate.image_url == '')).count()
+    return render_template(
+        'admin/dashboard.html', active='dashboard', alerts=alerts,
+        workouts={'week': sum(per_day[7:]), 'change': admin_dashboard.change(sum(per_day[7:]), sum(per_day[:7])),
+                  'today': per_day[-1], 'spark': admin_charts.sparkline(per_day[7:])},
+        active_users={'week': active_now, 'change': admin_dashboard.change(active_now, active_before),
+                      'spark': admin_charts.sparkline(active_per_day[7:])},
+        premium={'count': User.query.filter_by(is_premium=True).count(), 'users': User.query.count()},
+        coach={'rate': rate_now, 'change': (admin_dashboard.change(rate_now, rate_before)
+                                            if rate_now is not None and rate_before is not None else None),
+               'votes_week': sum(1 for v in recent if v.created_at >= now - timedelta(days=7)),
+               'newest_wrong': newest_wrong},
+        ai={'month': admin_stats.ai_totals([r for r in ai_rows if r.created_at >= month_start]),
+            'month_label': month_start.strftime('%B'),
+            'day': admin_stats.ai_totals(last24), 'insights': insights},
+        content={'missing_images': missing_images,
+                 'catalog': ExerciseDBEntry.query.count(),
+                 'quota': exercisedb.quota['remaining']},
+        audit_rows=AdminAuditLog.query.order_by(AdminAuditLog.created_at.desc(), AdminAuditLog.id.desc()).limit(5).all(),
+    )
 
 
 @admin_bp.get('/audit')
@@ -105,6 +173,12 @@ def admin_coach():
     helpful = sum(1 for r in rows if r.helpful)
     weekly = admin_stats.weekly_helpful_rate(weekly_rows, now.date())
     reasons = admin_stats.reason_totals(rows)
+    # The dashboard counts "Looks wrong" votes newer than this visit
+    state = db.session.get(AdminState, _COACH_LAST_OPENED) or AdminState(key=_COACH_LAST_OPENED)
+    state.value = now.isoformat(timespec='seconds')
+    state.updated_at = now
+    db.session.add(state)
+    db.session.commit()
     return render_template(
         'admin/coach.html', active='coach', range_key=range_key,
         total={'votes': len(rows), 'helpful': helpful,

@@ -1,0 +1,154 @@
+{% extends "admin/base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% macro money(v) %}${{ '%.2f' % v }}{% endmacro %}
+{% macro delta(c, suffix='', period='last week') %}
+  {%- if c is none -%}<span class="muted">Nothing to compare with yet</span>
+  {%- elif c.direction == 'flat' -%}<span class="delta flat">Same as {{ period }}</span>
+  {%- else -%}<span class="delta {{ c.direction }}">{{ '▲' if c.direction == 'up' else '▼' }} {{ c.diff|abs }}{{ suffix }} vs {{ period }}</span>
+  {%- endif -%}
+{% endmacro %}
+{% macro spark(s) %}
+  {% if s %}
+    <svg class="spark" viewBox="0 0 {{ s.width }} {{ s.height }}" aria-hidden="true">
+      <path d="{{ s.d }}"/><circle cx="{{ s.last.x|round(1) }}" cy="{{ s.last.y|round(1) }}" r="3"/>
+    </svg>
+  {% endif %}
+{% endmacro %}
+{% block content %}
+  <div class="page">
+    <div class="page-head">
+      <div>
+        <h1>Dashboard</h1>
+        <p class="sub">What needs attention, then the week at a glance. Each figure links to the page it comes from.</p>
+      </div>
+    </div>
+
+    <section class="card attention {{ 'clear' if not alerts }}">
+      {% if alerts %}
+        <div class="card-head"><div><h2>Needs attention</h2></div></div>
+        <ul class="alerts">
+          {% for a in alerts %}
+            <li><span class="status {{ a.level }}">{{ 'Problem' if a.level == 'bad' else 'Check' }}</span>
+              <a href="{{ url_for(a.link) }}">{{ a.text }}</a></li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="all-clear"><span class="status good">All clear</span><span class="muted">No AI failures, new "Looks wrong" votes or quota warnings.</span></div>
+      {% endif %}
+    </section>
+
+    <h2 class="section-title">This week</h2>
+    <div class="tiles">
+      <div class="tile">
+        <div class="tile-label">Workouts logged, 7 days</div>
+        <div class="tile-row">
+          <div class="tile-value">{{ workouts.week }}</div>{{ spark(workouts.spark) }}
+        </div>
+        <div class="tile-note">{{ delta(workouts.change) }} · {{ workouts.today }} today</div>
+      </div>
+      <div class="tile">
+        <div class="tile-label">Users who logged a workout, 7 days</div>
+        <div class="tile-row">
+          <div class="tile-value">{{ active_users.week }}</div>{{ spark(active_users.spark) }}
+        </div>
+        <div class="tile-note">{{ delta(active_users.change) }}</div>
+      </div>
+      <div class="tile">
+        <div class="tile-label">Premium users</div>
+        <div class="tile-value">{{ premium.count }}</div>
+        <div class="tile-note">of {{ premium.users }} accounts</div>
+      </div>
+    </div>
+
+    <div class="cols three">
+      <a class="card link-card" href="{{ url_for('admin.admin_coach') }}">
+        <div class="card-head"><div><h2>Coach</h2><p class="sub">Last 30 days</p></div><span class="go">Open ›</span></div>
+        <div class="card-body">
+          <div class="big">{{ coach.rate if coach.rate is not none else '–' }}{% if coach.rate is not none %}<span class="unit">% helpful</span>{% endif %}</div>
+          <div class="tile-note">{{ delta(coach.change, ' pts', 'the 30 days before') if coach.rate is not none else '' }}</div>
+          <dl class="facts">
+            <dt>Votes, 7 days</dt><dd>{{ coach.votes_week }}</dd>
+            <dt>Newest "Looks wrong"</dt><dd>{{ coach.newest_wrong.title if coach.newest_wrong else 'None yet' }}</dd>
+          </dl>
+        </div>
+      </a>
+      <a class="card link-card" href="{{ url_for('admin.admin_ai') }}">
+        <div class="card-head"><div><h2>AI usage</h2><p class="sub">{{ ai.month_label }} so far</p></div><span class="go">Open ›</span></div>
+        <div class="card-body">
+          <div class="big">{{ money(ai.month.cost) }}<span class="unit">estimated</span></div>
+          <div class="tile-note">{{ ai.month.calls }} calls</div>
+          <dl class="facts">
+            <dt>Failures, 24 hours</dt>
+            <dd>{% if ai.day.failures %}<span class="status warn">{{ ai.day.failures }} of {{ ai.day.calls }}</span>{% else %}0 of {{ ai.day.calls }}{% endif %}</dd>
+            <dt>Insights p95, 30 days</dt><dd>{{ '%.1fs' % (ai.insights.p95 / 1000) if ai.insights and ai.insights.p95 is not none else '–' }}</dd>
+          </dl>
+        </div>
+      </a>
+      <a class="card link-card" href="{{ url_for('admin.admin_exercises') }}">
+        <div class="card-head"><div><h2>Exercise library</h2><p class="sub">Images and the GIF catalog</p></div><span class="go">Open ›</span></div>
+        <div class="card-body">
+          <div class="big">{{ content.missing_images }}<span class="unit">without an image</span></div>
+          <div class="tile-note">Library exercises only, not users' custom ones</div>
+          <dl class="facts">
+            <dt>GIF catalog</dt><dd>{{ '%d exercises' % content.catalog if content.catalog else 'Not fetched yet' }}</dd>
+            <dt>RapidAPI calls left</dt><dd>{{ content.quota if content.quota is not none else 'Unknown until the next call' }}</dd>
+          </dl>
+        </div>
+      </a>
+    </div>
+
+    <section class="card recent">
+      <div class="card-head">
+        <div><h2>Recent admin activity</h2></div>
+        <a class="go" href="{{ url_for('admin.admin_audit') }}">Full log ›</a>
+      </div>
+      {% if audit_rows %}
+        <div class="table-wrap">
+          <table>
+            <tbody>
+              {% for row in audit_rows %}
+                <tr>
+                  <td class="nowrap muted">{{ row.created_at.strftime('%m/%d %H:%M') }}</td>
+                  <td class="nowrap"><b>{{ row.action }}</b></td>
+                  <td class="nowrap">{{ row.target_type }}{% if row.target_id is not none %} <span class="muted">#{{ row.target_id }}</span>{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty">No admin writes yet.</div>
+      {% endif %}
+    </section>
+  </div>
+{% endblock %}
+{% block head %}
+  <style>
+    .recent td:nth-child(2) { width: 100%; }
+    .section-title { font-size: 15px; font-weight: 700; margin: 22px 0 10px; }
+    .attention .alerts { list-style: none; padding: 8px 0 6px; }
+    .attention .alerts li { display: flex; gap: 12px; align-items: baseline; padding: 8px 18px; border-top: 1px solid var(--grid); }
+    .attention .alerts li:first-child { border-top: none; }
+    .attention .alerts a { color: var(--ink); text-decoration: none; }
+    .attention .alerts a:hover { text-decoration: underline; }
+    .all-clear { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; padding: 14px 18px; font-size: 13px; }
+    .tile-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+    .spark { width: 120px; height: 32px; flex-shrink: 0; }
+    .spark path { fill: none; stroke: var(--s1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .spark circle { fill: var(--s1); stroke: var(--surface); stroke-width: 2; }
+    .delta { font-weight: 600; }
+    .delta.up { color: var(--good-ink); }
+    .delta.down { color: var(--critical-ink); }
+    .delta.flat { color: var(--ink-2); }
+    .cols.three { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 16px; }
+    @media (max-width: 900px) { .cols.three { grid-template-columns: 1fr; } }
+    .link-card { color: inherit; text-decoration: none; display: block; transition: border-color 0.12s; }
+    .link-card:hover { border-color: var(--accent); }
+    .go { font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: none; white-space: nowrap; }
+    .big { font-size: 28px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.15; }
+    .big .unit { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-left: 6px; }
+    .facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--grid); font-size: 13px; }
+    .facts dt { color: var(--ink-2); }
+    .facts dd { text-align: right; font-weight: 600; overflow-wrap: anywhere; }
+  </style>
+{% endblock %}
