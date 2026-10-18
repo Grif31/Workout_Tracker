@@ -4,14 +4,19 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 
 from schemas import INSIGHT_FEEDBACK_REASONS
+from utils import admin_charts
 from utils.ai_client import estimate_cost
 
 # Prompt or model changes to the insights, shown on the weekly helpful-rate
-# trend so a step in it can be matched to its cause. Add a line per change.
+# trend so a step in it can be matched to its cause. Add a line per change:
+# (date shipped, a few words for the chart, the full description).
 PROMPT_CHANGES = [
-    (date(2026, 10, 15), 'Votes quoted into the insights prompt'),
-    (date(2026, 10, 16), 'Thumbs-down reasons, each with its own instruction'),
+    (date(2026, 10, 15), 'Votes in prompt', 'Votes quoted into the insights prompt'),
+    (date(2026, 10, 16), 'Reasons', 'Thumbs-down reasons, each with its own instruction'),
 ]
+
+# Fixed order, so an endpoint keeps its chart color whatever else is present
+AI_ENDPOINTS = ['insights', 'weekly-review', 'generate']
 
 
 # The app's own chip labels (INSIGHT_REASONS in CoachScreen.tsx), so the page
@@ -72,7 +77,7 @@ def weekly_helpful_rate(rows, today, weeks=12):
             buckets[week][1] += 1 if r.helpful else 0
     out = []
     for week, (votes, helpful) in buckets.items():
-        changes = [label for d, label in PROMPT_CHANGES if week <= d < week + timedelta(days=7)]
+        changes = [(short, label) for d, short, label in PROMPT_CHANGES if week <= d < week + timedelta(days=7)]
         out.append({'week': week, 'votes': votes, 'helpful': helpful,
                     'rate': _rate(helpful, votes), 'changes': changes})
     return out
@@ -158,3 +163,39 @@ def ai_totals(rows):
 
 def month_start(now: datetime):
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def coach_weekly_chart(weekly):
+    points, markers = [], []
+    for i, w in enumerate(weekly):
+        rows = []
+        if w['rate'] is not None:
+            rows.append([f"{w['rate']}%", 'helpful', 'key-0'])
+        rows.append([str(w['votes']), 'votes', None])
+        rows += [['', label, None] for _, label in w['changes']]
+        points.append({'label': w['week'].strftime('%m/%d'), 'value': w['rate'],
+                       'tip': {'head': 'Week of ' + w['week'].strftime('%m/%d/%Y'), 'rows': rows}})
+        if w['changes']:
+            short = w['changes'][0][0] if len(w['changes']) == 1 else f"{len(w['changes'])} changes"
+            markers.append({'index': i, 'label': short})
+    return admin_charts.line_chart(points, y_max=100, fmt='pct', markers=markers, label_every=2)
+
+
+def ai_daily_charts(by_day):
+    """Calls stacked by endpoint, and estimated cost on a chart of its own:
+    two measures, two scales, two charts. by_day is newest first."""
+    days = list(reversed(by_day))
+    calls, cost = [], []
+    for d in days:
+        head = d['day'].strftime('%a %m/%d')
+        rows = [[str(d['by_endpoint'].get(ep, 0)), ep, f'key-{i}'] for i, ep in enumerate(AI_ENDPOINTS)]
+        rows.append([str(d['calls']), 'total', None])
+        if d['failures']:
+            rows.append([str(d['failures']), 'failed', None])
+        calls.append({'label': d['day'].strftime('%m/%d'), 'parts': dict(d['by_endpoint']),
+                      'tip': {'head': head, 'rows': rows}})
+        cost.append({'label': d['day'].strftime('%m/%d'), 'parts': {'cost': d['cost']},
+                     'tip': {'head': head, 'rows': [[f"${d['cost']:.4f}", 'estimated', 'key-0'],
+                                                    [str(d['calls']), 'calls', None]]}})
+    return (admin_charts.stacked_columns(calls, AI_ENDPOINTS, label_every=5),
+            admin_charts.stacked_columns(cost, ['cost'], fmt='money', height=170, label_every=5))

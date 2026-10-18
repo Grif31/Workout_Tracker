@@ -1367,7 +1367,7 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 ## 🛠️ 24. Admin Console
 > Planned (owner, 2026-10-16; detailed 2026-10-17): grow `/admin` from the one exercise-images page into a console the owner uses day to day. Order follows what gets opened most: Coach & AI, then ops & content, then user lookup, then growth. Mostly read-only: the only writes are RevenueCat re-sync, force sign-out and exercise library edits (images included), each one audit-logged. Premium still comes only from RevenueCat. Desktop first, but the layout shouldn't break on a phone.
 >
-> Shipping order, one PR each: **Foundation → Exercise image search (§2b) → Coach & AI → System → Library editing → User lookup → Growth.** Image search jumps ahead of Coach because images are being added by hand right now and it only needs the Foundation.
+> Shipping order, one PR each: **Foundation → Exercise image search (§2b) → Coach & AI → Visual pass → Dashboard → System → Library editing → User lookup → Growth.** Image search jumps ahead of Coach because images are being added by hand right now and it only needs the Foundation. The dashboard (added 2026-10-18) goes before System because most of its tiles read data that already exists; tiles for later pages appear as those pages land.
 
 ### Where things stand
 - `routes/admin_routes.py` (584 lines): the whole page is one `ADMIN_PAGE` string, served by `GET /admin/exercises`; data from `/admin/exercises/data`; writes are `POST /admin/exercises/<id>/image` and `POST /admin/exercises/<id>/apply-suggestion` (downloads the GIF to `static/exercise_images/<id>.gif`)
@@ -1386,6 +1386,33 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [x] `GET /admin/audit`: last 200 rows, newest first
 - [x] Tests: `test_route_guardrails.py` walks every `/admin` rule (wrong password 401, right password with no body and no `RAPIDAPI_KEY` never 500); `test_admin_routes.py` covers the redirect, nav, write guard (foreign / missing Origin, form body, https Origin), audit rows and escaping, and the limiter (on its own app, since Flask-Limiter only installs its hooks when it starts enabled). Guard and limiter tests checked to fail with the code removed
 - [ ] Deploy and check on prod: log in, save an image, see it on the audit page
+
+### Visual pass (PR 3b, owner 2026-10-18: "hard to scan, no charts, layout is off"), built 2026-10-18
+- [x] Colors as light / dark tokens in `base.html` from the data-viz reference palette: follows the OS, a toggle in the nav overrides it (kept in `localStorage`). Every admin page uses them, the exercise page included (its GIF tiles renamed `.gif-tile` so they don't collide with the stat tiles)
+- [x] Layout: centered 1180px page, a title with its range control, a row of summary tiles, then one card per section with a heading and a one-line explanation; two columns where it fits; phone width checked (tiles two across, charts scroll sideways and open on the newest days)
+- [x] Charts as server-rendered SVG: geometry in `utils/admin_charts.py` (round 1 / 2 / 5 ticks, 24px bar cap, 2px gaps between stacked segments, rounded top only), drawn by `templates/admin/_charts.html`, a small vanilla hover layer in `base.html` (tooltips built with `textContent`, keyboard focus too). Each chart has its numbers under "Show table"
+  - Coach: helpful rate per week as a line (a week with no votes breaks the line), prompt changes as labelled markers; per insight type a neutral helpful-rate bar and a thumbs-down reasons bar with a legend
+  - AI usage: calls per day stacked by endpoint (fixed colors per endpoint), estimated cost per day as its own chart
+- [x] Status (failures) shown as an icon and a word, never color alone
+- [x] Screenshotted in both themes, at desktop and phone width, with realistic sample data
+- [x] Tests: `tests/test_admin_charts.py` (ticks, gaps in a line, slot order, rounded tops, marker placement, money ticks, page chart data), tooltip escaping on the Coach page
+
+### 0. Dashboard (PR 4, owner 2026-10-18), the page `/admin/` lands on
+One screen that says whether anything needs attention today, then links into the page that explains it. Every tile is a number from a page that already exists or is planned; the dashboard computes nothing of its own, so a tile and its page can't disagree.
+- [ ] **Needs attention** row first, empty when all is well, each item an icon, a sentence and a link:
+  - AI failures in the last 24 hours above 5% (or any, while volume is low) → `/admin/ai`
+  - New "Looks wrong" votes since the last time the Coach page was opened → `/admin/coach` (needs a "last opened" timestamp, kept in a one-row admin state table or the audit log)
+  - RapidAPI calls left under 100 → exercises
+  - Migration in the DB behind the code's head, or a required env var missing → `/admin/system` (once PR 5 lands)
+  - `PREMIUM_ENFORCED` still off while the turn-on checklist is all green → `/admin/system`
+- [ ] **Today and this week**, as tiles with a 7-day sparkline and the change against the week before: workouts logged, active users (from `user_activity_day` once §4 lands; until then, users who logged a workout), new accounts, premium users
+- [ ] **Coach**: helpful rate over 30 days and its change, votes this week, the newest "Looks wrong" title
+- [ ] **AI**: month-to-date estimated cost and calls, p95 latency of insights, failures in 24 hours
+- [ ] **Content**: library exercises without an image (links to the exercise page's "No Image" filter), catalog fetched or not, custom-exercise candidates waiting (once PR 6 lands)
+- [ ] **Recent admin activity**: the last 5 audit-log rows
+- [ ] Tiles for pages not built yet don't render, rather than showing zeros
+- [ ] One query per tile family, cheap enough to load on every visit (indexed `created_at` columns; no full-table Python loops over workouts)
+- [ ] Tests: a fresh DB renders with nothing in "Needs attention"; each attention rule fires on the data that should trip it and stays quiet just under it
 
 ### 1. Coach & AI (PR 3, covers §23's "Measure before tuning" step), built 2026-10-18
 **`/admin/coach`** (now where `/admin/` lands), from `insight_feedback`
@@ -1411,7 +1438,7 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [ ] On prod after deploy: open both pages; after the next insight refresh, check its row shows tokens and cost
 
 ### 2. Ops & content
-**`/admin/system`** (PR 4)
+**`/admin/system`** (PR 5)
 - [ ] DB ping (the `SELECT 1` from `health_routes.py`)
 - [ ] Migration state: the revision in `alembic_version` against the head of `migrations/versions`, red when they differ
 - [ ] Deployed commit from Railway's `RAILWAY_GIT_COMMIT_SHA`
@@ -1420,7 +1447,7 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [ ] Premium turn-on checklist as live status: both RevenueCat vars set, count of premium users (beta grants run if it's above zero), and a "Test sync" button that asks RevenueCat about one user via `fetch_entitlement_active` and shows the answer without writing anything
 - [ ] App versions in use: `apiFetch` sends `X-App-Version` (from `expo-application`), stored with the daily activity row (see §4), so it only counts builds from then on. Table: version → users seen on it in the last 30 days
 
-**Library editing** (PR 5)
+**Library editing** (PR 6)
 - [ ] `/admin/exercises/<id>` detail page for global exercises (custom ones are read-only): `muscle_group`, `ExerciseMuscleMapping` rows (muscle + primary / secondary, add and remove), `description`, `bodyweight_load_factor` (shown for Bodyweight / Weighted only), `standards_key` shown read-only
 - [ ] Every save audit-logged with before / after
 - [ ] After a `bodyweight_load_factor` change, a banner: "Run `flask backfill-workout-volume --apply`"
@@ -1448,21 +1475,21 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [ ] On prod after deploy: press "Fetch catalog" once (about 135 of the month's calls), then try a few hard searches. The preview shows the 180 thumbnail scaled up, so it's soft; the saved 360 file is sharper
 - [ ] Add aliases as misses turn up: `_WORD_ALIASES`, `_JOINS` and `_PHRASE_ALIASES` in `utils/exercisedb.py`, one line each, plus a test case
 
-### 3. User lookup / support (PR 6)
+### 3. User lookup / support (PR 7)
 - [ ] `/admin/users?q=`: search by email or username (`ilike`, 50 results max)
 - [ ] `/admin/users/<id>`: sign-in method (password / Apple / Google, `is_social_only`), `email_verified`, unit, gender set or not, premium state and source, counts of workouts / routines / templates / PRs, last workout date, last seen and app version (once §4 lands), insight votes, AI calls this month (from `ai_call_log`)
 - [ ] Actions, both behind the write guard and audit-logged: RevenueCat re-sync (the same code path as `POST /api/premium/sync`, pulled into a helper if it isn't one) and force sign-out (bump `token_version`). No manual premium grants, no account deletion
 - [ ] Never show progress photos or body measurements
 - [ ] Tests: search, detail for a fresh user (no 500s with no data), sign-out bumps `token_version` and an old token is rejected, re-sync with RevenueCat mocked
 
-### 4. Growth dashboard (PR 7)
+### 4. Growth dashboard (PR 8)
 - [ ] `User.created_at` (server default `now()`) + migration. Existing accounts stay NULL and use the first workout date, shown as "est."
 - [ ] **`user_activity_day` table** + migration (decided 2026-10-17): `user_id`, `day`, `app_version`; PK on user + day. It replaces the first draft's `last_seen_at`; "last seen" is the user's latest `day`. A single `last_seen_at` can say who was active today but not who was active last week, so DAU history and retention can't be drawn from it. Written by `INSERT ... ON CONFLICT DO NOTHING` on a user's first authenticated request of the day; an in-process `{user_id: day}` dict skips the insert after that, so it's about one write per user per day. Uses `user_today()`, not `date.today()`
 - [ ] Signups per week, DAU / WAU / MAU over time, workouts per day, premium count, week-1 and week-4 retention by signup week (retention counts from the day activity rows start, and says so)
 - [ ] Charts as server-rendered inline SVG from one Jinja macro (bar and line), no frontend build step
 
 ### Decisions (owner, 2026-10-17)
-- [x] The admin is the source of truth for library edits; `seed.py` overwrites one only when specifically told to (PR 5)
+- [x] The admin is the source of truth for library edits; `seed.py` overwrites one only when specifically told to (PR 6)
 - [x] Activity is tracked in a `user_activity_day` table, not a single `last_seen_at` column (§4)
 
 ### Later, not planned

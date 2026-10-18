@@ -1,0 +1,50 @@
+{# SVG charts drawn from utils/admin_charts.py geometry. data-tip is single-quoted:
+   tojson escapes ' but not ", so double quotes would end the attribute. #}
+
+{% macro axes(c) %}
+  {% for t in c.ticks %}
+    <line class="{{ 'baseline' if loop.first else 'grid-line' }}" x1="{{ c.plot.x0 }}" x2="{{ c.plot.x1 }}" y1="{{ t.y|round(1) }}" y2="{{ t.y|round(1) }}"/>
+    <text class="tick" x="{{ c.plot.x0 - 8 }}" y="{{ (t.y + 4)|round(1) }}" text-anchor="end">{{ t.label }}</text>
+  {% endfor %}
+  {% for l in c.x_labels %}
+    <text class="tick" x="{{ l.x|round(1) }}" y="{{ c.plot.y1 + 18 }}" text-anchor="middle">{{ l.label }}</text>
+  {% endfor %}
+{% endmacro %}
+
+{% macro line(c, title) %}
+  <div class="chart-scroll">
+    <svg class="chart" viewBox="0 0 {{ c.width }} {{ c.height }}" role="img" aria-label="{{ title }}">
+      {{ axes(c) }}
+      {% for m in c.markers %}
+        <line class="marker-line" x1="{{ m.x|round(1) }}" x2="{{ m.x|round(1) }}" y1="{{ c.plot.y0 - 6 }}" y2="{{ c.plot.y1 }}"/>
+        <text class="marker-label" x="{{ (m.x - 5 if m.anchor == 'end' else m.x + 5)|round(1) }}" y="{{ c.plot.y0 - 10 }}" text-anchor="{{ m.anchor }}">{{ m.label }}</text>
+      {% endfor %}
+      {% for d in c.paths %}<path class="line" d="{{ d }}"/>{% endfor %}
+      {% for d in c.dots %}<circle class="dot" cx="{{ d.x|round(1) }}" cy="{{ d.y|round(1) }}" r="4"/>{% endfor %}
+      {% if c.end_label %}
+        <text class="end-label" x="{{ (c.end_label.x - 8)|round(1) }}" y="{{ (c.end_label.y - 10)|round(1) }}" text-anchor="end">{{ c.end_label.text }}</text>
+      {% endif %}
+      {% for h in c.hits %}
+        <rect class="hit" x="{{ h.x|round(1) }}" y="{{ c.plot.y0 }}" width="{{ h.w|round(1) }}" height="{{ c.plot.y1 - c.plot.y0 }}" tabindex="0" data-tip='{{ h.tip|tojson }}'/>
+      {% endfor %}
+    </svg>
+  </div>
+{% endmacro %}
+
+{% macro columns(c, title) %}
+  <div class="chart-scroll">
+    <svg class="chart" viewBox="0 0 {{ c.width }} {{ c.height }}" role="img" aria-label="{{ title }}">
+      {{ axes(c) }}
+      {% for bar in c.bars %}
+        {% for s in bar.segments %}<path class="seg-{{ s.series }}" d="{{ s.d }}"/>{% endfor %}
+      {% endfor %}
+      {% for h in c.hits %}
+        <rect class="hit" x="{{ h.x|round(1) }}" y="{{ c.plot.y0 }}" width="{{ h.w|round(1) }}" height="{{ c.plot.y1 - c.plot.y0 }}" tabindex="0" data-tip='{{ h.tip|tojson }}'/>
+      {% endfor %}
+    </svg>
+  </div>
+{% endmacro %}
+
+{% macro legend(items) %}
+  <div class="legend">{% for label, key in items %}<span><i class="{{ key }}"></i>{{ label }}</span>{% endfor %}</div>
+{% endmacro %}

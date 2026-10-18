@@ -240,6 +240,20 @@ class TestCoachPage:
         assert '<img src=x onerror=alert(1)>' not in html
 
 
+    def test_a_quote_in_stored_text_cannot_break_out_of_a_tooltip(self, client, admin_pw, registered_user):
+        # Tooltip JSON sits in a single-quoted attribute; tojson must escape ' and <
+        _add_vote(registered_user['user']['id'], True, 'T', insight_type="x' onmouseover='alert(1)")
+        _add_vote(registered_user['user']['id'], False, 'T', insight_type='<b>y</b>', reason='vague')
+        html = client.get('/admin/coach', headers=_basic_auth()).get_data(as_text=True)
+        assert "' onmouseover='" not in html
+        assert '<b>y</b>' not in html
+
+    def test_charts_render_with_votes(self, client, admin_pw, registered_user):
+        _add_vote(registered_user['user']['id'], True, 'T')
+        html = client.get('/admin/coach', headers=_basic_auth()).get_data(as_text=True)
+        assert 'aria-label="Helpful rate by week"' in html
+
+
 class TestAiPage:
 
     def test_empty(self, client, admin_pw):

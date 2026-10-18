@@ -1,112 +1,192 @@
 {% extends "admin/base.html" %}
+{% import "admin/_charts.html" as charts %}
 {% block title %}AI Usage{% endblock %}
 {% macro money(v) %}${{ '%.2f' % v if v >= 0.01 or v == 0 else '%.4f' % v }}{% endmacro %}
+{% macro secs(ms) %}{{ '%.1fs' % (ms / 1000) if ms is not none else '–' }}{% endmacro %}
 {% block content %}
   <div class="page">
-    <h1>AI usage</h1>
-    <p class="sub">
-      Every Anthropic call, from <code>ai_call_log</code>.
-      {% if first_logged %}Logged since {{ first_logged.strftime('%m/%d/%Y') }}; nothing before that shows.{% else %}Nothing logged yet.{% endif %}
-      Cost is estimated from list prices.
-    </p>
-
-    <div class="tiles-row">
-      <div class="stat"><div class="stat-label">{{ month_label }} calls</div><div class="stat-value">{{ month_totals.calls }}</div></div>
-      <div class="stat"><div class="stat-label">{{ month_label }} est. cost</div><div class="stat-value">{{ money(month_totals.cost) }}</div></div>
-      <div class="stat"><div class="stat-label">30-day calls</div><div class="stat-value">{{ window_totals.calls }}</div></div>
-      <div class="stat"><div class="stat-label">30-day failures</div><div class="stat-value">{{ window_totals.failures }}</div></div>
-      <div class="stat"><div class="stat-label">30-day est. cost</div><div class="stat-value">{{ money(window_totals.cost) }}</div></div>
+    <div class="page-head">
+      <div>
+        <h1>AI usage</h1>
+        <p class="sub">
+          Every Anthropic call.
+          {% if first_logged %}Logged since {{ first_logged.strftime('%m/%d/%Y') }}.{% else %}Nothing logged yet.{% endif %}
+          Cost is estimated from list prices.
+        </p>
+      </div>
     </div>
 
-    <h2>By endpoint, last 30 days</h2>
-    {% if by_endpoint %}
-      <div class="table-wrap">
-        <table>
-          <thead><tr>
-            <th>Endpoint</th><th class="num">Calls</th><th class="num">Failed</th><th class="num">p50</th><th class="num">p95</th>
-            <th class="num">Input tokens</th><th class="num">Output tokens</th><th class="num">Est. cost</th>
-          </tr></thead>
-          <tbody>
-            {% for e in by_endpoint %}
-              <tr>
-                <td class="nowrap">{{ e.endpoint }}</td>
-                <td class="num">{{ e.calls }}</td>
-                <td class="num{{ ' bad' if e.failures }}">{{ e.failures }} ({{ e.failure_rate }}%)</td>
-                <td class="num">{{ '%.1fs' % (e.p50 / 1000) if e.p50 is not none else '–' }}</td>
-                <td class="num">{{ '%.1fs' % (e.p95 / 1000) if e.p95 is not none else '–' }}</td>
-                <td class="num">{{ '{:,}'.format(e.input_tokens) }}</td>
-                <td class="num">{{ '{:,}'.format(e.output_tokens) }}</td>
-                <td class="num">{{ money(e.cost) }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+    {% set rate = (100 * window_totals.failures / window_totals.calls)|round|int if window_totals.calls else none %}
+    {% set insights = by_endpoint|selectattr('endpoint', 'equalto', 'insights')|first %}
+    <div class="tiles">
+      <div class="tile">
+        <div class="tile-label">{{ month_label }} est. cost</div>
+        <div class="tile-value">{{ money(month_totals.cost) }}</div>
+        <div class="tile-note">{{ month_totals.calls }} calls this month</div>
       </div>
-    {% else %}
-      <p class="muted">No calls in the last 30 days.</p>
-    {% endif %}
-
-    <h2>By day</h2>
-    {% set busiest = by_day|map(attribute='calls')|max %}
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Day</th><th>Calls</th><th>Split</th><th class="num">Failed</th><th class="num">Est. cost</th></tr></thead>
-        <tbody>
-          {% for d in by_day %}
-            <tr>
-              <td class="nowrap">{{ d.day.strftime('%a %m/%d') }}</td>
-              <td class="bar-cell">
-                {% if d.calls %}<span class="bar" style="width: {{ (100 * d.calls / busiest)|round|int }}%"></span><span class="bar-label">{{ d.calls }}</span>{% endif %}
-              </td>
-              <td class="muted nowrap">{% for ep, n in d.by_endpoint|dictsort %}{{ ep }} {{ n }}{{ ', ' if not loop.last }}{% endfor %}</td>
-              <td class="num{{ ' bad' if d.failures }}">{{ d.failures or '' }}</td>
-              <td class="num">{{ money(d.cost) if d.calls else '' }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="tile">
+        <div class="tile-label">Calls, last 30 days</div>
+        <div class="tile-value">{{ window_totals.calls }}</div>
+        <div class="tile-note">{{ money(window_totals.cost) }} estimated</div>
+      </div>
+      <div class="tile">
+        <div class="tile-label">Failure rate, last 30 days</div>
+        <div class="tile-value">{{ rate if rate is not none else '–' }}{% if rate is not none %}<span class="unit">%</span>{% endif %}</div>
+        <div class="tile-note">
+          {% if rate is none %}No calls yet
+          {% elif rate >= 5 %}<span class="status bad">{{ window_totals.failures }} failed</span>
+          {% elif window_totals.failures %}<span class="status warn">{{ window_totals.failures }} failed</span>
+          {% else %}<span class="status good">None failed</span>{% endif %}
+        </div>
+      </div>
+      <div class="tile">
+        <div class="tile-label">Insights p95 response</div>
+        <div class="tile-value">{{ secs(insights.p95) if insights else '–' }}</div>
+        <div class="tile-note">{% if insights %}Typical {{ secs(insights.p50) }}{% else %}No insights calls yet{% endif %}</div>
+      </div>
     </div>
 
-    <h2>Top users, {{ month_label }}</h2>
-    {% if top_users %}
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>User</th><th class="num">Calls</th><th class="num">Est. cost</th></tr></thead>
-          <tbody>
-            {% for u in top_users %}
-              <tr>
-                <td>#{{ u.user_id }}{% if u.username %} {{ u.username }}{% endif %}</td>
-                <td class="num">{{ u.calls }}</td>
-                <td class="num">{{ money(u.cost) }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% else %}
-      <p class="muted">No calls this month.</p>
-    {% endif %}
+    <div class="stack">
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Calls per day</h2>
+            <p class="sub">Last 30 days, by endpoint.</p>
+          </div>
+          <div class="legend">{% for ep in endpoints %}<span><i class="key-{{ loop.index0 }}"></i>{{ ep }}</span>{% endfor %}</div>
+        </div>
+        <div class="card-body">
+          {% if window_totals.calls %}
+            {{ charts.columns(calls_chart, 'Calls per day by endpoint') }}
+          {% else %}
+            <div class="empty">No calls in the last 30 days.</div>
+          {% endif %}
+        </div>
+        <details class="table-toggle">
+          <summary>Show table</summary>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Day</th>{% for ep in endpoints %}<th class="num">{{ ep }}</th>{% endfor %}<th class="num">Total</th><th class="num">Failed</th><th class="num">Est. cost</th></tr></thead>
+              <tbody>
+                {% for d in by_day %}
+                  <tr>
+                    <td class="nowrap">{{ d.day.strftime('%a %m/%d') }}</td>
+                    {% for ep in endpoints %}<td class="num">{{ d.by_endpoint.get(ep, 0) }}</td>{% endfor %}
+                    <td class="num">{{ d.calls }}</td>
+                    <td class="num">{{ d.failures }}</td>
+                    <td class="num">{{ money(d.cost) }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
 
-    <h2>Recent failures</h2>
-    {% if failures %}
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>When (server time)</th><th>Endpoint</th><th>User</th><th class="num">After</th><th>Error</th></tr></thead>
-          <tbody>
-            {% for f in failures %}
-              <tr>
-                <td class="nowrap">{{ f.created_at.strftime('%m/%d/%Y %H:%M') }}</td>
-                <td class="nowrap">{{ f.endpoint }}</td>
-                <td class="nowrap">{% if f.user_id %}#{{ f.user_id }}{% if usernames.get(f.user_id) %} {{ usernames[f.user_id] }}{% endif %}{% endif %}</td>
-                <td class="num">{{ '%.1fs' % (f.latency_ms / 1000) }}</td>
-                <td class="mono">{{ f.error }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Estimated cost per day</h2>
+            <p class="sub">Last 30 days, all endpoints.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          {% if window_totals.calls %}
+            {{ charts.columns(cost_chart, 'Estimated cost per day') }}
+          {% else %}
+            <div class="empty">No calls in the last 30 days.</div>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>By endpoint</h2>
+            <p class="sub">Last 30 days. Response times count successful calls only.</p>
+          </div>
+        </div>
+        {% if by_endpoint %}
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Endpoint</th><th class="num">Calls</th><th>Failed</th><th class="num">Typical</th><th class="num">p95</th>
+                <th class="num">Input tokens</th><th class="num">Output tokens</th><th class="num">Est. cost</th>
+              </tr></thead>
+              <tbody>
+                {% for e in by_endpoint %}
+                  <tr>
+                    <td class="nowrap"><b>{{ e.endpoint }}</b></td>
+                    <td class="num">{{ e.calls }}</td>
+                    <td class="nowrap">
+                      {% if e.failures %}<span class="status {{ 'bad' if e.failure_rate >= 5 else 'warn' }}">{{ e.failures }} ({{ e.failure_rate }}%)</span>
+                      {% else %}<span class="status good">0</span>{% endif %}
+                    </td>
+                    <td class="num">{{ secs(e.p50) }}</td>
+                    <td class="num">{{ secs(e.p95) }}</td>
+                    <td class="num">{{ '{:,}'.format(e.input_tokens) }}</td>
+                    <td class="num">{{ '{:,}'.format(e.output_tokens) }}</td>
+                    <td class="num">{{ money(e.cost) }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="empty">No calls in the last 30 days.</div>
+        {% endif %}
+      </section>
+
+      <div class="cols">
+        <section class="card">
+          <div class="card-head"><div><h2>Top users, {{ month_label }}</h2><p class="sub">By number of calls.</p></div></div>
+          {% if top_users %}
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>User</th><th class="num">Calls</th><th class="num">Est. cost</th></tr></thead>
+                <tbody>
+                  {% for u in top_users %}
+                    <tr>
+                      <td>{{ u.username or 'unknown' }} <span class="muted">#{{ u.user_id }}</span></td>
+                      <td class="num">{{ u.calls }}</td>
+                      <td class="num">{{ money(u.cost) }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="empty">No calls this month.</div>
+          {% endif %}
+        </section>
+
+        <section class="card">
+          <div class="card-head"><div><h2>Recent failures</h2><p class="sub">The last 50, newest first. Times are server time.</p></div></div>
+          {% if failures %}
+            <div class="fail-list">
+              {% for f in failures %}
+                <div class="fail">
+                  <div class="fail-head">
+                    <span class="status bad">{{ f.endpoint }}</span>
+                    <span class="muted">{{ f.created_at.strftime('%m/%d/%Y %H:%M') }} · after {{ secs(f.latency_ms) }}{% if f.user_id %} · {{ usernames.get(f.user_id) or 'user' }} #{{ f.user_id }}{% endif %}</span>
+                  </div>
+                  <code class="fail-error">{{ f.error }}</code>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="empty">No failed calls.</div>
+          {% endif %}
+        </section>
       </div>
-    {% else %}
-      <p class="muted">No failed calls.</p>
-    {% endif %}
+    </div>
   </div>
+{% endblock %}
+{% block head %}
+  <style>
+    .fail { padding: 12px 18px; border-top: 1px solid var(--grid); }
+    .fail:first-child { border-top: none; }
+    .fail-head { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 12px; }
+    .fail-error { display: block; margin-top: 6px; word-break: break-word; }
+  </style>
 {% endblock %}

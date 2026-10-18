@@ -103,13 +103,19 @@ def admin_coach():
     wrong = (InsightFeedback.query.filter_by(helpful=False, reason='wrong')
              .order_by(InsightFeedback.created_at.desc(), InsightFeedback.id.desc()).limit(100).all())
     helpful = sum(1 for r in rows if r.helpful)
+    weekly = admin_stats.weekly_helpful_rate(weekly_rows, now.date())
+    reasons = admin_stats.reason_totals(rows)
     return render_template(
         'admin/coach.html', active='coach', range_key=range_key,
         total={'votes': len(rows), 'helpful': helpful,
                'rate': round(100 * helpful / len(rows)) if rows else None},
         by_type=admin_stats.votes_by_type(rows),
-        reasons=admin_stats.reason_totals(rows),
-        weekly=admin_stats.weekly_helpful_rate(weekly_rows, now.date()),
+        reasons=reasons,
+        top_reason_label=(admin_stats.REASON_LABELS[max(reasons, key=lambda k: reasons[k])]
+                          if any(reasons.values()) else None),
+        weekly=weekly,
+        weekly_chart=admin_stats.coach_weekly_chart(weekly),
+        wrong_total=InsightFeedback.query.filter_by(helpful=False, reason='wrong').count(),
         voted_down=admin_stats.most_voted_down(rows),
         wrong=wrong, usernames=_usernames(r.user_id for r in wrong),
         reason_labels=admin_stats.REASON_LABELS,
@@ -131,13 +137,17 @@ def admin_ai():
     failures = (AiCallLog.query.filter_by(ok=False)
                 .order_by(AiCallLog.created_at.desc(), AiCallLog.id.desc()).limit(50).all())
     first = db.session.query(db.func.min(AiCallLog.created_at)).scalar()
+    by_day = admin_stats.ai_by_day(window, now.date())
+    calls_chart, cost_chart = admin_stats.ai_daily_charts(by_day)
     return render_template(
         'admin/ai.html', active='ai',
         window_totals=admin_stats.ai_totals(window),
         month_totals=admin_stats.ai_totals(month),
         month_label=month_start.strftime('%B'),
         by_endpoint=admin_stats.ai_by_endpoint(window),
-        by_day=admin_stats.ai_by_day(window, now.date()),
+        by_day=by_day,
+        calls_chart=calls_chart, cost_chart=cost_chart,
+        endpoints=admin_stats.AI_ENDPOINTS,
         top_users=admin_stats.ai_top_users(month, _usernames(r.user_id for r in month)),
         failures=failures, usernames=_usernames(r.user_id for r in failures),
         first_logged=first,

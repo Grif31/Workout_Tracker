@@ -4,73 +4,257 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{% endblock %} | Aretē Admin</title>
+  <script>
+    // Before first paint, so a saved theme never flashes the other one
+    try { const t = localStorage.getItem('admin-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
   <style>
+    /* Tokens: the data-viz reference palette. Light is the default; dark
+       follows the OS unless the toggle chose light, and the toggle wins both ways. */
+    :root {
+      color-scheme: light;
+      --page: #f9f9f7;
+      --surface: #fcfcfb;
+      --surface-2: #f0efec;
+      --surface-3: #e7e6e1;
+      --ink: #0b0b0b;
+      --ink-2: #52514e;
+      --muted: #6f6e69;
+      --axis-ink: #898781;
+      --grid: #e1e0d9;
+      --axis: #c3c2b7;
+      --border: rgba(11,11,11,0.10);
+      --border-strong: rgba(11,11,11,0.18);
+      --accent: #2a78d6;
+      --accent-ink: #ffffff;
+      --accent-wash: rgba(42,120,214,0.10);
+      --good: #0ca30c;
+      --good-ink: #006300;
+      --warning: #fab219;
+      --warning-ink: #8a5a00;
+      --critical: #d03b3b;
+      --critical-ink: #b42323;
+      --s1: #2a78d6;
+      --s2: #eb6834;
+      --s3: #1baf7a;
+      --s4: #eda100;
+      --s-other: #c3c2b7;
+      --shadow: 0 1px 2px rgba(11,11,11,0.04);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:where(:not([data-theme="light"])) {
+        color-scheme: dark;
+        --page: #0d0d0d;
+        --surface: #1a1a19;
+        --surface-2: #232321;
+        --surface-3: #2e2e2b;
+        --ink: #f0efec;
+        --ink-2: #c3c2b7;
+        --muted: #9a9890;
+        --axis-ink: #898781;
+        --grid: #2c2c2a;
+        --axis: #383835;
+        --border: rgba(255,255,255,0.10);
+        --border-strong: rgba(255,255,255,0.18);
+        --accent: #3987e5;
+        --accent-ink: #ffffff;
+        --accent-wash: rgba(57,135,229,0.16);
+        --good: #0ca30c;
+        --good-ink: #0ca30c;
+        --warning: #fab219;
+        --warning-ink: #fab219;
+        --critical: #d03b3b;
+        --critical-ink: #e66767;
+        --s1: #3987e5;
+        --s2: #d95926;
+        --s3: #199e70;
+        --s4: #c98500;
+        --s-other: #4a4a46;
+        --shadow: none;
+      }
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --surface-2: #232321;
+      --surface-3: #2e2e2b;
+      --ink: #f0efec;
+      --ink-2: #c3c2b7;
+      --muted: #9a9890;
+      --axis-ink: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255,255,255,0.10);
+      --border-strong: rgba(255,255,255,0.18);
+      --accent: #3987e5;
+      --accent-ink: #ffffff;
+      --accent-wash: rgba(57,135,229,0.16);
+      --good: #0ca30c;
+      --good-ink: #0ca30c;
+      --warning: #fab219;
+      --warning-ink: #fab219;
+      --critical: #d03b3b;
+      --critical-ink: #e66767;
+      --s1: #3987e5;
+      --s2: #d95926;
+      --s3: #199e70;
+      --s4: #c98500;
+      --s-other: #4a4a46;
+      --shadow: none;
+    }
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #0D0D0D;
-      color: #F2F2F7;
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      background: var(--page);
+      color: var(--ink);
       min-height: 100vh;
+      font-size: 14px;
+      line-height: 1.45;
     }
+    a { color: var(--accent); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--ink-2); }
+
+    /* Nav */
     .nav {
-      display: flex;
-      gap: 4px;
-      align-items: center;
-      padding: 10px 20px;
-      background: #0D0D0D;
-      border-bottom: 1px solid #2C2C2E;
+      display: flex; gap: 2px; align-items: center;
+      padding: 0 20px; height: 52px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
       overflow-x: auto;
     }
-    .nav .brand { font-size: 13px; font-weight: 700; color: #8E8E93; margin-right: 12px; white-space: nowrap; }
+    .nav .brand { font-size: 14px; font-weight: 700; margin-right: 18px; white-space: nowrap; }
     .nav a {
-      color: #8E8E93;
-      text-decoration: none;
-      font-size: 13px;
-      font-weight: 600;
-      padding: 6px 10px;
-      border-radius: 7px;
-      white-space: nowrap;
+      color: var(--ink-2); text-decoration: none; font-size: 13px; font-weight: 600;
+      padding: 7px 11px; border-radius: 8px; white-space: nowrap;
     }
-    .nav a:hover { color: #F2F2F7; }
-    .nav a.active { color: #F2F2F7; background: #2C2C2E; }
-    .page { padding: 20px; max-width: 1200px; }
-    .page h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
-    .page .sub { font-size: 13px; color: #8E8E93; margin-bottom: 16px; }
-    .table-wrap { overflow-x: auto; border: 1px solid #2C2C2E; border-radius: 12px; }
+    .nav a:hover { color: var(--ink); background: var(--surface-2); }
+    .nav a.active { color: var(--ink); background: var(--surface-3); }
+    .theme-toggle {
+      margin-left: auto; flex-shrink: 0;
+      background: transparent; border: 1px solid var(--border-strong); color: var(--ink-2);
+      border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .theme-toggle:hover { color: var(--ink); }
+
+    /* Page layout */
+    .page { max-width: 1180px; margin: 0 auto; padding: 24px 20px 64px; }
+    .page-head { display: flex; gap: 16px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; margin-bottom: 18px; }
+    .page-head h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+    .page-head .sub { font-size: 13px; color: var(--ink-2); margin-top: 3px; max-width: 640px; }
+    .sub { font-size: 13px; color: var(--ink-2); }
+    .muted { color: var(--muted); }
+    .stack { display: flex; flex-direction: column; gap: 16px; }
+    /* Without this a wide chart or table stretches its column past the screen
+       instead of scrolling inside its card */
+    .stack > *, .cols > * { min-width: 0; }
+    .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+    @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+
+    /* Segmented control (ranges) */
+    .segmented { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; padding: 2px; }
+    .segmented a {
+      color: var(--ink-2); text-decoration: none; font-size: 12px; font-weight: 600;
+      padding: 5px 12px; border-radius: 7px; white-space: nowrap;
+    }
+    .segmented a.active { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--border); }
+
+    /* Stat tiles */
+    .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 12px; margin-bottom: 16px; }
+    .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); }
+    .tile-label { font-size: 12px; color: var(--ink-2); font-weight: 600; }
+    .tile-value { font-size: 28px; font-weight: 650; margin-top: 4px; letter-spacing: -0.01em; line-height: 1.15; }
+    .tile-value .unit { font-size: 15px; font-weight: 600; color: var(--ink-2); margin-left: 2px; }
+    .tile-note { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    /* Cards */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); min-width: 0; }
+    .card-head { padding: 14px 18px 0; display: flex; gap: 12px; align-items: baseline; justify-content: space-between; flex-wrap: wrap; }
+    .card-head h2 { font-size: 15px; font-weight: 700; }
+    .card-head .sub { font-size: 12px; margin-top: 2px; }
+    .card-body { padding: 12px 18px 16px; }
+    .card-body.flush { padding: 8px 0 4px; }
+    .empty { padding: 28px 18px; text-align: center; color: var(--muted); font-size: 13px; }
+
+    /* Status: always an icon and a word, never color alone */
+    .status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .status::before { font-size: 11px; line-height: 1; }
+    .status.good { color: var(--good-ink); }
+    .status.good::before { content: '●'; color: var(--good); }
+    .status.warn { color: var(--warning-ink); }
+    .status.warn::before { content: '▲'; color: var(--warning); }
+    .status.bad { color: var(--critical-ink); }
+    .status.bad::before { content: '■'; color: var(--critical); }
+
+    /* Tables */
+    .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid #2C2C2E; vertical-align: top; }
-    th { color: #8E8E93; font-weight: 600; background: #1C1C1E; white-space: nowrap; }
+    th, td { text-align: left; padding: 9px 18px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+    th { color: var(--ink-2); font-weight: 600; font-size: 12px; white-space: nowrap; }
     tr:last-child td { border-bottom: none; }
-    td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-word; }
-    td.nowrap { white-space: nowrap; }
-    .muted { color: #636366; }
-    .page h2 { font-size: 16px; font-weight: 700; margin: 28px 0 8px; }
-    .page h2 + .sub { margin-top: -4px; }
-    .page code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #C7C7CC; }
+    tbody tr:hover td { background: var(--surface-2); }
     th.num, td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-    td.bad { color: #FF453A; }
-    .range { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
-    .range a {
-      color: #8E8E93; text-decoration: none; font-size: 12px; font-weight: 600;
-      padding: 6px 12px; border: 1px solid #3A3A3C; border-radius: 8px;
+    td.nowrap { white-space: nowrap; }
+    td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-word; color: var(--ink-2); }
+    details.table-toggle { border-top: 1px solid var(--grid); }
+    details.table-toggle summary {
+      cursor: pointer; padding: 10px 18px; font-size: 12px; font-weight: 600; color: var(--ink-2); list-style: none;
     }
-    .range a.active { color: #000; background: #30D158; border-color: #30D158; }
-    .tiles-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
-    .stat { background: #1C1C1E; border: 1px solid #2C2C2E; border-radius: 12px; padding: 12px 14px; }
-    .stat-label { font-size: 12px; color: #8E8E93; }
-    .stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
-    td.bar-cell { min-width: 160px; position: relative; }
-    .bar {
-      display: inline-block; height: 8px; border-radius: 4px; background: #30D158;
-      vertical-align: middle; max-width: calc(100% - 44px);
+    details.table-toggle summary::-webkit-details-marker { display: none; }
+    details.table-toggle summary::before { content: '▸ '; }
+    details.table-toggle[open] summary::before { content: '▾ '; }
+
+    /* Charts */
+    .chart-scroll { overflow-x: auto; }
+    .chart { display: block; width: 100%; min-width: 560px; height: auto; font-family: inherit; }
+    .chart .grid-line { stroke: var(--grid); stroke-width: 1; }
+    .chart .baseline { stroke: var(--axis); stroke-width: 1; }
+    .chart .tick { fill: var(--axis-ink); font-size: 11px; font-variant-numeric: tabular-nums; }
+    .chart .line { fill: none; stroke: var(--s1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .chart .dot { fill: var(--s1); stroke: var(--surface); stroke-width: 2; }
+    .chart .end-label { fill: var(--ink); font-size: 12px; font-weight: 700; }
+    .chart .marker-line { stroke: var(--ink-2); stroke-width: 1; }
+    .chart .marker-label { fill: var(--ink-2); font-size: 11px; font-weight: 600; }
+    .chart .hit { fill: transparent; cursor: default; outline: none; }
+    .chart .hit:hover, .chart .hit:focus-visible { fill: var(--accent-wash); }
+    .chart .seg-0 { fill: var(--s1); } .chart .seg-1 { fill: var(--s2); }
+    .chart .seg-2 { fill: var(--s3); } .chart .seg-3 { fill: var(--s4); }
+    .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+    .key-0 { background: var(--s1); } .key-1 { background: var(--s2); }
+    .key-2 { background: var(--s3); } .key-3 { background: var(--s4); } .key-other { background: var(--s-other); }
+
+    /* Horizontal meters (rates, 100% stacks) */
+    .meter { height: 10px; border-radius: 5px; background: var(--surface-3); overflow: hidden; display: flex; gap: 2px; }
+    .meter > b { display: block; height: 100%; }
+    .meter > b:last-child { border-radius: 0 5px 5px 0; }
+    .meter.rate > b { background: var(--ink-2); border-radius: 5px; }
+
+    /* Tooltip */
+    #tip {
+      position: fixed; z-index: 100; pointer-events: none; display: none;
+      background: var(--surface); color: var(--ink); border: 1px solid var(--border-strong);
+      border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+      max-width: 280px;
     }
-    .bar-label { font-size: 12px; margin-left: 8px; vertical-align: middle; font-variant-numeric: tabular-nums; }
-    td.changes { font-size: 12px; color: #FF9F0A; }
-    .wrong-list { display: flex; flex-direction: column; gap: 10px; }
-    .wrong { background: #1C1C1E; border: 1px solid #2C2C2E; border-radius: 12px; padding: 12px 14px; }
-    .wrong-head { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; font-size: 12px; }
-    .wrong-title { font-size: 14px; font-weight: 700; color: #F2F2F7; }
-    .wrong-body { font-size: 13px; color: #C7C7CC; line-height: 1.5; margin-top: 6px; }
+    #tip .t-head { font-weight: 700; margin-bottom: 4px; }
+    #tip .t-row { display: flex; align-items: center; gap: 8px; color: var(--ink-2); }
+    #tip .t-row b { color: var(--ink); font-variant-numeric: tabular-nums; min-width: 38px; }
+    #tip .t-key { width: 10px; height: 2px; border-radius: 1px; display: inline-block; }
+
+    /* Phone: last, so it wins over the rules above */
+    @media (max-width: 600px) {
+      .page { padding: 18px 14px 48px; }
+      .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+      .tile { padding: 12px; }
+      .tile-value { font-size: 22px; }
+      th, td { padding: 9px 12px; }
+      .card-head { padding: 12px 14px 0; }
+      .card-body { padding: 10px 14px 14px; }
+      /* Scrolls sideways rather than shrinking its text below reading size */
+      .chart { min-width: 720px; }
+    }
   </style>
   {% block head %}{% endblock %}
 </head>
@@ -81,8 +265,65 @@
     <a href="{{ url_for('admin.admin_ai') }}" class="{{ 'active' if active == 'ai' }}">AI usage</a>
     <a href="{{ url_for('admin.admin_exercises') }}" class="{{ 'active' if active == 'exercises' }}">Exercises</a>
     <a href="{{ url_for('admin.admin_audit') }}" class="{{ 'active' if active == 'audit' }}">Audit log</a>
+    <button class="theme-toggle" type="button" id="theme-toggle">Theme</button>
   </nav>
   {% block content %}{% endblock %}
+  <div id="tip" role="tooltip"></div>
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const btn = document.getElementById('theme-toggle');
+      const dark = () => root.dataset.theme
+        ? root.dataset.theme === 'dark'
+        : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const label = () => { btn.textContent = dark() ? 'Light mode' : 'Dark mode'; };
+      btn.addEventListener('click', () => {
+        root.dataset.theme = dark() ? 'light' : 'dark';
+        try { localStorage.setItem('admin-theme', root.dataset.theme); } catch (e) {}
+        label();
+      });
+      label();
+
+      // On a narrow screen a chart scrolls sideways; open it on the newest days
+      document.querySelectorAll('.chart-scroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
+
+      // Chart tooltips. data-tip is JSON: {"head": "...", "rows": [[value, label, keyClass], ...]}.
+      // Built with textContent: labels come from the DB.
+      const tip = document.getElementById('tip');
+      function show(el, x, y) {
+        let data;
+        try { data = JSON.parse(el.dataset.tip); } catch (e) { return; }
+        tip.replaceChildren();
+        if (data.head) {
+          const h = document.createElement('div');
+          h.className = 't-head'; h.textContent = data.head; tip.appendChild(h);
+        }
+        for (const [value, text, key] of data.rows || []) {
+          const row = document.createElement('div'); row.className = 't-row';
+          if (key) { const k = document.createElement('i'); k.className = 't-key ' + key; row.appendChild(k); }
+          const b = document.createElement('b'); b.textContent = value; row.appendChild(b);
+          const s = document.createElement('span'); s.textContent = text; row.appendChild(s);
+          tip.appendChild(row);
+        }
+        tip.style.display = 'block';
+        const r = tip.getBoundingClientRect();
+        tip.style.left = Math.min(x + 14, window.innerWidth - r.width - 8) + 'px';
+        tip.style.top = Math.max(8, y - r.height - 12) + 'px';
+      }
+      function hide() { tip.style.display = 'none'; }
+      document.addEventListener('pointermove', e => {
+        const el = e.target.closest && e.target.closest('[data-tip]');
+        el ? show(el, e.clientX, e.clientY) : hide();
+      });
+      document.addEventListener('focusin', e => {
+        const el = e.target.closest && e.target.closest('[data-tip]');
+        if (!el) return hide();
+        const r = el.getBoundingClientRect();
+        show(el, r.left + r.width / 2, r.top);
+      });
+      document.addEventListener('focusout', hide);
+    })();
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
