@@ -1,12 +1,13 @@
 """The admin dashboard at /admin/: its attention rules, each tried on the data
 that should trip it and on data just under the line, and the page itself."""
 import base64
+import os
 from datetime import date, datetime, timedelta
 
 import pytest
 
 from models import db, AdminAuditLog, AdminState, AiCallLog, ExerciseTemplate, InsightFeedback, User, Workout
-from utils import admin_dashboard, exercisedb
+from utils import admin_dashboard, exercisedb, system_status
 from utils.admin_charts import sparkline
 
 
@@ -22,6 +23,13 @@ def admin_pw(monkeypatch):
 @pytest.fixture(autouse=True)
 def no_known_quota(monkeypatch):
     monkeypatch.setitem(exercisedb.quota, 'remaining', None)
+
+
+@pytest.fixture(autouse=True)
+def configured_server(monkeypatch):
+    # As production is: every required env var set, so only the rule under test fires
+    for name, _ in system_status.ENV_VARS['required']:
+        monkeypatch.setenv(name, os.environ.get(name) or 'set')
 
 
 class TestAttentionRules:

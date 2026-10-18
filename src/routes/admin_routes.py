@@ -8,7 +8,7 @@ from flask import Blueprint, Response, current_app, jsonify, render_template, re
 from limiter import limiter
 from models import (db, AdminAuditLog, AdminState, AiCallLog, ExerciseDBEntry, ExerciseDBThumbnail,
                     ExerciseTemplate, InsightFeedback, User, Workout)
-from utils import admin_charts, admin_dashboard, admin_stats, exercisedb
+from utils import admin_charts, admin_dashboard, admin_stats, exercisedb, premium, system_status
 from utils.admin_audit import audit
 
 # Thumbnails on the search panel are small; the saved file stays at 360, what
@@ -106,9 +106,12 @@ def admin_home():
                      if e['endpoint'] == 'insights'), None)
 
     alerts = [a for a in (
+        admin_dashboard.migration_alert(system_status.migration_state()),
+        admin_dashboard.env_alert(system_status.missing_required()),
         admin_dashboard.ai_failure_alert(len(last24), sum(1 for r in last24 if not r.ok)),
         admin_dashboard.looks_wrong_alert(wrong_q.count()),
         admin_dashboard.quota_alert(exercisedb.quota['remaining']),
+        admin_dashboard.premium_ready_alert(system_status.premium_checklist(now)),
     ) if a]
 
     missing_images = ExerciseTemplate.query.filter(
@@ -226,6 +229,45 @@ def admin_ai():
         failures=failures, usernames=_usernames(r.user_id for r in failures),
         first_logged=first,
     )
+
+
+@admin_bp.get('/system')
+@_require_admin
+def admin_system():
+    """The running server: database, migrations, deploy, env var names, and
+    the premium turn-on checklist."""
+    return render_template(
+        'admin/system.html', active='system',
+        db_status=system_status.db_ping(),
+        migrations=system_status.migration_state(),
+        deploy=system_status.deploy_info(),
+        env=system_status.env_status(),
+        checklist=system_status.premium_checklist(),
+        premium_users=User.query.filter_by(is_premium=True).order_by(User.id).limit(20).all(),
+    )
+
+
+@admin_bp.post('/system/test-sync')
+@_require_admin
+@_admin_write
+def admin_test_sync():
+    """Asks RevenueCat whether one account is premium, the same call
+    POST /api/premium/sync makes, without writing the answer to the user.
+    Proves the secret key works before PREMIUM_ENFORCED goes on."""
+    user_id = (request.get_json(silent=True) or {}).get('user_id')
+    if not isinstance(user_id, int) or isinstance(user_id, bool) or user_id <= 0:
+        return jsonify({'message': 'user_id must be a positive integer'}), 400
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'message': 'No such user'}), 404
+    active = premium.fetch_entitlement_active(user.id)
+    if active is None:
+        system_status.record_sync_check(False, f'user #{user.id}: RevenueCat did not answer')
+        return jsonify({'message': 'RevenueCat did not answer. Check REVENUECAT_SECRET_KEY.', 'ok': False}), 502
+    detail = f"user #{user.id}: {'premium' if active else 'not premium'} at RevenueCat"
+    system_status.record_sync_check(True, detail)
+    return jsonify({'message': 'ok', 'ok': True, 'active': active, 'stored': bool(user.is_premium),
+                    'detail': detail})
 
 
 @admin_bp.get('/exercises')

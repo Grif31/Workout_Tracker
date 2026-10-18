@@ -1436,14 +1436,15 @@ One screen that says whether anything needs attention today, then links into the
 - [ ] On prod after deploy: open both pages; after the next insight refresh, check its row shows tokens and cost
 
 ### 2. Ops & content
-**`/admin/system`** (PR 5)
-- [ ] DB ping (the `SELECT 1` from `health_routes.py`)
-- [ ] Migration state: the revision in `alembic_version` against the head of `migrations/versions`, red when they differ
-- [ ] Deployed commit from Railway's `RAILWAY_GIT_COMMIT_SHA`
-- [ ] Env vars as set / not set, names only, never values: the fixed list from CLAUDE.md's "Backend env vars"
-- [ ] `PREMIUM_ENFORCED` on or off
-- [ ] Premium turn-on checklist as live status: both RevenueCat vars set, count of premium users (beta grants run if it's above zero), and a "Test sync" button that asks RevenueCat about one user via `fetch_entitlement_active` and shows the answer without writing anything
-- [ ] App versions in use: `apiFetch` sends `X-App-Version` (from `expo-application`), stored with the daily activity row (see §4), so it only counts builds from then on. Table: version → users seen on it in the last 30 days
+**`/admin/system`** (PR 5), built 2026-10-18
+- [x] Database ping with its time; migration state (the `alembic_version` revision against the head of `migrations/versions`, read through alembic's `ScriptDirectory`; "unknown" where there's no `alembic_version` table, as in the test suite); deployed commit and message from `RAILWAY_GIT_COMMIT_SHA` / `_MESSAGE`; `PREMIUM_ENFORCED` on or off
+- [x] Env vars as set / not set, names only, grouped required / premium / optional with what each is for (`ENV_VARS` in `utils/system_status.py`: add a row when the code starts reading a new one)
+- [x] Premium turn-on checklist as live status: both RevenueCat vars set, beta grants run (premium count above zero), RevenueCat answered a test sync in the last 7 days, then `PREMIUM_ENFORCED`. "Test sync" asks RevenueCat about one account through `fetch_entitlement_active` and stores only the result (in `admin_state`), never the user's premium flag; nothing about the user is written, so it isn't audit-logged
+- [x] Premium accounts list (first 20)
+- [x] Dashboard alerts added: database behind the code's migration head, a required env var missing, and "PREMIUM_ENFORCED can be turned on" once the checklist is green
+- [x] Tests: `tests/test_admin_system.py`
+- [ ] App versions in use: `apiFetch` sends `X-App-Version` (from `expo-application`), stored with the daily activity row (see §4), so it only counts builds from then on. Moved to PR 8 with the table it needs
+- [ ] On prod: run "Test sync" on a beta tester; the checklist's fourth step should turn green
 
 **Library editing** (PR 6)
 - [ ] `/admin/exercises/<id>` detail page for global exercises (custom ones are read-only): `muscle_group`, `ExerciseMuscleMapping` rows (muscle + primary / secondary, add and remove), `description`, `bodyweight_load_factor` (shown for Bodyweight / Weighted only), `standards_key` shown read-only

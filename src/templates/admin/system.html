@@ -1,0 +1,177 @@
+{% extends "admin/base.html" %}
+{% block title %}System{% endblock %}
+{% block content %}
+  <div class="page">
+    <div class="page-head">
+      <div>
+        <h1>System</h1>
+        <p class="sub">The running server. Env vars show as set or not set; their values are never read here.</p>
+      </div>
+    </div>
+
+    <div class="tiles">
+      <div class="tile">
+        <div class="tile-label">Database</div>
+        <div class="tile-value">{% if db_status.ok %}{{ db_status.ms }}<span class="unit">ms</span>{% else %}Down{% endif %}</div>
+        <div class="tile-note">{% if db_status.ok %}<span class="status good">Answering</span>{% else %}<span class="status bad">{{ db_status.error }}</span>{% endif %}</div>
+      </div>
+      <div class="tile">
+        <div class="tile-label">Migrations</div>
+        <div class="tile-value mono-value">{{ migrations.current|join(', ') or '–' }}</div>
+        <div class="tile-note">
+          {% if migrations.state == 'ok' %}<span class="status good">At head</span>
+          {% elif migrations.state == 'behind' %}<span class="status bad">Code expects {{ migrations.heads|join(', ') }}</span>
+          {% else %}<span class="muted">No alembic_version table. Head is {{ migrations.heads|join(', ') }}</span>{% endif %}
+        </div>
+      </div>
+      <div class="tile">
+        <div class="tile-label">Deployed commit</div>
+        <div class="tile-value mono-value">{{ deploy.sha or '–' }}</div>
+        <div class="tile-note">{{ deploy.message or ('Not on Railway' if not deploy.sha else '') }}</div>
+      </div>
+      <div class="tile">
+        <div class="tile-label">Premium enforcement</div>
+        <div class="tile-value">{{ 'On' if checklist.enforced else 'Off' }}</div>
+        <div class="tile-note">{% if checklist.enforced %}Free accounts are refused premium AI{% else %}Every account counts as premium{% endif %}</div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Premium turn-on checklist</h2>
+            <p class="sub">From CLAUDE.md, Server-side premium. Turn enforcement on only once the first four are done.</p>
+          </div>
+          {% if checklist.enforced %}<span class="status good">Enforced</span>
+          {% elif checklist.ready %}<span class="status warn">Ready to turn on</span>
+          {% else %}<span class="status warn">Not ready</span>{% endif %}
+        </div>
+        <ol class="checklist">
+          {% for step in checklist.steps %}
+            <li class="{{ 'done' if step.done }}">
+              <span class="check" aria-hidden="true">{{ '✓' if step.done else '' }}</span>
+              <span><span class="sr">{{ 'Done: ' if step.done else 'Not done: ' }}</span>{{ step.text }}</span>
+            </li>
+          {% endfor %}
+        </ol>
+        <div class="sync">
+          <div class="sync-row">
+            <label for="sync-user">Test sync for user #</label>
+            <input id="sync-user" type="number" min="1" inputmode="numeric" value="{{ premium_users[0].id if premium_users else '' }}">
+            <button type="button" class="btn" id="sync-btn">Test sync</button>
+          </div>
+          <p class="sub" id="sync-result" role="status">
+            {% if checklist.sync %}Last test {{ checklist.sync.at.strftime('%m/%d/%Y %H:%M') }}:
+              <span class="status {{ 'good' if checklist.sync.ok else 'bad' }}">{{ checklist.sync.detail }}</span>
+            {% else %}Asks RevenueCat about one account without changing it. Pick a beta tester.{% endif %}
+          </p>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><div><h2>Premium accounts</h2><p class="sub">The first 20 by id, as stored here.</p></div></div>
+        {% if premium_users %}
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>User</th><th>Email</th></tr></thead>
+              <tbody>
+                {% for u in premium_users %}
+                  <tr><td class="nowrap">{{ u.username }} <span class="muted">#{{ u.id }}</span></td><td>{{ u.email }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="empty">No premium accounts yet.</div>
+        {% endif %}
+      </section>
+    </div>
+
+    <section class="card env">
+      <div class="card-head"><div><h2>Env vars</h2><p class="sub">Set or not set on this server.</p></div></div>
+      <div class="table-wrap">
+        <table>
+          {% for group, label in [('required', 'Required'), ('premium', 'Premium'), ('optional', 'Optional')] %}
+            <tbody>
+              <tr class="group-row"><th colspan="3">{{ label }}</th></tr>
+              {% for v in env[group] %}
+                <tr>
+                  <td class="nowrap"><code>{{ v.name }}</code></td>
+                  <td class="nowrap">
+                    {% if v.set %}<span class="status good">Set</span>
+                    {% elif group == 'required' %}<span class="status bad">Not set</span>
+                    {% else %}<span class="muted">Not set</span>{% endif %}
+                  </td>
+                  <td class="muted">{{ v.purpose }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          {% endfor %}
+        </table>
+      </div>
+    </section>
+  </div>
+{% endblock %}
+{% block head %}
+  <style>
+    .mono-value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 20px; overflow-wrap: anywhere; }
+    .cols { margin-bottom: 16px; }
+    .checklist { list-style: none; padding: 6px 0; }
+    .checklist li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 18px; font-size: 13px; }
+    .checklist .check {
+      width: 18px; height: 18px; flex-shrink: 0; border-radius: 50%; border: 1.5px solid var(--border-strong);
+      display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
+    }
+    .checklist li.done .check { background: var(--good); border-color: var(--good); color: #fff; }
+    .checklist li:not(.done) { color: var(--ink-2); }
+    .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .sync { border-top: 1px solid var(--grid); padding: 12px 18px 16px; }
+    .sync-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    .sync-row input {
+      width: 90px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 7px;
+      color: var(--ink); padding: 6px 8px; font: inherit;
+    }
+    .btn {
+      background: var(--accent); color: var(--accent-ink); border: none; border-radius: 7px;
+      padding: 7px 14px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+    }
+    .btn:disabled { opacity: 0.6; cursor: default; }
+    #sync-result { margin-top: 8px; }
+    .env tr.group-row th { font-size: 11px; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; padding-top: 16px; background: transparent; }
+    .env tbody tr.group-row:hover th { background: transparent; }
+    .env td:last-child { width: 100%; }
+  </style>
+{% endblock %}
+{% block scripts %}
+  <script>
+    document.getElementById('sync-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('sync-btn');
+      const out = document.getElementById('sync-result');
+      const id = parseInt(document.getElementById('sync-user').value, 10);
+      if (!id) { out.textContent = 'Enter a user id.'; return; }
+      btn.disabled = true;
+      out.textContent = 'Asking RevenueCat…';
+      try {
+        const res = await fetch('/admin/system/test-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: id }),
+        });
+        const data = await res.json();
+        out.replaceChildren();
+        const s = document.createElement('span');
+        s.className = 'status ' + (data.ok ? 'good' : 'bad');
+        s.textContent = data.ok
+          ? data.detail + (data.active === data.stored ? '. Matches what is stored here.' : '. Stored here: ' + (data.stored ? 'premium' : 'not premium') + '.')
+          : (data.message || 'Failed');
+        out.appendChild(s);
+        if (data.ok) setTimeout(() => location.reload(), 1200);
+      } catch {
+        out.textContent = 'Network error.';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+{% endblock %}

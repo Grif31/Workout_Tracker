@@ -77,3 +77,28 @@ def change(current, previous):
 
 def rate(helpful, total):
     return round(100 * helpful / total) if total else None
+
+
+def migration_alert(state):
+    if state['state'] != 'behind':
+        return None
+    return {'level': 'bad',
+            'text': f"Database is on migration {', '.join(state['current']) or 'none'}, the code expects "
+                    f"{', '.join(state['heads'])}",
+            'link': 'admin.admin_system'}
+
+
+def env_alert(missing):
+    if not missing:
+        return None
+    return {'level': 'bad',
+            'text': f"Required env var{'s' if len(missing) != 1 else ''} not set: {', '.join(missing)}",
+            'link': 'admin.admin_system'}
+
+
+def premium_ready_alert(checklist):
+    if not checklist['ready'] or checklist['enforced']:
+        return None
+    return {'level': 'warn',
+            'text': 'The premium checklist is green: PREMIUM_ENFORCED can be turned on',
+            'link': 'admin.admin_system'}
