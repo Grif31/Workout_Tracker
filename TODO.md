@@ -1188,7 +1188,7 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [x] **Prices and trial** (owner, 2026-10-08): monthly $4.99, annual $29.99 with a 1-week free trial, lifetime $59.99. Set these in App Store Connect; the paywall reads the store's prices, so nothing in code changes (annual saves 50% against twelve monthlies).
 - [x] **Template/routine caps** (owner, 2026-10-08): keep them, but the onboarding-generated routine and its day templates don't count (`starter` flag, see CLAUDE.md).
 - [x] **How much AI is free** (owner, 2026-10-08): the onboarding program is free, and free accounts get one part of the weekly review a week. They no longer get insights in the Coach tab (it shows a lock and points to the Weekly Summary).
-- [ ] **What a free user sees of the scores.** Recommendation in Phase 2.
+- [x] **What a free user sees of the scores.** Their overall tier and ring, with the breakdown blurred (Phase 2).
 
 ### Phase 0 — The purchase path must be correct (launch blocker)
 > None of the rest matters if buying fails silently or a subscriber is shown the paywall.
@@ -1225,7 +1225,7 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [x] **Strength Score / Endurance Score teaser.** Free users open the screen and see their overall tier and ring; the per-lift percentiles, history chart and "what to improve" are blurred behind one Unlock button. The server already computes all of it
 - [x] **Per-lift rank on Exercise Detail and Personal Records**: show the rank badge greyed with a lock rather than hiding it
 - [x] **One free insight a week.** Show the top insight in full and the count of the rest ("3 more insights this week")
-- [ ] **Upsell at the moment it's relevant**, each at most once per event and never mid-workout:
+- [x] **Upsell at the moment it's relevant**, each at most once per event and never mid-workout:
   - [x] After a PR on a ranked lift, the workout summary links to where it ranks (the POST flags `scored` PRs)
   - [x] Weekly Summary: locked parts of "Coach's Read" (built with the weekly coach review below)
   - [x] Muscle chart: one large lock over the advanced stats below the muscle card (free accounts, `PremiumTeaser`)
@@ -1273,8 +1273,8 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 
 ### Done when
 - [ ] A purchase, a restore, a failure and an expiry each behave correctly on a real device with a sandbox account
-- [ ] Every paywall entry point shows a pitch for the thing that was tapped
-- [ ] A free user can see their own Strength Score tier and one real insight without paying
+- [x] Every paywall entry point shows a pitch for the thing that was tapped
+- [x] A free user can see their own Strength Score tier and one real insight without paying (the insight is now the free part of the weekly review)
 - [x] At least two Phase 3 features give a subscriber something new each week (weekly review, fatigue monitor, trends, balance, progress rate)
 - [ ] Paywall views and conversions are measured per source
 

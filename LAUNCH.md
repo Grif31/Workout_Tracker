@@ -76,7 +76,7 @@
 - [x] Submit: `eas submit --platform ios`
 
 ### Day 5-7: Apple Review
-- [ ] Create a demo account for Apple reviewers
+- [x] Create a demo account for Apple reviewers
 - [ ] Apple reviews (typically 1-3 days)
 - [ ] Respond quickly if changes are requested
 - [ ] Watch for common rejections: crashes on launch, missing privacy disclosures, demo account needed
