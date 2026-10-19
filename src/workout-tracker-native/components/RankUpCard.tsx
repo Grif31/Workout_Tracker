@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
-import { GREEK_RANKS } from '../constants/greekRanks';
+import { GREEK_RANKS, rankTextColor } from '../constants/greekRanks';
 import ProfileAvatarFrame, { GREEK_RANK_COLORS } from './ProfileAvatarFrame';
 import { LaurelBranch } from './LaurelWreath';
 import { type GreekRankData, gateRequirementText } from '../utils/greekRank';
@@ -45,7 +45,7 @@ function bandOf(rankName: string) {
  * on the JS driver, on its own view.
  */
 export default function RankUpCard({ rank, previousRank, rankData, selectedFrame, reduceMotion, startDelay }: Props) {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const promoting = previousRank != null;
   // Before the swap the card is the old rank; after it, the new one
@@ -63,6 +63,8 @@ export default function RankUpCard({ rank, previousRank, rankData, selectedFrame
   const color = GREEK_RANK_COLORS[shown] ?? GREEK_RANK_COLORS.Neophyte;
   const oldColor = GREEK_RANK_COLORS[previousRank ?? rank] ?? GREEK_RANK_COLORS.Neophyte;
   const newColor = GREEK_RANK_COLORS[rank] ?? GREEK_RANK_COLORS.Neophyte;
+  // Aretē's gold vanishes on the card's light tint, so its name, pill and laurels use the text gold
+  const newTextColor = rankTextColor(rank, newColor, mode);
   const { band: newBand, next: newNext } = bandOf(rank);
   const newProgress = greekScore != null && newNext
     ? Math.min(1, Math.max(0, (greekScore - newBand.low) / (newBand.high - newBand.low)))
@@ -158,8 +160,8 @@ export default function RankUpCard({ rank, previousRank, rankData, selectedFrame
           opacity: flourish,
           transform: [{ translateX: flourish.interpolate({ inputRange: [0, 1], outputRange: [reduceMotion ? 0 : -20, 0] }) }],
         }]}>
-          <Ionicons name="arrow-up" size={12} color={newColor} />
-          <Text style={[styles.pillText, { color: newColor }]}>Ranked up</Text>
+          <Ionicons name="arrow-up" size={12} color={newTextColor} />
+          <Text style={[styles.pillText, { color: newTextColor }]}>Ranked up</Text>
         </Animated.View>
       )}
       <View style={styles.row}>
@@ -179,11 +181,11 @@ export default function RankUpCard({ rank, previousRank, rankData, selectedFrame
           <View style={styles.nameRow}>
             {promoting && (
               <Animated.View style={laurelStyle(-1)}>
-                <LaurelBranch height={18} color={newColor} />
+                <LaurelBranch height={18} color={newTextColor} />
               </Animated.View>
             )}
             <View>
-              <Animated.Text style={[styles.name, { color: newColor }, newNameStyle]}>{rank}</Animated.Text>
+              <Animated.Text style={[styles.name, { color: newTextColor }, newNameStyle]}>{rank}</Animated.Text>
               {promoting && (
                 <Animated.Text style={[styles.name, styles.oldName, { color: oldColor }, oldNameStyle]}>
                   {previousRank}
@@ -192,7 +194,7 @@ export default function RankUpCard({ rank, previousRank, rankData, selectedFrame
             </View>
             {promoting && (
               <Animated.View style={laurelStyle(1)}>
-                <LaurelBranch side="right" height={18} color={newColor} />
+                <LaurelBranch side="right" height={18} color={newTextColor} />
               </Animated.View>
             )}
           </View>

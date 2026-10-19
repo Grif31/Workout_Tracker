@@ -397,6 +397,16 @@ class TestAdminLoginRateLimit:
             assert limited_client.get(path, headers=_basic_auth('wrong')).status_code == 401
         assert limited_client.get('/admin/exercises/data', headers=_basic_auth('wrong')).status_code == 429
 
+    def test_counter_is_per_client_behind_the_proxy(self, limited_client):
+        # Railway appends the real client address last; anything before it is
+        # whatever the client sent, so it mustn't buy a fresh counter
+        attacker = lambda forged: {**_basic_auth('wrong'), 'X-Forwarded-For': f'{forged}, 203.0.113.7'}
+        for i in range(20):
+            assert limited_client.get('/admin/exercises', headers=attacker(f'10.0.0.{i}')).status_code == 401
+        assert limited_client.get('/admin/exercises', headers=attacker('10.0.0.99')).status_code == 429
+        owner = {**_basic_auth('pw'), 'X-Forwarded-For': '198.51.100.4'}
+        assert limited_client.get('/admin/exercises', headers=owner).status_code == 200
+
 
 def _fake_upstream(json_body=None, content=b'', content_type='image/gif', remaining='600'):
     resp = MagicMock()

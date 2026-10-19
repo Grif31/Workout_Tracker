@@ -9,6 +9,7 @@ from models import db, User
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 from apscheduler.schedulers.background import BackgroundScheduler
 from routes.auth_routes import auth_bp
 from routes.user_routes import user_bp
@@ -40,6 +41,11 @@ logging.basicConfig(
 
 def create_app(test_config=None):
     app = Flask(__name__)
+    # Railway's edge is the one proxy in front of us. Without this, remote_addr
+    # is the proxy's address and every IP-keyed rate limit is one counter shared
+    # by all clients, so a stranger could lock everyone out of password reset.
+    # x_for=1 trusts only the hop Railway appends, so a client can't spoof it.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
     _jwt_secret = os.environ.get('JWT_SECRET_KEY', 'dev-secret-key')
     if not (test_config or {}).get('TESTING') and _jwt_secret == 'dev-secret-key':

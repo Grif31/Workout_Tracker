@@ -23,9 +23,8 @@ admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
 # Only failed logins count, so a page that loads twenty thumbnails doesn't eat
 # into it. 20 rather than 5 because a browser's first request always 401s
-# before it shows the password prompt. Without ProxyFix the key is Railway's
-# proxy address, so this is one counter for everyone: a guessing run locks the
-# owner out for the window too, which is the safe way round.
+# before it shows the password prompt. Counted per client IP (ProxyFix in
+# app.py), so a guessing run from elsewhere doesn't lock the owner out.
 limiter.shared_limit(
     '20 per 15 minutes', scope='admin-login',
     deduct_when=lambda response: response.status_code == 401,
@@ -47,8 +46,9 @@ def _admin_write(f):
     """The browser replays cached Basic credentials to any page that posts
     here, so a write must come from our own origin. Same-origin fetches always
     send Origin on a POST, and a cross-site form can't send a JSON body.
-    Compares host only: without ProxyFix, request.scheme is http behind
-    Railway's TLS proxy while the browser's Origin says https."""
+    Compares host only: ProxyFix doesn't trust X-Forwarded-Proto, so
+    request.scheme is http behind Railway's TLS proxy while the browser's
+    Origin says https."""
     @wraps(f)
     def decorated(*args, **kwargs):
         origin_host = urllib.parse.urlparse(request.headers.get('Origin', '')).netloc
