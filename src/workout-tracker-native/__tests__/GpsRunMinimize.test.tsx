@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { createMockNavigation, createMockRoute } from './testUtils';
 import GPSCardioScreen from '../screens/DashboardTab/GPSCardioScreen';
-import { GpsRunProvider } from '../context/GpsRunContext';
+import { GpsRunProvider, useGpsRun, useGpsRunStatus } from '../context/GpsRunContext';
 import MiniRunBar from '../components/MiniRunBar';
 
 // A GPS run lives in GpsRunContext, not in the screen, so leaving the screen
@@ -693,6 +693,28 @@ describe('minimizing a GPS run', () => {
       await waitFor(() => expect(postedBodies()).toHaveLength(1));
       expect(postedBodies()[0].client_id).toBe(cp.clientId);
     });
+  });
+
+  it('a screen that only reads the status is not re-rendered by each GPS fix', async () => {
+    const renders = { status: 0, live: 0 };
+    const StatusProbe = () => { renders.status++; useGpsRunStatus(); return null; };
+    const LiveProbe = () => { renders.live++; useGpsRun(); return null; };
+    const r = render(
+      <GpsRunProvider>
+        <StatusProbe />
+        <LiveProbe />
+        <GPSCardioScreen navigation={nav as any} route={route as any} />
+      </GpsRunProvider>,
+    );
+    await settle();
+    await act(async () => { fireEvent.press(r.getByText('Start')); });
+    await waitFor(() => expect(mockGpsListener).not.toBeNull());
+    await feed(point(0));
+    const before = { ...renders };
+
+    await feed(point(1), point(2), point(3), point(4));
+    expect(renders.live - before.live).toBeGreaterThanOrEqual(4);
+    expect(renders.status).toBe(before.status);
   });
 
   // Section 22, Phase 6

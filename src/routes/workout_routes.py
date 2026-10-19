@@ -496,7 +496,11 @@ def get_workouts():
 
         # Paginated response when ?page= is supplied; plain array otherwise (backwards-compat).
         if page is not None:
-            pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+            # to_dict reads every workout's exercises (and a cardio one's sets)
+            # for workout_type, so a lazy load would be a query or two per row
+            pagination = query.options(
+                selectinload(Workout.exercises).selectinload(Exercise.sets)
+            ).paginate(page=page, per_page=per_page, error_out=False)
             workout_ids = [w.id for w in pagination.items]
             pr_counts: dict[int, int] = {}
             ex_counts: dict[int, int] = {}

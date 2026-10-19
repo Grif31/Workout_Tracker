@@ -8,7 +8,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { DashboardStackParamsList } from '../../navigation/types';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
-import { useGpsRun } from '../../context/GpsRunContext';
+import { useGpsRunStatus } from '../../context/GpsRunContext';
 import { useWorkoutSession } from '../../context/WorkoutSessionContext';
 import { alertActivityInProgress, alertWorkoutInProgress } from '../../utils/sessionConflict';
 import { useTheme, type Colors } from '../../context/ThemeContext';
@@ -285,7 +285,7 @@ const AVATAR_SIZE = 38;
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function DashboardScreen({ navigation }: Props) {
   const { user: authUser } = useAuth();
-  const { trackingState: gpsTrackingState } = useGpsRun();
+  const { trackingState: gpsTrackingState } = useGpsRunStatus();
   const { session: minimizedWorkout } = useWorkoutSession();
   const { colors, accentPreset } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);

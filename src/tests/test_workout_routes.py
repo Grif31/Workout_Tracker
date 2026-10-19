@@ -98,6 +98,34 @@ class TestGetWorkouts:
         assert len(res2.get_json()) == 1
         assert res2.get_json()[0]['name'] == 'Other Push Day'
 
+    def test_a_page_costs_the_same_queries_however_many_workouts_it_holds(self, client, auth_token):
+        from sqlalchemy import event
+        from models import db
+        cardio = {'workoutName': 'Run', 'exercises': [
+            {'name': 'Running', 'exercise_type': 'cardio', 'sets': [{'cardio_duration': 30, 'distance': 5, 'distance_unit': 'km'}]},
+        ]}
+
+        def page_queries():
+            statements = []
+            listener = lambda *args: statements.append(args[2])
+            event.listen(db.engine, 'before_cursor_execute', listener)
+            try:
+                res = client.get('/api/workouts?page=1&per_page=50', headers={'Authorization': f'Bearer {auth_token}'})
+            finally:
+                event.remove(db.engine, 'before_cursor_execute', listener)
+            assert res.status_code == 200
+            return len(statements), len(res.get_json()['workouts'])
+
+        create_workout(client, auth_token)
+        create_workout(client, auth_token, cardio)
+        few, n_few = page_queries()
+        for _ in range(4):
+            create_workout(client, auth_token)
+            create_workout(client, auth_token, cardio)
+        many, n_many = page_queries()
+        assert (n_few, n_many) == (2, 10)
+        assert many == few
+
 
 # ---------------------------------------------------------------------------
 # GET /api/workouts/recent

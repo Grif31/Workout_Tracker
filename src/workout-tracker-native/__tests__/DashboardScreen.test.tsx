@@ -22,7 +22,7 @@ jest.mock('../context/WorkoutSessionContext', () => ({
   SESSION_KEY: 'minimized_workout_session',
 }));
 let mockGpsTracking = 'idle';
-jest.mock('../context/GpsRunContext', () => ({ useGpsRun: () => ({ trackingState: mockGpsTracking }) }));
+jest.mock('../context/GpsRunContext', () => ({ useGpsRunStatus: () => ({ trackingState: mockGpsTracking }) }));
 const mockRefNavigate = jest.fn();
 jest.mock('../navigation/navigationRef', () => ({ navigationRef: { navigate: (...a: any[]) => mockRefNavigate(...a) } }));
 

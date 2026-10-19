@@ -367,6 +367,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   // count, notes, RPE) and DraggableList needs a uniform row height to do
   // its drag-slot math.
   const [reorderMode, setReorderMode] = useState(false);
+  const enterReorderMode = useCallback(() => setReorderMode(true), []);
   const [reorderDragging, setReorderDragging] = useState(false);
 
   useEffect(() => {
@@ -1803,7 +1804,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             onRepeatLastSetChange={onRepeatLastSetChange}
             prefillPreviousSets={prefillPreviousSets}
             onPrefillPreviousSetsChange={onPrefillPreviousSetsChange}
-            onReorderPress={() => setReorderMode(true)}
+            onReorderPress={enterReorderMode}
             exerciseCount={exercises.length}
             totalSets={workoutTotals.totalSets}
             totalVolume={workoutTotals.totalVolume}

@@ -14,7 +14,7 @@ jest.mock('../components/WorkoutLog', () => {
 });
 
 let mockTrackingState = 'idle';
-jest.mock('../context/GpsRunContext', () => ({ useGpsRun: () => ({ trackingState: mockTrackingState }) }));
+jest.mock('../context/GpsRunContext', () => ({ useGpsRunStatus: () => ({ trackingState: mockTrackingState }) }));
 const mockNavigate = jest.fn();
 jest.mock('../navigation/navigationRef', () => ({ navigationRef: { navigate: (...a: any[]) => mockNavigate(...a) } }));
 

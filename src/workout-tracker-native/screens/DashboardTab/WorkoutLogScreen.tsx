@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { DashboardStackParamsList } from '../../navigation/types';
 import WorkoutLog from '../../components/WorkoutLog';
-import { useGpsRun } from '../../context/GpsRunContext';
+import { useGpsRunStatus } from '../../context/GpsRunContext';
 import { alertActivityInProgress } from '../../utils/sessionConflict';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WorkoutLog'>;
@@ -10,7 +10,7 @@ type Props = NativeStackScreenProps<DashboardStackParamsList, 'WorkoutLog'>;
 export default function WorkoutLogScreen({ route, navigation }: Props) {
   // The app has one session at a time: a new workout can't start over a GPS run
   // that is running or minimized. Every way into a new workout comes through here.
-  const { trackingState } = useGpsRun();
+  const { trackingState } = useGpsRunStatus();
   const blockedByRun = !route.params?.editMode && trackingState !== 'idle';
   useEffect(() => {
     if (!blockedByRun) return;

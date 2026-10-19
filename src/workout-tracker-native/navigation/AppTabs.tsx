@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { postLiveWorkoutNotification, cancelLiveWorkoutNotification } from '../utils/notifications';
 import { endLiveActivity, isLiveActivityActive } from '../utils/liveActivity';
 import MiniRunBar from '../components/MiniRunBar';
-import { useGpsRun } from '../context/GpsRunContext';
+import { useGpsRunStatus } from '../context/GpsRunContext';
 import { currentExerciseName } from '../utils/liveActivityProps';
 import { onPendingCountChange, initPendingCount, flushQueue, announceFlushResult } from '../utils/offlineQueue';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -290,7 +290,7 @@ function AnimatedTabBar({ state, navigation, colors, pendingCount }: {
 function CustomTabBar(props: BottomTabBarProps) {
   const { colors } = useTheme();
   const { isWorkoutOpen } = useWorkoutSession();
-  const { screenOpen: gpsScreenOpen } = useGpsRun();
+  const { screenOpen: gpsScreenOpen } = useGpsRunStatus();
   const translateY = useRef(new Animated.Value(0)).current;
   const opacity    = useRef(new Animated.Value(1)).current;
   const heightRef  = useRef(0);

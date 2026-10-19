@@ -78,12 +78,12 @@ type GpsRunCtx = {
   setScreenOpen: (open: boolean) => void;
 };
 
-const GpsRunContext = createContext<GpsRunCtx>({
+type GpsRunStatus = Omit<GpsRunCtx, 'run' | 'timing'>;
+
+const IDLE_STATUS: GpsRunStatus = {
   activity: 'Run',
   setActivity: () => {},
   trackingState: 'idle',
-  run: emptyRun(),
-  timing: NOT_RUNNING,
   start: async () => 'denied',
   pause: () => {},
   resume: async () => {},
@@ -95,7 +95,10 @@ const GpsRunContext = createContext<GpsRunCtx>({
   clientId: null,
   screenOpen: false,
   setScreenOpen: () => {},
-});
+};
+
+const GpsRunContext = createContext<GpsRunCtx>({ ...IDLE_STATUS, run: emptyRun(), timing: NOT_RUNNING });
+const GpsRunStatusContext = createContext<GpsRunStatus>(IDLE_STATUS);
 
 const WATCH_OPTS = { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 5 };
 
@@ -367,13 +370,25 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(t);
   }, [runActivityKey]);
 
-  const value = useMemo(() => ({
-    activity, setActivity, trackingState, run, timing,
+  const status = useMemo(() => ({
+    activity, setActivity, trackingState,
     start, pause, resume, stop, clearRun, clearCheckpoint, checkpointKey,
     screenOpen, setScreenOpen, recovered, clientId,
-  }), [activity, trackingState, run, timing, start, pause, resume, stop, clearRun, clearCheckpoint, checkpointKey, screenOpen, recovered, clientId]);
+  }), [activity, trackingState, start, pause, resume, stop, clearRun, clearCheckpoint, checkpointKey, screenOpen, recovered, clientId]);
+  const value = useMemo(() => ({ ...status, run, timing }), [status, run, timing]);
 
-  return <GpsRunContext.Provider value={value}>{children}</GpsRunContext.Provider>;
+  return (
+    <GpsRunStatusContext.Provider value={status}>
+      <GpsRunContext.Provider value={value}>{children}</GpsRunContext.Provider>
+    </GpsRunStatusContext.Provider>
+  );
 }
 
+/** Everything, including the live route and clock: re-renders on every GPS fix */
 export const useGpsRun = () => useContext(GpsRunContext);
+/**
+ * Everything but the live route and clock. For screens that only need to know
+ * whether a run is on: they stay mounted under the map, and through a locked
+ * phone, for the whole run, so a re-render per fix is wasted work there.
+ */
+export const useGpsRunStatus = () => useContext(GpsRunStatusContext);
