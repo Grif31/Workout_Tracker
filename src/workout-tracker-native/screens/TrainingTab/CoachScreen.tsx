@@ -12,6 +12,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { usePurchase } from '../../context/PurchaseContext';
+import { handlePremiumRequired } from '../../utils/premiumSync';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { WeightUnit, GPS_DISTANCE_UNIT_KEY, roundTenth, toDisplayDistance } from '../../utils/units';
@@ -543,6 +544,7 @@ export default function CoachScreen({ navigation }: Props) {
         }),
       });
       const data = await res.json();
+      if (handlePremiumRequired(res, isPremium)) return;
       if (!res.ok) { Alert.alert("Couldn't Load Insights", data.message || 'Try again in a moment.'); return; }
       const fetchedAt = data.generated_at || new Date().toISOString();
       const shapedByFeedback = !!data.shaped_by_feedback;
@@ -614,6 +616,7 @@ export default function CoachScreen({ navigation }: Props) {
         }),
       });
       const data = await res.json();
+      if (handlePremiumRequired(res, isPremium)) return;
       if (!res.ok) { Alert.alert("Couldn't Generate Workout", data.message || 'Try again in a moment.'); return; }
       navigation.navigate('AIWorkoutPreview', {
         generateType: data.type,
@@ -655,6 +658,7 @@ export default function CoachScreen({ navigation }: Props) {
         }),
       });
       const data = await res.json();
+      if (handlePremiumRequired(res, isPremium)) return;
       if (!res.ok) { Alert.alert("Couldn't Generate Routine", data.message || 'Try again in a moment.'); return; }
       navigation.navigate('AIWorkoutPreview', {
         generateType: data.type,

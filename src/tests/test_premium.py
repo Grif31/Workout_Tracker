@@ -156,6 +156,16 @@ class TestWebhookRoute:
         assert self._post(client, body, header=SECRET).status_code == 200
 
 
+    def test_a_failed_event_rolls_back_and_answers_500_so_revenuecat_retries(self, client, app, uid):
+        def half_applied(event):
+            db.session.get(User, uid).is_premium = True
+            raise RuntimeError('boom')
+        body = {'event': {'type': 'INITIAL_PURCHASE', 'app_user_id': str(uid), 'entitlement_ids': ['premium'], 'expiration_at_ms': ms(3600)}}
+        with patch('utils.premium.apply_event', side_effect=half_applied):
+            assert self._post(client, body, header=SECRET).status_code == 500
+        assert is_premium(app, uid) is False
+
+
 class TestSyncRoute:
 
     def test_requires_auth(self, client):
@@ -254,3 +264,82 @@ class TestAiRoutesWhenEnforced:
         data = self._post(client, auth_token, '/api/ai/weekly-review', {}, partial).get_json()
         assert list(data['review']) == ['lagged']
         assert data['locked'] == ['next_change']
+
+
+class FakeResponse:
+    def __init__(self, status, body=None):
+        self.status_code = status
+        self.ok = status < 400
+        self._body = body
+
+    def json(self):
+        return self._body
+
+
+def subscriber(expires_date, entitlement='premium'):
+    return {'subscriber': {'entitlements': {entitlement: {'expires_date': expires_date}}}}
+
+
+class TestFetchEntitlementActive:
+    """Parses RevenueCat's subscriber reply. True grants, False revokes, None
+    means it couldn't tell and nothing changes."""
+
+    @pytest.fixture(autouse=True)
+    def secret_key(self, monkeypatch):
+        monkeypatch.setenv('REVENUECAT_SECRET_KEY', 'sk_test')
+
+    def fetch(self, response):
+        with patch('requests.get', return_value=response) as get:
+            result = premium.fetch_entitlement_active(42)
+        assert get.call_args.args[0].endswith('/subscribers/42')
+        assert get.call_args.kwargs['headers']['Authorization'] == 'Bearer sk_test'
+        return result
+
+    def test_a_live_entitlement_is_premium(self):
+        assert self.fetch(FakeResponse(200, subscriber('2099-01-01T00:00:00Z'))) is True
+
+    def test_an_expired_entitlement_is_not(self):
+        assert self.fetch(FakeResponse(200, subscriber('2020-01-01T00:00:00Z'))) is False
+
+    def test_no_expiry_is_lifetime(self):
+        assert self.fetch(FakeResponse(200, subscriber(None))) is True
+
+    def test_dates_with_milliseconds_compare_as_dates(self):
+        just_expired = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(time.time() - 1)) + '.999Z'
+        assert self.fetch(FakeResponse(200, subscriber(just_expired))) is False
+        assert self.fetch(FakeResponse(200, subscriber('2099-01-01T00:00:00.000Z'))) is True
+
+    def test_an_unreadable_date_cannot_say(self):
+        assert self.fetch(FakeResponse(200, subscriber('soon'))) is None
+
+    def test_no_premium_entitlement_is_not_premium(self):
+        assert self.fetch(FakeResponse(200, subscriber('2099-01-01T00:00:00Z', entitlement='other'))) is False
+        assert self.fetch(FakeResponse(200, {'subscriber': {'entitlements': {}}})) is False
+        assert self.fetch(FakeResponse(200, {'subscriber': {'entitlements': None}})) is False
+
+    def test_an_unknown_subscriber_is_not_premium(self):
+        assert self.fetch(FakeResponse(404)) is False
+
+    @pytest.mark.parametrize('status', [401, 429, 500, 503])
+    def test_any_other_failure_cannot_say(self, status):
+        assert self.fetch(FakeResponse(status)) is None
+
+    def test_a_network_error_cannot_say(self):
+        import requests
+        with patch('requests.get', side_effect=requests.ConnectionError()):
+            assert premium.fetch_entitlement_active(42) is None
+
+
+class TestScoresStayOpenWhenEnforced:
+    """CLAUDE.md: the score routes are not gated. A free account's app shows its
+    own lifts locked, so the server must still send them."""
+
+    def test_a_free_account_still_gets_its_lift_breakdown(self, client, app, uid, auth_token, enforced):
+        set_premium(app, uid, False)
+        client.patch('/api/me', json={'gender': 'male', 'bodyweight': 185}, headers=auth_headers(auth_token))
+        res = client.get('/api/stats/strength-score', headers=auth_headers(auth_token))
+        assert res.status_code == 200
+        body = res.get_json()
+        for key in ('big6', 'supplemental', 'supplemental_coverage', 'muscle_groups', 'endurance', 'greek_score'):
+            assert key in body
+        assert body['big6']

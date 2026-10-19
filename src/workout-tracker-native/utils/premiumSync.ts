@@ -1,3 +1,4 @@
+import { Alert } from 'react-native';
 import { apiFetch } from './api';
 
 /**
@@ -12,4 +13,17 @@ export async function syncServerPremium(): Promise<void> {
   } catch {
     // Offline or signed out: the next change in status tries again
   }
+}
+
+/**
+ * An AI route answered 402 while the store says Premium: the server hasn't
+ * heard about the purchase yet. Tells it and asks the user to try again,
+ * rather than showing "Premium required" to someone who has paid. True when
+ * handled, so the caller stops there.
+ */
+export function handlePremiumRequired(res: Response, isPremium: boolean): boolean {
+  if (res.status !== 402 || !isPremium) return false;
+  syncServerPremium();
+  Alert.alert('Almost There', 'Your Premium is still reaching our servers. Try again in a moment.');
+  return true;
 }

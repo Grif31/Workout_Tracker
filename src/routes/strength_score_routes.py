@@ -1,7 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from utils.local_date import user_today
-from utils.premium import has_premium
 from models import db, Exercise, Set, Workout, User, ExerciseTemplate, PersonalRecord, StrengthScoreSnapshot, BodyweightLog
 
 strength_score_bp = Blueprint('strength_score_bp', __name__)
@@ -478,10 +477,6 @@ def strength_score():
             db.session.commit()
 
     # Build response
-    # The score breakdown for old builds is premium; has_premium is True for everyone
-    # until PREMIUM_ENFORCED is switched on (utils/premium.py)
-    is_pro = has_premium(user)
-
     def _ex_entry(name):
         pct = exercise_percentiles.get(name)
         # bw_lbs is None when bodyweight is missing — 0 makes
@@ -564,39 +559,40 @@ def strength_score():
         for s in history_snaps
     ]
 
-    if is_pro:
-        resp['greek_score'] = round(greek_score, 1)
-        # Kept in this shape for app builds that read the Greek rank from here
-        # (1.1.6 and earlier). Newer builds use GET /api/stats/greek-rank.
-        resp['greek_score_components'] = {
-            'consistency': round(greek['consistency'], 1),
-            'strength': round(overall, 1),
-            'endurance': round(endurance_overall, 1) if endurance_overall is not None else 0.0,
-            'performance': round(greek['performance'] or 0.0, 1),
-            'dedication': round(greek['dedication'], 1),
-            'volume': round(greek['volume'], 1),
-        }
-        resp['big6'] = big6_list
-        resp['supplemental'] = supp_list
-        resp['supplemental_coverage'] = supp_coverage
-        resp['muscle_groups'] = muscle_groups
-        resp['endurance'] = {
-            'overall': round(endurance_overall, 1) if endurance_overall is not None else None,
-            'distances': sorted(
-                [
-                    {
-                        'distance_km': d,
-                        'label': DISTANCE_LABELS.get(d, f'{d} km'),
-                        'pace_min_per_km': round(best_pace_by_distance[d], 2),
-                        'percentile': round(p, 1),
-                        'rank': percentile_to_strength_rank(p),
-                        'tier': 'core' if d in CORE_DISTANCES else 'speed',
-                    }
-                    for d, p in endurance_percentiles.items()
-                ],
-                key=lambda x: x['distance_km'],
-            ),
-        }
+    # Not gated on premium, even with PREMIUM_ENFORCED: the app shows a free
+    # account its own lifts locked, and they cost nothing to compute
+    resp['greek_score'] = round(greek_score, 1)
+    # Kept in this shape for app builds that read the Greek rank from here
+    # (1.1.6 and earlier). Newer builds use GET /api/stats/greek-rank.
+    resp['greek_score_components'] = {
+        'consistency': round(greek['consistency'], 1),
+        'strength': round(overall, 1),
+        'endurance': round(endurance_overall, 1) if endurance_overall is not None else 0.0,
+        'performance': round(greek['performance'] or 0.0, 1),
+        'dedication': round(greek['dedication'], 1),
+        'volume': round(greek['volume'], 1),
+    }
+    resp['big6'] = big6_list
+    resp['supplemental'] = supp_list
+    resp['supplemental_coverage'] = supp_coverage
+    resp['muscle_groups'] = muscle_groups
+    resp['endurance'] = {
+        'overall': round(endurance_overall, 1) if endurance_overall is not None else None,
+        'distances': sorted(
+            [
+                {
+                    'distance_km': d,
+                    'label': DISTANCE_LABELS.get(d, f'{d} km'),
+                    'pace_min_per_km': round(best_pace_by_distance[d], 2),
+                    'percentile': round(p, 1),
+                    'rank': percentile_to_strength_rank(p),
+                    'tier': 'core' if d in CORE_DISTANCES else 'speed',
+                }
+                for d, p in endurance_percentiles.items()
+            ],
+            key=lambda x: x['distance_km'],
+        ),
+    }
 
     return jsonify(resp), 200
 

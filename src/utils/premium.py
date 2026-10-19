@@ -12,6 +12,7 @@ before this existed.
 import hmac
 import os
 import time
+from datetime import datetime, timezone
 
 from flask import jsonify
 
@@ -126,4 +127,11 @@ def fetch_entitlement_active(user_id):
     if not ent:
         return False
     expires = ent.get('expires_date')
-    return expires is None or expires > time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    if expires is None:
+        return True
+    # Parsed, not compared as strings: a date with milliseconds sorts wrong
+    # against one without, and an unreadable date must not revoke anyone
+    try:
+        return datetime.fromisoformat(expires) > datetime.now(timezone.utc)
+    except (TypeError, ValueError):
+        return None

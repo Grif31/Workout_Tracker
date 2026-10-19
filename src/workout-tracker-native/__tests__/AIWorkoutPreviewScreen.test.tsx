@@ -276,6 +276,18 @@ describe('AIWorkoutPreviewScreen', () => {
       expect(r.getByText('Save Template')).toBeTruthy();
     });
 
+    it('a Premium user the server still thinks is free gets a sync and a retry prompt', async () => {
+      replies['POST /api/ai/save'] = { status: 402, body: { message: 'Premium required', premium_required: true } };
+      replies['POST /api/premium/sync'] = { status: 200, body: {} };
+      const r = renderWith(templateParams());
+      await act(async () => { fireEvent.press(r.getByText('Save Template')); });
+
+      expect(alertSpy).toHaveBeenCalledWith('Almost There', expect.any(String));
+      expect(alertSpy).toHaveBeenCalledTimes(1);
+      expect((global.fetch as jest.Mock).mock.calls.some(([u]) => String(u).endsWith('/api/premium/sync'))).toBe(true);
+      expect(nav.replace).not.toHaveBeenCalled();
+    });
+
     it('stays on the preview without a second alert on a network failure', async () => {
       replies['POST /api/ai/save'] = new TypeError('Network request failed');
       const r = renderWith(templateParams());

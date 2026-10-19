@@ -12,6 +12,8 @@ import { apiFetch, isNetworkError } from '../../utils/api';
 import { useDiscardGuard } from '../../utils/useDiscardGuard';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
+import { usePurchase } from '../../context/PurchaseContext';
+import { handlePremiumRequired } from '../../utils/premiumSync';
 import ExerciseListModal from '../../components/ExerciseList';
 import ExerciseEditRow, { EXERCISE_ROW_HEIGHT } from '../../components/ExerciseEditRow';
 import DraggableList from '../../components/DraggableList';
@@ -36,6 +38,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
+  const { isPremium } = usePurchase();
 
   const [name, setName] = useState(route.params.name);
   const [description, setDescription] = useState(initDesc ?? '');
@@ -83,6 +86,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
         }),
       });
       const data = await res.json();
+      if (handlePremiumRequired(res, isPremium)) return;
       if (!res.ok) { Alert.alert("Couldn't Generate Workout", data.message || 'Try again in a moment.'); return; }
       setName(data.name);
       if (generateType === 'template') {
@@ -136,6 +140,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
         body: JSON.stringify(body),
       });
       const data = await res.json();
+      if (handlePremiumRequired(res, isPremium)) return;
       if (!res.ok) { Alert.alert("Couldn't Save Workout", data.message || 'Try again in a moment.'); return; }
 
       if (generateType === 'template') {
@@ -415,14 +420,14 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
     borderBottomWidth: 2,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.inputBorder,
     paddingBottom: spacing.xs,
   },
   descInput: {
     fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.inputBorder,
     paddingBottom: spacing.xs,
     minHeight: 36,
   },
@@ -445,7 +450,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.inputBorder,
     paddingBottom: spacing.xs,
     marginBottom: spacing.xs,
   },
