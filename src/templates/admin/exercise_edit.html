@@ -1,0 +1,172 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ ex.name if ex else 'Exercise not found' }}{% endblock %}
+{% block content %}
+  <div class="page narrow">
+    <p class="crumb"><a href="{{ url_for('admin.admin_exercises') }}">‹ Exercises</a></p>
+    {% if not ex %}
+      <div class="page-head"><div><h1>Exercise not found</h1></div></div>
+    {% else %}
+      <div class="page-head">
+        <div>
+          <h1>{{ ex.name }}</h1>
+          <p class="sub">{{ ex.equipment or 'No equipment' }} · {{ ex.exercise_type }}{% if ex.standards_key %} · standards key <code>{{ ex.standards_key }}</code>{% endif %} · #{{ ex.id }}</p>
+        </div>
+        {% if ex.image_url %}<img class="thumb" src="{{ ex.image_url }}" alt="">{% endif %}
+      </div>
+
+      {% if owner %}
+        <section class="card">
+          <div class="card-body">
+            <span class="status warn">Read only</span>
+            A custom exercise belonging to {{ owner.username }} (#{{ owner.id }}). Only library exercises are edited here.
+          </div>
+        </section>
+      {% endif %}
+
+      <form class="stack" id="edit-form" {% if owner %}inert{% endif %}>
+        <section class="card">
+          <div class="card-head">
+            <div><h2>Muscles</h2><p class="sub">Primary movers count as a full set in the volume chart, secondary as half.</p></div>
+            {% if 'muscles' in edited %}<span class="chip">Edited in admin</span>{% endif %}
+          </div>
+          <div class="card-body">
+            <div class="muscle-grid" role="group" aria-label="Muscles">
+              {% for m in all_muscles %}
+                {% set role = 'primary' if m in muscles.primary else 'secondary' if m in muscles.secondary else 'none' %}
+                <div class="muscle" data-muscle="{{ m }}">
+                  <span class="m-name">{{ m }}</span>
+                  <div class="seg" role="radiogroup" aria-label="{{ m }}">
+                    {% for value, label in [('none', 'Off'), ('secondary', 'Secondary'), ('primary', 'Primary')] %}
+                      <label><input type="radio" name="m-{{ m }}" value="{{ value }}" {{ 'checked' if role == value }}><span>{{ label }}</span></label>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div><h2>Description</h2><p class="sub">Shown on the exercise's detail screen in the app.</p></div>
+            {% if 'description' in edited %}<span class="chip">Edited in admin</span>{% endif %}
+          </div>
+          <div class="card-body">
+            <textarea id="description" rows="5" maxlength="4000">{{ ex.description or '' }}</textarea>
+          </div>
+        </section>
+
+        {% if load_factor_applies %}
+          <section class="card">
+            <div class="card-head">
+              <div><h2>Bodyweight load factor</h2><p class="sub">The share of bodyweight the movement moves, added to volume (push-up about 0.6, pull-up 1.0). Empty means 1.0.</p></div>
+              {% if 'load_factor' in edited %}<span class="chip">Edited in admin</span>{% endif %}
+            </div>
+            <div class="card-body">
+              <input id="load-factor" type="number" step="0.05" min="0.05" max="{{ load_factor_max }}" value="{{ ex.bodyweight_load_factor if ex.bodyweight_load_factor is not none else '' }}" placeholder="1.0">
+            </div>
+          </section>
+        {% endif %}
+
+        <div class="actions">
+          <button type="submit" class="btn">Save</button>
+          <span class="sub" id="save-result" role="status"></span>
+        </div>
+        <div class="card notice" id="backfill-notice" hidden>
+          <div class="card-body">
+            <span class="status warn">Run the backfill</span>
+            Stored workout volume used the old factor. Run <code>flask backfill-workout-volume --apply</code> against production to recompute it.
+          </div>
+        </div>
+      </form>
+
+      <section class="card">
+        <div class="card-head"><div><h2>Admin history</h2><p class="sub">Every admin change to this exercise, newest first.</p></div></div>
+        {% if history %}
+          <div class="table-wrap">
+            <table>
+              <tbody>
+                {% for row in history %}
+                  <tr>
+                    <td class="nowrap muted">{{ row.created_at.strftime('%m/%d/%Y %H:%M') }}</td>
+                    <td class="nowrap"><b>{{ row.action }}</b></td>
+                    <td class="mono">{{ row.before | tojson }} → {{ row.after | tojson }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="empty">No admin changes yet.</div>
+        {% endif %}
+      </section>
+    {% endif %}
+  </div>
+{% endblock %}
+{% block head %}
+  <style>
+    .page.narrow { max-width: 860px; }
+    .crumb { font-size: 13px; margin-bottom: 10px; }
+    .crumb a { text-decoration: none; }
+    .thumb { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; background: #fff; border: 1px solid var(--border); }
+    .stack { margin: 16px 0; }
+    .chip { background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-2); border-radius: 999px; padding: 1px 9px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .muscle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 6px 18px; }
+    .muscle { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; }
+    .m-name { font-size: 13px; font-weight: 600; }
+    .seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+    .seg label { cursor: pointer; }
+    .seg input { position: absolute; opacity: 0; pointer-events: none; }
+    .seg span { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); padding: 4px 10px; border-radius: 6px; }
+    .seg input:checked + span { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--border); }
+    .seg input[value="primary"]:checked + span { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
+    .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+    textarea, input[type="number"] {
+      width: 100%; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 8px;
+      color: var(--ink); padding: 9px 11px; font: inherit; font-size: 14px; line-height: 1.5;
+    }
+    input[type="number"] { width: 140px; }
+    textarea:focus, input:focus { outline: none; border-color: var(--accent); }
+    .actions { display: flex; gap: 12px; align-items: center; }
+    .btn { background: var(--accent); color: var(--accent-ink); border: none; border-radius: 8px; padding: 9px 18px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .btn:disabled { opacity: 0.6; }
+    .notice .card-body { font-size: 13px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+    form[inert] { opacity: 0.6; }
+  </style>
+{% endblock %}
+{% block scripts %}
+  {% if ex and not owner %}
+    <script>
+      document.getElementById('edit-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const out = document.getElementById('save-result');
+        const btn = e.target.querySelector('button[type="submit"]');
+        const primary = [], secondary = [];
+        document.querySelectorAll('.muscle').forEach(row => {
+          const v = row.querySelector('input:checked').value;
+          if (v === 'primary') primary.push(row.dataset.muscle);
+          if (v === 'secondary') secondary.push(row.dataset.muscle);
+        });
+        const body = { primary, secondary, description: document.getElementById('description').value };
+        const lf = document.getElementById('load-factor');
+        if (lf) body.bodyweight_load_factor = lf.value === '' ? null : Number(lf.value);
+        btn.disabled = true;
+        out.textContent = 'Saving…';
+        try {
+          const res = await fetch('/admin/exercises/{{ ex.id }}/library', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+          });
+          const data = await res.json();
+          if (!res.ok) { out.textContent = data.message || 'Could not save.'; return; }
+          out.textContent = data.changed.length ? 'Saved: ' + data.changed.join(', ') + '.' : 'Nothing changed.';
+          document.getElementById('backfill-notice').hidden = !data.backfill_needed;
+          if (data.changed.length && !data.backfill_needed) setTimeout(() => location.reload(), 900);
+        } catch {
+          out.textContent = 'Network error.';
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    </script>
+  {% endif %}
+{% endblock %}

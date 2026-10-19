@@ -1,0 +1,47 @@
+{% extends "admin/base.html" %}
+{% block title %}Library candidates{% endblock %}
+{% block content %}
+  <div class="page">
+    <p class="crumb"><a href="{{ url_for('admin.admin_exercises') }}">‹ Exercises</a></p>
+    <div class="page-head">
+      <div>
+        <h1>Library candidates</h1>
+        <p class="sub">Users' custom exercises grouped by name and equipment, the most users first. One many people made is worth adding to the library; one that matches a library exercise means they didn't find it.</p>
+      </div>
+    </div>
+    <section class="card">
+      {% if candidates %}
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Custom exercise</th><th>Equipment</th><th class="num">Users</th><th>Closest in the library</th></tr></thead>
+            <tbody>
+              {% for c in candidates %}
+                <tr>
+                  <td><b>{{ c.name }}</b>{% if c.exercises > c.users %} <span class="muted">({{ c.exercises }} copies)</span>{% endif %}</td>
+                  <td class="nowrap">{{ c.equipment or '–' }}</td>
+                  <td class="num">{{ c.users }}</td>
+                  <td>
+                    {% if c.closest %}
+                      <a href="{{ url_for('admin.admin_exercise_detail', exercise_id=c.closest.id) }}">{{ c.closest.name }}{% if c.closest.equipment %} ({{ c.closest.equipment }}){% endif %}</a>
+                      {% if c.same %} <span class="status warn">Already in the library</span>{% endif %}
+                    {% else %}<span class="muted">Nothing close</span>{% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty">No custom exercises yet.</div>
+      {% endif %}
+    </section>
+    <p class="sub foot">Adding one to the library is still a line in <code>seed.py</code>'s list (and a migration for production), so it reaches every database the same way.</p>
+  </div>
+{% endblock %}
+{% block head %}
+  <style>
+    .crumb { font-size: 13px; margin-bottom: 10px; }
+    .crumb a { text-decoration: none; }
+    .foot { margin-top: 12px; }
+  </style>
+{% endblock %}

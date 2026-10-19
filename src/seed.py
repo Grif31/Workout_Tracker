@@ -7,6 +7,7 @@ Usage:
     python seed.py --backfill       # Update existing exercises that have no image_url
     python seed.py --refetch-images # Re-fetch ExerciseDB images for ALL exercises (overwrites existing)
     python seed.py --update-muscles # Update muscle_group on existing exercises to match list
+    (--update-muscles and --refetch-images skip fields edited in /admin; add --force-admin-edits to overwrite them)
 
 Requires RAPIDAPI_KEY in environment (from RapidAPI ExerciseDB subscription).
 A local cache (exercisedb_cache.json) is written after the first fetch to avoid
@@ -532,13 +533,35 @@ def backfill_images():
     print(f'\nBackfill complete. Updated: {updated}/{total}')
 
 
-def refetch_images():
-    """Re-fetch wger diagram URLs for ALL exercises, overwriting any existing image_url."""
+def _admin_overrides(field, force):
+    """Library exercise ids whose `field` was edited in the admin. The admin is
+    the source of truth for what it edits, so these are skipped unless
+    --force-admin-edits, which lists each one before overwriting it."""
+    from utils.library_edits import admin_edited_fields
+    edited = {ex_id for ex_id, fields in admin_edited_fields().items() if field in fields}
+    if force and edited:
+        print(f'--force-admin-edits: overwriting {field} edited in the admin on {len(edited)} exercise(s):')
+        for ex in ExerciseTemplate.query.filter(ExerciseTemplate.id.in_(edited)).order_by(ExerciseTemplate.name):
+            print(f'  #{ex.id} {ex.name} ({ex.equipment or "—"})')
+        print()
+        return set()
+    return edited
+
+
+def refetch_images(force=False):
+    """Re-fetch images for every library exercise, overwriting image_url,
+    except ones whose image was picked in the admin."""
     _load_exercisedb()
+    skip = _admin_overrides('image', force)
 
     exercises = ExerciseTemplate.query.filter(
-        ExerciseTemplate.exercise_type != 'cardio'
+        ExerciseTemplate.exercise_type != 'cardio',
+        ExerciseTemplate.user_id.is_(None),
     ).all()
+    kept = [ex for ex in exercises if ex.id in skip]
+    exercises = [ex for ex in exercises if ex.id not in skip]
+    if kept:
+        print(f'Keeping {len(kept)} image(s) picked in the admin.\n')
     total = len(exercises)
     print(f'Re-fetching images for {total} strength exercises.\n')
     updated = 0
@@ -560,15 +583,22 @@ def refetch_images():
     print(f'\nDone. Updated: {updated}, Cleared: {cleared}')
 
 
-def update_muscles():
-    """Update muscle mappings on existing exercises to match the EXERCISES list."""
+def update_muscles(force=False):
+    """Update muscle mappings on library exercises to match the EXERCISES
+    list, except ones whose muscles were edited in the admin."""
+    skip = _admin_overrides('muscles', force)
     total = len(EXERCISES)
     updated = 0
     skipped = 0
     for i, (name, muscle_group, equipment) in enumerate(EXERCISES, start=1):
-        ex = ExerciseTemplate.query.filter_by(name=name, equipment=equipment).first()
+        # user_id None: a user's custom exercise can share a library name
+        ex = ExerciseTemplate.query.filter_by(name=name, equipment=equipment, user_id=None).first()
         if not ex:
             print(f'[{i}/{total}] Not found (skipping): {name} ({equipment})')
+            skipped += 1
+            continue
+        if ex.id in skip:
+            print(f'[{i}/{total}] Edited in the admin (keeping): {name} ({equipment})')
             skipped += 1
             continue
         # MULTI_PRIMARY_OVERRIDES exercises always rebuild: the assembled
@@ -606,6 +636,8 @@ def main():
                         help='Re-fetch wger images for ALL exercises, overwriting existing image_url')
     parser.add_argument('--update-muscles', action='store_true',
                         help='Update muscle_group on existing exercises to match the list')
+    parser.add_argument('--force-admin-edits', action='store_true',
+                        help='With --update-muscles or --refetch-images: also overwrite fields edited in /admin')
     args = parser.parse_args()
 
     app = create_app()
@@ -615,11 +647,11 @@ def main():
             return
 
         if args.refetch_images:
-            refetch_images()
+            refetch_images(force=args.force_admin_edits)
             return
 
         if args.update_muscles:
-            update_muscles()
+            update_muscles(force=args.force_admin_edits)
             return
 
         added = 0

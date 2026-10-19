@@ -205,10 +205,14 @@ def create_app(test_config=None):
         from models import ExerciseTemplate
         from utils.exercise_descriptions import EXERCISE_DESCRIPTIONS
 
-        rows = ExerciseTemplate.query.filter(
+        from utils.library_edits import admin_edited_fields
+        # A description cleared in /admin stays cleared: the admin is the source of truth
+        edited = {i for i, fields in admin_edited_fields().items() if 'description' in fields}
+        rows = [ex for ex in ExerciseTemplate.query.filter(
             ExerciseTemplate.name.in_(EXERCISE_DESCRIPTIONS.keys()),
             ExerciseTemplate.description.is_(None),
-        ).all()
+            ExerciseTemplate.user_id.is_(None),
+        ).all() if ex.id not in edited]
 
         if not rows:
             click.echo('Nothing to backfill — no matching rows with a null description.')

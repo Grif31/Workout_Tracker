@@ -8,7 +8,7 @@ from flask import Blueprint, Response, current_app, jsonify, render_template, re
 from limiter import limiter
 from models import (db, AdminAuditLog, AdminState, AiCallLog, ExerciseDBEntry, ExerciseDBThumbnail,
                     ExerciseTemplate, InsightFeedback, User, Workout)
-from utils import admin_charts, admin_dashboard, admin_stats, exercisedb, premium, system_status
+from utils import admin_charts, admin_dashboard, admin_stats, exercisedb, library_edits, premium, system_status
 from utils.admin_audit import audit
 
 # Thumbnails on the search panel are small; the saved file stays at 360, what
@@ -298,6 +298,57 @@ def admin_sync_all_premium():
 def admin_exercises():
     return render_template('admin/exercises.html', active='exercises',
                            equipment_map=exercisedb.OUR_TO_EXERCISEDB_EQUIP)
+
+
+@admin_bp.get('/exercises/<int:exercise_id>')
+@_require_admin
+def admin_exercise_detail(exercise_id):
+    """One library exercise's muscles, description and load factor, editable.
+    Users' custom exercises open read-only."""
+    ex = db.session.get(ExerciseTemplate, exercise_id)
+    if not ex:
+        return render_template('admin/exercise_edit.html', active='exercises', ex=None), 404
+    history = (AdminAuditLog.query.filter_by(target_type='exercise', target_id=ex.id)
+               .order_by(AdminAuditLog.created_at.desc(), AdminAuditLog.id.desc()).limit(20).all())
+    return render_template(
+        'admin/exercise_edit.html', active='exercises', ex=ex,
+        muscles=library_edits.muscles_of(ex), all_muscles=library_edits.MUSCLES,
+        edited=library_edits.admin_edited_fields([ex.id]).get(ex.id, set()),
+        load_factor_applies=ex.equipment in library_edits.BODYWEIGHT_EQUIPMENT,
+        load_factor_max=library_edits.LOAD_FACTOR_MAX, history=history,
+        owner=db.session.get(User, ex.user_id) if ex.user_id else None,
+    )
+
+
+@admin_bp.post('/exercises/<int:exercise_id>/library')
+@_require_admin
+@_admin_write
+def admin_exercise_edit(exercise_id):
+    """Saves the library fields present in the body: primary / secondary
+    muscles, description, bodyweight_load_factor. Each changed field is its
+    own audit row, which is also what makes seed.py leave it alone."""
+    ex = db.session.get(ExerciseTemplate, exercise_id)
+    if not ex:
+        return jsonify({'message': 'Not found'}), 404
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'message': 'Expected a JSON object'}), 400
+    try:
+        changed = library_edits.apply_edit(ex, data)
+    except library_edits.EditError as exc:
+        db.session.rollback()
+        return jsonify({'message': str(exc)}), 400
+    db.session.commit()
+    return jsonify({'message': 'ok', 'changed': changed,
+                    # Stored Workout.volume used the old factor until the backfill reruns
+                    'backfill_needed': 'load_factor' in changed})
+
+
+@admin_bp.get('/exercises/candidates')
+@_require_admin
+def admin_exercise_candidates():
+    return render_template('admin/candidates.html', active='exercises',
+                           candidates=library_edits.custom_candidates())
 
 
 @admin_bp.get('/exercises/data')
