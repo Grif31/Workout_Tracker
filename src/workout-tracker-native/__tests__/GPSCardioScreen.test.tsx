@@ -347,6 +347,19 @@ describe('GPSCardioScreen', () => {
       await waitFor(() => expect(mockEnqueueWorkout).toHaveBeenCalledTimes(1));
       expect(nav.goBack).toHaveBeenCalled();
     });
+
+    it("shows a refusal's reason and keeps the run, without offering a queue that would be refused too", async () => {
+      mockServer({ status: 400, body: { message: 'Distance must be positive' } });
+      const r = await renderReady();
+      await runAndStop(r, [point(0), point(1)]);
+      await act(async () => { fireEvent.press(r.getByText('Save')); });
+
+      await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("Couldn't Save Activity", 'Distance must be positive'));
+      expect(alertSpy.mock.calls.some(c => c[0] === 'Save Failed')).toBe(false);
+      expect(mockEnqueueWorkout).not.toHaveBeenCalled();
+      expect(nav.replace).not.toHaveBeenCalled();
+      expect(await AsyncStorage.getItem(CHECKPOINT_KEY)).not.toBeNull();
+    });
   });
 
   describe('stopping', () => {

@@ -310,6 +310,13 @@ export default function GPSCardioScreen({ navigation }: Props) {
         timeoutMs: SAVE_TIMEOUT_MS,
       });
 
+      if (res.status >= 400 && res.status < 500) {
+        // A refusal, not an outage: the queue would only be refused again, so
+        // keep the run here and show why
+        const data = await res.json().catch(() => ({}));
+        Alert.alert("Couldn't Save Activity", data.message || 'Try again in a moment.');
+        return;
+      }
       if (!res.ok) throw new Error('Save failed');
       const data = await res.json();
       syncFinishedWorkout({ ...health, userId: user?.id, workoutId: data.id });
@@ -317,11 +324,11 @@ export default function GPSCardioScreen({ navigation }: Props) {
       setConfirmVisible(false);
       navigation.replace('CardioDetails', { workoutId: data.id });
     } catch {
-      // NetInfo said online but the request still died (flaky signal) —
-      // offer the queue instead of a dead-end retry loop
+      // NetInfo said online but the request still died (flaky signal) or the
+      // server failed: offer the queue instead of a dead-end retry loop
       Alert.alert(
         'Save Failed',
-        "Couldn't reach the server. Save this activity offline and sync later?",
+        "Couldn't save to the server right now. Save this activity offline and sync later?",
         [
           { text: 'Try Again', style: 'cancel' },
           { text: 'Save Offline', onPress: () => { saveOffline(); } },
