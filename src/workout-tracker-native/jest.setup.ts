@@ -98,7 +98,7 @@ jest.mock('./context/AuthContext', () => {
 jest.mock('./context/ThemeContext', () => ({
   useTheme: () => ({
     colors: {
-      background: '#000', surface: '#1C1C1E', border: '#333', switchTrack: '#333',
+      background: '#000', surface: '#1C1C1E', border: '#333', switchTrack: '#333', inputBorder: '#48484A', prGold: '#f9de73', prGoldBorder: '#f9de73',
       textPrimary: '#FFF', textSecondary: '#AAA', placeholder: '#666',
       accent: '#30D158', accentText: '#000', accentDark: '#30D158', save: '#30D158', danger: '#FF453A',
       warmup: '#FF9500',

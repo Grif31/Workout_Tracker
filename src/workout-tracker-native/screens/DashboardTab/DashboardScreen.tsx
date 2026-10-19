@@ -28,7 +28,7 @@ import {
 import { showToast } from '../../utils/toast';
 import { appCache, useRefetchGate } from '../../utils/appCache';
 import { LaurelBranch } from '../../components/LaurelWreath';
-import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
+import { PR_GOLD_TEXT } from '../../constants/prColors';
 import { WEEKLY_SUMMARY_LAST_SHOWN_KEY } from './WeeklySummaryScreen';
 import SectionRule from '../../components/SectionRule';
 import PressableScale from '../../components/PressableScale';
@@ -1096,9 +1096,9 @@ export default function DashboardScreen({ navigation }: Props) {
                   <Text style={styles.workoutName}>{item.name || 'Workout'}</Text>
                   {!!item.pr_count && (
                     <View style={styles.prRow}>
-                      <LaurelBranch height={16} color={PR_GOLD} />
+                      <LaurelBranch height={16} color={colors.prGoldBorder} />
                       <Text style={styles.prText}>{item.pr_count} PR{item.pr_count > 1 ? 's' : ''}</Text>
-                      <LaurelBranch side="right" height={16} color={PR_GOLD} />
+                      <LaurelBranch side="right" height={16} color={colors.prGoldBorder} />
                     </View>
                   )}
                 </View>

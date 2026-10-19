@@ -514,7 +514,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
             <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Save Activity?</Text>
 
             <TextInput
-              style={[styles.modalNameInput, { color: colors.textPrimary, borderColor: colors.border }]}
+              style={[styles.modalNameInput, { color: colors.textPrimary, borderColor: colors.inputBorder }]}
               value={workoutName}
               onChangeText={setWorkoutName}
               placeholder="Activity name"

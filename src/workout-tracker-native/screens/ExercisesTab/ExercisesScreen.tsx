@@ -345,7 +345,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   createBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
   searchWrapper: {
     flex: 1, flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.inputBorder,
     borderRadius: spacing.sm, height: 36, paddingHorizontal: spacing.sm,
   },
   searchIcon: { marginRight: spacing.xs },

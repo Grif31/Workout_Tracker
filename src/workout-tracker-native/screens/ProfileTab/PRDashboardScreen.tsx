@@ -13,7 +13,7 @@ import PRShareCard from '../../components/share/PRShareCard';
 import SegmentedControl from '../../components/SegmentedControl';
 import PressableScale from '../../components/PressableScale';
 import { loadPrPins, pinSlotKey, type PRPin } from '../../utils/prPins';
-import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
+import { PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { ProfileStackParamsList } from '../../navigation/types';
@@ -497,14 +497,14 @@ export default function PRDashboardScreen({ navigation }: Props) {
 
   const renderHero = () =>
     stats ? (
-        <View style={[styles.heroCard, { backgroundColor: colors.surface, borderColor: PR_GOLD }]}>
+        <View style={[styles.heroCard, { backgroundColor: colors.surface, borderColor: colors.prGoldBorder }]}>
           <View style={styles.heroStreakRow}>
-            <LaurelBranch height={30} color={PR_GOLD} />
+            <LaurelBranch height={30} color={colors.prGoldBorder} />
             <View style={styles.heroStreakCenter}>
               <Text style={[styles.heroStreakValue, { color: PR_GOLD_TEXT }]}>{stats.pr_streak_weeks}</Text>
               <Text style={styles.heroStreakLabel}>week PR streak</Text>
             </View>
-            <LaurelBranch side="right" height={30} color={PR_GOLD} />
+            <LaurelBranch side="right" height={30} color={colors.prGoldBorder} />
           </View>
           <View style={[styles.heroDivider, { backgroundColor: colors.border }]} />
           <View style={styles.heroStatsRow}>

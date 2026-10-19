@@ -27,7 +27,7 @@ import CoachProfileModal, { CoachProfile, COACH_PROFILE_KEY, DEFAULT_PROFILE } f
 import SectionRule from '../../components/SectionRule';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import PressableScale from '../../components/PressableScale';
-import { GREEK_RANK_COLORS, GREEK_RANKS } from '../../constants/greekRanks';
+import { GREEK_RANK_COLORS, GREEK_RANKS, rankTextColor } from '../../constants/greekRanks';
 import type { GreekRankData } from '../../utils/greekRank';
 import WeeklyGoalModal from '../../components/coach/WeeklyGoalModal';
 import WorkingSetsInfoModal from '../../components/coach/WorkingSetsInfoModal';
@@ -145,7 +145,7 @@ function weekRangeLabel(weekStart: string): string {
 
 export default function CoachScreen({ navigation }: Props) {
   const { user, updateUser } = useAuth();
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const { isPremium } = usePurchase();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [activeTab, setActiveTab] = useState<'training' | 'progress' | 'coach'>('progress');
@@ -1038,7 +1038,7 @@ export default function CoachScreen({ navigation }: Props) {
                 <View style={[styles.rankPillIcon, { backgroundColor: rankColor }]}>
                   <Text style={[styles.rankPillIconText, { color: onColor(rankColor) }]}>{rankIcon}</Text>
                 </View>
-                <Text style={[styles.rankPillText, { color: rankColor }]}>{greekRank}</Text>
+                <Text style={[styles.rankPillText, { color: rankTextColor(greekRank, rankColor, mode) }]}>{greekRank}</Text>
               </TouchableOpacity>
               <Ionicons name="create-outline" size={16} color={colors.accent} />
             </View>

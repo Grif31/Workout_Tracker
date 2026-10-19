@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { Appearance } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PR_GOLD, PR_GOLD_ON_LIGHT, PR_GOLD_BORDER_ON_LIGHT } from '../constants/prColors';
 
 // ── Accent presets ────────────────────────────────────────────────────────────
 
@@ -31,6 +32,7 @@ export type Colors = {
   background: string;
   surface: string;
   border: string;
+  inputBorder: string; // edge of a text field; border is too faint to find a field by
   switchTrack: string; // off-state switch track; border is too faint against a white thumb in light mode
   textPrimary: string;
   textSecondary: string;
@@ -42,6 +44,8 @@ export type Colors = {
   danger: string;
   warmup: string;     // warm-up set indicator
   dropset: string;    // drop set indicator
+  prGold: string;       // PR text and icons on themed surfaces
+  prGoldBorder: string; // PR card borders, laurels and glows on themed surfaces
 };
 
 // ── Base palettes (no accent) ─────────────────────────────────────────────────
@@ -50,10 +54,13 @@ export const LIGHT_BASE = {
   background:    '#F2F2F7',
   surface:       '#FFFFFF',
   border:        '#E5E5EA',
+  inputBorder:   '#C7C7CC',
   switchTrack:   '#8E8E93',
   textPrimary:   '#000000',
   textSecondary: '#6C6C70',
   placeholder:   '#AEAEB2',
+  prGold:        PR_GOLD_ON_LIGHT,
+  prGoldBorder:  PR_GOLD_BORDER_ON_LIGHT,
   danger:        '#D70015', // iOS's #FF3B30 is 3.5:1 on white, too faint for error text
   warmup:        '#FF9500',
   dropset:       '#AF52DE',
@@ -63,10 +70,13 @@ export const DARK_BASE = {
   background:    '#141416',
   surface:       '#1C1C1E',
   border:        '#38383A',
+  inputBorder:   '#48484A',
   switchTrack:   '#38383A',
   textPrimary:   '#FFFFFF',
   textSecondary: '#8E8E93',
   placeholder:   '#636366',
+  prGold:        PR_GOLD,
+  prGoldBorder:  PR_GOLD,
   danger:        '#FF453A',
   warmup:        '#FF9500',
   dropset:       '#AF52DE',

@@ -528,7 +528,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   renameTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
   renameInput: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.inputBorder,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,

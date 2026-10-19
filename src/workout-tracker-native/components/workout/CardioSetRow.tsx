@@ -126,7 +126,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
 
   setInput: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.inputBorder,
     borderRadius: spacing.xs,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.xs,

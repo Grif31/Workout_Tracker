@@ -10,7 +10,7 @@ import { LineChart } from 'react-native-gifted-charts';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import GoldSectionRule from '../../components/GoldSectionRule';
 import SegmentedControl from '../../components/SegmentedControl';
-import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
+import { PR_GOLD_TEXT } from '../../constants/prColors';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { ProfileStackParamsList } from '../../navigation/types';
@@ -234,16 +234,16 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
         <ScrollView contentContainerStyle={styles.body}>
           {/* Hero — current best, laurel-flanked, with total improvement */}
           {series.length > 0 && (
-            <View style={[styles.heroCard, { backgroundColor: colors.surface, borderColor: PR_GOLD }]}>
+            <View style={[styles.heroCard, { backgroundColor: colors.surface, borderColor: colors.prGoldBorder }]}>
               <View style={styles.heroRow}>
-                <LaurelBranch height={24} color={PR_GOLD} />
+                <LaurelBranch height={24} color={colors.prGoldBorder} />
                 <View style={styles.heroCenter}>
                   <Text style={[styles.heroValue, { color: PR_GOLD_TEXT }]}>
                     {fmtPrValue(series[series.length - 1], unit, distanceUnit)}
                   </Text>
                   <Text style={styles.heroCaption}>current best</Text>
                 </View>
-                <LaurelBranch side="right" height={24} color={PR_GOLD} />
+                <LaurelBranch side="right" height={24} color={colors.prGoldBorder} />
               </View>
               {totalDelta && (
                 <Text style={styles.heroImprovement}>

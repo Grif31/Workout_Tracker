@@ -179,7 +179,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   repsInput: {
     backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.inputBorder,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,

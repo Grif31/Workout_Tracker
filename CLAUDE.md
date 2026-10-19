@@ -77,6 +77,7 @@ import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../constants/prColors';
 // PR_GOLD_TEXT = '#ad9206'  — dark text on gold/cream backgrounds
 // PR_GOLD_BG   = '#FFF3C4'  — cream background for PR banners
 ```
+On a themed surface (anything on `colors.surface`/`background`), use `colors.prGold` for PR text and icons and `colors.prGoldBorder` for PR borders, laurels and glows: they are `PR_GOLD` in dark mode and darker golds in light mode, where `PR_GOLD` is 1.3:1 on white. Raw `PR_GOLD` is for surfaces that are dark in both themes (share cards).
 Note: `#FFD700` (bright gold) still appears in `greekRanks.ts` and `CoachCharacter.tsx` as the **Aretē rank color** — that is intentional and separate from PR gold.
 
 ### Styles

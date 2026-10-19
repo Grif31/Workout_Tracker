@@ -179,7 +179,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   distanceControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.lg },
   stepBtn: { width: 44, height: 44, borderRadius: 22, borderWidth: 1.5, borderColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   stepBtnText: { fontSize: typography.fontSize.sm, color: colors.accent, fontWeight: '700' },
-  distanceField: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: spacing.xs, minWidth: 96, paddingHorizontal: spacing.sm, borderBottomWidth: 1.5, borderBottomColor: colors.border },
+  distanceField: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: spacing.xs, minWidth: 96, paddingHorizontal: spacing.sm, borderBottomWidth: 1.5, borderBottomColor: colors.inputBorder },
   distanceInput: { fontSize: typography.fontSize.xxl, fontWeight: '700', color: colors.textPrimary, textAlign: 'center', minWidth: 56, paddingVertical: spacing.xs },
   distanceUnit: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontWeight: '600' },
   done: { backgroundColor: colors.accent, borderRadius: spacing.sm, padding: spacing.md, alignItems: 'center' },

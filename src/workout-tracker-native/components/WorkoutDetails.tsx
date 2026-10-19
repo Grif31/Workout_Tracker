@@ -24,7 +24,6 @@ import { typography } from '../theme/typography';
 import { estimateCalories } from '../utils/cardioCalories';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayPace, toExactVolume, toKm } from '../utils/units';
 import { fmtMinSec, PR_TYPE_LABELS } from '../utils/prFormat';
-import { PR_GOLD } from '../constants/prColors';
 import Collapsible, { useCollapseAnim } from './Collapsible';
 import { captureAndShare } from '../utils/shareCapture';
 import MuscleSetBreakdown from './MuscleSetBreakdown';
@@ -515,14 +514,14 @@ export default function WorkoutDetailsScreen({
             <View style={styles.prSection}>
               {workoutPrs.length === 1 ? (
                 <View style={styles.prHeader}>
-                  <LaurelBranch height={20} color={PR_GOLD} />
+                  <LaurelBranch height={20} color={colors.prGoldBorder} />
                   <View style={styles.prTextCol}>
                     <Text style={styles.prHeaderText}>{prTitle(workoutPrs[0])}</Text>
                     {workoutPrs[0].values.length > 0 && (
                       <Text style={styles.prValuesText}>{workoutPrs[0].values.join(', ')}</Text>
                     )}
                   </View>
-                  <LaurelBranch side="right" height={20} color={PR_GOLD} />
+                  <LaurelBranch side="right" height={20} color={colors.prGoldBorder} />
                 </View>
               ) : (
                 <>
@@ -531,7 +530,7 @@ export default function WorkoutDetailsScreen({
                     onPress={() => setPrExpanded(v => !v)}
                     activeOpacity={0.8}
                   >
-                    <LaurelBranch height={20} color={PR_GOLD} />
+                    <LaurelBranch height={20} color={colors.prGoldBorder} />
                     <Text style={styles.prHeaderText}>{totalPrCount} Personal Records</Text>
                     <Animated.View
                       style={{
@@ -543,21 +542,21 @@ export default function WorkoutDetailsScreen({
                         }],
                       }}
                     >
-                      <Ionicons name="chevron-down" size={14} color={PR_GOLD} />
+                      <Ionicons name="chevron-down" size={14} color={colors.prGold} />
                     </Animated.View>
-                    <LaurelBranch side="right" height={20} color={PR_GOLD} />
+                    <LaurelBranch side="right" height={20} color={colors.prGoldBorder} />
                   </TouchableOpacity>
                   <Collapsible progress={prAnim} expanded={prExpanded}>
                     {workoutPrs.map((pr, i) => (
                       <View key={i} style={styles.prRow}>
-                        <LaurelBranch height={18} color={PR_GOLD} />
+                        <LaurelBranch height={18} color={colors.prGoldBorder} />
                         <View style={styles.prTextCol}>
                           <Text style={styles.prRowText}>{prTitle(pr)}</Text>
                           {pr.values.length > 0 && (
                             <Text style={styles.prValuesText}>{pr.values.join(', ')}</Text>
                           )}
                         </View>
-                        <LaurelBranch side="right" height={18} color={PR_GOLD} />
+                        <LaurelBranch side="right" height={18} color={colors.prGoldBorder} />
                       </View>
                     ))}
                   </Collapsible>
@@ -685,7 +684,7 @@ export default function WorkoutDetailsScreen({
                     <Text style={[styles.cardioBoutText, isHoldPr && styles.prGoldText]}>
                       {mins > 0 ? `${fmtHold(mins)} hold` : '—'}
                     </Text>
-                    {isHoldPr && <Ionicons name="trophy" size={14} color={PR_GOLD} />}
+                    {isHoldPr && <Ionicons name="trophy" size={14} color={colors.prGold} />}
                   </View>
                 );
               })}
@@ -738,7 +737,7 @@ export default function WorkoutDetailsScreen({
                         </Text>
                         {hasPr && (
                           isPr
-                            ? <Ionicons name="trophy" size={14} color={PR_GOLD} style={styles.colPr} />
+                            ? <Ionicons name="trophy" size={14} color={colors.prGold} style={styles.colPr} />
                             : <View style={styles.colPr} />
                         )}
                       </View>
@@ -937,7 +936,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   colReps: { flex: 1, textAlign: 'center' },
   colWeight: { flex: 1, textAlign: 'center' },
   colPr: { width: 24, alignItems: 'center' },
-  prGoldText: { color: PR_GOLD, fontWeight: '700' },
+  prGoldText: { color: colors.prGold, fontWeight: '700' },
 
   setNumBadge: {
     borderWidth: 1.5,
@@ -985,7 +984,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     backgroundColor: colors.background,
     borderRadius: spacing.xs,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.inputBorder,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     fontSize: typography.fontSize.md,
@@ -1050,16 +1049,16 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   prHeader: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     backgroundColor: colors.surface,
-    borderWidth: 1, borderColor: PR_GOLD,
+    borderWidth: 1, borderColor: colors.prGoldBorder,
     borderRadius: 10, padding: 12, marginBottom: spacing.xs,
   },
-  prHeaderText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: PR_GOLD, flex: 1 },
+  prHeaderText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.prGold, flex: 1 },
   prTextCol: { flex: 1 },
   prValuesText: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
   prRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     backgroundColor: colors.surface,
-    borderWidth: 1, borderColor: PR_GOLD + '66',
+    borderWidth: 1, borderColor: colors.prGoldBorder + '66',
     borderRadius: 10, padding: 12, marginTop: spacing.xs,
   },
   prRowText: { fontSize: typography.fontSize.sm, fontWeight: '500', color: colors.textPrimary, flex: 1 },

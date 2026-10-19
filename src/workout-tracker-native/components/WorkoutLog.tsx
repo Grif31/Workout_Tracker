@@ -33,7 +33,6 @@ import NewExerciseForm from '../components/NewExerciseForm';
 import { PrefillWorkoutData } from './WorkoutDetails';
 import { muscleGroups } from '../constants/muscleGroups';
 import { useWorkoutSession, sessionElapsedSeconds } from '../context/WorkoutSessionContext';
-import { PR_GOLD } from '../constants/prColors';
 import { nearPrHint } from '../utils/prFormat';
 import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../utils/templatePrefill';
 import { muscleSetCounts, sameMuscleCounts, type MuscleSetCount } from '../utils/muscleSetCounts';
@@ -2204,7 +2203,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           ]}
           pointerEvents="none"
         >
-          <Ionicons name="trophy" size={22} color={PR_GOLD} />
+          <Ionicons name="trophy" size={22} color={colors.prGold} />
           <View style={styles.prBannerText}>
             <Text style={styles.prBannerTitle}>New PR</Text>
             <Text style={styles.prBannerExercise} numberOfLines={1}>{prBanner.name}</Text>
@@ -2453,11 +2452,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     gap: spacing.sm,
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: PR_GOLD,
+    borderColor: colors.prGoldBorder,
     borderRadius: 14,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
-    shadowColor: PR_GOLD,
+    shadowColor: colors.prGoldBorder,
     shadowOpacity: 0.25,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 2 },
@@ -2468,7 +2467,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   prBannerTitle: {
     fontSize: typography.fontSize.sm,
     fontWeight: '700',
-    color: PR_GOLD,
+    color: colors.prGold,
     letterSpacing: 0.4,
   },
   prBannerExercise: {

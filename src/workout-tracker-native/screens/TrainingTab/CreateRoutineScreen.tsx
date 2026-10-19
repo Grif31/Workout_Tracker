@@ -488,7 +488,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   input: {
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.inputBorder,
     borderRadius: spacing.sm,
     padding: spacing.md,
     fontSize: typography.fontSize.md,
@@ -535,7 +535,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.inputBorder,
     borderRadius: spacing.sm,
     padding: spacing.md,
   },

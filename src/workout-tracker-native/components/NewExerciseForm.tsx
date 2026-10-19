@@ -187,7 +187,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.inputBorder,
     padding: spacing.sm,
     marginBottom: spacing.md,
     borderRadius: spacing.sm,

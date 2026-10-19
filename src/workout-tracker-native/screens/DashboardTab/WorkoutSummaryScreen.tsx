@@ -317,7 +317,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
 
   const renderPrRow = (pr: typeof groupedPrs[number], i: number) => (
     <Animated.View key={`${pr.exercise_name}|${pr.pr_type}`} entering={FadeInDown.delay(150 + i * 80).duration(350)} style={s.prRow}>
-      <Ionicons name="trophy" size={16} color={PR_GOLD} style={s.prRowIcon} />
+      <Ionicons name="trophy" size={16} color={colors.prGold} style={s.prRowIcon} />
       <View style={s.prRowText}>
         <Text style={s.prRowTitle}>
           {pr.exercise_name} · {PR_TYPE_LABELS[pr.pr_type] ?? pr.pr_type.replace(/_/g, ' ')}{pr.values.length > 1 ? 's' : ''}
@@ -395,7 +395,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
               { rotate: trophyPop.interpolate({ inputRange: [0, 0.6, 1], outputRange: ['-12deg', '8deg', '0deg'] }) },
             ],
           }}>
-            <Ionicons name="trophy" size={52} color={hasPrs ? PR_GOLD : colors.accent} style={s.trophy} />
+            <Ionicons name="trophy" size={52} color={hasPrs ? colors.prGold : colors.accent} style={s.trophy} />
           </RNAnimated.View>
           <Text style={s.headline}>
             {isFirstWorkout
@@ -420,11 +420,11 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           <Animated.View entering={FadeInDown.delay(100).duration(400)} style={s.section}>
             <View style={s.prCard}>
               <View style={s.prHeader}>
-                <LaurelBranch height={20} color={PR_GOLD} />
+                <LaurelBranch height={20} color={colors.prGoldBorder} />
                 <Text style={s.prHeaderText}>
                   {filteredPrs.length === 1 ? 'New Personal Record' : `${filteredPrs.length} Personal Records`}
                 </Text>
-                <LaurelBranch side="right" height={20} color={PR_GOLD} />
+                <LaurelBranch side="right" height={20} color={colors.prGoldBorder} />
               </View>
               {shownPrs.map(renderPrRow)}
               {morePrs.length > 0 && (
@@ -443,7 +443,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
                     <RNAnimated.View
                       style={{ transform: [{ rotate: morePrsAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}
                     >
-                      <Ionicons name="chevron-down" size={14} color={PR_GOLD} />
+                      <Ionicons name="chevron-down" size={14} color={colors.prGold} />
                     </RNAnimated.View>
                   </TouchableOpacity>
                 </>
@@ -592,11 +592,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   // PR Dashboard box — not the old filled-gold blocks.
   prCard: {
     backgroundColor: colors.surface,
-    borderWidth: 1, borderColor: PR_GOLD,
+    borderWidth: 1, borderColor: colors.prGoldBorder,
     borderRadius: radius.md, padding: spacing.md,
   },
   prHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  prHeaderText: { flex: 1, textAlign: 'center', fontSize: typography.fontSize.md, fontWeight: '800', color: PR_GOLD },
+  prHeaderText: { flex: 1, textAlign: 'center', fontSize: typography.fontSize.md, fontWeight: '800', color: colors.prGold },
   prRow: {
     flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm,
     paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border,
@@ -614,7 +614,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
     paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border,
   },
-  morePrsText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: PR_GOLD },
+  morePrsText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.prGold },
   statsRow: { flexDirection: 'row', gap: spacing.sm },
   statsPlaceholder: { height: 72, borderRadius: radius.md, backgroundColor: colors.surface },
   statBox: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },

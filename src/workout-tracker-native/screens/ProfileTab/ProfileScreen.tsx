@@ -32,7 +32,7 @@ import { apiFetch, resolveMediaUrl } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
 import { LaurelBranch } from '../../components/LaurelWreath';
-import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
+import { PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
 import { fmtHold } from '../../components/workout/types';
 import CalendarModal from '../../components/CalendarModal';
 import SectionRule from '../../components/SectionRule';
@@ -347,7 +347,7 @@ export default function ProfileScreen({ navigation }: Props) {
             return (
               <View key={slot} style={{ flex: 1 }}>
                 <View style={[styles.prCard, { backgroundColor: colors.surface }]}>
-                  <Ionicons name="trophy" size={22} color={PR_GOLD} style={styles.trophyIcon} />
+                  <Ionicons name="trophy" size={22} color={colors.prGold} style={styles.trophyIcon} />
                   {pr ? (
                     <>
                       <Text style={[styles.prCardName, { color: colors.textPrimary }]} numberOfLines={2}>
@@ -542,9 +542,9 @@ export default function ProfileScreen({ navigation }: Props) {
               <Text style={styles.workoutName} numberOfLines={1}>{item.name}</Text>
               {!!item.pr_count && (
                 <View style={styles.prRow}>
-                  <LaurelBranch height={16} color={PR_GOLD} />
+                  <LaurelBranch height={16} color={colors.prGoldBorder} />
                   <Text style={styles.prText}>{item.pr_count} PR{item.pr_count > 1 ? 's' : ''}</Text>
-                  <LaurelBranch side="right" height={16} color={PR_GOLD} />
+                  <LaurelBranch side="right" height={16} color={colors.prGoldBorder} />
                 </View>
               )}
             </View>
@@ -668,7 +668,7 @@ export default function ProfileScreen({ navigation }: Props) {
                 </TouchableOpacity>
               </View>
 
-              <View style={[styles.prSearchRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[styles.prSearchRow, { backgroundColor: colors.surface, borderColor: colors.inputBorder }]}>
                 <Ionicons name="search-outline" size={16} color={colors.textSecondary} />
                 <TextInput
                   style={[styles.prSearchInput, { color: colors.textPrimary }]}
@@ -871,7 +871,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.md,
     backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: PR_GOLD,
+    borderColor: colors.prGoldBorder,
     borderRadius: 14,
     padding: spacing.sm,
   },

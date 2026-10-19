@@ -392,7 +392,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
     borderBottomWidth: 2,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.inputBorder,
     paddingBottom: spacing.xs,
     marginBottom: spacing.md,
   },

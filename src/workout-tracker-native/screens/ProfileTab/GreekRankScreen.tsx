@@ -15,7 +15,7 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { ProfileStackParamsList } from '../../navigation/types';
-import { GREEK_RANK_COLORS, GREEK_RANKS } from '../../constants/greekRanks';
+import { GREEK_RANK_COLORS, GREEK_RANKS, rankTextColor } from '../../constants/greekRanks';
 import ProfileAvatarFrame, { frameOverflow } from '../../components/ProfileAvatarFrame';
 import { GREEK_RANK_CACHED_KEY, PROFILE_FRAME_RANK_KEY } from '../../constants/storageKeys';
 import { appCache } from '../../utils/appCache';
@@ -72,7 +72,7 @@ function RankCircle({
   selectedFrame: string;
   onSelect: () => void;
 }) {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
 
   // Position comes from the rank held, not the raw score: a score held back by
   // a top-rank gate sits inside a band the user hasn't actually unlocked.
@@ -123,9 +123,9 @@ function RankCircle({
 
             <View style={[circleStyles.innerCircle, { backgroundColor: rank.color + '22' }]}>
               {isCompleted ? (
-                <Ionicons name="checkmark" size={22} color={rank.color} />
+                <Ionicons name="checkmark" size={22} color={rankTextColor(rank.name, rank.color, mode)} />
               ) : (
-                <Text style={[circleStyles.iconText, { color: rank.color }]}>
+                <Text style={[circleStyles.iconText, { color: rankTextColor(rank.name, rank.color, mode) }]}>
                   {rank.icon}
                 </Text>
               )}
@@ -153,7 +153,7 @@ function RankCircle({
 }
 
 export default function GreekRankScreen({ navigation }: Props) {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const { user } = useAuth();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const frameKey = `${PROFILE_FRAME_RANK_KEY}_${user?.id}`;
@@ -374,7 +374,7 @@ export default function GreekRankScreen({ navigation }: Props) {
               <Image source={avatarSource} style={styles.heroAvatar} />
               <ProfileAvatarFrame rankName={selectedFrame} size={HERO_FRAME} avatarSize={HERO_AVATAR} />
             </View>
-            <Text style={[styles.rankNameLarge, { color: heldRank.color }]}>
+            <Text style={[styles.rankNameLarge, { color: rankTextColor(heldRank.name, heldRank.color, mode) }]}>
               {rankData?.greek_rank ?? 'Neophyte'}
             </Text>
             <Text style={styles.scoreSubtitle}>

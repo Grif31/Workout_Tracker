@@ -280,7 +280,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   stepperBtnText: { fontSize: typography.fontSize.xl, color: colors.accent, fontWeight: '600', lineHeight: 26 },
   stepperValue: { fontSize: 32, fontWeight: '700', color: colors.textPrimary, minWidth: 36, textAlign: 'center' },
   notesInput: {
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.inputBorder,
     borderRadius: radius.md, padding: spacing.md, color: colors.textPrimary,
     fontSize: typography.fontSize.sm, minHeight: 90,
   },

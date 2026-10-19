@@ -1215,7 +1215,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   notesInput: { minHeight: 72, textAlignVertical: 'top' },
   mFieldInput: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.inputBorder,
     borderRadius: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
@@ -1224,7 +1224,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   modalInput: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.inputBorder,
     borderRadius: spacing.sm,
     padding: spacing.md,
     fontSize: typography.fontSize.md,

@@ -43,3 +43,9 @@ export const GREEK_RANK_TEXT_COLORS: Record<'dark' | 'light', Record<string, str
     'Aretē':  '#8A6D00',
   },
 };
+
+// In the app only Aretē swaps to its text color: its gold is 1.4:1 on a white
+// card. The other ranks keep their badge color as text on purpose.
+export function rankTextColor(name: string, color: string, mode: 'dark' | 'light'): string {
+  return name === 'Aretē' ? GREEK_RANK_TEXT_COLORS[mode]['Aretē'] : color;
+}

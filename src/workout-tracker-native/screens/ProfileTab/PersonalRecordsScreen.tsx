@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import GoldSectionRule from '../../components/GoldSectionRule';
-import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
+import { PR_GOLD_TEXT } from '../../constants/prColors';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
@@ -355,9 +355,9 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
               <View style={styles.rowRight}>
                 {isTop ? (
                   <View style={styles.topValueRow}>
-                    <LaurelBranch height={18} color={PR_GOLD} />
+                    <LaurelBranch height={18} color={colors.prGoldBorder} />
                     <Text style={[styles.rowValue, { color: PR_GOLD_TEXT }]}>{item.reps} reps</Text>
-                    <LaurelBranch side="right" height={18} color={PR_GOLD} />
+                    <LaurelBranch side="right" height={18} color={colors.prGoldBorder} />
                   </View>
                 ) : (
                   <Text style={styles.rowValue}>{item.reps} reps</Text>
@@ -525,9 +525,9 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                 <View style={styles.rowRight}>
                   {index === 0 ? (
                     <View style={styles.topValueRow}>
-                      <LaurelBranch height={18} color={PR_GOLD} />
+                      <LaurelBranch height={18} color={colors.prGoldBorder} />
                       <Text style={[styles.rowValue, { color: PR_GOLD_TEXT }]}>{item.value} {unit}</Text>
-                      <LaurelBranch side="right" height={18} color={PR_GOLD} />
+                      <LaurelBranch side="right" height={18} color={colors.prGoldBorder} />
                     </View>
                   ) : (
                     <Text style={styles.rowValue}>{item.value} {unit}</Text>
@@ -570,9 +570,9 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                 <View style={styles.rowRight}>
                   {index === 0 && sortBy !== 'recent' ? (
                     <View style={styles.topValueRow}>
-                      <LaurelBranch height={18} color={PR_GOLD} />
+                      <LaurelBranch height={18} color={colors.prGoldBorder} />
                       <Text style={[styles.rowValue, { color: PR_GOLD_TEXT }]}>{item.value} {unit}</Text>
-                      <LaurelBranch side="right" height={18} color={PR_GOLD} />
+                      <LaurelBranch side="right" height={18} color={colors.prGoldBorder} />
                     </View>
                   ) : (
                     <Text style={styles.rowValue}>{item.value} {unit}</Text>

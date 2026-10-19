@@ -18,7 +18,7 @@ import { captureAndShare } from '../../utils/shareCapture';
 import { DashboardStackParamsList, WeeklySummaryData } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { PR_GOLD, PR_GOLD_TEXT } from '../../constants/prColors';
+import { PR_GOLD_TEXT } from '../../constants/prColors';
 import { CATEGORICAL_COLORS } from '../../constants/categoricalColors';
 import { fmtHold, RPE_KEY } from '../../components/workout/types';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
@@ -316,9 +316,9 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
           <Text style={styles.prTypeLabel}>{PR_TYPE_LABELS[pr.pr_type] ?? pr.pr_type}</Text>
         </View>
         <View style={styles.topValueRow}>
-          <LaurelBranch height={18} color={PR_GOLD} />
+          <LaurelBranch height={18} color={colors.prGoldBorder} />
           <Text style={styles.prValue}>{formatPrValue(pr, weightUnit, distanceUnit)}</Text>
-          <LaurelBranch side="right" height={18} color={PR_GOLD} />
+          <LaurelBranch side="right" height={18} color={colors.prGoldBorder} />
         </View>
         <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} style={{ alignSelf: 'center' }} />
       </TouchableOpacity>
@@ -613,11 +613,11 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
               {data.prs.length > 0 && (
                 <Animated.View entering={FadeInDown.delay(400).duration(400)} style={styles.section}>
                   <View style={styles.prSectionTitleRow}>
-                    <LaurelBranch height={16} color={PR_GOLD} />
+                    <LaurelBranch height={16} color={colors.prGoldBorder} />
                     <Text style={[styles.sectionTitle, { color: PR_GOLD_TEXT }]}>
                       Personal Records ({data.prs.length})
                     </Text>
-                    <LaurelBranch side="right" height={16} color={PR_GOLD} />
+                    <LaurelBranch side="right" height={16} color={colors.prGoldBorder} />
                   </View>
                   <View style={styles.card}>
                     {visiblePrs.map((pr, i) => renderPrRow(pr, i, data.weight_unit))}
@@ -671,11 +671,11 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
               <Ionicons name="close" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
             <View style={styles.prSectionTitleRow}>
-              <LaurelBranch height={16} color={PR_GOLD} />
+              <LaurelBranch height={16} color={colors.prGoldBorder} />
               <Text style={[styles.headerTitle, { color: PR_GOLD_TEXT }]}>
                 Personal Records ({sortedPrs.length})
               </Text>
-              <LaurelBranch side="right" height={16} color={PR_GOLD} />
+              <LaurelBranch side="right" height={16} color={colors.prGoldBorder} />
             </View>
             <View style={{ width: 24 }} />
           </View>
