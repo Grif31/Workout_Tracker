@@ -245,7 +245,3 @@ class AiWeeklyReviewSchema(AiInsightsSchema):
     # The Monday of the Weekly Summary week being reviewed; absent = the last 7 days
     week_start = fields.Date(load_default=None)
 
-
-class AiWeeklyReviewSchema(AiInsightsSchema):
-    # The Monday of the Weekly Summary week being reviewed; absent = the last 7 days
-    week_start = fields.Date(load_default=None)
