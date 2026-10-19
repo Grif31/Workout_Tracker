@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, ScrollView,
@@ -22,6 +22,8 @@ import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
 import { buildTemplatePrefill, parseProgramming, type ProgrammingEntry, type TemplateExercise } from '../../utils/templatePrefill';
 import { useDiscardGuard } from '../../utils/useDiscardGuard';
+import { captureAndShare } from '../../utils/shareCapture';
+import TemplateShareCard from '../../components/share/TemplateShareCard';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'TemplateDetail'>;
 type Exercise = TemplateExercise;
@@ -54,6 +56,8 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
   const [listDragging, setListDragging] = useState(false);
   // Shows the "log it now?" bar right after a new template's first save
   const [justCreated, setJustCreated] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const shareCardRef = useRef<View>(null);
   // The template as loaded or last saved; null until it has loaded
   const [initial, setInitial] = useState<string | null>(() => (isNew ? snapshot('New Template', [], {}) : null));
   const dirty = initial != null && snapshot(name, exercises, progMap) !== initial;
@@ -222,6 +226,15 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
     });
   };
 
+  const handleShare = async () => {
+    setSharing(true);
+    try {
+      await captureAndShare(shareCardRef, 'Share your template');
+    } finally {
+      setSharing(false);
+    }
+  };
+
   const editExercise = editExId != null ? exercises.find(e => e.id === editExId) : null;
 
   if (loading) {
@@ -234,6 +247,25 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      {/* Off-screen card for screenshot capture. Built from what's on screen,
+          unsaved edits included, the same way Log Workout is. */}
+      {!isNew && exercises.length > 0 && (
+        <View ref={shareCardRef} style={styles.offscreen} collapsable={false}>
+          <TemplateShareCard
+            templateName={name.trim() || 'Workout Template'}
+            exercises={exercises.map(e => ({
+              name: e.name,
+              muscleGroup: e.muscle_group,
+              equipment: e.equipment,
+              sets: progMap[e.id]?.sets,
+              reps: progMap[e.id]?.reps,
+              rpe: progMap[e.id]?.rpe,
+            }))}
+            accentColor={colors.accentDark}
+          />
+        </View>
+      )}
+
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
@@ -244,9 +276,20 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
           // the button so space-between doesn't push the title to the right.
           <View style={styles.headerSpacer} />
         ) : (
-          <TouchableOpacity onPress={handleDelete}>
-            <Text style={styles.deleteText}>Delete</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            {exercises.length > 0 && (
+              <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={8} accessibilityRole="button" accessibilityLabel="Share template">
+                {sharing ? (
+                  <ActivityIndicator color={colors.textPrimary} size="small" />
+                ) : (
+                  <Ionicons name="share-outline" size={22} color={colors.textPrimary} />
+                )}
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={handleDelete}>
+              <Text style={styles.deleteText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
@@ -383,6 +426,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   backBtn: { padding: 2 },
   headerTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  offscreen: { position: 'absolute', left: -9999, top: -9999 },
   deleteText: { color: colors.danger, fontWeight: '600', fontSize: typography.fontSize.sm },
   // backBtn's 24px icon plus its 2px padding on each side
   headerSpacer: { width: 28 },

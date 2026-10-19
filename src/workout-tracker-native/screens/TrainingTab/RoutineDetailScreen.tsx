@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,8 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch, isNetworkError } from '../../utils/api';
 import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../../utils/templatePrefill';
+import { captureAndShare } from '../../utils/shareCapture';
+import RoutineShareCard from '../../components/share/RoutineShareCard';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'RoutineDetail'>;
 
@@ -46,6 +48,8 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
   const [routine, setRoutine] = useState<Routine | null>(null);
   const [loading, setLoading] = useState(true);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const shareCardRef = useRef<View>(null);
 
   const isActive = user?.active_routine_id === routineId;
 
@@ -101,6 +105,15 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
     }
   };
 
+  const handleShare = async () => {
+    setSharing(true);
+    try {
+      await captureAndShare(shareCardRef, 'Share your routine');
+    } finally {
+      setSharing(false);
+    }
+  };
+
   const showMenu = () => {
     Alert.alert(
       routine?.name ?? routineName,
@@ -129,13 +142,49 @@ export default function RoutineDetailScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      {/* Off-screen card for screenshot capture */}
+      {routine.days.length > 0 && (
+        <View ref={shareCardRef} style={styles.offscreen} collapsable={false}>
+          <RoutineShareCard
+            routineName={routine.name}
+            description={routine.description}
+            days={routine.days.map(day => {
+              const prog = parseProgramming(day.workout_template.programming_json);
+              return {
+                label: day.label,
+                exercises: day.workout_template.exercises.map(e => ({
+                  name: e.name,
+                  muscleGroup: e.muscle_group,
+                  equipment: e.equipment,
+                  sets: prog[e.id]?.sets,
+                  reps: prog[e.id]?.reps,
+                  rpe: prog[e.id]?.rpe,
+                })),
+              };
+            })}
+            accentColor={colors.accentDark}
+          />
+        </View>
+      )}
+
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={8}>
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={showMenu} style={styles.menuBtn} hitSlop={8} testID="menu-btn">
-          <Ionicons name="ellipsis-vertical" size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
+        <View style={styles.topBarActions}>
+          {routine.days.length > 0 && (
+            <TouchableOpacity onPress={handleShare} disabled={sharing} style={styles.menuBtn} hitSlop={8} accessibilityRole="button" accessibilityLabel="Share routine">
+              {sharing ? (
+                <ActivityIndicator color={colors.textPrimary} size="small" />
+              ) : (
+                <Ionicons name="share-outline" size={22} color={colors.textPrimary} />
+              )}
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={showMenu} style={styles.menuBtn} hitSlop={8} testID="menu-btn">
+            <Ionicons name="ellipsis-vertical" size={22} color={colors.textPrimary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList
@@ -230,6 +279,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   backBtn: { padding: spacing.xs },
   menuBtn: { padding: spacing.xs },
+  topBarActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  offscreen: { position: 'absolute', left: -9999, top: -9999 },
 
   routineInfo: {
     paddingHorizontal: spacing.md,

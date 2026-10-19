@@ -11,6 +11,8 @@ import EnduranceScoreShareCard from '../components/share/EnduranceScoreShareCard
 import WeeklySummaryShareCard from '../components/share/WeeklySummaryShareCard';
 import WorkoutShareCard from '../components/share/WorkoutShareCard';
 import CardioShareCard from '../components/share/CardioShareCard';
+import TemplateShareCard from '../components/share/TemplateShareCard';
+import RoutineShareCard from '../components/share/RoutineShareCard';
 
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
@@ -125,6 +127,66 @@ describe('share cards', () => {
     );
     expect(getByText('Trail Run')).toBeTruthy();
     expect(getByText(/3\.10/)).toBeTruthy();
+  });
+
+  it('Template card lists each exercise with its muscle, equipment and programming', () => {
+    const { getByText, getAllByText } = render(
+      <TemplateShareCard
+        templateName="Push A"
+        exercises={[
+          { name: 'Bench Press', muscleGroup: 'Chest', equipment: 'Barbell', sets: 4, reps: '6-8', rpe: 8 },
+          { name: 'Incline Press', muscleGroup: 'Chest', equipment: 'Dumbbell', sets: 3, reps: '8-10' },
+          { name: 'Dips', muscleGroup: 'Chest' },
+        ]}
+        accentColor={ACCENT}
+      />,
+    );
+    expect(getByText('Push A')).toBeTruthy();
+    expect(getByText('3 exercises  ·  7 sets')).toBeTruthy();
+    expect(getByText('Chest  ·  Barbell')).toBeTruthy();
+    expect(getByText('Chest  ·  Dumbbell')).toBeTruthy();
+    expect(getByText('6-8')).toBeTruthy();
+    expect(getByText('8')).toBeTruthy();
+    expect(getByText('RPE')).toBeTruthy();
+    // Dips has no programming, Incline Press no RPE
+    expect(getAllByText('-')).toHaveLength(4);
+  });
+
+  it('Template card drops empty columns and counts exercises past the cap', () => {
+    const exercises = Array.from({ length: 12 }, (_, i) => ({ name: `Lift ${i + 1}` }));
+    const { getByText, queryByText } = render(
+      <TemplateShareCard templateName="Full Body" exercises={exercises} accentColor={ACCENT} />,
+    );
+    expect(getByText('12 exercises')).toBeTruthy();
+    expect(queryByText('Sets')).toBeNull();
+    expect(queryByText('RPE')).toBeNull();
+    expect(getByText('Lift 10')).toBeTruthy();
+    expect(queryByText('Lift 11')).toBeNull();
+    expect(getByText('+2 more')).toBeTruthy();
+  });
+
+  it('Routine card lists every day with its exercises and programming', () => {
+    const { getByText, getAllByText } = render(
+      <RoutineShareCard
+        routineName="PPL"
+        description="Push Pull Legs"
+        days={[
+          { label: 'Push', exercises: [{ name: 'Bench Press', muscleGroup: 'Chest', equipment: 'Barbell', sets: 4, reps: '6-8', rpe: 8 }] },
+          { label: 'Pull', exercises: [{ name: 'Barbell Row', muscleGroup: 'Back', sets: 3, reps: '8-10' }] },
+          { label: 'Legs', exercises: [] },
+        ]}
+        accentColor={ACCENT}
+      />,
+    );
+    expect(getByText('PPL')).toBeTruthy();
+    expect(getByText('Push Pull Legs')).toBeTruthy();
+    expect(getByText('Push')).toBeTruthy();
+    expect(getByText('Pull')).toBeTruthy();
+    expect(getByText('Chest  ·  Barbell')).toBeTruthy();
+    expect(getByText('4 sets')).toBeTruthy();
+    expect(getByText('No exercises')).toBeTruthy();
+    // RPE is set on one day only, but every day keeps the column so they line up
+    expect(getAllByText('RPE')).toHaveLength(2);
   });
 
   describe('never leads with a zero', () => {

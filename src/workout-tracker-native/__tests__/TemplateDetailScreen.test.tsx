@@ -21,6 +21,8 @@ jest.mock('components/DraggableList', () => {
     </View>
   );
 });
+// Rendered off-screen for capture; its exercise names would double up getByText
+jest.mock('components/share/TemplateShareCard', () => () => null);
 jest.mock('react-native-gesture-handler/Swipeable', () => {
   const { View } = require('react-native');
   return ({ children }: any) => <View>{children}</View>;
@@ -55,6 +57,11 @@ describe('TemplateDetailScreen', () => {
   it('shows existing exercise in the list', async () => {
     const { getByText } = render(<TemplateDetailScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
+  });
+
+  it('offers Share once a saved template has loaded', async () => {
+    const { getByLabelText } = render(<TemplateDetailScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByLabelText('Share template')).toBeTruthy());
   });
 
   it('shows Save button', async () => {
@@ -92,6 +99,14 @@ describe('TemplateDetailScreen (new template)', () => {
     await waitFor(() => expect(getByText('Save Template')).toBeTruthy());
     expect(queryByText('Log Workout')).toBeNull();
     expect(queryByText('Delete')).toBeNull();
+  });
+
+  it('offers no Share before the template is saved', async () => {
+    const { getByText, queryByLabelText } = render(
+      <TemplateDetailScreen navigation={createMockNavigation() as any} route={createMockRoute('TemplateDetail', {}) as any} />,
+    );
+    await waitFor(() => expect(getByText('Save Template')).toBeTruthy());
+    expect(queryByLabelText('Share template')).toBeNull();
   });
 
   it('creates the template on save and offers to log it', async () => {

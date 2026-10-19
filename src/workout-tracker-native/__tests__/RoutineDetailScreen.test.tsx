@@ -7,6 +7,9 @@ jest.mock('navigation/types', () => ({}), { virtual: true });
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 jest.mock('theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));
 
+// Rendered off-screen for capture; its day and exercise names would double up getByText
+jest.mock('components/share/RoutineShareCard', () => () => null);
+
 const nav = createMockNavigation();
 const route = createMockRoute('RoutineDetail', { routineId: 1, routineName: 'PPL' });
 
@@ -53,5 +56,17 @@ describe('RoutineDetailScreen', () => {
   it('shows the 3-dot menu button', async () => {
     const { getByTestId } = render(<RoutineDetailScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByTestId('menu-btn')).toBeTruthy());
+  });
+
+  it('offers Share once the routine has loaded', async () => {
+    const { getByLabelText } = render(<RoutineDetailScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByLabelText('Share routine')).toBeTruthy());
+  });
+
+  it('offers no Share for a routine with no days', async () => {
+    mockFetch({ ...mockRoutine, days: [] });
+    const { getByText, queryByLabelText } = render(<RoutineDetailScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('PPL')).toBeTruthy());
+    expect(queryByLabelText('Share routine')).toBeNull();
   });
 });
