@@ -34,7 +34,7 @@ export function nextSetLines(
   const index = ex.sets.findIndex(s => !s.done);
   if (index < 0) return null;
   const set = ex.sets[index];
-  const setLine = `Next set  ·  ${index + 1} of ${ex.sets.length}`;
+  const setLine = 'Next set';
 
   if (isDuration(ex)) {
     const minutes = parseFloat(set.cardio_duration ?? '');

@@ -20,23 +20,23 @@ describe('currentExerciseName', () => {
 
 describe('nextSetLines', () => {
   it("names the set position and its reps-first target in the user's unit", () => {
-    expect(nextSetLines([bench, row], 'lbs')).toEqual({ setLine: 'Next set  ·  3 of 3', next: '6 × 190 lbs' });
+    expect(nextSetLines([bench, row], 'lbs')).toEqual({ setLine: 'Next set', next: '6 × 190 lbs' });
     expect(nextSetLines([bench, row], 'kg')?.next).toBe('6 × 190 kg');
   });
 
   it('shows reps alone for a bodyweight set or one with no weight yet', () => {
     const pushUp = { name: 'Push-up', equipment: 'Bodyweight', sets: [{ reps: '15', weight: '0' }] };
-    expect(nextSetLines([pushUp], 'lbs')).toEqual({ setLine: 'Next set  ·  1 of 1', next: '15 reps' });
+    expect(nextSetLines([pushUp], 'lbs')).toEqual({ setLine: 'Next set', next: '15 reps' });
     expect(nextSetLines([{ name: 'Curl', sets: [{ reps: '10', weight: '' }] }], 'lbs')?.next).toBe('10 reps');
   });
 
   it('gives the position alone while the next set has no reps typed', () => {
-    expect(nextSetLines([row], 'lbs')).toEqual({ setLine: 'Next set  ·  1 of 2' });
+    expect(nextSetLines([row], 'lbs')).toEqual({ setLine: 'Next set' });
   });
 
   it('shows a timed hold as its time', () => {
     const plank = { name: 'Plank', exercise_type: 'duration', sets: [{ cardio_duration: '0.75' }, { cardio_duration: '1.5' }] };
-    expect(nextSetLines([plank], 'lbs')).toEqual({ setLine: 'Next set  ·  1 of 2', next: '45s' });
+    expect(nextSetLines([plank], 'lbs')).toEqual({ setLine: 'Next set', next: '45s' });
     expect(nextSetLines([{ ...plank, sets: [{ done: true, cardio_duration: '0.75' }, { cardio_duration: '1.5' }] }], 'lbs')?.next).toBe('1:30');
   });
 
@@ -49,7 +49,7 @@ describe('nextSetLines', () => {
   it('follows the current exercise, not the first', () => {
     const done = { ...bench, sets: bench.sets.map(s => ({ ...s, done: true })) };
     expect(nextSetLines([done, { name: 'Curl', sets: [{ done: true, reps: '10', weight: '30' }, { reps: '12', weight: '25' }] }], 'lbs'))
-      .toEqual({ setLine: 'Next set  ·  2 of 2', next: '12 × 25 lbs' });
+      .toEqual({ setLine: 'Next set', next: '12 × 25 lbs' });
   });
 });
 
@@ -60,7 +60,7 @@ describe('liveActivityProps', () => {
   });
 
   it('carries the next set target, and none once everything is done', () => {
-    expect(liveActivityProps(base)).toMatchObject({ setLine: 'Next set  ·  3 of 3', next: '6 × 190 lbs' });
+    expect(liveActivityProps(base)).toMatchObject({ setLine: 'Next set', next: '6 × 190 lbs' });
     const finished = liveActivityProps({ ...base, exercises: [{ name: 'Bench', sets: [{ done: true, reps: '5', weight: '100' }] }] });
     expect(finished).not.toHaveProperty('setLine');
     expect(finished).not.toHaveProperty('next');
