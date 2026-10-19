@@ -9,6 +9,9 @@ const LOGO_Y = 0.469;
 const IMAGE_ASPECT = 1284 / 2778;
 const ZOOM = 8;
 const DURATION_MS = 500;
+// The overlay covers the whole app, so it goes after this even if the
+// animation never reports finishing
+const BACKSTOP_MS = 2000;
 
 /**
  * Laid over the app when the last splash screen goes away: starts as the exact
@@ -20,6 +23,21 @@ export default function SplashExit({ onDone }: { onDone: () => void }) {
   const { width, height } = useWindowDimensions();
   const progress = useRef(new Animated.Value(0)).current;
   const [reduceMotion, setReduceMotion] = useState<boolean | null>(null);
+  const done = useRef(false);
+  const finish = useRef(onDone);
+  finish.current = () => {
+    if (done.current) return;
+    done.current = true;
+    onDone();
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (__DEV__ && !done.current) console.warn('SplashExit: animation never finished, removed by the backstop');
+      finish.current();
+    }, BACKSTOP_MS);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,9 +55,9 @@ export default function SplashExit({ onDone }: { onDone: () => void }) {
       easing: reduceMotion ? Easing.linear : Easing.in(Easing.cubic),
       useNativeDriver: true,
     });
-    anim.start(({ finished }) => { if (finished) onDone(); });
+    anim.start(({ finished }) => { if (finished) finish.current(); });
     return () => anim.stop();
-  }, [reduceMotion, progress, onDone]);
+  }, [reduceMotion, progress]);
 
   // Where `contain` draws the image, to find the logo on any screen shape
   const imageW = width / height > IMAGE_ASPECT ? height * IMAGE_ASPECT : width;

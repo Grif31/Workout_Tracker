@@ -22,6 +22,21 @@ describe('SplashExit', () => {
     expect(onDone).not.toHaveBeenCalled();
     act(() => { jest.advanceTimersByTime(1000); });
     expect(onDone).toHaveBeenCalledTimes(1);
+    act(() => { jest.advanceTimersByTime(2000); });
+    expect(onDone).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
+
+  it('removes itself on the backstop when the animation never starts', () => {
+    jest.useFakeTimers();
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockReturnValue(new Promise(() => {}));
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const onDone = jest.fn();
+    render(<SplashExit onDone={onDone} />);
+    act(() => { jest.advanceTimersByTime(1999); });
+    expect(onDone).not.toHaveBeenCalled();
+    act(() => { jest.advanceTimersByTime(1); });
+    expect(onDone).toHaveBeenCalledTimes(1);
     jest.useRealTimers();
   });
 });
