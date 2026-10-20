@@ -16,7 +16,8 @@ import { GPS_DISTANCE_UNIT_KEY, type DistanceUnit } from '../utils/units';
 import { LIVE_WORKOUT_NOTIF_KEY } from '../constants/storageKeys';
 import { newClientId } from '../utils/clientId';
 import {
-  ACTIVITIES, afterGap, applyFix, emptyRun, runElapsedSeconds, type Activity, type Coord, type RunState,
+  ACTIVITIES, afterGap, applyFix, checkpointIntervalMs, emptyRun, runElapsedSeconds,
+  type Activity, type Coord, type RunState,
 } from '../utils/gpsRun';
 
 // The GPS run in progress. It lives here, above every screen, so leaving
@@ -107,10 +108,10 @@ const WATCH_OPTS = { accuracy: Location.Accuracy.BestForNavigation, timeInterval
 // would be throttled on a long run. Start, pause and resume still go at once.
 export const RUN_ACTIVITY_UPDATE_MS = 5000;
 
-// How much of a run a kill can cost: the checkpoint is written at least this
-// often while fixes arrive, so a killed app loses this much at most
+// How much of a run a kill can cost: checkpointIntervalMs (utils/gpsRun), 5 s
+// for the first 20 minutes, stretching to at most a minute on a long route
 // (it was every 10 fixes, up to about a minute, and nothing before the 10th).
-export const CHECKPOINT_EVERY_MS = 5000;
+export { CHECKPOINT_EVERY_MS } from '../utils/gpsRun';
 
 export function GpsRunProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -141,7 +142,7 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
   const timingRef = useRef<RunTiming>(NOT_RUNNING);
   const setTiming = useCallback((t: RunTiming) => { timingRef.current = t; setTimingState(t); }, []);
 
-  // When the checkpoint was last written, for CHECKPOINT_EVERY_MS
+  // When the checkpoint was last written, for checkpointIntervalMs
   const lastCheckpointAtRef = useRef(0);
   const locationSub = useRef<Location.LocationSubscription | null>(null);
   const gpsUnsubRef = useRef<(() => void) | null>(null);
@@ -173,7 +174,7 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
   // The first fix of a run writes at once, since the clock starts at 0.
   useEffect(() => {
     if (trackingState !== 'running' || run.coords.length === 0) return;
-    if (Date.now() - lastCheckpointAtRef.current < CHECKPOINT_EVERY_MS) return;
+    if (Date.now() - lastCheckpointAtRef.current < checkpointIntervalMs(run.coords.length)) return;
     writeCheckpoint();
   }, [run.coords]);
 

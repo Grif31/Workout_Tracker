@@ -255,3 +255,23 @@ describe('activities in Health', () => {
   });
 });
 
+describe('checkpointIntervalMs', () => {
+  const { checkpointIntervalMs, CHECKPOINT_EVERY_MS, CHECKPOINT_FULL_RATE_POINTS, CHECKPOINT_MAX_MS } = require('../utils/gpsRun');
+
+  it('checkpoints every 5 s for the first 20 minutes or so of fixes', () => {
+    expect(checkpointIntervalMs(0)).toBe(CHECKPOINT_EVERY_MS);
+    expect(checkpointIntervalMs(CHECKPOINT_FULL_RATE_POINTS)).toBe(CHECKPOINT_EVERY_MS);
+  });
+
+  it('stretches in step with the route, so bytes written per second stay flat', () => {
+    expect(checkpointIntervalMs(CHECKPOINT_FULL_RATE_POINTS * 2)).toBe(CHECKPOINT_EVERY_MS * 2);
+    // An hour of fixes, about 1,800 points
+    expect(checkpointIntervalMs(1800)).toBe(15_000);
+    const bytesPerMs = (n: number) => n / checkpointIntervalMs(n);
+    expect(bytesPerMs(3000)).toBeCloseTo(bytesPerMs(1200));
+  });
+
+  it('never waits longer than a minute, the most a kill can cost', () => {
+    expect(checkpointIntervalMs(50_000)).toBe(CHECKPOINT_MAX_MS);
+  });
+});

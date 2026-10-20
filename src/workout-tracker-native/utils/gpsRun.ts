@@ -202,3 +202,18 @@ export function buildGpsRunBody(input: {
     }],
   };
 }
+
+// The crash checkpoint rewrites the whole route, so a fixed interval writes
+// more every second as the run grows (about 60 KB a write after an hour).
+// Past CHECKPOINT_FULL_RATE_POINTS (about 20 minutes of fixes) the interval
+// grows in step with the route, which keeps the bytes written per second flat,
+// up to CHECKPOINT_MAX_MS: the most a kill can cost. Leaving the foreground
+// still writes at once, and that is when iOS ends apps.
+export const CHECKPOINT_EVERY_MS = 5000;
+export const CHECKPOINT_FULL_RATE_POINTS = 600;
+export const CHECKPOINT_MAX_MS = 60_000;
+
+export function checkpointIntervalMs(points: number): number {
+  const scale = Math.max(1, points / CHECKPOINT_FULL_RATE_POINTS);
+  return Math.min(CHECKPOINT_MAX_MS, Math.round(CHECKPOINT_EVERY_MS * scale));
+}
