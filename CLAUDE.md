@@ -24,6 +24,8 @@ npx expo install <pkg>      # install Expo-compatible package version
 #   Write the versions `expo install --check` lists into package.json and run one `npm install` instead.
 #   @react-native/jest-preset is a required peer of jest-expo and must match react-native exactly; bump them together.
 #   Before pushing, prove EAS can install: `npm_config_legacy_peer_deps=false npm ci` (only the development profile sets legacy peer deps)
+#   In PowerShell: `$env:npm_config_legacy_peer_deps = 'false'; npm ci; Remove-Item Env:npm_config_legacy_peer_deps`
+#   Pass = "added N packages" with no ERESOLVE. Ignore the deprecation and `npm audit` noise; never `npm audit fix --force` (it breaks Expo's pinned versions)
 ```
 
 ### Backend (`src/`)
