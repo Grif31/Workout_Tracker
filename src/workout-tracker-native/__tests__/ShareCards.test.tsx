@@ -189,6 +189,31 @@ describe('share cards', () => {
     expect(getAllByText('RPE')).toHaveLength(2);
   });
 
+  it('Routine card caps each day at eight rows and sums exercises across days', () => {
+    const lifts = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => ({ name: `${prefix} ${i + 1}` }));
+    const { getByText, getAllByText, queryByText } = render(
+      <RoutineShareCard
+        routineName="Long Week"
+        days={[{ label: 'Upper', exercises: lifts('Upper', 11) }, { label: 'Lower', exercises: lifts('Lower', 1) }]}
+        accentColor={ACCENT}
+      />,
+    );
+    expect(getByText('2 days  ·  12 exercises')).toBeTruthy();
+    expect(getByText('Upper 8')).toBeTruthy();
+    expect(queryByText('Upper 9')).toBeNull();
+    expect(getByText('+3 more')).toBeTruthy();
+    // The cap is per day: a short day shows all of its rows and no "more"
+    expect(getByText('Lower 1')).toBeTruthy();
+    expect(getAllByText(/^\+\d+ more$/)).toHaveLength(1);
+  });
+
+  it('Routine card singularises a one-day, one-exercise routine', () => {
+    const { getByText } = render(
+      <RoutineShareCard routineName="Just Squat" days={[{ label: 'Day 1', exercises: [{ name: 'Squat' }] }]} accentColor={ACCENT} />,
+    );
+    expect(getByText('1 day  ·  1 exercise')).toBeTruthy();
+  });
+
   describe('never leads with a zero', () => {
     it('a cardio-only week leads with its distance', () => {
       const { getByText, queryByText } = render(

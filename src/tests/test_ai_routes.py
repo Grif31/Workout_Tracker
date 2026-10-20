@@ -735,6 +735,22 @@ class TestInsightFeedback:
         prompt = self._insights_prompt(client, auth_token)
         assert 'Hamstring Sets Lagging' not in prompt and 'Someone Else Insight' not in prompt
 
+    def test_only_the_newest_twenty_votes_reach_the_prompt(self, client, auth_token):
+        from datetime import datetime, timedelta
+        from models import db, InsightFeedback
+        from routes.ai_routes import FEEDBACK_LIMIT
+        assert FEEDBACK_LIMIT == 20  # CLAUDE.md documents the cap
+        for i in range(FEEDBACK_LIMIT + 5):
+            self._vote(client, auth_token, True, title=f'Insight Number {i:02d}', body=f'Body {i}')
+        start = datetime.now() - timedelta(days=30)
+        for row in InsightFeedback.query.all():
+            row.created_at = start + timedelta(hours=int(row.title[-2:]))
+        db.session.commit()
+
+        prompt = self._insights_prompt(client, auth_token)
+        quoted = [i for i in range(FEEDBACK_LIMIT + 5) if f'Insight Number {i:02d}' in prompt]
+        assert quoted == list(range(5, FEEDBACK_LIMIT + 5))
+
     def test_review_prompt_ignores_feedback(self):
         from routes.ai_routes import _build_insights_prompt
         ctx = {'insight_feedback': [{'type': 'rest', 'title': 'Take A Rest Day', 'helpful': True}]}

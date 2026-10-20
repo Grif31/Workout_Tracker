@@ -103,6 +103,35 @@ class TestApplyEvent:
         assert is_premium(app, uid) is False
         assert is_premium(app, other) is True
 
+    def _transfer(self, app, **event):
+        with app.app_context():
+            changed = premium.apply_event({'type': 'TRANSFER', 'entitlement_ids': ['premium'], **event})
+            db.session.commit()
+        return changed
+
+    def test_a_transfer_of_an_expired_entitlement_grants_nobody(self, app, uid, auth_token2):
+        with app.app_context():
+            other = User.query.filter(User.id != uid).first().id
+        set_premium(app, uid, True)
+        assert self._transfer(app, transferred_from=[str(uid)], transferred_to=[str(other)],
+                              expiration_at_ms=ms(-60)) is True
+        assert is_premium(app, uid) is False
+        assert is_premium(app, other) is False
+
+    def test_a_transfer_from_an_anonymous_id_still_grants_our_user(self, app, uid):
+        assert self._transfer(app, transferred_from=['$RCAnonymousID:abc'], transferred_to=[str(uid)],
+                              expiration_at_ms=ms(3600)) is True
+        assert is_premium(app, uid) is True
+
+    def test_a_transfer_to_an_unknown_id_still_revokes_our_user(self, app, uid):
+        set_premium(app, uid, True)
+        assert self._transfer(app, transferred_from=[str(uid)], transferred_to=['$RCAnonymousID:abc']) is True
+        assert is_premium(app, uid) is False
+
+    def test_a_transfer_between_ids_we_do_not_know_is_ignored(self, app, uid):
+        assert self._transfer(app, transferred_from=['$RCAnonymousID:a'], transferred_to=['999999']) is False
+        assert is_premium(app, uid) is False
+
     @pytest.mark.parametrize('event', [
         {'type': 'INITIAL_PURCHASE', 'entitlement_ids': ['something_else']},
         {'type': 'BILLING_ISSUE'},
