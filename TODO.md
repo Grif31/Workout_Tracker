@@ -1478,12 +1478,12 @@ One screen that says whether anything needs attention today, then links into the
 - [ ] On prod after deploy: press "Fetch catalog" once (about 135 of the month's calls), then try a few hard searches. The preview shows the 180 thumbnail scaled up, so it's soft; the saved 360 file is sharper
 - [ ] Add aliases as misses turn up: `_WORD_ALIASES`, `_JOINS` and `_PHRASE_ALIASES` in `utils/exercisedb.py`, one line each, plus a test case
 
-### 3. User lookup / support (PR 7)
-- [ ] `/admin/users?q=`: search by email or username (`ilike`, 50 results max)
-- [ ] `/admin/users/<id>`: sign-in method (password / Apple / Google, `is_social_only`), `email_verified`, unit, gender set or not, premium state and source, counts of workouts / routines / templates / PRs, last workout date, last seen and app version (once §4 lands), insight votes, AI calls this month (from `ai_call_log`)
-- [ ] Actions, both behind the write guard and audit-logged: RevenueCat re-sync (the same code path as `POST /api/premium/sync`, pulled into a helper if it isn't one) and force sign-out (bump `token_version`). No manual premium grants, no account deletion
-- [ ] Never show progress photos or body measurements
-- [ ] Tests: search, detail for a fresh user (no 500s with no data), sign-out bumps `token_version` and an old token is rejected, re-sync with RevenueCat mocked
+### 3. User lookup / support (PR 7), built 2026-10-20
+- [x] `/admin/users?q=`: email or username contains, or `#id`; `%` and `_` are plain characters (autoescaped LIKE); first 50
+- [x] `/admin/users/<id>`: sign-in (password, or Apple / Google only: which provider isn't stored), `email_verified`, unit, gender set or not, push devices, sessions revoked so far; stored premium and whether the onboarding program was used; counts of workouts (with the last date), routines, templates, PRs, insight votes, AI calls this month; the account's admin history. Usernames on the Coach, AI and System pages link here
+- [x] Actions, both behind the write guard and audit-logged: "Re-sync from RevenueCat" (sets `is_premium` to RevenueCat's answer, no change without one) and "Sign out everywhere" (bumps `token_version`). No manual premium grants, no account deletion
+- [x] Never shows progress photos, body measurements, bodyweight or workout contents (a test checks bodyweight and a measurement don't appear)
+- [x] Tests: `tests/test_admin_users.py`, including an old token refused after sign-out and the user signing in again
 
 ### 4. Growth dashboard (PR 8)
 - [ ] `User.created_at` (server default `now()`) + migration. Existing accounts stay NULL and use the first workout date, shown as "est."

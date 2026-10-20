@@ -1,0 +1,128 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ user.username if user else 'User not found' }}{% endblock %}
+{% block content %}
+  <div class="page narrow">
+    <p class="crumb"><a href="{{ url_for('admin.admin_users_search') }}">‹ Users</a></p>
+    {% if not user %}
+      <div class="page-head"><div><h1>User not found</h1></div></div>
+    {% else %}
+      <div class="page-head">
+        <div>
+          <h1>{{ user.username }} <span class="muted id">#{{ user.id }}</span></h1>
+          <p class="sub">{{ user.email }}{% if user.name %} · {{ user.name }}{% endif %}</p>
+        </div>
+      </div>
+
+      <div class="tiles">
+        <div class="tile"><div class="tile-label">Workouts</div><div class="tile-value">{{ s.workouts }}</div>
+          <div class="tile-note">{{ 'Last ' ~ s.last_workout.strftime('%m/%d/%Y') if s.last_workout else 'None logged' }}</div></div>
+        <div class="tile"><div class="tile-label">Routines / templates</div><div class="tile-value">{{ s.routines }} / {{ s.templates }}</div>
+          <div class="tile-note">{{ s.prs }} personal records</div></div>
+        <div class="tile"><div class="tile-label">Coach</div><div class="tile-value">{{ s.ai_calls_month }}</div>
+          <div class="tile-note">AI calls this month · {{ s.insight_votes }} insight votes</div></div>
+      </div>
+
+      <div class="cols">
+        <section class="card">
+          <div class="card-head"><div><h2>Account</h2></div></div>
+          <dl class="facts">
+            <dt>Sign-in</dt><dd>{{ s.sign_in }}</dd>
+            <dt>Email verified</dt><dd>{% if user.email_verified %}<span class="status good">Yes</span>{% else %}<span class="muted">No</span>{% endif %}</dd>
+            <dt>Weight unit</dt><dd>{{ user.weight_unit or 'lbs' }}</dd>
+            <dt>Gender</dt><dd>{{ 'Set' if user.gender else 'Not set' }}</dd>
+            <dt>Devices for push</dt><dd>{{ s.devices }}</dd>
+            <dt>Sessions revoked</dt><dd>{{ user.token_version or 0 }} time{{ '' if (user.token_version or 0) == 1 else 's' }}</dd>
+          </dl>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><div><h2>Premium</h2><p class="sub">Enforcement is {{ 'on' if enforced else 'off' }}.</p></div></div>
+          <dl class="facts">
+            <dt>Stored here</dt><dd>{% if user.is_premium %}<span class="status good">Premium</span>{% else %}Free{% endif %}</dd>
+            <dt>Onboarding program</dt><dd>{{ 'Used' if user.starter_granted else 'Not used' }}</dd>
+          </dl>
+          <div class="action">
+            <button type="button" class="btn" data-action="resync">Re-sync from RevenueCat</button>
+            <span class="sub" id="resync-result" role="status">Sets stored premium to RevenueCat's answer.</span>
+          </div>
+        </section>
+      </div>
+
+      <section class="card danger">
+        <div class="card-head"><div><h2>Sign out everywhere</h2><p class="sub">Every device signed in to this account is signed out on its next request. Nothing else changes; they sign in again as usual.</p></div></div>
+        <div class="action">
+          <button type="button" class="btn ghost" data-action="sign-out">Sign out everywhere</button>
+          <span class="sub" id="sign-out-result" role="status"></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><div><h2>Admin history</h2><p class="sub">Admin actions on this account, newest first.</p></div></div>
+        {% if history %}
+          <div class="table-wrap">
+            <table>
+              <tbody>
+                {% for row in history %}
+                  <tr>
+                    <td class="nowrap muted">{{ row.created_at.strftime('%m/%d/%Y %H:%M') }}</td>
+                    <td class="nowrap"><b>{{ row.action }}</b></td>
+                    <td class="mono">{{ row.before | tojson }} → {{ row.after | tojson }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="empty">No admin actions yet.</div>
+        {% endif %}
+      </section>
+      <p class="sub foot">Progress photos, body measurements and workout contents are left out of this page on purpose.</p>
+    {% endif %}
+  </div>
+{% endblock %}
+{% block head %}
+  <style>
+    .page.narrow { max-width: 960px; }
+    .crumb { font-size: 13px; margin-bottom: 10px; }
+    .crumb a { text-decoration: none; }
+    h1 .id { font-weight: 500; font-size: 18px; }
+    .cols { margin: 0 0 16px; }
+    .facts { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; padding: 12px 18px 16px; font-size: 13px; }
+    .facts dt { color: var(--ink-2); }
+    .facts dd { text-align: right; font-weight: 600; }
+    .action { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 4px 18px 16px; }
+    .btn { background: var(--accent); color: var(--accent-ink); border: none; border-radius: 8px; padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .btn.ghost { background: transparent; color: var(--critical-ink); border: 1px solid var(--critical); }
+    .btn:disabled { opacity: 0.6; cursor: default; }
+    .danger { margin-bottom: 16px; }
+    .foot { margin-top: 12px; }
+  </style>
+{% endblock %}
+{% block scripts %}
+  {% if user %}
+    <script>
+      document.querySelectorAll('[data-action]').forEach(btn => btn.addEventListener('click', async () => {
+        const action = btn.dataset.action;
+        const out = document.getElementById(action + '-result');
+        if (action === 'sign-out' && !confirm('Sign ' + {{ user.username|tojson }} + ' out on every device?')) return;
+        btn.disabled = true;
+        out.textContent = 'Working…';
+        try {
+          const res = await fetch('/admin/users/{{ user.id }}/' + action, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+          });
+          const data = await res.json();
+          if (!res.ok) { out.textContent = data.message || 'Failed.'; return; }
+          out.textContent = action === 'resync'
+            ? 'RevenueCat says ' + (data.is_premium ? 'premium' : 'not premium') + (data.changed ? '. Updated.' : '. Already matched.')
+            : 'Signed out everywhere.';
+          if (data.changed || action === 'sign-out') setTimeout(() => location.reload(), 1200);
+        } catch {
+          out.textContent = 'Network error.';
+        } finally {
+          btn.disabled = false;
+        }
+      }));
+    </script>
+  {% endif %}
+{% endblock %}

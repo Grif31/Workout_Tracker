@@ -8,7 +8,8 @@ from flask import Blueprint, Response, current_app, jsonify, render_template, re
 from limiter import limiter
 from models import (db, AdminAuditLog, AdminState, AiCallLog, ExerciseDBEntry, ExerciseDBThumbnail,
                     ExerciseTemplate, InsightFeedback, User, Workout)
-from utils import admin_charts, admin_dashboard, admin_stats, exercisedb, library_edits, premium, system_status
+from utils import (admin_charts, admin_dashboard, admin_stats, admin_users, exercisedb, library_edits, premium,
+                   system_status)
 from utils.admin_audit import audit
 
 # Thumbnails on the search panel are small; the saved file stays at 360, what
@@ -291,6 +292,56 @@ def admin_sync_all_premium():
               result['changed'])
     db.session.commit()
     return jsonify({'message': 'ok', **result})
+
+
+@admin_bp.get('/users')
+@_require_admin
+def admin_users_search():
+    q = request.args.get('q', '')
+    return render_template('admin/users.html', active='users', q=q, results=admin_users.search(q),
+                           limit=admin_users.SEARCH_LIMIT)
+
+
+@admin_bp.get('/users/<int:user_id>')
+@_require_admin
+def admin_user_detail(user_id):
+    user = db.session.get(User, user_id)
+    if not user:
+        return render_template('admin/user.html', active='users', user=None), 404
+    history = (AdminAuditLog.query.filter_by(target_type='user', target_id=user.id)
+               .order_by(AdminAuditLog.created_at.desc(), AdminAuditLog.id.desc()).limit(20).all())
+    return render_template('admin/user.html', active='users', user=user,
+                           s=admin_users.summary(user), history=history, enforced=premium.enforced())
+
+
+@admin_bp.post('/users/<int:user_id>/resync')
+@_require_admin
+@_admin_write
+def admin_user_resync(user_id):
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'message': 'Not found'}), 404
+    if not os.environ.get('REVENUECAT_SECRET_KEY'):
+        return jsonify({'message': 'REVENUECAT_SECRET_KEY not configured on server'}), 503
+    active, changed = admin_users.resync_premium(user)
+    if active is None:
+        return jsonify({'message': 'RevenueCat did not answer. Nothing changed.'}), 502
+    db.session.commit()
+    return jsonify({'message': 'ok', 'is_premium': active, 'changed': changed})
+
+
+@admin_bp.post('/users/<int:user_id>/sign-out')
+@_require_admin
+@_admin_write
+def admin_user_sign_out(user_id):
+    """Signs the account out everywhere. Their data is untouched; they sign
+    in again with their usual method."""
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'message': 'Not found'}), 404
+    admin_users.force_sign_out(user)
+    db.session.commit()
+    return jsonify({'message': 'ok', 'token_version': user.token_version})
 
 
 @admin_bp.get('/exercises')

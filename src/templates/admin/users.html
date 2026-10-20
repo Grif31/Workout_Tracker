@@ -1,0 +1,54 @@
+{% extends "admin/base.html" %}
+{% block title %}Users{% endblock %}
+{% block content %}
+  <div class="page">
+    <div class="page-head">
+      <div>
+        <h1>Users</h1>
+        <p class="sub">Search by email, username or id.</p>
+      </div>
+    </div>
+    <form class="search-form" method="get" role="search">
+      <input type="search" name="q" value="{{ q }}" placeholder="name@example.com, username or #42" autofocus aria-label="Search users">
+      <button type="submit" class="btn">Search</button>
+    </form>
+    {% if q %}
+      <section class="card">
+        {% if results %}
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>User</th><th>Email</th><th>Sign-in</th><th>Premium</th></tr></thead>
+              <tbody>
+                {% for u in results %}
+                  <tr>
+                    <td class="nowrap"><a href="{{ url_for('admin.admin_user_detail', user_id=u.id) }}"><b>{{ u.username }}</b></a> <span class="muted">#{{ u.id }}</span></td>
+                    <td>{{ u.email }}</td>
+                    <td class="nowrap muted">{{ 'Apple or Google' if u.is_social_only else 'Password' }}</td>
+                    <td class="nowrap">{% if u.is_premium %}<span class="status good">Premium</span>{% else %}<span class="muted">Free</span>{% endif %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if results|length >= limit %}<p class="sub more">Showing the first {{ limit }}. Search for something more specific.</p>{% endif %}
+        {% else %}
+          <div class="empty">No user matches "{{ q }}".</div>
+        {% endif %}
+      </section>
+    {% endif %}
+  </div>
+{% endblock %}
+{% block head %}
+  <style>
+    .search-form { display: flex; gap: 8px; margin-bottom: 16px; max-width: 560px; }
+    .search-form input {
+      flex: 1; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px;
+      color: var(--ink); padding: 9px 12px; font: inherit; font-size: 14px;
+    }
+    .search-form input:focus { outline: none; border-color: var(--accent); }
+    .btn { background: var(--accent); color: var(--accent-ink); border: none; border-radius: 8px; padding: 9px 16px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+    td a { color: var(--ink); text-decoration: none; }
+    td a:hover { color: var(--accent); }
+    .more { padding: 10px 18px; }
+  </style>
+{% endblock %}

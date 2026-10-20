@@ -147,7 +147,7 @@
                 <tbody>
                   {% for u in top_users %}
                     <tr>
-                      <td>{{ u.username or 'unknown' }} <span class="muted">#{{ u.user_id }}</span></td>
+                      <td><a href="{{ url_for('admin.admin_user_detail', user_id=u.user_id) }}">{{ u.username or 'unknown' }}</a> <span class="muted">#{{ u.user_id }}</span></td>
                       <td class="num">{{ u.calls }}</td>
                       <td class="num">{{ money(u.cost) }}</td>
                     </tr>

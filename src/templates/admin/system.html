@@ -88,7 +88,7 @@
               <thead><tr><th>User</th><th>Email</th></tr></thead>
               <tbody>
                 {% for u in premium_users %}
-                  <tr><td class="nowrap">{{ u.username }} <span class="muted">#{{ u.id }}</span></td><td>{{ u.email }}</td></tr>
+                  <tr><td class="nowrap"><a href="{{ url_for('admin.admin_user_detail', user_id=u.id) }}">{{ u.username }}</a> <span class="muted">#{{ u.id }}</span></td><td>{{ u.email }}</td></tr>
                 {% endfor %}
               </tbody>
             </table>

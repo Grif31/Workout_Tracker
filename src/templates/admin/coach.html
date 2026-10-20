@@ -191,7 +191,7 @@
                 <div class="wrong-body">{{ r.body }}</div>
                 <div class="wrong-meta">
                   <span class="chip">{{ r.insight_type or 'untyped' }}</span>
-                  <span>User #{{ r.user_id }}{% if usernames.get(r.user_id) %} · {{ usernames[r.user_id] }}{% endif %}</span>
+                  <a href="{{ url_for('admin.admin_user_detail', user_id=r.user_id) }}">{{ usernames.get(r.user_id) or 'User' }} #{{ r.user_id }}</a>
                   <span>{{ r.created_at.strftime('%m/%d/%Y') }}</span>
                 </div>
               </article>
