@@ -59,7 +59,7 @@ export default function RankUpCard({ rank, previousRank, rankData, selectedFrame
 
   const greekScore = rankData?.greek_score ?? null;
   const shown = swapped ? rank : (previousRank ?? rank);
-  const { band, next } = bandOf(shown);
+  const { next } = bandOf(shown);
   const color = GREEK_RANK_COLORS[shown] ?? GREEK_RANK_COLORS.Neophyte;
   const oldColor = GREEK_RANK_COLORS[previousRank ?? rank] ?? GREEK_RANK_COLORS.Neophyte;
   const newColor = GREEK_RANK_COLORS[rank] ?? GREEK_RANK_COLORS.Neophyte;

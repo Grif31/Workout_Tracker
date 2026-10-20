@@ -12,10 +12,6 @@ jest.mock('react-native-gesture-handler', () => {
     PanGestureHandler: ({ children }: any) => <View>{children}</View>,
   };
 });
-jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => {
-  const { View } = require('react-native');
-  return ({ children }: any) => <View>{children}</View>;
-});
 jest.mock('@react-native-community/datetimepicker', () => 'DateTimePicker');
 jest.mock('../components/ExerciseList', () => () => null);
 jest.mock('../components/NewExerciseForm', () => () => null);

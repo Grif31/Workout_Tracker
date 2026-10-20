@@ -32,12 +32,6 @@ export const HEALTH_ACTIVITY: Record<Activity, CardioActivity> = {
   Hike: 'hiking',
 };
 
-/** The activity a saved GPS exercise was, from its library name ("Running"), if it was one */
-export function activityForExerciseName(name: string | undefined): Activity | null {
-  const found = (Object.keys(ACTIVITY_TEMPLATE_NAME) as Activity[]).find(a => ACTIVITY_TEMPLATE_NAME[a] === name);
-  return found ?? null;
-}
-
 /**
  * When a run actually happened, for Health: its first and last fix. The save
  * can come long after the run stopped (the save sheet waited, or the app was

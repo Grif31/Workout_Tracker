@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  FlatList, Dimensions,
+  FlatList,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,8 +22,6 @@ type Props = {
   };
   route?: object;
 };
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Effort earns the score. Performance adds no points; it unlocks the top two
 // ranks, so its row shows what it does instead of a weight.

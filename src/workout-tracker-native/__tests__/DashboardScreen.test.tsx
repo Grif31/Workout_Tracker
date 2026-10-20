@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert } from 'react-native';
-import { render, waitFor, fireEvent, act, cleanup } from '@testing-library/react-native';
+import { render, waitFor, fireEvent, act } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { enqueueWorkout, flushQueue, initPendingCount } from '../utils/offlineQueue';
 import { registerToastCallback } from '../utils/toast';

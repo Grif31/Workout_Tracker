@@ -3,7 +3,6 @@
  * No jest.mock() calls here — keep this side-effect free so it can be
  * imported without surprising hoisting behaviour.
  */
-import React from 'react';
 
 // ── Mock user / auth context values ──────────────────────────────────────────
 

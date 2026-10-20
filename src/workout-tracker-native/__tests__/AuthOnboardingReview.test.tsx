@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { mockFetch, createMockNavigation, createMockRoute } from './testUtils';
 import { needsOnboarding, markOnboardingComplete } from '../utils/onboarding';

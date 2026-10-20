@@ -23,10 +23,6 @@ def nice_scale(value, max_ticks=5):
     return round(step * math.ceil(value / step - 1e-9), 10), step
 
 
-def nice_max(value):
-    return nice_scale(value)[0]
-
-
 def _ticks(y_max, step=None):
     step = step or y_max / 4
     n = int(round(y_max / step))

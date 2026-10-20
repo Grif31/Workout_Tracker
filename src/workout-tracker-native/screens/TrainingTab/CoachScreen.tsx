@@ -1687,7 +1687,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   metricDivider: { width: 1, backgroundColor: colors.border, marginVertical: spacing.sm },
   metricText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
   metricSlider: { position: 'absolute', bottom: 0, height: 2, backgroundColor: colors.accent, borderRadius: 1 },
-  scoreCardTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, marginBottom: 3 },
   axisLabel: { fontSize: 9, color: colors.textSecondary },
 
   barTopLabel: { fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textPrimary, marginBottom: 2, textAlign: 'center' },
@@ -1783,7 +1782,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1,
     borderTopColor: colors.border, borderRightColor: colors.border, borderBottomColor: colors.border,
   },
-  moreInsightsRow: { alignItems: 'center' },
   insightIconWrap: { width: 32, alignItems: 'center', paddingTop: 2 },
   insightTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs },
   insightBody: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 18 },
@@ -1798,7 +1796,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   insightReasonChipSelected: { borderColor: colors.accent, backgroundColor: colors.accent + '15' },
   insightReasonText: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
   freeLimitText: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
-  moreInsightsText: { flex: 1, fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
   insightsEmpty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
   insightsEmptyText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center', maxWidth: 240 },
   upgradeBanner: {

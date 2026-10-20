@@ -1,7 +1,7 @@
 import polylineLib from '@mapbox/polyline';
 import { haversineKm } from '../utils/bestEfforts';
 import {
-  activityForExerciseName, HEALTH_ACTIVITY, runWindow,
+  HEALTH_ACTIVITY, runWindow,
   afterGap, applyFix, buildGpsRunBody, emptyRun, fmtClock, runElapsedSeconds, MAX_ACCURACY_M, type Fix, type RunState,
 } from '../utils/gpsRun';
 
@@ -248,10 +248,8 @@ describe('runWindow, for Health', () => {
 });
 
 describe('activities in Health', () => {
-  it('maps each activity to its Health kind, and back from a saved exercise name', () => {
+  it('maps each activity to its Health kind', () => {
     expect(HEALTH_ACTIVITY).toEqual({ Run: 'running', Cycle: 'cycling', Walk: 'walking', Hike: 'hiking' });
-    expect(activityForExerciseName('Hiking')).toBe('Hike');
-    expect(activityForExerciseName('Bench Press')).toBeNull();
   });
 });
 

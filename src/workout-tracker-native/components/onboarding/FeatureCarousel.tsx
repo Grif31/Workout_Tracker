@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, Image, ImageSourcePropType, Animated, useWindowDimensions,
+  View, Text, StyleSheet, Image, ImageSourcePropType, Animated, useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';

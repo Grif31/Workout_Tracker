@@ -1,5 +1,5 @@
 ﻿import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, waitFor } from '@testing-library/react-native';
 import { mockFetch, createMockNavigation, createMockRoute } from './testUtils';
 import RoutineDetailScreen from '../screens/TrainingTab/RoutineDetailScreen';
 

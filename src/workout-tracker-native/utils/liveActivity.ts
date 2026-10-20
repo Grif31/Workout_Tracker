@@ -84,7 +84,6 @@ function controller<P extends { logo?: string }>(load: () => Factory<P>, url: st
     // Also counts one left running by an earlier launch: a workout session
     // restores without WorkoutLog mounting, and the notification must not double it.
     isActive: () => active || count() > 0,
-    count,
   };
 }
 
@@ -96,7 +95,6 @@ const run = controller<GpsLiveActivityProps>(() => require('../widgets/GpsLiveAc
 export const startOrUpdateLiveActivity = workout.startOrUpdate;
 export const endLiveActivity = workout.end;
 export const isLiveActivityActive = workout.isActive;
-export const liveActivityCount = workout.count;
 
 // The GPS run's activity
 export const startOrUpdateRunActivity = run.startOrUpdate;

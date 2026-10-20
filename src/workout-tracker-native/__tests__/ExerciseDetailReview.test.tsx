@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import { createMockNavigation, createMockRoute } from './testUtils';
 import ExerciseDetailScreen from '../screens/ExercisesTab/ExerciseDetailScreen';
 import { computeChartYAxisRange } from '../utils/prFormat';

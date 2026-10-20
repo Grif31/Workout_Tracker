@@ -1,8 +1,6 @@
 import React from 'react';
-import { render, waitFor, fireEvent, act, cleanup } from '@testing-library/react-native';
+import { render, waitFor, fireEvent } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { enqueueWorkout, flushQueue, initPendingCount } from '../utils/offlineQueue';
-import { registerToastCallback } from '../utils/toast';
 import { mockFetchSequence, createMockNavigation, createMockRoute } from './testUtils';
 import DashboardScreen from '../screens/DashboardTab/DashboardScreen';
 
