@@ -104,6 +104,14 @@ export function fmtHold(minutes: number): string {
   return secs < 60 ? `${secs}s` : fmtCountdown(secs);
 }
 
+// "45 min" / "1h 5m" — a duration in minutes. Rounded first so 59.7 reads
+// "1h 0m" rather than "60 min".
+export function fmtMinutes(minutes: number): string {
+  const total = Math.round(minutes);
+  const h = Math.floor(total / 60);
+  return h > 0 ? `${h}h ${total % 60}m` : `${total} min`;
+}
+
 // Blank set matching the exercise's logging mode
 export const makeInitialSet = (ex: { exercise_type?: string; equipment?: string }): WorkoutSet =>
   ex.exercise_type === 'cardio'

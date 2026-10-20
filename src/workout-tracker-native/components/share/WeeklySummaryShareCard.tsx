@@ -13,6 +13,7 @@ import {
 import { typography } from '../../theme/typography';
 import { SHARE_TEXT } from '../../constants/shareCardTheme';
 import StreakFlame from '../StreakFlame';
+import { fmtMinutes } from '../workout/types';
 
 type WeeklySummaryShareCardProps = {
   dateRange: string;
@@ -33,11 +34,6 @@ type WeeklySummaryShareCardProps = {
   accentColor: string;
 };
 
-function fmtDurationMin(min: number): string {
-  const h = Math.floor(min / 60);
-  const m = Math.round(min % 60);
-  return h > 0 ? `${h}h ${m}m` : `${m} min`;
-}
 
 const WeeklySummaryShareCard = forwardRef<View, WeeklySummaryShareCardProps>(
   ({
@@ -71,7 +67,7 @@ const WeeklySummaryShareCard = forwardRef<View, WeeklySummaryShareCardProps>(
     if (hasDistance && (totalVolume > 0 || totalReps > 0)) {
       statItems.push({ value: distance!.toFixed(1), label: distanceUnit === 'mi' ? 'Miles' : 'Km' });
     }
-    statItems.push({ value: fmtDurationMin(totalDurationMin), label: 'Training Time' });
+    statItems.push({ value: fmtMinutes(totalDurationMin), label: 'Training Time' });
 
     return (
       <ShareCardFrame ref={ref} accentColor={accentColor}>

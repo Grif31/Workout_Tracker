@@ -10,20 +10,13 @@ import { navigationRef } from '../navigation/navigationRef';
 import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../utils/units';
-import { runElapsedSeconds } from '../utils/gpsRun';
+import { fmtClock, runElapsedSeconds } from '../utils/gpsRun';
 
 // Stands in for GPSCardioScreen while a run is minimized, the way the workout
 // mini bar stands in for WorkoutLog. Open goes back to the map; Discard asks
 // first, since a tracked route can't be re-walked. Pause and Stop stay on the
 // screen.
 
-function fmtElapsed(secs: number): string {
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = secs % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
 
 export default function MiniRunBar() {
   const { colors } = useTheme();
@@ -105,7 +98,7 @@ export default function MiniRunBar() {
             {recovered ? `Unsaved ${activity}` : paused ? `${activity} paused` : activity}
           </Text>
           <Text style={[styles.sub, { color: colors.textSecondary }]} numberOfLines={1}>
-            {`${distance} ${unit} · ${fmtElapsed(elapsed)}`}
+            {`${distance} ${unit} · ${fmtClock(elapsed)}`}
           </Text>
         </View>
         <View style={[styles.btn, { backgroundColor: colors.accent }]}>

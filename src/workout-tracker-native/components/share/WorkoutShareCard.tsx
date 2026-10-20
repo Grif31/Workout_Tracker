@@ -14,7 +14,7 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { SHARE_TEXT } from '../../constants/shareCardTheme';
 import { PR_TYPE_LABELS } from '../../utils/prFormat';
-import { fmtHold } from '../workout/types';
+import { fmtHold, fmtMinutes } from '../workout/types';
 
 export type ShareExercise = {
   name: string;
@@ -58,11 +58,6 @@ type WorkoutShareCardProps = {
   accentColor: string;
 };
 
-function fmtDurationMin(min: number): string {
-  const h = Math.floor(min / 60);
-  const m = Math.round(min % 60);
-  return h > 0 ? `${h}h ${m}m` : `${m} min`;
-}
 
 function bestSetLabel(set: { reps: number; weight: number }, unit: string): string {
   // weight 0 = bodyweight set
@@ -87,7 +82,7 @@ const WorkoutShareCard = forwardRef<View, WorkoutShareCardProps>(
 
     const statItems: ShareCardStatItem[] = [];
     if (duration != null && duration > 0) {
-      statItems.push({ value: fmtDurationMin(duration), label: 'Duration' });
+      statItems.push({ value: fmtMinutes(duration), label: 'Duration' });
     }
     statItems.push({ value: totalSets, label: 'Sets' });
     // Not repeated under the headline when reps are the headline

@@ -32,7 +32,7 @@ import { GREEK_RANK_CACHED_KEY, PROFILE_FRAME_RANK_KEY } from '../../constants/s
 import { type GreekRankData } from '../../utils/greekRank';
 import { PR_TYPE_LABELS, PR_TYPE_ORDER, fmtMinSec } from '../../utils/prFormat';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toExactVolume, toKm, type DistanceUnit, type WeightUnit } from '../../utils/units';
-import { fmtHold } from '../../components/workout/types';
+import { fmtHold, fmtMinutes } from '../../components/workout/types';
 import { usePurchase } from '../../context/PurchaseContext';
 import { writeWidgetGreekRank } from '../../utils/widgetData';
 
@@ -56,11 +56,6 @@ type WorkoutData = {
 // Rep-record and best-time PRs come several to a lift; the rest come one at a time
 const PRS_SHOWN_BEFORE_MORE = 3;
 
-function fmtMinutes(min: number): string {
-  const h = Math.floor(min / 60);
-  const m = Math.round(min % 60);
-  return h > 0 ? `${h}h ${m}m` : `${m} min`;
-}
 
 const toDistanceUnitKm = (value: number, unit?: string) => toKm(value, unit === 'mi' ? 'mi' : 'km');
 

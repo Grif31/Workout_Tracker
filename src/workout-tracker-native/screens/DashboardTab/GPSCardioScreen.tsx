@@ -32,7 +32,7 @@ import {
   currentPaceMinPerKm, isCycling, speedInUnit, speedLabel, MIN_PACE_DISTANCE_KM,
 } from '../../utils/gpsMetrics';
 import {
-  ACTIVITIES, ACTIVITY_TEMPLATE_NAME, HEALTH_ACTIVITY, buildGpsRunBody, runElapsedSeconds, runWindow, type Activity,
+  ACTIVITIES, ACTIVITY_TEMPLATE_NAME, HEALTH_ACTIVITY, buildGpsRunBody, fmtClock, runElapsedSeconds, runWindow, type Activity,
 } from '../../utils/gpsRun';
 import { syncFinishedWorkout } from '../../utils/healthSync';
 import { useGpsRun } from '../../context/GpsRunContext';
@@ -72,13 +72,6 @@ async function resolveCardioTemplateId(
   return null;
 }
 
-function fmtElapsed(totalSec: number): string {
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
 
 class MapErrorBoundary extends React.Component<
   { children: React.ReactNode; fallback: React.ReactNode },
@@ -449,7 +442,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
           <>
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtElapsed(elapsedSec)}</Text>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtClock(elapsedSec)}</Text>
                 <Text style={styles.statLabel}>Time</Text>
               </View>
               <View style={styles.statSep} />
@@ -485,7 +478,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
           <>
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtElapsed(elapsedSec)}</Text>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtClock(elapsedSec)}</Text>
                 <Text style={styles.statLabel}>Time</Text>
               </View>
               <View style={styles.statSep} />
@@ -530,7 +523,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
             <View style={styles.modalStats}>
               <View style={styles.modalStatItem}>
-                <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>{fmtElapsed(elapsedSec)}</Text>
+                <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>{fmtClock(elapsedSec)}</Text>
                 <Text style={[styles.modalStatLabel, { color: colors.textSecondary }]}>Duration</Text>
               </View>
               <View style={styles.modalStatItem}>

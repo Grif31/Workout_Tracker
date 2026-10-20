@@ -7,6 +7,7 @@ import { postLiveWorkoutNotification, cancelLiveWorkoutNotification } from '../u
 import { endLiveActivity, isLiveActivityActive } from '../utils/liveActivity';
 import MiniRunBar from '../components/MiniRunBar';
 import { useGpsRunStatus } from '../context/GpsRunContext';
+import { fmtElapsed } from '../components/workout/types';
 import { currentExerciseName } from '../utils/liveActivityProps';
 import { onPendingCountChange, initPendingCount, flushQueue, announceFlushResult } from '../utils/offlineQueue';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -63,14 +64,6 @@ const FadedExercisesStack = withScreenFade(ExercisesStack);
 const FadedTrainingStack  = withScreenFade(TrainingStack);
 const FadedProfileStack   = withScreenFade(ProfileStack);
 
-function fmtElapsed(secs: number): string {
-  if (secs < 60) return `${secs}s`;
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  if (m < 60) return `${m}:${s.toString().padStart(2, '0')}`;
-  const h = Math.floor(m / 60);
-  return `${h}h ${(m % 60)}m`;
-}
 
 function MiniWorkoutBar() {
   const { colors } = useTheme();

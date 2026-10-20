@@ -2,7 +2,7 @@ import polylineLib from '@mapbox/polyline';
 import { haversineKm } from '../utils/bestEfforts';
 import {
   activityForExerciseName, HEALTH_ACTIVITY, runWindow,
-  afterGap, applyFix, buildGpsRunBody, emptyRun, runElapsedSeconds, MAX_ACCURACY_M, type Fix, type RunState,
+  afterGap, applyFix, buildGpsRunBody, emptyRun, fmtClock, runElapsedSeconds, MAX_ACCURACY_M, type Fix, type RunState,
 } from '../utils/gpsRun';
 
 const T0 = Date.UTC(2026, 9, 8, 15, 0, 0);
@@ -273,5 +273,13 @@ describe('checkpointIntervalMs', () => {
 
   it('never waits longer than a minute, the most a kill can cost', () => {
     expect(checkpointIntervalMs(50_000)).toBe(CHECKPOINT_MAX_MS);
+  });
+});
+
+describe('fmtClock', () => {
+  it('shows m:ss under an hour and h:mm:ss above', () => {
+    expect(fmtClock(5)).toBe('0:05');
+    expect(fmtClock(725)).toBe('12:05');
+    expect(fmtClock(3909)).toBe('1:05:09');
   });
 });

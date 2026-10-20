@@ -1,6 +1,6 @@
 import {
   isBodyweight, usesBodyweightForVolume, bodyweightLoadFactor, isDuration,
-  fmtHold, fmtElapsed, fmtCountdown, makeInitialSet, makeUid,
+  fmtHold, fmtElapsed, fmtCountdown, fmtMinutes, makeInitialSet, makeUid,
 } from '../components/workout/types';
 
 describe('isBodyweight', () => {
@@ -105,5 +105,18 @@ describe('makeInitialSet', () => {
   it('gives every set a unique uid', () => {
     const uids = new Set(Array.from({ length: 200 }, () => makeUid()));
     expect(uids.size).toBe(200);
+  });
+});
+
+describe('fmtMinutes', () => {
+  it('writes minutes under an hour and hours with minutes above', () => {
+    expect(fmtMinutes(45)).toBe('45 min');
+    expect(fmtMinutes(65)).toBe('1h 5m');
+    expect(fmtMinutes(120)).toBe('2h 0m');
+  });
+
+  it('rounds before splitting, so it never shows 60 minutes', () => {
+    expect(fmtMinutes(59.7)).toBe('1h 0m');
+    expect(fmtMinutes(119.6)).toBe('2h 0m');
   });
 });

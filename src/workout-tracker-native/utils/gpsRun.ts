@@ -137,6 +137,15 @@ export function applyFix(state: RunState, loc: Fix): RunState {
 /** The run after a pause or resume: the next fix is across a gap and the climb anchor starts over. */
 export const afterGap = (state: RunState): RunState => ({ ...state, skipNext: true, climb: freshClimb() });
 
+/** "12:05" / "1:05:09", the run's elapsed time as a clock. */
+export function fmtClock(totalSec: number): string {
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 /**
  * Wall-clock elapsed seconds: the time banked before the running segment plus
  * the segment so far. Intervals get throttled or suspended and counting ticks

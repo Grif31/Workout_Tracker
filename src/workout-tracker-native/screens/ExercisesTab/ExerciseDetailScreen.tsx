@@ -23,7 +23,7 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { toDisplayWeight, toDisplayVolume, convertWeight, WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayPace, toKm } from '../../utils/units';
 import { computeChartYAxisRange, computeBarChartMax, computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH, fmtMinSec } from '../../utils/prFormat';
-import { fmtHold } from '../../components/workout/types';
+import { fmtHold, fmtMinutes } from '../../components/workout/types';
 import { fmtPaceValue } from '../../utils/cardioFormat';
 import { parseApiDate } from '../../utils/date';
 import MuscleDiagram from '../../components/MuscleDiagram';
@@ -114,11 +114,6 @@ type HoldSession = { date: string; workout_name: string; sets: { cardio_duration
 /** How a chart writes its values: axis/tooltip text, unit, and which way is better */
 type ChartSpec = { suffix: string; fmt: (v: number) => string; lowerIsBetter?: boolean };
 
-function fmtMinutes(min: number): string {
-  const h = Math.floor(min / 60);
-  const m = Math.round(min % 60);
-  return h > 0 ? `${h}h ${m}m` : `${m} min`;
-}
 
 const exerciseDescriptions: Record<string, string> = {
   Chest:
