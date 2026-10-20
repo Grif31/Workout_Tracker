@@ -125,6 +125,17 @@ describe('premium status with RevenueCat configured', () => {
     expect(result.current.isPremium).toBe(false);
   });
 
+  it('keeps the same value when only the profile changes, so Premium screens skip that render', async () => {
+    signIn(7);
+    const { result, rerender } = renderPurchase();
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const before = result.current;
+
+    mockUseAuth.mockReturnValue({ user: { id: 7, bodyweight: 180 } });
+    rerender({});
+    expect(result.current).toBe(before);
+  });
+
   describe('telling the server', () => {
     it('syncs once at sign-in, and again only when the answer changes', async () => {
       rc.logIn.mockResolvedValue({ customerInfo: FREE });

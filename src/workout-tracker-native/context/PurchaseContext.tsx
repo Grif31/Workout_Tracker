@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import Purchases, {
   INTRO_ELIGIBILITY_STATUS, type CustomerInfo, type PurchasesOfferings, type PurchasesPackage,
@@ -234,16 +234,15 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     }
   }, [preview]);
 
-  return (
-    <PurchaseContext.Provider
-      value={{
-        isPremium, subscription, offerings, offeringsState, reloadOfferings,
-        checkTrialEligibility, purchasePackage, restorePurchases, loading,
-      }}
-    >
-      {children}
-    </PurchaseContext.Provider>
-  );
+  // Memoized because this provider re-renders on every Auth change (it reads
+  // useAuth), and a fresh value would re-render every usePurchase screen with it
+  const value = useMemo(() => ({
+    isPremium, subscription, offerings, offeringsState, reloadOfferings,
+    checkTrialEligibility, purchasePackage, restorePurchases, loading,
+  }), [isPremium, subscription, offerings, offeringsState, reloadOfferings,
+    checkTrialEligibility, purchasePackage, restorePurchases, loading]);
+
+  return <PurchaseContext.Provider value={value}>{children}</PurchaseContext.Provider>;
 }
 
 export const usePurchase = () => useContext(PurchaseContext);
