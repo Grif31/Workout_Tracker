@@ -154,9 +154,14 @@ describe('WorkoutLog regressions', () => {
 
   describe('PR banner matches what the server will save', () => {
     // Best ever: 320 x 1, and an estimated 1RM of 330 (from 300 x 3)
+    // WorkoutLog reads every exercise's PRs from the one full list
     const prRoutes: Route = url =>
-      url.endsWith('/api/personal-records/7')
-        ? { max_weight: 320, estimated_1rm: 330, per_weight_reps: [{ weight: 300, max_reps: 3 }] }
+      url.endsWith('/api/personal-records')
+        ? [
+            { pr_type: 'max_weight', exercise_template_id: 7, value: 320, weight_context: null },
+            { pr_type: 'estimated_1rm', exercise_template_id: 7, value: 330, weight_context: null },
+            { pr_type: 'max_reps', exercise_template_id: 7, value: 3, weight_context: 300 },
+          ]
         : undefined;
 
     async function checkOff(sets: any[]) {
@@ -165,7 +170,7 @@ describe('WorkoutLog regressions', () => {
         <WorkoutLog prefill={{ name: 'Push', notes: '', exercises: [bench(sets)] } as any} onSubmit={jest.fn()} onCancel={jest.fn()} />,
       );
       // currentPR arrives with the history fetch; checking off before it lands can't fire a banner
-      await waitFor(() => expect((global.fetch as jest.Mock).mock.calls.some(([u]) => String(u).endsWith('/api/personal-records/7'))).toBe(true));
+      await waitFor(() => expect((global.fetch as jest.Mock).mock.calls.some(([u]) => String(u).endsWith('/api/personal-records'))).toBe(true));
       await new Promise(r => setTimeout(r, 0));
       fireEvent.press(utils.getByLabelText('Set 1 done'));
       return utils;
@@ -188,6 +193,26 @@ describe('WorkoutLog regressions', () => {
       const { queryByText } = await checkOff([{ reps: 1, weight: 200, set_type: 'N' }]);
       expect(queryByText('Most Reps at Weight')).toBeNull();
     });
+  });
+
+  it("opens a template with one PR request, not one per exercise, and still fills each exercise's PRs", async () => {
+    mockServer(url => url.endsWith('/api/personal-records')
+      ? [{ pr_type: 'max_weight', exercise_template_id: 8, value: 140, weight_context: null }]
+      : undefined);
+    const exercises = [7, 8, 9].map(id => ({ ...bench([{ reps: 5, weight: 100, set_type: 'N' }]), name: `Lift ${id}`, exercise_template_id: id }));
+    render(<WorkoutLog prefill={{ name: 'Push', notes: '', exercises } as any} onSubmit={jest.fn()} onCancel={jest.fn()} />);
+
+    const calls = () => (global.fetch as jest.Mock).mock.calls.map(([u]) => String(u));
+    await waitFor(() => expect(calls().filter(u => u.includes('/last-session'))).toHaveLength(3));
+    await new Promise(r => setTimeout(r, 0));
+    expect(calls().filter(u => /\/api\/personal-records(\/|$)/.test(u))).toEqual([expect.stringMatching(/\/api\/personal-records$/)]);
+  });
+
+  it("falls back to each exercise's own PR lookup when the full list fails", async () => {
+    mockServer(url => url.endsWith('/api/personal-records') ? Promise.reject(new TypeError('Network request failed')) : undefined);
+    render(<WorkoutLog prefill={{ name: 'Push', notes: '', exercises: [bench([{ reps: 5, weight: 100, set_type: 'N' }])] } as any}
+      onSubmit={jest.fn()} onCancel={jest.fn()} />);
+    await waitFor(() => expect((global.fetch as jest.Mock).mock.calls.some(([u]) => String(u).endsWith('/api/personal-records/7'))).toBe(true));
   });
 
   it("keeps a set the user logs while last session's sets are still loading", async () => {

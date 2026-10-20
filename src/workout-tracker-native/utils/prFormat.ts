@@ -321,3 +321,25 @@ export function nearPrHint(
   if (diff / maxWeightPr > 0.05) return null;
   return `${round1(diff)} ${unit} from your ${maxWeightPr} ${unit} PR`;
 }
+
+/** A row of GET /api/personal-records */
+export type PrRow = { pr_type: string; exercise_template_id?: number; value: number; weight_context?: number | null };
+
+/**
+ * One exercise's PRs, in the shape GET /api/personal-records/<id> returns,
+ * picked out of the full list WorkoutLog already holds: a template of six
+ * exercises costs one request instead of seven.
+ */
+export function exercisePrSummary(rows: PrRow[], templateId: number) {
+  const mine = rows.filter(r => r.exercise_template_id === templateId);
+  const one = (type: string) => mine.find(r => r.pr_type === type)?.value ?? null;
+  return {
+    max_weight: one('max_weight'),
+    estimated_1rm: one('estimated_1rm'),
+    max_duration: one('max_duration'),
+    per_weight_reps: mine
+      .filter(r => r.pr_type === 'max_reps' && r.weight_context != null && r.weight_context >= 0)
+      .map(r => ({ weight: r.weight_context as number, max_reps: r.value }))
+      .sort((a, b) => b.weight - a.weight),
+  };
+}

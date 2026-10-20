@@ -33,7 +33,7 @@ import NewExerciseForm from '../components/NewExerciseForm';
 import { PrefillWorkoutData } from './WorkoutDetails';
 import { muscleGroups } from '../constants/muscleGroups';
 import { useWorkoutSession, sessionElapsedSeconds } from '../context/WorkoutSessionContext';
-import { nearPrHint } from '../utils/prFormat';
+import { exercisePrSummary, nearPrHint, type PrRow } from '../utils/prFormat';
 import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../utils/templatePrefill';
 import { muscleSetCounts, sameMuscleCounts, type MuscleSetCount } from '../utils/muscleSetCounts';
 import { endLiveActivity, isLiveActivityActive, startOrUpdateLiveActivity } from '../utils/liveActivity';
@@ -263,6 +263,18 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   // Current max-weight PR per exercise template, fetched once on open —
   // powers the near-PR hint under the focused set row
   const [maxWeightPrs, setMaxWeightPrs] = useState<Record<number, number>>({});
+  // GET /api/personal-records, requested once: the near-PR hint and each added
+  // exercise's PRs both read it, instead of a request per exercise. Kept as the
+  // promise so an exercise added before it lands waits for it. null = it failed.
+  const allPrsRef = useRef<Promise<PrRow[] | null> | null>(null);
+  const loadAllPrs = () => {
+    if (!allPrsRef.current) {
+      allPrsRef.current = apiFetch('/api/personal-records')
+        .then(res => (res.ok ? res.json() : null))
+        .catch(() => null);
+    }
+    return allPrsRef.current;
+  };
 
   const [prBanner, setPrBanner] = useState<{ name: string; type: string } | null>(null);
   const prAnim = useRef(new Animated.Value(0)).current;
@@ -1164,9 +1176,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     let alive = true;
     (async () => {
       try {
-        const res = await apiFetch('/api/personal-records');
-        if (!res.ok || !alive) return;
-        const rows: { pr_type: string; exercise_template_id?: number; value: number }[] = await res.json();
+        const rows = await loadAllPrs();
+        if (!rows || !alive) return;
         const map: Record<number, number> = {};
         for (const r of rows) {
           if (r.pr_type === 'max_weight' && r.exercise_template_id) map[r.exercise_template_id] = r.value;
@@ -1369,14 +1380,20 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       const tid = entry.exercise_template_id;
       const params = new URLSearchParams({ name: entry.name });
       if (tid) params.set('exercise_template_id', String(tid));
-      const [lastRes, prRes] = await Promise.all([
+      const [lastRes, allPrs] = await Promise.all([
         apiFetch(`/api/stats/exercise/last-session?${params}`),
-        tid ? apiFetch(`/api/personal-records/${tid}`) : Promise.resolve(null),
+        tid ? loadAllPrs() : Promise.resolve(null),
       ]);
       let prData: ExerciseEntry['currentPR'] | undefined;
-      if (prRes?.ok) {
-        const pr = await prRes.json();
-        prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps, max_duration: pr.max_duration };
+      if (tid && allPrs) {
+        prData = exercisePrSummary(allPrs, tid);
+      } else if (tid) {
+        // The full list failed: one exercise's own lookup still beats no PRs
+        const prRes = await apiFetch(`/api/personal-records/${tid}`);
+        if (prRes.ok) {
+          const pr = await prRes.json();
+          prData = { max_weight: pr.max_weight, estimated_1rm: pr.estimated_1rm, per_weight_reps: pr.per_weight_reps, max_duration: pr.max_duration };
+        }
       }
       if (!lastRes.ok) return;
       const data = await lastRes.json();

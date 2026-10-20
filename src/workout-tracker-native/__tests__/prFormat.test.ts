@@ -1,6 +1,6 @@
 import {
   prWorkoutScreen,
-  fmtPrValue, fmtPrDelta, fmtPrContext, fmtMinSec, nearPrHint,
+  fmtPrValue, fmtPrDelta, fmtPrContext, fmtMinSec, nearPrHint, exercisePrSummary,
   fmtRelativeDate, fmtChartDate, formatChartYLabel, computeChartYAxisRange, computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH, prTypeIcon, stalledUrgency,
   stalledCategoryToPrType, pickDefaultPrSeries,
   PR_METRIC_OPTIONS, PR_TYPE_LABELS, PR_TYPE_ORDER,
@@ -374,5 +374,33 @@ describe('prWorkoutScreen', () => {
     for (const t of ['max_weight', 'max_reps', 'estimated_1rm', 'max_duration'] as const) {
       expect(prWorkoutScreen(t)).toBe('WorkoutDetails');
     }
+  });
+});
+
+describe('exercisePrSummary', () => {
+  const rows = [
+    { pr_type: 'max_weight', exercise_template_id: 7, value: 320, weight_context: null },
+    { pr_type: 'estimated_1rm', exercise_template_id: 7, value: 330, weight_context: null },
+    { pr_type: 'max_reps', exercise_template_id: 7, value: 8, weight_context: 225 },
+    { pr_type: 'max_reps', exercise_template_id: 7, value: 3, weight_context: 300 },
+    { pr_type: 'max_weight', exercise_template_id: 9, value: 100, weight_context: null },
+    { pr_type: 'max_duration', exercise_template_id: 12, value: 2.5, weight_context: null },
+  ];
+
+  it("gives one exercise's PRs in the per-exercise route's shape, heaviest reps first", () => {
+    expect(exercisePrSummary(rows, 7)).toEqual({
+      max_weight: 320,
+      estimated_1rm: 330,
+      max_duration: null,
+      per_weight_reps: [{ weight: 300, max_reps: 3 }, { weight: 225, max_reps: 8 }],
+    });
+  });
+
+  it('reads a hold and leaves weight records empty', () => {
+    expect(exercisePrSummary(rows, 12)).toEqual({ max_weight: null, estimated_1rm: null, max_duration: 2.5, per_weight_reps: [] });
+  });
+
+  it('gives nothing for an exercise with no records', () => {
+    expect(exercisePrSummary(rows, 99)).toEqual({ max_weight: null, estimated_1rm: null, max_duration: null, per_weight_reps: [] });
   });
 });
