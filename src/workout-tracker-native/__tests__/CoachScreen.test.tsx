@@ -194,6 +194,13 @@ describe('CoachScreen', () => {
     });
     const lastChart = () => mockBarChart.mock.calls[mockBarChart.mock.calls.length - 1][0];
 
+    it("asks for the 30-day progress once, and fills this week's goal from that answer", async () => {
+      installServer({ '/api/stats/progress': progress(ALL) });
+      const r = await renderScreen();
+      await waitFor(() => expect(r.getByText(/^2\/\d+ this week/)).toBeTruthy());
+      expect(urlsCalled().filter(u => u.includes('/api/stats/progress'))).toHaveLength(1);
+    });
+
     it('shows a new user an empty chart with no tabs or range to pick', async () => {
       installServer({ '/api/stats/progress': progress({ volume: false, sets: false, workouts: false, distance: false }) });
       const r = await renderScreen();

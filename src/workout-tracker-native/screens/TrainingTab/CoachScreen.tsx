@@ -93,6 +93,8 @@ const INSIGHT_REASONS: { key: InsightReason; label: string }[] = [
 // What onboarding generated (`starter`) is not counted.
 const FREE_TEMPLATE_LIMIT = 5;
 const FREE_ROUTINE_LIMIT = 2;
+// This week's count and distance are the last bucket of the 30-day progress range
+const THIS_WEEK_RANGE: ChartRange = '30d';
 
 
 
@@ -398,6 +400,8 @@ export default function CoachScreen({ navigation }: Props) {
         const data: ProgressResponse = await res.json();
         setProgressData(data.buckets ?? []);
         if (data.metrics_logged) setMetricsLogged(data.metrics_logged);
+        // The same request fetchThisWeekCount makes, so it fills this week too
+        if (range === THIS_WEEK_RANGE) applyThisWeek(data);
       }
     } catch { }
   };
@@ -464,7 +468,7 @@ export default function CoachScreen({ navigation }: Props) {
 
   const fetchThisWeekCount = async () => {
     try {
-      const res = await apiFetch('/api/stats/progress?range=30d');
+      const res = await apiFetch(`/api/stats/progress?range=${THIS_WEEK_RANGE}`);
       if (res.ok) applyThisWeek(await res.json());
     } catch { }
   };
@@ -526,7 +530,8 @@ export default function CoachScreen({ navigation }: Props) {
     refetchIfStale('endurance', fetchEnduranceScore);
     refetchIfStale('greek', fetchGreekRank);
     refetchIfStale('muscleVolume', fetchMuscleGroupData);
-    refetchIfStale('thisWeek', fetchThisWeekCount);
+    // On the 30-day chart the progress request above already brings this week
+    if (chartRangeRef.current !== THIS_WEEK_RANGE) refetchIfStale('thisWeek', fetchThisWeekCount);
     refetchIfStale('weeklySummary', fetchWeeklySummaryPreview);
   }, [user?.active_routine_id]));
 
