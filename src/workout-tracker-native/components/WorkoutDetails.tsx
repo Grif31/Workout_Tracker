@@ -28,7 +28,7 @@ import Collapsible, { useCollapseAnim } from './Collapsible';
 import { captureAndShare } from '../utils/shareCapture';
 import MuscleSetBreakdown from './MuscleSetBreakdown';
 import { muscleSetCounts } from '../utils/muscleSetCounts';
-import { fmtHold } from './workout/types';
+import { fmtHold, fmtMinutes } from './workout/types';
 import WorkoutShareCard, { bestWorkingSet, type ShareExercise } from './share/WorkoutShareCard';
 import CardioShareCard from './share/CardioShareCard';
 import { LaurelBranch } from './LaurelWreath';
@@ -77,11 +77,6 @@ type Props = {
   onSaveAsTemplate?: () => void;
   onPerformAgain?: (prefill: PrefillWorkoutData) => void;
 };
-
-function fmtDuration(mins: number): string {
-  if (mins < 60) return `${mins}m`;
-  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
-}
 
 export default function WorkoutDetailsScreen({
   workoutId, onBack, onEdit, onDelete, onSaveAsTemplate, onPerformAgain,
@@ -455,7 +450,7 @@ export default function WorkoutDetailsScreen({
                 <>
                   <View style={styles.summaryDivider} />
                   <View style={styles.summaryItem}>
-                    <Text style={styles.summaryValue}>{fmtDuration(workout.duration)}</Text>
+                    <Text style={styles.summaryValue}>{fmtMinutes(workout.duration)}</Text>
                     <Text style={styles.summaryLabel}>Duration</Text>
                   </View>
                 </>

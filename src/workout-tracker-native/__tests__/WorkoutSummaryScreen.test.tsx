@@ -93,7 +93,7 @@ describe('WorkoutSummaryScreen', () => {
     // On screen and as the share card's best set
     expect(getAllByText('8 × 185 lbs')).toHaveLength(2);
     expect(getByText(/W\s+10 × 95 lbs/)).toBeTruthy();
-    expect(getByText('"Push Day" · 52 min')).toBeTruthy();
+    expect(getByText('"Push Day" · 52m')).toBeTruthy();
   });
 
   it('dates the share card with the workout, not today', async () => {
@@ -114,7 +114,7 @@ describe('WorkoutSummaryScreen', () => {
     expect(getByText('Time')).toBeTruthy();
     expect(queryByText('Volume (lbs)')).toBeNull();
     // The bout itself, converted to the default mi
-    expect(getByText('30 min · 3.11 mi')).toBeTruthy();
+    expect(getByText('30m · 3.11 mi')).toBeTruthy();
   });
 
   it('says so and offers a retry when the sets fail to load', async () => {

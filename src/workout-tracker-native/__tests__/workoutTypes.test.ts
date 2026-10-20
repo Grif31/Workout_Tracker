@@ -110,7 +110,7 @@ describe('makeInitialSet', () => {
 
 describe('fmtMinutes', () => {
   it('writes minutes under an hour and hours with minutes above', () => {
-    expect(fmtMinutes(45)).toBe('45 min');
+    expect(fmtMinutes(45)).toBe('45m');
     expect(fmtMinutes(65)).toBe('1h 5m');
     expect(fmtMinutes(120)).toBe('2h 0m');
   });

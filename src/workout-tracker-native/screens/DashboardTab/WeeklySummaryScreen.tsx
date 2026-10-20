@@ -19,7 +19,7 @@ import { DashboardStackParamsList, WeeklySummaryData } from '../../navigation/ty
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { CATEGORICAL_COLORS } from '../../constants/categoricalColors';
-import { fmtHold, RPE_KEY } from '../../components/workout/types';
+import { fmtHold, fmtMinutes, RPE_KEY } from '../../components/workout/types';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
 import { toLocalDateStr } from '../../utils/date';
 import { LaurelBranch } from '../../components/LaurelWreath';
@@ -74,13 +74,6 @@ function fmtDateRange(startIso: string, endIsoExclusive: string): string {
   end.setDate(end.getDate() - 1); // week_end from the API is exclusive
   const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
   return `${start.toLocaleDateString('en-US', opts)} – ${end.toLocaleDateString('en-US', opts)}`;
-}
-
-function fmtDuration(mins: number): string {
-  if (mins < 60) return `${mins}m`;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
 function fmtTime(mins: number): string {
@@ -452,7 +445,7 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
                 </View>
                 <View style={[styles.statsRow, styles.statsRowWrap, { marginTop: spacing.sm }]}>
                   <View style={[styles.statBox, styles.statBoxWrap]}>
-                    <Text style={styles.statValue}>{fmtDuration(data.total_duration_min)}</Text>
+                    <Text style={styles.statValue}>{fmtMinutes(data.total_duration_min)}</Text>
                     <Text style={styles.statLabel}>Training Time</Text>
                   </View>
                   {data.distance_km != null && (
