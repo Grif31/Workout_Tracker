@@ -32,6 +32,7 @@ ENV_VARS = {
     ],
     'optional': [
         ('RAPIDAPI_KEY', 'ExerciseDB GIFs on the exercise page'),
+        ('AI_DAILY_BUDGET_USD', 'Daily ceiling on AI spend across all users (defaults to $20)'),
         ('RESEND_FROM', 'Sender address for emails (has a default)'),
         ('CORS_ORIGINS', 'Allowed browser origins (defaults to any)'),
         ('RATELIMIT_STORAGE_URI', 'Shared rate-limit store (defaults to in-process memory)'),

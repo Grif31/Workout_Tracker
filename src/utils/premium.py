@@ -44,7 +44,11 @@ def premium_required_response():
 
 def free_onboarding_allowed(user_id) -> bool:
     """A free account gets the program onboarding builds for it, once: it may
-    generate and save a starter routine until it has one."""
+    generate and save a starter routine until it has saved one. starter_granted
+    stays set after that routine is deleted, so deleting it doesn't renew this."""
+    user = db.session.get(User, user_id)
+    if user is None or user.starter_granted:
+        return False
     has_starter = db.session.query(Routine.query.filter_by(user_id=user_id, starter=True).exists()).scalar()
     return not has_starter
 

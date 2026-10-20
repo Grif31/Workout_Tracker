@@ -12,7 +12,7 @@ from models import (
 )
 from schemas import AiGenerateSchema, AiInsightsSchema, AiInsightFeedbackSchema, AiSaveSchema, AiWeeklyReviewSchema
 from utils.validation import validate_body
-from utils.ai_client import create_message
+from utils.ai_client import create_message, daily_budget_spent, budget_spent_response
 from utils.local_date import user_today
 from utils.premium import has_premium, free_onboarding_allowed, premium_required_response
 from utils.lift_progress import compute_most_improved_lift
@@ -1212,12 +1212,16 @@ def generate_workout():
     data = g.validated
     generate_type = data['generate_type']
     user_id = int(get_jwt_identity())
-    if not has_premium(db.session.get(User, user_id)) and not free_onboarding_allowed(user_id):
-        return premium_required_response()
+    if not has_premium(db.session.get(User, user_id)):
+        # The onboarding exemption is for the starter routine, not any plan
+        if generate_type != 'routine' or not free_onboarding_allowed(user_id):
+            return premium_required_response()
 
     api_key = os.environ.get('ANTHROPIC_API_KEY')
     if not api_key:
         return jsonify({'message': 'AI service not configured. Add ANTHROPIC_API_KEY to .env'}), 503
+    if daily_budget_spent():
+        return budget_spent_response()
 
     try:
 
@@ -1278,6 +1282,8 @@ def get_ai_insights():
     api_key = os.environ.get('ANTHROPIC_API_KEY')
     if not api_key:
         return jsonify({'message': 'AI service not configured'}), 503
+    if daily_budget_spent():
+        return budget_spent_response()
 
     try:
         ctx = _build_insights_context(user_id, experience=data.get('experience'), goal=data.get('goal'), avoid=data.get('avoid'))
@@ -1391,6 +1397,8 @@ def get_weekly_review():
     api_key = os.environ.get('ANTHROPIC_API_KEY')
     if not api_key:
         return jsonify({'message': 'AI service not configured'}), 503
+    if daily_budget_spent():
+        return budget_spent_response()
 
     try:
         ctx = _build_insights_context(
@@ -1473,6 +1481,8 @@ def save_generated_workout():
                 label=day['label'],
             ))
 
+        if data['starter']:
+            db.session.get(User, int(user_id)).starter_granted = True
         db.session.commit()
         return jsonify({'type': 'routine', 'id': routine.id, 'name': routine.name}), 201
 

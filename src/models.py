@@ -32,7 +32,10 @@ class User(db.Model):
     # Set by the RevenueCat webhook and POST /api/premium/sync, never by the app
     # itself. Only read when PREMIUM_ENFORCED is on (see utils/premium.py).
     is_premium         = db.Column(db.Boolean,    default=False, nullable=False, server_default=db.false())
-    gender            = db.Column(db.String(10),  nullable=True)   # 'male' | 'female' | None
+    # Set once a starter routine is saved, and never cleared: a free account's
+    # one onboarding program must not come back by deleting the routine
+    starter_granted    = db.Column(db.Boolean,    default=False, nullable=False, server_default=db.false())
+    gender           = db.Column(db.String(10),  nullable=True)   # 'male' | 'female' | None
     birth_date        = db.Column(db.Date,          nullable=True)
     workouts = db.relationship('Workout', backref='user', lazy=True)
 

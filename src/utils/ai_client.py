@@ -1,8 +1,11 @@
 """Every Anthropic call goes through create_message, which logs it to
 ai_call_log for the admin's AI usage page."""
+import os
 import time
+from datetime import datetime
 
-from flask import current_app
+from flask import current_app, jsonify
+from sqlalchemy import func
 
 from models import db, AiCallLog
 
@@ -33,6 +36,44 @@ def estimate_cost(model, input_tokens, output_tokens, cache_read_tokens=0, cache
             + (cache_read_tokens or 0) * per_in * CACHE_READ_MULTIPLIER
             + (cache_write_tokens or 0) * per_in * CACHE_WRITE_MULTIPLIER
             + (output_tokens or 0) * per_out) / 1_000_000
+
+
+# A ceiling on what all users together can spend in a day. Free accounts
+# still reach the model (the weekly review's free part, the onboarding
+# program), so without one the bill grows with every account someone creates.
+DEFAULT_DAILY_BUDGET_USD = 20.0
+
+
+def daily_budget_usd():
+    try:
+        return float(os.environ.get('AI_DAILY_BUDGET_USD', DEFAULT_DAILY_BUDGET_USD))
+    except ValueError:
+        return DEFAULT_DAILY_BUDGET_USD
+
+
+def spent_today(now=None):
+    """Estimated dollars spent since midnight (server time, as ai_call_log is written)."""
+    now = now or datetime.now()
+    since = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    rows = (
+        db.session.query(
+            AiCallLog.model,
+            func.sum(AiCallLog.input_tokens), func.sum(AiCallLog.output_tokens),
+            func.sum(AiCallLog.cache_read_tokens), func.sum(AiCallLog.cache_write_tokens),
+        )
+        .filter(AiCallLog.created_at >= since)
+        .group_by(AiCallLog.model)
+        .all()
+    )
+    return sum(estimate_cost(*row) for row in rows)
+
+
+def daily_budget_spent(now=None):
+    return spent_today(now) >= daily_budget_usd()
+
+
+def budget_spent_response():
+    return jsonify({'message': "The Coach has reached today's limit. Try again tomorrow.", 'budget_spent': True}), 503
 
 
 def _count(usage, field):

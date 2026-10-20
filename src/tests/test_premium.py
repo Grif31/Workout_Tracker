@@ -254,6 +254,18 @@ class TestAiRoutesWhenEnforced:
         assert self._post(client, auth_token, '/api/ai/generate', self.GENERATE, ROUTINE_JSON).status_code == 402
         assert self._post(client, auth_token, '/api/ai/save', {**self.SAVE, 'starter': True}, {}).status_code == 402
 
+    def test_deleting_the_starter_routine_does_not_renew_the_free_program(self, client, app, uid, auth_token, enforced):
+        routine_id = self._post(client, auth_token, '/api/ai/save', {**self.SAVE, 'starter': True}, {}).get_json()['id']
+        assert client.delete(f'/api/routines/{routine_id}', headers=auth_headers(auth_token)).status_code == 200
+        with app.app_context():
+            assert Routine.query.filter_by(user_id=uid).count() == 0
+        assert self._post(client, auth_token, '/api/ai/generate', self.GENERATE, ROUTINE_JSON).status_code == 402
+        assert self._post(client, auth_token, '/api/ai/save', {**self.SAVE, 'starter': True}, {}).status_code == 402
+
+    def test_the_free_program_is_a_routine_not_any_plan(self, client, auth_token, enforced):
+        res = self._post(client, auth_token, '/api/ai/generate', {**self.GENERATE, 'generate_type': 'template'}, ROUTINE_JSON)
+        assert res.status_code == 402
+
     def test_a_free_account_cannot_save_a_routine_that_is_not_the_starter(self, client, auth_token, enforced):
         assert self._post(client, auth_token, '/api/ai/save', self.SAVE, {}).status_code == 402
         assert self._post(client, auth_token, '/api/ai/save', {'type': 'template', 'name': 'T', 'starter': True}, {}).status_code == 402
