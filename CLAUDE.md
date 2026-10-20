@@ -109,7 +109,7 @@ Without it, the sub-screen becomes the tab stack's only route — its back butto
 ## Backend Conventions
 
 ### Every new route must:
-- Be `@jwt_required()` protected — exceptions: auth endpoints, `legal_routes.py` (public pages), `/health` (public probe), and `/admin/*` (HTTP Basic Auth via `ADMIN_PASSWORD` env var instead)
+- Be `@jwt_required()` protected — exceptions: auth endpoints, `legal_routes.py` (public pages), `/health` (public probe), `/api/webhooks/revenuecat` (authenticated by `REVENUECAT_WEBHOOK_SECRET` in the Authorization header, since RevenueCat has no JWT), and `/admin/*` (HTTP Basic Auth via `ADMIN_PASSWORD` env var instead)
 - Live in the appropriate blueprint in `routes/`
 - Be registered in `app.py`
 
@@ -200,7 +200,7 @@ The app has **one session at a time**: a lifting workout or a GPS run, never bot
 - **Never pass a bare function to `FlatList`'s `ListHeaderComponent`** (`ListHeaderComponent={renderHeader}`) when the header contains stateful or expensive children (charts, forms) — a fresh function identity every render makes FlatList treat it as a new component type and remount the whole subtree instead of re-rendering it, discarding child state/memoization and replaying entrance animations. Call it and pass the built element instead: `ListHeaderComponent={renderHeader()}`.
 - **Never use `date.toISOString()` to build a date string for the backend** — it outputs UTC and shifts the date in US timezones. Always use local methods: `` `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` ``
 - **Never `new Date(x)` a bare `"YYYY-MM-DD"` from the API** (e.g. `/api/stats/exercise` history dates) — it parses as UTC midnight, the day before in the Americas. Use `parseApiDate` from `utils/date.ts`. Jest runs in `America/Los_Angeles` (`jest.globalSetup.js`) so this class of bug fails in tests, not just for users.
-- **Guardrail tests scan the whole codebase:** `src/tests/test_route_guardrails.py` walks the Flask url_map (auth on every non-public route, no 500s for a fresh user, malformed bodies or garbage query params), and `__tests__/codeGuardrails.test.ts` scans the app source (no raw `fetch`, `initial: false` on cross-tab navigates, listeners and intervals cleaned up, no AsyncStorage key literal in two files; shared keys live in `constants/storageKeys.ts`). A new public route goes in that test's `PUBLIC` set.
+- **Guardrail tests scan the whole codebase:** `src/tests/test_route_guardrails.py` walks the Flask url_map (auth on every non-public route, no 500s for a fresh user, malformed bodies or garbage query params), and `__tests__/codeGuardrails.test.ts` scans the app source (no raw `fetch`, `initial: false` on cross-tab navigates, listeners and intervals cleaned up, no AsyncStorage key literal in two files; a shared key is a constant in `constants/` or exported from the file that owns it, see the app CLAUDE.md). A new public route goes in that test's `PUBLIC` set.
 
 ---
 

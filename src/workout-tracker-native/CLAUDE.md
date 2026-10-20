@@ -93,7 +93,14 @@ A tracked run (`GPSCardioScreen`) lives in `context/GpsRunContext.tsx`, mounted 
 | `live_workout_notif_enabled` | true | Live Workout on Lock Screen: the workout's and the GPS run's Live Activities on iOS, and the live workout notification where no activity can run |
 | `minimized_workout_session` | — | Serialized minimized workout state (WorkoutSessionContext) |
 | `greek_rank_cached` | — | Cached current Greek rank name (avoids fetch on cold open) |
-| `coach_insights_cache` | — | Cached AI coach insights JSON |
+| `coach_insights_cache` | — | Cached AI coaching insights JSON + fetchedAt timestamp |
+| `@workout_open_backup` | — | Crash insurance for an open workout: WorkoutLog writes it while open, `WorkoutSessionContext` reads it on cold start to resurrect a killed workout (`WORKOUT_BACKUP_KEY`, `components/workout/types.ts`) |
+| `@workout_timer_checkpoint` | — | The open workout's timer, saved with the backup above so a resurrected workout keeps its elapsed time (`TIMER_CHECKPOINT_KEY`) |
+| `@theme_mode` | — | Pinned light/dark mode; absent = follow the system (`ThemeContext`) |
+| `@theme_accent` | — | Accent preset for whoever is signed in. Cleared on logout and login; each account's choice is kept in `@theme_accent_${uid}` and loaded back by `loadAccentForUser` |
+| `workout_reminder_notif_id` | — | Id of the scheduled daily reminder, so it can be cancelled (`utils/notifications.ts`) |
+| `rest_timer_notif_id` | — | Id of the pending rest-timer alert, so it can be cancelled |
+| `trial_reminder_notif_id` | — | Id of the scheduled trial-ending reminder, so it can be cancelled |
 | `secure_token_store_ready` | — | Marks that this install set up its SecureStore tokens. Never cleared on logout: iOS keeps keychain items across an uninstall and AsyncStorage doesn't, so a missing marker is how `loadTokens` recognises a fresh install and drops a previous install's tokens. Its first absence on an updated install is also when the pre-SecureStore AsyncStorage tokens get migrated |
 | `widget_snapshot` | — | Everything the home screen widgets show, as one versioned JSON blob for whoever is logged in (`WIDGET_SNAPSHOT_KEY`, `utils/widgetSnapshot.ts`). Written only through `utils/widgetData.ts`; cleared on logout and login (see Home screen widgets) |
 
@@ -130,8 +137,9 @@ A tracked run (`GPSCardioScreen`) lives in `context/GpsRunContext.tsx`, mounted 
 | `exercise_list_cache_${uid}` | — | Exercise list cache, 24h TTL (`utils/exerciseCache.ts`; falls back to un-suffixed key when no userId passed) |
 | `offline_workout_queue_${uid}` | — | Offline workout queue (`utils/offlineQueue.ts`) — deliberately NOT cleared on logout; each user's queue waits for them and is only flushed while they are logged in. **Nothing in it is ever deleted for the user:** a workout the server refuses 3 times is marked `rejected` (status and the server's message), skipped by automatic uploads, and listed on Home's "couldn't sync" card with Retry (`retryStuckWorkout`) and Delete behind a confirm (`discardStuckWorkout`, which only removes a rejected one). Its payload carries `client_id`, so a retry can never save a workout twice |
 | `gps_run_checkpoint_${uid}` | — | In-progress GPS run checkpoint (route/distance/elapsed), written every 10 fixes and on pause or stop. `GpsRunProvider` restores it at launch and on sign-in as a recovered run on the mini bar (see GPS run session); cleared on save or discard |
+| `@theme_accent_${uid}` | — | This account's accent preset, applied at sign-in by `loadAccentForUser`; written on logout and when Settings changes the accent |
+| `plateau_dismissed_${uid}` | — | JSON `{ [exerciseTemplateId]: dismissedAtMs }` for Coach's plateau nudge (`components/PlateauNudge.tsx`). A dismissed lift stays quiet for `REMIND_AFTER_DAYS` (28), then is flagged again if still flat |
 | `coach_settings_${uid}` | — | Legacy onboarding settings (migrated to coach_profile on first open) |
-| `coach_insights_cache` | — | Cached AI coaching insights JSON + fetchedAt timestamp |
 | `coach_settings` | — | Legacy key — migrated to `coach_profile` on first CoachProfileModal open |
 
 **On logout**, `AuthContext.tsx` deletes the `token`/`refresh_token` SecureStore items (`clearStoredTokens`) and clears via `AsyncStorage.multiRemove`: `user`, `greek_rank_cached`, `@theme_accent`, `coach_insights_cache`, `minimized_workout_session`. **On login**, the same four cache keys (`greek_rank_cached`, `@theme_accent`, `coach_insights_cache`, `minimized_workout_session`) are cleared before the new session starts, so a freshly logged-in user never sees the previous account's cached data. Per-user-suffixed keys (`coach_profile_${uid}`, `workout_weekly_goal_${uid}`, `@pr_pins_${uid}`, etc.) don't need clearing — each account already has its own slot. The daily workout reminder is the exception that needs work: its setting is per user but it's one scheduled notification on the device, so logout cancels it and login reschedules the incoming user's (`restoreWorkoutReminder` in `utils/notifications.ts`).

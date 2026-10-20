@@ -8,6 +8,7 @@ import { AUTH } from '../../theme/authColors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { APP_ICONS_ENABLED } from '../../constants/featureFlags';
+import { BETA_PREMIUM } from '../../constants/purchaseConfig';
 
 type Slide =
   | { type: 'screenshot'; source: ImageSourcePropType; title: string; body: string }
@@ -21,10 +22,6 @@ const PREMIUM_FEATURES = [
   'Unlimited templates & routines',
   ...(APP_ICONS_ENABLED ? ['Custom app icons'] : []),
 ];
-
-// Builds that set this hand out premium for free (see PurchaseContext), so the
-// premium pitch slide is hidden. Production doesn't set it.
-const BETA_PREMIUM = process.env.EXPO_PUBLIC_BETA_PREMIUM === 'true';
 
 const SLIDES: Slide[] = [
   {
@@ -45,6 +42,7 @@ const SLIDES: Slide[] = [
     title: 'Your AI Coach',
     body: 'Programs built around your goal, schedule and equipment, plus insights on when to push and when to back off.',
   },
+  // Beta builds hand out premium for free, so pitching it would be wrong.
   ...(BETA_PREMIUM ? [] : [{
     type: 'premium',
     title: 'Reach Your Peak',
