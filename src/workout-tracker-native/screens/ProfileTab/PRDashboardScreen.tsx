@@ -501,7 +501,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
           <View style={styles.heroStreakRow}>
             <LaurelBranch height={30} color={colors.prGoldBorder} />
             <View style={styles.heroStreakCenter}>
-              <Text style={[styles.heroStreakValue, { color: PR_GOLD_TEXT }]}>{stats.pr_streak_weeks}</Text>
+              <Text style={[styles.heroStreakValue, { color: colors.prGold }]}>{stats.pr_streak_weeks}</Text>
               <Text style={styles.heroStreakLabel}>week PR streak</Text>
             </View>
             <LaurelBranch side="right" height={30} color={colors.prGoldBorder} />
@@ -888,7 +888,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   weeklyTotalsText: {
     fontSize: typography.fontSize.xs,
     fontWeight: '700',
-    color: PR_GOLD_TEXT,
+    color: colors.prGold,
   },
 
   bestsRow: { flexDirection: 'row', gap: spacing.sm },

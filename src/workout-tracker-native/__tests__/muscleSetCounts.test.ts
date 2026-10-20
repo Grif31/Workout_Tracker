@@ -89,7 +89,7 @@ describe('muscleShading', () => {
     ];
     expect(muscleShading(counts, '#30D158')).toEqual({
       muscles: ['Abs', 'Core'],
-      muscleColors: { Abs: '#30D15840', Core: '#30D158FF' },
+      muscleColors: { Abs: '#30D15873', Core: '#30D158FF' },
     });
   });
 });

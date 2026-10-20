@@ -235,7 +235,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   freeFill: { height: '100%', borderRadius: 3 },
   premiumTrack: { height: 7, backgroundColor: colors.border, borderRadius: 3, overflow: 'visible', position: 'relative' },
   premiumFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 3 },
-  tick: { position: 'absolute', top: -2, bottom: -2, width: 1.5, backgroundColor: colors.background },
+  // textSecondary, not background: past the fill the ticks sit on the border-colored
+  // track, and the background grey was 1.1:1 against it, so MEV/MAV vanished
+  tick: { position: 'absolute', top: 0, bottom: 0, width: 1.5, backgroundColor: colors.textSecondary },
   pips: { flexDirection: 'row', gap: 6 },
   pip: { width: 12, height: 12, borderRadius: 6 },
   spark: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 22, maxWidth: 90 },

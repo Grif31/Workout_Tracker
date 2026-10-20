@@ -10,7 +10,6 @@ import { LineChart } from 'react-native-gifted-charts';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import GoldSectionRule from '../../components/GoldSectionRule';
 import SegmentedControl from '../../components/SegmentedControl';
-import { PR_GOLD_TEXT } from '../../constants/prColors';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { ProfileStackParamsList } from '../../navigation/types';
@@ -238,7 +237,7 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
               <View style={styles.heroRow}>
                 <LaurelBranch height={24} color={colors.prGoldBorder} />
                 <View style={styles.heroCenter}>
-                  <Text style={[styles.heroValue, { color: PR_GOLD_TEXT }]}>
+                  <Text style={[styles.heroValue, { color: colors.prGold }]}>
                     {fmtPrValue(series[series.length - 1], unit, distanceUnit)}
                   </Text>
                   <Text style={styles.heroCaption}>current best</Text>
@@ -367,7 +366,7 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
                   activeOpacity={0.7}
                 >
                   <View style={[styles.thDate, styles.dateCell]}>
-                    {isCurrent && <Ionicons name="trophy" size={11} color={PR_GOLD_TEXT} />}
+                    {isCurrent && <Ionicons name="trophy" size={11} color={colors.prGold} />}
                     <Text style={[styles.td, { color: colors.textSecondary }]}>{fmtTableDate(e.achieved_at)}</Text>
                   </View>
                   <Text style={[styles.thValue, styles.td, styles.tdValue, { color: colors.textPrimary }]}>

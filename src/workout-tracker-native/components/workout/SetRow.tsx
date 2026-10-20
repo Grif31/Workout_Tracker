@@ -5,7 +5,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { PR_GOLD_TEXT } from '../../constants/prColors';
 import { type WorkoutSet, type PreviousSet, type SetType, colStyles, fmtPrevSet } from './types';
 
 // Resting width of the revealed Delete button. Swipeable measures the actions
@@ -290,7 +289,7 @@ function SetRow({
       </View>
       {!!prHint && (
         <View style={styles.prHintRow}>
-          <Ionicons name="trophy-outline" size={12} color={PR_GOLD_TEXT} />
+          <Ionicons name="trophy-outline" size={12} color={colors.prGold} />
           <Text style={styles.prHintText}>{prHint}</Text>
         </View>
       )}
@@ -369,7 +368,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   prHintText: {
     fontSize: typography.fontSize.xs,
     fontWeight: '600',
-    color: PR_GOLD_TEXT,
+    color: colors.prGold,
   },
 
   // Anchored right so the animated width grows leftward, over the row, rather

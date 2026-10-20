@@ -76,7 +76,7 @@ import { typography } from '../theme/typography'; // fontSize xs=11 sm=14 md=16 
 ```typescript
 import { PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG } from '../constants/prColors';
 // PR_GOLD      = '#f9de73'  — PR indicators (trophies, laurel borders, PR banners)
-// PR_GOLD_TEXT = '#ad9206'  — dark text on gold/cream backgrounds
+// PR_GOLD_TEXT = '#7A6000'  — dark text on the cream PR_GOLD_BG only (too dark for dark mode)
 // PR_GOLD_BG   = '#FFF3C4'  — cream background for PR banners
 ```
 On a themed surface (anything on `colors.surface`/`background`), use `colors.prGold` for PR text and icons and `colors.prGoldBorder` for PR borders, laurels and glows: they are `PR_GOLD` in dark mode and darker golds in light mode, where `PR_GOLD` is 1.3:1 on white. Raw `PR_GOLD` is for surfaces that are dark in both themes (share cards).

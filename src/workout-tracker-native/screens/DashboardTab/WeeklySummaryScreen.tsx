@@ -18,7 +18,6 @@ import { captureAndShare } from '../../utils/shareCapture';
 import { DashboardStackParamsList, WeeklySummaryData } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { PR_GOLD_TEXT } from '../../constants/prColors';
 import { CATEGORICAL_COLORS } from '../../constants/categoricalColors';
 import { fmtHold, RPE_KEY } from '../../components/workout/types';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
@@ -614,7 +613,7 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
                 <Animated.View entering={FadeInDown.delay(400).duration(400)} style={styles.section}>
                   <View style={styles.prSectionTitleRow}>
                     <LaurelBranch height={16} color={colors.prGoldBorder} />
-                    <Text style={[styles.sectionTitle, { color: PR_GOLD_TEXT }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.prGold }]}>
                       Personal Records ({data.prs.length})
                     </Text>
                     <LaurelBranch side="right" height={16} color={colors.prGoldBorder} />
@@ -672,7 +671,7 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
             </TouchableOpacity>
             <View style={styles.prSectionTitleRow}>
               <LaurelBranch height={16} color={colors.prGoldBorder} />
-              <Text style={[styles.headerTitle, { color: PR_GOLD_TEXT }]}>
+              <Text style={[styles.headerTitle, { color: colors.prGold }]}>
                 Personal Records ({sortedPrs.length})
               </Text>
               <LaurelBranch side="right" height={16} color={colors.prGoldBorder} />
@@ -771,7 +770,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: 12, color: colors.textSecondary, textTransform: 'uppercase',
     letterSpacing: 0.4, marginTop: 1,
   },
-  prValue: { fontSize: typography.fontSize.md, fontWeight: '800', color: PR_GOLD_TEXT },
+  prValue: { fontSize: typography.fontSize.md, fontWeight: '800', color: colors.prGold },
   prMoreBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
     paddingVertical: spacing.sm,

@@ -34,7 +34,7 @@ export const mockThemeColors = {
   surface: '#1C1C1E',
   border: '#3A3A3C',
   switchTrack: '#3A3A3C',
-  inputBorder: '#48484A',
+  inputBorder: '#6E6E73',
   prGold: '#f9de73',
   prGoldBorder: '#f9de73',
   textPrimary: '#FFFFFF',

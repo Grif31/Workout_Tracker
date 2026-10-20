@@ -51,7 +51,7 @@ describe('MuscleSetBreakdown', () => {
     const { muscleColors } = mockDiagramProps.mock.calls[0][0];
     // ThemeContext's jest mock accent, with each level's alpha
     const accent = muscleColors.Chest.slice(0, 7);
-    expect(muscleColors).toEqual({ Biceps: `${accent}40`, Triceps: `${accent}73`, Chest: `${accent}73` });
+    expect(muscleColors).toEqual({ Biceps: `${accent}73`, Triceps: `${accent}A0`, Chest: `${accent}A0` });
   });
 });
 

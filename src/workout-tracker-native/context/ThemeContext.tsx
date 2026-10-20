@@ -54,7 +54,7 @@ export const LIGHT_BASE = {
   background:    '#F2F2F7',
   surface:       '#FFFFFF',
   border:        '#E5E5EA',
-  inputBorder:   '#C7C7CC',
+  inputBorder:   '#8E8E93', // 3.3:1 on white; a text field's only edge needs 3:1
   switchTrack:   '#8E8E93',
   textPrimary:   '#000000',
   textSecondary: '#6C6C70',
@@ -70,7 +70,7 @@ export const DARK_BASE = {
   background:    '#141416',
   surface:       '#1C1C1E',
   border:        '#38383A',
-  inputBorder:   '#48484A',
+  inputBorder:   '#6E6E73', // 3.4:1 on #1C1C1E
   switchTrack:   '#38383A',
   textPrimary:   '#FFFFFF',
   textSecondary: '#8E8E93',

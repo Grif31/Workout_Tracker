@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
-import { PR_GOLD_TEXT } from '../constants/prColors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -23,7 +22,7 @@ export default function GoldSectionRule({ icon, label, right, style }: Props) {
   const { colors } = useTheme();
   return (
     <View style={[styles.row, style]}>
-      <Ionicons name={icon} size={14} color={PR_GOLD_TEXT} />
+      <Ionicons name={icon} size={14} color={colors.prGold} />
       <Text style={[styles.label, { color: colors.textPrimary }]}>{label}</Text>
       {right}
     </View>

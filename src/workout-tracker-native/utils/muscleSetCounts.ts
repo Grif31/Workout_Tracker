@@ -18,8 +18,12 @@ export type MuscleSetCount = {
 
 export type ShadeLevel = 1 | 2 | 3 | 4;
 
-/** Opacity of the accent for each level: planned only, 1-3 sets, 4-6, 7+. */
-const SHADE_ALPHAS: Record<ShadeLevel, string> = { 1: '40', 2: '73', 3: 'A6', 4: 'FF' };
+/**
+ * Opacity of the accent for each level: planned only, 1-3 sets, 4-6, 7+.
+ * Level 1 was 40 (25%), about 1.4:1 against an unshaded muscle, so the scale
+ * starts at 73 and the rest move up with it to stay distinct from each other.
+ */
+const SHADE_ALPHAS: Record<ShadeLevel, string> = { 1: '73', 2: 'A0', 3: 'CC', 4: 'FF' };
 
 function splitMuscles(muscleGroup: string | null | undefined): string[] {
   return (muscleGroup ?? '').split(',').map(m => m.trim()).filter(Boolean);

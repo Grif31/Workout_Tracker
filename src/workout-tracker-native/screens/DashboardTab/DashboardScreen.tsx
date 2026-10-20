@@ -28,7 +28,6 @@ import {
 import { showToast } from '../../utils/toast';
 import { appCache, useRefetchGate } from '../../utils/appCache';
 import { LaurelBranch } from '../../components/LaurelWreath';
-import { PR_GOLD_TEXT } from '../../constants/prColors';
 import { WEEKLY_SUMMARY_LAST_SHOWN_KEY } from './WeeklySummaryScreen';
 import SectionRule from '../../components/SectionRule';
 import PressableScale from '../../components/PressableScale';
@@ -1562,7 +1561,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
   workoutName: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, flex: 1 },
   prRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginLeft: spacing.sm },
-  prText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: PR_GOLD_TEXT },
+  prText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.prGold },
   workoutDate: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginBottom: spacing.sm },
   statPills: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xs },
   pill: {

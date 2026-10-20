@@ -32,7 +32,7 @@ import { apiFetch, resolveMediaUrl } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
 import { LaurelBranch } from '../../components/LaurelWreath';
-import { PR_GOLD_TEXT, PR_GOLD_BG } from '../../constants/prColors';
+import { PR_GOLD_BG } from '../../constants/prColors';
 import { fmtHold } from '../../components/workout/types';
 import CalendarModal from '../../components/CalendarModal';
 import SectionRule from '../../components/SectionRule';
@@ -336,9 +336,9 @@ export default function ProfileScreen({ navigation }: Props) {
         onPress={() => navigation.navigate('PRDashboard')}
       >
         <View style={styles.prSectionHeader}>
-          <LaurelBranch height={16} color={PR_GOLD_TEXT} />
+          <LaurelBranch height={16} color={colors.prGoldBorder} />
           <Text style={styles.prSectionTitle}>Personal Records</Text>
-          <LaurelBranch side="right" height={16} color={PR_GOLD_TEXT} />
+          <LaurelBranch side="right" height={16} color={colors.prGoldBorder} />
         </View>
 
         <View style={styles.prCards}>
@@ -353,7 +353,7 @@ export default function ProfileScreen({ navigation }: Props) {
                       <Text style={[styles.prCardName, { color: colors.textPrimary }]} numberOfLines={2}>
                         {pr.exercise_name}
                       </Text>
-                      <Text style={[styles.prCardValue, { color: PR_GOLD_TEXT }]}>
+                      <Text style={[styles.prCardValue, { color: colors.prGold }]}>
                         {pr.pr_type === 'max_weight'
                           ? `${pr.value} ${unit}`
                           : pr.pr_type === 'max_reps'
@@ -802,7 +802,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
   workoutName: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, flex: 1 },
   prRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginLeft: spacing.sm },
-  prText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: PR_GOLD_TEXT },
+  prText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.prGold },
   workoutDate: { fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
   workoutMeta: { fontSize: typography.fontSize.xs, fontWeight: '500', color: colors.textSecondary },
   weightRow: {
@@ -887,7 +887,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     textAlign: 'center',
     fontSize: typography.fontSize.sm,
     fontWeight: '700',
-    color: PR_GOLD_TEXT,
+    color: colors.prGold,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },

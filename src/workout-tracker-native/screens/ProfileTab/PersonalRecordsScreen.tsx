@@ -8,7 +8,6 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import GoldSectionRule from '../../components/GoldSectionRule';
-import { PR_GOLD_TEXT } from '../../constants/prColors';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
@@ -356,7 +355,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                 {isTop ? (
                   <View style={styles.topValueRow}>
                     <LaurelBranch height={18} color={colors.prGoldBorder} />
-                    <Text style={[styles.rowValue, { color: PR_GOLD_TEXT }]}>{item.reps} reps</Text>
+                    <Text style={[styles.rowValue, { color: colors.prGold }]}>{item.reps} reps</Text>
                     <LaurelBranch side="right" height={18} color={colors.prGoldBorder} />
                   </View>
                 ) : (
@@ -526,7 +525,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                   {index === 0 ? (
                     <View style={styles.topValueRow}>
                       <LaurelBranch height={18} color={colors.prGoldBorder} />
-                      <Text style={[styles.rowValue, { color: PR_GOLD_TEXT }]}>{item.value} {unit}</Text>
+                      <Text style={[styles.rowValue, { color: colors.prGold }]}>{item.value} {unit}</Text>
                       <LaurelBranch side="right" height={18} color={colors.prGoldBorder} />
                     </View>
                   ) : (
@@ -571,7 +570,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                   {index === 0 && sortBy !== 'recent' ? (
                     <View style={styles.topValueRow}>
                       <LaurelBranch height={18} color={colors.prGoldBorder} />
-                      <Text style={[styles.rowValue, { color: PR_GOLD_TEXT }]}>{item.value} {unit}</Text>
+                      <Text style={[styles.rowValue, { color: colors.prGold }]}>{item.value} {unit}</Text>
                       <LaurelBranch side="right" height={18} color={colors.prGoldBorder} />
                     </View>
                   ) : (
@@ -632,7 +631,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                   <Text style={styles.rowDate}>{fmtDate(item.achieved_at)}</Text>
                 </View>
                 <View style={styles.rowRight}>
-                  <Text style={[styles.rowValue, { color: PR_GOLD_TEXT }]}>
+                  <Text style={[styles.rowValue, { color: colors.prGold }]}>
                     {item.kind === 'time' ? fmtTime(item.time_min) : item.kind === 'hold' ? fmtHold(item.time_min) : fmtDistance(item.distance_km)}
                   </Text>
                 </View>
