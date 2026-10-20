@@ -39,6 +39,9 @@ export type MinimizedSession = {
   timerPaused?: boolean;
   editMode?: boolean;
   workoutId?: number;
+  // The workout's Workout.client_id, so a save retried after a resume is still
+  // recognised as the same workout. Absent in sessions saved by older builds.
+  clientId?: string;
 };
 
 export function sessionElapsedSeconds(
@@ -126,6 +129,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
           startedAt,
           baseElapsed,
           timerPaused,
+          clientId: typeof backup.clientId === 'string' ? backup.clientId : undefined,
         };
         await AsyncStorage.multiRemove([WORKOUT_BACKUP_KEY, TIMER_CHECKPOINT_KEY]);
         await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(restored));

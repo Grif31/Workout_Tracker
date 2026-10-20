@@ -97,6 +97,20 @@ describe('WorkoutSessionContext', () => {
     expect(sessionElapsedSeconds(ctx.session!, Date.now() + 3_600_000)).toBe(300);
   });
 
+  it("keeps the workout's client_id through a kill, so a retried save is still the same workout", async () => {
+    await AsyncStorage.setItem(WORKOUT_BACKUP_KEY, JSON.stringify({ ...backup, clientId: 'abc-1234567890abcdefghij' }));
+    const { findByText } = mount();
+    expect(await findByText('session:Leg Day')).toBeTruthy();
+    expect(ctx.session!.clientId).toBe('abc-1234567890abcdefghij');
+  });
+
+  it('recovers a backup from an older build, which has no client_id', async () => {
+    await AsyncStorage.setItem(WORKOUT_BACKUP_KEY, JSON.stringify(backup));
+    const { findByText } = mount();
+    expect(await findByText('session:Leg Day')).toBeTruthy();
+    expect(ctx.session!.clientId).toBeUndefined();
+  });
+
   it('recovers the workout even without a timer checkpoint', async () => {
     await AsyncStorage.setItem(WORKOUT_BACKUP_KEY, JSON.stringify(backup));
     const { findByText } = mount();

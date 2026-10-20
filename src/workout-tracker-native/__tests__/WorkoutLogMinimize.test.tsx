@@ -1,6 +1,9 @@
 import React from 'react';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import WorkoutLog from '../components/WorkoutLog';
+import { WORKOUT_BACKUP_KEY } from '../components/workout/types';
 
 jest.mock('react-native-gesture-handler', () => {
   const { View, ScrollView } = require('react-native');
@@ -119,5 +122,58 @@ describe('WorkoutLog minimize and resume timer', () => {
     toggleTimer(r); // resume
     advance(1000);
     expect(r.getByText('5:01')).toBeTruthy();
+  });
+});
+
+// A save can reach the server and still fail on the phone (a proxy's HTML 502),
+// so a retry after a resume must carry the same client_id for the server to
+// recognise it (Workout.client_id)
+describe('WorkoutLog keeps its client_id across a minimize or a kill', () => {
+  const ID = 'abc-1234567890abcdefghij';
+  const exercises = [{
+    uid: 'e1', name: 'Squat', exercise_template_id: 7, exercise_type: 'strength', equipment: 'Barbell',
+    sets: [{ reps: '5', weight: '225', set_type: 'N', done: true }],
+  }];
+  const postedClientIds = () => (global.fetch as jest.Mock).mock.calls
+    .filter(([url, init]) => String(url).endsWith('/api/workouts') && init?.method === 'POST')
+    .map(([, init]) => JSON.parse(init.body).client_id);
+
+  let alertSpy: jest.SpyInstance;
+  beforeEach(async () => {
+    (global.fetch as jest.Mock) = jest.fn((url: string, init: any = {}) =>
+      Promise.resolve(String(url).endsWith('/api/workouts') && init.method === 'POST'
+        ? { ok: true, status: 201, json: () => Promise.resolve({ id: 9 }) }
+        : { ok: true, status: 200, json: () => Promise.resolve([]) }));
+    mockSaveSession.mockClear();
+    mockSession = null;
+    await AsyncStorage.clear();
+    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  });
+  afterEach(() => alertSpy.mockRestore());
+
+  it('puts the client_id in the minimized session', () => {
+    const r = render(<WorkoutLog onSubmit={jest.fn()} onCancel={jest.fn()} />);
+    minimize(r);
+    expect(mockSaveSession.mock.calls[0][0].clientId).toMatch(/^[a-z0-9]+-[a-z0-9]{20}$/);
+  });
+
+  it('saves a resumed workout with the client_id it was minimized with', async () => {
+    mockSession = {
+      workoutName: 'Leg Day', notes: '', exercises,
+      selectedDate: new Date(), startedAt: new Date(), baseElapsed: 60, timerPaused: false, clientId: ID,
+    };
+    const r = render(<WorkoutLog onSubmit={jest.fn()} onCancel={jest.fn()} />);
+    fireEvent.press(r.getByText('Save'));
+    await waitFor(() => expect(postedClientIds()).toEqual([ID]));
+  });
+
+  it('saves a workout recovered from the crash backup with its client_id', async () => {
+    await AsyncStorage.setItem(WORKOUT_BACKUP_KEY, JSON.stringify({
+      workoutName: 'Leg Day', notes: '', exercises, selectedDate: new Date().toISOString(), clientId: ID,
+    }));
+    const r = render(<WorkoutLog onSubmit={jest.fn()} onCancel={jest.fn()} />);
+    await waitFor(() => expect(r.getByText('Squat')).toBeTruthy());
+    fireEvent.press(r.getByText('Save'));
+    await waitFor(() => expect(postedClientIds()).toEqual([ID]));
   });
 });

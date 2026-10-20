@@ -154,8 +154,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const weightUnit = user?.weight_unit === 'kg' ? 'kg' : 'lbs';
   const insets = useSafeAreaInsets();
   const { session, saveSession, clearSession, setWorkoutOpen } = useWorkoutSession();
-  // This workout's id for the server's duplicate check (Workout.client_id)
-  const [clientId] = useState(newClientId);
+  // This workout's id for the server's duplicate check (Workout.client_id).
+  // Carried through a minimize and the crash backup: a save that failed after
+  // reaching the server must not get a new id when retried after a resume.
+  const [clientId, setClientId] = useState(newClientId);
 
   const [workoutName, setWorkoutName] = useState('');
   const [notes, setNotes] = useState('');
@@ -438,6 +440,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       baseRef.current = sessionElapsedSeconds(session);
       startRef.current = new Date();
       if (session.timerPaused) setTimerPaused(true);
+      if (session.clientId) setClientId(session.clientId);
       clearSession();
       AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
       AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
@@ -454,6 +457,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
             setExercises((backup.exercises as ExerciseEntry[]) ?? []);
             const d = new Date(backup.selectedDate);
             if (!isNaN(d.getTime())) setSelectedDate(d);
+            if (typeof backup.clientId === 'string') setClientId(backup.clientId);
           } catch {}
           await AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
         }
@@ -644,6 +648,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           notes: notesRef.current,
           exercises,
           selectedDate: selectedDateRef.current.toISOString(),
+          clientId,
         }));
 
         const liveOff = await AsyncStorage.getItem(LIVE_WORKOUT_NOTIF_KEY);
@@ -677,7 +682,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     });
     return () => sub.remove();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exercises, workoutName, editMode]);
+  }, [exercises, workoutName, editMode, clientId]);
 
   // iOS Live Activity: the lock screen / Dynamic Island copy of this workout.
   // Pushed when what it shows changes (not on every keystroke in a set), since
@@ -1645,6 +1650,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       timerPaused: paused,
       editMode,
       workoutId,
+      clientId,
     });
     // The minimized session (SESSION_KEY) is now the single source of truth for
     // this in-progress workout — clear the crash-recovery backup so a stale,
