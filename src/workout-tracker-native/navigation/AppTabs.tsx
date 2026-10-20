@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
   miniBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: spacing.xs,
     paddingHorizontal: 12,
     paddingVertical: spacing.sm,
     borderRadius: radius.sm,

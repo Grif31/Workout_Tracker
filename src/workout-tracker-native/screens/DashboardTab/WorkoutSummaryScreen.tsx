@@ -19,7 +19,7 @@ import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
 import { GREEK_RANKS } from '../../constants/greekRanks';
 import MuscleDiagram from '../../components/MuscleDiagram';
-import WorkoutShareCard from '../../components/share/WorkoutShareCard';
+import WorkoutShareCard, { bestWorkingSet } from '../../components/share/WorkoutShareCard';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { PR_GOLD, PR_GOLD_BG, PR_GOLD_TEXT } from '../../constants/prColors';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
@@ -263,19 +263,6 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
     }
   }
 
-  // Heaviest working set per exercise for the share card (bodyweight = most reps)
-  function bestSetOf(ex: ExerciseData) {
-    let best: { reps: number; weight: number } | null = null;
-    for (const set of ex.sets) {
-      if (!set.reps || set.set_type === 'W') continue;
-      const w = set.weight ?? 0;
-      if (!best || w > best.weight || (w === best.weight && set.reps > best.reps)) {
-        best = { reps: set.reps, weight: w };
-      }
-    }
-    return best;
-  }
-
   function formatSet(ex: ExerciseData, set: SetData) {
     if (ex.exercise_type === 'duration') {
       return set.cardio_duration ? fmtHold(set.cardio_duration) : '—';
@@ -346,7 +333,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
             .filter(e => e.exercise_type === 'duration')
             .reduce((sum, e) => sum + e.sets.reduce((t, st) => t + (st.cardio_duration ?? 0), 0), 0)}
           weightUnit={weightUnit}
-          exercises={exercises.slice(0, 3).map(e => ({ name: e.name, bestSet: bestSetOf(e) }))}
+          exercises={exercises.slice(0, 3).map(e => ({ name: e.name, bestSet: bestWorkingSet(e.sets) }))}
           prs={filteredPrs}
           accentColor={colors.accentDark}
         />

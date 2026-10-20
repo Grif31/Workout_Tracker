@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
   },
 
   heroCaption: {
-    fontSize: 14,
+    fontSize: typography.fontSize.sm,
     color: SHARE_TEXT,
     marginTop: spacing.xs,
   },

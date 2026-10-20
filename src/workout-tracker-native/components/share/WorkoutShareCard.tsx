@@ -21,6 +21,23 @@ export type ShareExercise = {
   bestSet?: { reps: number; weight: number } | null;
 };
 
+/** The heaviest working set (warm-ups and rep-less rows skipped), most reps on
+ *  a tie, so a bodyweight exercise shows its biggest set. */
+export function bestWorkingSet(
+  sets: { reps?: number | null; weight?: number | null; set_type?: string | null }[],
+): { reps: number; weight: number } | null {
+  let best: { reps: number; weight: number } | null = null;
+  for (const s of sets) {
+    const reps = s.reps ?? 0;
+    if (reps <= 0 || s.set_type === 'W') continue;
+    const weight = s.weight ?? 0;
+    if (!best || weight > best.weight || (weight === best.weight && reps > best.reps)) {
+      best = { reps, weight };
+    }
+  }
+  return best;
+}
+
 type WorkoutShareCardProps = {
   workoutName: string;
   date: string;

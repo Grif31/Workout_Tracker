@@ -9,7 +9,7 @@ import PRShareCard from '../components/share/PRShareCard';
 import StrengthScoreShareCard from '../components/share/StrengthScoreShareCard';
 import EnduranceScoreShareCard from '../components/share/EnduranceScoreShareCard';
 import WeeklySummaryShareCard from '../components/share/WeeklySummaryShareCard';
-import WorkoutShareCard from '../components/share/WorkoutShareCard';
+import WorkoutShareCard, { bestWorkingSet } from '../components/share/WorkoutShareCard';
 import CardioShareCard from '../components/share/CardioShareCard';
 import TemplateShareCard from '../components/share/TemplateShareCard';
 import RoutineShareCard from '../components/share/RoutineShareCard';
@@ -292,5 +292,28 @@ describe('share cards', () => {
     expect(render(
       <EnduranceScoreShareCard score={55.4} rankLabel="Intermediate" longestDistance="10K" bestTime="25:00" bestTimeLabel="5K Time" accentColor={ACCENT} date="Sep 20, 2026" />,
     ).getByText('Faster than 55% of runners')).toBeTruthy();
+  });
+});
+
+describe('bestWorkingSet', () => {
+  it('takes the heaviest working set, skipping warm-ups and rep-less rows', () => {
+    expect(bestWorkingSet([
+      { reps: 10, weight: 225, set_type: 'W' },
+      { reps: 0, weight: 315 },
+      { reps: 5, weight: 185 },
+      { reps: 8, weight: 135 },
+    ])).toEqual({ reps: 5, weight: 185 });
+  });
+
+  it('breaks a weight tie by reps, so bodyweight shows the biggest set', () => {
+    expect(bestWorkingSet([
+      { reps: 12, weight: null },
+      { reps: 15, weight: 0 },
+      { reps: 9, weight: null },
+    ])).toEqual({ reps: 15, weight: 0 });
+  });
+
+  it('is null with no working sets', () => {
+    expect(bestWorkingSet([{ reps: 10, weight: 95, set_type: 'W' }, { reps: null, weight: 100 }])).toBeNull();
   });
 });

@@ -29,7 +29,7 @@ import { captureAndShare } from '../utils/shareCapture';
 import MuscleSetBreakdown from './MuscleSetBreakdown';
 import { muscleSetCounts } from '../utils/muscleSetCounts';
 import { fmtHold } from './workout/types';
-import WorkoutShareCard, { type ShareExercise } from './share/WorkoutShareCard';
+import WorkoutShareCard, { bestWorkingSet, type ShareExercise } from './share/WorkoutShareCard';
 import CardioShareCard from './share/CardioShareCard';
 import { LaurelBranch } from './LaurelWreath';
 import StreakFlame from './StreakFlame';
@@ -255,10 +255,8 @@ export default function WorkoutDetailsScreen({
     const prs: { exercise_name: string; pr_type: string }[] = [];
     const exercises: ShareExercise[] = [];
     for (const ex of workout.exercises) {
-      let best: { reps: number; weight: number } | null = null;
       for (const s of ex.sets) {
         const reps = parseFloat(s.reps ?? '0') || 0;
-        const weight = parseFloat(s.weight ?? '0') || 0;
         if (reps > 0) { totalReps += reps; setCount += 1; }
         // A timed hold has no reps but is still a set
         const hold = ex.exercise_type === 'duration' ? Number(s.cardio_duration) || 0 : 0;
@@ -266,12 +264,13 @@ export default function WorkoutDetailsScreen({
         for (const t of s.pr_types ?? []) {
           if (t !== 'estimated_1rm') prs.push({ exercise_name: ex.name, pr_type: t });
         }
-        if (reps > 0 && s.set_type !== 'W' &&
-            (!best || weight > best.weight || (weight === best.weight && reps > best.reps))) {
-          best = { reps, weight };
-        }
       }
-      exercises.push({ name: ex.name, bestSet: best });
+      const bestSet = bestWorkingSet(ex.sets.map(s => ({
+        reps: parseFloat(s.reps ?? '0') || 0,
+        weight: parseFloat(s.weight ?? '0') || 0,
+        set_type: s.set_type,
+      })));
+      exercises.push({ name: ex.name, bestSet });
     }
     return {
       kind: 'strength' as const,

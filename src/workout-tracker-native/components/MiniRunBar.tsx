@@ -140,7 +140,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   btn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: spacing.xs,
     paddingHorizontal: 12,
     paddingVertical: spacing.sm,
     borderRadius: radius.sm,

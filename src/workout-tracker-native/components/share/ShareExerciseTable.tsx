@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     color: SHARE_TEXT,
   },
   details: {
-    fontSize: 11,
+    fontSize: typography.fontSize.xs,
     color: SHARE_TEXT_MUTED,
     marginTop: 2,
   },
