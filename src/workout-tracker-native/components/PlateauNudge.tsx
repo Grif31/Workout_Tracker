@@ -15,9 +15,18 @@ export const PLATEAU_DISMISSED_KEY = 'plateau_dismissed';
 export const REMIND_AFTER_DAYS = 28;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+export type PlateauLift = {
+  exerciseId: number;
+  exerciseName: string;
+  equipment?: string;
+  muscleGroup?: string;
+  imageUrl?: string;
+  isCustom?: boolean;
+};
+
 type Props = {
   isPremium: boolean;
-  onOpenLift: (lift: { exerciseId: number; exerciseName: string }) => void;
+  onOpenLift: (lift: PlateauLift) => void;
 };
 
 /** A dismissible card naming the most-trained lift that has stopped gaining. Premium only. */
@@ -66,6 +75,7 @@ export default function PlateauNudge({ isPremium, onOpenLift }: Props) {
         <Ionicons name="pause-circle-outline" size={20} color={colors.warmup} />
         <Text style={styles.title}>{lift.exercise_name} has plateaued</Text>
       </View>
+      {!!lift.equipment && <Text style={styles.equipment}>{lift.equipment}</Text>}
       <Text style={styles.body}>
         Its estimated 1RM has not moved in 8 weeks. A lighter week, then a new rep range or variation, often gets it moving again.
       </Text>
@@ -74,7 +84,14 @@ export default function PlateauNudge({ isPremium, onOpenLift }: Props) {
           <Text style={styles.secondary}>Not now</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => onOpenLift({ exerciseId: lift.exercise_template_id, exerciseName: lift.exercise_name! })}
+          onPress={() => onOpenLift({
+            exerciseId: lift.exercise_template_id,
+            exerciseName: lift.exercise_name!,
+            equipment: lift.equipment ?? undefined,
+            muscleGroup: lift.muscle_group ?? undefined,
+            imageUrl: lift.image_url ?? undefined,
+            isCustom: !!lift.is_custom,
+          })}
           accessibilityRole="button"
           hitSlop={8}
         >
@@ -93,6 +110,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   title: { flex: 1, fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
+  // Under the title, lined up with its text rather than the icon
+  equipment: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: -spacing.xs, marginLeft: 20 + spacing.sm },
   body: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 18 },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.lg },
   secondary: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },

@@ -885,13 +885,23 @@ def pr_velocity():
     results.sort(key=lambda r: r['sessions'], reverse=True)
     results = results[:PR_VELOCITY_LIMIT]
 
-    names = dict(
-        db.session.query(ExerciseTemplate.id, ExerciseTemplate.name)
-        .filter(ExerciseTemplate.id.in_([r['exercise_template_id'] for r in results] or [-1]))
-        .all()
-    )
+    # Enough of each exercise for the app to name it and open its detail screen
+    # (the Coach's plateau card), not just its name
+    templates = {
+        t.id: t for t in (
+            ExerciseTemplate.query
+            .options(selectinload(ExerciseTemplate.muscle_mappings))
+            .filter(ExerciseTemplate.id.in_([r['exercise_template_id'] for r in results] or [-1]))
+            .all()
+        )
+    }
     for r in results:
-        r['exercise_name'] = names.get(r['exercise_template_id'])
+        t = templates.get(r['exercise_template_id'])
+        r['exercise_name'] = t.name if t else None
+        r['equipment'] = t.equipment if t else None
+        r['muscle_group'] = t.muscle_group if t else None
+        r['image_url'] = t.image_url if t else None
+        r['is_custom'] = bool(t and t.user_id is not None)
     weight_unit = db.session.get(User, int(user_id)).weight_unit or 'lbs'
     return jsonify({'weight_unit': weight_unit, 'exercises': results}), 200
 

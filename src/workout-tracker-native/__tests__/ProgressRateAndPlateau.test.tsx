@@ -85,13 +85,18 @@ describe('PlateauNudge', () => {
   };
   beforeEach(async () => { jest.clearAllMocks(); await AsyncStorage.clear(); });
 
-  it('names the most-trained lift that has plateaued, and opens it', async () => {
+  it('names the most-trained lift that has plateaued with its equipment, and opens it with all it knows', async () => {
     installServer([lift({ status: 'gaining', exercise_name: 'Squat', exercise_template_id: 9 }),
-      lift({ status: 'plateau' }), lift({ status: 'plateau', exercise_name: 'Row', exercise_template_id: 5 })]);
+      lift({ status: 'plateau', equipment: 'Barbell', muscle_group: 'Chest, Triceps', image_url: '/static/b.gif', is_custom: false }),
+      lift({ status: 'plateau', exercise_name: 'Row', exercise_template_id: 5 })]);
     const r = await renderNudge();
     expect(r.getByText('Bench Press has plateaued')).toBeTruthy();
+    expect(r.getByText('Barbell')).toBeTruthy();
     fireEvent.press(r.getByText('See the lift'));
-    expect(r.onOpenLift).toHaveBeenCalledWith({ exerciseId: 3, exerciseName: 'Bench Press' });
+    expect(r.onOpenLift).toHaveBeenCalledWith({
+      exerciseId: 3, exerciseName: 'Bench Press', equipment: 'Barbell',
+      muscleGroup: 'Chest, Triceps', imageUrl: '/static/b.gif', isCustom: false,
+    });
   });
 
   it('stays quiet when nothing has plateaued', async () => {

@@ -848,8 +848,7 @@ export default function CoachScreen({ navigation }: Props) {
         <ScrollView contentContainerStyle={styles.coachContent}>
           <PlateauNudge
             isPremium={isPremium}
-            onOpenLift={({ exerciseId, exerciseName }) =>
-              navigation.navigate('ExerciseDetail', { exerciseId, exerciseName, initialTab: 'charts' })}
+            onOpenLift={lift => navigation.navigate('ExerciseDetail', { ...lift, initialTab: 'charts' })}
           />
           {/* Coach-profile summary — the whole card opens the profile modal */}
           <PressableScale

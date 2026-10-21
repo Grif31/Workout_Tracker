@@ -80,3 +80,28 @@ describe('ExerciseDetailScreen', () => {
     expect(queryByText(new Date(2025, 11, 31).toLocaleDateString())).toBeNull();
   });
 });
+
+describe('ExerciseDetailScreen tab underline', () => {
+  const sliderX = (r: any) => {
+    const { StyleSheet } = require('react-native');
+    const style = StyleSheet.flatten(r.getByTestId('tab-slider').props.style);
+    return style.transform.find((t: any) => 'translateX' in t).translateX;
+  };
+
+  beforeEach(() => {
+    mockFetchSequence([{ data: mockApiStats }]);
+  });
+
+  it('starts under the first tab by default', async () => {
+    const r = render(<ExerciseDetailScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(r.getByText('History')).toBeTruthy());
+    expect(sliderX(r)).toBe(0);
+  });
+
+  it('starts under the tab the screen opened on, not Overview', async () => {
+    const openOnHistory = createMockRoute('ExerciseDetail', { exerciseId: 1, exerciseName: 'Bench Press', initialTab: 'history' });
+    const r = render(<ExerciseDetailScreen navigation={nav as any} route={openOnHistory as any} />);
+    await waitFor(() => expect(r.getByText('History')).toBeTruthy());
+    expect(sliderX(r)).toBeGreaterThan(0);
+  });
+});

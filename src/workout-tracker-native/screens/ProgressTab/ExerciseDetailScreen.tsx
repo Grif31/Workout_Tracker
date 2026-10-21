@@ -243,6 +243,15 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     return tabs;
   }, [exerciseType, hasAnyChart]);
 
+  // The underline starts wherever the screen opened (initialTab: 'charts' from
+  // the Coach's plateau card), and jumps when Charts appears once its data loads,
+  // shifting the tabs after it. Hidden while the open tab isn't listed yet.
+  const activeTabIndex = visibleTabs.findIndex(t => t.key === activeTab);
+  useEffect(() => {
+    if (activeTabIndex >= 0) tabAnimRef.setValue(activeTabIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleTabs]);
+
   const tabSlideWidth = (SCREEN_WIDTH - spacing.md * 2) / visibleTabs.length;
   const sliderX = tabAnimRef.interpolate({
     inputRange: visibleTabs.map((_, i) => i),
@@ -1052,7 +1061,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
               </TouchableOpacity>
             </React.Fragment>
           ))}
-          <Animated.View style={[styles.tabSlider, { backgroundColor: colors.accent, width: tabSlideWidth, transform: [{ translateX: sliderX }] }]} />
+          <Animated.View testID="tab-slider" style={[styles.tabSlider, { backgroundColor: colors.accent, width: tabSlideWidth, opacity: activeTabIndex >= 0 ? 1 : 0, transform: [{ translateX: sliderX }] }]} />
         </View>
 
         <View style={styles.crossfadeContainer} {...swipeResponder.panHandlers}>

@@ -207,20 +207,22 @@ export default function ExerciseListModal({
           </View>
         )}
         <View style={styles.cardInfo}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={styles.cardName}>{displayName(item)}</Text>
-            {added.has(item.id) && (
-              <View style={[styles.addedBadge, { borderColor: colors.save }]}>
-                <Text style={[styles.addedBadgeText, { color: colors.save }]}>Added</Text>
-              </View>
-            )}
-          </View>
-          {/* Custom sits bottom right, not beside the name, so a long name gets the full width */}
+          <Text style={styles.cardName}>{displayName(item)}</Text>
+          {/* Added and Custom sit bottom right, not beside the name, so a long name gets the full width */}
           <View style={styles.cardMetaRow}>
             <Text style={styles.cardMuscle}>{isCardio ? 'Cardio' : item.muscle_group}</Text>
-            {item.is_custom && (
-              <View style={styles.customBadge}>
-                <Text style={styles.customBadgeText}>Custom</Text>
+            {(added.has(item.id) || item.is_custom) && (
+              <View style={styles.cardTags}>
+                {added.has(item.id) && (
+                  <View style={[styles.addedBadge, { borderColor: colors.save }]}>
+                    <Text style={[styles.addedBadgeText, { color: colors.save }]}>Added</Text>
+                  </View>
+                )}
+                {item.is_custom && (
+                  <View style={styles.customBadge}>
+                    <Text style={styles.customBadgeText}>Custom</Text>
+                  </View>
+                )}
               </View>
             )}
           </View>
@@ -465,8 +467,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   addedBadge: { borderWidth: 1, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
   addedBadgeText: { fontSize: typography.fontSize.xs, fontWeight: '700' },
+  cardTags: { flexDirection: 'row', gap: 4, marginLeft: 'auto' },
   customBadge: {
-    marginLeft: 'auto',
     backgroundColor: colors.accent + '22',
     borderRadius: 4,
     paddingHorizontal: 5,

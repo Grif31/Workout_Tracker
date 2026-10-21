@@ -15,6 +15,11 @@ export type LiftVelocity = {
   status: VelocityStatus;
   rate_per_month: number | null;
   rate_pct_per_month: number | null;
+  // From the exercise template, so a caller can name the lift and open its detail screen
+  equipment?: string | null;
+  muscle_group?: string | null;
+  image_url?: string | null;
+  is_custom?: boolean;
 };
 
 type Props = {

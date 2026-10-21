@@ -98,6 +98,18 @@ class TestPrVelocityRoute:
         assert lift['status'] == 'gaining'
         assert lift['rate_per_month'] > 5
 
+    def test_sends_what_the_exercise_screen_needs(self, client, auth_token):
+        res = client.post('/api/exercises', json={'name': 'Bench Press', 'muscle_group': 'Chest', 'equipment': 'Barbell'},
+                          headers=auth_headers(auth_token))
+        assert res.status_code == 201
+        tid = res.get_json()['id']
+        self._log(client, auth_token, tid, 1, 135)
+        (lift,) = self._get(client, auth_token)['exercises']
+        assert lift['equipment'] == 'Barbell'
+        assert lift['muscle_group'] == 'Chest'
+        assert lift['is_custom'] is True
+        assert 'image_url' in lift
+
     def test_reports_a_stalled_lift(self, client, auth_token):
         tid = self._template(client, auth_token)
         for days_ago in (70, 56, 42, 28, 14, 0):

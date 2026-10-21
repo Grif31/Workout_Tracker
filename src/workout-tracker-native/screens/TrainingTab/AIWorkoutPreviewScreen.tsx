@@ -252,7 +252,6 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
           muscleGroup={item.muscle_group}
           equipment={item.equipment}
           programming={{ sets: item.prescribed_sets, reps: item.prescribed_reps, rpe: item.prescribed_rpe }}
-          rowColor={colors.background}
           swipeEnabled={!listDragging}
           onDelete={() => removeExercise(scope, item.id)}
           onSwitch={() => setPicker({ mode: 'switch', scope, exId: item.id })}
@@ -432,10 +431,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     minHeight: 36,
   },
 
+  // No box around the list: each exercise row is its own surface card on the screen background
   section: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
     gap: spacing.sm,
   },
   sectionLabel: {

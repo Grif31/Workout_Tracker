@@ -42,7 +42,6 @@ export default function ExerciseEditRow({
   const prescription = programming?.sets
     ? `${programming.sets} × ${programming.reps || '?'}${programming.rpe != null ? `  @ RPE ${programming.rpe}` : ''}`
     : null;
-  const subtitle = [muscleGroup, equipment, prescription].filter(Boolean).join('  ·  ');
 
   return (
     <Swipeable
@@ -72,9 +71,20 @@ export default function ExerciseEditRow({
       }}
     >
       <View style={[styles.row, { backgroundColor: rowColor ?? colors.surface }]}>
+        {/* Equipment rides beside the name and the prescription never shrinks: on one
+            line with the muscle group, a long muscle list cut off the sets and RPE */}
         <View style={styles.info}>
-          <Text style={styles.name} numberOfLines={1}>{name}</Text>
-          {!!subtitle && <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>}
+          <View style={styles.line}>
+            <Text style={styles.name} numberOfLines={1}>{name}</Text>
+            {!!equipment && <Text style={styles.equipment} numberOfLines={1}>{equipment}</Text>}
+          </View>
+          {(!!muscleGroup || !!prescription) && (
+            <View style={[styles.line, styles.subtitleLine]}>
+              {!!muscleGroup && <Text style={styles.muscle} numberOfLines={1}>{muscleGroup}</Text>}
+              {!!muscleGroup && !!prescription && <Text style={styles.subtitle}>·</Text>}
+              {!!prescription && <Text style={styles.prescription} numberOfLines={1}>{prescription}</Text>}
+            </View>
+          )}
         </View>
         <Ionicons name="reorder-three-outline" size={20} color={colors.textSecondary} />
       </View>
@@ -92,8 +102,13 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     gap: spacing.sm,
   },
   info: { flex: 1 },
-  name: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
-  subtitle: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
+  line: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs },
+  subtitleLine: { marginTop: 2 },
+  name: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary, flexShrink: 1 },
+  equipment: { fontSize: typography.fontSize.xs, color: colors.textSecondary, flexShrink: 0, maxWidth: '40%' },
+  subtitle: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+  muscle: { fontSize: typography.fontSize.sm, color: colors.textSecondary, flexShrink: 1 },
+  prescription: { fontSize: typography.fontSize.sm, color: colors.textPrimary, fontWeight: '600', flexShrink: 0 },
 
   actionsRow: { flexDirection: 'row', marginLeft: spacing.xs, height: EXERCISE_ROW_HEIGHT },
   action: {
