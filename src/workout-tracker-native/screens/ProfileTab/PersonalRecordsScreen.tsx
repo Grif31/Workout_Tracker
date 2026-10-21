@@ -377,7 +377,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
       return (
         <TouchableOpacity
           style={[styles.strengthPill, styles.strengthPillLocked, { borderColor: colors.border }]}
-          onPress={() => (navigation as any).navigate('TrainingTab', { screen: 'StrengthScore', initial: false })}
+          onPress={() => (navigation as any).navigate('ProgressTab', { screen: 'StrengthScore', initial: false })}
           hitSlop={6}
           accessibilityRole="button"
           accessibilityLabel="Strength rank, premium"
@@ -391,7 +391,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
     return (
       <TouchableOpacity
         style={[styles.strengthPill, { borderColor: color, backgroundColor: color + '1F' }]}
-        onPress={() => (navigation as any).navigate('TrainingTab', { screen: 'StrengthScore', initial: false })}
+        onPress={() => (navigation as any).navigate('ProgressTab', { screen: 'StrengthScore', initial: false })}
         hitSlop={6}
         accessibilityRole="button"
         accessibilityLabel={`Strength Score ${fmtOrdinal(score.percentile)} percentile, ${score.rank}`}

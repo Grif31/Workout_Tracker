@@ -1,6 +1,6 @@
 import { GREEK_RANKS } from '../constants/greekRanks';
 import { gateRequirementText, type GreekRankData } from './greekRank';
-import { toLocalDateStr } from './date';
+import { toLocalDateStr, trainedDaysOfWeek } from './date';
 
 // The one blob every home screen widget renders from (TODO.md section 19,
 // Phase 1). Widgets can't call the API, so the app writes this whenever it
@@ -177,12 +177,7 @@ export type WeekView = {
 export function viewWeek(week: WidgetWeek, today: Date): WeekView {
   const monday = mondayOf(today);
   const current = week.weekStart === monday;
-  const trained = new Set(current ? week.trainedDates : []);
-  const trainedDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(today.getDate() - ((today.getDay() + 6) % 7) + i);
-    return trained.has(toLocalDateStr(d));
-  });
+  const trainedDays = trainedDaysOfWeek(current ? week.trainedDates : [], today);
   const done = current ? week.workoutCount : 0;
   return {
     done,

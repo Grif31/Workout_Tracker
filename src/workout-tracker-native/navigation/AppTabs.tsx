@@ -13,7 +13,7 @@ import { onPendingCountChange, initPendingCount, flushQueue, announceFlushResult
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { DashboardStack } from './DashboardStack';
-import { ExercisesStack } from './ExercisesStack';
+import { ProgressStack } from './ProgressStack';
 import { TrainingStack } from './TrainingStack';
 import { ProfileStack } from './ProfileStack';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -30,7 +30,7 @@ const Tab = createBottomTabNavigator<AppStack>();
 
 const ROOT_SCREENS: Record<string, string> = {
   DashboardTab: 'DashboardHome',
-  ExercisesTab: 'ExercisesHome',
+  ProgressTab:  'ProgressHome',
   TrainingTab:  'TrainingHome',
   ProfileTab:   'ProfileHome',
 };
@@ -41,8 +41,8 @@ const isIOS18Plus = isIOS && iosVersion >= 18;
 
 const TAB_CONFIG: Array<{ route: string; icon: keyof typeof Ionicons.glyphMap; label: string }> = [
   { route: 'DashboardTab', icon: 'home',        label: 'Home'      },
-  { route: 'ExercisesTab', icon: 'barbell',     label: 'Exercises' },
-  { route: 'TrainingTab',  icon: 'stats-chart', label: 'Training'  },
+  { route: 'ProgressTab',  icon: 'stats-chart', label: 'Progress'  },
+  { route: 'TrainingTab',  icon: 'barbell',     label: 'Coach'     },
   { route: 'ProfileTab',   icon: 'person',      label: 'Profile'   },
 ];
 
@@ -60,7 +60,7 @@ const withScreenFade = (Stack: React.ComponentType<any>) => () => (
   </Animated.View>
 );
 const FadedDashboardStack = withScreenFade(DashboardStack);
-const FadedExercisesStack = withScreenFade(ExercisesStack);
+const FadedProgressStack  = withScreenFade(ProgressStack);
 const FadedTrainingStack  = withScreenFade(TrainingStack);
 const FadedProfileStack   = withScreenFade(ProfileStack);
 
@@ -359,8 +359,8 @@ export function AppTabs() {
         screenOptions={{ headerShown: false }}
       >
         <Tab.Screen name="DashboardTab" component={FadedDashboardStack} options={{ title: 'Dashboard' }} />
-        <Tab.Screen name="ExercisesTab" component={FadedExercisesStack} options={{ title: 'Exercises' }} />
-        <Tab.Screen name="TrainingTab" component={FadedTrainingStack} options={{ title: 'Training' }} />
+        <Tab.Screen name="ProgressTab" component={FadedProgressStack} options={{ title: 'Progress' }} />
+        <Tab.Screen name="TrainingTab" component={FadedTrainingStack} options={{ title: 'Coach' }} />
         <Tab.Screen name="ProfileTab" component={FadedProfileStack} options={{ title: 'Profile' }} />
       </Tab.Navigator>
     </>

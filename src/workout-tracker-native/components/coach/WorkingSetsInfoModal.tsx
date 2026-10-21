@@ -21,24 +21,18 @@ export default function WorkingSetsInfoModal({ visible, onClose, muscleStandards
       <View style={styles.modalOverlay}>
         <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
         <View style={[styles.modalBox, { maxHeight: Dimensions.get('window').height * 0.8, overflow: 'hidden' }]}>
-          <Text style={styles.modalTitle}>Working Sets & Volume Zones</Text>
+          <Text style={styles.modalTitle}>Working sets</Text>
           <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
             <Text style={styles.body}>
-              Every set you log that isn't a warm-up counts as a working set. For growth, keep them hard: within about 1-4 reps of failure. Your weekly working sets per muscle are compared against three volume landmarks from exercise science:
+              Any set that isn't a warm-up. It counts as <Text style={styles.bold}>1</Text> for the main muscle and <Text style={styles.bold}>0.5</Text> for the others it works. Weeks run Monday to Sunday.
             </Text>
             <Text style={styles.body}>
-              Each working set counts as <Text style={styles.bold}>1 set</Text> for the muscle an exercise mainly targets, and <Text style={styles.bold}>0.5 sets</Text> for the other muscles it works. One set of bench press adds 1 set to chest and 0.5 sets each to triceps and shoulders. A few lifts, like squats and deadlifts, count fully for more than one muscle.
-            </Text>
-            <Text style={styles.body}>
-              <Text style={styles.bold}>MEV</Text> (Minimum Effective Volume): the least volume that still grows the muscle.{'\n'}
-              <Text style={styles.bold}>MAV</Text> (Maximum Adaptive Volume): the sweet spot for the most growth per set.{'\n'}
-              <Text style={styles.bold}>MRV</Text> (Maximum Recoverable Volume): the ceiling before fatigue outpaces recovery.
-            </Text>
-            <Text style={styles.body}>
-              The chart counts Monday to Sunday. Until Sunday, a muscle short of its MEV shows how many sets are left to reach it, since one more session can still get it there. On Sunday it gets its verdict. Reaching MRV reads <Text style={styles.bold}>At limit</Text>, and going past it is flagged <Text style={styles.bold}>Over limit</Text> right away.
+              <Text style={styles.bold}>MEV</Text>: the least that still builds muscle{'\n'}
+              <Text style={styles.bold}>MAV</Text>: the sweet spot{'\n'}
+              <Text style={styles.bold}>MRV</Text>: the most you can recover from
             </Text>
 
-            <Text style={styles.tableTitle}>Weekly Set Guidelines</Text>
+            <Text style={styles.tableTitle}>Weekly sets</Text>
             <View style={styles.table}>
               <View style={styles.tableRow}>
                 <Text style={[styles.tableCell, styles.tableMuscleCell, styles.tableHeaderText]}>Muscle</Text>
@@ -57,7 +51,7 @@ export default function WorkingSetsInfoModal({ visible, onClose, muscleStandards
             </View>
 
             <Text style={[styles.body, { marginBottom: spacing.md }]}>
-              These are general starting points, not a personal prescription. Your real numbers shift with training experience, sleep, nutrition, stress, and genetics. A beginner may grow well below MEV; a more advanced lifter may need to push toward MRV to keep progressing.
+              General starting points. Yours shift with experience, sleep and recovery.
             </Text>
           </ScrollView>
         </View>

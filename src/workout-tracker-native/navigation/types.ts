@@ -70,9 +70,12 @@ export type DashboardStackParamsList = {
     GreekRankIntro: undefined;
     WeeklySummary: WeeklySummaryParams;
 };
-export type ExercisesStackParamsList = {
-    ExercisesHome: undefined;
+export type ProgressStackParamsList = {
+    ProgressHome: undefined;
     ExerciseDetail: ExerciseDetailParams;
+    StrengthScore: undefined;
+    EnduranceScore: undefined;
+    WeeklySummary: WeeklySummaryParams;
 };
 export type PreviewExercise = {
   id: number;
@@ -94,9 +97,6 @@ export type TrainingStackParamsList = {
     WorkoutDetails: { workoutId: number };
     WorkoutSummary: WorkoutSummaryParams;
     ExerciseDetail: ExerciseDetailParams;
-    StrengthScore: undefined;
-    EnduranceScore: undefined;
-    WeeklySummary: WeeklySummaryParams;
     AIWorkoutPreview: {
         generateType: 'routine' | 'template';
         name: string;
@@ -142,7 +142,8 @@ export type ProfileStackParamsList = {
 
 export type AppStack = {
   DashboardTab: undefined;
-  ExercisesTab: undefined;
+  ProgressTab: undefined;
+  // Labelled "Coach" (AI coach + plans); the route name predates that
   TrainingTab: undefined;
   ProfileTab: undefined;
 };

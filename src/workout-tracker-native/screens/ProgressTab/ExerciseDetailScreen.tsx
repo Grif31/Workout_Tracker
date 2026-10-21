@@ -880,7 +880,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         <TouchableOpacity
           style={[styles.scoreCard, styles.scoreCardLocked]}
           activeOpacity={0.8}
-          onPress={() => (navigation as any).navigate('TrainingTab', { screen: 'StrengthScore', initial: false })}
+          onPress={() => (navigation as any).navigate('ProgressTab', { screen: 'StrengthScore', initial: false })}
           accessibilityRole="button"
           accessibilityLabel="Strength Score rank, premium"
         >

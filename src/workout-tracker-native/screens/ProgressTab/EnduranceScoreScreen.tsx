@@ -24,7 +24,7 @@ import DistanceDetailModal from '../../components/DistanceDetailModal';
 import { appCache } from '../../utils/appCache';
 import { GPS_DISTANCE_UNIT_KEY, type DistanceUnit } from '../../utils/units';
 import { fmtPaceForUnit, fmtRaceTime } from '../../utils/cardioFormat';
-import { TrainingStackParamsList } from '../../navigation/types';
+import { ProgressStackParamsList } from '../../navigation/types';
 import { STRENGTH_TIERS, SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
 import { toLocalDateStr, timeAgo } from '../../utils/date';
 import ScoreRing, { AnimatedPercentText } from '../../components/ScoreRing';
@@ -37,7 +37,7 @@ import { usePurchase } from '../../context/PurchaseContext';
 const RANGE_SEGMENTS = (['1M', '3M', '6M', 'All'] as const).map(r => ({ key: r, label: r }));
 import { writeWidgetScore } from '../../utils/widgetData';
 
-type Props = NativeStackScreenProps<TrainingStackParamsList, 'EnduranceScore'>;
+type Props = NativeStackScreenProps<ProgressStackParamsList, 'EnduranceScore'>;
 
 
 // Endurance keeps its own last-celebrated tier: ranking up as a runner is a

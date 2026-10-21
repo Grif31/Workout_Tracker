@@ -20,7 +20,7 @@ import { appCache } from '../../utils/appCache';
 import { captureAndShare } from '../../utils/shareCapture';
 import { computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH, CHART_Y_AXIS_WIDTH, CHART_EDGE_SPACING } from '../../utils/prFormat';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
-import { TrainingStackParamsList } from '../../navigation/types';
+import { ProgressStackParamsList } from '../../navigation/types';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import { STRENGTH_TIERS, SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
 import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModal';
@@ -36,7 +36,7 @@ import { usePurchase } from '../../context/PurchaseContext';
 const RANGE_SEGMENTS = (['1M', '3M', '6M', 'All'] as const).map(r => ({ key: r, label: r }));
 import { writeWidgetScore } from '../../utils/widgetData';
 
-type Props = NativeStackScreenProps<TrainingStackParamsList, 'StrengthScore'>;
+type Props = NativeStackScreenProps<ProgressStackParamsList, 'StrengthScore'>;
 
 
 const LAST_TIER_KEY = 'strength_score_last_tier';

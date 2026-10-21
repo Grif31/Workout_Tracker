@@ -1,78 +1,51 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert,
-  ScrollView, Dimensions, Animated, ActivityIndicator, PanResponder,
+  ScrollView, Animated, ActivityIndicator, PanResponder,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { BarChart } from 'react-native-gifted-charts';
-import Svg, { Circle } from 'react-native-svg';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { usePurchase } from '../../context/PurchaseContext';
 import { handlePremiumRequired } from '../../utils/premiumSync';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { WeightUnit, GPS_DISTANCE_UNIT_KEY, roundTenth, toDisplayDistance } from '../../utils/units';
-import { toLocalDateStr } from '../../utils/date';
-import { COACH_INSIGHTS_KEY, WEEKLY_DISTANCE_GOAL_KEY, WEEKLY_GOAL_KEY } from '../../constants/storageKeys';
+import { COACH_INSIGHTS_KEY } from '../../constants/storageKeys';
 import { apiFetch, isNetworkError } from '../../utils/api';
 import { appCache, useRefetchGate } from '../../utils/appCache';
 import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../../utils/templatePrefill';
+import { routineRotation, type RotationWorkout } from '../../utils/routineRotation';
+import { toLocalDateStr } from '../../utils/date';
+import { mondayOf } from '../../utils/widgetSnapshot';
 import { TrainingStackParamsList } from '../../navigation/types';
 import { muscleGroups } from '../../constants/muscleGroups';
-import { SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
 import CoachProfileModal, { CoachProfile, COACH_PROFILE_KEY, DEFAULT_PROFILE } from '../../components/coach/CoachProfileModal';
 import SectionRule from '../../components/SectionRule';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import PressableScale from '../../components/PressableScale';
+import TopTabBar from '../../components/TopTabBar';
 import { GREEK_RANK_COLORS, GREEK_RANKS, rankTextColor } from '../../constants/greekRanks';
 import type { GreekRankData } from '../../utils/greekRank';
-import WeeklyGoalModal from '../../components/coach/WeeklyGoalModal';
-import WorkingSetsInfoModal from '../../components/coach/WorkingSetsInfoModal';
-import RangePickerModal, { type ChartRange, type MenuAnchor } from '../../components/coach/RangePickerModal';
-import { hasLoggedNothing, visibleChartMetrics, type ChartMetric, type MetricsLogged } from '../../utils/progressMetrics';
-import {
-  displayToGoalKm, distanceGoalProgress, formatDistanceValue, goalKmToDisplay,
-} from '../../utils/weeklyDistanceGoal';
 import RoutinePickerModal from '../../components/coach/RoutinePickerModal';
 import MusclePickerModal from '../../components/coach/MusclePickerModal';
-import { MUSCLE_STANDARDS } from '../../constants/volumeLandmarks';
-import { fatigueBanner, pplBalance } from '../../utils/muscleTrends';
-import MuscleVolumeCard, { type MuscleVolumeData } from '../../components/MuscleVolumeCard';
-import AdvancedStatsCard from '../../components/AdvancedStatsCard';
 import PlateauNudge from '../../components/PlateauNudge';
 import GenerateAction from '../../components/GenerateAction';
-import PremiumTeaser from '../../components/PremiumTeaser';
-import { computeBarChartMax } from '../../utils/prFormat';
-import { writeWidgetGreekRank, writeWidgetScore } from '../../utils/widgetData';
+import { writeWidgetGreekRank } from '../../utils/widgetData';
 
-const MINI_RING_SIZE = 44;
-const MINI_RING_STROKE = 4;
-const MINI_RING_R = (MINI_RING_SIZE - MINI_RING_STROKE) / 2;
-const MINI_RING_CIRCUMFERENCE = 2 * Math.PI * MINI_RING_R;
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'TrainingHome'>;
 
-// Templates listed before Show All.
-const VISIBLE_TEMPLATES = 5;
+// Templates listed before Show All: three full rows of the 2-column grid
+const VISIBLE_TEMPLATES = 6;
 
-type ProgressBucket = { label: string; volume: number; sets: number; count: number; distance_km?: number; density?: number };
-type ProgressResponse = { buckets?: ProgressBucket[]; metrics_logged?: MetricsLogged };
 type Exercise = TemplateExercise;
-type WeeklySummaryPreview = {
-  week_start: string;
-  workouts: number;
-  total_volume: number;
-  distance_km?: number;
-  weight_unit: string;
-};
 type WorkoutTemplate = { id: number; name: string; exercises: Exercise[]; programming_json?: string | null; starter?: boolean };
 type RoutineDay = {
   id: number; day_order: number; label: string;
-  workout_template: { id: number; name: string; exercises: Exercise[] };
+  workout_template: { id: number; name: string; exercises: Exercise[]; programming_json?: string | null };
 };
 type Routine = { id: number; name: string; description?: string; day_count: number; starter?: boolean };
 type ActiveRoutine = { id: number; name: string; days: RoutineDay[] };
@@ -93,8 +66,6 @@ const INSIGHT_REASONS: { key: InsightReason; label: string }[] = [
 // What onboarding generated (`starter`) is not counted.
 const FREE_TEMPLATE_LIMIT = 5;
 const FREE_ROUTINE_LIMIT = 2;
-// This week's count and distance are the last bucket of the 30-day progress range
-const THIS_WEEK_RANGE: ChartRange = '30d';
 
 
 
@@ -130,6 +101,26 @@ function onColor(hex: string): string {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#1a1a1a' : '#fff';
 }
 
+// When a routine day was last logged, matched by name as the rotation does
+function lastDoneText(label: string, history: RotationWorkout[], today: Date): string | null {
+  const key = label.trim().toLowerCase();
+  const days = history
+    .filter(w => w.name.trim().toLowerCase() === key)
+    .map(w => toLocalDateStr(new Date(w.date)))
+    .sort();
+  const last = days[days.length - 1];
+  if (!last) return null;
+  const [y, m, d] = last.split('-').map(Number);
+  const midnight = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const ago = Math.round((midnight - new Date(y, m - 1, d).getTime()) / 86_400_000);
+  if (ago <= 0) return 'last done today';
+  if (ago === 1) return 'last done yesterday';
+  return `last done ${ago} days ago`;
+}
+
+// Rows shown from the day's exercises before "+ N more"
+const PREVIEW_EXERCISES = 3;
+
 function fmtUpdatedAgo(iso: string): string {
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
   if (!(mins >= 1)) return 'Updated just now';
@@ -138,46 +129,25 @@ function fmtUpdatedAgo(iso: string): string {
   return `Updated ${hours} hour${hours !== 1 ? 's' : ''} ago`;
 }
 
-function weekRangeLabel(weekStart: string): string {
-  const start = new Date(weekStart + 'T12:00:00');
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  return `${fmt(start)} – ${fmt(end)}`;
-}
 
 export default function CoachScreen({ navigation }: Props) {
   const { user, updateUser } = useAuth();
   const { colors, mode } = useTheme();
   const { isPremium } = usePurchase();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const [activeTab, setActiveTab] = useState<'training' | 'progress' | 'coach'>('progress');
-  const weightUnit: WeightUnit = (user as any)?.weight_unit === 'kg' ? 'kg' : 'lbs';
-  const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
-
-  useEffect(() => {
-    if (!user?.id) return;
-    AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user.id}`).then(v => {
-      setDistanceUnit(v === 'km' ? 'km' : 'mi');
-    });
-  }, [user?.id]);
-
-  const metricAnimRef = useRef(new Animated.Value(0)).current;
-  const barsAnim = useRef(new Animated.Value(0)).current;
-  const { width: SCREEN_WIDTH } = Dimensions.get('window');
-  const METRIC_BAR_WIDTH = SCREEN_WIDTH - spacing.lg * 2 - spacing.md * 2;
+  // Someone following a routine comes here to start its next day; everyone else for the Coach
+  const initialTab: 'plans' | 'coach' = user?.active_routine_id ? 'plans' : 'coach';
+  const [activeTab, setActiveTab] = useState<'plans' | 'coach'>(initialTab);
 
   // ── Tab animations ──────────────────────────────────────────────────────────
-  const TAB_NAMES = ['training', 'progress', 'coach'] as const;
-  const TAB_W = (SCREEN_WIDTH - spacing.md * 2) / 3;
-  const SLIDER_W = TAB_W * 0.5;
-  const tabIndexAnim = useRef(new Animated.Value(1)).current;
+  const TAB_NAMES = ['plans', 'coach'] as const;
+  const TABS = TAB_NAMES.map(key => ({ key, label: key.charAt(0).toUpperCase() + key.slice(1) }));
   const contentOpacity = useRef(new Animated.Value(1)).current;
   const insightAnimsRef = useRef<Animated.Value[]>([]);
 
   
   // Mutable refs so the stable PanResponder can read current values without stale closure
-  const activeTabRef = useRef<typeof TAB_NAMES[number]>('progress');
+  const activeTabRef = useRef<typeof TAB_NAMES[number]>(initialTab);
   const handleTabChangeRef = useRef<(tab: typeof TAB_NAMES[number]) => void>(() => {});
 
   const swipeResponder = useRef(
@@ -196,23 +166,7 @@ export default function CoachScreen({ navigation }: Props) {
     })
   ).current;
 
-  const tabSliderX = tabIndexAnim.interpolate({
-    inputRange: [0, 1, 2],
-    outputRange: [
-      (TAB_W - SLIDER_W) / 2,
-      TAB_W + (TAB_W - SLIDER_W) / 2,
-      TAB_W * 2 + (TAB_W - SLIDER_W) / 2,
-    ],
-  });
-
   const handleTabChange = (tab: typeof TAB_NAMES[number]) => {
-    Animated.spring(tabIndexAnim, {
-      toValue: TAB_NAMES.indexOf(tab),
-      useNativeDriver: true,
-      damping: 18,
-      stiffness: 220,
-      mass: 0.6,
-    }).start();
     Animated.timing(contentOpacity, { toValue: 0, duration: 80, useNativeDriver: true }).start(() => {
       setActiveTab(tab);
       Animated.timing(contentOpacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
@@ -223,42 +177,14 @@ export default function CoachScreen({ navigation }: Props) {
   activeTabRef.current = activeTab;
   handleTabChangeRef.current = handleTabChange;
 
-  const handleMetricChange = (m: ChartMetric) => {
-    const idx = visibleMetrics.indexOf(m);
-    Animated.timing(metricAnimRef, { toValue: idx, duration: 200, useNativeDriver: true }).start();
-    setChartMetric(m);
-    setSelectedBarIndex(null);
-  };
-
-  // ── Progress tab state ──────────────────────────────────────────────────────
-  const [progressData, setProgressData] = useState<ProgressBucket[]>([]);
-  const [chartRange, setChartRange] = useState<ChartRange>('30d');
-  const [chartMetric, setChartMetric] = useState<ChartMetric>('volume');
-  const [weeklyGoal, setWeeklyGoal] = useState(3);
-  const [thisWeekCount, setThisWeekCount] = useState(0);
-  // Optional, in km; null until the user turns a distance goal on.
-  const [weeklyDistanceGoalKm, setWeeklyDistanceGoalKm] = useState<number | null>(null);
-  const [thisWeekDistanceKm, setThisWeekDistanceKm] = useState(0);
-  // All-time, from the progress endpoint; null until it answers (or from a
-  // backend that predates it). Decides which metric tabs the chart offers.
-  const [metricsLogged, setMetricsLogged] = useState<MetricsLogged | null>(null);
-  const [strengthPercentile, setStrengthPercentile] = useState<number | null>(null);
-  const [strengthRankLabel, setStrengthRankLabel] = useState<string | null>(null);
-  const [endurancePercentile, setEndurancePercentile] = useState<number | null>(null);
-  const [enduranceRankLabel, setEnduranceRankLabel] = useState<string | null>(null);
-  const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeData | null>(null);
-  const [weeklySummaryPreview, setWeeklySummaryPreview] = useState<WeeklySummaryPreview | null>(null);
-  const [rangePickerVisible, setRangePickerVisible] = useState(false);
-  const [rangeAnchor, setRangeAnchor] = useState<MenuAnchor | null>(null);
-  const rangeButtonRef = useRef<View>(null);
-  const [goalModalVisible, setGoalModalVisible] = useState(false);
-  const [workingSetsInfoVisible, setWorkingSetsInfoVisible] = useState(false);
-  const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
-
   // ── Training tab state ──────────────────────────────────────────────────────
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [activeRoutine, setActiveRoutine] = useState<ActiveRoutine | null>(null);
+  // Recent workouts by name and date, for the active routine's Up Next (see Home's routine card)
+  const [routineHistory, setRoutineHistory] = useState<RotationWorkout[]>(
+    () => appCache.get<RotationWorkout[]>('routine_history') ?? [],
+  );
   const [selectModalVisible, setSelectModalVisible] = useState(false);
   // Muscle picker for creating blank templates (existing feature)
   const [musclePickerVisible, setMusclePickerVisible] = useState(false);
@@ -286,15 +212,10 @@ export default function CoachScreen({ navigation }: Props) {
   // and a `_undefined` key would just read back the defaults.
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.multiGet([
-      `${COACH_PROFILE_KEY}_${user.id}`, `${WEEKLY_GOAL_KEY}_${user.id}`, `${WEEKLY_DISTANCE_GOAL_KEY}_${user.id}`,
-    ]).then(([profileRaw, goalRaw, distanceGoalRaw]) => {
-      if (profileRaw[1]) {
-        try { setCoachProfile({ ...DEFAULT_PROFILE, ...JSON.parse(profileRaw[1]) }); } catch { }
+    AsyncStorage.getItem(`${COACH_PROFILE_KEY}_${user.id}`).then(profileRaw => {
+      if (profileRaw) {
+        try { setCoachProfile({ ...DEFAULT_PROFILE, ...JSON.parse(profileRaw) }); } catch { }
       }
-      if (goalRaw[1]) setWeeklyGoal(parseInt(goalRaw[1], 10) || 3);
-      const goalKm = distanceGoalRaw[1] ? parseFloat(distanceGoalRaw[1]) : NaN;
-      setWeeklyDistanceGoalKm(goalKm > 0 ? goalKm : null);
     });
   }, [user?.id]);
 
@@ -320,63 +241,14 @@ export default function CoachScreen({ navigation }: Props) {
   const templatesAtLimit = !isPremium && ownTemplateCount >= FREE_TEMPLATE_LIMIT;
   const routinesAtLimit = !isPremium && ownRoutineCount >= FREE_ROUTINE_LIMIT;
 
-  const updateWeeklyGoal = (delta: number) => {
-    const next = Math.max(1, Math.min(7, weeklyGoal + delta));
-    setWeeklyGoal(next);
-    AsyncStorage.setItem(`${WEEKLY_GOAL_KEY}_${user?.id}`, String(next));
-  };
-
-  // `value` is in the display unit; null turns the goal off.
-  const updateWeeklyDistanceGoal = (value: number | null) => {
-    const key = `${WEEKLY_DISTANCE_GOAL_KEY}_${user?.id}`;
-    if (value == null) {
-      setWeeklyDistanceGoalKm(null);
-      AsyncStorage.removeItem(key);
-      return;
-    }
-    const km = displayToGoalKm(value, distanceUnit);
-    setWeeklyDistanceGoalKm(km);
-    AsyncStorage.setItem(key, String(km));
-  };
-
-  // This week is the newest 30d bucket, the same source as thisWeekCount.
-  const applyThisWeek = (data: ProgressResponse) => {
-    const buckets = data.buckets ?? [];
-    const thisWeek = buckets[buckets.length - 1];
-    setThisWeekCount(thisWeek?.count ?? 0);
-    setThisWeekDistanceKm(thisWeek?.distance_km ?? 0);
-    if (data.metrics_logged) setMetricsLogged(data.metrics_logged);
-  };
-
-  const hasMuscleVolume = muscleVolume != null;
-  useEffect(() => {
-    if (activeTab !== 'progress' || !hasMuscleVolume) return;
-    barsAnim.setValue(0);
-    Animated.timing(barsAnim, { toValue: 1, duration: 900, useNativeDriver: true }).start();
-  }, [activeTab, hasMuscleVolume, barsAnim]);
-
   // ── Data fetching ───────────────────────────────────────────────────────────
   useEffect(() => {
     const tmpl = appCache.get<WorkoutTemplate[]>('templates');
     const rout = appCache.get<Routine[]>('routines');
-    const prog = appCache.get<{ buckets: ProgressBucket[] }>('progress');
-    const score = appCache.get<any>('strength_score');
     if (tmpl) setTemplates(tmpl);
     if (rout) setRoutines(rout);
-    if (prog) setProgressData(prog.buckets ?? []);
-    if (score?.overall != null) setStrengthPercentile(score.overall);
-    if (score?.overall_rank?.label) setStrengthRankLabel(score.overall_rank.label);
-    const endurance = appCache.get<any>('endurance_score');
-    if (endurance?.overall != null) setEndurancePercentile(endurance.overall);
-    if (endurance?.overall_rank?.label) setEnduranceRankLabel(endurance.overall_rank.label);
     const greek = appCache.get<GreekRankData>('greek_rank');
     if (greek?.greek_rank) setGreekRank(greek.greek_rank);
-    const mv = appCache.get<MuscleVolumeData>('muscle_volume');
-    if (mv) setMuscleVolume(mv);
-    const wsp = appCache.get<WeeklySummaryPreview>('weekly_summary_preview');
-    if (wsp) setWeeklySummaryPreview(wsp);
-    const prog30 = appCache.get<ProgressResponse>('progress');
-    if (prog30) applyThisWeek(prog30);
   }, []);
 
   // Keyed on the batch, not the array: a vote replaces the array, and replaying
@@ -393,19 +265,6 @@ export default function CoachScreen({ navigation }: Props) {
     )).start();
   }, [insightsFetchedAt, insights.length]);
 
-  const fetchProgressData = async (range: ChartRange) => {
-    try {
-      const res = await apiFetch(`/api/stats/progress?range=${range}`);
-      if (res.ok) {
-        const data: ProgressResponse = await res.json();
-        setProgressData(data.buckets ?? []);
-        if (data.metrics_logged) setMetricsLogged(data.metrics_logged);
-        // The same request fetchThisWeekCount makes, so it fills this week too
-        if (range === THIS_WEEK_RANGE) applyThisWeek(data);
-      }
-    } catch { }
-  };
-
   const fetchTemplates = async () => {
     try {
       const res = await apiFetch('/api/workout-templates');
@@ -420,23 +279,23 @@ export default function CoachScreen({ navigation }: Props) {
     } catch { }
   };
 
+  // Same request as Home's: /api/workouts/recent caps at 5, too few to find the last routine day or a layoff
+  const fetchRoutineHistory = async () => {
+    try {
+      const res = await apiFetch('/api/workouts?page=1&per_page=50');
+      if (!res.ok) return;
+      const data = await res.json();
+      const history: RotationWorkout[] = (data.workouts ?? []).map((w: any) => ({ id: w.id, name: w.name ?? '', date: String(w.date) }));
+      setRoutineHistory(history);
+      appCache.set('routine_history', history);
+    } catch { }
+  };
+
   const fetchActiveRoutine = async () => {
     if (!user?.active_routine_id) { setActiveRoutine(null); return; }
     try {
       const res = await apiFetch(`/api/routines/${user.active_routine_id}`);
       if (res.ok) setActiveRoutine(await res.json());
-    } catch { }
-  };
-
-  const fetchStrengthScore = async () => {
-    try {
-      const res = await apiFetch('/api/stats/strength-score');
-      if (res.ok) {
-        const data = await res.json();
-        setStrengthPercentile(data.overall ?? null);
-        if (data.overall_rank?.label) setStrengthRankLabel(data.overall_rank.label);
-        writeWidgetScore(user?.id, 'strength', data);
-      }
     } catch { }
   };
 
@@ -453,86 +312,21 @@ export default function CoachScreen({ navigation }: Props) {
     } catch { }
   };
 
-  const fetchEnduranceScore = async () => {
-    try {
-      const res = await apiFetch('/api/stats/endurance-score');
-      if (res.ok) {
-        const data = await res.json();
-        setEndurancePercentile(data.overall ?? null);
-        setEnduranceRankLabel(data.overall_rank?.label ?? null);
-        appCache.set('endurance_score', data);
-        writeWidgetScore(user?.id, 'endurance', data);
-      }
-    } catch { }
-  };
-
-  const fetchThisWeekCount = async () => {
-    try {
-      const res = await apiFetch(`/api/stats/progress?range=${THIS_WEEK_RANGE}`);
-      if (res.ok) applyThisWeek(await res.json());
-    } catch { }
-  };
-
-  const fetchMuscleGroupData = async () => {
-    try {
-      const now = new Date();
-      const localDate = toLocalDateStr(now);
-      const res = await apiFetch(`/api/stats/muscle-volume?local_date=${localDate}`);
-      if (res.ok) {
-        const data = await res.json();
-        setMuscleVolume(data);
-        appCache.set('muscle_volume', data);
-      }
-    } catch { }
-  };
-
-  const fetchWeeklySummaryPreview = async () => {
-    try {
-      const res = await apiFetch('/api/stats/weekly-summary');
-      if (res.ok) {
-        const data = await res.json();
-        const preview: WeeklySummaryPreview = {
-          week_start: data.week_start, workouts: data.workouts, total_volume: data.total_volume,
-          distance_km: data.distance_km, weight_unit: data.weight_unit,
-        };
-        setWeeklySummaryPreview(preview);
-        appCache.set('weekly_summary_preview', preview);
-      }
-    } catch { }
-  };
-
-  // Seeded from the preload so the data the mount effect above just painted
-  // counts as fetched. Progress was preloaded at 30d, the initial chartRange.
+  // Seeded from the preload so the data the mount effect above just painted counts as fetched
   const refetchIfStale = useRefetchGate(() => ({
-    progress: appCache.stampOf('progress'),
-    thisWeek: appCache.stampOf('progress'),
     templates: appCache.stampOf('templates'),
     routines: appCache.stampOf('routines'),
-    strength: appCache.stampOf('strength_score'),
-    endurance: appCache.stampOf('endurance_score'),
     greek: appCache.stampOf('greek_rank'),
-    muscleVolume: appCache.stampOf('muscle_volume'),
-    weeklySummary: appCache.stampOf('weekly_summary_preview'),
+    routineHistory: appCache.stampOf('routine_history'),
   }));
 
-  // Read through a ref so a range change doesn't re-run the whole focus
-  // refetch; handleRangeChange fetches the new range itself.
-  const chartRangeRef = useRef(chartRange);
-  chartRangeRef.current = chartRange;
-
   useFocusEffect(useCallback(() => {
-    refetchIfStale('progress', () => fetchProgressData(chartRangeRef.current));
     refetchIfStale('templates', fetchTemplates);
     refetchIfStale('routines', fetchRoutines);
     // Keyed on the id so switching routines is never answered from the old one
     refetchIfStale(`routine:${user?.active_routine_id}`, fetchActiveRoutine);
-    refetchIfStale('strength', fetchStrengthScore);
-    refetchIfStale('endurance', fetchEnduranceScore);
     refetchIfStale('greek', fetchGreekRank);
-    refetchIfStale('muscleVolume', fetchMuscleGroupData);
-    // On the 30-day chart the progress request above already brings this week
-    if (chartRangeRef.current !== THIS_WEEK_RANGE) refetchIfStale('thisWeek', fetchThisWeekCount);
-    refetchIfStale('weeklySummary', fetchWeeklySummaryPreview);
+    if (user?.active_routine_id) refetchIfStale('routineHistory', fetchRoutineHistory);
   }, [user?.active_routine_id]));
 
   // ── Coach tab handlers ──────────────────────────────────────────────────────
@@ -719,71 +513,52 @@ export default function CoachScreen({ navigation }: Props) {
     });
   };
 
-  const visibleMetrics = useMemo(() => visibleChartMetrics(metricsLogged), [metricsLogged]);
-  // Whether the advanced stats below the muscle card have anything to show; the lock only covers real content
-  const hasAdvancedStats = !!muscleVolume && (
-    !!metricsLogged?.density
-    || fatigueBanner(muscleVolume.this_week_total ?? 0, muscleVolume.last_week_to_date_total ?? 0) != null
-    || pplBalance(muscleVolume.muscle_sets) != null
+  const routineDays = useMemo(
+    () => [...(activeRoutine?.days ?? [])].sort((a, b) => a.day_order - b.day_order),
+    [activeRoutine],
   );
-  // Falling back here rather than resetting state keeps the user's pick for
-  // when that metric's tab comes back.
-  const activeMetric: ChartMetric = visibleMetrics.includes(chartMetric)
-    ? chartMetric
-    : (visibleMetrics[0] ?? 'workouts');
-  const metricSlideWidth = METRIC_BAR_WIDTH / Math.max(1, visibleMetrics.length);
-  const visibleMetricsKey = visibleMetrics.join(',');
-  useEffect(() => {
-    // Tabs were added or removed under the slider; put it back on the active one.
-    metricAnimRef.setValue(Math.max(0, visibleMetrics.indexOf(activeMetric)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleMetricsKey]);
+  const rotation = useMemo(() => {
+    const today = new Date();
+    return routineRotation(routineDays.map(d => d.label), routineHistory, toLocalDateStr(today), mondayOf(today));
+  }, [routineDays, routineHistory]);
+  const nextDay = routineDays[rotation.nextIndex] ?? null;
 
-  // Opens straight away; the menu stays invisible for the frame until the
-  // button's position comes back, so the tap never waits on the measurement.
-  const openRangePicker = () => {
-    setRangeAnchor(null);
-    setRangePickerVisible(true);
-    rangeButtonRef.current?.measureInWindow((x, y, width, height) => {
-      setRangeAnchor({ x, y, width, height });
-    });
-  };
-
-  const handleRangeChange = (newRange: ChartRange) => {
-    setProgressData([]);
-    setSelectedBarIndex(null);
-    setChartRange(newRange);
-    refetchIfStale('progress', () => fetchProgressData(newRange), true);
-  };
+  const startDay = (day: RoutineDay) => (navigation as any).navigate('DashboardTab', {
+    screen: 'WorkoutLog',
+    initial: false,
+    params: {
+      prefill: buildTemplatePrefill(day.label, day.workout_template.exercises, parseProgramming(day.workout_template.programming_json)),
+      editMode: false,
+    },
+  });
 
   // ── Render helpers ──────────────────────────────────────────────────────────
   const rankColor = GREEK_RANK_COLORS[greekRank] ?? colors.accent;
   const rankIcon = GREEK_RANKS.find(r => r.name === greekRank)?.icon ?? greekRank.charAt(0);
 
-  const renderTemplateCard = (t: WorkoutTemplate) => (
-    <PressableScale
-      key={t.id}
-      style={styles.card}
-      onPress={() => navigation.navigate('TemplateDetail', { templateId: t.id })}
-    >
-      <View style={styles.cardRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.cardName}>{t.name}</Text>
+  const renderTemplateCard = (t: WorkoutTemplate) => {
+    // Two muscles: a third rarely fits half a row
+    const muscles = [...new Set(
+      t.exercises.flatMap(ex => ex.muscle_group ? ex.muscle_group.split(',').map(m => m.trim()) : []).filter(Boolean)
+    )].slice(0, 2);
+    return (
+      <PressableScale
+        key={t.id}
+        style={styles.templateCard}
+        onPress={() => navigation.navigate('TemplateDetail', { templateId: t.id })}
+      >
+        <View>
+          <Text style={styles.cardName} numberOfLines={2}>{t.name}</Text>
           <Text style={styles.cardSub}>{t.exercises.length} exercise{t.exercises.length !== 1 ? 's' : ''}</Text>
-          {(() => {
-            const muscles = [...new Set(
-              t.exercises.flatMap(ex => ex.muscle_group ? ex.muscle_group.split(',').map(m => m.trim()) : []).filter(Boolean)
-            )].slice(0, 3);
-            return muscles.length > 0 ? (
-              <View style={styles.muscleChipRow}>
-                {muscles.map(m => (
-                  <View key={m} style={styles.templateMuscleChip}>
-                    <Text style={styles.templateMuscleChipText}>{m}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : null;
-          })()}
+          {muscles.length > 0 && (
+            <View style={styles.muscleChipRow}>
+              {muscles.map(m => (
+                <View key={m} style={styles.templateMuscleChip}>
+                  <Text style={styles.templateMuscleChipText} numberOfLines={1}>{m}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
         <TouchableOpacity
           style={styles.logInlineBtn}
@@ -794,12 +569,13 @@ export default function CoachScreen({ navigation }: Props) {
               prefill: buildTemplatePrefill(t.name, t.exercises, parseProgramming(t.programming_json)),
             },
           })}
+          accessibilityLabel={`Log ${t.name}`}
         >
           <Text style={styles.logInlineBtnText}>Log</Text>
         </TouchableOpacity>
-      </View>
-    </PressableScale>
-  );
+      </PressableScale>
+    );
+  };
 
   const renderInsightCard = (ins: Insight, idx: number) => {
     const icon = INSIGHT_ICONS[ins.type] ?? 'bulb-outline';
@@ -875,73 +651,110 @@ export default function CoachScreen({ navigation }: Props) {
     );
   };
 
-  const weeklySummarySubtitle = () => {
-    const p = weeklySummaryPreview;
-    if (!p) return 'Workouts, volume, and PRs from last week';
-    const dateRange = weekRangeLabel(p.week_start);
-    if (p.workouts === 0) return `${dateRange} · No workouts logged`;
-    const workoutsStr = `${p.workouts} workout${p.workouts !== 1 ? 's' : ''}`;
-    if (p.total_volume > 0) return `${dateRange} · ${workoutsStr} · ${p.total_volume.toLocaleString()} ${p.weight_unit}`;
-    if (p.distance_km != null) {
-      const dist = toDisplayDistance(p.distance_km, distanceUnit);
-      return `${dateRange} · ${workoutsStr} · ${dist.toFixed(2)} ${distanceUnit}`;
-    }
-    return `${dateRange} · ${workoutsStr}`;
-  };
-
   // ── JSX ─────────────────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
-      {/* 3-tab row */}
-      <View style={styles.tabRow}>
-        {TAB_NAMES.map(tab => (
-          <TouchableOpacity
-            key={tab}
-            style={styles.tabBtn}
-            onPress={() => handleTabChange(tab)}
-          >
-            <Text style={[styles.tabBtnText, activeTab === tab && styles.tabBtnTextActive]}>
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-        <Animated.View
-          style={[styles.tabSlider, { width: SLIDER_W, transform: [{ translateX: tabSliderX }] }]}
-        />
-      </View>
+      <TopTabBar tabs={TABS} active={activeTab} onChange={handleTabChange} />
 
       <Animated.View style={{ flex: 1, opacity: contentOpacity }} {...swipeResponder.panHandlers}>
-      {/* ── TRAINING TAB ── */}
-      {activeTab === 'training' && (
+      {/* ── PLANS TAB ── */}
+      {activeTab === 'plans' && (
         <ScrollView style={styles.trainingScroll} contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.xl }}>
-          {/* Active Routine */}
-          <PressableScale
-            style={styles.activeBlock}
-            onPress={activeRoutine
-              ? () => navigation.navigate('RoutineDetail', { routineId: activeRoutine.id, routineName: activeRoutine.name })
-              : handleActiveBlockPress}
-          >
-            <Text style={styles.activeRoutineLabel}>Active Routine</Text>
-            {activeRoutine ? (
-              <View style={styles.activeRoutineNameRow}>
-                <Text style={styles.activeRoutineName} numberOfLines={1}>{activeRoutine.name}</Text>
-                {/* Plain View, not a TouchableOpacity: the card itself is the
-                    tap target, and nesting a touchable inside PressableScale
-                    left the label stuck at its pressed opacity because the
-                    outer responder swallowed the press-out. */}
-                <View style={styles.toggleDaysBtn}>
-                  <Text style={[styles.toggleDaysBtnText, { color: colors.accent }]}>
-                    {activeRoutine.days.length} Day{activeRoutine.days.length !== 1 ? 's' : ''}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={14} color={colors.accent} />
-                </View>
+          {/* Active routine with its Up Next. Not one big touchable: the
+              routine name and Start are separate targets, since a touchable
+              nested inside PressableScale gets stuck at its pressed opacity
+              (the outer responder swallows the press-out). */}
+          {activeRoutine ? (
+            <View style={styles.activeBlock}>
+              <View style={styles.activeHeaderRow}>
+                <Text style={styles.activeRoutineLabel}>Active Routine</Text>
+                <TouchableOpacity
+                  style={styles.activeRoutineLink}
+                  onPress={() => navigation.navigate('RoutineDetail', { routineId: activeRoutine.id, routineName: activeRoutine.name })}
+                  accessibilityLabel={`Open ${activeRoutine.name}`}
+                >
+                  <Text style={styles.activeRoutineLinkText} numberOfLines={1}>{activeRoutine.name}</Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
+                </TouchableOpacity>
               </View>
-            ) : (
+
+              {nextDay ? (() => {
+                const exercises = nextDay.workout_template.exercises;
+                const programming = parseProgramming(nextDay.workout_template.programming_json);
+                const lastDone = lastDoneText(nextDay.label, routineHistory, new Date());
+                const meta = [
+                  `${exercises.length} exercise${exercises.length !== 1 ? 's' : ''}`,
+                  ...(lastDone ? [lastDone] : []),
+                ].join(' · ');
+                return (
+                  <>
+                    <Text style={styles.upNextLabel}>
+                      {rotation.restarted
+                        ? `Up next · Fresh start, day 1 of ${routineDays.length}`
+                        : `Up next · Day ${rotation.nextIndex + 1} of ${routineDays.length}`}
+                    </Text>
+                    <Text style={styles.upNextName} numberOfLines={2}>{nextDay.label}</Text>
+                    <Text style={styles.upNextMeta}>{meta}</Text>
+
+                    <View
+                      style={styles.rotationBar}
+                      accessible
+                      accessibilityLabel={`${rotation.doneThisWeek.size} of ${routineDays.length} days done this week`}
+                    >
+                      {routineDays.map((d, i) => (
+                        <View
+                          key={d.id}
+                          style={[
+                            styles.rotationSegment,
+                            {
+                              backgroundColor: rotation.doneThisWeek.has(i) ? colors.accent
+                                : i === rotation.nextIndex ? colors.textPrimary
+                                : colors.border,
+                            },
+                          ]}
+                        />
+                      ))}
+                    </View>
+
+                    {exercises.length > 0 && (
+                      <View style={styles.previewList}>
+                        {exercises.slice(0, PREVIEW_EXERCISES).map(ex => {
+                          const plan = programming[ex.id];
+                          return (
+                            <View key={ex.id} style={styles.previewRow}>
+                              <Text style={styles.previewName} numberOfLines={1}>{ex.name}</Text>
+                              {plan && <Text style={styles.previewPlan}>{plan.sets} × {plan.reps}</Text>}
+                            </View>
+                          );
+                        })}
+                        {exercises.length > PREVIEW_EXERCISES && (
+                          <Text style={styles.previewMore}>+ {exercises.length - PREVIEW_EXERCISES} more</Text>
+                        )}
+                      </View>
+                    )}
+
+                    <TouchableOpacity
+                      style={styles.startBtn}
+                      onPress={() => startDay(nextDay)}
+                      accessibilityLabel={`Start ${nextDay.label}`}
+                    >
+                      <Ionicons name="play" size={16} color={colors.accentText} />
+                      <Text style={styles.startBtnText} numberOfLines={1}>Start {nextDay.label}</Text>
+                    </TouchableOpacity>
+                  </>
+                );
+              })() : (
+                <Text style={styles.noRoutineText}>This routine has no days yet. Open it to add some.</Text>
+              )}
+            </View>
+          ) : (
+            <PressableScale style={styles.activeBlock} onPress={handleActiveBlockPress}>
+              <Text style={styles.activeRoutineLabel}>Active Routine</Text>
               <Text style={styles.noRoutineText}>
                 {routines.length === 0 ? 'No routines yet. Tap to create one' : 'No active routine. Tap to select one'}
               </Text>
-            )}
-          </PressableScale>
+            </PressableScale>
+          )}
 
           {/* Templates */}
           <View style={styles.sectionHeaderRow}>
@@ -964,12 +777,16 @@ export default function CoachScreen({ navigation }: Props) {
             <Text style={styles.emptyText}>No templates yet. Save a workout as a template to reuse it.</Text>
           ) : (
             <>
-              {templates.slice(0, VISIBLE_TEMPLATES).map(renderTemplateCard)}
+              <View style={styles.templateGrid}>
+                {templates.slice(0, VISIBLE_TEMPLATES).map(renderTemplateCard)}
+              </View>
               {/* The rest open and close as one block, so height and fade
                   stay on one timeline (see utils/layoutAnimation.ts). */}
               {templates.length > VISIBLE_TEMPLATES && (
                 <Collapsible progress={templatesAnim} expanded={showAllTemplates}>
-                  {templates.slice(VISIBLE_TEMPLATES).map(renderTemplateCard)}
+                  <View style={styles.templateGrid}>
+                    {templates.slice(VISIBLE_TEMPLATES).map(renderTemplateCard)}
+                  </View>
                 </Collapsible>
               )}
             </>
@@ -1042,7 +859,7 @@ export default function CoachScreen({ navigation }: Props) {
             <View style={styles.coachHeroTopRow}>
               <TouchableOpacity
                 style={[styles.rankPill, { borderColor: rankColor + '55' }]}
-                onPress={() => navigation.navigate('StrengthScore')}
+                onPress={() => (navigation as any).navigate('ProgressTab', { screen: 'StrengthScore', initial: false })}
               >
                 <View style={[styles.rankPillIcon, { backgroundColor: rankColor }]}>
                   <Text style={[styles.rankPillIconText, { color: onColor(rankColor) }]}>{rankIcon}</Text>
@@ -1175,394 +992,9 @@ export default function CoachScreen({ navigation }: Props) {
         </ScrollView>
       )}
 
-      {/* ── PROGRESS TAB ── */}
-      {activeTab === 'progress' && (
-        <ScrollView contentContainerStyle={styles.content}>
-          {(() => {
-            const getValue = (b: ProgressBucket) =>
-              activeMetric === 'volume' ? b.volume
-                : activeMetric === 'sets' ? b.sets
-                : activeMetric === 'distance' ? roundTenth(toDisplayDistance(b.distance_km ?? 0, distanceUnit))
-                : b.count;
-            const hasData = progressData.some(b => getValue(b) > 0);
-            const metricLabel = activeMetric === 'volume' ? `Volume (${weightUnit})`
-              : activeMetric === 'sets' ? 'Sets'
-              : activeMetric === 'distance' ? `Distance (${distanceUnit})`
-              : 'Workouts';
-
-            const BAR_GAP = 6;
-            const N = progressData.length || 1;
-            const availableForBars = Dimensions.get('window').width - 48 - 32 - 35 - 40;
-            const barWidth = Math.max(8, Math.floor((availableForBars - (N - 1) * BAR_GAP) / N));
-            const maxVal = Math.max(...progressData.map(getValue), 1);
-
-            const formatTopLabel = (val: number) => {
-              if (activeMetric === 'volume' && val >= 1000) return `${(val / 1000).toFixed(val % 1000 === 0 ? 0 : 1)}K`;
-              if (activeMetric === 'distance') return formatDistanceValue(val);
-              return String(val);
-            };
-
-            // 3M packs 13 weekly bars into the width 30D gives 5, about 12px
-            // each, and the library sizes a label to its bar, so "9/22" won't
-            // fit. Every other week gets a label, drawn wider and recentred
-            // over its bar; the newest week always keeps one.
-            const THIN_LABELS = chartRange === '3m';
-            const X_LABEL_WIDTH = 36;
-            const lastIndex = progressData.length - 1;
-
-            // gifted-charts sizes the top-label container to exactly barWidth,
-            // which on the 6m/1y ranges (many narrow bars) is far too narrow
-            // for e.g. "12.3K" and forces it to wrap onto a second line —
-            // widen the container and recenter it over the bar so it always
-            // fits on one line.
-            const TOP_LABEL_WIDTH = 50;
-            const barData = progressData.map((b, i) => ({
-              value: getValue(b),
-              label: THIN_LABELS ? undefined : b.label,
-              labelComponent: THIN_LABELS
-                ? () => (
-                    <Text
-                      numberOfLines={1}
-                      style={[styles.axisLabel, {
-                        width: X_LABEL_WIDTH,
-                        marginLeft: (barWidth + BAR_GAP - X_LABEL_WIDTH) / 2,
-                        textAlign: 'center',
-                      }]}
-                    >
-                      {(lastIndex - i) % 2 === 0 ? b.label : ''}
-                    </Text>
-                  )
-                : undefined,
-              frontColor: i === selectedBarIndex ? colors.accent : colors.accent + '99',
-              onPress: () => setSelectedBarIndex(prev => prev === i ? null : i),
-              topLabelComponent: i === selectedBarIndex
-                ? () => (
-                    <Text
-                      numberOfLines={1}
-                      style={[styles.barTopLabel, { width: TOP_LABEL_WIDTH }]}
-                    >
-                      {formatTopLabel(getValue(b))}
-                    </Text>
-                  )
-                : undefined,
-              topLabelContainerStyle: { width: TOP_LABEL_WIDTH, left: -(TOP_LABEL_WIDTH - barWidth) / 2 },
-            }));
-
-            // Goal line: the weekly goal on weekly bars (30D, 3M), four weeks'
-            // worth on monthly bars (6M, 1Y). Distance only has one once the
-            // user has set a distance goal.
-            const isMonthlyRange = chartRange === '6m' || chartRange === '1y';
-            const weeklyTarget = activeMetric === 'workouts' ? weeklyGoal
-              : activeMetric === 'distance' && weeklyDistanceGoalKm != null
-                ? goalKmToDisplay(weeklyDistanceGoalKm, distanceUnit)
-                : null;
-            const referenceLinePos = weeklyTarget != null ? roundTenth(isMonthlyRange ? weeklyTarget * 4 : weeklyTarget) : 0;
-            const unitSuffix = activeMetric === 'distance' ? ` ${distanceUnit}` : '';
-            const referenceLineLabel = weeklyTarget != null
-              ? `Goal: ${formatDistanceValue(referenceLinePos)}${unitSuffix}/${isMonthlyRange ? 'mo' : 'wk'}`
-              : '';
-
-            const RANGE_SHORT: Record<ChartRange, string> = { '30d': '30D', '3m': '3M', '6m': '6M', '1y': '1Y' };
-            const scoreRingColor = strengthRankLabel
-              ? (SCORE_RANK_COLORS[strengthRankLabel] ?? colors.accent)
-              : colors.border;
-            const enduranceColor = enduranceRankLabel
-              ? (SCORE_RANK_COLORS[enduranceRankLabel] ?? colors.accent)
-              : colors.textSecondary;
-
-            return (
-              <>
-                {/* Score circle + Weekly goal */}
-                <View style={styles.scoreGoalRow}>
-                  <TouchableOpacity
-                    style={styles.scoreCircleWrap}
-                    // Open to everyone: free accounts see their score with the breakdown locked
-                    onPress={() => navigation.navigate('StrengthScore')}
-                  >
-                    <View style={[styles.scoreCircle, { borderColor: scoreRingColor }]}>
-                      {strengthRankLabel && (
-                        // The ring narrows toward the top, so the longest rank
-                        // ("Intermediate") shrinks slightly rather than touch it
-                        <Text
-                          style={[styles.scoreRankLabel, { color: scoreRingColor }]}
-                          numberOfLines={1}
-                          adjustsFontSizeToFit
-                          minimumFontScale={0.8}
-                        >
-                          {strengthRankLabel}
-                        </Text>
-                      )}
-                      <Text style={[styles.scoreNum, { color: scoreRingColor }]}>
-                        {strengthPercentile != null ? Math.round(strengthPercentile) : '–'}
-                      </Text>
-                      {/* Two lines: at this size and letter spacing one line would touch the ring */}
-                      <Text style={styles.scoreCircleLabel}>{'Strength\nScore'}</Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.goalSide} onPress={() => setGoalModalVisible(true)}>
-                    <Text style={styles.goalSideTitle}>Weekly Goal</Text>
-                    <View style={styles.goalCirclesRow}>
-                      {Array.from({ length: weeklyGoal }).map((_, i) => {
-                        const done = i < Math.min(thisWeekCount, weeklyGoal);
-                        return (
-                          <View
-                            key={i}
-                            style={[
-                              styles.goalCircle,
-                              done
-                                ? { backgroundColor: colors.accent, borderColor: colors.accent }
-                                : { backgroundColor: 'transparent', borderColor: colors.border },
-                            ]}
-                          >
-                            {done && <Ionicons name="checkmark" size={11} color={colors.accentText} />}
-                          </View>
-                        );
-                      })}
-                    </View>
-                    {weeklyDistanceGoalKm != null && (() => {
-                      const dg = distanceGoalProgress(thisWeekDistanceKm, weeklyDistanceGoalKm, distanceUnit);
-                      return (
-                        <View
-                          style={styles.distanceGoalWrap}
-                          accessible
-                          accessibilityLabel={`${formatDistanceValue(dg.done)} of ${formatDistanceValue(dg.goal)} ${distanceUnit === 'mi' ? 'miles' : 'kilometers'} this week`}
-                        >
-                          <View style={styles.distanceGoalTrack}>
-                            <View testID="distance-goal-fill" style={[styles.distanceGoalFill, { width: `${dg.fill * 100}%` }]} />
-                          </View>
-                          <View style={styles.distanceGoalLabelRow}>
-                            {dg.complete && <Ionicons name="checkmark-circle" size={12} color={colors.accent} />}
-                            <Text style={styles.distanceGoalLabel}>
-                              {formatDistanceValue(dg.done)} / {formatDistanceValue(dg.goal)} {distanceUnit}
-                            </Text>
-                          </View>
-                        </View>
-                      );
-                    })()}
-                    <Text style={styles.goalSideSub}>
-                      {Math.min(thisWeekCount, weeklyGoal)}/{weeklyGoal} this week · Tap to edit
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Endurance Score entry point. The mini ring echoes the Strength
-                    circle above at a smaller size, so it reads as a sibling
-                    rather than competing with it. */}
-                <TouchableOpacity
-                  style={styles.weeklySummaryCard}
-                  onPress={() => navigation.navigate('EnduranceScore')}
-                >
-                  <View style={styles.enduranceRing}>
-                    <Svg width={MINI_RING_SIZE} height={MINI_RING_SIZE}>
-                      <Circle
-                        cx={MINI_RING_SIZE / 2} cy={MINI_RING_SIZE / 2} r={MINI_RING_R}
-                        stroke={colors.border} strokeWidth={MINI_RING_STROKE} fill="none"
-                      />
-                      {endurancePercentile != null && (
-                        <Circle
-                          cx={MINI_RING_SIZE / 2} cy={MINI_RING_SIZE / 2} r={MINI_RING_R}
-                          stroke={enduranceColor} strokeWidth={MINI_RING_STROKE} fill="none"
-                          strokeDasharray={`${MINI_RING_CIRCUMFERENCE}`}
-                          strokeDashoffset={MINI_RING_CIRCUMFERENCE * (1 - endurancePercentile / 100)}
-                          strokeLinecap="round"
-                          transform={`rotate(-90 ${MINI_RING_SIZE / 2} ${MINI_RING_SIZE / 2})`}
-                        />
-                      )}
-                    </Svg>
-                    <View style={styles.enduranceRingCenter}>
-                      {endurancePercentile != null ? (
-                        <Text style={[styles.enduranceRingNum, { color: enduranceColor }]}>
-                          {Math.round(endurancePercentile)}
-                        </Text>
-                      ) : (
-                        <Ionicons name="walk-outline" size={18} color={colors.textSecondary} />
-                      )}
-                    </View>
-                  </View>
-                  <View style={styles.weeklySummaryTextWrap}>
-                    <Text style={styles.weeklySummaryText}>Endurance Score</Text>
-                  </View>
-                  {enduranceRankLabel && (
-                    <View style={[styles.enduranceRankPill, { backgroundColor: enduranceColor + '22', borderColor: enduranceColor }]}>
-                      <Ionicons name={SCORE_RANK_ICONS[enduranceRankLabel] ?? 'ellipse-outline'} size={11} color={enduranceColor} />
-                      <Text style={[styles.enduranceRankText, { color: enduranceColor }]}>{enduranceRankLabel}</Text>
-                    </View>
-                  )}
-                  <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
-                </TouchableOpacity>
-
-                {/* Weekly Summary entry point */}
-                <TouchableOpacity
-                  style={styles.weeklySummaryCard}
-                  onPress={() => navigation.navigate('WeeklySummary')}
-                >
-                  <Ionicons name="calendar-outline" size={20} color={colors.accent} />
-                  <View style={styles.weeklySummaryTextWrap}>
-                    <Text style={styles.weeklySummaryText}>Weekly Summary</Text>
-                    <Text style={styles.weeklySummarySub} numberOfLines={1}>{weeklySummarySubtitle()}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
-                </TouchableOpacity>
-
-                {/* Chart card. Someone who hasn't logged anything gets the card
-                    with no tabs or range to pick, since there's nothing to chart. */}
-                {hasLoggedNothing(metricsLogged) ? (
-                  <View style={styles.chartCard}>
-                    <View style={styles.chartEmpty}>
-                      <Text style={styles.emptyText}>Start logging to track your progress</Text>
-                    </View>
-                  </View>
-                ) : (
-                <View style={styles.chartCard}>
-                  <View style={styles.chartHeader}>
-                    <Text style={styles.chartTitle}>{metricLabel}</Text>
-                    <TouchableOpacity
-                      ref={rangeButtonRef}
-                      style={styles.rangeDropdown}
-                      onPress={openRangePicker}
-                      accessibilityLabel={`Chart range, ${RANGE_SHORT[chartRange]}`}
-                    >
-                      <Text style={styles.rangeDropdownText}>{RANGE_SHORT[chartRange]}</Text>
-                      <Ionicons name="chevron-down" size={12} color={colors.textSecondary} />
-                    </TouchableOpacity>
-                  </View>
-
-                  {hasData ? (
-                    <BarChart
-                      key={`${chartRange}-${activeMetric}`}
-                      data={barData}
-                      barWidth={barWidth}
-                      spacing={BAR_GAP}
-                      roundedTop
-                      hideRules
-                      xAxisLabelTextStyle={styles.axisLabel}
-                      yAxisTextStyle={styles.axisLabel}
-                      noOfSections={4}
-                      maxValue={computeBarChartMax(
-                        Math.max(maxVal * 1.1, weeklyTarget != null ? referenceLinePos * 1.1 : 0),
-                        4,
-                      )}
-                      height={150}
-                      barBorderRadius={3}
-                      xAxisThickness={1}
-                      xAxisColor={colors.border}
-                      yAxisThickness={1}
-                      yAxisColor={colors.border}
-                      formatYLabel={(v) => {
-                        const n = parseFloat(v);
-                        if (activeMetric === 'volume' && n >= 1000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}K`;
-                        // Axis steps on a short run land on values like 1.25; a
-                        // tenth is as fine as the bars themselves go.
-                        if (activeMetric === 'distance') return formatDistanceValue(n >= 10 ? Math.round(n) : roundTenth(n));
-                        return v;
-                      }}
-                      isAnimated
-                      showReferenceLine1={weeklyTarget != null}
-                      referenceLine1Position={referenceLinePos}
-                      referenceLine1Config={{
-                        color: colors.accent, thickness: 1.5, type: 'dashed',
-                        dashWidth: 5, dashGap: 4,
-                        labelText: referenceLineLabel,
-                        labelTextStyle: styles.axisLabel,
-                        zIndex: 2,
-                      }}
-                    />
-                  ) : (
-                    <View style={styles.chartEmpty}>
-                      <Text style={styles.emptyText}>Nothing logged in this range yet.</Text>
-                    </View>
-                  )}
-
-                  {/* Metric selector */}
-                  <View style={styles.metricBar}>
-                    {visibleMetrics.map((m, idx) => (
-                      <React.Fragment key={m}>
-                        {idx > 0 && <View style={styles.metricDivider} />}
-                        <TouchableOpacity
-                          style={styles.metricItem}
-                          onPress={() => handleMetricChange(m)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={[styles.metricText, activeMetric === m && { color: colors.accent, fontWeight: '700' }]}>
-                            {m.charAt(0).toUpperCase() + m.slice(1)}
-                          </Text>
-                        </TouchableOpacity>
-                      </React.Fragment>
-                    ))}
-                    <Animated.View
-                      style={[styles.metricSlider, {
-                        width: metricSlideWidth,
-                        // multiply, not interpolate: interpolate needs at least
-                        // two points and a user can have a single tab.
-                        transform: [{ translateX: Animated.multiply(metricAnimRef, metricSlideWidth) }],
-                      }]}
-                    />
-                  </View>
-                </View>
-                )}
-
-                {muscleVolume && (
-                  <MuscleVolumeCard
-                    data={muscleVolume}
-                    isPremium={isPremium}
-                    barsAnim={barsAnim}
-                    onInfo={() => setWorkingSetsInfoVisible(true)}
-                    onUnlock={() => (navigation as any).navigate('Paywall', { source: 'muscle_volume' })}
-                  />
-                )}
-                {hasAdvancedStats && muscleVolume && (
-                  <PremiumTeaser
-                    locked={!isPremium}
-                    largeLock
-                    source="muscle_volume"
-                    title="Advanced stats"
-                    body="A fatigue monitor that compares this week with last, your push, pull and legs balance, and how much work you fit into each minute."
-                    onUnlock={() => (navigation as any).navigate('Paywall', { source: 'muscle_volume' })}
-                  >
-                    <AdvancedStatsCard
-                      muscleSets={muscleVolume.muscle_sets}
-                      setsToDate={muscleVolume.this_week_total ?? 0}
-                      lastWeekSetsToDate={muscleVolume.last_week_to_date_total}
-                      densityBuckets={progressData}
-                      hasDensity={!!metricsLogged?.density}
-                      weightUnit={weightUnit}
-                    />
-                  </PremiumTeaser>
-                )}
-              </>
-            );
-          })()}
-        </ScrollView>
-      )}
-
       </Animated.View>
 
       {/* ── Modals ──────────────────────────────────────────────────────────── */}
-
-      <WeeklyGoalModal
-        visible={goalModalVisible}
-        weeklyGoal={weeklyGoal}
-        onChangeGoal={updateWeeklyGoal}
-        distanceGoal={weeklyDistanceGoalKm != null ? goalKmToDisplay(weeklyDistanceGoalKm, distanceUnit) : null}
-        distanceUnit={distanceUnit}
-        onChangeDistanceGoal={updateWeeklyDistanceGoal}
-        onClose={() => setGoalModalVisible(false)}
-      />
-
-      <WorkingSetsInfoModal
-        visible={workingSetsInfoVisible}
-        onClose={() => setWorkingSetsInfoVisible(false)}
-        muscleStandards={MUSCLE_STANDARDS}
-      />
-
-      <RangePickerModal
-        visible={rangePickerVisible}
-        chartRange={chartRange}
-        anchor={rangeAnchor}
-        onSelect={handleRangeChange}
-        onClose={() => setRangePickerVisible(false)}
-      />
 
       <RoutinePickerModal
         visible={selectModalVisible}
@@ -1614,103 +1046,40 @@ export default function CoachScreen({ navigation }: Props) {
 const createStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
-  tabRow: {
-    flexDirection: 'row',
-    marginHorizontal: spacing.md,
-    marginTop: spacing.xl,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  tabBtn: { flex: 1, alignItems: 'center', paddingBottom: 10 },
-  tabBtnText: {
-    fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary,
-    textTransform: 'uppercase', letterSpacing: 1.2, paddingTop: spacing.sm, marginBottom: 6,
-  },
-  tabBtnTextActive: { color: colors.accent },
-  tabSlider: { position: 'absolute', bottom: 0, left: 0, height: 2, borderRadius: 1, backgroundColor: colors.accent },
-
-  // ── Progress tab ────────────────────────────────────────────────────────────
-  content: { padding: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xl },
-  scoreGoalRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md, alignItems: 'stretch' },
-  scoreCircleWrap: { alignItems: 'center', justifyContent: 'center', gap: 6 },
-  scoreCircle: {
-    width: 100, height: 100, borderRadius: 50, borderWidth: 4,
-    backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
-  },
-  scoreNum: { fontSize: typography.fontSize.xxl, fontWeight: '800', lineHeight: 32 },
-  scoreCircleLabel: { fontSize: 9, lineHeight: 11, fontWeight: '700', color: colors.textSecondary, letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' },
-  scoreRankLabel: { fontSize: typography.fontSize.xs, fontWeight: '700', letterSpacing: 0.3, maxWidth: 68, textAlign: 'center' },
-  goalSide: {
-    flex: 1, backgroundColor: colors.surface, borderRadius: spacing.sm,
-    padding: spacing.md, borderWidth: 1, borderColor: colors.border, justifyContent: 'center',
-  },
-  goalSideTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.sm },
-  goalCirclesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: spacing.sm },
-  goalCircle: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  goalSideSub: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
-  distanceGoalWrap: { marginBottom: spacing.sm },
-  distanceGoalTrack: { height: 6, borderRadius: 3, backgroundColor: colors.border, overflow: 'hidden' },
-  distanceGoalFill: { height: '100%', borderRadius: 3, backgroundColor: colors.accent },
-  distanceGoalLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  distanceGoalLabel: { fontSize: typography.fontSize.xs, color: colors.textPrimary, fontWeight: '600' },
-  enduranceRing: { width: MINI_RING_SIZE, height: MINI_RING_SIZE, alignItems: 'center', justifyContent: 'center' },
-  enduranceRingCenter: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-  enduranceRingNum: { fontSize: typography.fontSize.sm, fontWeight: '800' },
-  enduranceRankPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    borderRadius: 6, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2,
-  },
-  enduranceRankText: { fontSize: typography.fontSize.xs, fontWeight: '700' },
-  weeklySummaryCard: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.surface, borderRadius: spacing.sm, borderWidth: 1, borderColor: colors.border,
-    padding: spacing.md, marginBottom: spacing.md,
-  },
-  weeklySummaryTextWrap: { flex: 1 },
-  weeklySummaryText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
-  weeklySummarySub: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
-  chartCard: {
-    backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md,
-    marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
-  },
-  chartHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
-  chartTitle: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
-  rangeDropdown: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: 6, borderWidth: 1, borderColor: colors.border },
-  rangeDropdownText: { fontSize: typography.fontSize.xs, fontWeight: '600', color: colors.textSecondary },
-  chartEmpty: { height: 150, justifyContent: 'center', alignItems: 'center' },
-  metricBar: {
-    flexDirection: 'row', marginTop: spacing.md,
-    borderWidth: 1, borderColor: colors.border, borderRadius: spacing.sm,
-    overflow: 'hidden', position: 'relative',
-  },
-  metricItem: { flex: 1, paddingVertical: 9, alignItems: 'center', justifyContent: 'center' },
-  metricDivider: { width: 1, backgroundColor: colors.border, marginVertical: spacing.sm },
-  metricText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
-  metricSlider: { position: 'absolute', bottom: 0, height: 2, backgroundColor: colors.accent, borderRadius: 1 },
-  axisLabel: { fontSize: 9, color: colors.textSecondary },
-
-  barTopLabel: { fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textPrimary, marginBottom: 2, textAlign: 'center' },
   insightsUpdated: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: spacing.xs },
 
   emptyText: { textAlign: 'center', color: colors.textSecondary, marginVertical: spacing.sm, fontSize: typography.fontSize.sm },
 
   // ── Training tab ────────────────────────────────────────────────────────────
   trainingScroll: { flex: 1, paddingHorizontal: spacing.md },
-  activeBlock: { backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 3, borderLeftColor: colors.accent },
+  activeBlock: {
+    backgroundColor: colors.surface, borderRadius: spacing.md, padding: spacing.md, marginBottom: spacing.lg,
+    borderWidth: 1, borderColor: colors.accent + '59',
+  },
+  activeHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginBottom: spacing.sm },
   // Same label treatment as SectionRule, minus the hairlines and centering.
-  activeRoutineLabel: { fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.sm },
-  // No marginBottom: this row is the card's last element now that the day list
-  // navigates to RoutineDetail instead of expanding inline.
-  activeRoutineNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  activeRoutineName: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, flex: 1 },
-  toggleDaysBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: spacing.sm },
-  toggleDaysBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600' },
-  noRoutineText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontStyle: 'italic' },
+  activeRoutineLabel: { fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1 },
+  activeRoutineLink: { flexDirection: 'row', alignItems: 'center', gap: 2, flexShrink: 1, minHeight: 32 },
+  activeRoutineLinkText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, flexShrink: 1 },
+  noRoutineText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, fontStyle: 'italic', marginTop: spacing.xs },
+  upNextLabel: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.accent },
+  upNextName: { fontSize: typography.fontSize.xxl, fontWeight: '800', color: colors.textPrimary, marginTop: 2 },
+  upNextMeta: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
+  rotationBar: { flexDirection: 'row', gap: 6, marginTop: spacing.md },
+  rotationSegment: { flex: 1, height: 6, borderRadius: 3 },
+  previewList: { marginTop: spacing.md, gap: spacing.sm },
+  previewRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
+  previewName: { flex: 1, fontSize: typography.fontSize.sm, color: colors.textPrimary },
+  previewPlan: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+  previewMore: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+  startBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    minHeight: 50, marginTop: spacing.md, borderRadius: spacing.md, backgroundColor: colors.accent, paddingHorizontal: spacing.md,
+  },
+  startBtnText: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.accentText, flexShrink: 1 },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   newTemplateBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   newTemplateBtnText: { color: colors.save, fontWeight: '600', fontSize: typography.fontSize.sm },
-  card: { backgroundColor: colors.surface, borderRadius: spacing.sm, padding: spacing.md, marginBottom: spacing.sm },
-  cardRow: { flexDirection: 'row', alignItems: 'center' },
   cardName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
   cardSub: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
   routineGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
@@ -1721,7 +1090,17 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   routineCardName: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary, lineHeight: 18 },
   routineCardSub: { fontSize: 12, color: colors.textSecondary, marginTop: spacing.xs },
-  logInlineBtn: { backgroundColor: colors.save, borderRadius: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
+  // Same 2-column grid as the routines; cards in a row stretch to the taller one, so Log buttons line up
+  templateGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },
+  templateCard: {
+    backgroundColor: colors.surface, borderRadius: spacing.sm,
+    padding: spacing.md, width: '48%', gap: spacing.sm,
+    justifyContent: 'space-between',
+  },
+  logInlineBtn: {
+    backgroundColor: colors.save, borderRadius: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+    minHeight: 32, alignItems: 'center', justifyContent: 'center',
+  },
   logInlineBtnText: { color: colors.accentText, fontWeight: '600', fontSize: typography.fontSize.sm },
   showAllBtn: {
     flexDirection: 'row',

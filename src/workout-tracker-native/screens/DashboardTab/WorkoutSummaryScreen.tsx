@@ -433,7 +433,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
               {rankedPr && (
                 <TouchableOpacity
                   style={s.rankLink}
-                  onPress={() => (navigation as any).navigate('TrainingTab', { screen: 'StrengthScore', initial: false })}
+                  onPress={() => (navigation as any).navigate('ProgressTab', { screen: 'StrengthScore', initial: false })}
                   accessibilityRole="button"
                 >
                   <Ionicons name={isPremium ? 'trophy-outline' : 'lock-closed'} size={14} color={colors.accent} />

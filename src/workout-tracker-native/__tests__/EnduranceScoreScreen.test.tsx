@@ -8,7 +8,7 @@ import React from 'react';
 import { render, waitFor, fireEvent, act, within } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createMockNavigation, createMockRoute, mockUser } from './testUtils';
-import EnduranceScoreScreen from '../screens/TrainingTab/EnduranceScoreScreen';
+import EnduranceScoreScreen from '../screens/ProgressTab/EnduranceScoreScreen';
 import { appCache } from '../utils/appCache';
 
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));

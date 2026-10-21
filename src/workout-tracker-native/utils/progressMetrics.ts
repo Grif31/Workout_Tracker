@@ -6,6 +6,10 @@ export type MetricsLogged = Record<ChartMetric, boolean> & { density?: boolean }
 
 export const CHART_METRICS: readonly ChartMetric[] = ['volume', 'sets', 'workouts', 'distance'];
 
+export type ChartRange = '30d' | '3m' | '6m' | '1y';
+
+export const CHART_RANGES: readonly ChartRange[] = ['30d', '3m', '6m', '1y'];
+
 /**
  * The chart tabs to show. A metric gets a tab only once the user has logged
  * something it can chart, judged across all time rather than the selected

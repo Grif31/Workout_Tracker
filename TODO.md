@@ -1501,3 +1501,45 @@ One screen that says whether anything needs attention today, then links into the
 - Error tracking (Sentry or a small error log table)
 - Editing user records
 - Marking "Looks wrong" votes as triaged (needs a column; the list is sorted by date for now)
+
+---
+
+## 🧭 25. Progress & Coach Redesign
+> Planned (owner, 2026-10-20). The Training tab hides three sub-tabs (Training / Progress / Coach), and on Progress the two scores look unequal: Strength is a big circle squeezed beside the weekly goal, Endurance a list row styled like the Weekly Summary link. Mockups (private canvas): https://claude.ai/artifact/TUe6dBVJUtwk1CcoAbgJ5r. Shipping order, one PR each, smallest risk first.
+
+### Target layout
+- Tab bar: **Home · Progress · Coach · Profile**
+  - **Progress:** Overview | Exercises segments
+  - **Coach:** Coach (AI) | Plans (routines + templates) segments
+- Progress › Overview, top to bottom: This week card → Your scores card → trends chart → sets per muscle → advanced stats
+- Exercises list: option D (today's cards plus one line: last top set, or the PR when it's recent)
+
+### 1. Overview cards (in the current Progress sub-tab, no navigation change), built 2026-10-20
+- [x] **This week card** replaces the Weekly Goal block and the Weekly Summary row: Mon–Sun day dots (filled = trained, today outlined) from `workout_dates`, "N of goal", the distance bar when a distance goal is set, a pencil button to edit the goal, and a "Last week" line that opens WeeklySummary
+- [x] **Your scores card** replaces the big Strength circle and the Endurance row: twin rings of equal size (shared `ScoreRing`), a rank pill each, and a "this month" trend from the score `history` the endpoints already return. Empty states keep both halves (Endurance "Log a run to unlock", Strength "Set up your score")
+- [x] Tests for both cards and the trend helper (`ThisWeekCard`, `ScoresCard`, `utils/scoreTrend.ts`, `trainedDaysOfWeek` in `utils/date.ts`, now shared with the widget)
+- [ ] On a device, light and dark: day dots, the count-up rings, an empty Endurance half, and the goal edit button
+
+### 2. Chart controls, built 2026-10-20
+- [x] Metric picker above the chart and range picker below it, both the app's `SegmentedControl` (the range dropdown, `RangePickerModal`, is deleted)
+- [x] Headline number (`utils/chartHeadline.ts`): the picked bar, else the newest. The week or month still in progress shows the earlier average beside it ("4-week average 10,000") instead of a percentage, which would read as a drop every Monday; a finished period shows its change against the up-to-4 periods before it
+- [x] Tapping a bar updates the headline and highlights the bar; the label above the bar and its width workarounds are gone
+- [x] Dashed goal line kept; tapping the range already showing no longer refetches
+- [x] Every bar compares against the same 4 periods on any range: `/api/stats/progress` sends `lead_in`, the 4 periods before the first bar (30D's oldest bars used to look back fewer weeks than 3M's)
+- [x] Scores and chart sit on the screen background with no card; smaller score rings (`ScoreRing` takes a `size`); metric chips on one row; square-cornered chips and bars; a spinner, not "Nothing logged", while a new range loads, and a slow answer for a range already left is dropped
+- [ ] On a device: 3M and 1Y bar taps, a kg account, a cardio-only account
+
+### 3. Tab restructure, built 2026-10-20
+- [x] Tabs are Home · Progress · Coach · Profile. `ProgressTab` replaces `ExercisesTab`; Coach keeps the `TrainingTab` route
+- [x] `CoachScreen.tsx` split: Progress › Overview is `screens/ProgressTab/ProgressOverview.tsx`, hosted with the Exercises segment by `ProgressScreen`; `CoachScreen` keeps Plans + Coach (about 1,800 lines down to about 1,100). Shared `TopTabBar` for both tabs' segment rows
+- [x] `StrengthScore`, `EnduranceScore` and `WeeklySummary` moved to the Progress stack, with the score screens and the exercise screens moved into `screens/ProgressTab/`; every cross-tab link repointed (Workout Summary, Exercise Detail, Greek Rank, Personal Records, Paywall's unlocked list, the cardio "View History" action, Coach's rank pill)
+- [x] Coach opens on Plans when there's an active routine, else Coach
+- [x] Plans: one active routine card as in the mockup: routine name linking to it, "Up next · Day 2 of 4", the day in large type, exercise count and when it was last done, a rotation bar (done this week / next / rest), the first 3 exercises with sets × reps, and a full-width Start button. From `routineRotation` like Home; Home shares its 50-workout history through `appCache` (`routine_history`)
+- [x] Exercises lost its own title (the segment row names it); Create sits beside the search box
+- [x] Templates as a 2-column grid like the routines: name (2 lines), exercise count, up to 2 muscle chips, Log along the bottom; 6 shown before Show All (three full rows)
+- [ ] On a device: every cross-tab link above lands on the right screen with a working back button; widget taps; switching segments keeps the Exercises search
+
+### 4. Exercises list (option D)
+- [x] Custom tag moved off the name's line (bottom right of the card) in the Exercises list and the workout picker, so a long name keeps the full width (2026-10-20)
+- [ ] "Last 255 × 5 · Mon" on the equipment line, or the gold "PR 205 × 5" when the PR is recent. Needs each exercise's last top set and latest PR date from the server; find the cheapest source (extend `/api/stats/recent-exercises` or one batch endpoint), never one request per row
+- [ ] The workout picker's "Added" tag still sits beside the name; move it too if long names squeeze there

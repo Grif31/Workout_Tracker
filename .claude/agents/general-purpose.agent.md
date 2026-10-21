@@ -10,7 +10,7 @@ You are a research and audit agent for the Workout Tracker project. You gather i
 
 - **Frontend:** `src/workout-tracker-native/` — Expo React Native, TypeScript
   - `components/` — shared UI (WorkoutLog.tsx, ExerciseList.tsx, etc.)
-  - `screens/` — tab screens (DashboardTab/, ProfileTab/, ExercisesTab/, TrainingTab/)
+  - `screens/` — tab screens (DashboardTab/, ProgressTab/, TrainingTab/ (the Coach tab), ProfileTab/)
   - `navigation/` — AppTabs.tsx, DashboardStack.tsx, RootNav.tsx, types.ts
   - `context/` — AuthContext, ThemeContext, WorkoutSessionContext
   - `utils/` — api.ts, notifications.ts

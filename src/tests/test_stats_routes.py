@@ -2557,6 +2557,31 @@ class TestProgressDistanceAndRanges:
         assert buckets[0]['count'] == 1
         assert sum(b['count'] for b in buckets) == 1
 
+    def test_every_range_sends_the_4_periods_before_its_first_bar(self, client, auth_token):
+        this_monday = self.TODAY - timedelta(days=self.TODAY.weekday())
+        lead = self._get(client, auth_token, '3m')['lead_in']
+        first_lead = this_monday - timedelta(weeks=16)
+        assert [b['label'] for b in lead][0] == f'{first_lead.month}/{first_lead.day}'
+        last_lead = this_monday - timedelta(weeks=13)
+        assert lead[-1]['label'] == f'{last_lead.month}/{last_lead.day}'
+        for r in ('30d', '6m', '1y'):
+            assert len(self._get(client, auth_token, r)['lead_in']) == 4, r
+
+    def test_lead_in_counts_workouts_before_the_range_and_bars_do_not(self, client, auth_token, app):
+        this_monday = self.TODAY - timedelta(days=self.TODAY.weekday())
+        before = self._post(client, auth_token, self._run(5))
+        _backdate(app, before, this_monday - timedelta(weeks=13))
+        data = self._get(client, auth_token, '3m')
+        assert data['lead_in'][-1]['count'] == 1
+        assert sum(b['count'] for b in data['buckets']) == 0
+
+    def test_monthly_lead_in_crosses_the_year(self, client, auth_token):
+        lead = self._get(client, auth_token, '1y')['lead_in']
+        months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        first_bar = self.TODAY.month - 11
+        expected = [months[(first_bar - i - 1) % 12] for i in range(4, 0, -1)]
+        assert [b['label'] for b in lead] == expected
+
     def test_distance_sums_km_and_miles_into_km(self, client, auth_token):
         self._post(client, auth_token, self._run(5, 'km'))
         self._post(client, auth_token, self._run(2, 'mi'))

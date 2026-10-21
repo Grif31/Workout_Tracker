@@ -57,7 +57,7 @@ describe('Personal Records', () => {
     const { findByText, getAllByText } = render(<PersonalRecordsScreen navigation={nav as any} route={route as any} />);
 
     fireEvent.press(await findByText('72nd · Advanced'));
-    expect(nav.navigate).toHaveBeenCalledWith('TrainingTab', { screen: 'StrengthScore', initial: false });
+    expect(nav.navigate).toHaveBeenCalledWith('ProgressTab', { screen: 'StrengthScore', initial: false });
     // Leg Press has no strength standards, so only Bench gets a pill
     expect(getAllByText(/· Advanced$/)).toHaveLength(1);
   });

@@ -15,7 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { ExercisesStackParamsList } from '../../navigation/types';
+import { ProgressStackParamsList } from '../../navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -29,7 +29,8 @@ import { matchesExerciseSearch } from '../../utils/exerciseSearch';
 import { useAuth } from '../../context/AuthContext';
 
 
-type Props = NativeStackScreenProps<ExercisesStackParamsList, 'ExercisesHome'>;
+// Rendered inside ProgressScreen's Exercises segment, not as a stack screen of its own
+type Props = Pick<NativeStackScreenProps<ProgressStackParamsList, 'ProgressHome'>, 'navigation'>;
 
 type Exercise = { id: number; name: string; muscle_group: string; equipment?: string; image_url?: string; exercise_type?: string; is_custom?: boolean };
 
@@ -177,18 +178,21 @@ export default function ExercisesScreen({ navigation }: Props) {
           </View>
         )}
         <View style={styles.exerciseCardRight}>
-          <View style={styles.exerciseNameRow}>
-            <Text style={styles.exerciseName}>{item.name}</Text>
-            {item.is_custom && (
-              <View style={styles.customBadge}>
-                <Text style={styles.customBadgeText}>Custom</Text>
-              </View>
-            )}
-          </View>
+          <Text style={styles.exerciseName}>{item.name}</Text>
           {!!item.equipment && <Text style={styles.exerciseEquipment}>{item.equipment}</Text>}
-          {!!primaryMuscle && (
-            <View style={styles.musclePill}>
-              <Text style={styles.musclePillText}>{primaryMuscle}</Text>
+          {/* The Custom tag sits bottom right, not beside the name, so a long name gets the full width */}
+          {(!!primaryMuscle || item.is_custom) && (
+            <View style={styles.pillRow}>
+              {!!primaryMuscle && (
+                <View style={styles.musclePill}>
+                  <Text style={styles.musclePillText}>{primaryMuscle}</Text>
+                </View>
+              )}
+              {item.is_custom && (
+                <View style={styles.customBadge}>
+                  <Text style={styles.customBadgeText}>Custom</Text>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -198,15 +202,7 @@ export default function ExercisesScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {/* Title row */}
-      <View style={styles.titleRow}>
-        <Text style={styles.screenTitle}>Exercises</Text>
-        <TouchableOpacity style={styles.createBtn} onPress={() => setShowNewExerciseModal(true)}>
-          <Text style={styles.createBtnText}>Create</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Search */}
+      {/* Search, with Create beside it: the Progress tab's segment row already says "Exercises" */}
       <View style={styles.topRow}>
         <View style={styles.searchWrapper}>
           <Ionicons name="search" size={16} color={colors.textSecondary} style={styles.searchIcon} />
@@ -223,6 +219,9 @@ export default function ExercisesScreen({ navigation }: Props) {
             </TouchableOpacity>
           )}
         </View>
+        <TouchableOpacity style={styles.createBtn} onPress={() => setShowNewExerciseModal(true)}>
+          <Text style={styles.createBtnText}>Create</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Filter row */}
@@ -334,8 +333,6 @@ export default function ExercisesScreen({ navigation }: Props) {
 
 const createStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.md, paddingTop: spacing.md },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
-  screenTitle: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   createBtn: {
     backgroundColor: colors.accent, borderRadius: spacing.sm,
@@ -385,21 +382,19 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     padding: spacing.md, marginBottom: spacing.sm,
     flexDirection: 'row', alignItems: 'center',
   },
-  exerciseName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary, flexShrink: 1 },
-  customBadge: { backgroundColor: colors.accent + '22', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
+  exerciseName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary, marginBottom: 1 },
+  customBadge: { backgroundColor: colors.accent + '22', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, justifyContent: 'center', marginLeft: 'auto' },
   customBadgeText: { fontSize: 10, fontWeight: '700', color: colors.accent, textTransform: 'uppercase', letterSpacing: 0.4 },
   exerciseEquipment: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 1 },
   exerciseImage: { width: 64, height: 64, borderRadius: radius.sm, marginRight: spacing.sm },
   exerciseImagePlaceholder: { backgroundColor: colors.accent + '18', alignItems: 'center', justifyContent: 'center' },
   exerciseCardRight: { flex: 1, justifyContent: 'center' },
-  exerciseNameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 1 },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },
   musclePill: {
-    alignSelf: 'flex-start',
     backgroundColor: colors.accent + '18',
     borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    marginTop: spacing.xs,
   },
   musclePillText: { fontSize: typography.fontSize.xs, fontWeight: '600', color: colors.accent },
   emptyText: { textAlign: 'center', color: colors.textSecondary, marginVertical: spacing.sm, fontSize: typography.fontSize.sm },

@@ -514,6 +514,10 @@ def dashboard_stats():
     })
 
 
+# Periods sent before the first bar of /api/stats/progress, for the app's comparisons
+PROGRESS_LEAD_IN = 4
+
+
 @stats_bp.get('/api/stats/progress')
 @jwt_required()
 def progress_stats():
@@ -524,7 +528,24 @@ def progress_stats():
     range_param = request.args.get('range', '30d')
     today = user_today()
 
-    if range_param in ('30d', '3m'):
+    MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+    def new_bucket(start_day, end_day, label):
+        return {'start': start_day, 'end': end_day, 'label': label, 'volume': 0.0, 'sets': 0, 'count': 0,
+                'distance_km': 0.0, 'density_volume': 0.0, 'timed_minutes': 0}
+
+    def week_bucket(ws):
+        return new_bucket(ws, ws + timedelta(days=6), f"{ws.month}/{ws.day}")
+
+    def month_bucket(y, m):
+        while m <= 0:
+            m += 12
+            y -= 1
+        _, last_day = cal.monthrange(y, m)
+        return new_bucket(date(y, m, 1), date(y, m, last_day), MONTHS[m - 1])
+
+    weekly = range_param in ('30d', '3m')
+    if weekly:
         this_monday = today - timedelta(days=today.weekday())
         if range_param == '30d':
             thirty_days_ago = today - timedelta(days=29)
@@ -533,62 +554,42 @@ def progress_stats():
             # 13 weeks: this one plus the 12 before it.
             start_monday = this_monday - timedelta(weeks=12)
         num_weeks = ((this_monday - start_monday).days // 7) + 1
-        buckets = []
-        for i in range(num_weeks):
-            ws = start_monday + timedelta(weeks=i)
-            we = ws + timedelta(days=6)
-            buckets.append({'start': ws, 'end': we, 'label': f"{ws.month}/{ws.day}", 'volume': 0.0, 'sets': 0, 'count': 0, 'distance_km': 0.0, 'density_volume': 0.0, 'timed_minutes': 0})
-        start = start_monday
-        def assign(w, w_date):
-            for b in buckets:
-                if b['start'] <= w_date <= b['end']:
-                    _add_workout(b, w); break
+        buckets = [week_bucket(start_monday + timedelta(weeks=i)) for i in range(num_weeks)]
+    else:
+        months = 6 if range_param == '6m' else 12
+        buckets = [month_bucket(today.year, today.month - i) for i in range(months - 1, -1, -1)]
 
-    elif range_param == '6m':
-        MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-        buckets = []
-        for i in range(5, -1, -1):
-            y, m = today.year, today.month - i
-            while m <= 0: m += 12; y -= 1
-            _, last_day = cal.monthrange(y, m)
-            buckets.append({'start': date(y, m, 1), 'end': date(y, m, last_day),
-                            'label': MONTHS[m - 1], 'volume': 0.0, 'sets': 0, 'count': 0, 'distance_km': 0.0, 'density_volume': 0.0, 'timed_minutes': 0})
-        start = buckets[0]['start']
-        def assign(w, w_date):
-            for b in buckets:
-                if b['start'] <= w_date <= b['end']:
-                    _add_workout(b, w); break
+    # The PROGRESS_LEAD_IN periods before the first bar, so the app compares any
+    # bar with the same number of periods before it: on 30D the oldest bars
+    # otherwise had fewer behind them than on 3M, and the wording changed by range.
+    first = buckets[0]['start']
+    if weekly:
+        lead_in = [week_bucket(first - timedelta(weeks=i)) for i in range(PROGRESS_LEAD_IN, 0, -1)]
+    else:
+        lead_in = [month_bucket(first.year, first.month - i) for i in range(PROGRESS_LEAD_IN, 0, -1)]
 
-    else:  # 1y
-        MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-        buckets = []
-        for i in range(11, -1, -1):
-            y, m = today.year, today.month - i
-            while m <= 0: m += 12; y -= 1
-            _, last_day = cal.monthrange(y, m)
-            buckets.append({'start': date(y, m, 1), 'end': date(y, m, last_day),
-                            'label': MONTHS[m - 1], 'volume': 0.0, 'sets': 0, 'count': 0, 'distance_km': 0.0, 'density_volume': 0.0, 'timed_minutes': 0})
-        start = buckets[0]['start']
-        def assign(w, w_date):
-            for b in buckets:
-                if b['start'] <= w_date <= b['end']:
-                    _add_workout(b, w); break
-
+    all_buckets = lead_in + buckets
     workouts = (Workout.query.filter_by(user_id=user_id)
-                .filter(Workout.date >= start)
+                .filter(Workout.date >= all_buckets[0]['start'])
                 .options(selectinload(Workout.exercises).selectinload(Exercise.sets))
                 .all())
     for w in workouts:
         w_date = w.date.date() if hasattr(w.date, 'date') else w.date
-        assign(w, w_date)
+        for b in all_buckets:
+            if b['start'] <= w_date <= b['end']:
+                _add_workout(b, w)
+                break
+
+    def serialize(b):
+        return {
+            'label': b['label'], 'volume': round(volume_in_user_unit(b['volume'], weight_unit)), 'sets': b['sets'], 'count': b['count'],
+            'distance_km': round(b['distance_km'], 3),
+            'density': round(volume_in_user_unit(b['density_volume'], weight_unit) / b['timed_minutes'], 1) if b['timed_minutes'] else 0.0,
+        }
 
     return jsonify({
-        'buckets': [
-            {'label': b['label'], 'volume': round(volume_in_user_unit(b['volume'], weight_unit)), 'sets': b['sets'], 'count': b['count'],
-             'distance_km': round(b['distance_km'], 3),
-             'density': round(volume_in_user_unit(b['density_volume'], weight_unit) / b['timed_minutes'], 1) if b['timed_minutes'] else 0.0}
-            for b in buckets
-        ],
+        'buckets': [serialize(b) for b in buckets],
+        'lead_in': [serialize(b) for b in lead_in],
         'metrics_logged': _metrics_logged(user_id),
     })
 

@@ -571,7 +571,7 @@ export default function GreekRankScreen({ navigation }: Props) {
                 accessibilityRole="button"
                 accessibilityLabel={link.label}
                 // Open to everyone: the score screens lock their own breakdown for free accounts
-                onPress={() => (navigation as any).navigate('TrainingTab', { screen: link.screen, initial: false })}
+                onPress={() => (navigation as any).navigate('ProgressTab', { screen: link.screen, initial: false })}
               >
                 <Text style={[styles.fullBreakdownText, { color: colors.accent }]} numberOfLines={1}>
                   {link.label}

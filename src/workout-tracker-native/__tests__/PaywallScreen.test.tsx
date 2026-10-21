@@ -198,7 +198,7 @@ describe('PaywallScreen', () => {
       await findByText('Welcome to Aretē Premium');
       fireEvent.press(getByText('See how every lift ranks'));
       expect(nav.goBack).toHaveBeenCalled();
-      expect(navigate).toHaveBeenCalledWith('TrainingTab', { screen: 'StrengthScore', initial: false });
+      expect(navigate).toHaveBeenCalledWith('ProgressTab', { screen: 'StrengthScore', initial: false });
     });
 
     it('says nothing when the user cancels', async () => {

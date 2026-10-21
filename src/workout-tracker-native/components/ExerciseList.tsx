@@ -209,18 +209,21 @@ export default function ExerciseListModal({
         <View style={styles.cardInfo}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Text style={styles.cardName}>{displayName(item)}</Text>
-            {item.is_custom && (
-              <View style={styles.customBadge}>
-                <Text style={styles.customBadgeText}>Custom</Text>
-              </View>
-            )}
             {added.has(item.id) && (
               <View style={[styles.addedBadge, { borderColor: colors.save }]}>
                 <Text style={[styles.addedBadgeText, { color: colors.save }]}>Added</Text>
               </View>
             )}
           </View>
-          <Text style={styles.cardMuscle}>{isCardio ? 'Cardio' : item.muscle_group}</Text>
+          {/* Custom sits bottom right, not beside the name, so a long name gets the full width */}
+          <View style={styles.cardMetaRow}>
+            <Text style={styles.cardMuscle}>{isCardio ? 'Cardio' : item.muscle_group}</Text>
+            {item.is_custom && (
+              <View style={styles.customBadge}>
+                <Text style={styles.customBadgeText}>Custom</Text>
+              </View>
+            )}
+          </View>
         </View>
         <Ionicons
           name={isPending ? 'checkmark-circle' : 'add-circle-outline'}
@@ -454,14 +457,16 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textPrimary,
     flexShrink: 1,
   },
+  cardMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   cardMuscle: {
     fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
-    marginTop: 2,
+    flexShrink: 1,
   },
   addedBadge: { borderWidth: 1, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
   addedBadgeText: { fontSize: typography.fontSize.xs, fontWeight: '700' },
   customBadge: {
+    marginLeft: 'auto',
     backgroundColor: colors.accent + '22',
     borderRadius: 4,
     paddingHorizontal: 5,

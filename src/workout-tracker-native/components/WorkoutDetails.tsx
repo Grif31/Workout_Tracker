@@ -297,7 +297,7 @@ export default function WorkoutDetailsScreen({
     if (cardioExercise?.exercise_type === 'cardio' && cardioExercise.exercise_template_id != null) {
       options.push('View History');
       handlers.push(() => {
-        navigation.navigate('ExercisesTab', {
+        navigation.navigate('ProgressTab', {
           screen: 'ExerciseDetail',
           params: {
             exerciseId: cardioExercise.exercise_template_id,

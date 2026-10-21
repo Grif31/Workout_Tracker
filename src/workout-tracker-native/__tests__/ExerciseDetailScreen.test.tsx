@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { mockFetchSequence, createMockNavigation, createMockRoute } from './testUtils';
-import ExerciseDetailScreen from '../screens/ExercisesTab/ExerciseDetailScreen';
+import ExerciseDetailScreen from '../screens/ProgressTab/ExerciseDetailScreen';
 
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 jest.mock('theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));

@@ -7,11 +7,8 @@ import RoutineDetailScreen from '../screens/TrainingTab/RoutineDetailScreen';
 import TemplateDetailScreen from '../screens/TrainingTab/TemplateDetailScreen';
 import WorkoutDetailScreen from '../screens/DashboardTab/WorkoutDetailsScreen';
 import WorkoutSummaryScreen from '../screens/DashboardTab/WorkoutSummaryScreen';
-import ExerciseDetailScreen from '../screens/ExercisesTab/ExerciseDetailScreen';
-import StrengthScoreScreen from '../screens/TrainingTab/StrengthScoreScreen';
-import EnduranceScoreScreen from '../screens/TrainingTab/EnduranceScoreScreen';
+import ExerciseDetailScreen from '../screens/ProgressTab/ExerciseDetailScreen';
 import AIWorkoutPreviewScreen from '../screens/TrainingTab/AIWorkoutPreviewScreen';
-import WeeklySummaryScreen from '../screens/DashboardTab/WeeklySummaryScreen';
 import { useTheme } from '../context/ThemeContext';
 
 const Stack = createNativeStackNavigator<TrainingStackParamsList>();
@@ -28,10 +25,7 @@ export function TrainingStack() {
       <Stack.Screen name="WorkoutDetails" component={WorkoutDetailScreen} />
       <Stack.Screen name="WorkoutSummary" component={WorkoutSummaryScreen} options={{ contentStyle: { paddingTop: 0 }, animation: 'fade' }} />
       <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen} options={{ presentation: 'modal', contentStyle: { paddingTop: 0 } }} />
-      <Stack.Screen name="StrengthScore" component={StrengthScoreScreen} />
-      <Stack.Screen name="EnduranceScore" component={EnduranceScoreScreen} />
       <Stack.Screen name="AIWorkoutPreview" component={AIWorkoutPreviewScreen} />
-      <Stack.Screen name="WeeklySummary" component={WeeklySummaryScreen} options={{ contentStyle: { paddingTop: 0 } }} />
     </Stack.Navigator>
   );
 }

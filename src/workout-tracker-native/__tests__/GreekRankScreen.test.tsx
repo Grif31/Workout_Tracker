@@ -371,9 +371,9 @@ describe('GreekRankScreen', () => {
     it('opens each score screen', async () => {
       const { getByText, nav } = await renderWith(payload(41, 67));
       fireEvent.press(getByText('Strength Score'));
-      expect(nav.navigate).toHaveBeenCalledWith('TrainingTab', { screen: 'StrengthScore', initial: false });
+      expect(nav.navigate).toHaveBeenCalledWith('ProgressTab', { screen: 'StrengthScore', initial: false });
       fireEvent.press(getByText('Endurance Score'));
-      expect(nav.navigate).toHaveBeenCalledWith('TrainingTab', { screen: 'EnduranceScore', initial: false });
+      expect(nav.navigate).toHaveBeenCalledWith('ProgressTab', { screen: 'EnduranceScore', initial: false });
     });
 
     // The score screens show a free account its score and lock the breakdown
@@ -382,7 +382,7 @@ describe('GreekRankScreen', () => {
       mockIsPremium = false;
       const { getByText, getByLabelText, nav } = await renderWith(payload(41, 67));
       fireEvent.press(getByText('Strength Score'));
-      expect(nav.navigate).toHaveBeenCalledWith('TrainingTab', { screen: 'StrengthScore', initial: false });
+      expect(nav.navigate).toHaveBeenCalledWith('ProgressTab', { screen: 'StrengthScore', initial: false });
       expect(nav.navigate).not.toHaveBeenCalledWith('Paywall', expect.anything());
       const icons = getByLabelText('Strength Score').findAllByType(Ionicons as any);
       expect(icons.map((i: any) => i.props.name)).not.toContain('lock-closed');

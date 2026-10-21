@@ -48,9 +48,9 @@ python -m pytest tests/test_foo.py -v        # run single test file
 The tree is `ls`-derivable; these are the parts it can't tell you:
 
 - Health sync (`healthKit.ts`, `healthConnect.ts`) and `GPSCardioScreen` need an EAS build, not Expo Go. Payments are iOS only.
-- `screens/TrainingTab/CoachCharacter.tsx` is UNUSED (no longer rendered). The tab label is "Coach" but the route stays `TrainingTab`.
+- Tabs are Home · Progress · Coach · Profile. Progress (`ProgressTab`, `screens/ProgressTab/`) is `ProgressScreen`: an Overview segment (`ProgressOverview`: this week, scores, trends chart, muscle volume) and an Exercises segment (`ExercisesScreen`, mounted on first visit); its stack also holds `StrengthScore`, `EnduranceScore`, `WeeklySummary` and `ExerciseDetail`. Coach keeps the route name `TrainingTab`: `CoachScreen` with Plans (routines, templates, Up Next) and Coach (AI) segments, opening on Plans when there's an active routine. `screens/TrainingTab/CoachCharacter.tsx` is UNUSED (no longer rendered).
 - `StrengthScoreScreen`/`EnduranceScoreScreen` use `SCORE_RANK_COLORS` (`constants/strengthRanks.ts`), NOT the Greek rank colors; both share `ScoreRing` and `PercentileBar`.
-- ALL share cards live in `components/share/`. `components/coach/` holds modals whose only caller is CoachScreen.
+- ALL share cards live in `components/share/`. `components/coach/` holds modals called only from the Coach and Progress tabs (`CoachScreen`, `ProgressOverview`).
 - `utils/templatePrefill.ts` is the only way a template/routine day becomes a WorkoutLog prefill. `utils/routineRotation.ts` is mirrored by `_routine_rotation_context` in `routes/ai_routes.py`.
 - `strength_score_routes.py` also serves the endurance score and score history; `utils/endurance_standards.py` milestone floats mirror `constants/cardioMilestones.ts`.
 - Legal pages are Jinja templates in `src/templates/`; `/admin/*` uses HTTP Basic Auth via `ADMIN_PASSWORD`.
@@ -102,7 +102,7 @@ const res = await apiFetch('/api/workouts', { method: 'POST', ... });
 
 ### Navigation — cross-tab navigation MUST pass `initial: false`
 ```typescript
-navigation.navigate('TrainingTab', { screen: 'StrengthScore', initial: false })
+navigation.navigate('ProgressTab', { screen: 'StrengthScore', initial: false })
 ```
 Without it, the sub-screen becomes the tab stack's only route — its back button bubbles to the tab navigator (jumps to Dashboard) and the hidden tab bar strands the user.
 

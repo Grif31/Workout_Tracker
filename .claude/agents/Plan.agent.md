@@ -10,7 +10,7 @@ You are a software architect for the Workout Tracker project. Your job is to pro
 
 - **Frontend:** `src/workout-tracker-native/` — Expo React Native, TypeScript
   - `components/` — shared UI (WorkoutLog.tsx, ExerciseList.tsx, etc.)
-  - `screens/` — tab screens (DashboardTab/, ProfileTab/, ExercisesTab/, TrainingTab/)
+  - `screens/` — tab screens (DashboardTab/, ProgressTab/, TrainingTab/ (the Coach tab), ProfileTab/)
   - `navigation/` — AppTabs.tsx, DashboardStack.tsx, RootNav.tsx, types.ts
   - `context/` — AuthContext, ThemeContext, WorkoutSessionContext
   - `utils/` — api.ts, notifications.ts

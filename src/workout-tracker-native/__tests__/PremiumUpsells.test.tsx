@@ -6,7 +6,7 @@ import React from 'react';
 import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
 import { createMockNavigation, createMockRoute } from './testUtils';
 import WorkoutSummaryScreen from '../screens/DashboardTab/WorkoutSummaryScreen';
-import ExerciseDetailScreen from '../screens/ExercisesTab/ExerciseDetailScreen';
+import ExerciseDetailScreen from '../screens/ProgressTab/ExerciseDetailScreen';
 
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
@@ -16,7 +16,7 @@ jest.mock('react-native-gifted-charts', () => ({ LineChart: () => null, BarChart
 let mockIsPremium = false;
 jest.mock('../context/PurchaseContext', () => ({ usePurchase: () => ({ isPremium: mockIsPremium }) }));
 
-const TO_STRENGTH_SCORE = ['TrainingTab', { screen: 'StrengthScore', initial: false }];
+const TO_STRENGTH_SCORE = ['ProgressTab', { screen: 'StrengthScore', initial: false }];
 
 function serve(routes: Record<string, any>) {
   (global.fetch as jest.Mock) = jest.fn((url: string) => {

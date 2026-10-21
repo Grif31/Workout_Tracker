@@ -13,6 +13,16 @@ export function parseApiDate(value: string): Date {
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
 }
 
+/** Whether each day of `today`'s Monday-first week appears in `dates` (local "YYYY-MM-DD"). */
+export function trainedDaysOfWeek(dates: Iterable<string>, today: Date): boolean[] {
+  const trained = new Set(dates);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() - ((today.getDay() + 6) % 7) + i);
+    return trained.has(toLocalDateStr(d));
+  });
+}
+
 // One month as calendar rows starting on Monday, the week the app's weekly
 // stats use, so each row is exactly one Weekly Summary week. Cells are local
 // "YYYY-MM-DD" strings, with null padding before the 1st and after the last day.

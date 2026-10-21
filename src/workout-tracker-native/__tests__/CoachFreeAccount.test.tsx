@@ -1,14 +1,16 @@
 /**
- * The Coach tab for a free account: insights locked (its one free insight a
- * week is in the Weekly Summary's review), the score cards opening the score
- * screens (which lock their own breakdown) rather than the paywall, and the
- * template and routine caps skipping what onboarding generated.
+ * A free account on the Coach and Progress tabs: insights locked (its one free
+ * insight a week is in the Weekly Summary's review), the rank opening the
+ * Strength Score (which locks its own breakdown) rather than the paywall, one
+ * lock over Progress's advanced stats, and the template and routine caps
+ * skipping what onboarding generated.
  */
 import React from 'react';
 import { render, waitFor, fireEvent, act } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createMockNavigation, createMockRoute, mockUser } from './testUtils';
 import CoachScreen from '../screens/TrainingTab/CoachScreen';
+import ProgressOverview from '../screens/ProgressTab/ProgressOverview';
 import { appCache } from '../utils/appCache';
 
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));
@@ -81,12 +83,12 @@ describe('Coach tab for a free account', () => {
   it('opens the Strength Score screen itself, not the paywall', async () => {
     const r = await openCoachTab();
     fireEvent.press(await r.findByText('Hero'));
-    expect(r.nav.navigate).toHaveBeenCalledWith('StrengthScore');
+    expect(r.nav.navigate).toHaveBeenCalledWith('ProgressTab', { screen: 'StrengthScore', initial: false });
     expect(r.nav.navigate).not.toHaveBeenCalledWith('Paywall', expect.anything());
   });
 });
 
-describe('Advanced stats lock for a free account', () => {
+describe('Advanced stats lock on Progress for a free account', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     appCache.clear();
@@ -101,7 +103,7 @@ describe('Advanced stats lock for a free account', () => {
   it('puts one lock over the fatigue, balance and density cards and opens the paywall', async () => {
     installServer({ '/api/stats/progress': progress });
     const nav = createMockNavigation();
-    const r = render(<CoachScreen navigation={nav as any} route={createMockRoute('CoachHome') as any} />);
+    const r = render(<ProgressOverview navigation={nav as any} />);
     expect(await r.findByText('Advanced stats')).toBeTruthy();
     expect(r.getByTestId('premium-teaser')).toBeTruthy();
     fireEvent.press(r.getByText('Unlock with Premium'));
@@ -113,7 +115,7 @@ describe('Advanced stats lock for a free account', () => {
       '/api/stats/progress': { buckets: [], metrics_logged: { volume: false, sets: false, workouts: false, distance: false, density: false } },
       '/api/stats/muscle-volume': { muscle_sets: {}, last_trained: {}, total_sets: 0, last_week_total: 0, this_week_total: 0, last_week_to_date_total: 0, week_start: '2026-09-21' },
     });
-    const r = render(<CoachScreen navigation={createMockNavigation() as any} route={createMockRoute('CoachHome') as any} />);
+    const r = render(<ProgressOverview navigation={createMockNavigation() as any} />);
     await act(async () => {});
     expect(r.queryByText('Advanced stats')).toBeNull();
   });
@@ -131,7 +133,7 @@ describe('free template and routine caps', () => {
       '/api/routines': [routine(1, true), routine(2, true)],
       '/api/workout-templates': [tmpl(1, true), tmpl(2, true), tmpl(3, true), tmpl(4, true), tmpl(5, true), tmpl(6, true)],
     });
-    const { nav, ...r } = await openTab('Training');
+    const { nav, ...r } = await openTab('Plans');
     expect(await r.findByText('0 of 5 free')).toBeTruthy();
     expect(r.getByText('0 of 2 free')).toBeTruthy();
     r.getAllByText('New').forEach(b => fireEvent.press(b));
@@ -143,7 +145,7 @@ describe('free template and routine caps', () => {
       '/api/routines': [routine(1, true), routine(2), routine(3)],
       '/api/workout-templates': [tmpl(1, true), tmpl(2)],
     });
-    const { nav, ...r } = await openTab('Training');
+    const { nav, ...r } = await openTab('Plans');
     expect(await r.findByText('2 of 2 free')).toBeTruthy();
     expect(r.getByText('1 of 5 free')).toBeTruthy();
     fireEvent.press(r.getAllByText('New')[1]);

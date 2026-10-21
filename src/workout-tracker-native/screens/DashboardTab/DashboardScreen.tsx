@@ -607,7 +607,10 @@ export default function DashboardScreen({ navigation }: Props) {
       const res = await apiFetch('/api/workouts?page=1&per_page=50');
       if (!res.ok) return;
       const data = await res.json();
-      setRoutineHistory((data.workouts ?? []).map((w: Workout) => ({ id: w.id, name: w.name ?? '', date: String(w.date) })));
+      const history: RotationWorkout[] = (data.workouts ?? []).map((w: Workout) => ({ id: w.id, name: w.name ?? '', date: String(w.date) }));
+      setRoutineHistory(history);
+      // The Coach tab's Plans reads the same rotation for its Up Next
+      appCache.set('routine_history', history);
     } catch { /* silently fail — the card falls back to day 1 */ }
   };
 

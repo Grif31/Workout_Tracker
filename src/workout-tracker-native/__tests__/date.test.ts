@@ -1,4 +1,4 @@
-import { mondayFirstMonthGrid, parseApiDate, toLocalDateStr, timeAgo } from '../utils/date';
+import { mondayFirstMonthGrid, parseApiDate, toLocalDateStr, timeAgo, trainedDaysOfWeek } from '../utils/date';
 
 describe('toLocalDateStr', () => {
   it('formats as YYYY-MM-DD with zero padding', () => {
@@ -87,5 +87,23 @@ describe('mondayFirstMonthGrid', () => {
   it('uses local dates, not UTC, so no day shifts in the Americas', () => {
     // Jest runs in America/Los_Angeles; a UTC-built string would start a day early.
     expect(mondayFirstMonthGrid(2026, 0).flat().filter(Boolean)[0]).toBe('2026-01-01');
+  });
+});
+
+describe('trainedDaysOfWeek', () => {
+  // Wednesday 2026-10-21, local time
+  const wed = new Date(2026, 9, 21, 20, 0);
+
+  it('marks the days of this Monday-first week that appear in the list', () => {
+    expect(trainedDaysOfWeek(['2026-10-19', '2026-10-21', '2026-10-25'], wed))
+      .toEqual([true, false, true, false, false, false, true]);
+  });
+
+  it('ignores last week and next week', () => {
+    expect(trainedDaysOfWeek(['2026-10-18', '2026-10-26'], wed)).toEqual(Array(7).fill(false));
+  });
+
+  it('puts a Sunday in the week that started the Monday before', () => {
+    expect(trainedDaysOfWeek(['2026-10-19'], new Date(2026, 9, 25, 23, 30))[0]).toBe(true);
   });
 });

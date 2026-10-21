@@ -41,10 +41,11 @@ See [`CHANGELOG.md`](CHANGELOG.md) for a per-release feature history.
 - Create reusable workout templates with ordered exercises
 - Build multi-day weekly routines (e.g. Push / Pull / Legs) from templates
 - Log any routine day directly from the routine detail view
-- Set an active routine to surface it at the top of the Training tab
+- Set an active routine to surface it, with its next day ready to start, at the top of the Coach tab
 
 ### AI Coach
-- Coach home on the Training tab — insights plus a training overview and active-routine card
+- Coach tab: AI insights and generation, plus your routines and templates under Plans
+- Progress tab: this week, Strength and Endurance Scores, trends chart and muscle volume, plus the exercise library
 - AI-generated insights (powered by Claude) — personalized recommendations based on your full training history, muscle volume, strength score, consistency, experience level, goals, and active routine
 - Coach profile to specify training goal, experience level, equipment, session length, days per week, and injury avoidances
 - Free-text notes passed to the AI when generating a routine or template
@@ -196,8 +197,8 @@ src/
     ├── screens/
     │   ├── Auth/                 # Login, signup, forgot/reset password, welcome + onboarding
     │   ├── DashboardTab/         # Home, workout log, details, workout + weekly summary, GPS cardio
-    │   ├── ExercisesTab/         # Exercise browser and detail
-    │   ├── TrainingTab/          # Coach home, strength score, templates, routines, AI preview
+    │   ├── ProgressTab/          # Progress overview, exercise browser and detail, strength + endurance scores
+    │   ├── TrainingTab/          # Coach tab: AI coach, templates, routines, AI preview
     │   └── ProfileTab/           # Profile, PR dashboard + progression, bodyweight, measurements, settings, Greek rank
     ├── components/               # Shared UI components (DraggableList, WorkoutLog, share-card chrome, ...)
     ├── context/                  # AuthContext, ThemeContext, WorkoutSessionContext, PurchaseContext

@@ -51,12 +51,12 @@ const PURCHASE_PROBLEMS: Partial<Record<PurchaseOutcome, [string, string]>> = {
 };
 
 // Where each thing that just unlocked lives, for the welcome screen
-const UNLOCKED: { icon: string; label: string; detail: string; screen: string }[] = [
-  { icon: 'trophy-outline', label: 'Strength Score', detail: 'See how every lift ranks', screen: 'StrengthScore' },
-  { icon: 'speedometer-outline', label: 'Endurance Score', detail: 'See your rank at every distance', screen: 'EnduranceScore' },
-  { icon: 'bulb-outline', label: 'Weekly review', detail: 'What went well, what lagged, what to change', screen: 'WeeklySummary' },
-  { icon: 'bar-chart-outline', label: 'Advanced stats', detail: 'Zones, trends, balance and density', screen: 'TrainingHome' },
-  { icon: 'sparkles', label: 'AI Coach', detail: 'Programs and insights', screen: 'TrainingHome' },
+const UNLOCKED: { icon: string; label: string; detail: string; tab: 'ProgressTab' | 'TrainingTab'; screen: string }[] = [
+  { icon: 'trophy-outline', label: 'Strength Score', detail: 'See how every lift ranks', tab: 'ProgressTab', screen: 'StrengthScore' },
+  { icon: 'speedometer-outline', label: 'Endurance Score', detail: 'See your rank at every distance', tab: 'ProgressTab', screen: 'EnduranceScore' },
+  { icon: 'bulb-outline', label: 'Weekly review', detail: 'What went well, what lagged, what to change', tab: 'ProgressTab', screen: 'WeeklySummary' },
+  { icon: 'bar-chart-outline', label: 'Advanced stats', detail: 'Zones, trends, balance and density', tab: 'ProgressTab', screen: 'ProgressHome' },
+  { icon: 'sparkles', label: 'AI Coach', detail: 'Programs and insights', tab: 'TrainingTab', screen: 'TrainingHome' },
 ];
 
 export default function PaywallScreen({ navigation, route }: Props) {
@@ -132,10 +132,10 @@ export default function PaywallScreen({ navigation, route }: Props) {
   };
 
   // Close the paywall, then open what they just unlocked
-  const openUnlocked = (screen: string) => {
+  const openUnlocked = (tab: 'ProgressTab' | 'TrainingTab', screen: string) => {
     navigation.goBack();
     if (navigationRef.isReady()) {
-      (navigationRef as any).navigate('TrainingTab', { screen, initial: false });
+      (navigationRef as any).navigate(tab, { screen, initial: false });
     }
   };
 
@@ -350,7 +350,7 @@ export default function PaywallScreen({ navigation, route }: Props) {
               <Animated.View key={u.label} entering={FadeInDown.delay(250 + i * 80).duration(260)}>
                 <TouchableOpacity
                   style={[styles.featureRow, i < UNLOCKED.length - 1 && styles.featureRowBorder]}
-                  onPress={() => openUnlocked(u.screen)}
+                  onPress={() => openUnlocked(u.tab, u.screen)}
                   accessibilityRole="button"
                 >
                   <View style={styles.featureIconWrap}>

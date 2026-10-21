@@ -1,9 +1,10 @@
 /**
- * Coach tab home. It fans out across nine endpoints, so the fake server below
- * answers by path and each test overrides only what it cares about.
+ * Coach tab home: the Plans (routines and templates) and Coach (AI) sections.
+ * The fake server below answers by path and each test overrides only what it
+ * cares about.
  *
- * The behaviours that matter here: which tab opens first, that the Greek rank
- * comes from its own endpoint (strength-score 422s without gender), that
+ * The behaviours that matter here: which section opens first, that the Greek
+ * rank comes from its own endpoint (strength-score 422s without gender), that
  * logging a template goes through buildTemplatePrefill with initial: false,
  * and that cached AI insights render without a network call.
  */
@@ -14,18 +15,11 @@ import { createMockNavigation, createMockRoute, mockUser } from './testUtils';
 import CoachScreen from '../screens/TrainingTab/CoachScreen';
 import { appCache } from '../utils/appCache';
 import Collapsible from '../components/Collapsible';
-import { COACH_INSIGHTS_KEY, WEEKLY_DISTANCE_GOAL_KEY } from '../constants/storageKeys';
+import { COACH_INSIGHTS_KEY } from '../constants/storageKeys';
 import { COACH_PROFILE_KEY } from '../components/coach/CoachProfileModal';
-import { toLocalDateStr } from '../utils/date';
 
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
-
-// Records what the chart was asked to draw; the real chart can't render here.
-const mockBarChart = jest.fn();
-jest.mock('react-native-gifted-charts', () => ({
-  BarChart: (props: any) => { mockBarChart(props); return null; },
-}));
 
 const route = createMockRoute('CoachHome');
 
@@ -78,14 +72,71 @@ describe('CoachScreen', () => {
     installServer();
   });
 
-  it('opens on Progress, with all three tabs available', async () => {
-    const { getByText } = await renderScreen();
-    await waitFor(() => expect(getByText('Progress')).toBeTruthy());
-    expect(getByText('Training')).toBeTruthy();
-    expect(getByText('Coach')).toBeTruthy();
+  it('opens on Coach for someone with no active routine, with Plans beside it', async () => {
+    const { getByText, queryByText } = await renderScreen();
+    await waitFor(() => expect(getByText('Hero')).toBeTruthy());
+    expect(getByText('Plans')).toBeTruthy();
+    expect(queryByText('Progress')).toBeNull();
   });
 
-  describe('scores and rank', () => {
+  it('opens on Plans for someone following a routine', async () => {
+    const auth = require('../context/AuthContext');
+    const real = auth.useAuth();
+    const spy = jest.spyOn(auth, 'useAuth').mockReturnValue({ ...real, user: { ...real.user, active_routine_id: 9 } });
+    // The routes table matches by prefix, so the list route would answer the routine's own path
+    const base = (global.fetch as jest.Mock).getMockImplementation()!;
+    (global.fetch as jest.Mock).mockImplementation((url: string) => String(url).includes('/api/routines/9')
+      ? Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ id: 9, name: 'Upper Lower', days: [] }) })
+      : base(url));
+    try {
+      const { getByText } = await renderScreen();
+      await waitFor(() => expect(getByText('Push Day')).toBeTruthy());
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("shows the routine's next day on Plans and starts it in the workout log", async () => {
+    const auth = require('../context/AuthContext');
+    const real = auth.useAuth();
+    const spy = jest.spyOn(auth, 'useAuth').mockReturnValue({ ...real, user: { ...real.user, active_routine_id: 9 } });
+    const day = (id: number, order: number, label: string) => ({
+      id, day_order: order, label,
+      workout_template: { id: 50 + id, name: label, exercises: TEMPLATE.exercises, programming_json: TEMPLATE.programming_json },
+    });
+    const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString(); };
+    const base = (global.fetch as jest.Mock).getMockImplementation()!;
+    const ok = (body: any) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
+    (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      const u = String(url);
+      if (u.includes('/api/routines/9')) return ok({ id: 9, name: 'Upper Lower', days: [day(1, 0, 'Upper'), day(2, 1, 'Lower')] });
+      if (u.includes('/api/workouts?')) return ok({ workouts: [
+        { id: 1, name: 'Lower', date: daysAgo(3) },
+        { id: 2, name: 'Upper', date: daysAgo(1) },
+      ] });
+      return base(url);
+    });
+    try {
+      const r = await renderScreen();
+      await waitFor(() => expect(r.getByText('Up next · Day 2 of 2')).toBeTruthy());
+      expect(r.getByText('Lower')).toBeTruthy();
+      expect(r.getByText('1 exercise · last done 3 days ago')).toBeTruthy();
+      // The day's exercises with their programmed sets and reps
+      expect(r.getByText('Bench Press')).toBeTruthy();
+      expect(r.getByText('4 × 8')).toBeTruthy();
+      expect(r.getByText('Start Lower')).toBeTruthy();
+      fireEvent.press(r.getByLabelText('Start Lower'));
+      expect(r.nav.navigate).toHaveBeenCalledWith('DashboardTab', expect.objectContaining({
+        screen: 'WorkoutLog',
+        initial: false,
+        params: expect.objectContaining({ prefill: expect.objectContaining({ name: 'Lower' }) }),
+      }));
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  describe('rank', () => {
     it('reads the Greek rank from its own endpoint, which needs no gender', async () => {
       await renderScreen();
       await waitFor(() => expect(urlsCalled().some(u => u.includes('/api/stats/greek-rank'))).toBe(true));
@@ -100,23 +151,11 @@ describe('CoachScreen', () => {
       await waitFor(() => expect(getByText('Hero')).toBeTruthy());
     });
 
-    it('shows both score percentiles', async () => {
-      const { getByText } = await renderScreen();
-      await waitFor(() => expect(getByText('62')).toBeTruthy());
-      expect(getByText('55')).toBeTruthy();
-    });
-
-    it('opens the Strength Score screen from the score card', async () => {
-      const { getByText, nav } = await renderScreen();
-      await waitFor(() => expect(getByText('62')).toBeTruthy());
-      fireEvent.press(getByText('62'));
-      expect(nav.navigate).toHaveBeenCalledWith('StrengthScore');
-    });
   });
 
-  describe('training tab', () => {
+  describe('plans tab', () => {
     const openTraining = async (r: any) => {
-      fireEvent.press(r.getByText('Training'));
+      fireEvent.press(r.getByText('Plans'));
       await waitFor(() => expect(r.getByText('Push Day')).toBeTruthy());
     };
 
@@ -145,28 +184,30 @@ describe('CoachScreen', () => {
       expect(exercise.sets[0]).toMatchObject({ reps: '8', rpe: '8' });
     });
 
-    it('keeps templates past the first five in a collapsible block that Show All opens', async () => {
-      const many = Array.from({ length: 7 }, (_, i) => ({ ...TEMPLATE, id: 100 + i, name: `Template ${i + 1}` }));
+    it('keeps templates past the first six in a collapsible block that Show All opens', async () => {
+      const many = Array.from({ length: 8 }, (_, i) => ({ ...TEMPLATE, id: 100 + i, name: `Template ${i + 1}` }));
       installServer({ '/api/workout-templates': many });
       const r = await renderScreen();
-      fireEvent.press(r.getByText('Training'));
-      await waitFor(() => expect(r.getByText('Show All (7)')).toBeTruthy());
+      fireEvent.press(r.getByText('Plans'));
+      await waitFor(() => expect(r.getByText('Show All (8)')).toBeTruthy());
 
       const block = r.UNSAFE_getByType(Collapsible);
       const inside = (name: string) => block.findAll(n => n.props.children === name).length > 0;
-      // Five always shown, outside it; the other two live inside it, closed.
-      for (let i = 1; i <= 5; i++) expect(inside(`Template ${i}`)).toBe(false);
-      expect(inside('Template 6')).toBe(true);
+      // Six always shown (three rows of two), outside it; the other two live inside it, closed.
+      for (let i = 1; i <= 6; i++) expect(inside(`Template ${i}`)).toBe(false);
       expect(inside('Template 7')).toBe(true);
+      expect(inside('Template 8')).toBe(true);
       expect(block.props.expanded).toBe(false);
 
-      fireEvent.press(r.getByText('Show All (7)'));
+      fireEvent.press(r.getByText('Show All (8)'));
       expect(r.UNSAFE_getByType(Collapsible).props.expanded).toBe(true);
       fireEvent.press(r.getByText('Show Less'));
       expect(r.UNSAFE_getByType(Collapsible).props.expanded).toBe(false);
     });
 
-    it('has no collapsible block or toggle with five templates or fewer', async () => {
+    it('has no collapsible block or toggle with six templates or fewer', async () => {
+      const six = Array.from({ length: 6 }, (_, i) => ({ ...TEMPLATE, id: 100 + i, name: i === 0 ? 'Push Day' : `Template ${i + 1}` }));
+      installServer({ '/api/workout-templates': six });
       const r = await renderScreen();
       await openTraining(r);
       expect(r.UNSAFE_queryAllByType(Collapsible)).toHaveLength(0);
@@ -178,139 +219,6 @@ describe('CoachScreen', () => {
       await openTraining(r);
       fireEvent.press(r.getByText('Push Day'));
       expect(r.nav.navigate).toHaveBeenCalledWith('TemplateDetail', { templateId: 7 });
-    });
-  });
-
-  describe('progress chart', () => {
-    const KM_PER_MI = 1.60934;
-    const ALL = { volume: true, sets: true, workouts: true, distance: true };
-    // Four empty weeks and this week: 2 workouts, 5 mi.
-    const bucket = (label: string, over: object = {}) =>
-      ({ label, volume: 0, sets: 0, count: 0, distance_km: 0, ...over });
-    const progress = (metrics_logged: object | undefined, thisWeek: object = {}) => ({
-      buckets: [bucket('8/25'), bucket('9/1'), bucket('9/8'), bucket('9/15'),
-        bucket('9/22', { volume: 5000, sets: 12, count: 2, distance_km: 5 * KM_PER_MI, ...thisWeek })],
-      ...(metrics_logged ? { metrics_logged } : {}),
-    });
-    const lastChart = () => mockBarChart.mock.calls[mockBarChart.mock.calls.length - 1][0];
-
-    it("asks for the 30-day progress once, and fills this week's goal from that answer", async () => {
-      installServer({ '/api/stats/progress': progress(ALL) });
-      const r = await renderScreen();
-      await waitFor(() => expect(r.getByText(/^2\/\d+ this week/)).toBeTruthy());
-      expect(urlsCalled().filter(u => u.includes('/api/stats/progress'))).toHaveLength(1);
-    });
-
-    it('shows a new user an empty chart with no tabs or range to pick', async () => {
-      installServer({ '/api/stats/progress': progress({ volume: false, sets: false, workouts: false, distance: false }) });
-      const r = await renderScreen();
-      await waitFor(() => expect(r.getByText('Start logging to track your progress')).toBeTruthy());
-      for (const tab of ['Volume', 'Sets', 'Workouts', 'Distance']) expect(r.queryByText(tab)).toBeNull();
-      expect(r.queryByLabelText(/Chart range/)).toBeNull();
-    });
-
-    it('gives a cardio-only user Workouts and Distance, and no lifting tabs', async () => {
-      installServer({ '/api/stats/progress': progress({ volume: false, sets: false, workouts: true, distance: true }) });
-      const r = await renderScreen();
-      await waitFor(() => expect(r.getByText('Distance')).toBeTruthy());
-      expect(r.queryByText('Volume')).toBeNull();
-      expect(r.queryByText('Sets')).toBeNull();
-      // Their default Volume pick falls back to the first tab they have, so
-      // "Workouts" is both a tab and the chart title.
-      expect(r.getAllByText('Workouts')).toHaveLength(2);
-      expect(r.queryByText(/^Volume \(/)).toBeNull();
-    });
-
-    it('charts distance in the user unit on the Distance tab', async () => {
-      installServer({ '/api/stats/progress': progress(ALL) });
-      const r = await renderScreen();
-      await waitFor(() => expect(r.getByText('Distance')).toBeTruthy());
-      fireEvent.press(r.getByText('Distance'));
-      await waitFor(() => expect(r.getByText('Distance (mi)')).toBeTruthy());
-      const values = lastChart().data.map((d: any) => d.value);
-      expect(values).toEqual([0, 0, 0, 0, 5]);
-    });
-
-    it('gives density its own card instead of a chart tab', async () => {
-      installServer({ '/api/stats/progress': progress({ ...ALL, density: true }, { density: 41.6 }) });
-      const r = await renderScreen();
-      expect(await r.findByText('Workout density')).toBeTruthy();
-      expect(r.getByText(/lbs lifted per minute, timed workouts only. Latest 42, average 42./)).toBeTruthy();
-      expect(r.queryByText('Density')).toBeNull();
-    });
-
-    it('has no density card until a workout was both timed and had volume', async () => {
-      installServer({ '/api/stats/progress': progress({ ...ALL, density: false }) });
-      const r = await renderScreen();
-      await waitFor(() => expect(r.getByText('Distance')).toBeTruthy());
-      expect(r.queryByText('Workout density')).toBeNull();
-    });
-
-    it('keeps the original three tabs against a backend without metrics_logged', async () => {
-      installServer({ '/api/stats/progress': progress(undefined) });
-      const r = await renderScreen();
-      await waitFor(() => expect(r.getByText('Volume')).toBeTruthy());
-      expect(r.getByText('Sets')).toBeTruthy();
-      expect(r.queryByText('Distance')).toBeNull();
-      expect(r.queryByText('Start logging to track your progress')).toBeNull();
-    });
-
-    it('asks for 3 months when the 3M range is picked', async () => {
-      installServer({ '/api/stats/progress': progress(ALL) });
-      const r = await renderScreen();
-      await waitFor(() => expect(r.getByLabelText('Chart range, 30D')).toBeTruthy());
-      fireEvent.press(r.getByLabelText('Chart range, 30D'));
-      fireEvent.press(r.getByText('Last 3 Months'));
-      await waitFor(() => expect(urlsCalled().some(u => u.includes('/api/stats/progress?range=3m'))).toBe(true));
-    });
-  });
-
-  describe('weekly distance goal', () => {
-    const KM_PER_MI = 1.60934;
-    const goalKey = `${WEEKLY_DISTANCE_GOAL_KEY}_${mockUser.id}`;
-    const withFiveMilesThisWeek = () => installServer({
-      '/api/stats/progress': {
-        buckets: [{ label: '9/22', volume: 0, sets: 0, count: 1, distance_km: 5 * KM_PER_MI }],
-        metrics_logged: { volume: false, sets: false, workouts: true, distance: true },
-      },
-    });
-    const storedMiles = async () => Number(await AsyncStorage.getItem(goalKey)) / KM_PER_MI;
-
-    it('has no distance line until the user turns a goal on', async () => {
-      withFiveMilesThisWeek();
-      const r = await renderScreen();
-      await waitFor(() => expect(r.getByText('Weekly Goal')).toBeTruthy());
-      expect(r.queryByTestId('distance-goal-fill')).toBeNull();
-    });
-
-    it('fills the line toward a saved goal', async () => {
-      withFiveMilesThisWeek();
-      await AsyncStorage.setItem(goalKey, String(10 * KM_PER_MI));
-      const r = await renderScreen();
-      await waitFor(() => expect(r.getByText('5 / 10 mi')).toBeTruthy());
-      expect(r.getByTestId('distance-goal-fill').props.style).toEqual(
-        expect.arrayContaining([expect.objectContaining({ width: '50%' })]),
-      );
-    });
-
-    it('saves the goal in km from the switch, the +5 button and typed input', async () => {
-      withFiveMilesThisWeek();
-      const r = await renderScreen();
-      await waitFor(() => expect(r.getByText('Weekly Goal')).toBeTruthy());
-      fireEvent.press(r.getByText('Weekly Goal'));
-
-      fireEvent(r.getByTestId('distance-goal-switch'), 'valueChange', true);
-      await waitFor(async () => expect(await storedMiles()).toBeCloseTo(10, 5));
-
-      fireEvent.press(r.getByLabelText('Increase distance goal by 5'));
-      await waitFor(async () => expect(await storedMiles()).toBeCloseTo(15, 5));
-
-      fireEvent.changeText(r.getByTestId('distance-goal-input'), '12.5');
-      fireEvent(r.getByTestId('distance-goal-input'), 'endEditing');
-      await waitFor(async () => expect(await storedMiles()).toBeCloseTo(12.5, 5));
-
-      fireEvent(r.getByTestId('distance-goal-switch'), 'valueChange', false);
-      await waitFor(async () => expect(await AsyncStorage.getItem(goalKey)).toBeNull());
     });
   });
 
@@ -436,76 +344,4 @@ describe('CoachScreen', () => {
     });
   });
 
-  describe('muscle volume zones (Monday to Sunday)', () => {
-    const daysAgo = (n: number) => {
-      const d = new Date();
-      d.setDate(d.getDate() - n);
-      return toLocalDateStr(d);
-    };
-    const withChest = (sets: number, weekStart: string) => installServer({
-      '/api/stats/muscle-volume': { muscle_sets: { Chest: sets }, last_trained: {}, total_sets: sets, last_week_total: 0, week_start: weekStart },
-    });
-
-    it('counts down to MEV while the week is still going', async () => {
-      withChest(6, daysAgo(0)); // the week started today, so it has six days left
-      const r = await renderScreen();
-      expect(await r.findByText('2 to go')).toBeTruthy();
-      expect(r.queryByText('Below target')).toBeNull();
-    });
-
-    it('gives the verdict on Sunday', async () => {
-      withChest(6, daysAgo(6)); // today is the week's seventh day
-      const r = await renderScreen();
-      expect(await r.findByText('Below target')).toBeTruthy();
-    });
-
-    describe('premium views of the muscle chart', () => {
-      const trends = () => installServer({
-        '/api/stats/muscle-volume': {
-          muscle_sets: { Chest: 12, Back: 10 }, last_trained: {}, total_sets: 22, last_week_total: 0, week_start: daysAgo(0),
-          session_count: { Chest: 2, Back: 1 },
-          weekly_history: { Chest: [6, 8, 12, 14], Back: [10, 10, 10, 10] },
-        },
-      });
-
-      it('opens on Zones, with no explanatory sentence over the chart', async () => {
-        trends();
-        const r = await renderScreen();
-        expect(await r.findByText('Zones')).toBeTruthy();
-        expect(r.getByText('Frequency')).toBeTruthy();
-        expect(r.getByText('Trend')).toBeTruthy();
-        expect(r.queryByText(/Twice a week gains the most/)).toBeNull();
-        expect(r.queryByText(/MEV/)).toBeNull();
-      });
-
-      it('shows how often each muscle was trained on Frequency', async () => {
-        trends();
-        const r = await renderScreen();
-        fireEvent.press(await r.findByText('Frequency'));
-        expect(await r.findByText('2×')).toBeTruthy();
-        expect(r.getByText('1×')).toBeTruthy();
-        expect(r.getByText('On target')).toBeTruthy();
-        expect(r.getByText('Add a day')).toBeTruthy();
-        expect(r.getByLabelText('Chest trained 2 days this week')).toBeTruthy();
-        expect(r.getByLabelText('Back trained 1 day this week')).toBeTruthy();
-      });
-
-      it('shows where each muscle is heading on Trend', async () => {
-        trends();
-        const r = await renderScreen();
-        fireEvent.press(await r.findByText('Trend'));
-        expect(await r.findByText('Up')).toBeTruthy();
-        expect(r.getByText('Steady')).toBeTruthy();
-        expect(r.getByLabelText('Chest trend Up')).toBeTruthy();
-        expect(r.getByLabelText('Back trend Steady')).toBeTruthy();
-      });
-    });
-
-    it('calls reaching MRV the limit, and only past it over', async () => {
-      withChest(20, daysAgo(0));
-      const r = await renderScreen();
-      expect(await r.findByText('At limit')).toBeTruthy();
-      expect(r.queryByText('Over limit')).toBeNull();
-    });
-  });
 });

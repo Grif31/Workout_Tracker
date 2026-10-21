@@ -7,7 +7,7 @@ import WorkoutSummaryScreen from '../screens/DashboardTab/WorkoutSummaryScreen';
 import LogWorkoutScreen from '../screens/DashboardTab/WorkoutLogScreen';
 import GPSCardioScreen from '../screens/DashboardTab/GPSCardioScreen';
 import CardioDetailsScreen from '../screens/DashboardTab/CardioDetailsScreen';
-import ExerciseDetailScreen from '../screens/ExercisesTab/ExerciseDetailScreen';
+import ExerciseDetailScreen from '../screens/ProgressTab/ExerciseDetailScreen';
 import GreekRankIntroScreen from '../screens/DashboardTab/GreekRankIntroScreen';
 import WeeklySummaryScreen from '../screens/DashboardTab/WeeklySummaryScreen';
 import { useTheme } from '../context/ThemeContext';

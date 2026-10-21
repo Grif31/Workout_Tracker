@@ -1,7 +1,7 @@
 ﻿import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import { createMockNavigation, createMockRoute } from './testUtils';
-import ExercisesScreen from '../screens/ExercisesTab/ExercisesScreen';
+import { createMockNavigation } from './testUtils';
+import ExercisesScreen from '../screens/ProgressTab/ExercisesScreen';
 
 jest.mock('navigation/types', () => ({}), { virtual: true });
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
@@ -11,7 +11,6 @@ jest.mock('constants/equipmentTypes', () => ({ equipmentTypes: ['All', 'Barbell'
 jest.mock('components/ExerciseList', () => () => null);
 
 const nav = createMockNavigation();
-const route = createMockRoute('ExercisesHome');
 
 const exercises = [
   { id: 1, name: 'Bench Press', muscle_group: 'Chest' },
@@ -36,20 +35,21 @@ describe('ExercisesScreen', () => {
   });
 
   it('renders without crashing', () => {
-    render(<ExercisesScreen navigation={nav as any} route={route as any} />);
+    render(<ExercisesScreen navigation={nav as any} />);
   });
 
-  it('shows the Exercises screen title', () => {
-    const { getByText } = render(<ExercisesScreen navigation={nav as any} route={route as any} />);
-    expect(getByText('Exercises')).toBeTruthy();
+  it("has no title of its own, since the Progress tab's segment row names it", () => {
+    const { queryByText, getByText } = render(<ExercisesScreen navigation={nav as any} />);
+    expect(queryByText('Exercises')).toBeNull();
+    expect(getByText('Create')).toBeTruthy();
   });
 
   it('shows exercise list after fetch', async () => {
-    const { getByText } = render(<ExercisesScreen navigation={nav as any} route={route as any} />);
+    const { getByText } = render(<ExercisesScreen navigation={nav as any} />);
     await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
   });
   it('matches search words in any order', async () => {
-    const { getByText, getByPlaceholderText, queryByText } = render(<ExercisesScreen navigation={nav as any} route={route as any} />);
+    const { getByText, getByPlaceholderText, queryByText } = render(<ExercisesScreen navigation={nav as any} />);
     await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
     fireEvent.changeText(getByPlaceholderText(/search/i), 'press bench');
     expect(getByText('Bench Press')).toBeTruthy();
@@ -58,7 +58,7 @@ describe('ExercisesScreen', () => {
 
   it('writes Create in the accent text color, not hardcoded white', () => {
     const { StyleSheet } = require('react-native');
-    const { getByText } = render(<ExercisesScreen navigation={nav as any} route={route as any} />);
+    const { getByText } = render(<ExercisesScreen navigation={nav as any} />);
     const { colors } = require('../context/ThemeContext').useTheme();
     expect(StyleSheet.flatten(getByText('Create').props.style).color).toBe(colors.accentText);
   });
