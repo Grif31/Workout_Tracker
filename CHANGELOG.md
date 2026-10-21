@@ -1,6 +1,40 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 (2026-10-20)
+
+### Redesigned: Progress and Coach tabs
+- The tabs are now Home, Progress, Coach and Profile.
+- Progress opens on an overview of your training, with the exercise library one tap away under Exercises.
+- This week shows which days you trained, your progress toward your weekly goal and your distance goal, and a link to last week's summary.
+- Your Strength and Endurance Scores sit side by side as equal rings, each with its rank and how far it moved this month.
+- The chart leads with the number: tap Volume, Sets, Workouts or Distance, then any bar to see that week or month against the four before it.
+- Coach holds your plans and the AI Coach. If you follow a routine, it opens on your next day: what's up next, where you are in the rotation, the first exercises with their sets and reps, and a Start button.
+- Templates are laid out two to a row.
+
+### New: The Coach's weekly read
+- The Weekly Summary has a Coach's Read card: what went well, what lagged, and one change for next week.
+- Everything it says is checked against your logged workouts.
+
+### New: Tell the Coach what helps
+- Each insight has a thumbs up and a thumbs down. A thumbs down asks why: already knew this, not for your goal, looks wrong, or too vague.
+- The Coach uses your votes the next time it writes insights, and says so when they shaped what you see.
+
+### New: Deeper training stats (Premium)
+- The muscle volume card switches between zones, how often each muscle was trained, and where each one is trending.
+- A fatigue check compares this week with last week up to the same day, and a balance bar shows your push, pull and legs split.
+- Workout density shows how much you lift per minute of timed training.
+- Each lift shows how fast its estimated 1RM is climbing, and the Coach flags a lift that has stopped moving.
+- During a workout, each exercise suggests a target for today from your last session, and you can swap an exercise for one that works the same muscles.
+
+### New: More ways to see your work
+- Every workout shows the muscles it trained and how many sets each one got.
+- Ranking up plays a celebration on your workout summary.
+- Share a routine or a template as an image, with every exercise and its sets and reps.
+
+### New: 128 more exercises
+- Over 100 strength exercises and 22 cardio activities, each with a description. More of them count toward your Strength Score.
+- Plank, Dead Hang, Side Plank, Wall Sit and other holds are logged by time.
+- Filter exercises by Kettlebell and Other.
 
 ### New: Live workout on your lock screen (iPhone)
 - While you train, your lock screen shows your workout: the timer, your current exercise, how many sets you've done, and your next set with its reps and weight.
@@ -25,6 +59,32 @@
 ### Improved: One workout or activity at a time
 - While a workout is minimized, Home's button reads Resume Workout. Starting an activity tells you to finish the workout first, and starting a workout during an activity does the same.
 - The minimized bar for a workout says Open instead of Resume, since your workout isn't paused.
+
+### Improved: Tracked activities
+- If Aretē closes during an activity, you can keep recording from where it stopped.
+- A gap in the signal no longer draws a straight line across the map or adds distance.
+- Elevation gain is realistic: GPS noise no longer adds hundreds of feet to a flat walk.
+- Activities reach Apple Health and Health Connect as what they were (a ride, walk or hike, not a run) with their distance and start and end times.
+- If the server refuses a save, you see why instead of an offer to save offline.
+
+### Improved: Your workouts are never lost
+- A save on a slow connection gives up after 15 seconds and keeps your workout to upload later.
+- A workout is never saved twice, even if a save is retried or the app closes partway through.
+- A workout the server refuses stays on Home with the reason, so you can retry or delete it.
+
+### Improved: Easier to read in light mode
+- Switches, text fields, PR gold, red warnings, the Aretē rank and the status bar are all readable in light mode.
+
+### Improved: Faster
+- Templates open faster, and the app does less work while an activity is being tracked.
+
+### Bug Fixes
+- Health sync on Android can now get permission from Health Connect, and workouts no longer reach it labelled as runs or walks.
+- Durations read the same everywhere, like "45m" and "1h 5m".
+- The splash screen can no longer stay on screen.
+- A long exercise name is no longer squeezed by its Custom or Added tag.
+- The sets and RPE in the AI preview and the template editor are no longer cut off.
+- Opening a lift on its charts underlines the right tab.
 
 ## 1.1.9 (2026-10-07)
 
