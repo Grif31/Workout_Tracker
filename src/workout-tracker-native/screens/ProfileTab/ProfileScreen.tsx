@@ -22,7 +22,7 @@ import { typography } from '../../theme/typography';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import type { PR } from './PersonalRecordsScreen';
-import { toDisplayVolume, roundTenth, type WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toKm } from '../../utils/units';
+import { toDisplayVolume, roundTenth, type WeightUnit, GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayElevation, elevationLabel, toKm } from '../../utils/units';
 import PressableScale from '../../components/PressableScale';
 import { fmtDuration } from '../../utils/cardioFormat';
 import { GREEK_RANK_CACHED_KEY, WEEKLY_GOAL_KEY, PROFILE_FRAME_RANK_KEY } from '../../constants/storageKeys';
@@ -360,7 +360,9 @@ export default function ProfileScreen({ navigation }: Props) {
                               ? fmtTime(pr.value)
                               : pr.pr_type === 'max_duration'
                                 ? fmtHold(pr.value)
-                                : `${toDisplayDistance(pr.value, distanceUnit).toFixed(1)} ${distanceUnit}`}
+                                : pr.pr_type === 'max_elevation'
+                                  ? `${Math.round(toDisplayElevation(pr.value, distanceUnit))} ${elevationLabel(distanceUnit)}`
+                                  : `${toDisplayDistance(pr.value, distanceUnit).toFixed(1)} ${distanceUnit}`}
                       </Text>
                       <Text style={styles.prCardType}>
                         {pr.pr_type === 'max_weight' ? 'Max Weight'
@@ -623,7 +625,8 @@ export default function ProfileScreen({ navigation }: Props) {
                     if (p.pr_type === 'max_weight') { label = 'Max Weight'; valueStr = `${p.value} ${unit}`; }
                     else if (p.pr_type === 'max_reps') { label = 'Max Reps'; valueStr = `${p.value} reps${p.weight_context != null ? ` @ ${p.weight_context} ${unit}` : ''}`; }
                     else if (p.pr_type === 'best_time') { valueStr = fmtTime(p.value); }
-                    else if (p.pr_type === 'best_distance') { valueStr = `${toDisplayDistance(p.value, distanceUnit).toFixed(1)} ${distanceUnit}`; }
+                    else if (p.pr_type === 'best_distance' || p.pr_type === 'longest_distance') { valueStr = `${toDisplayDistance(p.value, distanceUnit).toFixed(1)} ${distanceUnit}`; }
+                    else if (p.pr_type === 'max_elevation') { valueStr = `${Math.round(toDisplayElevation(p.value, distanceUnit))} ${elevationLabel(distanceUnit)}`; }
                     else if (p.pr_type === 'max_duration') { label = 'Longest Hold'; valueStr = fmtHold(p.value); }
                     opts.push({ label, value: valueStr, prType: p.pr_type, context: p.weight_context ?? null });
                   }

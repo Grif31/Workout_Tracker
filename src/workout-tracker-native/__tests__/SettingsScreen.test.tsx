@@ -144,6 +144,32 @@ describe('SettingsScreen', () => {
     });
   });
 
+  describe('GPS activities', () => {
+    beforeEach(() => AsyncStorage.clear());
+
+    it('has auto-pause on and keep screen on off until changed', async () => {
+      const { getByLabelText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(getByLabelText('Auto-pause').props.value).toBe(true));
+      expect(getByLabelText('Keep screen on during GPS activities').props.value).toBe(false);
+    });
+
+    it('stores each switch for this account', async () => {
+      const { getByLabelText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(getByLabelText('Auto-pause').props.value).toBe(true));
+      fireEvent(getByLabelText('Auto-pause'), 'valueChange', false);
+      fireEvent(getByLabelText('Keep screen on during GPS activities'), 'valueChange', true);
+      await waitFor(async () => expect(await AsyncStorage.getItem('gps_auto_pause_1')).toBe('false'));
+      expect(await AsyncStorage.getItem('gps_keep_screen_on_1')).toBe('true');
+    });
+
+    it('shows what was stored', async () => {
+      await AsyncStorage.multiSet([['gps_auto_pause_1', 'false'], ['gps_keep_screen_on_1', 'true']]);
+      const { getByLabelText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
+      await waitFor(() => expect(getByLabelText('Auto-pause').props.value).toBe(false));
+      expect(getByLabelText('Keep screen on during GPS activities').props.value).toBe(true);
+    });
+  });
+
   it('opens the Workout settings from its row', () => {
     const { getAllByText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
     // The section label reads the same; the row is the second

@@ -14,7 +14,7 @@ import ThemedSwitch from '../../components/ThemedSwitch';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  LIVE_WORKOUT_NOTIF_KEY, REST_ALERTS_KEY, REMINDERS_KEY, REMINDER_HOUR_KEY, REMINDER_MIN_KEY,
+  GPS_AUTO_PAUSE_KEY, GPS_KEEP_SCREEN_ON_KEY, LIVE_WORKOUT_NOTIF_KEY, REST_ALERTS_KEY, REMINDERS_KEY, REMINDER_HOUR_KEY, REMINDER_MIN_KEY,
 } from '../../constants/storageKeys';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
@@ -58,6 +58,8 @@ export default function SettingsScreen({ navigation }: Props) {
   const uid = user?.id;
   const perUserHealthSyncKey   = `${HEALTH_SYNC_KEY}_${uid}`;
   const perUserGpsKey          = `${GPS_DISTANCE_UNIT_KEY}_${uid}`;
+  const perUserAutoPauseKey    = `${GPS_AUTO_PAUSE_KEY}_${uid}`;
+  const perUserKeepScreenKey   = `${GPS_KEEP_SCREEN_ON_KEY}_${uid}`;
   const perUserRemindersKey    = `${REMINDERS_KEY}_${uid}`;
   const perUserReminderHourKey = `${REMINDER_HOUR_KEY}_${uid}`;
   const perUserReminderMinKey  = `${REMINDER_MIN_KEY}_${uid}`;
@@ -65,6 +67,8 @@ export default function SettingsScreen({ navigation }: Props) {
   const [unitIsKg, setUnitIsKg]             = useState(user?.weight_unit === 'kg');
   const [distanceIsKm, setDistanceIsKm]     = useState(false);
   const [savingUnit, setSavingUnit]         = useState(false);
+  const [autoPauseOn, setAutoPauseOn]       = useState(true);
+  const [keepScreenOn, setKeepScreenOn]     = useState(false);
   // Notification settings
   const [remindersOn, setRemindersOn]   = useState(false);
   const [restAlertsOn, setRestAlertsOn] = useState(true);
@@ -85,6 +89,7 @@ export default function SettingsScreen({ navigation }: Props) {
     AsyncStorage.multiGet([
       perUserRemindersKey, REST_ALERTS_KEY, LIVE_WORKOUT_NOTIF_KEY,
       perUserReminderHourKey, perUserReminderMinKey, perUserHealthSyncKey, perUserGpsKey,
+      perUserAutoPauseKey, perUserKeepScreenKey,
     ]).then(async pairs => {
       const map = Object.fromEntries(pairs.map(([k, v]) => [k, v]));
       if (map[perUserRemindersKey] === 'true') {
@@ -99,6 +104,8 @@ export default function SettingsScreen({ navigation }: Props) {
       if (map[perUserReminderMinKey]) setReminderMin(map[perUserReminderMinKey]!);
       if (map[perUserHealthSyncKey] !== null) setHealthSyncOn(map[perUserHealthSyncKey] === 'true');
       if (map[perUserGpsKey]) setDistanceIsKm(map[perUserGpsKey] !== 'mi');
+      setAutoPauseOn(map[perUserAutoPauseKey] !== 'false');
+      setKeepScreenOn(map[perUserKeepScreenKey] === 'true');
     });
   }, []);
 
@@ -305,6 +312,48 @@ export default function SettingsScreen({ navigation }: Props) {
             />
             <Text style={[styles.unitLabel, distanceIsKm && styles.unitActive]}>km</Text>
           </View>
+        </View>
+      </View>
+
+      {/* ── GPS Activities ── */}
+      <Text style={styles.sectionLabel}>GPS Activities</Text>
+      <View style={styles.group}>
+        <View style={styles.row}>
+          <View style={styles.rowLeft}>
+            <Ionicons name="pause-circle-outline" size={20} color={colors.textSecondary} />
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Auto-Pause</Text>
+              <Text style={styles.rowHint}>Stops the clock while you're stopped, like at a light</Text>
+            </View>
+          </View>
+          <ThemedSwitch
+            value={autoPauseOn}
+            accessibilityLabel="Auto-pause"
+            onValueChange={async (v) => {
+              setAutoPauseOn(v);
+              await AsyncStorage.setItem(perUserAutoPauseKey, String(v));
+            }}
+          />
+        </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.row}>
+          <View style={styles.rowLeft}>
+            <Ionicons name="phone-portrait-outline" size={20} color={colors.textSecondary} />
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Keep Screen On</Text>
+              <Text style={styles.rowHint}>While the map is open, for a phone on a mount</Text>
+            </View>
+          </View>
+          <ThemedSwitch
+            value={keepScreenOn}
+            accessibilityLabel="Keep screen on during GPS activities"
+            onValueChange={async (v) => {
+              setKeepScreenOn(v);
+              await AsyncStorage.setItem(perUserKeepScreenKey, String(v));
+            }}
+          />
         </View>
       </View>
 
@@ -644,6 +693,8 @@ const createStyles = (colors: Colors) =>
       fontSize: typography.fontSize.md,
       color: colors.textPrimary,
     },
+    rowText: { flex: 1, paddingRight: spacing.sm },
+    rowHint: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
     themeControl: { width: 190 },
     rowValue: {
       fontSize: typography.fontSize.md,

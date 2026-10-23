@@ -25,6 +25,7 @@ import { toDisplayWeight, toDisplayVolume, convertWeight, WeightUnit, GPS_DISTAN
 import { computeChartYAxisRange, computeBarChartMax, computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH, fmtMinSec } from '../../utils/prFormat';
 import { fmtHold, fmtMinutes } from '../../components/workout/types';
 import { fmtPaceValue } from '../../utils/cardioFormat';
+import { isCycling, speedLabel } from '../../utils/gpsMetrics';
 import { parseApiDate } from '../../utils/date';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import { SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
@@ -410,7 +411,12 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     setChartVolume(series(s => s.volume));
   }, [historySessions, rangeCutoff, weightUnit]);
 
-  // Cardio: distance and pace per session, in the user's mi/km
+  // Rides read speed wherever runs read pace. The stored pace is the same either way.
+  const cycling = isCycling(exerciseName);
+  const speedUnit = speedLabel(distanceUnit);
+  const toSpeed = (paceInUnit: number) => 60 / paceInUnit;
+
+  // Cardio: distance and pace (or speed) per session, in the user's mi/km
   useEffect(() => {
     if (cardioHistory.length === 0) return;
     const chrono = [...cardioHistory].reverse();
@@ -424,13 +430,11 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         .map(s => ({ date: s.date, value: Math.round(toDisplayDistance(s.distance_km!, distanceUnit) * 100) / 100 })),
       v => v.toFixed(1),
     ));
-    setChartPace(toPoints(
-      inRange.filter(s => (s.pace ?? 0) > 0)
-        .map(s => ({ date: s.date, value: toDisplayPace(s.pace!, distanceUnit) })),
-      v => fmtMinSec(v),
-      true,
-    ));
-  }, [cardioHistory, rangeCutoff, distanceUnit]);
+    const paced = inRange.filter(s => (s.pace ?? 0) > 0);
+    setChartPace(cycling
+      ? toPoints(paced.map(s => ({ date: s.date, value: toSpeed(toDisplayPace(s.pace!, distanceUnit)) })), v => v.toFixed(1))
+      : toPoints(paced.map(s => ({ date: s.date, value: toDisplayPace(s.pace!, distanceUnit) })), v => fmtMinSec(v), true));
+  }, [cardioHistory, rangeCutoff, distanceUnit, cycling]);
 
   useEffect(() => {
     if (activeTab !== 'overview' || stats.totalSets === 0) return;
@@ -641,7 +645,8 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     );
   };
 
-  const fmtPace = (pace: number, unit: string) => `${fmtPaceValue(pace)} /${unit}`;
+  const fmtPace = (pace: number, unit: string) =>
+    (cycling ? `${toSpeed(pace).toFixed(1)} ${speedUnit}` : `${fmtPaceValue(pace)} /${unit}`);
 
   const renderCardioStats = () => {
     if (loading) return <ActivityIndicator size="large" color={colors.save} />;
@@ -669,7 +674,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         </View>
         {paceDisplay != null && (
           <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Avg Pace</Text>
+            <Text style={styles.statLabel}>{cycling ? 'Avg Speed' : 'Avg Pace'}</Text>
             <Text style={styles.statValue}>{fmtPace(paceDisplay, distanceUnit)}</Text>
           </View>
         )}
@@ -980,7 +985,9 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         {exerciseType === 'cardio' ? (
           <>
             {renderBarChart(chartDistance, `Distance (${distanceUnit})`, hasCardioCharts.distance, { suffix: distanceUnit, fmt: v => (Number.isInteger(v) ? String(v) : v.toFixed(1)) })}
-            {renderChart(chartPace, `Pace (/${distanceUnit})`, colors.accent, hasCardioCharts.pace, { suffix: `/${distanceUnit}`, fmt: v => fmtMinSec(v), lowerIsBetter: true })}
+            {cycling
+              ? renderChart(chartPace, `Speed (${speedUnit})`, colors.accent, hasCardioCharts.pace, { suffix: speedUnit, fmt: v => v.toFixed(1) })
+              : renderChart(chartPace, `Pace (/${distanceUnit})`, colors.accent, hasCardioCharts.pace, { suffix: `/${distanceUnit}`, fmt: v => fmtMinSec(v), lowerIsBetter: true })}
           </>
         ) : (
           <>

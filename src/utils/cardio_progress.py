@@ -1,26 +1,8 @@
 from models import db, Exercise, Set, Workout, PersonalRecord, ExerciseTemplate
+from utils.endurance_standards import ALL_DISTANCE_LABELS, ALL_DURATION_LABELS, cardio_milestones
 
-# Mirrors workout_routes.py's CARDIO_DISTANCE_MILESTONES / CARDIO_DURATION_MILESTONES
-# exactly — duplicated (not imported) so this read-only comparison never touches
-# the live PR-write path; keep both lists in sync if the milestones ever change.
-_DISTANCE_MILESTONES = [
-    (0.4,     '400m'),
-    (0.8,     '800m'),
-    (1.0,     '1K'),
-    (1.60934, '1 Mile'),
-    (5.0,     '5K'),
-    (10.0,    '10K'),
-    (21.0975, 'Half Marathon'),
-    (42.195,  'Marathon'),
-]
-_DURATION_MILESTONES = [
-    (10.0, '10 min'),
-    (20.0, '20 min'),
-    (30.0, '30 min'),
-    (60.0, '60 min'),
-]
-_MILESTONE_LABELS = {('best_time', km): label for km, label in _DISTANCE_MILESTONES}
-_MILESTONE_LABELS.update({('best_distance', mn): label for mn, label in _DURATION_MILESTONES})
+_MILESTONE_LABELS = {('best_time', km): label for km, label in ALL_DISTANCE_LABELS.items()}
+_MILESTONE_LABELS.update({('best_distance', mn): label for mn, label in ALL_DURATION_LABELS.items()})
 
 
 def _cardio_bouts(user_id, exercise_template_id, start, end):
@@ -46,23 +28,24 @@ def _cardio_bouts(user_id, exercise_template_id, start, end):
     return bouts
 
 
-def _project_cardio_bests(bouts):
+def _project_cardio_bests(bouts, exercise_name):
     """Best value reachable at each milestone via constant-pace extrapolation
     from the given bouts — same per-bout projection math as
     workout_routes.py's _compute_and_upsert_cardio_prs. Returns
     {(pr_type, weight_context): projected_value}; lower is better for
     best_time, higher is better for best_distance.
     """
+    distance_milestones, duration_milestones = cardio_milestones(exercise_name)
     best = {}
     for dist_km, duration in bouts:
-        for target_km, _label in _DISTANCE_MILESTONES:
+        for target_km, _label in distance_milestones:
             if dist_km < target_km:
                 continue
             est_time = round(duration * (target_km / dist_km), 4)
             key = ('best_time', target_km)
             if key not in best or est_time < best[key]:
                 best[key] = est_time
-        for target_min, _label in _DURATION_MILESTONES:
+        for target_min, _label in duration_milestones:
             if duration < target_min:
                 continue
             est_dist = round(dist_km * (target_min / duration), 4)
@@ -108,7 +91,10 @@ def compute_most_improved_cardio(user_id, period_start, period_end, prev_period_
 
     best_candidate = None
     for tid, candidates in by_exercise.items():
-        prev_bests = _project_cardio_bests(_cardio_bouts(user_id, tid, prev_period_start, period_start))
+        tmpl = db.session.get(ExerciseTemplate, tid)
+        prev_bests = _project_cardio_bests(
+            _cardio_bouts(user_id, tid, prev_period_start, period_start), tmpl.name if tmpl else None,
+        )
         for pr_type, weight_context, value in candidates:
             prev_value = prev_bests.get((pr_type, weight_context))
             if prev_value is None:

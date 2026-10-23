@@ -11,6 +11,8 @@ Only exercises whose ExerciseTemplate.standards_key == 'Running' feed this
 standards, so it doesn't produce a percentile.
 """
 
+import re
+
 # Milestone tables previously lived in routes/workout_routes.py (which now
 # imports them from here). They double as PACE_STANDARDS' distance keys — the
 # per-distance dicts below are keyed off these exact floats so the join key
@@ -33,7 +35,51 @@ CARDIO_DURATION_MILESTONES = [
     (60.0,  '60 min'),
 ]
 
+# Rides get their own milestones: a 400m or a "Marathon" best time means
+# nothing on a bike, and a ride covers distances no run list reaches. Same
+# join-key rule as above: these floats are what cycling PR rows are written
+# with, and constants/cardioMilestones.ts mirrors them (a test checks).
+CYCLING_DISTANCE_MILESTONES = [
+    (5.0,     '5K'),
+    (10.0,    '10K'),
+    (16.0934, '10 Mile'),
+    (20.0,    '20K'),
+    (40.0,    '40K'),
+    (50.0,    '50K'),
+    (80.4672, '50 Mile'),
+    (100.0,   '100K'),
+    (160.934, '100 Mile'),
+]
+
+CYCLING_DURATION_MILESTONES = [
+    (10.0,  '10 min'),
+    (20.0,  '20 min'),
+    (30.0,  '30 min'),
+    (60.0,  '60 min'),
+    (120.0, '2 hr'),
+]
+
+_CYCLING_NAME = re.compile(r'cycl|bike|biking|ride', re.IGNORECASE)
+
+
+def is_cycling(name):
+    """Mirrors isCycling in the app's utils/gpsMetrics.ts."""
+    return bool(_CYCLING_NAME.search(name or ''))
+
+
+def cardio_milestones(exercise_name):
+    """(distance milestones, duration milestones) for one cardio exercise."""
+    if is_cycling(exercise_name):
+        return CYCLING_DISTANCE_MILESTONES, CYCLING_DURATION_MILESTONES
+    return CARDIO_DISTANCE_MILESTONES, CARDIO_DURATION_MILESTONES
+
+
 DISTANCE_LABELS = dict(CARDIO_DISTANCE_MILESTONES)
+
+# For naming a stored PR row of either kind. A float in both lists has the same
+# label in both (5K, 10K, 10 min...), so one lookup serves runs and rides.
+ALL_DISTANCE_LABELS = {**dict(CYCLING_DISTANCE_MILESTONES), **DISTANCE_LABELS}
+ALL_DURATION_LABELS = {**dict(CYCLING_DURATION_MILESTONES), **dict(CARDIO_DURATION_MILESTONES)}
 
 _D400, _D800, _D1K, _DMILE, _D5K, _D10K, _DHALF, _DFULL = (
     d for d, _ in CARDIO_DISTANCE_MILESTONES

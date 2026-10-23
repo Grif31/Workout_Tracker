@@ -133,7 +133,7 @@ export type ProfileStackParamsList = {
         // a table row, a pin) instead of always defaulting to the top-priority
         // metric. Omitted when the caller can't know a specific one (e.g. the
         // stalled section's "All" view spans every type).
-        prType?: 'max_weight' | 'max_reps' | 'estimated_1rm' | 'best_time' | 'best_distance' | 'max_duration';
+        prType?: 'max_weight' | 'max_reps' | 'estimated_1rm' | 'best_time' | 'best_distance' | 'max_duration' | 'longest_distance' | 'max_elevation';
         weightContext?: number | null;
     };
     GreekRank: undefined;

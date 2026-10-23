@@ -23,6 +23,7 @@ import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { estimateCalories } from '../utils/cardioCalories';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayPace, toExactVolume, toKm } from '../utils/units';
+import { isCycling, speedLabel } from '../utils/gpsMetrics';
 import { fmtMinSec, PR_TYPE_LABELS } from '../utils/prFormat';
 import Collapsible, { useCollapseAnim } from './Collapsible';
 import { captureAndShare } from '../utils/shareCapture';
@@ -241,6 +242,7 @@ export default function WorkoutDetailsScreen({
         durationMin: Number(workout.cardio_duration) || 0,
         elevationM: elevated ? parseFloat(elevated.elevation_gain) || null : null,
         coords,
+        cycling: workout.exercises.some(e => isCycling(e.name)),
       };
     }
 
@@ -583,7 +585,9 @@ export default function WorkoutDetailsScreen({
             return s + toKm(d, b.distance_unit === 'mi' ? 'mi' : 'km');
           }, 0);
           const speedKmH = totalDur > 0 && totalDistKm > 0 ? totalDistKm / (totalDur / 60) : undefined;
-          const kcal = estimateCalories(exercise.name, totalDur, bodyKg, speedKmH);
+          const climbedM = exercise.sets.reduce((t, b) => t + (Number(b.elevation_gain) || 0), 0);
+          const kcal = estimateCalories(exercise.name, totalDur, bodyKg, speedKmH, climbedM);
+          const cycling = isCycling(exercise.name);
 
           // Segments, so a pause or a stretch with no GPS isn't drawn as a straight line
           const routeSegments = thinSegments(decodeRouteSegments(exercise));
@@ -635,9 +639,13 @@ export default function WorkoutDetailsScreen({
                 const distStr = dist > 0
                   ? `${toDisplayDistance(toKm(dist, loggedUnit), distanceUnit).toFixed(2)} ${distanceUnit}`
                   : null;
-                // intensity is a pace in the bout's own unit; shown as m:ss in the user's
-                const paceStr = intensity > 0
-                  ? `${fmtMinSec(toDisplayPace(loggedUnit === 'mi' ? intensity / toKm(1, 'mi') : intensity, distanceUnit))} /${distanceUnit}`
+                // intensity is a pace in the bout's own unit; shown as m:ss in the
+                // user's, or for a ride as the speed it works out to
+                const pace = intensity > 0
+                  ? toDisplayPace(loggedUnit === 'mi' ? intensity / toKm(1, 'mi') : intensity, distanceUnit)
+                  : 0;
+                const paceStr = pace > 0
+                  ? (cycling ? `${(60 / pace).toFixed(1)} ${speedLabel(distanceUnit)}` : `${fmtMinSec(pace)} /${distanceUnit}`)
                   : null;
                 return (
                   <View key={i} style={styles.cardioBoutRow}>
@@ -765,6 +773,7 @@ export default function WorkoutDetailsScreen({
             elevationM={shareData.elevationM}
             coords={shareData.coords}
             accentColor={colors.accentDark}
+            cycling={shareData.cycling}
           />
         ) : (
           <WorkoutShareCard

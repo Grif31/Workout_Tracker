@@ -913,3 +913,153 @@ class TestCardioBestEfforts:
         assert CardioBestEffort.query.count() == 1
         assert client.delete(f'/api/workouts/{wid}', headers=_h(auth_token)).status_code == 200
         assert CardioBestEffort.query.count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Rides take PRs at cycling milestones (5K to 100 Mile, up to 2 hr), never the
+# running ones: a 400m or "Marathon" best time means nothing on a bike. They
+# also hold a Longest Ride and a Most Elevation record.
+# ---------------------------------------------------------------------------
+
+class TestCyclingMilestones:
+
+    def _template(self, client, token, name):
+        res = client.post('/api/exercises',
+                          json={'name': name, 'muscle_group': 'Legs', 'exercise_type': 'cardio'},
+                          headers=_h(token))
+        return res.get_json()['id']
+
+    def _log(self, client, token, tid, distance_km, duration_min, name, elevation=None, unit='km'):
+        res = client.post('/api/workouts', json={'workoutName': 'Ride', 'exercises': [{
+            'name': name, 'exercise_template_id': tid, 'exercise_type': 'cardio',
+            'sets': [{'cardio_duration': duration_min, 'distance': distance_km, 'distance_unit': unit,
+                      'elevation_gain': elevation}],
+        }]}, headers=_h(token))
+        assert res.status_code == 201
+        return res.get_json()
+
+    def _record(self, tid, pr_type):
+        from models import PersonalRecord
+        row = PersonalRecord.query.filter_by(exercise_template_id=tid, pr_type=pr_type).first()
+        return row.value if row else None
+
+    def _contexts(self, tid, pr_type):
+        from models import PersonalRecord
+        return sorted(r.weight_context for r in
+                      PersonalRecord.query.filter_by(exercise_template_id=tid, pr_type=pr_type).all())
+
+    def test_a_ride_takes_cycling_milestones(self, client, auth_token):
+        tid = self._template(client, auth_token, 'Cycling')
+        self._log(client, auth_token, tid, 50, 130, 'Cycling')
+        assert self._contexts(tid, 'best_time') == [5.0, 10.0, 16.0934, 20.0, 40.0, 50.0]
+        assert self._contexts(tid, 'best_distance') == [10.0, 20.0, 30.0, 60.0, 120.0]
+
+    def test_a_run_keeps_the_running_milestones(self, client, auth_token):
+        tid = self._template(client, auth_token, 'Running')
+        self._log(client, auth_token, tid, 50, 300, 'Running')
+        assert self._contexts(tid, 'best_time') == [0.4, 0.8, 1.0, 1.60934, 5.0, 10.0, 21.0975, 42.195]
+
+    def test_the_template_decides_even_when_the_copy_was_renamed(self, client, auth_token):
+        tid = self._template(client, auth_token, 'Cycling')
+        self._log(client, auth_token, tid, 45, 100, 'Saturday Loop')
+        assert 40.0 in self._contexts(tid, 'best_time')
+        assert 42.195 not in self._contexts(tid, 'best_time')
+
+    def test_ride_prs_are_labelled(self, client, auth_token):
+        tid = self._template(client, auth_token, 'Cycling')
+        self._log(client, auth_token, tid, 50, 130, 'Cycling')
+        labels = {p['pr_label'] for p in
+                  client.get('/api/personal-records', headers=_h(auth_token)).get_json()}
+        assert {'40K Best Time', '10 Mile Best Time', '2 hr Best Distance'} <= labels
+
+    def test_the_longest_ride_is_kept_and_beaten(self, client, auth_token):
+        from models import PREvent
+        tid = self._template(client, auth_token, 'Cycling')
+        self._log(client, auth_token, tid, 30, 75, 'Cycling')
+        self._log(client, auth_token, tid, 20, 50, 'Cycling')
+        assert self._record(tid, 'longest_distance') == pytest.approx(30)
+        # In miles, stored in km like every other cardio PR
+        body = self._log(client, auth_token, tid, 31, 120, 'Cycling', unit='mi')
+        assert self._record(tid, 'longest_distance') == pytest.approx(31 * 1.60934)
+        assert any(p['pr_type'] == 'longest_distance' for p in body['new_prs'])
+        events = PREvent.query.filter_by(exercise_template_id=tid, pr_type='longest_distance').order_by(PREvent.id).all()
+        assert [round(e.value, 2) for e in events] == [30, 49.89]
+        assert events[1].improved_by() == pytest.approx(31 * 1.60934 - 30, abs=1e-3)
+
+    def test_the_most_climbing_is_a_record_in_metres(self, client, auth_token):
+        tid = self._template(client, auth_token, 'Cycling')
+        self._log(client, auth_token, tid, 30, 75, 'Cycling', elevation=420)
+        self._log(client, auth_token, tid, 40, 90, 'Cycling', elevation=150)
+        assert self._record(tid, 'max_elevation') == pytest.approx(420)
+        # A flat ride (no climbing recorded) never writes a zero record
+        flat = self._template(client, auth_token, 'Bike Commute')
+        self._log(client, auth_token, flat, 8, 25, 'Bike Commute')
+        assert self._record(flat, 'max_elevation') is None
+
+    def test_runs_get_neither_ride_record(self, client, auth_token):
+        tid = self._template(client, auth_token, 'Running')
+        self._log(client, auth_token, tid, 10, 50, 'Running', elevation=200)
+        assert self._record(tid, 'longest_distance') is None
+        assert self._record(tid, 'max_elevation') is None
+
+    def test_ride_records_are_named_and_in_the_distance_feed(self, client, auth_token):
+        tid = self._template(client, auth_token, 'Cycling')
+        self._log(client, auth_token, tid, 30, 75, 'Cycling', elevation=420)
+        labels = {p['pr_label'] for p in
+                  client.get('/api/personal-records', headers=_h(auth_token)).get_json()}
+        assert {'Longest Ride', 'Most Elevation'} <= labels
+        from routes.personal_record_routes import FEED_TYPE_FILTERS
+        assert {'longest_distance', 'max_elevation'} <= set(FEED_TYPE_FILTERS['distance'])
+
+    def test_the_backfill_moves_old_ride_prs_onto_cycling_milestones(self, app, client, auth_token):
+        # Rides saved before this change hold PRs at running milestones; the
+        # replay rebuilds them, which is how production gets fixed
+        from models import db, PersonalRecord
+        tid = self._template(client, auth_token, 'Cycling')
+        self._log(client, auth_token, tid, 50, 130, 'Cycling')
+        user_id = PersonalRecord.query.filter_by(exercise_template_id=tid).first().user_id
+        db.session.add(PersonalRecord(user_id=user_id, exercise_template_id=tid, pr_type='best_time',
+                                      value=110.0, weight_context=42.195, achieved_at=datetime.now()))
+        db.session.commit()
+
+        result = app.test_cli_runner().invoke(args=['backfill-pr-events', '--apply', '--force'])
+        assert result.exit_code == 0
+        assert self._contexts(tid, 'best_time') == [5.0, 10.0, 16.0934, 20.0, 40.0, 50.0]
+        assert self._record(tid, 'longest_distance') == pytest.approx(50)
+
+
+# ---------------------------------------------------------------------------
+# A GPS activity's top speed rides on its set, in km/h
+# ---------------------------------------------------------------------------
+
+class TestMaxSpeed:
+
+    def _post(self, client, token, max_speed):
+        return client.post('/api/workouts', json={'workoutName': 'Ride', 'exercises': [{
+            'name': 'Cycling', 'exercise_type': 'cardio',
+            'sets': [{'cardio_duration': 60, 'distance': 30, 'distance_unit': 'km', 'max_speed': max_speed}],
+        }]}, headers=_h(token))
+
+    def test_is_saved_and_returned(self, client, auth_token):
+        res = self._post(client, auth_token, 52.3)
+        assert res.status_code == 201
+        detail = client.get(f"/api/workouts/{res.get_json()['id']}", headers=_h(auth_token)).get_json()
+        assert detail['exercises'][0]['sets'][0]['max_speed'] == pytest.approx(52.3)
+
+    def test_none_is_fine(self, client, auth_token):
+        assert self._post(client, auth_token, None).status_code == 201
+
+    @pytest.mark.parametrize('bad', ['fast', -3, 999, True])
+    def test_garbage_is_refused_not_a_500(self, client, auth_token, bad):
+        res = self._post(client, auth_token, bad)
+        assert res.status_code == 400
+
+    def test_an_edit_keeps_or_changes_it(self, client, auth_token):
+        wid = self._post(client, auth_token, 40.0).get_json()['id']
+        detail = client.get(f'/api/workouts/{wid}', headers=_h(auth_token)).get_json()
+        ex = detail['exercises'][0]
+        ex['sets'][0]['max_speed'] = 44.5
+        res = client.put(f'/api/workouts/{wid}', json={'workoutName': 'Ride', 'exercises': [ex]}, headers=_h(auth_token))
+        assert res.status_code == 200
+        after = client.get(f'/api/workouts/{wid}', headers=_h(auth_token)).get_json()
+        assert after['exercises'][0]['sets'][0]['max_speed'] == pytest.approx(44.5)

@@ -16,7 +16,7 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch } from '../../utils/api';
 import { fmtHold } from '../../components/workout/types';
-import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
+import { GPS_DISTANCE_UNIT_KEY, elevationLabel, toDisplayDistance, toDisplayElevation } from '../../utils/units';
 import { usePurchase } from '../../context/PurchaseContext';
 import { SCORE_RANK_COLORS } from '../../constants/strengthRanks';
 import { fmtOrdinal } from '../../utils/prFormat';
@@ -30,7 +30,7 @@ export type PR = {
   exercise_template_id: number;
   exercise_name: string;
   equipment?: string | null;
-  pr_type: 'max_weight' | 'max_reps' | 'estimated_1rm' | 'best_time' | 'best_distance' | 'max_duration';
+  pr_type: 'max_weight' | 'max_reps' | 'estimated_1rm' | 'best_time' | 'best_distance' | 'max_duration' | 'longest_distance' | 'max_elevation';
   pr_label: string;
   value: number;
   weight_context: number | null;
@@ -61,8 +61,15 @@ type RepsSection = {
 type CardioEntry =
   | { kind: 'time'; label: string; time_min: number; achieved_at: string; weight_context: number | null }
   | { kind: 'distance'; label: string; distance_km: number; achieved_at: string; weight_context: number | null }
-  | { kind: 'hold'; label: string; time_min: number; achieved_at: string; weight_context: number | null };
+  | { kind: 'hold'; label: string; time_min: number; achieved_at: string; weight_context: number | null }
+  | { kind: 'longest'; label: string; distance_km: number; achieved_at: string; weight_context: number | null }
+  | { kind: 'elevation'; label: string; metres: number; achieved_at: string; weight_context: number | null };
 type CardioSection = { title: string; exercise_template_id: number; data: CardioEntry[] };
+
+const CARDIO_KIND_PR_TYPE = {
+  time: 'best_time', distance: 'best_distance', hold: 'max_duration',
+  longest: 'longest_distance', elevation: 'max_elevation',
+} as const;
 
 
 function RepsAccordion({ expanded, onToggle, header, children, styles, colors }: {
@@ -230,7 +237,8 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
   const cardioSections: CardioSection[] = useMemo(() => {
     const map = new Map<number, CardioSection>();
     prs
-      .filter(p => p.pr_type === 'best_time' || p.pr_type === 'best_distance' || p.pr_type === 'max_duration')
+      .filter(p => p.pr_type === 'best_time' || p.pr_type === 'best_distance' || p.pr_type === 'max_duration'
+        || p.pr_type === 'longest_distance' || p.pr_type === 'max_elevation')
       .forEach(p => {
         const key = p.exercise_template_id;
         if (!map.has(key)) map.set(key, { title: p.exercise_name, exercise_template_id: key, data: [] });
@@ -238,11 +246,16 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
           map.get(key)!.data.push({ kind: 'time', label: p.pr_label.replace(' Best Time', ''), time_min: p.value, achieved_at: p.achieved_at, weight_context: p.weight_context });
         } else if (p.pr_type === 'best_distance') {
           map.get(key)!.data.push({ kind: 'distance', label: p.pr_label.replace(' Best Distance', ''), distance_km: p.value, achieved_at: p.achieved_at, weight_context: p.weight_context });
+        } else if (p.pr_type === 'longest_distance') {
+          map.get(key)!.data.push({ kind: 'longest', label: 'Longest Ride', distance_km: p.value, achieved_at: p.achieved_at, weight_context: p.weight_context });
+        } else if (p.pr_type === 'max_elevation') {
+          map.get(key)!.data.push({ kind: 'elevation', label: 'Most Elevation', metres: p.value, achieved_at: p.achieved_at, weight_context: p.weight_context });
         } else {
           map.get(key)!.data.push({ kind: 'hold', label: 'Longest Hold', time_min: p.value, achieved_at: p.achieved_at, weight_context: p.weight_context });
         }
       });
-    const kindOrder = { time: 0, distance: 1, hold: 2 } as const;
+    // A ride's whole-ride records lead its section, ahead of the milestones
+    const kindOrder = { longest: 0, elevation: 1, time: 2, distance: 3, hold: 4 } as const;
     return [...map.values()]
       .sort((a, b) => a.title.localeCompare(b.title))
       .map(sec => ({
@@ -621,7 +634,7 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                 onPress={() => openProgression(
                   section.exercise_template_id,
                   section.title,
-                  item.kind === 'time' ? 'best_time' : item.kind === 'distance' ? 'best_distance' : 'max_duration',
+                  CARDIO_KIND_PR_TYPE[item.kind],
                   item.weight_context,
                 )}
                 activeOpacity={0.7}
@@ -632,7 +645,10 @@ export default function PersonalRecordsScreen({ navigation }: Props) {
                 </View>
                 <View style={styles.rowRight}>
                   <Text style={[styles.rowValue, { color: colors.prGold }]}>
-                    {item.kind === 'time' ? fmtTime(item.time_min) : item.kind === 'hold' ? fmtHold(item.time_min) : fmtDistance(item.distance_km)}
+                    {item.kind === 'time' ? fmtTime(item.time_min)
+                      : item.kind === 'hold' ? fmtHold(item.time_min)
+                        : item.kind === 'elevation' ? `${Math.round(toDisplayElevation(item.metres, distanceUnit))} ${elevationLabel(distanceUnit)}`
+                          : fmtDistance(item.distance_km)}
                   </Text>
                 </View>
               </TouchableOpacity>

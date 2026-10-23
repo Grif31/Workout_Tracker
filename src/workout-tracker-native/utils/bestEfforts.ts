@@ -12,7 +12,9 @@
 // Runs on the phone at save time: the encoded route_polyline keeps latitude and
 // longitude only, so per-point timing exists nowhere else once the run is saved.
 
-import { CARDIO_DISTANCE_MILESTONES, CARDIO_DURATION_MILESTONES } from '../constants/cardioMilestones';
+import {
+  CARDIO_DISTANCE_MILESTONES, CARDIO_DURATION_MILESTONES, CYCLING_DISTANCE_MILESTONES, CYCLING_DURATION_MILESTONES,
+} from '../constants/cardioMilestones';
 
 export type TrackPoint = {
   latitude: number;
@@ -36,6 +38,9 @@ export type BestEffort = {
 // PR rows are upserted as all-time bests: one noise spike would otherwise sit
 // at the top of a user's records permanently, with no way to clear it.
 const MIN_PLAUSIBLE_PACE_MIN_PER_KM = 2.0;
+// A bike's ceiling: 80 km/h. The running one (30 km/h) threw out the best
+// efforts of any quick road ride, a pace a cyclist holds for an hour.
+const MIN_PLAUSIBLE_RIDE_PACE_MIN_PER_KM = 0.75;
 
 // A milestone spanned by two points is a straight line between them, not a
 // measurement of what was run.
@@ -85,7 +90,7 @@ function interpolate(series: number[], i: number, f: number): number {
 }
 
 // Fastest moving time covering exactly `targetKm`.
-function fastestForDistance(cum: Cumulative, targetKm: number): number | null {
+function fastestForDistance(cum: Cumulative, targetKm: number, minPace: number): number | null {
   const { km, sec } = cum;
   const n = km.length;
   if (n < MIN_POINTS_PER_WINDOW || km[n - 1] < targetKm) return null;
@@ -110,12 +115,12 @@ function fastestForDistance(cum: Cumulative, targetKm: number): number | null {
 
   if (best === null) return null;
   const minutes = best / 60;
-  if (minutes / targetKm < MIN_PLAUSIBLE_PACE_MIN_PER_KM) return null;
+  if (minutes / targetKm < minPace) return null;
   return minutes;
 }
 
 // Furthest distance covered inside exactly `targetMin` of moving time.
-function furthestForDuration(cum: Cumulative, targetMin: number): number | null {
+function furthestForDuration(cum: Cumulative, targetMin: number, minPace: number): number | null {
   const { km, sec } = cum;
   const n = km.length;
   const targetSec = targetMin * 60;
@@ -135,7 +140,7 @@ function furthestForDuration(cum: Cumulative, targetMin: number): number | null 
   }
 
   if (best === null) return null;
-  if (targetMin / best < MIN_PLAUSIBLE_PACE_MIN_PER_KM) return null;
+  if (targetMin / best < minPace) return null;
   return best;
 }
 
@@ -148,20 +153,21 @@ function furthestForDuration(cum: Cumulative, targetMin: number): number | null 
  * bout whose distance (or duration) happens to land exactly on a milestone.
  * The upsert keeps the best, so adding these can only ever improve a PR.
  */
-export function extractBestEfforts(points: TrackPoint[]): BestEffort[] {
+export function extractBestEfforts(points: TrackPoint[], cycling = false): BestEffort[] {
   if (!Array.isArray(points) || points.length < MIN_POINTS_PER_WINDOW) return [];
   const cum = accumulate(points);
   const efforts: BestEffort[] = [];
+  const minPace = cycling ? MIN_PLAUSIBLE_RIDE_PACE_MIN_PER_KM : MIN_PLAUSIBLE_PACE_MIN_PER_KM;
 
-  for (const [targetKm] of CARDIO_DISTANCE_MILESTONES) {
-    const minutes = fastestForDistance(cum, targetKm);
+  for (const [targetKm] of cycling ? CYCLING_DISTANCE_MILESTONES : CARDIO_DISTANCE_MILESTONES) {
+    const minutes = fastestForDistance(cum, targetKm, minPace);
     if (minutes !== null) {
       efforts.push({ milestone_type: 'distance', distance_km: targetKm, duration_min: minutes });
     }
   }
 
-  for (const [targetMin] of CARDIO_DURATION_MILESTONES) {
-    const distance = furthestForDuration(cum, targetMin);
+  for (const [targetMin] of cycling ? CYCLING_DURATION_MILESTONES : CARDIO_DURATION_MILESTONES) {
+    const distance = furthestForDuration(cum, targetMin, minPace);
     if (distance !== null) {
       efforts.push({ milestone_type: 'duration', distance_km: distance, duration_min: targetMin });
     }
@@ -172,9 +178,10 @@ export function extractBestEfforts(points: TrackPoint[]): BestEffort[] {
 
 /** "1 Mile" / "10 min" — the milestone an effort was measured against. */
 export function bestEffortLabel(effort: BestEffort): string {
+  // A value in both lists has the same label in both, so either one answers
   const list = effort.milestone_type === 'distance'
-    ? CARDIO_DISTANCE_MILESTONES
-    : CARDIO_DURATION_MILESTONES;
+    ? [...CARDIO_DISTANCE_MILESTONES, ...CYCLING_DISTANCE_MILESTONES]
+    : [...CARDIO_DURATION_MILESTONES, ...CYCLING_DURATION_MILESTONES];
   const target = effort.milestone_type === 'distance' ? effort.distance_km : effort.duration_min;
   return list.find(([value]) => value === target)?.[1] ?? String(target);
 }

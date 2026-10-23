@@ -47,6 +47,12 @@ describe('fmtPrValue', () => {
     expect(fmtPrValue(ev('best_distance', 5), 'lbs', 'km')).toBe('5.00 km');
     expect(fmtPrValue(ev('best_distance', 5), 'lbs', 'mi')).toBe('3.11 mi');
   });
+
+  it('writes a longest ride like a distance and climbing in feet beside miles', () => {
+    expect(fmtPrValue(ev('longest_distance', 80.4672), 'lbs', 'mi')).toBe('50.00 mi');
+    expect(fmtPrValue(ev('max_elevation', 420), 'lbs', 'mi')).toBe('1378 ft');
+    expect(fmtPrValue(ev('max_elevation', 420), 'kg', 'km')).toBe('420 m');
+  });
 });
 
 describe('fmtPrContext', () => {
@@ -89,6 +95,11 @@ describe('fmtPrDelta', () => {
 
   it('converts distance improvements to the display unit', () => {
     expect(fmtPrDelta(ev('best_distance', 6, 0.5), 'lbs', 'km')).toBe('+0.50 km');
+  });
+
+  it('formats ride-record improvements', () => {
+    expect(fmtPrDelta(ev('longest_distance', 60, 10), 'lbs', 'km')).toBe('+10.00 km');
+    expect(fmtPrDelta(ev('max_elevation', 500, 100), 'lbs', 'mi')).toBe('+328 ft');
   });
 });
 
@@ -368,6 +379,8 @@ describe('prWorkoutScreen', () => {
   it('opens cardio PRs in Cardio Details', () => {
     expect(prWorkoutScreen('best_time')).toBe('CardioDetails');
     expect(prWorkoutScreen('best_distance')).toBe('CardioDetails');
+    expect(prWorkoutScreen('longest_distance')).toBe('CardioDetails');
+    expect(prWorkoutScreen('max_elevation')).toBe('CardioDetails');
   });
 
   it('keeps lifts and timed holds in Workout Details', () => {

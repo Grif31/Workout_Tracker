@@ -45,3 +45,8 @@ export const REMINDER_MIN_KEY = 'workout_reminder_minute';
 // utils/widgetData.ts; Android's widget task reads it with the app closed.
 // Cleared on logout and login, and a write for any other user starts empty.
 export const WIDGET_SNAPSHOT_KEY = 'widget_snapshot';
+// Per user: `${KEY}_${userId}`. GPS activity settings: Settings writes them,
+// GpsRunContext (auto-pause) and GPSCardioScreen (keep screen on) read them.
+// Auto-pause is on unless 'false'; keep screen on is off unless 'true'.
+export const GPS_AUTO_PAUSE_KEY = 'gps_auto_pause';
+export const GPS_KEEP_SCREEN_ON_KEY = 'gps_keep_screen_on';

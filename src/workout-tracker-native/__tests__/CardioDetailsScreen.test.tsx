@@ -130,9 +130,24 @@ describe('CardioDetailsScreen', () => {
         { cardio_duration: 60, distance: 30, distance_unit: 'km', elevation_gain: null },
       ] }],
     }));
+    const { findByText, getByText, getAllByText } = await renderScreen();
+    expect(await findByText('km/h')).toBeTruthy();
+    // On the screen and on the off-screen share card, which names the ride by its title
+    expect(getAllByText('30.0').length).toBe(2);
+    expect(getByText('Speed km/h')).toBeTruthy();
+  });
+
+  it("shows a ride's top speed, and the time out when auto-pause left stops out", async () => {
+    await AsyncStorage.setItem(UNIT_KEY, 'km');
+    installServer(workout({
+      name: 'Evening Ride', duration: 75,
+      exercises: [{ name: 'Cycling', exercise_type: 'cardio', route_polyline: null, sets: [
+        { cardio_duration: 60, distance: 30, distance_unit: 'km', elevation_gain: null, max_speed: 52.34 },
+      ] }],
+    }));
     const { findByText, getByText } = await renderScreen();
-    expect(await findByText('30.0')).toBeTruthy();
-    expect(getByText('km/h')).toBeTruthy();
+    expect(await findByText('52.3 km/h max speed')).toBeTruthy();
+    expect(getByText('1h 15m elapsed, stops included')).toBeTruthy();
   });
 
   it('stays on the activity and says so when the delete fails', async () => {

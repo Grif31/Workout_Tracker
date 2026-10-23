@@ -33,25 +33,42 @@ describe('estimateCalories — flat MET (no speed)', () => {
   });
 });
 
-describe('estimateCalories — speed-based MET (GPS workouts)', () => {
-  it('running MET tracks km/h roughly 1:1 above the 6.0 floor', () => {
-    // 12 km/h -> MET 12; 70kg; 60 min -> 840
-    expect(estimateCalories('running', 60, 70, 12)).toBe(840);
+// Whole calories, so a hand-worked figure can land half a calorie either side
+const near = (actual: number, expected: number) => expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1);
+
+describe('estimateCalories with a speed (GPS and logged distances)', () => {
+  it('runs by the ACSM running equation', () => {
+    // 12 km/h = 200 m/min: VO2 0.2*200 + 3.5 = 43.5 ml/kg/min; *70kg*60min/1000*5 kcal/L
+    near(estimateCalories('running', 60, 70, 12), 913.5);
   });
 
-  it('applies the running MET floor for a slow jog', () => {
-    // 4 km/h -> Math.max(6, 4) = 6; 70kg; 60 min -> 420
-    expect(estimateCalories('running', 60, 70, 4)).toBe(420);
+  it('walks by the ACSM walking equation', () => {
+    // 6 km/h = 100 m/min: VO2 0.1*100 + 3.5 = 13.5; *70*60/1000*5
+    near(estimateCalories('walking', 60, 70, 6), 283.5);
   });
 
-  it('uses the cycling speed formula (speed*0.45 + 2)', () => {
-    // 20 km/h -> 0.45*20 + 2 = 11 MET; 80kg; 60 min -> 880
-    expect(estimateCalories('cycling', 60, 80, 20)).toBe(880);
+  it('rides by the power it takes to hold the speed', () => {
+    // 20 km/h, 80 kg + 10 kg bike: rolling 0.006*90*9.81*5.56 = 29.4 W, drag
+    // 0.5*1.2*0.5*5.56^3 = 51.4 W; 80.9 W for an hour at 24% efficiency
+    near(estimateCalories('Cycling', 60, 80, 20), 290);
   });
 
-  it('uses the walking speed formula (speed*0.5 + 1.5)', () => {
-    // 6 km/h -> 0.5*6 + 1.5 = 4.5 MET; 70kg; 60 min -> 315
-    expect(estimateCalories('walking', 60, 70, 6)).toBe(315);
+  it('costs drag steeply with speed on a bike', () => {
+    const at20 = estimateCalories('cycling', 60, 80, 20);
+    const at30 = estimateCalories('cycling', 60, 80, 30);
+    expect(at30).toBeGreaterThan(at20 * 2);
+  });
+
+  it('counts the climbing', () => {
+    // Lifting 90 kg 500 m is 441 kJ of work, 440 kcal at 24% efficiency
+    near(estimateCalories('cycling', 60, 80, 20, 500) - estimateCalories('cycling', 60, 80, 20), 439.6);
+    // 200 m up over a 10 km run is a 2% grade: 0.9*v*0.02 more oxygen
+    expect(estimateCalories('running', 50, 70, 12, 200)).toBeGreaterThan(estimateCalories('running', 50, 70, 12));
+    expect(estimateCalories('hiking', 120, 70, 4, 600)).toBeGreaterThan(estimateCalories('hiking', 120, 70, 4));
+  });
+
+  it('treats a hike as a walk over rougher ground', () => {
+    expect(estimateCalories('hiking', 60, 70, 5)).toBeGreaterThan(estimateCalories('walking', 60, 70, 5));
   });
 
   it('ignores a non-positive speed and uses the flat MET', () => {
@@ -59,8 +76,8 @@ describe('estimateCalories — speed-based MET (GPS workouts)', () => {
     expect(estimateCalories('running', 30, 70, -5)).toBe(estimateCalories('running', 30, 70));
   });
 
-  it('falls back to flat-table MET for an activity with no speed formula', () => {
-    // elliptical has no speed branch -> FLAT_MET.elliptical = 5; 70kg; 60 min -> 350
+  it('falls back to the flat MET for an activity with no speed model', () => {
+    // elliptical: FLAT_MET 5; 70kg; 60 min -> 350
     expect(estimateCalories('elliptical', 60, 70, 10)).toBe(350);
   });
 });

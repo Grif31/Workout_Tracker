@@ -5,41 +5,26 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func
 from models import db, PersonalRecord, PREvent, ExerciseTemplate, Exercise, Set, Workout
 from utils.local_date import user_today
+from utils.endurance_standards import ALL_DISTANCE_LABELS, ALL_DURATION_LABELS
 
 pr_bp = Blueprint('pr_bp', __name__)
-
-DISTANCE_LABELS = {
-    0.4:     '400m',
-    0.8:     '800m',
-    1.0:     '1K',
-    1.60934: '1 Mile',
-    5.0:     '5K',
-    10.0:    '10K',
-    21.0975: 'Half Marathon',
-    42.195:  'Marathon',
-}
-
-DURATION_LABELS = {
-    10.0: '10 min',
-    20.0: '20 min',
-    30.0: '30 min',
-    60.0: '60 min',
-}
 
 PR_LABELS = {
     'max_weight':    'Max Weight',
     'max_reps':      'Max Reps',
     'estimated_1rm': 'Estimated 1RM',
     'max_duration':  'Longest Hold',
+    'longest_distance': 'Longest Ride',
+    'max_elevation':    'Most Elevation',
 }
 
 
 def _cardio_pr_label(pr):
     if pr.pr_type == 'best_time':
-        dist_label = DISTANCE_LABELS.get(pr.weight_context, f'{pr.weight_context} km')
+        dist_label = ALL_DISTANCE_LABELS.get(pr.weight_context, f'{pr.weight_context} km')
         return f'{dist_label} Best Time'
     if pr.pr_type == 'best_distance':
-        dur_label = DURATION_LABELS.get(pr.weight_context, f'{pr.weight_context:.0f} min')
+        dur_label = ALL_DURATION_LABELS.get(pr.weight_context, f'{pr.weight_context:.0f} min')
         return f'{dur_label} Best Distance'
     return pr.pr_type
 
@@ -57,7 +42,7 @@ FEED_TYPE_FILTERS = {
     'weight':   ['max_weight'],
     'reps':     ['max_reps'],
     'time':     ['best_time', 'max_duration'],
-    'distance': ['best_distance'],
+    'distance': ['best_distance', 'longest_distance', 'max_elevation'],
 }
 FEED_PR_TYPES = [t for types in FEED_TYPE_FILTERS.values() for t in types]
 
@@ -472,7 +457,7 @@ def get_prs_for_exercise(exercise_template_id):
         'best_times': [
             {
                 'distance_km': p.weight_context,
-                'label':       DISTANCE_LABELS.get(p.weight_context, f'{p.weight_context} km'),
+                'label':       ALL_DISTANCE_LABELS.get(p.weight_context, f'{p.weight_context} km'),
                 'time_min':    p.value,
                 'achieved_at': p.achieved_at.isoformat() if p.achieved_at else None,
             }
@@ -481,7 +466,7 @@ def get_prs_for_exercise(exercise_template_id):
         'best_distances': [
             {
                 'duration_min': p.weight_context,
-                'label':        DURATION_LABELS.get(p.weight_context, f'{p.weight_context:.0f} min'),
+                'label':        ALL_DURATION_LABELS.get(p.weight_context, f'{p.weight_context:.0f} min'),
                 'distance_km':  p.value,
                 'achieved_at':  p.achieved_at.isoformat() if p.achieved_at else None,
             }

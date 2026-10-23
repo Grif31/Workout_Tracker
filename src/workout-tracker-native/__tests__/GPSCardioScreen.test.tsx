@@ -7,6 +7,7 @@ import { createMockNavigation, createMockRoute } from './testUtils';
 import GPSCardioScreen from '../screens/DashboardTab/GPSCardioScreen';
 import { GpsRunProvider } from '../context/GpsRunContext';
 import { toLocalDateStr } from '../utils/date';
+import { HOLD_MS } from '../components/HoldButton';
 
 jest.mock('react-native-maps', () => {
   const React = require('react');
@@ -135,6 +136,9 @@ describe('GPSCardioScreen', () => {
     jest.clearAllMocks();
     mockGpsListener = null;
     await AsyncStorage.clear();
+    // These tracks stand still between sparse fixes; the clock tests want every
+    // second counted, so auto-pause is off unless a test turns it on
+    await AsyncStorage.setItem(`gps_auto_pause_${USER_ID}`, 'false');
     Location.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
     mockNetInfoFetch.mockResolvedValue({ isConnected: true, isInternetReachable: true });
     mockServer();
@@ -146,12 +150,24 @@ describe('GPSCardioScreen', () => {
   });
 
   describe('saving a tracked run', () => {
+    it("opens the summary with the save's PRs, so they're celebrated", async () => {
+      const prs = [{ exercise_name: 'Running', pr_type: 'best_time', value: 4.2, label: '1K' }];
+      mockServer({ status: 201, body: { id: 77, new_prs: prs, is_first_workout: true } });
+      const r = await renderReady();
+      await runAndStop(r, [point(0), point(1), point(2), point(3)]);
+      await act(async () => { fireEvent.press(r.getByText('Save')); });
+      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('WorkoutSummary', {
+        workoutId: 77, workoutName: 'Run', prs, totalVolume: 0, totalReps: 0, totalSets: 0,
+        muscles: [], isFirstWorkout: true, isBestVolume: false, isBestReps: false,
+      }));
+    });
+
     it('posts the route, distance in the display unit, duration and pace', async () => {
       const r = await renderReady();
       await runAndStop(r, [point(0), point(1), point(2), point(3)]);
       await act(async () => { fireEvent.press(r.getByText('Save')); });
 
-      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('CardioDetails', { workoutId: 77 }));
+      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('WorkoutSummary', expect.objectContaining({ workoutId: 77 })));
       const body = JSON.parse(posts()[0][1].body);
       const [ex] = body.exercises;
       const [set] = ex.sets;
@@ -399,6 +415,69 @@ describe('GPSCardioScreen', () => {
 
       await act(async () => { fireEvent.press(r.getByText('Stop')); });
       expect(alertSpy).toHaveBeenCalledWith('End this activity?', expect.any(String), expect.any(Array));
+    });
+  });
+
+  describe('riding', () => {
+    // 8 m/s (28.8 km/h, 17.9 mph) by the chip's own reading, a fix every 2 s ~16.7 m apart
+    const ridePt = (i: number, speed = 8) => ({
+      coords: { latitude: 40 + i * 0.00015, longitude: -74, altitude: 10, accuracy: 5, speed },
+      timestamp: T0 + i * 2000,
+    });
+    async function startRide(r: ReturnType<typeof render>) {
+      await act(async () => { fireEvent.press(r.getByText('Cycle')); });
+      await act(async () => { fireEvent.press(r.getByText('Start')); });
+      await waitFor(() => expect(mockGpsListener).not.toBeNull());
+      await feed(...[0, 1, 2, 3, 4, 5].map(i => ridePt(i)));
+      await advance(10_000);
+    }
+
+    it('leads with the current speed, big, and holds to stop', async () => {
+      const r = await renderReady();
+      await startRide(r);
+      expect(r.getByLabelText('17.9 mph')).toBeTruthy();
+      expect(r.getByText('Hold to Stop')).toBeTruthy();
+      expect(r.queryByText('Stop')).toBeNull();
+      expect(r.getByText('max mph')).toBeTruthy();
+    });
+
+    it('takes a tap on Stop for a slip, and a hold as meaning it', async () => {
+      const r = await renderReady();
+      await startRide(r);
+      const stopBtn = r.getByLabelText('Hold to Stop');
+      await act(async () => { fireEvent(stopBtn, 'pressIn'); fireEvent(stopBtn, 'pressOut'); });
+      expect(r.getByText('Keep holding')).toBeTruthy();
+      expect(r.queryByText('Save Activity?')).toBeNull();
+
+      await act(async () => { fireEvent(stopBtn, 'pressIn'); jest.advanceTimersByTime(HOLD_MS + 50); });
+      await waitFor(() => expect(r.getByText('Save Activity?')).toBeTruthy());
+      // The hold was the confirmation
+      expect(alertSpy).not.toHaveBeenCalledWith('End this activity?', expect.anything(), expect.anything());
+    });
+
+    it('auto-pauses when the fixes stop, with the moving clock held', async () => {
+      await AsyncStorage.removeItem(`gps_auto_pause_${USER_ID}`);
+      const r = await renderReady();
+      await startRide(r);
+      expect(r.queryByText('Auto-paused')).toBeNull();
+      // 10 s with no fix: over the 8 s grace at 3 km/h
+      await advance(10_000);
+      expect(r.getByText('Auto-paused')).toBeTruthy();
+      expect(r.getByText('Moving')).toBeTruthy();
+      const held = r.getByText(/^0:\d\d$/).props.children;
+      await advance(60_000);
+      expect(r.getByText(held)).toBeTruthy();
+      expect(r.getByText(/^Elapsed /)).toBeTruthy();
+    });
+
+    it('keeps the screen on while riding when Settings asks', async () => {
+      const { activateKeepAwakeAsync, deactivateKeepAwake } = require('expo-keep-awake');
+      await AsyncStorage.setItem(`gps_keep_screen_on_${USER_ID}`, 'true');
+      const r = await renderReady();
+      await startRide(r);
+      expect(activateKeepAwakeAsync).toHaveBeenCalledWith('gps-map-screen');
+      await act(async () => { fireEvent.press(r.getByText('Pause')); });
+      expect(deactivateKeepAwake).toHaveBeenCalledWith('gps-map-screen');
     });
   });
 

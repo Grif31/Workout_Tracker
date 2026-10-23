@@ -20,7 +20,7 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { CATEGORICAL_COLORS } from '../../constants/categoricalColors';
 import { fmtHold, fmtMinutes, RPE_KEY } from '../../components/workout/types';
-import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../../utils/units';
+import { GPS_DISTANCE_UNIT_KEY, elevationLabel, toDisplayDistance, toDisplayElevation } from '../../utils/units';
 import { toLocalDateStr } from '../../utils/date';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import StreakFlame from '../../components/StreakFlame';
@@ -107,6 +107,10 @@ function formatPrValue(
       return ctx != null ? `${toDist(pr.value).toFixed(2)} ${distanceUnit} / ${ctx} min` : `${toDist(pr.value).toFixed(2)} ${distanceUnit}`;
     case 'max_duration':
       return fmtHold(pr.value);
+    case 'longest_distance':
+      return `${toDist(pr.value).toFixed(2)} ${distanceUnit}`;
+    case 'max_elevation':
+      return `${Math.round(toDisplayElevation(pr.value, distanceUnit))} ${elevationLabel(distanceUnit)} climbed`;
     default:
       return `${pr.value}`;
   }

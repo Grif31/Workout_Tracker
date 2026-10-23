@@ -1,5 +1,5 @@
 import {
-  addAltitude, currentPaceMinPerKm, freshClimb, speedInUnit, isCycling, CLIMB_THRESHOLD_M, MAX_CLIMB_GRADE,
+  addAltitude, currentPaceMinPerKm, currentSpeedKmh, freshClimb, speedInUnit, isCycling, CLIMB_THRESHOLD_M, MAX_CLIMB_GRADE,
 } from '../utils/gpsMetrics';
 
 // Feeds altitudes as fixes `stepM` metres apart, the way applyFix does
@@ -101,6 +101,34 @@ describe('current pace', () => {
 
   it('has nothing to say from a handful of meters', () => {
     expect(currentPaceMinPerKm([pt(0, 0), pt(30, 0.0001)])).toBeNull();
+  });
+});
+
+describe('current speed', () => {
+  const pt = (sec: number, lat: number, speed?: number, resumed = false) => ({
+    latitude: lat, longitude: 0, timestamp: sec * 1000,
+    ...(speed != null ? { speed } : {}), ...(resumed ? { resumed } : {}),
+  });
+
+  it("reads the GPS chip's own speed, the median of the last three", () => {
+    // 8, 8 and a 20 m/s blip: 8 m/s is 28.8 km/h
+    expect(currentSpeedKmh([pt(0, 0, 8), pt(2, 0.0001, 8), pt(4, 0.0002, 20)], 4000)).toBeCloseTo(28.8, 5);
+  });
+
+  it('reacts at once where the position window lags', () => {
+    // Ten minutes at walking pace, then a sprint the chip already reads as 10 m/s
+    const pts = [pt(0, 0, 1.4), pt(300, 0.004, 1.4), pt(302, 0.0041, 10), pt(304, 0.0043, 10)];
+    expect(currentSpeedKmh(pts, 304_000)).toBeCloseTo(36, 5);
+  });
+
+  it('falls back to positions when the phone gives no speed, or a stale one', () => {
+    const noSpeed = [pt(0, 0), pt(300, 0.001), pt(310, 0.002), pt(320, 0.003), pt(330, 0.004)];
+    expect(currentSpeedKmh(noSpeed, 330_000)!).toBeCloseTo(60 / currentPaceMinPerKm(noSpeed)!, 5);
+    expect(currentSpeedKmh([pt(0, 0, 8), pt(2, 0.0001, 8)], 60_000)).toBeNull();
+  });
+
+  it("doesn't reach back across a resume", () => {
+    expect(currentSpeedKmh([pt(0, 0, 2), pt(600, 0.001, 9, true), pt(602, 0.0011, 9)], 602_000)).toBeCloseTo(32.4, 5);
   });
 });
 

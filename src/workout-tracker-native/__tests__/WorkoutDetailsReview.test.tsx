@@ -85,4 +85,14 @@ describe('WorkoutDetails', () => {
     // 5 km at 5:00/km, in the default mi
     expect(await findByText('25:00 · 3.11 mi · 8:03 /mi')).toBeTruthy();
   });
+
+  it('writes a ride bout as a speed, from the same stored pace', async () => {
+    serve({
+      id: 2, name: 'Ride', date: '2026-09-20T00:00:00', workout_type: 'cardio',
+      cardio_duration: 25, distance: 5, distance_unit: 'km', exercises: [{ ...RUN, name: 'Cycling', sets: [RUN.sets[0]] }],
+    });
+    const { findByText } = render(<WorkoutDetails workoutId={2} />);
+    // 5:00/km is 12 km/h, 7.5 mph
+    expect(await findByText('25:00 · 3.11 mi · 7.5 mph')).toBeTruthy();
+  });
 });

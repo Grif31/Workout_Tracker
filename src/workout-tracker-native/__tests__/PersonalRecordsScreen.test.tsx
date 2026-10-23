@@ -71,6 +71,36 @@ describe('PersonalRecordsScreen', () => {
     expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 9, exerciseName: 'Running', prType: 'best_time', weightContext: 5 });
   });
 
+  it("leads a ride's section with its whole-ride records and opens their progression", async () => {
+    mockFetch([...prsPayload,
+      {
+        id: 3, exercise_template_id: 11, exercise_name: 'Cycling', equipment: null,
+        pr_type: 'best_time', pr_label: '20K Best Time', value: 40, weight_context: 20.0,
+        achieved_at: '2026-08-02T00:00:00', muscle_group: 'Legs',
+      },
+      {
+        id: 4, exercise_template_id: 11, exercise_name: 'Cycling', equipment: null,
+        pr_type: 'max_elevation', pr_label: 'Most Elevation', value: 420, weight_context: -1,
+        achieved_at: '2026-08-02T00:00:00', muscle_group: 'Legs',
+      },
+      {
+        id: 5, exercise_template_id: 11, exercise_name: 'Cycling', equipment: null,
+        pr_type: 'longest_distance', pr_label: 'Longest Ride', value: 80.4672, weight_context: -1,
+        achieved_at: '2026-08-02T00:00:00', muscle_group: 'Legs',
+      },
+    ]);
+    const { getByText, getAllByText } = render(<PersonalRecordsScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Bench Press')).toBeTruthy());
+    fireEvent.press(getByText('Cardio & Holds'));
+    await waitFor(() => expect(getByText('Longest Ride')).toBeTruthy());
+    expect(getByText('50.00 mi')).toBeTruthy();
+    expect(getByText('1378 ft')).toBeTruthy();
+    const labels = getAllByText(/^(Longest Ride|Most Elevation|20K)$/).map(n => n.props.children);
+    expect(labels).toEqual(['Longest Ride', 'Most Elevation', '20K']);
+    fireEvent.press(getByText('Most Elevation'));
+    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 11, exerciseName: 'Cycling', prType: 'max_elevation', weightContext: -1 });
+  });
+
   it('navigates to Progression when an expanded Max Reps entry is tapped', async () => {
     mockFetch([...prsPayload, {
       id: 3, exercise_template_id: 12, exercise_name: 'Squat', equipment: null,

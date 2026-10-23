@@ -116,6 +116,24 @@ describe('share cards', () => {
     expect(getByText(/5\.00/)).toBeTruthy();
   });
 
+  it('Cardio card shows a ride as speed, not pace', () => {
+    const { getByText, queryByText } = render(
+      <CardioShareCard activityName="Saturday Loop" date="Sep 20, 2026" distance={24.8} distanceUnit="mi" durationMin={80} cycling accentColor={ACCENT} />,
+    );
+    // 24.8 mi in 80 minutes
+    expect(getByText('18.6')).toBeTruthy();
+    expect(getByText('Speed mph')).toBeTruthy();
+    expect(queryByText(/Pace/)).toBeNull();
+  });
+
+  it('Cardio card keeps pace for a run', () => {
+    const { getByText, queryByText } = render(
+      <CardioShareCard activityName="Running" date="Sep 20, 2026" distance={5} distanceUnit="km" durationMin={30} accentColor={ACCENT} />,
+    );
+    expect(getByText('Pace /km')).toBeTruthy();
+    expect(queryByText(/Speed/)).toBeNull();
+  });
+
   it('Cardio card draws the route when one was recorded', () => {
     const coords = [
       { latitude: 40.0, longitude: -75.0 },

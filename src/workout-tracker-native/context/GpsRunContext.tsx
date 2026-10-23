@@ -13,11 +13,11 @@ import { showToast } from '../utils/toast';
 import { endRunActivity, startOrUpdateRunActivity } from '../utils/liveActivity';
 import { gpsLiveActivityKey, gpsLiveActivityProps } from '../utils/gpsLiveActivityProps';
 import { GPS_DISTANCE_UNIT_KEY, type DistanceUnit } from '../utils/units';
-import { LIVE_WORKOUT_NOTIF_KEY } from '../constants/storageKeys';
+import { GPS_AUTO_PAUSE_KEY, LIVE_WORKOUT_NOTIF_KEY } from '../constants/storageKeys';
 import { newClientId } from '../utils/clientId';
 import {
-  ACTIVITIES, afterGap, applyFix, checkpointIntervalMs, emptyRun, runElapsedSeconds,
-  type Activity, type Coord, type RunState,
+  ACTIVITIES, AUTO_PAUSE_KMH, SPEED_CAP_KMH, afterGap, applyFix, checkpointIntervalMs, emptyRun, runElapsedSeconds,
+  settleStop, type Activity, type Coord, type RunState,
 } from '../utils/gpsRun';
 
 // The GPS run in progress. It lives here, above every screen, so leaving
@@ -33,6 +33,9 @@ export type RunCheckpoint = {
   distanceKm?: number;
   elevationGainM?: number;
   elapsedSec?: number;
+  /** Auto-paused seconds and top speed; absent in checkpoints from older builds */
+  stoppedSec?: number;
+  maxSpeedKmh?: number;
   savedAt: number;
   /** The run's id for the server's duplicate check; absent in checkpoints from older builds */
   clientId?: string;
@@ -74,6 +77,11 @@ type GpsRunCtx = {
    * same workout if the save before the kill did land
    */
   clientId: string | null;
+  /**
+   * The speed below which this run counts as stopped, or null with auto-pause
+   * off (Settings). Read when the run starts or resumes, like the distance unit.
+   */
+  stopBelowKmh: number | null;
   /** The map screen is showing, so the mini bar stays hidden, as with an open workout */
   screenOpen: boolean;
   setScreenOpen: (open: boolean) => void;
@@ -94,6 +102,7 @@ const IDLE_STATUS: GpsRunStatus = {
   clearCheckpoint: () => {},
   checkpointKey: '',
   clientId: null,
+  stopBelowKmh: null,
   screenOpen: false,
   setScreenOpen: () => {},
 };
@@ -159,6 +168,8 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
       distanceKm: r.distanceKm,
       elevationGainM: r.elevationGainM,
       elapsedSec: elapsedNow(),
+      stoppedSec: r.stoppedSec,
+      maxSpeedKmh: r.maxSpeedKmh,
       savedAt: Date.now(),
       ...(clientIdRef.current ? { clientId: clientIdRef.current } : {}),
     })).catch(() => {});
@@ -191,7 +202,8 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
   // what a fix is worth (utils/gpsRun.applyFix), including that the gap
   // travelled while paused is never counted as distance.
   const onLocationUpdate = useCallback((loc: Location.LocationObject) => {
-    setRun(prev => applyFix(prev, loc));
+    const rules = { stopBelowKmh: stopBelowRef.current, speedCapKmh: SPEED_CAP_KMH[latest.current.activity] };
+    setRun(prev => applyFix(prev, loc, rules));
   }, []);
 
   // Prefers the background task (survives screen lock); falls back to a
@@ -251,15 +263,22 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
   // Read when a run starts or resumes, so a change in Settings counts from then.
   const unitRef = useRef<DistanceUnit>('mi');
   const liveEnabledRef = useRef(true);
+  // Read by every fix, so a ref; the state copy is for the screen's clock
+  const stopBelowRef = useRef<number | null>(null);
+  const [stopBelowKmh, setStopBelowState] = useState<number | null>(null);
+  const setStopBelow = useCallback((v: number | null) => { stopBelowRef.current = v; setStopBelowState(v); }, []);
   const readActivityPrefs = useCallback(async () => {
     try {
-      const [[, unit], [, live]] = await AsyncStorage.multiGet([
-        `${GPS_DISTANCE_UNIT_KEY}_${latest.current.userId}`, LIVE_WORKOUT_NOTIF_KEY,
+      const uid = latest.current.userId;
+      const [[, unit], [, live], [, autoPause]] = await AsyncStorage.multiGet([
+        `${GPS_DISTANCE_UNIT_KEY}_${uid}`, LIVE_WORKOUT_NOTIF_KEY, `${GPS_AUTO_PAUSE_KEY}_${uid}`,
       ]);
       unitRef.current = unit === 'km' ? 'km' : 'mi';
       liveEnabledRef.current = live !== 'false';
+      // On unless switched off
+      setStopBelow(autoPause === 'false' ? null : AUTO_PAUSE_KMH[latest.current.activity]);
     } catch {}
-  }, []);
+  }, [setStopBelow]);
 
   const start = useCallback(async () => {
     if (latest.current.trackingState !== 'idle') return 'started' as const;
@@ -274,9 +293,15 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
     return 'started' as const;
   }, [beginLocationUpdates, setTiming]);
 
-  // Folds the running segment into the base so the clock freezes correctly
+  // Folds the running segment into the base so the clock freezes correctly. A
+  // stop auto-pause is in the middle of is banked first, against the clock
+  // that was running; the checkpoint written straight after reads it.
   const haltClock = useCallback(() => {
-    setTiming({ base: elapsedNow(), segmentStart: null });
+    const now = Date.now();
+    const settled = settleStop(latest.current.run, timingRef.current, now, stopBelowRef.current);
+    latest.current = { ...latest.current, run: settled };
+    setRun(settled);
+    setTiming({ base: runElapsedSeconds(timingRef.current.base, timingRef.current.segmentStart, now), segmentStart: null });
   }, [setTiming]);
 
   const stop = useCallback(() => {
@@ -316,6 +341,8 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
       coords: cp.coords,
       distanceKm: cp.distanceKm ?? 0,
       elevationGainM: cp.elevationGainM ?? 0,
+      stoppedSec: cp.stoppedSec ?? 0,
+      maxSpeedKmh: cp.maxSpeedKmh ?? 0,
     }));
     setTiming({ base: cp.elapsedSec ?? 0, segmentStart: null });
     setTrackingState('paused');
@@ -351,7 +378,7 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
     lastPushRef.current = Date.now();
     startOrUpdateRunActivity(gpsLiveActivityProps({
       activity: act, run: r, timing: timingRef.current, running: st === 'running',
-      unit: unitRef.current, accent: acc, now: Date.now(),
+      unit: unitRef.current, accent: acc, now: Date.now(), stopBelowKmh: stopBelowRef.current,
     }));
   }, []);
 
@@ -360,7 +387,7 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
 
   // Distance and pace: when what the lock screen shows changes, no more often than RUN_ACTIVITY_UPDATE_MS
   const runActivityKey = trackingState === 'running' && !recovered
-    ? gpsLiveActivityKey(gpsLiveActivityProps({ activity, run, timing, running: true, unit: unitRef.current, accent, now: Date.now() }))
+    ? gpsLiveActivityKey(gpsLiveActivityProps({ activity, run, timing, running: true, unit: unitRef.current, accent, now: Date.now(), stopBelowKmh }))
     : '';
   useEffect(() => {
     if (!runActivityKey) return;
@@ -374,8 +401,8 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
   const status = useMemo(() => ({
     activity, setActivity, trackingState,
     start, pause, resume, stop, clearRun, clearCheckpoint, checkpointKey,
-    screenOpen, setScreenOpen, recovered, clientId,
-  }), [activity, trackingState, start, pause, resume, stop, clearRun, clearCheckpoint, checkpointKey, screenOpen, recovered, clientId]);
+    screenOpen, setScreenOpen, recovered, clientId, stopBelowKmh,
+  }), [activity, trackingState, start, pause, resume, stop, clearRun, clearCheckpoint, checkpointKey, screenOpen, recovered, clientId, stopBelowKmh]);
   const value = useMemo(() => ({ ...status, run, timing }), [status, run, timing]);
 
   return (

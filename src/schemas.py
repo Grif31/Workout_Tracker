@@ -74,6 +74,8 @@ class ExerciseSchema(_Base):
 # of kilobytes at most
 MAX_ROUTE_SEGMENTS = 500
 MAX_SEGMENT_LENGTH = 500_000
+# Above any bike on a descent; the app drops readings past its own, lower caps
+MAX_SPEED_KMH = 200
 
 
 def _validate_exercises(exercises):
@@ -92,6 +94,12 @@ def _validate_exercises(exercises):
             and all(isinstance(seg, str) and len(seg) <= MAX_SEGMENT_LENGTH for seg in segments)
         ):
             raise ValidationError(f'exercise {i + 1} route_segments must be a list of encoded polylines')
+        # A top speed feeds what the app shows, never PRs, but a string would
+        # reach the Float column and fail the save as a 500
+        for s in sets:
+            speed = s.get('max_speed')
+            if speed is not None and (isinstance(speed, bool) or not isinstance(speed, (int, float)) or not 0 <= speed <= MAX_SPEED_KMH):
+                raise ValidationError(f'exercise {i + 1} max_speed must be a number of km/h')
 
 
 class WorkoutSchema(_Base):

@@ -3,6 +3,8 @@ import path from 'path';
 import {
   CARDIO_DISTANCE_MILESTONES,
   CARDIO_DURATION_MILESTONES,
+  CYCLING_DISTANCE_MILESTONES,
+  CYCLING_DURATION_MILESTONES,
 } from '../constants/cardioMilestones';
 
 // These floats are the weight_context a cardio PR row is written with. If the
@@ -26,5 +28,10 @@ describe('cardio milestones match the backend', () => {
 
   it('uses the same duration milestones as endurance_standards.py', () => {
     expect(CARDIO_DURATION_MILESTONES).toEqual(parsePythonList(source, 'CARDIO_DURATION_MILESTONES'));
+  });
+
+  it('uses the same cycling milestones as endurance_standards.py', () => {
+    expect(CYCLING_DISTANCE_MILESTONES).toEqual(parsePythonList(source, 'CYCLING_DISTANCE_MILESTONES'));
+    expect(CYCLING_DURATION_MILESTONES).toEqual(parsePythonList(source, 'CYCLING_DURATION_MILESTONES'));
   });
 });

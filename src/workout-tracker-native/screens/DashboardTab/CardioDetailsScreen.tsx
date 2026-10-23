@@ -39,6 +39,8 @@ interface CardioSet {
   distance: string | number | null;
   distance_unit: 'km' | 'mi' | null;
   elevation_gain: string | number | null;
+  /** km/h; GPS activities recorded since max speed shipped */
+  max_speed?: number | null;
 }
 
 interface CardioExercise {
@@ -57,6 +59,8 @@ interface CardioWorkout {
   name: string;
   date: string | null;
   notes: string | null;
+  /** The time out, stops included. The bouts hold the moving time */
+  duration?: number | null;
   // Totals across every bout (Workout.to_dict), present when every exercise is
   // cardio; distance is in the first bout's unit
   cardio_duration?: number | null;
@@ -104,8 +108,8 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
     return (user as any).weight_unit === 'lbs' ? bw / 2.205 : bw;
   }, [user]);
 
-  const { exercise, segments, mapRegion, durationMin, distanceKm, elevationGainM, calories, bestEfforts } = useMemo(() => {
-    if (!workout) return { exercise: null, segments: [] as ReturnType<typeof decodeRouteSegments>, mapRegion: null, durationMin: 0, distanceKm: 0, elevationGainM: null, calories: 0, bestEfforts: [] as BestEffort[] };
+  const { exercise, segments, mapRegion, durationMin, distanceKm, elevationGainM, calories, bestEfforts, maxSpeedKmh } = useMemo(() => {
+    if (!workout) return { exercise: null, segments: [] as ReturnType<typeof decodeRouteSegments>, mapRegion: null, durationMin: 0, distanceKm: 0, elevationGainM: null, calories: 0, bestEfforts: [] as BestEffort[], maxSpeedKmh: 0 };
 
     // Every cardio exercise and bout, not exercises[0].sets[0]: intervals are
     // several bouts, and a lifting session reached from a cardio PR has its
@@ -126,7 +130,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
     const elevations = bouts.filter(b => b.elevation_gain != null).map(b => Number(b.elevation_gain) || 0);
     const elev = elevations.length > 0 ? elevations.reduce((a, b) => a + b, 0) : null;
     const speedKmH = dur > 0 && distKm > 0 ? distKm / (dur / 60) : 0;
-    const kcal = estimateCalories(ex?.name ?? '', dur, weightKg, speedKmH);
+    const kcal = estimateCalories(ex?.name ?? '', dur, weightKg, speedKmH, elev);
 
     // Segments, so a pause or a stretch with no GPS isn't drawn as a straight line
     const segments = decodeRouteSegments(ex);
@@ -141,7 +145,9 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
         : a.duration_min - b.duration_min;
     });
 
-    return { exercise: ex, segments, mapRegion: region, durationMin: dur, distanceKm: distKm, elevationGainM: elev, calories: kcal, bestEfforts: efforts };
+    const topSpeed = bouts.reduce((m, b) => Math.max(m, Number(b.max_speed) || 0), 0);
+
+    return { exercise: ex, segments, mapRegion: region, durationMin: dur, distanceKm: distKm, elevationGainM: elev, calories: kcal, bestEfforts: efforts, maxSpeedKmh: topSpeed };
   }, [workout, weightKg]);
 
   // This screen renders the route twice at once — the static map below, and
@@ -256,6 +262,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
           elevationM={elevationGainM}
           coords={displaySegments}
           accentColor={colors.accentDark}
+          cycling={cycling}
         />
       </View>
 
@@ -354,6 +361,23 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
                 ? `${Math.round(elevationGainM * 3.28084)} ft elevation gain`
                 : `${Math.round(elevationGainM)} m elevation gain`}
             </Text>
+          </View>
+        )}
+
+        {cycling && maxSpeedKmh > 0 && (
+          <View style={styles.elevationRow}>
+            <Ionicons name="speedometer-outline" size={16} color={colors.textSecondary} />
+            <Text style={styles.elevationText}>
+              {toDisplayDistance(maxSpeedKmh, distanceUnit).toFixed(1)} {speedLabel(distanceUnit)} max speed
+            </Text>
+          </View>
+        )}
+
+        {/* Auto-pause left stops out of the duration above; the time out includes them */}
+        {workout.duration != null && durationMin > 0 && workout.duration - durationMin >= 1 && (
+          <View style={styles.elevationRow}>
+            <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
+            <Text style={styles.elevationText}>{fmtDuration(workout.duration)} elapsed, stops included</Text>
           </View>
         )}
 
@@ -478,6 +502,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
+    marginBottom: spacing.xs,
   },
   elevationText: {
     fontSize: typography.fontSize.sm,

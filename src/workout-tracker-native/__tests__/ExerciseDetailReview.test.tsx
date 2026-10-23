@@ -101,6 +101,27 @@ describe('cardio', () => {
     expect(pace.data.map((d: any) => Math.round(d.value * 100) / 100)).toEqual([8.85, 8.05]);
     expect(pace.formatYLabel('8')).toBe('8:00');
   });
+
+  it('reads speed for a ride wherever a run reads pace', async () => {
+    mockServer(RUN);
+    const { findByText, queryByText } = renderScreen({ exerciseName: 'Cycling', muscleGroup: 'Cardio', chartRange: 'All' });
+    // 5:00/km is 12 km/h, 7.5 mph
+    expect(await findByText('Avg Speed')).toBeTruthy();
+    expect(await findByText('7.5 mph')).toBeTruthy();
+    expect(queryByText('Avg Pace')).toBeNull();
+
+    fireEvent.press(await findByText('Charts'));
+    fireEvent.press(await findByText('All'));
+    await findByText('Speed (mph)');
+    const speed = mockLine.mock.calls.at(-1)[0];
+    expect(speed.data.map((d: any) => Math.round(d.value * 100) / 100)).toEqual([6.78, 7.46]);
+  });
+
+  it('writes a ride bout as a speed', async () => {
+    mockServer(RUN);
+    const { findByText } = renderScreen({ exerciseName: 'Cycling', muscleGroup: 'Cardio', initialTab: 'history' });
+    expect(await findByText(/3\.11 mi · @ 7\.5 mph/)).toBeTruthy();
+  });
 });
 
 describe('strength', () => {

@@ -63,3 +63,10 @@ export function toKm(value: number, unit: DistanceUnit): number {
 export function toDisplayPace(minPerKm: number, unit: DistanceUnit): number {
   return unit === 'mi' ? minPerKm * KM_PER_MILE : minPerKm;
 }
+
+/** Climbing in metres, in the unit that goes with the distance unit: feet beside miles. */
+export function toDisplayElevation(metres: number, unit: DistanceUnit): number {
+  return unit === 'mi' ? metres * 3.28084 : metres;
+}
+
+export const elevationLabel = (unit: DistanceUnit) => (unit === 'mi' ? 'ft' : 'm');

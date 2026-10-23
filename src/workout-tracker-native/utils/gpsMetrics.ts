@@ -116,3 +116,42 @@ export const speedLabel = (unit: DistanceUnit) => (unit === 'mi' ? 'mph' : 'km/h
 export function isCycling(activityName: string | null | undefined): boolean {
   return /cycl|bike|biking|ride/i.test(activityName ?? '');
 }
+
+/** The middle of up to three readings: one wild reading can't move it */
+export function median3(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+// A Doppler reading older than this is about a moment that has passed
+export const DOPPLER_FRESH_SEC = 10;
+
+/**
+ * Speed right now, in km/h. The GPS chip's own Doppler speed when the recent
+ * fixes carry one: it is measured, not worked out from positions, so it holds
+ * steady at bike speeds where 30 seconds of positions lag behind every surge
+ * and stop. The median of the last three, so one bad reading can't spike it.
+ * Falls back to the position window (currentPaceMinPerKm) when the phone
+ * reports no speed. Null when neither has anything to say.
+ */
+export function currentSpeedKmh(
+  points: (TrackPoint & { speed?: number | null })[],
+  now: number,
+  windowSec = CURRENT_PACE_WINDOW_SEC,
+): number | null {
+  const last = points[points.length - 1];
+  if (!last) return null;
+  if (last.speed != null && (now - last.timestamp) / 1000 <= DOPPLER_FRESH_SEC) {
+    const recent: number[] = [];
+    for (let i = points.length - 1; i >= 0 && recent.length < 3; i -= 1) {
+      const sp = points[i].speed;
+      if (sp == null) break;
+      recent.push(sp * 3.6);
+      // A resume is a gap: readings before it are another moment
+      if (points[i].resumed) break;
+    }
+    return median3(recent);
+  }
+  const pace = currentPaceMinPerKm(points, windowSec);
+  return pace == null ? null : 60 / pace;
+}

@@ -383,6 +383,9 @@ class Set(db.Model):
     intensity = db.Column(db.Float, nullable=True)          # pace or watts
     rpe = db.Column(db.Integer, nullable=True)               # 1-10 rating of perceived exertion
     elevation_gain = db.Column(db.Float, nullable=True)     # metres of ascent
+    # km/h, the top speed a GPS activity reached. A unit-free number like
+    # elevation: the app converts to mph for display
+    max_speed = db.Column(db.Float, nullable=True)
 
     def to_dict(self):
         return {
@@ -398,6 +401,7 @@ class Set(db.Model):
             "intensity": self.intensity,
             "rpe": self.rpe,
             "elevation_gain": self.elevation_gain,
+            "max_speed": self.max_speed,
         }
 
 # ── CardioBestEffort ────────────────────────────────────────────────────

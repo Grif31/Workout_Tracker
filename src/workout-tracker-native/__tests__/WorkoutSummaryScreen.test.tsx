@@ -17,6 +17,14 @@ jest.mock('expo-haptics', () => ({
 }));
 jest.mock('../utils/shareCapture', () => ({ captureAndShare: jest.fn() }));
 jest.mock('../components/MuscleDiagram', () => () => null);
+jest.mock('react-native-maps', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  class MapView extends React.Component<any> {
+    render() { return <View>{this.props.children}</View>; }
+  }
+  return { __esModule: true, default: MapView, Polyline: (props: any) => <View {...props} /> };
+});
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22 } } }), { virtual: true });
 
 type Server = { workout?: any; workoutStatus?: number; rank?: any };
@@ -115,6 +123,65 @@ describe('WorkoutSummaryScreen', () => {
     expect(queryByText('Volume (lbs)')).toBeNull();
     // The bout itself, converted to the default mi
     expect(getByText('30m · 3.11 mi')).toBeTruthy();
+  });
+
+  describe('a GPS activity', () => {
+    const polyline = require('@mapbox/polyline');
+    const ride = {
+      date: '2026-03-05T00:00:00', workout_type: 'cardio', cardio_duration: 60, distance: 20, distance_unit: 'km',
+      exercises: [{
+        id: 1, name: 'Cycling', exercise_type: 'cardio',
+        route_polyline: polyline.encode([[40, -74], [40.01, -74], [40.02, -74.01]]),
+        best_efforts: [{ milestone_type: 'distance', distance_km: 10, duration_min: 28 }],
+        sets: [{ id: 1, cardio_duration: 60, distance: 20, distance_unit: 'km', elevation_gain: 120, max_speed: 48.3, set_type: 'N' }],
+      }],
+    };
+    const gpsParams = { workoutName: 'Saturday Loop', totalVolume: 0, totalReps: 0, totalSets: 0 };
+
+    it('reads speed, the route, climbing and best efforts for a ride', async () => {
+      mockServer({ workout: ride });
+      const r = renderSummary(gpsParams);
+
+      expect(await r.findByText('Speed (mph)')).toBeTruthy();
+      // 20 km in an hour, on the screen and on the share card
+      expect(r.getAllByText('12.4')).toHaveLength(2);
+      expect(r.getByText('Speed mph')).toBeTruthy();
+      expect(r.getByText('Ride complete.')).toBeTruthy();
+      expect(r.getByText('394 ft climbed')).toBeTruthy();
+      expect(r.getByText('30.0 mph max speed')).toBeTruthy();
+      // No stops left out: the plain label
+      expect(r.getByText('Time')).toBeTruthy();
+      expect(r.getByText('28:00')).toBeTruthy();
+      expect(r.UNSAFE_queryAllByType(require('react-native-maps').Polyline)).toHaveLength(1);
+      // The route card stands in for the one-bout exercise list
+      expect(r.queryByText('1h · 12.43 mi')).toBeNull();
+    });
+
+    it('labels the moving time when auto-pause left stops out of it', async () => {
+      mockServer({ workout: { ...ride, duration: 72 } });
+      const r = renderSummary(gpsParams);
+      expect(await r.findByText('Moving Time')).toBeTruthy();
+    });
+
+    it("celebrates the ride's PRs", async () => {
+      mockServer({ workout: ride });
+      const r = renderSummary({ ...gpsParams, prs: [{ exercise_name: 'Cycling', pr_type: 'longest_distance', value: 20 }] });
+
+      expect(await r.findByText('New Personal Record')).toBeTruthy();
+      expect(r.getByText('Cycling · Longest Ride')).toBeTruthy();
+      // The PR row's value; the off-screen share card says it too
+      expect(r.getAllByText('12.43 mi').length).toBeGreaterThan(0);
+      await waitFor(() => expect(Haptics.notificationAsync).toHaveBeenCalled());
+    });
+
+    it('opens the activity in Cardio Details', async () => {
+      mockServer({ workout: ride });
+      const navigation = createMockNavigation();
+      const r = render(<WorkoutSummaryScreen navigation={navigation as any} route={{ key: 'k', name: 'WorkoutSummary', params: params(gpsParams) } as any} />);
+      await r.findByText('Speed (mph)');
+      fireEvent.press(r.getByText('View Full Details'));
+      expect(navigation.replace).toHaveBeenCalledWith('CardioDetails', { workoutId: 42 });
+    });
   });
 
   it('says so and offers a retry when the sets fail to load', async () => {

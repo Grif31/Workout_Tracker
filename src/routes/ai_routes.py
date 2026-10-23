@@ -224,8 +224,10 @@ def _fmt_pr_value(pr_type, value, unit):
         return f"{round(value * 60)} s"
     if pr_type == 'best_time':
         return f"{value:.1f} min"
-    if pr_type == 'best_distance':
+    if pr_type in ('best_distance', 'longest_distance'):
         return f"{value:.2f} km"
+    if pr_type == 'max_elevation':
+        return f"{value:.0f} m climbed"
     return f"{round(value, 1):g} {unit}"
 
 

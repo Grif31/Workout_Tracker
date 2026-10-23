@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
 // react-native-maps requires a development build — not available in Expo Go.
 let _MapsModule: any = null;
@@ -29,11 +30,14 @@ import { estimateCalories } from '../../utils/cardioCalories';
 import { fmtPaceValue } from '../../utils/cardioFormat';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayPace } from '../../utils/units';
 import {
-  currentPaceMinPerKm, isCycling, speedInUnit, speedLabel, MIN_PACE_DISTANCE_KM,
+  currentSpeedKmh, isCycling, speedInUnit, speedLabel, MIN_PACE_DISTANCE_KM,
 } from '../../utils/gpsMetrics';
 import {
-  ACTIVITIES, ACTIVITY_TEMPLATE_NAME, HEALTH_ACTIVITY, buildGpsRunBody, fmtClock, runElapsedSeconds, runWindow, type Activity,
+  ACTIVITIES, ACTIVITY_TEMPLATE_NAME, HEALTH_ACTIVITY, buildGpsRunBody, fmtClock, isAutoPaused, movingSeconds,
+  runElapsedSeconds, runWindow, type Activity,
 } from '../../utils/gpsRun';
+import { GPS_KEEP_SCREEN_ON_KEY } from '../../constants/storageKeys';
+import HoldButton from '../../components/HoldButton';
 import { syncFinishedWorkout } from '../../utils/healthSync';
 import { useGpsRun } from '../../context/GpsRunContext';
 import { useAppActive } from '../../hooks/useAppActive';
@@ -42,6 +46,12 @@ import { alertWorkoutInProgress } from '../../utils/sessionConflict';
 
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'GPSCardio'>;
+
+// Its own tag, so the screen's keep-awake and the provider's foreground-only
+// fallback (default tag) can't switch each other off
+const KEEP_AWAKE_TAG = 'gps-map-screen';
+// A stretch of stops this long before the moving and elapsed clocks are both worth showing
+const ELAPSED_SHOWN_AFTER_SEC = 5;
 
 async function resolveCardioTemplateId(
   activity: Activity,
@@ -94,7 +104,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
   // keeps going when this screen is left. This screen only shows and controls it.
   const {
     activity, setActivity, trackingState, run, timing,
-    start, pause, resume, stop, clearRun, setScreenOpen, recovered, clientId,
+    start, pause, resume, stop, clearRun, setScreenOpen, recovered, clientId, stopBelowKmh,
   } = useGpsRun();
   // The mini bar stands in for this screen when it is left, so it hides while this shows
   useEffect(() => {
@@ -114,7 +124,14 @@ export default function GPSCardioScreen({ navigation }: Props) {
     const id = setInterval(() => setTick(t => t + 1), 1000);
     return () => clearInterval(id);
   }, [trackingState, appActive]);
-  const elapsedSec = runElapsedSeconds(timing.base, timing.segmentStart, Date.now());
+  const now = Date.now();
+  const elapsedSec = runElapsedSeconds(timing.base, timing.segmentStart, now);
+  // Speed, pace, calories and the save all go by moving time; with auto-pause
+  // off it is the elapsed time
+  const movingSec = movingSeconds(run, timing, now, stopBelowKmh);
+  const autoPaused = trackingState === 'running' && isAutoPaused(run, timing, now, stopBelowKmh);
+  const showElapsed = elapsedSec - movingSec >= ELAPSED_SHOWN_AFTER_SEC;
+  const [keepScreenOn, setKeepScreenOn] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [workoutName, setWorkoutName] = useState('');
@@ -137,19 +154,21 @@ export default function GPSCardioScreen({ navigation }: Props) {
   const displayDistance = toDisplayDistance(distanceKm, distanceUnit);
   // Nothing until there's enough distance: the first few meters gave paces like 99:59
   const hasPace = distanceKm >= MIN_PACE_DISTANCE_KM;
-  const pace = hasPace ? elapsedSec / 60 / displayDistance : 0;
-  // Rides read speed, the rest pace; "current" is roughly the last 30 seconds
+  const pace = hasPace && movingSec > 0 ? movingSec / 60 / displayDistance : 0;
+  // Rides read speed, the rest pace. "Now" is the GPS's own speed reading
+  // (utils/gpsMetrics.currentSpeedKmh), nothing while stopped.
   const cycling = isCycling(activity);
   const rateUnit = cycling ? speedLabel(distanceUnit) : `/${distanceUnit}`;
   const avgRateText = cycling
-    ? (hasPace ? speedInUnit(distanceKm, elapsedSec / 60, distanceUnit).toFixed(1) : '--')
+    ? (hasPace && movingSec > 0 ? speedInUnit(distanceKm, movingSec / 60, distanceUnit).toFixed(1) : '--')
     : fmtPaceValue(pace);
-  const currentPaceKm = trackingState === 'running' ? currentPaceMinPerKm(coords) : null;
-  const currentRateText = currentPaceKm == null
-    ? (cycling ? '--' : '--:--')
+  const currentKmh = trackingState === 'running' && !autoPaused ? currentSpeedKmh(coords, now) : null;
+  const currentRateText = currentKmh == null || currentKmh <= 0
+    ? (cycling ? (autoPaused ? '0.0' : '--') : '--:--')
     : cycling
-      ? (60 / toDisplayPace(currentPaceKm, distanceUnit)).toFixed(1)
-      : fmtPaceValue(toDisplayPace(currentPaceKm, distanceUnit));
+      ? toDisplayDistance(currentKmh, distanceUnit).toFixed(1)
+      : fmtPaceValue(toDisplayPace(60 / currentKmh, distanceUnit));
+  const maxSpeedText = run.maxSpeedKmh > 0 ? toDisplayDistance(run.maxSpeedKmh, distanceUnit).toFixed(1) : '--';
 
   // Follows the run on the map as fixes arrive, and jumps to where it is on return
   useEffect(() => {
@@ -190,6 +209,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
       AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user?.id}`).then(v => {
         setDistanceUnit(v === 'km' ? 'km' : 'mi');
       });
+      AsyncStorage.getItem(`${GPS_KEEP_SCREEN_ON_KEY}_${user?.id}`).then(v => setKeepScreenOn(v === 'true')).catch(() => {});
       (async () => {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
@@ -207,6 +227,14 @@ export default function GPSCardioScreen({ navigation }: Props) {
     // Leaving the screen leaves the run going: that is minimizing it
     return () => task.cancel();
   }, []);
+
+  // For a phone on a mount: the map stays readable while the activity runs.
+  // Off with pause, stop and leaving the screen, so it never drains a pocket.
+  useEffect(() => {
+    if (!keepScreenOn || trackingState !== 'running') return;
+    activateKeepAwakeAsync(KEEP_AWAKE_TAG);
+    return () => { deactivateKeepAwake(KEEP_AWAKE_TAG); };
+  }, [keepScreenOn, trackingState]);
 
   const handleStart = async () => {
     const result = await start();
@@ -262,8 +290,8 @@ export default function GPSCardioScreen({ navigation }: Props) {
     setSaving(true);
     const exerciseTemplateId = await resolveCardioTemplateId(activity, user?.id);
     const body = buildGpsRunBody({
-      activity, workoutName, elapsedSec, distanceKm, distanceUnit, elevationGainM, coords,
-      exerciseTemplateId, now: new Date(), clientId,
+      activity, workoutName, elapsedSec, movingSec, maxSpeedKmh: run.maxSpeedKmh, distanceKm, distanceUnit,
+      elevationGainM, coords, exerciseTemplateId, now: new Date(), clientId,
     });
 
     // Apple Health / Health Connect get the activity's kind, distance and the
@@ -272,8 +300,8 @@ export default function GPSCardioScreen({ navigation }: Props) {
     const health = { type: 'cardio' as const, activity: HEALTH_ACTIVITY[activity], distanceKm, ...ranAt };
 
     // A tracked run must never depend on one POST succeeding — queue it for
-    // sync when there's no connection. CardioDetails needs a server id, so
-    // offline saves return to the Dashboard instead.
+    // sync when there's no connection. The summary needs a server id, so
+    // offline saves (no PRs until the upload) return to the Dashboard instead.
     const saveOffline = async () => {
       await enqueueWorkout(body, {
         type: 'cardio', activity: health.activity, distanceKm,
@@ -315,7 +343,19 @@ export default function GPSCardioScreen({ navigation }: Props) {
       syncFinishedWorkout({ ...health, userId: user?.id, workoutId: data.id });
       clearRun();
       setConfirmVisible(false);
-      navigation.replace('CardioDetails', { workoutId: data.id });
+      // The summary is where PRs are celebrated; its View Full Details opens CardioDetails
+      navigation.replace('WorkoutSummary', {
+        workoutId: data.id,
+        workoutName: body.workoutName,
+        prs: data.new_prs ?? [],
+        totalVolume: 0,
+        totalReps: 0,
+        totalSets: 0,
+        muscles: [],
+        isFirstWorkout: data.is_first_workout ?? false,
+        isBestVolume: false,
+        isBestReps: false,
+      });
     } catch {
       // NetInfo said online but the request still died (flaky signal) or the
       // server failed: offer the queue instead of a dead-end retry loop
@@ -338,8 +378,48 @@ export default function GPSCardioScreen({ navigation }: Props) {
     return (user as any).weight_unit === 'lbs' ? bw / 2.205 : bw;
   }, [user]);
 
-  const speedKmH = elapsedSec > 0 ? distanceKm / (elapsedSec / 3600) : 0;
-  const estimatedKcal = Math.round(estimateCalories(activity, elapsedSec / 60, weightKg, speedKmH));
+  const speedKmH = movingSec > 0 ? distanceKm / (movingSec / 3600) : 0;
+  const estimatedKcal = estimateCalories(activity, movingSec / 60, weightKg, speedKmH, elevationGainM);
+
+  const stat = (value: string, label: string) => (
+    <View style={styles.statItem}>
+      <Text style={[styles.statValue, { color: colors.textPrimary }]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+  const statsRow = (items: [string, string][]) => (
+    <View style={styles.statsRow}>
+      {items.map(([value, label], i) => (
+        <React.Fragment key={label}>
+          {i > 0 && <View style={styles.statSep} />}
+          {stat(value, label)}
+        </React.Fragment>
+      ))}
+    </View>
+  );
+  const timeStat: [string, string] = [fmtClock(movingSec), stopBelowKmh != null ? 'Moving' : 'Time'];
+  const distanceStat: [string, string] = [displayDistance.toFixed(2), distanceUnit];
+  const avgStat: [string, string] = [avgRateText, `avg ${rateUnit}`];
+  // A ride's live row: its speed is the hero above it
+  const rideStats: [string, string][] = [timeStat, distanceStat, avgStat, [maxSpeedText, `max ${rateUnit}`]];
+  const elapsedNote = showElapsed && (
+    <Text style={styles.elapsedNote}>Elapsed {fmtClock(elapsedSec)}</Text>
+  );
+  // On a ride the phone is likely on the bars: Stop needs holding, so a bump can't end it
+  const stopButton = cycling ? (
+    <HoldButton
+      label="Hold to Stop"
+      icon="stop"
+      color={colors.danger}
+      onComplete={handleStop}
+      onAccessibilityActivate={confirmStop}
+    />
+  ) : (
+    <TouchableOpacity style={[styles.mainBtn, { backgroundColor: colors.danger }]} onPress={confirmStop}>
+      <Ionicons name="stop" size={28} color={colors.accentText} />
+      <Text style={styles.mainBtnText}>Stop</Text>
+    </TouchableOpacity>
+  );
 
   // Map rendering only needs a bounded number of vertices — a long run can
   // accumulate thousands of raw GPS points, and react-native-maps rebuilds
@@ -440,67 +520,44 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
         {trackingState === 'running' && (
           <>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtClock(elapsedSec)}</Text>
-                <Text style={styles.statLabel}>Time</Text>
+            {autoPaused && (
+              <View style={[styles.autoPausedPill, { backgroundColor: colors.background }]} accessibilityLiveRegion="polite">
+                <Ionicons name="pause" size={14} color={colors.textSecondary} />
+                <Text style={styles.autoPausedText}>Auto-paused</Text>
               </View>
-              <View style={styles.statSep} />
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{displayDistance.toFixed(2)}</Text>
-                <Text style={styles.statLabel}>{distanceUnit}</Text>
-              </View>
-              <View style={styles.statSep} />
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{currentRateText}</Text>
-                <Text style={styles.statLabel}>now {rateUnit}</Text>
-              </View>
-              <View style={styles.statSep} />
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{avgRateText}</Text>
-                <Text style={styles.statLabel}>avg {rateUnit}</Text>
-              </View>
-            </View>
+            )}
+            {cycling ? (
+              <>
+                <View style={styles.heroStat} accessible accessibilityLabel={`${currentRateText} ${speedLabel(distanceUnit)}`}>
+                  <Text style={[styles.heroValue, autoPaused && { color: colors.textSecondary }]}>{currentRateText}</Text>
+                  <Text style={styles.heroLabel}>{speedLabel(distanceUnit)}</Text>
+                </View>
+                {statsRow(rideStats)}
+              </>
+            ) : (
+              statsRow([timeStat, distanceStat, [currentRateText, `now ${rateUnit}`], avgStat])
+            )}
+            {elapsedNote}
             <View style={styles.runningBtns}>
-              <TouchableOpacity style={[styles.secondaryBtn, { backgroundColor: colors.border }]} onPress={pause}>
+              <TouchableOpacity style={[styles.secondaryBtn, cycling && styles.secondaryBtnLarge, { backgroundColor: colors.border }]} onPress={pause}>
                 <Ionicons name="pause" size={22} color={colors.textPrimary} />
                 <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Pause</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.mainBtn, { backgroundColor: colors.danger }]} onPress={confirmStop}>
-                <Ionicons name="stop" size={28} color={colors.accentText} />
-                <Text style={styles.mainBtnText}>Stop</Text>
-              </TouchableOpacity>
+              {stopButton}
             </View>
           </>
         )}
 
         {trackingState === 'paused' && (
           <>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{fmtClock(elapsedSec)}</Text>
-                <Text style={styles.statLabel}>Time</Text>
-              </View>
-              <View style={styles.statSep} />
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{displayDistance.toFixed(2)}</Text>
-                <Text style={styles.statLabel}>{distanceUnit}</Text>
-              </View>
-              <View style={styles.statSep} />
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{avgRateText}</Text>
-                <Text style={styles.statLabel}>avg {rateUnit}</Text>
-              </View>
-            </View>
+            {statsRow(cycling ? rideStats : [timeStat, distanceStat, avgStat])}
+            {elapsedNote}
             <View style={styles.runningBtns}>
-              <TouchableOpacity style={[styles.secondaryBtn, { backgroundColor: colors.border }]} onPress={resume}>
+              <TouchableOpacity style={[styles.secondaryBtn, cycling && styles.secondaryBtnLarge, { backgroundColor: colors.border }]} onPress={resume}>
                 <Ionicons name="play" size={22} color={colors.textPrimary} />
                 <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Resume</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.mainBtn, { backgroundColor: colors.danger }]} onPress={confirmStop}>
-                <Ionicons name="stop" size={28} color={colors.accentText} />
-                <Text style={styles.mainBtnText}>Stop</Text>
-              </TouchableOpacity>
+              {stopButton}
             </View>
           </>
         )}
@@ -523,8 +580,10 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
             <View style={styles.modalStats}>
               <View style={styles.modalStatItem}>
-                <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>{fmtClock(elapsedSec)}</Text>
-                <Text style={[styles.modalStatLabel, { color: colors.textSecondary }]}>Duration</Text>
+                <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>{fmtClock(movingSec)}</Text>
+                <Text style={[styles.modalStatLabel, { color: colors.textSecondary }]}>
+                  {showElapsed ? `Moving · ${fmtClock(elapsedSec)} elapsed` : 'Duration'}
+                </Text>
               </View>
               <View style={styles.modalStatItem}>
                 <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>{displayDistance.toFixed(2)} {distanceUnit}</Text>
@@ -534,6 +593,12 @@ export default function GPSCardioScreen({ navigation }: Props) {
                 <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>{avgRateText} {rateUnit}</Text>
                 <Text style={[styles.modalStatLabel, { color: colors.textSecondary }]}>{cycling ? 'Avg Speed' : 'Avg Pace'}</Text>
               </View>
+              {cycling && run.maxSpeedKmh > 0 && (
+                <View style={styles.modalStatItem}>
+                  <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>{maxSpeedText} {rateUnit}</Text>
+                  <Text style={[styles.modalStatLabel, { color: colors.textSecondary }]}>Max Speed</Text>
+                </View>
+              )}
               <View style={styles.modalStatItem}>
                 <Text style={[styles.modalStatValue, { color: colors.textPrimary }]}>~{estimatedKcal} kcal</Text>
                 <Text style={[styles.modalStatLabel, { color: colors.textSecondary }]}>Est. Calories</Text>
@@ -638,6 +703,26 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   statValue: { fontSize: typography.fontSize.xl, fontWeight: '700' },
   statLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
   statSep: { width: 1, height: 40, backgroundColor: colors.border },
+  // A ride's current speed, read at arm's length on the handlebars
+  heroStat: { alignItems: 'center' },
+  heroValue: {
+    fontSize: typography.fontSize.xxl * 2.5,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    fontVariant: ['tabular-nums'],
+    lineHeight: typography.fontSize.xxl * 2.8,
+  },
+  heroLabel: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textSecondary },
+  autoPausedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: 50,
+  },
+  autoPausedText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary },
+  elapsedNote: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
 
   controls: {
     paddingHorizontal: spacing.lg,
@@ -670,6 +755,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: 50,
   },
   secondaryBtnText: { fontSize: typography.fontSize.sm, fontWeight: '600' },
+  // Matches the hold button's height, for a gloved thumb
+  secondaryBtnLarge: { minHeight: 60, paddingHorizontal: spacing.xl },
   backBtn: {
     position: 'absolute',
     left: spacing.md,

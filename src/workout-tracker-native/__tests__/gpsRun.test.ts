@@ -3,6 +3,7 @@ import { haversineKm } from '../utils/bestEfforts';
 import {
   HEALTH_ACTIVITY, runWindow,
   afterGap, applyFix, buildGpsRunBody, emptyRun, fmtClock, runElapsedSeconds, MAX_ACCURACY_M, type Fix, type RunState,
+  isAutoPaused, movingSeconds, settleStop, stopGraceSec, SPEED_CAP_KMH, type FixRules,
 } from '../utils/gpsRun';
 
 const T0 = Date.UTC(2026, 9, 8, 15, 0, 0);
@@ -157,6 +158,16 @@ describe('buildGpsRunBody', () => {
     expect((long.exercises[0] as { best_efforts?: { milestone_type: string }[] }).best_efforts?.length).toBeGreaterThan(0);
   });
 
+  it('scans a ride against the ride milestones', () => {
+    type Efforts = { best_efforts?: { milestone_type: string; distance_km: number }[] };
+    const track = { ...base, coords: walk(45).coords, distanceKm: 1.9, elapsedSec: 660 };
+    const kms = (body: ReturnType<typeof buildGpsRunBody>) => ((body.exercises[0] as Efforts).best_efforts ?? [])
+      .filter(e => e.milestone_type === 'distance').map(e => e.distance_km);
+    expect(kms(buildGpsRunBody(track))).toContain(1);
+    // A ride's shortest milestone is 5K, so 1.9 km holds none
+    expect(kms(buildGpsRunBody({ ...track, activity: 'Cycle' }))).toEqual([]);
+  });
+
   it('is the same body for the online and the offline save: plain JSON', () => {
     const body = buildGpsRunBody({ ...base, coords: walk(45).coords });
     expect(JSON.parse(JSON.stringify(body))).toEqual(body);
@@ -279,5 +290,115 @@ describe('fmtClock', () => {
     expect(fmtClock(5)).toBe('0:05');
     expect(fmtClock(725)).toBe('12:05');
     expect(fmtClock(3909)).toBe('1:05:09');
+  });
+});
+
+describe('auto-pause and max speed', () => {
+  const RIDE: FixRules = { stopBelowKmh: 3, speedCapKmh: 110 };
+  const OFF: FixRules = { stopBelowKmh: null, speedCapKmh: 110 };
+  // A fix `m` metres north of the start, `sec` seconds in, with a Doppler speed in m/s
+  const at = (sec: number, m: number, speed: number | null = 5): Fix => ({
+    coords: { latitude: m / 111_195, longitude: 0, altitude: null, accuracy: 5, altitudeAccuracy: null, speed },
+    timestamp: T0 + sec * 1000,
+  });
+  const feed = (fixes: Fix[], rules = RIDE, from = emptyRun()) => fixes.reduce((s, f) => applyFix(s, f, rules), from);
+  // Riding at 5 m/s (18 km/h): a fix every 2 s, 10 m apart, for `sec` seconds from `startSec`
+  const riding = (startSec: number, sec: number, startM = 0) =>
+    Array.from({ length: sec / 2 + 1 }, (_, i) => at(startSec + i * 2, startM + i * 10));
+  const clock = { base: 0, segmentStart: T0 };
+
+  it('counts nothing as stopped while riding', () => {
+    const s = feed(riding(0, 60));
+    expect(s.stoppedSec).toBe(0);
+    expect(movingSeconds(s, clock, T0 + 60_000, 3)).toBe(60);
+  });
+
+  it('takes a stop out of the moving time once the next fix shows how slow it was', () => {
+    // 60 s riding, then the next fix comes 90 s later only 4 m on: a red light
+    const s = feed([...riding(0, 60), at(150, 304, 2), ...riding(152, 20, 314)]);
+    expect(s.stoppedSec).toBe(90);
+    expect(movingSeconds(s, clock, T0 + 172_000, 3)).toBe(172 - 90);
+    // The distance still counts: auto-pause only stops the clock
+    expect(s.distanceKm).toBeCloseTo(0.414, 2);
+  });
+
+  it('freezes the moving clock during a stop, before the next fix arrives', () => {
+    const s = feed(riding(0, 60));
+    // Fixes come every 5 m, so silence past the grace means standing still
+    expect(stopGraceSec(3)).toBe(8);
+    expect(isAutoPaused(s, clock, T0 + 67_000, 3)).toBe(false);
+    expect(isAutoPaused(s, clock, T0 + 80_000, 3)).toBe(true);
+    expect(movingSeconds(s, clock, T0 + 80_000, 3)).toBe(60);
+    expect(movingSeconds(s, clock, T0 + 120_000, 3)).toBe(60);
+  });
+
+  it('reads GPS wobble while standing still as stopped, by the Doppler speed', () => {
+    // 6 m hops every 2 s would be 10.8 km/h; the chip says 0
+    const s = feed([...riding(0, 10), at(12, 56, 0), at(14, 62, 0), at(16, 56, 0)]);
+    expect(s.stoppedSec).toBe(6);
+    expect(isAutoPaused(s, clock, T0 + 16_500, 3)).toBe(true);
+  });
+
+  it('changes nothing with auto-pause off', () => {
+    const s = feed([...riding(0, 60), at(150, 304, 2)], OFF);
+    expect(s.stoppedSec).toBe(0);
+    expect(isAutoPaused(s, clock, T0 + 300_000, null)).toBe(false);
+    expect(movingSeconds(s, clock, T0 + 300_000, null)).toBe(300);
+  });
+
+  it('banks a stop in progress when the clock is paused, so the moving time holds', () => {
+    const s = feed(riding(0, 60));
+    const settled = settleStop(s, clock, T0 + 100_000, 3);
+    expect(settled.stoppedSec).toBe(40);
+    // Paused at 100 s of clock, 40 of it stopped
+    expect(movingSeconds(settled, { base: 100, segmentStart: null }, T0 + 500_000, 3)).toBe(60);
+  });
+
+  it('is not auto-paused the moment a run resumes', () => {
+    const s = afterGap(feed(riding(0, 60)));
+    // Resumed at 300 s: the last fix is long ago, but the clock only just started
+    expect(isAutoPaused(s, { segmentStart: T0 + 300_000 }, T0 + 302_000, 3)).toBe(false);
+  });
+
+  it('takes max speed as a median of three, so one spike never sets it', () => {
+    const s = feed([at(0, 0, 5), at(2, 10, 5), at(4, 20, 30), at(6, 30, 5), at(8, 40, 5)]);
+    expect(s.maxSpeedKmh).toBeCloseTo(18, 5);
+  });
+
+  it('leaves out readings past the activity cap', () => {
+    // 40 m/s is 144 km/h: no bike on these roads
+    const s = feed([at(0, 0, 40), at(2, 80, 40), at(4, 160, 40)]);
+    expect(s.maxSpeedKmh).toBe(0);
+    expect(SPEED_CAP_KMH.Cycle).toBeLessThan(144);
+  });
+
+  it('works from positions when the phone reports no speed', () => {
+    // 30 m every 4 s is 27 km/h
+    const s = feed([0, 1, 2, 3].map(i => at(i * 4, i * 30, null)));
+    expect(s.maxSpeedKmh).toBeCloseTo(27, 0);
+  });
+});
+
+describe('buildGpsRunBody with auto-pause', () => {
+  it('saves the moving time on the set and the time out on the workout, with the top speed', () => {
+    const body = buildGpsRunBody({
+      activity: 'Cycle', workoutName: 'Loop', elapsedSec: 3600, movingSec: 3000, maxSpeedKmh: 41.27,
+      distanceKm: 25, distanceUnit: 'km', elevationGainM: 0, coords: walk(2).coords,
+      exerciseTemplateId: 7, now: new Date(2026, 9, 8, 12),
+    });
+    const [set] = body.exercises[0].sets;
+    expect(body.duration).toBe(60);
+    expect(set.cardio_duration).toBe(50);
+    expect(set.intensity).toBeCloseTo(2, 5);
+    expect(set.max_speed).toBe(41.3);
+  });
+
+  it('sends no top speed when there was none', () => {
+    const body = buildGpsRunBody({
+      activity: 'Run', workoutName: '', elapsedSec: 600, distanceKm: 2, distanceUnit: 'km',
+      elevationGainM: 0, coords: walk(2).coords, exerciseTemplateId: 7, now: new Date(2026, 9, 8, 12),
+    });
+    expect(body.exercises[0].sets[0].max_speed).toBeNull();
+    expect(body.exercises[0].sets[0].cardio_duration).toBe(10);
   });
 });

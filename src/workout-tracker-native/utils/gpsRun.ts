@@ -1,6 +1,6 @@
 import polylineLib from '@mapbox/polyline';
 import { extractBestEfforts, haversineKm, type BestEffort, type TrackPoint } from './bestEfforts';
-import { addAltitude, freshClimb, type ClimbState } from './gpsMetrics';
+import { addAltitude, freshClimb, isCycling, median3, DOPPLER_FRESH_SEC, type ClimbState } from './gpsMetrics';
 import { toDisplayDistance, type DistanceUnit } from './units';
 import { toLocalDateStr } from './date';
 import { encodeSegments, splitAtGaps } from './routeSegments';
@@ -50,6 +50,26 @@ export function runWindow(coords: Coord[], elapsedSec: number, now: number): { s
 // GPS fixes worse than this add phantom distance and jagged routes: drop them
 export const MAX_ACCURACY_M = 30;
 
+/**
+ * Auto-pause: below this speed the clock counts the time as stopped, not
+ * moving. Hikers crawl up steep ground, so theirs is lowest. A stop at a light
+ * is what it's for; it never stops the GPS or the distance.
+ */
+export const AUTO_PAUSE_KMH: Record<Activity, number> = { Run: 3, Cycle: 3, Walk: 1.5, Hike: 1 };
+
+// The fastest top speed each activity believes. A reading past it is a GPS
+// glitch, not a sprint, and is left out of max speed.
+export const SPEED_CAP_KMH: Record<Activity, number> = { Run: 40, Cycle: 110, Walk: 15, Hike: 15 };
+
+/**
+ * How long without a fix before the screen calls it a stop. Fixes come every
+ * 5 m of movement, so at the threshold speed one is due every 5 m / speed; a
+ * little longer than that, or slow walkers would flicker in and out of it.
+ */
+export function stopGraceSec(stopBelowKmh: number): number {
+  return 5 / (stopBelowKmh / 3.6) + 2;
+}
+
 // A fix this long after the last one, and this far from it, follows a stretch
 // with no GPS (iOS stopped delivering, or the app was suspended): nobody knows
 // the path between, so it starts a new segment instead of a straight line that
@@ -65,7 +85,8 @@ export const GAP_MIN_METRES = 100;
 // can't be backfilled, since route_polyline encodes latitude/longitude only.
 // `resumed` marks the first fix after a pause or a crash-restore: neither
 // distance nor elapsed time accrues across that gap.
-export type Coord = TrackPoint & { altitude: number | null };
+// `speed` is the GPS chip's Doppler speed in m/s, kept only when it reported one.
+export type Coord = TrackPoint & { altitude: number | null; speed?: number };
 
 export type RunState = {
   coords: Coord[];
@@ -74,11 +95,24 @@ export type RunState = {
   climb: ClimbState;
   // The next accepted fix follows a gap (resume, crash restore), so it adds no distance
   skipNext: boolean;
+  /** Seconds auto-pause counted as stopped, between fixes already received */
+  stoppedSec: number;
+  /** The stretch up to the latest fix was a stop */
+  lastStopped: boolean;
+  maxSpeedKmh: number;
+  /** The last few speed readings, so max speed takes a median and never one spike */
+  recentSpeeds: number[];
 };
 
 export const emptyRun = (): RunState => ({
   coords: [], distanceKm: 0, elevationGainM: 0, climb: freshClimb(), skipNext: false,
+  stoppedSec: 0, lastStopped: false, maxSpeedKmh: 0, recentSpeeds: [],
 });
+
+/** What a fix is measured against: the activity's auto-pause speed (null when it's off) and speed cap */
+export type FixRules = { stopBelowKmh: number | null; speedCapKmh: number };
+
+const NO_RULES: FixRules = { stopBelowKmh: null, speedCapKmh: SPEED_CAP_KMH.Cycle };
 
 /** The parts of an expo-location fix the run reads. */
 export type Fix = {
@@ -88,6 +122,8 @@ export type Fix = {
     altitude: number | null;
     accuracy: number | null;
     altitudeAccuracy: number | null;
+    /** m/s; iOS reports -1 when it has no reading */
+    speed?: number | null;
   };
   timestamp: number;
 };
@@ -97,7 +133,7 @@ export type Fix = {
  * dropped (too inaccurate), so a caller can tell from identity that nothing
  * changed; otherwise a new state, never a mutation of the old one.
  */
-export function applyFix(state: RunState, loc: Fix): RunState {
+export function applyFix(state: RunState, loc: Fix, rules: FixRules = NO_RULES): RunState {
   const accuracy = loc.coords.accuracy;
   if (accuracy != null && accuracy > MAX_ACCURACY_M) return state;
 
@@ -107,12 +143,28 @@ export function applyFix(state: RunState, loc: Fix): RunState {
     && (loc.timestamp - prev.timestamp) / 1000 > GAP_SECONDS
     && haversineKm(prev, at) * 1000 > GAP_MIN_METRES;
   const resumed = state.skipNext || gap;
+  const doppler = loc.coords.speed != null && loc.coords.speed >= 0 ? loc.coords.speed : null;
   const next: Coord = {
     ...at,
     altitude: loc.coords.altitude ?? null,
     timestamp: loc.timestamp,
+    ...(doppler != null ? { speed: doppler } : {}),
     ...(resumed ? { resumed: true } : {}),
   };
+  // The stretch since the last fix: how fast it went decides whether it was a
+  // stop, and gives max speed a reading. Doppler when it's fresh; over a long
+  // stretch it only describes the end, so the average over the stretch decides.
+  const dt = prev && !resumed ? (next.timestamp - prev.timestamp) / 1000 : 0;
+  const stretchKmh = dt > 0 ? (haversineKm(prev!, next) / dt) * 3600 : null;
+  const dopplerKmh = doppler != null ? doppler * 3.6 : null;
+  const speedNow = dopplerKmh != null && dt <= DOPPLER_FRESH_SEC ? dopplerKmh : stretchKmh;
+  const stopped = rules.stopBelowKmh != null && dt > 0 && speedNow != null && speedNow < rules.stopBelowKmh;
+  // A reading for max speed: Doppler, else a stretch long enough that GPS
+  // wobble can't fake a burst. A resume starts the readings over.
+  const reading = dopplerKmh ?? (dt >= 3 ? stretchKmh : null);
+  const recentSpeeds = resumed ? [] : reading == null ? state.recentSpeeds : [...state.recentSpeeds, reading].slice(-3);
+  const steady = recentSpeeds.length === 3 ? median3(recentSpeeds) : 0;
+  const maxSpeedKmh = steady <= rules.speedCapKmh ? Math.max(state.maxSpeedKmh, steady) : state.maxSpeedKmh;
   // addAltitude moves the anchor in place, so it gets a copy. Across a gap the
   // altitude change isn't a climb anyone recorded, so the anchor starts over.
   const climb = gap ? freshClimb() : { ...state.climb };
@@ -125,11 +177,74 @@ export function applyFix(state: RunState, loc: Fix): RunState {
     elevationGainM: state.elevationGainM + (climbed > 0 ? climbed : 0),
     climb,
     skipNext: false,
+    stoppedSec: state.stoppedSec + (stopped ? dt : 0),
+    lastStopped: stopped,
+    maxSpeedKmh,
+    recentSpeeds,
   };
 }
 
+// When the stop in progress began: the latest fix, or the moment the clock
+// last started if that's later, since a pause had already stopped it
+function quietSince(run: RunState, timing: { segmentStart: number | null }): number | null {
+  const last = run.coords[run.coords.length - 1];
+  if (timing.segmentStart == null) return null;
+  return last ? Math.max(last.timestamp, timing.segmentStart) : timing.segmentStart;
+}
+
+/**
+ * Auto-paused right now, while the clock runs: the stretch to the latest fix
+ * was a stop, or the next fix is overdue (fixes only come with movement, so
+ * standing still is silence).
+ */
+export function isAutoPaused(
+  run: RunState,
+  timing: { segmentStart: number | null },
+  now: number,
+  stopBelowKmh: number | null,
+): boolean {
+  const since = quietSince(run, timing);
+  if (stopBelowKmh == null || since == null || run.coords.length === 0) return false;
+  return run.lastStopped || (now - since) / 1000 > stopGraceSec(stopBelowKmh);
+}
+
+function openStopSec(run: RunState, timing: { segmentStart: number | null }, now: number, stopBelowKmh: number | null): number {
+  if (!isAutoPaused(run, timing, now, stopBelowKmh)) return 0;
+  return Math.max(0, (now - quietSince(run, timing)!) / 1000);
+}
+
+/**
+ * Moving time: the clock (pauses already left out) less every stop auto-pause
+ * found, the one in progress included. Equal to the clock with auto-pause off.
+ */
+export function movingSeconds(
+  run: RunState,
+  timing: { base: number; segmentStart: number | null },
+  now: number,
+  stopBelowKmh: number | null,
+): number {
+  const elapsed = runElapsedSeconds(timing.base, timing.segmentStart, now);
+  return Math.max(0, Math.floor(elapsed - run.stoppedSec - openStopSec(run, timing, now, stopBelowKmh)));
+}
+
+/**
+ * The run as the clock halts (pause, stop): a stop in progress is banked, or
+ * the moving clock would jump up by it once the clock no longer runs.
+ */
+export function settleStop(
+  run: RunState,
+  timing: { segmentStart: number | null },
+  now: number,
+  stopBelowKmh: number | null,
+): RunState {
+  const open = openStopSec(run, timing, now, stopBelowKmh);
+  return open > 0 ? { ...run, stoppedSec: run.stoppedSec + open, lastStopped: false } : run;
+}
+
 /** The run after a pause or resume: the next fix is across a gap and the climb anchor starts over. */
-export const afterGap = (state: RunState): RunState => ({ ...state, skipNext: true, climb: freshClimb() });
+export const afterGap = (state: RunState): RunState => ({
+  ...state, skipNext: true, climb: freshClimb(), lastStopped: false, recentSpeeds: [],
+});
 
 /** "12:05" / "1:05:09", the run's elapsed time as a clock. */
 export function fmtClock(totalSec: number): string {
@@ -154,6 +269,9 @@ export function buildGpsRunBody(input: {
   activity: Activity;
   workoutName: string;
   elapsedSec: number;
+  /** Moving time; the elapsed time when auto-pause is off. Speed, pace and PRs read this */
+  movingSec?: number;
+  maxSpeedKmh?: number;
   distanceKm: number;
   distanceUnit: DistanceUnit;
   elevationGainM: number;
@@ -163,7 +281,9 @@ export function buildGpsRunBody(input: {
   /** The run's id for the server's duplicate check (Workout.client_id) */
   clientId?: string | null;
 }) {
-  const durationMin = input.elapsedSec / 60;
+  // The activity's own length is the time out, stops included; its set holds
+  // the moving time, which everything per-distance is measured against
+  const durationMin = (input.movingSec ?? input.elapsedSec) / 60;
   const displayDistance = toDisplayDistance(input.distanceKm, input.distanceUnit);
   // The joined line stays for app builds from before route_segments, which draw only it
   const encodedPolyline = input.coords.length >= 2
@@ -178,13 +298,13 @@ export function buildGpsRunBody(input: {
   // fast reps in with its recovery jogs, so scan the raw points for the genuine
   // efforts. Timing lives only in this array: the encoded polyline drops it, so
   // this can never be done after the fact.
-  const bestEfforts: BestEffort[] = extractBestEfforts(input.coords);
+  const bestEfforts: BestEffort[] = extractBestEfforts(input.coords, isCycling(input.activity));
 
   return {
     ...(input.clientId ? { client_id: input.clientId } : {}),
     workoutName: input.workoutName.trim() || input.activity,
     date: toLocalDateStr(input.now),
-    duration: Math.round(durationMin),
+    duration: Math.round(input.elapsedSec / 60),
     exercises: [{
       name: ACTIVITY_TEMPLATE_NAME[input.activity],
       exercise_template_id: input.exerciseTemplateId,
@@ -198,6 +318,7 @@ export function buildGpsRunBody(input: {
         distance_unit: input.distanceUnit,
         intensity: avgPace,
         elevation_gain: input.elevationGainM > 0 ? Math.round(input.elevationGainM) : null,
+        max_speed: input.maxSpeedKmh && input.maxSpeedKmh > 0 ? Math.round(input.maxSpeedKmh * 10) / 10 : null,
         reps: null,
         weight: null,
         set_type: 'N',

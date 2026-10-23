@@ -111,6 +111,9 @@ describe('minimizing a GPS run', () => {
     mockUser = { id: 1, bodyweight: 185, weight_unit: 'lbs' };
     mockWorkoutSession = null;
     await AsyncStorage.clear();
+    // Sparse fixes read as stops: off, so the clock tests count every second
+    await AsyncStorage.setItem('gps_auto_pause_1', 'false');
+    await AsyncStorage.setItem('gps_auto_pause_2', 'false');
     Location.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
     mockNetInfoFetch.mockResolvedValue({ isConnected: true, isInternetReachable: true });
     (global.fetch as jest.Mock) = jest.fn((url: string, init: any = {}) => {
@@ -194,7 +197,7 @@ describe('minimizing a GPS run', () => {
     });
     await waitFor(() => expect(r.getByText('Save Activity?')).toBeTruthy());
     await act(async () => { fireEvent.press(r.getByText('Save')); });
-    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('CardioDetails', { workoutId: 77 }));
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('WorkoutSummary', expect.objectContaining({ workoutId: 77 })));
 
     expect(await AsyncStorage.getItem('gps_run_checkpoint_1')).toBeNull();
     await leaveScreen(r);

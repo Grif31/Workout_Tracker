@@ -52,4 +52,8 @@ export type Set = {
   distance?: string;
   distance_unit?: string;
   intensity?: string;
+  /** metres of ascent, GPS activities */
+  elevation_gain?: number | null;
+  /** km/h, the top speed a GPS activity reached */
+  max_speed?: number | null;
 }

@@ -1,11 +1,11 @@
-import { toDisplayDistance } from './units';
+import { elevationLabel, toDisplayDistance, toDisplayElevation } from './units';
 import { fmtHold } from '../components/workout/types';
 
 export type PREventItem = {
   id: number;
   exercise_template_id: number;
   workout_id: number;
-  pr_type: 'max_weight' | 'max_reps' | 'estimated_1rm' | 'best_time' | 'best_distance' | 'max_duration';
+  pr_type: 'max_weight' | 'max_reps' | 'estimated_1rm' | 'best_time' | 'best_distance' | 'max_duration' | 'longest_distance' | 'max_elevation';
   value: number;
   weight_context: number | null;
   previous_value: number | null;
@@ -22,12 +22,13 @@ export type PREventItem = {
 // default-series selection (pinned progression cards on the dashboard).
 // estimated_1rm is a trend metric here, never labeled a PR (project rule).
 /**
- * Which screen opens the workout a PR came from. best_time and best_distance
- * only come from cardio exercises, so those open Cardio Details. A timed hold
+ * Which screen opens the workout a PR came from. The cardio types (milestones,
+ * and a ride's longest distance and climbing) open Cardio Details. A timed hold
  * (max_duration) stays a strength workout.
  */
 export function prWorkoutScreen(prType: PREventItem['pr_type']): 'CardioDetails' | 'WorkoutDetails' {
-  return prType === 'best_time' || prType === 'best_distance' ? 'CardioDetails' : 'WorkoutDetails';
+  return prType === 'best_time' || prType === 'best_distance' || prType === 'longest_distance' || prType === 'max_elevation'
+    ? 'CardioDetails' : 'WorkoutDetails';
 }
 
 export const PR_METRIC_OPTIONS: { key: PREventItem['pr_type']; label: string }[] = [
@@ -37,6 +38,8 @@ export const PR_METRIC_OPTIONS: { key: PREventItem['pr_type']; label: string }[]
   { key: 'best_time',     label: 'Best Time'     },
   { key: 'best_distance', label: 'Best Distance' },
   { key: 'max_duration',  label: 'Longest Hold'  },
+  { key: 'longest_distance', label: 'Longest Ride'   },
+  { key: 'max_elevation',    label: 'Most Elevation' },
 ];
 
 /**
@@ -57,7 +60,7 @@ export const PR_TYPE_LABELS: Record<string, string> = Object.fromEntries(
  * metric selection rather than summary ranking.
  */
 export const PR_TYPE_ORDER: Record<string, number> = {
-  max_weight: 0, max_reps: 1, max_duration: 2, best_distance: 3, best_time: 4,
+  max_weight: 0, max_reps: 1, max_duration: 2, longest_distance: 3, max_elevation: 4, best_distance: 5, best_time: 6,
 };
 
 /**
@@ -88,6 +91,8 @@ export function prTypeIcon(prType: PREventItem['pr_type']): string {
     case 'best_time':     return 'stopwatch-outline';
     case 'best_distance': return 'navigate-outline';
     case 'max_duration':  return 'hourglass-outline';
+    case 'longest_distance': return 'bicycle-outline';
+    case 'max_elevation':    return 'trending-up-outline';
   }
 }
 
@@ -119,7 +124,9 @@ export function fmtChartDate(iso: string): string {
  */
 export function prChartValue(e: PREventItem, distanceUnit: 'km' | 'mi'): number {
   switch (e.pr_type) {
-    case 'best_distance': return toDisplayDistance(e.value, distanceUnit);
+    case 'best_distance':
+    case 'longest_distance': return toDisplayDistance(e.value, distanceUnit);
+    case 'max_elevation': return Math.round(toDisplayElevation(e.value, distanceUnit));
     case 'best_time':
     case 'max_duration':  return Math.round(e.value * 60);
     default:              return e.value;
@@ -272,8 +279,10 @@ export function fmtPrValue(e: PREventItem, unit: string, distanceUnit: 'km' | 'm
     case 'estimated_1rm': return `${e.value.toFixed(1)} ${unit}`;
     case 'max_reps':      return `${e.value} reps`;
     case 'best_time':     return fmtMinSec(e.value);
-    case 'best_distance': return `${toDisplayDistance(e.value, distanceUnit).toFixed(2)} ${distanceUnit}`;
+    case 'best_distance':
+    case 'longest_distance': return `${toDisplayDistance(e.value, distanceUnit).toFixed(2)} ${distanceUnit}`;
     case 'max_duration':  return fmtHold(e.value);
+    case 'max_elevation': return `${Math.round(toDisplayElevation(e.value, distanceUnit))} ${elevationLabel(distanceUnit)}`;
   }
 }
 
@@ -293,8 +302,10 @@ export function fmtPrDelta(e: PREventItem, unit: string, distanceUnit: 'km' | 'm
     case 'estimated_1rm': return `+${round1(d)} ${unit}`;
     case 'max_reps':      return `+${d} ${d === 1 ? 'rep' : 'reps'}`;
     case 'best_time':     return d < 1 ? `${Math.round(d * 60)}s faster` : `${fmtMinSec(d)} faster`;
-    case 'best_distance': return `+${toDisplayDistance(d, distanceUnit).toFixed(2)} ${distanceUnit}`;
+    case 'best_distance':
+    case 'longest_distance': return `+${toDisplayDistance(d, distanceUnit).toFixed(2)} ${distanceUnit}`;
     case 'max_duration':  return `+${fmtHold(d)}`;
+    case 'max_elevation': return `+${Math.round(toDisplayElevation(d, distanceUnit))} ${elevationLabel(distanceUnit)}`;
   }
 }
 

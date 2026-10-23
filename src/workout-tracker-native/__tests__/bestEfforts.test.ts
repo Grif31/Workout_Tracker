@@ -125,9 +125,36 @@ describe('extractBestEfforts', () => {
   });
 });
 
+describe('extractBestEfforts on a ride', () => {
+  // 2 min/km is 30 km/h: the running ceiling, and an ordinary road ride
+  const ride = track([[22, 1.8]], 0.1);
+
+  it('keeps efforts faster than any run, which the running ceiling threw out', () => {
+    expect(distanceEffort(extractBestEfforts(ride), 10)).toBeUndefined();
+    expect(distanceEffort(extractBestEfforts(ride, true), 10)?.duration_min).toBeCloseTo(18, 1);
+  });
+
+  it('measures the ride milestones, not the running ones', () => {
+    const efforts = extractBestEfforts(ride, true);
+    expect(distanceEffort(efforts, 20)?.duration_min).toBeCloseTo(36, 1);
+    expect(distanceEffort(efforts, 0.4)).toBeUndefined();
+    expect(distanceEffort(efforts, 21.0975)).toBeUndefined();
+  });
+
+  it('still drops a spike no bike could ride', () => {
+    // 0.5 min/km is 120 km/h
+    expect(extractBestEfforts(track([[12, 0.5]], 0.1), true)).toEqual([]);
+  });
+});
+
 describe('bestEffortLabel', () => {
   it('names the milestone an effort was measured against', () => {
     expect(bestEffortLabel({ milestone_type: 'distance', distance_km: 1.60934, duration_min: 7 })).toBe('1 Mile');
     expect(bestEffortLabel({ milestone_type: 'duration', distance_km: 2.2, duration_min: 10 })).toBe('10 min');
+  });
+
+  it('names ride milestones too', () => {
+    expect(bestEffortLabel({ milestone_type: 'distance', distance_km: 40, duration_min: 70 })).toBe('40K');
+    expect(bestEffortLabel({ milestone_type: 'duration', distance_km: 50, duration_min: 120 })).toBe('2 hr');
   });
 });

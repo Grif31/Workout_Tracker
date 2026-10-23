@@ -14,7 +14,7 @@ from utils.strength_standards import epley_1rm
 from utils.volume import get_bodyweight_at
 # Milestone tables moved to utils/endurance_standards.py so the Endurance
 # Score's pace tables share the exact float keys PR rows are written with.
-from utils.endurance_standards import CARDIO_DISTANCE_MILESTONES, CARDIO_DURATION_MILESTONES
+from utils.endurance_standards import cardio_milestones, is_cycling
 
 workout_bp = Blueprint('workout_bp', __name__)
 
@@ -101,16 +101,63 @@ def _build_best_efforts(ex_data):
     return rows
 
 
+def _upsert_ride_record(user_id, exercise, pr_type, value, workout_date):
+    """A one-per-exercise, higher-is-better ride PR (weight_context = -1, like
+    max_duration). Returns the new-PR dict, or None when it isn't one."""
+    existing = PersonalRecord.query.filter_by(
+        user_id=user_id,
+        exercise_template_id=exercise.exercise_template_id,
+        pr_type=pr_type,
+        weight_context=-1.0,
+    ).first()
+    if existing and value <= existing.value:
+        return None
+    previous = existing.value if existing else None
+    if existing:
+        existing.value = value
+        existing.achieved_at = workout_date
+    else:
+        db.session.add(PersonalRecord(
+            user_id=user_id,
+            exercise_template_id=exercise.exercise_template_id,
+            pr_type=pr_type,
+            value=value,
+            achieved_at=workout_date,
+            weight_context=-1.0,
+        ))
+    _record_pr_event(user_id, exercise, pr_type, value, previous, -1.0, workout_date)
+    return {'exercise_name': exercise.name, 'pr_type': pr_type, 'value': value}
+
+
 def _compute_and_upsert_cardio_prs(user_id, exercise_set_pairs, workout_date):
     """Compute best_time and best_distance PRs for cardio exercises.
 
     best_time: weight_context = target distance km, value = time in minutes (lower is better)
     best_distance: weight_context = target duration min, value = distance km (higher is better)
+    Rides also get longest_distance (the ride's whole distance, km) and
+    max_elevation (its climbing, metres), one each per exercise.
     """
     new_prs = []
     for exercise, sets in exercise_set_pairs:
         if not exercise.exercise_template_id:
             continue
+        # By the template's name, so one exercise's PRs never mix two lists
+        # when a workout's copy of it was renamed
+        tmpl = db.session.get(ExerciseTemplate, exercise.exercise_template_id)
+        ride = is_cycling(tmpl.name if tmpl else exercise.name)
+        if ride:
+            # The whole ride, from its sets: neither needs a duration, which the
+            # milestone bouts below do, and a best effort is a slice of the ride, not more of it
+            ridden = sum(
+                s.distance if (s.distance_unit or 'km') == 'km' else s.distance * 1.60934
+                for s in sets if s.distance and s.distance > 0
+            )
+            climbed = sum(s.elevation_gain for s in sets if s.elevation_gain and s.elevation_gain > 0)
+            for pr_type, value in (('longest_distance', round(ridden, 4)), ('max_elevation', round(climbed, 1))):
+                if value > 0:
+                    pr = _upsert_ride_record(user_id, exercise, pr_type, value, workout_date)
+                    if pr:
+                        new_prs.append(pr)
         bouts = []
         for s in sets:
             if s.distance and s.cardio_duration and s.distance > 0 and s.cardio_duration > 0:
@@ -125,9 +172,10 @@ def _compute_and_upsert_cardio_prs(user_id, exercise_set_pairs, workout_date):
                 bouts.append((effort.distance_km, effort.duration_min))
         if not bouts:
             continue
+        distance_milestones, duration_milestones = cardio_milestones(tmpl.name if tmpl else exercise.name)
 
         for dist_km, duration in bouts:
-            for target_km, label in CARDIO_DISTANCE_MILESTONES:
+            for target_km, label in distance_milestones:
                 if dist_km < target_km:
                     continue
                 est_time = round(duration * (target_km / dist_km), 4)
@@ -156,7 +204,7 @@ def _compute_and_upsert_cardio_prs(user_id, exercise_set_pairs, workout_date):
                 new_prs.append({'exercise_name': exercise.name, 'pr_type': 'best_time',
                                 'label': label, 'value': est_time})
 
-            for target_min, label in CARDIO_DURATION_MILESTONES:
+            for target_min, label in duration_milestones:
                 if duration < target_min:
                     continue
                 est_dist = round(dist_km * (target_min / duration), 4)
@@ -713,6 +761,7 @@ def add_workout():
                     intensity=s.get('intensity'),
                     rpe=s.get('rpe'),
                     elevation_gain=s.get('elevation_gain'),
+                    max_speed=s.get('max_speed'),
                 )
                 db.session.add(new_set)
                 new_sets.append(new_set)
@@ -922,6 +971,8 @@ def update_workout(workout_id):
                             s.rpe = s_data["rpe"]
                         if "elevation_gain" in s_data:
                             s.elevation_gain = s_data["elevation_gain"]
+                        if "max_speed" in s_data:
+                            s.max_speed = s_data["max_speed"]
                         s.order = s_data.get('order', set_index)
                     else:
                         cardio_edited = True
@@ -936,6 +987,7 @@ def update_workout(workout_id):
                             intensity=s_data.get('intensity'),
                             rpe=s_data.get('rpe'),
                             elevation_gain=s_data.get('elevation_gain'),
+                            max_speed=s_data.get('max_speed'),
                         ))
 
                 if cardio_edited and ex.best_efforts:
@@ -967,6 +1019,7 @@ def update_workout(workout_id):
                         intensity=s.get('intensity'),
                         rpe=s.get('rpe'),
                         elevation_gain=s.get('elevation_gain'),
+                        max_speed=s.get('max_speed'),
                     ))
                 workout.exercises.append(new_ex)
                         

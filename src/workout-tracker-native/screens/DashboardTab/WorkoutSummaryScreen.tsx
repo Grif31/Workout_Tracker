@@ -20,6 +20,7 @@ import { apiFetch } from '../../utils/api';
 import { GREEK_RANKS } from '../../constants/greekRanks';
 import MuscleDiagram from '../../components/MuscleDiagram';
 import WorkoutShareCard, { bestWorkingSet } from '../../components/share/WorkoutShareCard';
+import CardioShareCard from '../../components/share/CardioShareCard';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { PR_GOLD, PR_GOLD_BG, PR_GOLD_TEXT } from '../../constants/prColors';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
@@ -31,18 +32,32 @@ import { typography } from '../../theme/typography';
 import { GREEK_RANK_CACHED_KEY, PROFILE_FRAME_RANK_KEY } from '../../constants/storageKeys';
 import { type GreekRankData } from '../../utils/greekRank';
 import { PR_TYPE_LABELS, PR_TYPE_ORDER, fmtMinSec } from '../../utils/prFormat';
-import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toExactVolume, toKm, type DistanceUnit, type WeightUnit } from '../../utils/units';
+import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayElevation, elevationLabel, toExactVolume, toKm, type DistanceUnit, type WeightUnit } from '../../utils/units';
 import { fmtHold, fmtMinutes } from '../../components/workout/types';
 import { usePurchase } from '../../context/PurchaseContext';
 import { writeWidgetGreekRank } from '../../utils/widgetData';
+import { decodeRouteSegments, regionFor, thinSegments } from '../../utils/routeSegments';
+import { isCycling, speedInUnit, speedLabel } from '../../utils/gpsMetrics';
+import { bestEffortLabel, type BestEffort } from '../../utils/bestEfforts';
+import { fmtRaceTime } from '../../utils/cardioFormat';
+
+// react-native-maps needs a development build; without it the route card has no map
+let _MapsModule: any = null;
+try { _MapsModule = require('react-native-maps'); } catch {}
+const MapView: React.ComponentType<any> | null = _MapsModule?.default ?? null;
+const Polyline: React.ComponentType<any> | null = _MapsModule?.Polyline ?? null;
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WorkoutSummary'>;
 type SummaryPr = Props['route']['params']['prs'][number];
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-type SetData = { id: number; reps?: number; weight?: number; set_type: string; cardio_duration?: number; distance?: number; distance_unit?: string };
-type ExerciseData = { id: number; name: string; exercise_type?: string; sets: SetData[] };
+type SetData = { id: number; reps?: number; weight?: number; set_type: string; cardio_duration?: number; distance?: number; distance_unit?: string; elevation_gain?: number | null; max_speed?: number | null };
+type ExerciseData = {
+  id: number; name: string; exercise_type?: string; sets: SetData[];
+  // A GPS activity's route and the efforts scanned from it
+  route_polyline?: string | null; route_segments?: string[] | null; best_efforts?: BestEffort[];
+};
 type WorkoutData = {
   date?: string;
   duration?: number | null;
@@ -74,6 +89,10 @@ function fmtSummaryPr(pr: SummaryPr, unit: string, distanceUnit: DistanceUnit): 
     }
     case 'max_duration':
       return fmtHold(pr.value);
+    case 'longest_distance':
+      return `${toDisplayDistance(pr.value, distanceUnit).toFixed(2)} ${distanceUnit}`;
+    case 'max_elevation':
+      return `${Math.round(toDisplayElevation(pr.value, distanceUnit))} ${elevationLabel(distanceUnit)} climbed`;
     default:
       return String(pr.value);
   }
@@ -133,6 +152,11 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   // Cardio only when every exercise is (Workout.to_dict), so a lifting session
   // with a warm-up jog keeps its volume/sets/reps
   const isCardio = workout?.workout_type === 'cardio';
+  // A GPS activity: the cardio exercise that recorded a route
+  const routeExercise = isCardio ? exercises.find(e => e.route_polyline || e.route_segments?.length) ?? null : null;
+  const routeSegments = useMemo(() => thinSegments(decodeRouteSegments(routeExercise)), [routeExercise]);
+  const routeRegion = useMemo(() => regionFor(routeSegments), [routeSegments]);
+  const cycling = isCardio && exercises.some(e => isCycling(e.name));
 
   const filteredPrs = prs
     .filter(pr => pr.pr_type !== 'estimated_1rm')
@@ -244,7 +268,8 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   );
 
   function goToDetails() {
-    navigation.replace('WorkoutDetails', { workoutId });
+    if (isCardio) navigation.replace('CardioDetails', { workoutId });
+    else navigation.replace('WorkoutDetails', { workoutId });
   }
 
   async function handleShare() {
@@ -290,6 +315,11 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const cardioKm = workout?.distance ? toDistanceUnitKm(workout.distance, workout.distance_unit) : 0;
   const cardioDistance = cardioKm > 0 ? toDisplayDistance(cardioKm, distanceUnit) : 0;
   const pace = cardioMinutes > 0 && cardioDistance > 0 ? cardioMinutes / cardioDistance : null;
+  const elevationM = exercises.reduce((t, e) => t + e.sets.reduce((u, st) => u + (st.elevation_gain ?? 0), 0), 0);
+  const bestEfforts = routeExercise?.best_efforts ?? [];
+  const maxSpeedKmh = cycling ? exercises.reduce((m, e) => Math.max(m, ...e.sets.map(st => st.max_speed ?? 0)), 0) : 0;
+  // Auto-pause kept stops out of the moving time; the workout's own length has them
+  const movedLess = durationMin != null && cardioMinutes > 0 && durationMin - cardioMinutes >= 1;
 
   const hasPrs = filteredPrs.length > 0;
   // A PR on a lift the Strength Score ranks: the moment someone most wants to know where it puts them
@@ -317,21 +347,35 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
         style={{ position: 'absolute', left: -9999, top: -9999 }}
         collapsable={false}
       >
-        <WorkoutShareCard
-          workoutName={workoutName}
-          date={shareDate}
-          volumeText={totalVolume > 0 ? volumeText : null}
-          totalSets={totalSets}
-          totalReps={totalReps}
-          duration={durationMin}
-          holdMinutes={exercises
-            .filter(e => e.exercise_type === 'duration')
-            .reduce((sum, e) => sum + e.sets.reduce((t, st) => t + (st.cardio_duration ?? 0), 0), 0)}
-          weightUnit={weightUnit}
-          exercises={exercises.slice(0, 3).map(e => ({ name: e.name, bestSet: bestWorkingSet(e.sets) }))}
-          prs={filteredPrs}
-          accentColor={colors.accentDark}
-        />
+        {isCardio ? (
+          <CardioShareCard
+            activityName={workoutName}
+            date={shareDate}
+            distance={cardioDistance}
+            distanceUnit={distanceUnit}
+            durationMin={cardioMinutes}
+            elevationM={elevationM}
+            coords={routeSegments}
+            accentColor={colors.accentDark}
+            cycling={cycling}
+          />
+        ) : (
+          <WorkoutShareCard
+            workoutName={workoutName}
+            date={shareDate}
+            volumeText={totalVolume > 0 ? volumeText : null}
+            totalSets={totalSets}
+            totalReps={totalReps}
+            duration={durationMin}
+            holdMinutes={exercises
+              .filter(e => e.exercise_type === 'duration')
+              .reduce((sum, e) => sum + e.sets.reduce((t, st) => t + (st.cardio_duration ?? 0), 0), 0)}
+            weightUnit={weightUnit}
+            exercises={exercises.slice(0, 3).map(e => ({ name: e.name, bestSet: bestWorkingSet(e.sets) }))}
+            prs={filteredPrs}
+            accentColor={colors.accentDark}
+          />
+        )}
       </View>
 
       {isFirstWorkout ? (
@@ -388,6 +432,10 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
               ? 'Your highest-volume workout yet.'
               : isBestReps
               ? 'Your most reps in a workout yet.'
+              : cycling
+              ? 'Ride complete.'
+              : isCardio
+              ? 'Activity complete.'
               : 'Workout complete.'}
           </Text>
           <Text style={s.subline}>
@@ -459,7 +507,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
             <View style={s.statsRow}>
               <View style={s.statBox}>
                 <Text style={s.statValue}>{cardioMinutes > 0 ? fmtMinutes(cardioMinutes) : '—'}</Text>
-                <Text style={s.statLabel}>Time</Text>
+                <Text style={s.statLabel}>{movedLess ? 'Moving Time' : 'Time'}</Text>
               </View>
               <View style={s.statBox}>
                 {cardioDistance > 0
@@ -468,8 +516,10 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
                 <Text style={s.statLabel}>Distance ({distanceUnit})</Text>
               </View>
               <View style={s.statBox}>
-                <Text style={s.statValue}>{pace != null ? fmtMinSec(pace) : '—'}</Text>
-                <Text style={s.statLabel}>Pace (/{distanceUnit})</Text>
+                <Text style={s.statValue}>
+                  {pace == null ? '—' : cycling ? speedInUnit(cardioKm, cardioMinutes, distanceUnit).toFixed(1) : fmtMinSec(pace)}
+                </Text>
+                <Text style={s.statLabel}>{cycling ? `Speed (${speedLabel(distanceUnit)})` : `Pace (/${distanceUnit})`}</Text>
               </View>
             </View>
           ) : (
@@ -490,6 +540,67 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           )}
         </Animated.View>
 
+        {routeExercise && (routeRegion || bestEfforts.length > 0 || elevationM > 0 || maxSpeedKmh > 0) && (
+          <Animated.View entering={FadeInDown.delay(250).duration(400)} style={s.section}>
+            <View style={s.routeCard}>
+              {MapView && Polyline && routeRegion && (
+                <MapView
+                  style={s.routeMap}
+                  initialRegion={routeRegion}
+                  scrollEnabled={false}
+                  zoomEnabled={false}
+                  pitchEnabled={false}
+                  rotateEnabled={false}
+                  pointerEvents="none"
+                >
+                  {routeSegments.filter(seg => seg.length >= 2).map((seg, i) => (
+                    <Polyline key={i} coordinates={seg} strokeColor={colors.accent} strokeWidth={4} />
+                  ))}
+                </MapView>
+              )}
+              {(elevationM > 0 || bestEfforts.length > 0 || maxSpeedKmh > 0) && (
+                <View style={s.routeBody}>
+                  {maxSpeedKmh > 0 && (
+                    <View style={s.elevationRow}>
+                      <Ionicons name="speedometer-outline" size={16} color={colors.textSecondary} />
+                      <Text style={s.elevationText}>
+                        {toDisplayDistance(maxSpeedKmh, distanceUnit).toFixed(1)} {speedLabel(distanceUnit)} max speed
+                      </Text>
+                    </View>
+                  )}
+                  {elevationM > 0 && (
+                    <View style={s.elevationRow}>
+                      <Ionicons name="trending-up" size={16} color={colors.textSecondary} />
+                      <Text style={s.elevationText}>
+                        {Math.round(toDisplayElevation(elevationM, distanceUnit)).toLocaleString()} {elevationLabel(distanceUnit)} climbed
+                      </Text>
+                    </View>
+                  )}
+                  {bestEfforts.length > 0 && (
+                    <>
+                      <Text style={s.effortsLabel}>Best Efforts</Text>
+                      <View style={s.setBadgeRow}>
+                        {bestEfforts.map(effort => (
+                          <View key={`${effort.milestone_type}-${effort.distance_km}-${effort.duration_min}`} style={s.setBadge}>
+                            <Text style={s.setBadgeText}>
+                              {`${bestEffortLabel(effort)} `}
+                              <Text style={s.effortValue}>
+                                {effort.milestone_type === 'distance'
+                                  ? fmtRaceTime(effort.duration_min)
+                                  : `${toDisplayDistance(effort.distance_km, distanceUnit).toFixed(2)} ${distanceUnit}`}
+                              </Text>
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    </>
+                  )}
+                </View>
+              )}
+            </View>
+          </Animated.View>
+        )}
+
         {muscles.length > 0 && (
           <Animated.View entering={FadeInDown.delay(300).duration(400)} style={s.section}>
             <View style={s.diagramCard}>
@@ -509,7 +620,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
                 <Text style={s.retryText}>Try Again</Text>
               </TouchableOpacity>
             </View>
-          ) : (
+          ) : routeExercise ? null : (
             exercises.map(ex => (
               <View key={ex.id} style={s.exCard}>
                 <Text style={s.exName}>{ex.name}</Text>
@@ -602,6 +713,13 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   statBox: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
   statValue: { fontSize: typography.fontSize.xl, fontWeight: '700', color: colors.textPrimary },
   statLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
+  routeCard: { backgroundColor: colors.surface, borderRadius: radius.md, overflow: 'hidden' },
+  routeMap: { width: '100%', height: 200 },
+  routeBody: { padding: spacing.md, gap: spacing.sm },
+  elevationRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  elevationText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
+  effortsLabel: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
+  effortValue: { fontWeight: '700', color: colors.textPrimary },
   diagramCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
   diagramTitle: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary, marginBottom: spacing.sm },
   exCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
