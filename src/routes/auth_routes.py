@@ -293,7 +293,7 @@ def _send_otp_email(recipient: str, otp: str) -> None:
     # Fire-and-forget in a daemon thread so the route returns immediately.
     app = current_app._get_current_object()
     api_key = os.environ.get('RESEND_API_KEY', '')
-    sender  = os.environ.get('RESEND_FROM', 'Arete Fitness <support@aretefitnessapp.com>')
+    sender  = os.environ.get('RESEND_FROM', 'Arete Workout Tracker <support@aretefitnessapp.com>')
     if not api_key:
         app.logger.error('RESEND_API_KEY not set — OTP email not sent to %s', recipient)
         return
@@ -304,7 +304,7 @@ def _send_otp_email(recipient: str, otp: str) -> None:
   <table width="100%" style="background:#0D0D0D;padding:40px 0;"><tr><td align="center">
   <table width="480" style="background:#1C1C1E;border-radius:16px;border:1px solid #2C2C2E;">
     <tr><td style="padding:32px 40px 0;text-align:center;">
-      <p style="font-size:12px;color:#8E8E93;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px;">Arete Fitness</p>
+      <p style="font-size:12px;color:#8E8E93;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px;">Ar&#x113;te Workout Tracker</p>
       <h1 style="color:#fff;font-size:22px;font-weight:700;margin:0 0 8px;">Password Reset Code</h1>
       <p style="color:#8E8E93;font-size:15px;margin:0;">Enter this code in the app to reset your password.</p>
     </td></tr>
@@ -323,7 +323,7 @@ def _send_otp_email(recipient: str, otp: str) -> None:
   </table></td></tr></table>
 </body></html>"""
         plain = (
-            f"Your Arete Fitness reset code: {otp}\n\n"
+            f"Your Aretē Workout Tracker reset code: {otp}\n\n"
             f"Expires in 15 minutes.\n"
             f"If you didn't request this, ignore this email."
         )
@@ -334,7 +334,7 @@ def _send_otp_email(recipient: str, otp: str) -> None:
                 json={
                     'from': sender,
                     'to': [recipient],
-                    'subject': 'Your Arete Fitness reset code',
+                    'subject': 'Your Aretē Workout Tracker reset code',
                     'html': html,
                     'text': plain,
                 },

@@ -1,8 +1,8 @@
-# Aretē Fitness — Project Guide
+# Aretē Workout Tracker — Project Guide
 
 ## Overview
 
-**App name:** Aretē (ē = Unicode macron-e, U+0113 — use in UI copy, not in file names)  
+**App name:** Aretē Workout Tracker in full (titles, legal pages, emails, store listing); Aretē in running copy and the home screen label (ē = Unicode macron-e, U+0113 — use in UI copy, not in file names). Never "Aretē Fitness": `aretefitness` survives only in identifiers (domain, bundle ID, scheme)  
 **Domain:** aretefitnessapp.com | **Support:** support@aretefitnessapp.com  
 **iOS bundle:** `com.aretefitness.app` | **Android package:** `com.aretefitness.app`  
 **Expo project ID:** `356b88e9-4302-43fc-b50a-6d83030b8fa6`  

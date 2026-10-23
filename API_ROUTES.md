@@ -1,4 +1,4 @@
-# Aretē Fitness — API Route Reference
+# Aretē Workout Tracker — API Route Reference
 
 All routes are Flask endpoints under the backend (`src/routes/`). Unless noted otherwise, every route requires a valid JWT access token (`@jwt_required()`, `Authorization: Bearer <token>`). Routes are grouped by blueprint file and sorted alphabetically by path within each group.
 

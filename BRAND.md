@@ -16,6 +16,15 @@ the character set can't render it (e.g. file names, bundle identifiers,
 URLs) — those already use the plain-ASCII **Arete** / **arete** form
 (`aretefitnessapp.com`, `com.aretefitness.app`).
 
+**Full name: Aretē Workout Tracker.** Use it where the product is named on
+its own: page titles, legal pages, email headers, the App Store listing.
+In running copy ("Aretē uses your location...") and the home screen label
+(iOS truncates past about 12 characters) the short **Aretē** is right.
+Never "Aretē Fitness": that was the old name, and `aretefitness` now lives
+on only in identifiers that can't change (domain, bundle ID, URL scheme).
+Email `From` display names stay ASCII (`Arete Workout Tracker`) so every
+mail client renders them.
+
 From Greek ἀρετή (*arete*) — "excellence" or "virtue," specifically the
 excellence realized through struggle and pursuit rather than given. That's
 the whole positioning: the app doesn't just log workouts, it measures your

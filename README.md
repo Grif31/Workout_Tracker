@@ -1,4 +1,4 @@
-# Aretē Fitness
+# Aretē Workout Tracker
 
 A full-stack mobile fitness app with a Greek mythology progression system. Track strength and cardio workouts, earn Greek ranks as you grow stronger, get AI-powered coaching insights, and monitor progress across every dimension of your training.
 

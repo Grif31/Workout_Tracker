@@ -92,7 +92,7 @@ def create_app(test_config=None):
     app.config['MAIL_USERNAME']       = os.environ.get('MAIL_USERNAME', '')
     app.config['MAIL_PASSWORD']       = os.environ.get('MAIL_PASSWORD', '')
     app.config['MAIL_DEFAULT_SENDER'] = os.environ.get(
-        'MAIL_DEFAULT_SENDER', 'Arete Fitness <support@aretefitnessapp.com>'
+        'MAIL_DEFAULT_SENDER', 'Arete Workout Tracker <support@aretefitnessapp.com>'
     )
 
     jwt = JWTManager(app)

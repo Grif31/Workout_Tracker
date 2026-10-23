@@ -1,4 +1,4 @@
-# Workout Tracker — Project TODO
+# Aretē Workout Tracker — Project TODO
 
 A living checklist for everything left to build, fix, and ship.
 Check off items as you complete them.
