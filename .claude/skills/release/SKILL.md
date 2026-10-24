@@ -62,11 +62,13 @@ Category conventions already used in this file: `New: <Feature>`,
 concrete, written for the end user (e.g. "Fixed X" not "Refactored Y
 to prevent X").
 
-### Step 5 — Write a short release blurb
-Write a 2–4 sentence "What's New" blurb suitable for pasting into App
-Store Connect / Play Console release notes — punchier and shorter than
-the CHANGELOG entry, no bullet points, no technical terms. Present it
-to the user directly in chat (don't create a file for it unless asked).
+### Step 5 — Write the "What's New" list
+Write the "What's New" text for App Store Connect / Play Console as a
+list: one short line per change, each starting with "• " (the stores
+show plain text, so no markdown), most important first. Shorter than
+the CHANGELOG entry, no technical terms, no em dashes or exclamation
+marks. Never a prose paragraph: the owner wants a list. Present it to
+the user directly in chat (don't create a file for it unless asked).
 
 ### Step 6 — Report, don't commit
 Show the user the version bump and the new CHANGELOG entry. Per this
