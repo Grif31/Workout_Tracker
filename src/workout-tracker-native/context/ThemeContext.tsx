@@ -42,6 +42,7 @@ export type Colors = {
   accentDark: string; // accent for surfaces that stay dark in both themes (share cards)
   save: string;       // alias for accent (backwards compat)
   danger: string;
+  dangerText: string; // text on a danger-colored background; accentText follows the accent, and some presets' fail on red
   warmup: string;     // warm-up set indicator
   dropset: string;    // drop set indicator
   prGold: string;       // PR text and icons on themed surfaces
@@ -62,6 +63,7 @@ export const LIGHT_BASE = {
   prGold:        PR_GOLD_ON_LIGHT,
   prGoldBorder:  PR_GOLD_BORDER_ON_LIGHT,
   danger:        '#D70015', // iOS's #FF3B30 is 3.5:1 on white, too faint for error text
+  dangerText:    '#FFFFFF', // 5.4:1 on danger
   warmup:        '#FF9500',
   dropset:       '#AF52DE',
 };
@@ -71,13 +73,14 @@ export const DARK_BASE = {
   surface:       '#1C1C1E',
   border:        '#38383A',
   inputBorder:   '#6E6E73', // 3.4:1 on #1C1C1E
-  switchTrack:   '#38383A',
+  switchTrack:   '#6E6E73', // 3.4:1 on surface; border's #38383A was 1.45:1
   textPrimary:   '#FFFFFF',
   textSecondary: '#8E8E93',
   placeholder:   '#636366',
   prGold:        PR_GOLD,
   prGoldBorder:  PR_GOLD,
   danger:        '#FF453A',
+  dangerText:    '#000000', // 6.2:1 on danger; white is 3.4:1
   warmup:        '#FF9500',
   dropset:       '#AF52DE',
 };

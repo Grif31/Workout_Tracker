@@ -1,4 +1,5 @@
 import csv
+import math
 from datetime import datetime
 from io import StringIO
 from flask import Blueprint, request, jsonify, current_app, g, make_response
@@ -91,7 +92,7 @@ def _build_best_efforts(ex_data):
             duration_min = float(item['duration_min'])
         except (KeyError, TypeError, ValueError):
             continue
-        if distance_km <= 0 or duration_min <= 0:
+        if not (math.isfinite(distance_km) and math.isfinite(duration_min)) or distance_km <= 0 or duration_min <= 0:
             continue
         rows.append(CardioBestEffort(
             milestone_type=item['milestone_type'],
@@ -174,11 +175,26 @@ def _compute_and_upsert_cardio_prs(user_id, exercise_set_pairs, workout_date):
             continue
         distance_milestones, duration_milestones = cardio_milestones(tmpl.name if tmpl else exercise.name)
 
+        # The best bout per milestone first, then one upsert each: a measured
+        # 5K usually beats the whole-run extrapolation too, and upserting per
+        # bout would report (and log) the same milestone twice in one save
+        best_times = {}
+        best_dists = {}
         for dist_km, duration in bouts:
-            for target_km, label in distance_milestones:
-                if dist_km < target_km:
-                    continue
-                est_time = round(duration * (target_km / dist_km), 4)
+            for target_km, _ in distance_milestones:
+                if dist_km >= target_km:
+                    est = round(duration * (target_km / dist_km), 4)
+                    if target_km not in best_times or est < best_times[target_km]:
+                        best_times[target_km] = est
+            for target_min, _ in duration_milestones:
+                if duration >= target_min:
+                    est = round(dist_km * (target_min / duration), 4)
+                    if target_min not in best_dists or est > best_dists[target_min]:
+                        best_dists[target_min] = est
+
+        for target_km, label in distance_milestones:
+            if target_km in best_times:
+                est_time = best_times[target_km]
                 existing = PersonalRecord.query.filter_by(
                     user_id=user_id,
                     exercise_template_id=exercise.exercise_template_id,
@@ -204,10 +220,9 @@ def _compute_and_upsert_cardio_prs(user_id, exercise_set_pairs, workout_date):
                 new_prs.append({'exercise_name': exercise.name, 'pr_type': 'best_time',
                                 'label': label, 'value': est_time})
 
-            for target_min, label in duration_milestones:
-                if duration < target_min:
-                    continue
-                est_dist = round(dist_km * (target_min / duration), 4)
+        for target_min, label in duration_milestones:
+            if target_min in best_dists:
+                est_dist = best_dists[target_min]
                 existing = PersonalRecord.query.filter_by(
                     user_id=user_id,
                     exercise_template_id=exercise.exercise_template_id,
@@ -452,6 +467,7 @@ def _recompute_prs_for_templates(user_id, template_ids):
             Workout.user_id == user_id,
             Exercise.exercise_template_id.in_(template_ids),
         )
+        .options(selectinload(Exercise.sets), selectinload(Exercise.best_efforts))
         .order_by(Workout.date, Workout.id, Exercise.id)
         .all()
     )

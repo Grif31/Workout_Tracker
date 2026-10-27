@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import polylineLib from '@mapbox/polyline';
@@ -468,6 +468,145 @@ describe('GPSCardioScreen', () => {
       await advance(60_000);
       expect(r.getByText(held)).toBeTruthy();
       expect(r.getByText(/^Elapsed /)).toBeTruthy();
+    });
+
+    describe('saving with auto-pause on', () => {
+      // Fixes stamped with the fake clock, 2 s apart, so stops are measured against the timer
+      const fixNow = (i: number, speed: number) => ({
+        coords: { latitude: 40 + i * 0.00015, longitude: -74, altitude: 10, accuracy: 5, speed },
+        timestamp: Date.now(),
+      });
+      const rideFor = async (from: number, n: number, speed: number) => {
+        for (let k = 0; k < n; k++) {
+          await feed(fixNow(from + k, speed));
+          await act(async () => { jest.setSystemTime(Date.now() + 2000); });
+        }
+      };
+      const holdStop = async (r: ReturnType<typeof render>) => {
+        const stopBtn = r.getByLabelText('Hold to Stop');
+        await act(async () => { fireEvent(stopBtn, 'pressIn'); jest.advanceTimersByTime(HOLD_MS + 50); });
+        await waitFor(() => expect(r.getByText('Save Activity?')).toBeTruthy());
+      };
+      const savedBody = async (r: ReturnType<typeof render>) => {
+        await act(async () => { fireEvent.press(r.getByText('Save')); });
+        await waitFor(() => expect(posts()).toHaveLength(1));
+        return JSON.parse(posts()[0][1].body);
+      };
+
+      beforeEach(async () => { await AsyncStorage.removeItem(`gps_auto_pause_${USER_ID}`); });
+
+      it('saves the moving time on the set and the time out on the workout, with the top speed', async () => {
+        const r = await renderReady();
+        await act(async () => { fireEvent.press(r.getByText('Cycle')); });
+        await act(async () => { fireEvent.press(r.getByText('Start')); });
+        await waitFor(() => expect(mockGpsListener).not.toBeNull());
+        await rideFor(0, 6, 8);
+        // Five minutes at a light, then the next fix 302 s after the last one ends the stop
+        await act(async () => { jest.setSystemTime(Date.now() + 300_000); });
+        await rideFor(6, 6, 10);
+        await holdStop(r);
+
+        const body = await savedBody(r);
+        const [set] = body.exercises[0].sets;
+        // 324 s out, 302 of them stopped
+        expect(body.duration).toBe(5);
+        expect(set.cardio_duration).toBeCloseTo(22 / 60, 5);
+        expect(set.max_speed).toBe(36);
+        expect(set.intensity).toBeCloseTo(set.cardio_duration / set.distance, 6);
+      });
+
+      it('banks a stop that a pause cuts into, once, and counts none of the paused time', async () => {
+        const r = await renderReady();
+        await act(async () => { fireEvent.press(r.getByText('Cycle')); });
+        await act(async () => { fireEvent.press(r.getByText('Start')); });
+        await waitFor(() => expect(mockGpsListener).not.toBeNull());
+        await rideFor(0, 6, 8);
+        await advance(99_000);
+        expect(r.getByText('Auto-paused')).toBeTruthy();
+        // Paused 102 s after the last fix, at 112 s on the clock
+        await act(async () => { fireEvent.press(r.getByText('Pause')); });
+        await act(async () => { jest.setSystemTime(Date.now() + 600_000); });
+        await act(async () => { fireEvent.press(r.getByText('Resume')); });
+        await waitFor(() => expect(mockGpsListener).not.toBeNull());
+        await rideFor(6, 6, 10);
+        await holdStop(r);
+
+        const body = await savedBody(r);
+        const [set] = body.exercises[0].sets;
+        // 112 s before the pause and 12 s after it
+        expect(body.duration).toBe(2);
+        expect(set.cardio_duration).toBeCloseTo(22 / 60, 5);
+        expect(set.max_speed).toBe(36);
+      });
+
+      describe('after a kill', () => {
+        let handlers: ((s: string) => void)[];
+        let appStateSpy: jest.SpyInstance;
+        let previous: ((...args: any[]) => any) | undefined;
+        beforeEach(() => {
+          handlers = [];
+          appStateSpy = jest.spyOn(AppState, 'addEventListener');
+          // react-native's jest setup already mocks this; mockRestore would wipe that for later tests
+          previous = appStateSpy.getMockImplementation();
+          appStateSpy.mockImplementation(((_t: string, h: (s: string) => void) => {
+            handlers.push(h);
+            return { remove: () => {} };
+          }) as any);
+        });
+        afterEach(() => {
+          if (previous) appStateSpy.mockImplementation(previous);
+          else appStateSpy.mockRestore();
+        });
+
+        // The checkpoint goes to disk as the app leaves the foreground; the
+        // app is then killed and relaunched onto the recovered run
+        const killAndRelaunch = async (r: ReturnType<typeof render>) => {
+          await act(async () => { handlers.forEach(h => h('background')); });
+          const written = (await AsyncStorage.getItem(CHECKPOINT_KEY))!;
+          r.unmount();
+          await act(async () => { await AsyncStorage.setItem(CHECKPOINT_KEY, written); });
+          mockGpsListener = null;
+          const relaunched = render(<GpsRunProvider><GPSCardioScreen navigation={nav as any} route={route as any} /></GpsRunProvider>);
+          await waitFor(() => expect(relaunched.getByText('Save Activity?')).toBeTruthy());
+          return { relaunched, checkpoint: JSON.parse(written) };
+        };
+
+        it('keeps the stops and the top speed through the checkpoint', async () => {
+          const r = await renderReady();
+          await act(async () => { fireEvent.press(r.getByText('Cycle')); });
+          await act(async () => { fireEvent.press(r.getByText('Start')); });
+          await waitFor(() => expect(mockGpsListener).not.toBeNull());
+          await rideFor(0, 6, 8);
+          await act(async () => { jest.setSystemTime(Date.now() + 300_000); });
+          await rideFor(6, 6, 10);
+
+          const { relaunched, checkpoint } = await killAndRelaunch(r);
+          expect(checkpoint).toMatchObject({ elapsedSec: 324, stoppedSec: 302 });
+          expect(checkpoint.maxSpeedKmh).toBeCloseTo(36, 5);
+
+          const body = await savedBody(relaunched);
+          const [set] = body.exercises[0].sets;
+          expect(body.exercises[0].name).toBe('Cycling');
+          expect(body.duration).toBe(5);
+          expect(set.cardio_duration).toBeCloseTo(22 / 60, 5);
+          expect(set.max_speed).toBe(36);
+        });
+
+        it('keeps a stop still in progress when the checkpoint is written out of moving time', async () => {
+          const r = await renderReady();
+          await act(async () => { fireEvent.press(r.getByText('Cycle')); });
+          await act(async () => { fireEvent.press(r.getByText('Start')); });
+          await waitFor(() => expect(mockGpsListener).not.toBeNull());
+          await rideFor(0, 6, 8);
+          // Standing still 302 s since the last fix as the phone locks
+          await act(async () => { jest.setSystemTime(Date.now() + 300_000); });
+
+          const { relaunched } = await killAndRelaunch(r);
+          const body = await savedBody(relaunched);
+          // 312 s out, the last 302 of them stopped
+          expect(body.exercises[0].sets[0].cardio_duration).toBeCloseTo(10 / 60, 5);
+        });
+      });
     });
 
     it('keeps the screen on while riding when Settings asks', async () => {

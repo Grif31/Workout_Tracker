@@ -22,7 +22,7 @@ import MuscleDiagram from '../../components/MuscleDiagram';
 import WorkoutShareCard, { bestWorkingSet } from '../../components/share/WorkoutShareCard';
 import CardioShareCard from '../../components/share/CardioShareCard';
 import { LaurelBranch } from '../../components/LaurelWreath';
-import { PR_GOLD, PR_GOLD_BG, PR_GOLD_TEXT } from '../../constants/prColors';
+import { PR_GOLD } from '../../constants/prColors';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
 import RankUpCard from '../../components/RankUpCard';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
@@ -158,13 +158,13 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const routeRegion = useMemo(() => regionFor(routeSegments), [routeSegments]);
   const cycling = isCardio && exercises.some(e => isCycling(e.name));
 
-  const filteredPrs = prs
+  const filteredPrs = useMemo(() => prs
     .filter(pr => pr.pr_type !== 'estimated_1rm')
     .sort((a, b) => {
       const typeOrder = (PR_TYPE_ORDER[a.pr_type] ?? 9) - (PR_TYPE_ORDER[b.pr_type] ?? 9);
       if (typeOrder !== 0) return typeOrder;
       return (b.value ?? 0) - (a.value ?? 0);
-    });
+    }), [prs]);
 
   // One row per exercise + PR type, listing every record in it. Two rep
   // records at two weights are two PRs, so the header counts PRs and each row
@@ -392,7 +392,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           ref={confettiRef}
           count={60}
           origin={{ x: SCREEN_WIDTH / 2, y: -20 }}
-          colors={[PR_GOLD, PR_GOLD_TEXT, PR_GOLD_BG]}
+          colors={[colors.prGold, colors.prGoldBorder, PR_GOLD]}
           fadeOut
           autoStart={false}
         />

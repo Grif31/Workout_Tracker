@@ -6,6 +6,7 @@ import {
   CYCLING_DISTANCE_MILESTONES,
   CYCLING_DURATION_MILESTONES,
 } from '../constants/cardioMilestones';
+import { CYCLING_NAME } from '../utils/gpsMetrics';
 
 // These floats are the weight_context a cardio PR row is written with. If the
 // TS copy drifts from the Python source, the app writes PRs keyed to a value
@@ -28,6 +29,14 @@ describe('cardio milestones match the backend', () => {
 
   it('uses the same duration milestones as endurance_standards.py', () => {
     expect(CARDIO_DURATION_MILESTONES).toEqual(parsePythonList(source, 'CARDIO_DURATION_MILESTONES'));
+  });
+
+  it('tells a ride apart by the same name rule as endurance_standards.py', () => {
+    // The server picks a ride's PR list by this rule and the app its speed
+    // display, so a drift shows one exercise as a ride on one side only
+    const py = /_CYCLING_NAME = re\.compile\(r'([^']+)', re\.IGNORECASE\)/.exec(source);
+    expect(py?.[1]).toBe(CYCLING_NAME.source);
+    expect(CYCLING_NAME.flags).toBe('i');
   });
 
   it('uses the same cycling milestones as endurance_standards.py', () => {

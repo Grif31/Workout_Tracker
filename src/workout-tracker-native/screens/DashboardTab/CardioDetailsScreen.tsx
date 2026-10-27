@@ -16,7 +16,7 @@ import { apiFetch, isNetworkError } from '../../utils/api';
 import { estimateCalories } from '../../utils/cardioCalories';
 import { fmtDuration, fmtPace, fmtRaceTime } from '../../utils/cardioFormat';
 import { bestEffortLabel, type BestEffort } from '../../utils/bestEfforts';
-import { GPS_DISTANCE_UNIT_KEY, toKm, toDisplayDistance, roundTenth } from '../../utils/units';
+import { GPS_DISTANCE_UNIT_KEY, toKm, toDisplayDistance, roundTenth, toDisplayElevation, elevationLabel } from '../../utils/units';
 import { isCycling, speedInUnit, speedLabel } from '../../utils/gpsMetrics';
 import { captureAndShare } from '../../utils/shareCapture';
 import CardioShareCard from '../../components/share/CardioShareCard';
@@ -357,9 +357,7 @@ export default function CardioDetailsScreen({ navigation, route }: Props) {
           <View style={styles.elevationRow}>
             <Ionicons name="trending-up" size={16} color={colors.textSecondary} />
             <Text style={styles.elevationText}>
-              {distanceUnit === 'mi'
-                ? `${Math.round(elevationGainM * 3.28084)} ft elevation gain`
-                : `${Math.round(elevationGainM)} m elevation gain`}
+              {`${Math.round(toDisplayElevation(elevationGainM, distanceUnit))} ${elevationLabel(distanceUnit)} elevation gain`}
             </Text>
           </View>
         )}

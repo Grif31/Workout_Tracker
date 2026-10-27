@@ -8,7 +8,6 @@ jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl:
 jest.mock('theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));
 jest.mock('constants/muscleGroups', () => ({ muscleGroups: ['All', 'Chest', 'Back', 'Quads'] }));
 jest.mock('constants/equipmentTypes', () => ({ equipmentTypes: ['All', 'Barbell', 'Dumbbell'] }));
-jest.mock('components/ExerciseList', () => () => null);
 
 const nav = createMockNavigation();
 

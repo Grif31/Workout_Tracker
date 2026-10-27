@@ -278,7 +278,7 @@ Vector masters exported from Figma live in `src/workout-tracker-native/assets/`:
 |---|---|---|
 | `Arete_name.svg` | Vector | Master. Use for anything large: App Store, social, print, web |
 | `Arete_name_dark.svg` | Vector | Ink master, generated from `Arete_name.svg` (white → `#0D0D0D`, bar `#EFEFEF` → `#8E8E93`, group opacity removed) |
-| `Arete_name@4x.png`, `Arete_name_dark@4x.png` | 1472 × 572 | For tools that can't take SVG |
+| `Arete_name_4x.png` | 1472 × 572 | For tools that can't take SVG. Never name it `@4x`: Metro would read it as a scale of the in-app PNG, and iOS release builds drop 4x files, which blanked the Welcome screen logo |
 | `Arete_name.png`, `Arete_name_dark.png` | 368 × 143 | In-app and homepage only |
 
 Never upscale the 368 px PNGs. In the white master, the "A" and barbell

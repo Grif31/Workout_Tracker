@@ -1,5 +1,5 @@
 import json
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, jsonify, g
 from models import db, Routine, RoutineDay, WorkoutTemplate, User
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from schemas import RoutineSchema, UpdateRoutineSchema

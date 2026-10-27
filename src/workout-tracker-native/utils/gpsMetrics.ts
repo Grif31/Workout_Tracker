@@ -112,9 +112,12 @@ export function speedInUnit(distanceKm: number, minutes: number, unit: DistanceU
 
 export const speedLabel = (unit: DistanceUnit) => (unit === 'mi' ? 'mph' : 'km/h');
 
+/** Mirrors `_CYCLING_NAME` in utils/endurance_standards.py, which picks a ride's PR milestones */
+export const CYCLING_NAME = /cycl|bike|biking|\bride/i;
+
 /** Cyclists read speed, everyone else pace. Matches the GPS activity chip and the library names. */
 export function isCycling(activityName: string | null | undefined): boolean {
-  return /cycl|bike|biking|ride/i.test(activityName ?? '');
+  return CYCLING_NAME.test(activityName ?? '');
 }
 
 /** The middle of up to three readings: one wild reading can't move it */

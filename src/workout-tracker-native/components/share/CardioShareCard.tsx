@@ -16,6 +16,7 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { fmtDuration, fmtPace } from '../../utils/cardioFormat';
 import { speedLabel } from '../../utils/gpsMetrics';
+import { toDisplayElevation, elevationLabel } from '../../utils/units';
 import { SHARE_SURFACE, SHARE_TEXT } from '../../constants/shareCardTheme';
 
 type CardioShareCardProps = {
@@ -52,9 +53,8 @@ const CardioShareCard = forwardRef<View, CardioShareCardProps>(
         ]
       : [];
     if (elevationM != null && elevationM > 0) {
-      // Feet for a miles user, like the Cardio Details screen
       statItems.push({
-        value: distanceUnit === 'mi' ? `${Math.round(elevationM * 3.28084)} ft` : `${Math.round(elevationM)} m`,
+        value: `${Math.round(toDisplayElevation(elevationM, distanceUnit))} ${elevationLabel(distanceUnit)}`,
         label: 'Elevation',
       });
     }

@@ -112,22 +112,25 @@ def compute_days_since_last_pr(user_id, now, per_category=False, before=None):
         )
 
     def _category_latest(template_id, category):
-        """(weight_context, achieved_at) of the single most recent event in this
-        category — maxing across the category's pr_types and, for a type with
-        multiple weight contexts (max_reps), across those too."""
+        """(pr_type, weight_context, achieved_at) of the single most recent event
+        in this category — maxing across the category's pr_types and, for a type
+        with multiple weight contexts (max_reps), across those too."""
         by_type = last_by_template_and_type.get(template_id, {})
-        candidates = [c for t in FEED_TYPE_FILTERS[category] for c in by_type.get(t, [])]
-        return max(candidates, key=lambda c: c[1]) if candidates else None
+        candidates = [(t, *c) for t in FEED_TYPE_FILTERS[category] for c in by_type.get(t, [])]
+        return max(candidates, key=lambda c: c[2]) if candidates else None
 
     def _category_summary(template_id, category):
         latest = _category_latest(template_id, category)
         if not latest:
             return None
-        weight_context, last_dt = latest
+        pr_type, weight_context, last_dt = latest
         return {
             'days_since_last_pr': (now - last_dt).days,
             'last_pr_at': last_dt.isoformat(),
             'weight_context': None if weight_context < 0 else weight_context,
+            # A category holds several types (distance: best distance, longest
+            # ride, most climbing), so the app opens the chart of the one that fired
+            'pr_type': pr_type,
         }
 
     # The overall top 10, plus (per_category) each category's own top 10 among

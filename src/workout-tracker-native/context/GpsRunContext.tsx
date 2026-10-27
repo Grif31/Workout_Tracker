@@ -168,7 +168,9 @@ export function GpsRunProvider({ children }: { children: React.ReactNode }) {
       distanceKm: r.distanceKm,
       elevationGainM: r.elevationGainM,
       elapsedSec: elapsedNow(),
-      stoppedSec: r.stoppedSec,
+      // A stop still open (standing still as the phone locks) is banked into
+      // the copy on disk, or a kill now restores it as moving time
+      stoppedSec: settleStop(r, timingRef.current, Date.now(), stopBelowRef.current).stoppedSec,
       maxSpeedKmh: r.maxSpeedKmh,
       savedAt: Date.now(),
       ...(clientIdRef.current ? { clientId: clientIdRef.current } : {}),

@@ -63,7 +63,7 @@ type DashboardData = {
       stalest_category?: StalledCategory;
       // Per-category breakdown (same categories as the feed's filter chips),
       // null when the exercise has never earned a PR of that type.
-      by_type: Record<StalledCategory, { days_since_last_pr: number; last_pr_at: string; weight_context: number | null } | null>;
+      by_type: Record<StalledCategory, { days_since_last_pr: number; last_pr_at: string; weight_context: number | null; pr_type?: PREventItem['pr_type'] } | null>;
       // One of the user's 10 most-trained exercises. The rest are only here
       // for a category filter (a lifter's runs, for Time), so "All" skips
       // them. Absent on an older API, where every row was most-trained.
@@ -98,21 +98,24 @@ const STALLED_CATEGORY_LABELS: Record<StalledCategory, string> = {
 function stalledRowCategory(
   row: {
     stalest_category?: StalledCategory;
-    by_type?: Record<StalledCategory, { days_since_last_pr: number; last_pr_at: string; weight_context: number | null } | null>;
+    by_type?: Record<StalledCategory, { days_since_last_pr: number; last_pr_at: string; weight_context: number | null; pr_type?: PREventItem['pr_type'] } | null>;
   },
   filter: StalledCategory | null,
-): { category: StalledCategory | null; categoryLabel: string | null; weightContext: number | null } {
+): { category: StalledCategory | null; categoryLabel: string | null; weightContext: number | null; prType: PREventItem['pr_type'] | undefined } {
   // The active chip already says which category this is — don't repeat it
   // as a subtitle, but still surface the weight a rep record was set at.
   // Falls back to the row's own stalest_category in "All" mode; absent
   // entirely on an older, not-yet-deployed API response.
   const category = filter ?? row.stalest_category ?? null;
-  if (!category) return { category: null, categoryLabel: null, weightContext: null };
+  if (!category) return { category: null, categoryLabel: null, weightContext: null, prType: undefined };
   const entry = row.by_type?.[category];
   return {
     category,
     categoryLabel: filter ? null : STALLED_CATEGORY_LABELS[category],
     weightContext: category === 'reps' ? (entry?.weight_context ?? null) : null,
+    // The type that actually fired: one category spans several (Distance is best
+    // distance, longest ride and most climbing). Older APIs don't send it
+    prType: entry?.pr_type ?? stalledCategoryToPrType(category),
   };
 }
 
@@ -581,7 +584,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
             <View style={[styles.trophyCard, { backgroundColor: colors.surface }]}>
               {stalled.map((row, i) => {
                 const urgency = stalledUrgency(row.days_since_last_pr);
-                const { category, categoryLabel, weightContext } = stalledRowCategory(row, stalledFilter);
+                const { categoryLabel, weightContext, prType } = stalledRowCategory(row, stalledFilter);
                 const subtitleParts: string[] = [];
                 if (categoryLabel) subtitleParts.push(categoryLabel);
                 if (weightContext != null) subtitleParts.push(weightContext === 0 ? 'Bodyweight' : `@ ${weightContext} ${unit}`);
@@ -590,7 +593,7 @@ export default function PRDashboardScreen({ navigation }: Props) {
                   <TouchableOpacity
                     key={row.exercise_template_id}
                     style={[styles.trophyRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
-                    onPress={() => openProgression({ ...row, pr_type: stalledCategoryToPrType(category), weight_context: weightContext })}
+                    onPress={() => openProgression({ ...row, pr_type: prType, weight_context: weightContext })}
                     activeOpacity={0.7}
                   >
                     <Ionicons

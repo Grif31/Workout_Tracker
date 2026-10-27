@@ -333,6 +333,25 @@ class TestDashboardEndpoint:
         assert rows[0]['days_since_last_pr'] == 10
         assert rows[0]['stalest_category'] == 'weight'
 
+    def test_a_category_names_the_pr_type_that_fired(self, client, auth_token):
+        # Distance spans best distance, longest ride and most climbing; the app
+        # opens the chart of whichever fired, so the entry must say which
+        tid = client.post('/api/exercises', json={'name': 'Cycling', 'muscle_group': 'Legs',
+                                                  'exercise_type': 'cardio'},
+                          headers=auth_headers(auth_token)).get_json()['id']
+        for days_ago, km, climbed in ((10, 30, 100), (3, 10, 500)):
+            client.post('/api/workouts', json={
+                'workoutName': 'Ride', 'date': iso(date.today() - timedelta(days=days_ago)),
+                'exercises': [{'name': 'Cycling', 'exercise_template_id': tid, 'exercise_type': 'cardio',
+                               'sets': [{'cardio_duration': 60, 'distance': km, 'distance_unit': 'km',
+                                         'elevation_gain': climbed}]}],
+            }, headers=auth_headers(auth_token))
+        data = client.get('/api/personal-records/dashboard', headers=auth_headers(auth_token)).get_json()
+        row = next(r for r in data['stats']['days_since_last_pr'] if r['exercise_template_id'] == tid)
+        assert row['by_type']['distance']['days_since_last_pr'] == 3
+        assert row['by_type']['distance']['pr_type'] == 'max_elevation'
+        assert row['by_type']['time']['pr_type'] == 'best_time'
+
     def test_days_since_last_pr_by_type_breakdown(self, client, auth_token):
         # max_weight 10 days ago, max_reps (different weight) 3 days ago —
         # the aggregate should track the STALEST type (weight, the one that's

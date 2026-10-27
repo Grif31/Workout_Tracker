@@ -1,5 +1,4 @@
 from models import db, Exercise, Set, Workout, PersonalRecord, ExerciseTemplate
-from utils.strength_standards import epley_1rm  # noqa: F401 (re-exported for callers that also need the raw formula)
 
 _EPLEY_EXPR = db.case((Set.reps <= 1, Set.weight), else_=Set.weight * (1 + Set.reps / 30.0))
 # Same limits as the estimated_1rm PRs this is compared against

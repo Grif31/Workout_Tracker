@@ -1,3 +1,5 @@
+import math
+
 from marshmallow import Schema, fields, validate, validates_schema, ValidationError, EXCLUDE
 
 
@@ -100,6 +102,40 @@ def _validate_exercises(exercises):
             speed = s.get('max_speed')
             if speed is not None and (isinstance(speed, bool) or not isinstance(speed, (int, float)) or not 0 <= speed <= MAX_SPEED_KMH):
                 raise ValidationError(f'exercise {i + 1} max_speed must be a number of km/h')
+            for field, bound in SET_NUMBER_BOUNDS.items():
+                if field in s:
+                    s[field] = _set_number(s[field], bound, f'exercise {i + 1} {field}')
+            if s.get('distance_unit') not in (None, '', 'km', 'mi'):
+                raise ValidationError(f'exercise {i + 1} distance_unit must be km or mi')
+
+
+# Far past any real set: they exist to keep Infinity, 1e300 and the like out
+# of PR rows, where a non-finite value breaks the app's JSON.parse for good
+SET_NUMBER_BOUNDS = {
+    'weight': 10_000,
+    'cardio_duration': 100_000,   # minutes
+    'distance': 10_000,           # km or mi
+    'elevation_gain': 100_000,    # metres
+}
+
+
+def _set_number(value, bound, name):
+    """A set's number as a float, or None. Numeric strings are converted rather
+    than refused: some callers send them, and SQLAlchemy keeps a string as it
+    came in memory, so the PR maths after the flush would compare str to int.
+    The set dicts are shared with the validated payload (fields.Dict copies only
+    the exercise), which is what makes the conversion reach the route."""
+    if value is None or value == '':
+        return None
+    if isinstance(value, bool) or isinstance(value, (list, dict)):
+        raise ValidationError(f'{name} must be a number')
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        raise ValidationError(f'{name} must be a number')
+    if not math.isfinite(number) or abs(number) > bound:
+        raise ValidationError(f'{name} is out of range')
+    return number
 
 
 class WorkoutSchema(_Base):

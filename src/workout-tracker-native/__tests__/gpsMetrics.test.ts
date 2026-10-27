@@ -140,5 +140,6 @@ describe('speed', () => {
 
   it('knows a ride from a run', () => {
     expect(['Cycling', 'Cycle', 'Bike Ride', 'Running', 'Walking'].map(isCycling)).toEqual([true, true, true, false, false]);
+    expect(['Ride', 'Gravel Rides', 'Stride Drills', 'Strides'].map(isCycling)).toEqual([true, true, false, false]);
   });
 });

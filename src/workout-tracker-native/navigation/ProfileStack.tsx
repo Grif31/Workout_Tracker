@@ -16,13 +16,11 @@ import PRDashboardScreen from '../screens/ProfileTab/PRDashboardScreen';
 import PRProgressionScreen from '../screens/ProfileTab/PRProgressionScreen';
 import GreekRankScreen from '../screens/ProfileTab/GreekRankScreen';
 import GreekRankIntroScreen from '../screens/DashboardTab/GreekRankIntroScreen';
-import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
 const Stack = createNativeStackNavigator<ProfileStackParamsList>();
 
 export function ProfileStack() {
-  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
 

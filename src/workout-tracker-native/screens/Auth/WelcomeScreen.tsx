@@ -21,7 +21,7 @@ import { typography } from '../../theme/typography';
 type Props = NativeStackScreenProps<AuthStackParamsList, 'Welcome'>;
 
 export default function WelcomeScreen({ navigation }: Props) {
-  const { handleApple, handleGoogle, handleFacebook } = useSocialAuth();
+  const { handleApple } = useSocialAuth();
 
   return (
     <SafeAreaView style={styles.container}>

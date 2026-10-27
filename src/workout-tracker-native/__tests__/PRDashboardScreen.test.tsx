@@ -188,6 +188,30 @@ describe('PRDashboardScreen', () => {
     await waitFor(() => expect(captureRef).toHaveBeenCalled());
   });
 
+  it('opens a stalled row on the PR type that fired, not the category default', async () => {
+    // Distance spans best distance, longest ride and most climbing: a ride
+    // whose last Distance PR was a climb opens the Most Elevation chart
+    mockFetch({
+      ...dashboardPayload,
+      stats: {
+        ...dashboardPayload.stats,
+        days_since_last_pr: [{
+          exercise_template_id: 21, exercise_name: 'Cycling', workout_count: 6,
+          days_since_last_pr: 12, last_pr_at: '2026-07-29T00:00:00',
+          stalest_category: 'distance' as const,
+          by_type: {
+            weight: null, reps: null, time: null,
+            distance: { days_since_last_pr: 12, last_pr_at: '2026-07-29T00:00:00', weight_context: null, pr_type: 'max_elevation' as const },
+          },
+        }],
+      },
+    });
+    const { getByText } = render(<PRDashboardScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Cycling')).toBeTruthy());
+    fireEvent.press(getByText('Cycling'));
+    expect(nav.navigate).toHaveBeenCalledWith('PRProgression', { exerciseTemplateId: 21, exerciseName: 'Cycling', prType: 'max_elevation', weightContext: null });
+  });
+
   it('navigates to PRProgression from a stalled lift row, pre-selecting the stalest category (not the most recent one)', async () => {
     // In "All" mode the row's 32d-ago aggregate is the STALEST category
     // (Weight) — even though Reps (5d ago) is more recent — since the point

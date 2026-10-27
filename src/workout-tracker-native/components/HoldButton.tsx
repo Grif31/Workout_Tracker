@@ -9,21 +9,24 @@ import { typography } from '../theme/typography';
 export const HOLD_MS = 800;
 
 /**
- * A button that acts only after being held for HOLD_MS, filling as it's held.
+ * A button that acts only after being held for HOLD_MS, a bar filling as it's held.
  * For a phone on handlebars, where a bump or a gloved brush would otherwise end
  * the ride. A tap says how it works instead. Screen readers can't hold, so
  * their activate action goes to `onAccessibilityActivate` (a confirm dialog).
  */
-export default function HoldButton({ label, icon, color, onComplete, onAccessibilityActivate, style }: {
+export default function HoldButton({ label, icon, color, textColor, onComplete, onAccessibilityActivate, style }: {
   label: string;
   icon: React.ComponentProps<typeof Ionicons>['name'];
   color: string;
+  /** The label, icon and progress bar; must read on `color` (defaults to accentText, for an accent button) */
+  textColor?: string;
   onComplete: () => void;
   onAccessibilityActivate: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const ink = textColor ?? colors.accentText;
   const progress = useRef(new Animated.Value(0)).current;
   const [hint, setHint] = useState(false);
   const done = useRef(false);
@@ -68,11 +71,11 @@ export default function HoldButton({ label, icon, color, onComplete, onAccessibi
     >
       <Animated.View
         pointerEvents="none"
-        style={[styles.fill, { transform: [{ scaleX: progress }] }]}
+        style={[styles.fill, { backgroundColor: ink, transform: [{ scaleX: progress }] }]}
       />
       <View style={styles.content} pointerEvents="none">
-        <Ionicons name={icon} size={26} color={colors.accentText} />
-        <Text style={styles.label}>{hint ? 'Keep holding' : label}</Text>
+        <Ionicons name={icon} size={26} color={ink} />
+        <Text style={[styles.label, { color: ink }]}>{hint ? 'Keep holding' : label}</Text>
       </View>
     </Pressable>
   );
@@ -86,11 +89,12 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     minWidth: 180,
     minHeight: 60,
   },
-  // Fills left to right: scaleX would otherwise grow from the centre
+  // A solid bar in the label's colour: a tinted wash over the whole button
+  // measured 1.4:1 against the red, so the hold showed no progress. Fills left
+  // to right: scaleX would otherwise grow from the centre
   fill: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: colors.accentText,
-    opacity: 0.3,
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    height: spacing.xs,
     transformOrigin: 'left',
   },
   content: {
@@ -100,5 +104,5 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.xl,
   },
-  label: { color: colors.accentText, fontSize: typography.fontSize.md, fontWeight: '700' },
+  label: { fontSize: typography.fontSize.md, fontWeight: '700' },
 });

@@ -144,3 +144,21 @@ describe('code guardrails', () => {
     expect(dupes).toEqual([]);
   });
 });
+
+describe('image assets', () => {
+  it('has no scale suffix above @3x', () => {
+    // Metro reads Foo@4x.png as a scale of Foo.png, and a 3x iPhone then asks
+    // for the 4x file, but iOS release builds only package 1x-3x: the image
+    // drew nothing in App Store builds while dev builds, served by Metro, looked fine
+    const found: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (/@([4-9]|\d{2,})x\.(png|jpe?g|gif|webp)$/i.test(entry.name)) found.push(path.relative(ROOT, full));
+      }
+    };
+    walk(path.join(ROOT, 'assets'));
+    expect(found).toEqual([]);
+  });
+});

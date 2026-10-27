@@ -97,7 +97,6 @@ export default function ProfileScreen({ navigation }: Props) {
   const [page, setPage]             = useState(1);
   const [hasMore, setHasMore]       = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [totalWorkouts, setTotalWorkouts] = useState<number | null>(null);
   const loadingMoreRef              = useRef(false);
   const [stats, setStats]           = useState<ProfileStats | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -128,7 +127,6 @@ export default function ProfileScreen({ navigation }: Props) {
     const greek = appCache.get<GreekRankData>('greek_rank');
     if (pw) {
       setWorkouts(pw.workouts ?? []);
-      setTotalWorkouts(pw.total);
       setHasMore(pw.has_more);
     }
     if (ps) setStats(ps);
@@ -193,7 +191,6 @@ export default function ProfileScreen({ navigation }: Props) {
       if (workoutsRes.ok) {
         const data = await workoutsRes.json();
         setWorkouts(data.workouts);
-        setTotalWorkouts(data.total);
         setHasMore(data.has_more);
         setPage(1);
       }
@@ -239,7 +236,6 @@ export default function ProfileScreen({ navigation }: Props) {
       if (res.ok) {
         const data = await res.json();
         setWorkouts(prev => [...prev, ...data.workouts]);
-        setTotalWorkouts(data.total);
         setHasMore(data.has_more);
         setPage(nextPage);
       }

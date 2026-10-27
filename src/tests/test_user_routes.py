@@ -496,3 +496,48 @@ class TestWeightUnitConversion:
         after = client.get('/api/stats/profile', headers=auth_headers(auth_token)).get_json()['total_volume']
         # 0.5 kg snapping shifts per-set weights slightly — stays within ~1%
         assert after == pytest.approx(before * 0.45359237, rel=0.01)
+
+    def _log_ride(self, client, token, tid, distance_km, duration_min, elevation, max_speed):
+        res = client.post('/api/workouts', json={'workoutName': 'Ride', 'exercises': [{
+            'name': 'Cycling', 'exercise_template_id': tid, 'exercise_type': 'cardio',
+            'sets': [{'cardio_duration': duration_min, 'distance': distance_km, 'distance_unit': 'km',
+                      'elevation_gain': elevation, 'max_speed': max_speed}],
+        }]}, headers=auth_headers(token))
+        assert res.status_code == 201
+
+    def test_ride_records_and_sets_survive_a_round_trip_unit_switch(self, client, auth_token, registered_user):
+        from models import PersonalRecord, PREvent, Set
+        user_id = registered_user['user']['id']
+        h = auth_headers(auth_token)
+        _setup_lbs_user_with_data(client, auth_token)
+        tid = client.post('/api/exercises', json={
+            'name': 'Cycling', 'muscle_group': 'Legs', 'exercise_type': 'cardio',
+        }, headers=h).get_json()['id']
+        self._log_ride(client, auth_token, tid, 30, 75, 420, 41.3)
+        # Longer, faster and higher, so every ride record is beaten and has a previous_value
+        self._log_ride(client, auth_token, tid, 45, 100, 610, 52.7)
+
+        def snapshot():
+            prs = sorted((p.pr_type, p.weight_context, p.value) for p in
+                         PersonalRecord.query.filter_by(exercise_template_id=tid).all())
+            events = sorted((e.pr_type, e.weight_context, e.value, e.previous_value) for e in
+                            PREvent.query.filter_by(exercise_template_id=tid).all())
+            sets = sorted((s.distance, s.cardio_duration, s.elevation_gain, s.max_speed)
+                          for s in Set.query.filter(Set.max_speed.isnot(None)).all())
+            return prs, events, sets
+
+        prs, events, sets = snapshot()
+        assert {'longest_distance', 'max_elevation', 'best_time', 'best_distance'} <= {p[0] for p in prs}
+        assert any(e[0] == 'longest_distance' and e[3] == pytest.approx(30) for e in events)
+        assert any(e[0] == 'max_elevation' and e[3] == pytest.approx(420) for e in events)
+        assert any(e[0] == 'best_time' and e[3] is not None for e in events)
+        assert sets == [(30, 75, 420, 41.3), (45, 100, 610, 52.7)]
+        before = (prs, events, sets)
+
+        client.patch('/api/me', json={'weight_unit': 'kg'}, headers=h)
+        assert PersonalRecord.query.filter_by(user_id=user_id, pr_type='max_weight').first().value == 54.5
+        assert snapshot() == before
+
+        client.patch('/api/me', json={'weight_unit': 'lbs'}, headers=h)
+        assert PersonalRecord.query.filter_by(user_id=user_id, pr_type='max_weight').first().value == 120
+        assert snapshot() == before

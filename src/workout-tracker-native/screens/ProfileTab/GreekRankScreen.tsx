@@ -30,7 +30,6 @@ import { AnimatedPercentText } from '../../components/ScoreRing';
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'GreekRank'>;
 
 const ARETE_RANK = 'Aretē';
-// Both breakdown screens are premium; locked, these open the paywall instead
 const SCORE_LINKS = [
   { label: 'Strength Score',  screen: 'StrengthScore' },
   { label: 'Endurance Score', screen: 'EnduranceScore' },

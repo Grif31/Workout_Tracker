@@ -13,8 +13,7 @@ standards, so it doesn't produce a percentile.
 
 import re
 
-# Milestone tables previously lived in routes/workout_routes.py (which now
-# imports them from here). They double as PACE_STANDARDS' distance keys — the
+# The PR milestone tables (routes read them through cardio_milestones()). They double as PACE_STANDARDS' distance keys — the
 # per-distance dicts below are keyed off these exact floats so the join key
 # against PersonalRecord.weight_context can never drift.
 CARDIO_DISTANCE_MILESTONES = [
@@ -59,7 +58,9 @@ CYCLING_DURATION_MILESTONES = [
     (120.0, '2 hr'),
 ]
 
-_CYCLING_NAME = re.compile(r'cycl|bike|biking|ride', re.IGNORECASE)
+# A word-start ride: "Stride" is not a ride. Mirrors CYCLING_NAME in the app's
+# utils/gpsMetrics.ts, and a test there fails if the two drift
+_CYCLING_NAME = re.compile(r'cycl|bike|biking|\bride', re.IGNORECASE)
 
 
 def is_cycling(name):

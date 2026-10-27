@@ -411,13 +411,14 @@ export default function GPSCardioScreen({ navigation }: Props) {
       label="Hold to Stop"
       icon="stop"
       color={colors.danger}
+      textColor={colors.dangerText}
       onComplete={handleStop}
       onAccessibilityActivate={confirmStop}
     />
   ) : (
     <TouchableOpacity style={[styles.mainBtn, { backgroundColor: colors.danger }]} onPress={confirmStop}>
-      <Ionicons name="stop" size={28} color={colors.accentText} />
-      <Text style={styles.mainBtnText}>Stop</Text>
+      <Ionicons name="stop" size={28} color={colors.dangerText} />
+      <Text style={[styles.mainBtnText, { color: colors.dangerText }]}>Stop</Text>
     </TouchableOpacity>
   );
 
@@ -428,11 +429,16 @@ export default function GPSCardioScreen({ navigation }: Props) {
   // course of a tracked activity. `coords` itself stays full-resolution for
   // distance/elevation math, checkpointing, and the saved route_polyline.
   // In segments: a pause or a stretch with no GPS leaves a gap rather than a straight line
-  const displaySegments = useMemo(() => thinSegments(splitAtGaps(coords)), [coords]);
+  // Not worked out in the background, where nothing draws it: this re-renders on
+  // every fix with the phone locked, and a long ride is thousands of points
+  const displaySegments = useMemo(
+    () => (appActive ? thinSegments(splitAtGaps(coords)) : null),
+    [coords, appActive],
+  );
   // The line on the map holds still in the background: the same array means the
   // native overlay isn't rebuilt
-  const mapSegmentsRef = useRef(displaySegments);
-  if (appActive) mapSegmentsRef.current = displaySegments;
+  const mapSegmentsRef = useRef(displaySegments ?? []);
+  if (displaySegments) mapSegmentsRef.current = displaySegments;
   const mapSegments = mapSegmentsRef.current;
 
   if (!MAPS_AVAILABLE) {
@@ -521,7 +527,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
         {trackingState === 'running' && (
           <>
             {autoPaused && (
-              <View style={[styles.autoPausedPill, { backgroundColor: colors.background }]} accessibilityLiveRegion="polite">
+              <View style={styles.autoPausedPill} accessibilityLiveRegion="polite">
                 <Ionicons name="pause" size={14} color={colors.textSecondary} />
                 <Text style={styles.autoPausedText}>Auto-paused</Text>
               </View>
@@ -618,7 +624,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
                     longitudeDelta: 0.01,
                   }}
                 >
-                  {displaySegments.filter(seg => seg.length >= 2).map((seg, i) => (
+                  {mapSegments.filter(seg => seg.length >= 2).map((seg, i) => (
                     <Polyline key={i} coordinates={seg} strokeColor={colors.accent} strokeWidth={3} />
                   ))}
                 </MapView>
@@ -720,6 +726,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: 50,
+    backgroundColor: colors.background,
+    // The fill is 1.1:1 on the panel; the edge is what shows it's a pill
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
   },
   autoPausedText: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary },
   elapsedNote: { fontSize: typography.fontSize.xs, color: colors.textSecondary },

@@ -2,7 +2,7 @@ import os
 import re
 import json
 from datetime import datetime, timedelta
-from flask import Blueprint, request, jsonify, current_app, g
+from flask import Blueprint, jsonify, current_app, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm import aliased
 from models import (

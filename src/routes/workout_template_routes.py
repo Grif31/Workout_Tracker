@@ -1,6 +1,6 @@
 import json
 
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, jsonify, g
 from sqlalchemy import func
 
 from models import db, WorkoutTemplate, WorkoutTemplateExercise

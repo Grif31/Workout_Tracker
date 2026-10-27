@@ -44,6 +44,7 @@ export const mockThemeColors = {
   accentDark: '#30D158',
   save: '#30D158',
   danger: '#FF453A',
+  dangerText: '#000000',
 };
 
 export const mockThemeContext = {
