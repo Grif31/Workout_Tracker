@@ -64,8 +64,10 @@ to prevent X").
 
 ### Step 5 — Write the "What's New" list
 Write the "What's New" text for App Store Connect / Play Console as a
-list: one short line per change, each starting with "• " (the stores
-show plain text, so no markdown), most important first. Shorter than
+list grouped into sections: a short plain-text heading line per area
+(e.g. "Rides", "Bug fixes"), then one short line per change starting
+with "• ", a blank line between sections (the stores show plain text,
+so no markdown), most important section and line first. Shorter than
 the CHANGELOG entry, no technical terms, no em dashes or exclamation
 marks. Never a prose paragraph: the owner wants a list. Present it to
 the user directly in chat (don't create a file for it unless asked).

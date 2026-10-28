@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.2.1 (2026-10-27)
+
+### New: Rides are their own activity
+- Rides get their own records: best times from 5K to 100 miles, the furthest you rode in 10 minutes up to 2 hours, Longest Ride and Most Elevation.
+- Fast efforts on a ride now count. Before, a quick road ride could be thrown out as too fast for a run.
+- Rides show speed everywhere a run shows pace: workout details, exercise history and charts, and the share card.
+- While riding, your current speed is shown large, Pause and Resume are bigger, and Stop is held down so a bump can't end your ride.
+- Calories for rides account for speed and climbing, and runs and walks account for hills.
+
+### New: Auto-Pause
+- Stops at lights and crossings are left out of your moving time, so your pace, speed and calories reflect the time you were moving. It works with your phone locked.
+- The workout still records your total time out, stops included.
+- On by default. Turn it off with Auto-Pause in Settings.
+
+### New: Max speed and Keep Screen On
+- Each tracked activity records your max speed.
+- Keep Screen On in Settings stops the screen locking while the map is open.
+
+### Improved: Finishing a tracked activity
+- Saving a run, ride, walk or hike opens its summary, with your route, climbing, best efforts and a celebration for any new records.
+- Share the activity from the summary, or open its full details.
+
+### Bug Fixes
+- Current speed and pace respond faster and jump around less.
+- Tapping a record on the PR dashboard opens the chart for the record you actually set.
+- A new record is no longer listed twice when one activity has several parts.
+- Standing still as your phone locks no longer counts as moving time if Aretē is closed before you save.
+- Long rides no longer slow the app down while your phone is locked.
+- The Stop button and its hold progress are easier to see with every accent color, and switches are easier to see in dark mode.
+- Elevation shows in feet or metres to match your distance unit everywhere.
+
 ## 1.2.0 (2026-10-20)
 
 ### Redesigned: Progress and Coach tabs
