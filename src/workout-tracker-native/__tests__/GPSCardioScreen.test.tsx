@@ -1,13 +1,14 @@
 import React from 'react';
-import { Alert, AppState } from 'react-native';
+import { Alert, AppState, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import polylineLib from '@mapbox/polyline';
 import { createMockNavigation, createMockRoute } from './testUtils';
 import GPSCardioScreen from '../screens/DashboardTab/GPSCardioScreen';
 import { GpsRunProvider } from '../context/GpsRunContext';
 import { toLocalDateStr } from '../utils/date';
 import { HOLD_MS } from '../components/HoldButton';
+import { typography } from '../theme/typography';
 
 jest.mock('react-native-maps', () => {
   const React = require('react');
@@ -441,6 +442,33 @@ describe('GPSCardioScreen', () => {
       expect(r.getByText('max mph')).toBeTruthy();
     });
 
+    it('hides the map for full-screen stats, with the speed still the biggest number', async () => {
+      const r = await renderReady();
+      await startRide(r);
+      await act(async () => { fireEvent.press(r.getByLabelText('Hide map')); });
+
+      const size = (el: any) => StyleSheet.flatten(el.props.style).fontSize as number;
+      const speed = within(r.getByLabelText('17.9 mph')).getByText('17.9');
+      const speedSize = size(speed);
+      // Bigger than the stats were beside the map, and bigger than every other number
+      expect(speedSize).toBeGreaterThan(typography.fontSize.xxl * 3);
+      const others = r.root.findAll((n: any) => n.type === 'Text' && n !== speed);
+      expect(others.length).toBeGreaterThan(4);
+      for (const t of others) expect(size(t) ?? 0).toBeLessThan(speedSize);
+      expect(r.getByText('Hold to Stop')).toBeTruthy();
+
+      await act(async () => { fireEvent.press(r.getByLabelText('Show map')); });
+      expect(r.getByLabelText('Hide map')).toBeTruthy();
+    });
+
+    it('offers no map toggle before a ride starts, or on a run', async () => {
+      const r = await renderReady();
+      expect(r.queryByLabelText('Hide map')).toBeNull();
+      await act(async () => { fireEvent.press(r.getByText('Start')); });
+      await waitFor(() => expect(mockGpsListener).not.toBeNull());
+      expect(r.queryByLabelText('Hide map')).toBeNull();
+    });
+
     it('takes a tap on Stop for a slip, and a hold as meaning it', async () => {
       const r = await renderReady();
       await startRide(r);
@@ -460,8 +488,8 @@ describe('GPSCardioScreen', () => {
       const r = await renderReady();
       await startRide(r);
       expect(r.queryByText('Auto-paused')).toBeNull();
-      // 10 s with no fix: over the 8 s grace at 3 km/h
-      await advance(10_000);
+      // 20 s with no fix: over the 11.6 s grace at 3 km/h
+      await advance(20_000);
       expect(r.getByText('Auto-paused')).toBeTruthy();
       expect(r.getByText('Moving')).toBeTruthy();
       const held = r.getByText(/^0:\d\d$/).props.children;

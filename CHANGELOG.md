@@ -6,7 +6,8 @@
 - Rides get their own records: best times from 5K to 100 miles, the furthest you rode in 10 minutes up to 2 hours, Longest Ride and Most Elevation.
 - Fast efforts on a ride now count. Before, a quick road ride could be thrown out as too fast for a run.
 - Rides show speed everywhere a run shows pace: workout details, exercise history and charts, and the share card.
-- While riding, your current speed is shown large, Pause and Resume are bigger, and Stop is held down so a bump can't end your ride.
+- While riding, your current speed and stats are shown large, Pause and Resume are bigger, and Stop is held down so a bump can't end your ride.
+- Hide the map with the button in the corner of the stats, and your speed and stats fill the screen. Tap it again to bring the map back.
 - Calories for rides account for speed and climbing, and runs and walks account for hills.
 
 ### New: Auto-Pause
@@ -23,6 +24,7 @@
 - Share the activity from the summary, or open its full details.
 
 ### Bug Fixes
+- Standing still no longer adds distance, moving time or a top speed while GPS drifts.
 - Current speed and pace respond faster and jump around less.
 - Tapping a record on the PR dashboard opens the chart for the record you actually set.
 - A new record is no longer listed twice when one activity has several parts.

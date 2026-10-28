@@ -314,29 +314,75 @@ describe('auto-pause and max speed', () => {
   });
 
   it('takes a stop out of the moving time once the next fix shows how slow it was', () => {
-    // 60 s riding, then the next fix comes 90 s later only 4 m on: a red light
-    const s = feed([...riding(0, 60), at(150, 304, 2), ...riding(152, 20, 314)]);
+    // 60 s riding, then the next fix comes 90 s later only 12 m on: a red light
+    const s = feed([...riding(0, 60), at(150, 312, 2), ...riding(152, 20, 322)]);
     expect(s.stoppedSec).toBe(90);
     expect(movingSeconds(s, clock, T0 + 172_000, 3)).toBe(172 - 90);
     // The distance still counts: auto-pause only stops the clock
-    expect(s.distanceKm).toBeCloseTo(0.414, 2);
+    expect(s.distanceKm).toBeCloseTo(0.422, 2);
   });
 
   it('freezes the moving clock during a stop, before the next fix arrives', () => {
     const s = feed(riding(0, 60));
-    // Fixes come every 5 m, so silence past the grace means standing still
-    expect(stopGraceSec(3)).toBe(8);
+    // A fix is kept every 8 m or more, so silence past the grace means standing still
+    expect(stopGraceSec(3)).toBeCloseTo(11.6, 5);
+    // A rougher fix needs more ground before it counts, so the next one is due later
+    expect(stopGraceSec(3, 20)).toBeCloseTo(26, 5);
     expect(isAutoPaused(s, clock, T0 + 67_000, 3)).toBe(false);
     expect(isAutoPaused(s, clock, T0 + 80_000, 3)).toBe(true);
     expect(movingSeconds(s, clock, T0 + 80_000, 3)).toBe(60);
     expect(movingSeconds(s, clock, T0 + 120_000, 3)).toBe(60);
   });
 
-  it('reads GPS wobble while standing still as stopped, by the Doppler speed', () => {
-    // 6 m hops every 2 s would be 10.8 km/h; the chip says 0
-    const s = feed([...riding(0, 10), at(12, 56, 0), at(14, 62, 0), at(16, 56, 0)]);
-    expect(s.stoppedSec).toBe(6);
-    expect(isAutoPaused(s, clock, T0 + 16_500, 3)).toBe(true);
+  it('reads a hop past the wander as stopped when the chip says 0', () => {
+    // 12 m in 2 s would be 21.6 km/h
+    const s = feed([...riding(0, 10), at(12, 62, 0)]);
+    expect(s.stoppedSec).toBe(2);
+    expect(isAutoPaused(s, clock, T0 + 12_500, 3)).toBe(true);
+  });
+
+  describe('standing still', () => {
+    // A phone on a parked bike for 3 minutes: a fix every 2 s wandering up to
+    // 9 m around the spot, at 10 m accuracy, with jumpy speeds. A real
+    // 1170x2532 capture drew a scribble, 0.09 mi, 42 s moving and 14 mph.
+    const wander = (startSec: number, accuracy = 10) => Array.from({ length: 90 }, (_, i): Fix => {
+      const angle = i * 2.4;
+      const r = 3 + ((i * 7) % 7);
+      return {
+        coords: {
+          latitude: (r * Math.cos(angle)) / 111_195, longitude: (r * Math.sin(angle)) / 111_195,
+          altitude: null, accuracy, altitudeAccuracy: null, speed: (i % 5) * 1.5,
+        },
+        timestamp: T0 + (startSec + i * 2) * 1000,
+      };
+    });
+
+    it('adds no distance, no moving time and no top speed', () => {
+      const fixes = wander(0);
+      const s = feed(fixes);
+      expect(s.coords).toHaveLength(1);
+      expect(s.distanceKm).toBe(0);
+      expect(s.maxSpeedKmh).toBe(0);
+      expect(movingSeconds(s, clock, T0 + 180_000, 3)).toBeLessThanOrEqual(12);
+    });
+
+    it('drops the wander with auto-pause off too', () => {
+      const s = feed(wander(0), OFF);
+      expect(s.distanceKm).toBe(0);
+      expect(s.maxSpeedKmh).toBe(0);
+    });
+
+    it('needs more ground when the fix is rougher', () => {
+      const first = feed([at(0, 0)]);
+      const rough = (m: number) => ({ ...at(2, m), coords: { ...at(2, m).coords, accuracy: 25 } });
+      expect(applyFix(first, rough(20), RIDE)).toBe(first);
+      expect(applyFix(first, rough(26), RIDE).coords).toHaveLength(2);
+    });
+
+    it('starts again where the rider is after a pause, however close', () => {
+      const s = afterGap(feed(riding(0, 10)));
+      expect(applyFix(s, at(100, 52), RIDE).coords).toHaveLength(7);
+    });
   });
 
   it('changes nothing with auto-pause off', () => {

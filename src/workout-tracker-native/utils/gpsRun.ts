@@ -51,6 +51,15 @@ export function runWindow(coords: Coord[], elapsedSec: number, now: number): { s
 export const MAX_ACCURACY_M = 30;
 
 /**
+ * Standing still, the reported position wanders by about its accuracy, and
+ * each wander past the watch's 5 m arrived as a fix: phantom distance, moving
+ * time and top speed with nobody moving. A fix closer to the last kept one than
+ * its own accuracy (and never under this floor) is that wander, and dropped.
+ */
+export const MIN_MOVE_M = 8;
+const moveGateM = (accuracy: number | null) => Math.max(MIN_MOVE_M, accuracy ?? 0);
+
+/**
  * Auto-pause: below this speed the clock counts the time as stopped, not
  * moving. Hikers crawl up steep ground, so theirs is lowest. A stop at a light
  * is what it's for; it never stops the GPS or the distance.
@@ -62,12 +71,13 @@ export const AUTO_PAUSE_KMH: Record<Activity, number> = { Run: 3, Cycle: 3, Walk
 export const SPEED_CAP_KMH: Record<Activity, number> = { Run: 40, Cycle: 110, Walk: 15, Hike: 15 };
 
 /**
- * How long without a fix before the screen calls it a stop. Fixes come every
- * 5 m of movement, so at the threshold speed one is due every 5 m / speed; a
- * little longer than that, or slow walkers would flicker in and out of it.
+ * How long without a fix before the screen calls it a stop. A fix is kept only
+ * once it's `gateM` from the last, so at the threshold speed one is due every
+ * gateM / speed; a little longer than that, or slow walkers would flicker in
+ * and out of it.
  */
-export function stopGraceSec(stopBelowKmh: number): number {
-  return 5 / (stopBelowKmh / 3.6) + 2;
+export function stopGraceSec(stopBelowKmh: number, gateM = MIN_MOVE_M): number {
+  return gateM / (stopBelowKmh / 3.6) + 2;
 }
 
 // A fix this long after the last one, and this far from it, follows a stretch
@@ -102,11 +112,13 @@ export type RunState = {
   maxSpeedKmh: number;
   /** The last few speed readings, so max speed takes a median and never one spike */
   recentSpeeds: number[];
+  /** How far the next fix must be from the latest to count as movement (see MIN_MOVE_M) */
+  moveGateM: number;
 };
 
 export const emptyRun = (): RunState => ({
   coords: [], distanceKm: 0, elevationGainM: 0, climb: freshClimb(), skipNext: false,
-  stoppedSec: 0, lastStopped: false, maxSpeedKmh: 0, recentSpeeds: [],
+  stoppedSec: 0, lastStopped: false, maxSpeedKmh: 0, recentSpeeds: [], moveGateM: MIN_MOVE_M,
 });
 
 /** What a fix is measured against: the activity's auto-pause speed (null when it's off) and speed cap */
@@ -130,8 +142,8 @@ export type Fix = {
 
 /**
  * One location fix applied to the run. Returns the same object when the fix is
- * dropped (too inaccurate), so a caller can tell from identity that nothing
- * changed; otherwise a new state, never a mutation of the old one.
+ * dropped (too inaccurate, or standing-still wander), so a caller can tell from
+ * identity that nothing changed; otherwise a new state, never a mutation of the old one.
  */
 export function applyFix(state: RunState, loc: Fix, rules: FixRules = NO_RULES): RunState {
   const accuracy = loc.coords.accuracy;
@@ -139,6 +151,9 @@ export function applyFix(state: RunState, loc: Fix, rules: FixRules = NO_RULES):
 
   const prev = state.coords[state.coords.length - 1];
   const at = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+  // Dropped, it's silence, which is what auto-pause reads as a stop. After a
+  // pause the first fix starts a new segment wherever it lands.
+  if (prev && !state.skipNext && haversineKm(prev, at) * 1000 < moveGateM(accuracy)) return state;
   const gap = !!prev
     && (loc.timestamp - prev.timestamp) / 1000 > GAP_SECONDS
     && haversineKm(prev, at) * 1000 > GAP_MIN_METRES;
@@ -181,6 +196,7 @@ export function applyFix(state: RunState, loc: Fix, rules: FixRules = NO_RULES):
     lastStopped: stopped,
     maxSpeedKmh,
     recentSpeeds,
+    moveGateM: moveGateM(accuracy),
   };
 }
 
@@ -205,7 +221,7 @@ export function isAutoPaused(
 ): boolean {
   const since = quietSince(run, timing);
   if (stopBelowKmh == null || since == null || run.coords.length === 0) return false;
-  return run.lastStopped || (now - since) / 1000 > stopGraceSec(stopBelowKmh);
+  return run.lastStopped || (now - since) / 1000 > stopGraceSec(stopBelowKmh, run.moveGateM);
 }
 
 function openStopSec(run: RunState, timing: { segmentStart: number | null }, now: number, stopBelowKmh: number | null): number {

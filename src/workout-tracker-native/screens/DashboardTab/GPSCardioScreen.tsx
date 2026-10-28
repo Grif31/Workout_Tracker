@@ -135,6 +135,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [workoutName, setWorkoutName] = useState('');
+  const [mapHidden, setMapHidden] = useState(false);
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
   const [initialRegion, setInitialRegion] = useState<{
     latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number;
@@ -169,6 +170,9 @@ export default function GPSCardioScreen({ navigation }: Props) {
       ? toDisplayDistance(currentKmh, distanceUnit).toFixed(1)
       : fmtPaceValue(toDisplayPace(60 / currentKmh, distanceUnit));
   const maxSpeedText = run.maxSpeedKmh > 0 ? toDisplayDistance(run.maxSpeedKmh, distanceUnit).toFixed(1) : '--';
+  // A ride can trade the map for its numbers, filling the screen
+  const rideActive = cycling && trackingState !== 'idle';
+  const fullStats = rideActive && mapHidden;
 
   // Follows the run on the map as fixes arrive, and jumps to where it is on return
   useEffect(() => {
@@ -383,8 +387,9 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
   const stat = (value: string, label: string) => (
     <View style={styles.statItem}>
-      <Text style={[styles.statValue, { color: colors.textPrimary }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      {/* Shrinks rather than wraps: four across leaves an hour-long time little room */}
+      <Text style={[styles.statValue, cycling && styles.rideStatValue, { color: colors.textPrimary }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
+      <Text style={[styles.statLabel, cycling && styles.rideStatLabel]}>{label}</Text>
     </View>
   );
   const statsRow = (items: [string, string][]) => (
@@ -397,6 +402,18 @@ export default function GPSCardioScreen({ navigation }: Props) {
       ))}
     </View>
   );
+  // With the map hidden: two by two, each stat big enough to read on the bars
+  const statsGrid = (items: [string, string][]) => (
+    <View style={styles.statsGrid}>
+      {items.map(([value, label]) => (
+        <View key={label} style={styles.gridItem}>
+          <Text style={styles.gridValue} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
+          <Text style={styles.gridLabel}>{label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+  const rideStatsView = (items: [string, string][]) => (fullStats ? statsGrid(items) : statsRow(items));
   const timeStat: [string, string] = [fmtClock(movingSec), stopBelowKmh != null ? 'Moving' : 'Time'];
   const distanceStat: [string, string] = [displayDistance.toFixed(2), distanceUnit];
   const avgStat: [string, string] = [avgRateText, `avg ${rateUnit}`];
@@ -462,7 +479,9 @@ export default function GPSCardioScreen({ navigation }: Props) {
     <View style={styles.container}>
       {/* Map — deferred until `ready` (see the mount effect) so mounting the
           native map surface doesn't compete with the tab bar's slide-out
-          transition and cut it short. */}
+          transition and cut it short. Hidden rather than unmounted, so showing
+          it again doesn't reload the tiles or lose the route. */}
+      <View style={fullStats ? styles.mapHidden : styles.map}>
       {ready ? (
         <MapErrorBoundary
           fallback={
@@ -490,6 +509,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
       ) : (
         <View style={styles.map} />
       )}
+      </View>
 
       {/* Back button */}
       <TouchableOpacity
@@ -503,7 +523,21 @@ export default function GPSCardioScreen({ navigation }: Props) {
       </TouchableOpacity>
 
       {/* Controls */}
-      <View style={[styles.controls, { backgroundColor: colors.surface }]}>
+      <View style={[
+        styles.controls,
+        { backgroundColor: colors.surface },
+        fullStats && [styles.controlsFull, { paddingTop: insets.top + spacing.xl }],
+      ]}>
+        {rideActive && (
+          <TouchableOpacity
+            style={[styles.mapToggle, fullStats && { top: insets.top + spacing.sm }]}
+            onPress={() => setMapHidden(h => !h)}
+            accessibilityRole="button"
+            accessibilityLabel={mapHidden ? 'Show map' : 'Hide map'}
+          >
+            <Ionicons name={mapHidden ? 'map-outline' : 'expand-outline'} size={20} color={colors.textPrimary} />
+          </TouchableOpacity>
+        )}
         {trackingState === 'idle' && (
           <>
             <View style={styles.activityRow}>
@@ -535,10 +569,14 @@ export default function GPSCardioScreen({ navigation }: Props) {
             {cycling ? (
               <>
                 <View style={styles.heroStat} accessible accessibilityLabel={`${currentRateText} ${speedLabel(distanceUnit)}`}>
-                  <Text style={[styles.heroValue, autoPaused && { color: colors.textSecondary }]}>{currentRateText}</Text>
-                  <Text style={styles.heroLabel}>{speedLabel(distanceUnit)}</Text>
+                  <Text
+                    style={[styles.heroValue, fullStats && styles.heroValueFull, autoPaused && { color: colors.textSecondary }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >{currentRateText}</Text>
+                  <Text style={[styles.heroLabel, fullStats && styles.heroLabelFull]}>{speedLabel(distanceUnit)}</Text>
                 </View>
-                {statsRow(rideStats)}
+                {rideStatsView(rideStats)}
               </>
             ) : (
               statsRow([timeStat, distanceStat, [currentRateText, `now ${rateUnit}`], avgStat])
@@ -556,7 +594,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
 
         {trackingState === 'paused' && (
           <>
-            {statsRow(cycling ? rideStats : [timeStat, distanceStat, avgStat])}
+            {cycling ? rideStatsView(rideStats) : statsRow([timeStat, distanceStat, avgStat])}
             {elapsedNote}
             <View style={styles.runningBtns}>
               <TouchableOpacity style={[styles.secondaryBtn, cycling && styles.secondaryBtnLarge, { backgroundColor: colors.border }]} onPress={resume}>
@@ -672,7 +710,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   unavailableBack: { marginTop: spacing.sm },
   unavailableBackText: { color: colors.accent, fontWeight: '600' },
   container: { flex: 1, backgroundColor: colors.background },
-  map: { flex: 1 },
   mapFallback: { justifyContent: 'center', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl, backgroundColor: colors.background },
   mapFallbackTitle: { fontSize: typography.fontSize.md, fontWeight: '700' },
   mapFallbackSub: { fontSize: typography.fontSize.sm, textAlign: 'center', lineHeight: 20 },
@@ -709,16 +746,30 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   statValue: { fontSize: typography.fontSize.xl, fontWeight: '700' },
   statLabel: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2 },
   statSep: { width: 1, height: 40, backgroundColor: colors.border },
-  // A ride's current speed, read at arm's length on the handlebars
-  heroStat: { alignItems: 'center' },
-  heroValue: {
-    fontSize: typography.fontSize.xxl * 2.5,
+  // A ride is read at arm's length on the handlebars: everything a size up
+  rideStatValue: { fontSize: typography.fontSize.xxl, fontVariant: ['tabular-nums'] },
+  rideStatLabel: { fontSize: typography.fontSize.sm },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', width: '100%', rowGap: spacing.lg },
+  gridItem: { width: '50%', alignItems: 'center', paddingHorizontal: spacing.sm },
+  gridValue: {
+    fontSize: typography.fontSize.xxl * 1.6,
     fontWeight: '800',
     color: colors.textPrimary,
     fontVariant: ['tabular-nums'],
-    lineHeight: typography.fontSize.xxl * 2.8,
   },
+  gridLabel: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textSecondary, marginTop: 2 },
+  heroStat: { alignItems: 'center', alignSelf: 'stretch' },
+  heroValue: {
+    fontSize: typography.fontSize.xxl * 3,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    fontVariant: ['tabular-nums'],
+    lineHeight: typography.fontSize.xxl * 3.3,
+  },
+  // Still the biggest number on the screen when the map is hidden
+  heroValueFull: { fontSize: typography.fontSize.xxl * 4.5, lineHeight: typography.fontSize.xxl * 4.9 },
   heroLabel: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textSecondary },
+  heroLabelFull: { fontSize: typography.fontSize.xl },
   autoPausedPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -742,6 +793,23 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     gap: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+  },
+  controlsFull: { flex: 1, justifyContent: 'space-evenly', borderTopWidth: 0 },
+  map: { flex: 1 },
+  mapHidden: { height: 0, overflow: 'hidden' },
+  mapToggle: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
   },
   mainBtn: {
     flexDirection: 'row',
