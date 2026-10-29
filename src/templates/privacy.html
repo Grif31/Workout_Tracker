@@ -15,22 +15,35 @@
   you agree to the practices described below.</p>
 
   <h2>1. Information We Collect</h2>
-  <p><strong>Account information:</strong> When you register, we collect your name, email address,
-  and a securely hashed password. If you sign in with Apple or Google, we receive a unique identifier
-  and, optionally, your name and email from those providers. You may optionally provide your gender,
-  which is used solely to calculate strength percentile scores against the appropriate standards.</p>
+  <p><strong>Account information:</strong> When you register, we collect your name, username, email
+  address, and a securely hashed password. If you sign in with Apple or Google, we receive a unique
+  identifier and, optionally, your name and email from those providers.</p>
 
-  <p><strong>Fitness data:</strong> We store the workout data you log: exercises, sets, reps, weight,
-  RPE, cardio duration, distance, and workout dates. We also store bodyweight entries, body
-  measurements, and personal records you accumulate over time.</p>
+  <p><strong>Body and profile details (optional):</strong> You may provide your gender, birth date,
+  height and bodyweight. Gender, age and bodyweight are used to rank your lifts and paces against the
+  right standards for your Strength and Endurance Scores; bodyweight is also used to estimate calories
+  and the training volume of bodyweight exercises. You may also add a bio and a profile picture.</p>
 
-  <p><strong>Profile information:</strong> Optionally, you may upload a profile picture and provide
-  a bio. Profile pictures are stored securely on our servers.</p>
+  <p><strong>Fitness data:</strong> We store the workouts you log: exercises, sets, reps, weight,
+  set type, RPE, timed holds, cardio duration, distance, pace, and workout dates and notes. We also
+  store the templates and routines you create, bodyweight entries, body measurements, progress photos
+  and their notes, and the personal records, scores and rank history worked out from your training.</p>
 
-  <p><strong>GPS and location data:</strong> If you use the GPS cardio tracking feature, we collect
-  your GPS route (encoded as a polyline) for that activity. Location access is only used during an
-  active GPS workout session that you explicitly start, including while your screen is off or the
-  app is in the background during that session, so the whole route is recorded.</p>
+  <p><strong>Photos:</strong> Profile pictures and progress photos are stored on our servers. Each is
+  saved under a long random link that is not listed or searchable, and is deleted when you delete it
+  or your account.</p>
+
+  <p><strong>GPS and location data:</strong> If you use GPS tracking for a run, ride, walk or hike,
+  we store that activity's route along with its distance, elevation gain, maximum speed and your
+  fastest efforts over set distances and times. Location is only used during an activity that you
+  explicitly start, including while your screen is off or the app is in the background during that
+  activity, so the whole route is recorded. We do not track your location at any other time.</p>
+
+  <p><strong>AI Coach information:</strong> If you use the AI Coach, we store the preferences you give
+  it (goal, experience, equipment, schedule, any injuries to work around, and notes you type), and
+  your helpful / not helpful votes on its insights, so later insights can be tailored to you. We also
+  log when each AI feature is used and how large the request was, to apply daily limits and control
+  cost. We do not store the content of AI requests or responses on our servers.</p>
 
   <p><strong>Health data:</strong> If you turn on Apple Health or Android Health Connect sync,
   Aretē writes each finished workout to that platform: its activity type, start and end time, and,
@@ -52,13 +65,18 @@
   to exclude personal identifying information and your fitness data.</p>
 
   <p><strong>Usage data:</strong> We do not collect behavioural analytics or advertising
-  tracking data.</p>
+  tracking data. Our servers process your IP address to deliver requests and to limit abuse, such
+  as repeated sign-in attempts; it is not stored with your account.</p>
+
+  <p><strong>Stored on your device:</strong> Some information stays on your phone only, such as your
+  app settings, an in-progress workout or GPS activity, workouts waiting to upload while you are
+  offline, and the summaries shown in home screen widgets and Live Activities on your lock screen.</p>
 
   <h2>2. How We Use Your Information</h2>
   <ul>
     <li>To provide, maintain, and improve the Aretē app and its features</li>
-    <li>To calculate your Strength Score, personal records, and progress statistics</li>
-    <li>To generate AI-powered workout routines and templates (your preferences are sent to our AI service)</li>
+    <li>To calculate your Strength and Endurance Scores, rank, personal records, and progress statistics</li>
+    <li>To generate AI Coach routines, insights and weekly reviews (see Anthropic below for what is sent)</li>
     <li>To send push notifications you have opted into</li>
     <li>To send essential account emails, such as password reset codes</li>
     <li>To diagnose and fix crashes and errors in the app</li>
@@ -68,13 +86,16 @@
 
   <h2>3. Third-Party Services</h2>
   <ul>
-    <li><strong>Anthropic:</strong> the AI Coach feature sends your training preferences (goal,
-        experience level, equipment, schedule) and aggregated training statistics to Anthropic's
-        Claude API to generate personalised workout suggestions and insights. No personal
-        identifying information (name, email, or account ID) is included in these requests.
+    <li><strong>Anthropic:</strong> when you use the AI Coach, the request is sent to Anthropic's
+        Claude API to write your routine, insights or weekly review. It can include your name or
+        username, your AI Coach preferences (goal, experience, equipment, schedule, injuries and
+        any notes you type), your bodyweight and gender, and your training history: the exercises
+        you do, recent personal records, weekly sets per muscle, effort (RPE) and your rank. It never
+        includes your email, password, account ID, GPS routes, photos, or any health data.
         See <a href="https://www.anthropic.com/privacy">anthropic.com/privacy</a>.</li>
     <li><strong>RevenueCat:</strong> manages in-app subscriptions and purchase verification.
-        RevenueCat may receive your App Store account identifier and purchase history.
+        RevenueCat receives your Aretē account number (so your purchase follows you across devices),
+        your App Store purchase history, and your subscription status.
         See <a href="https://www.revenuecat.com/privacy">revenuecat.com/privacy</a>.</li>
     <li><strong>Sentry:</strong> collects crash reports so we can find and fix bugs. Reports
         include device and error details but are configured to exclude personal identifying
@@ -91,14 +112,16 @@
 
   <h2>4. Data Retention</h2>
   <p>We retain your account and fitness data for as long as your account is active. You may
-  export your data at any time from Settings → Account → Export Data. You may delete your
+  export your workouts at any time from Settings → Account → Export Data. You may delete your
   account directly in the app (Settings → Account → Delete Account) or by contacting us at
-  <a href="mailto:support@aretefitnessapp.com">support@aretefitnessapp.com</a>; all account
-  and fitness data is permanently deleted within 30 days.</p>
+  <a href="mailto:support@aretefitnessapp.com">support@aretefitnessapp.com</a>. Deleting in the
+  app removes your account, fitness data and photos from our servers straight away; a request by
+  email is completed within 30 days.</p>
 
   <h2>5. Data Security</h2>
   <p>Passwords are hashed using industry-standard algorithms and never stored in plain text.
-  All data is transmitted over HTTPS. Access to the database is restricted to authorised
+  All data is transmitted over HTTPS. Changing or resetting your password signs you out on every
+  other device. Access to the database is restricted to authorised
   infrastructure only.</p>
 
   <h2>6. Children's Privacy</h2>
@@ -109,6 +132,7 @@
   <h2>7. Your Rights</h2>
   <ul>
     <li>Export your workout data as CSV (Settings → Account → Export Data)</li>
+    <li>Delete any workout, measurement or photo at any time</li>
     <li>Update your profile information (Settings → Account → Edit Profile)</li>
     <li>Delete your account and all associated data in-app (Settings → Account → Delete Account)</li>
     <li>Opt out of push notifications at any time via your device settings or the in-app notification settings</li>
