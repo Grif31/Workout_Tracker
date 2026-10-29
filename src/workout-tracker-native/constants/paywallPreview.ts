@@ -17,7 +17,7 @@ const pkg = (packageType: string, identifier: string, price: number, intro?: obj
 const packages = [
   pkg('ANNUAL', 'preview.annual', 29.99, { price: 0, periodUnit: 'WEEK', periodNumberOfUnits: 1 }),
   pkg('MONTHLY', 'preview.monthly', 4.99),
-  pkg('LIFETIME', 'preview.lifetime', 59.99),
+  pkg('LIFETIME', 'preview.lifetime', 69.99),
 ];
 
 export const PREVIEW_OFFERINGS = {

@@ -210,7 +210,7 @@ HTML = f"""<!DOCTYPE html>
       <div class="price-num">$4.99<small>/mo</small></div>
       <div class="price-sub">Cancel anytime</div></div>
     <div class="price"><div class="price-lab">Lifetime</div>
-      <div class="price-num">$60</div>
+      <div class="price-num">$70</div>
       <div class="price-sub">One-time. May be retired, so don't feature it</div></div>
   </div>
   <p class="muted" style="font-size:8.8pt">Only the annual plan has the <strong style="color:#F2F2F7">one-week free trial</strong>.
@@ -484,7 +484,7 @@ HTML = f"""<!DOCTYPE html>
   <table class="fp block">
     <tr><th>Feature</th><th style="width:1.35in">Free</th><th style="width:1.35in">Premium</th></tr>
     <tr><td class="k">Strength, cardio and GPS logging, PRs, Greek Rank, share cards</td><td class="yes">Included</td><td class="yes">Included</td></tr>
-    <tr><td class="k">Workout templates</td><td>Up to 5</td><td class="yes">Unlimited</td></tr>
+    <tr><td class="k">Workout templates</td><td>Up to 7</td><td class="yes">Unlimited</td></tr>
     <tr><td class="k">Routines</td><td>Up to 2</td><td class="yes">Unlimited</td></tr>
     <tr><td class="k">Strength Score and Endurance Score</td><td class="muted">Headline score</td><td class="yes">Full breakdown</td></tr>
     <tr><td class="k">AI Coach workouts, routines and insights</td><td class="muted">Not included</td><td class="yes">Included</td></tr>

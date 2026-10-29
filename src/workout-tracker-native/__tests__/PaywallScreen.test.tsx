@@ -131,7 +131,7 @@ describe('PaywallScreen', () => {
     });
 
     it('says which free limit was reached for templates and routines', () => {
-      expect(renderPaywall('templates').getByText("You've used your 5 free templates")).toBeTruthy();
+      expect(renderPaywall('templates').getByText("You've used your 7 free templates")).toBeTruthy();
       expect(renderPaywall('routines').getByText("You've used your 2 free routines")).toBeTruthy();
     });
   });

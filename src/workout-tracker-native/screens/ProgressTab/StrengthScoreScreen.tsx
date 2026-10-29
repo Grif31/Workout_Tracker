@@ -573,7 +573,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                         disabled={!ex.has_data}
                       >
                         <View style={{ flex: 1 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: 2 }}>
+                          <View style={styles.exNameRow}>
                             <Text style={[styles.exName, !ex.has_data && { color: colors.textSecondary }]}>{ex.exercise}</Text>
                             {ex.has_data && bwLbs && ex.estimated_1rm != null && ex.estimated_1rm > 0 && (
                               <Text style={[styles.bwMultiplier, { color: exColor }]}>
@@ -591,7 +591,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                           )}
                         </View>
                         {ex.rank ? (
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                          <View style={styles.rankRow}>
                             <View style={[styles.miniRankBadge, { backgroundColor: exColor + '22', borderColor: exColor }]}>
                               <Ionicons name={SCORE_RANK_ICONS[ex.rank.label] ?? 'ellipse-outline'} size={10} color={exColor} />
                               <Text style={[styles.miniRankText, { color: exColor }]}>{ex.rank.display}</Text>
@@ -629,7 +629,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                         disabled={!ex.has_data}
                       >
                         <View style={{ flex: 1 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: 2 }}>
+                          <View style={styles.exNameRow}>
                             <Text style={[styles.exName, !ex.has_data && { color: colors.textSecondary }]}>{ex.exercise}</Text>
                             {ex.has_data && bwLbs && ex.estimated_1rm != null && ex.estimated_1rm > 0 && (
                               <Text style={[styles.bwMultiplier, { color: exColor }]}>
@@ -647,7 +647,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                           )}
                         </View>
                         {ex.rank ? (
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                          <View style={styles.rankRow}>
                             <View style={[styles.miniRankBadge, { backgroundColor: exColor + '22', borderColor: exColor }]}>
                               <Ionicons name={SCORE_RANK_ICONS[ex.rank.label] ?? 'ellipse-outline'} size={10} color={exColor} />
                               <Text style={[styles.miniRankText, { color: exColor }]}>{ex.rank.display}</Text>
@@ -1054,8 +1054,11 @@ const createStyles = (colors: Colors) =>
       flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
       paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     },
-    exName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
-    bwMultiplier: { fontSize: typography.fontSize.xs, fontWeight: '700', letterSpacing: 0.2 },
+    // A long lift's multiplier wraps to its own line instead of running under the rank badge
+    exNameRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing.xs, marginBottom: 2 },
+    exName: { flexShrink: 1, fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
+    bwMultiplier: { flexShrink: 0, fontSize: typography.fontSize.xs, fontWeight: '700', letterSpacing: 0.2 },
+    rankRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
     noDataText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
     modalSheet: {

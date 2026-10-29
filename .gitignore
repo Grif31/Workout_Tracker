@@ -209,3 +209,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# App preview recordings and renders (large; rebuilt by src/brand/store/preview.py)
+src/brand/store/preview/
+# Raw iPhone photos for the App Store header (personal; only the finished header is kept)
+src/brand/store/header/*.heic
+src/brand/store/header/converted/

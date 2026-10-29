@@ -98,10 +98,50 @@ describe('WorkoutSummaryScreen', () => {
     const { findByText, getByText, getAllByText } = renderSummary();
 
     expect(await findByText('1:30')).toBeTruthy();
-    // On screen and as the share card's best set
-    expect(getAllByText('8 × 185 lbs')).toHaveLength(2);
-    expect(getByText(/W\s+10 × 95 lbs/)).toBeTruthy();
+    // The share card's best set, and the on-screen line with the warm-up marked
+    expect(getAllByText('8 × 185 lbs')).toHaveLength(1);
+    expect(getByText('W 10 × 95 lbs, 8 × 185 lbs')).toBeTruthy();
     expect(getByText('"Push Day" · 52m')).toBeTruthy();
+  });
+
+  it('collapses back-to-back identical sets into one entry', async () => {
+    mockServer({ workout: { ...strengthWorkout, exercises: [
+      { id: 1, name: 'Squat', exercise_type: 'strength', sets: [
+        { id: 1, reps: 5, weight: 135, set_type: 'W' },
+        { id: 2, reps: 5, weight: 225, set_type: 'N' },
+        { id: 3, reps: 5, weight: 225, set_type: 'N' },
+        { id: 4, reps: 5, weight: 225, set_type: 'N' },
+        { id: 5, reps: 3, weight: 225, set_type: 'N' },
+      ] },
+    ] } });
+    const { findByText } = renderSummary();
+    expect(await findByText('W 5 × 135 lbs, 3× 5 × 225 lbs, 3 × 225 lbs')).toBeTruthy();
+  });
+
+  it('never folds a set of another type into the run', async () => {
+    mockServer({ workout: { ...strengthWorkout, exercises: [
+      { id: 1, name: 'Bench Press', exercise_type: 'strength', sets: [
+        { id: 1, reps: 5, weight: 135, set_type: 'W' },
+        { id: 2, reps: 5, weight: 135, set_type: 'N' },
+        { id: 3, reps: 8, weight: 185, set_type: 'N' },
+        { id: 4, reps: 8, weight: 185, set_type: 'F' },
+        { id: 5, reps: 8, weight: 185, set_type: 'D' },
+      ] },
+    ] } });
+    const { findByText } = renderSummary();
+    expect(await findByText('W 5 × 135 lbs, 5 × 135 lbs, 8 × 185 lbs, F 8 × 185 lbs, D 8 × 185 lbs')).toBeTruthy();
+  });
+
+  it('keeps identical sets apart when something comes between them', async () => {
+    mockServer({ workout: { ...strengthWorkout, exercises: [
+      { id: 1, name: 'Row', exercise_type: 'strength', sets: [
+        { id: 1, reps: 10, weight: 135, set_type: 'N' },
+        { id: 2, reps: 8, weight: 155, set_type: 'N' },
+        { id: 3, reps: 10, weight: 135, set_type: 'N' },
+      ] },
+    ] } });
+    const { findByText } = renderSummary();
+    expect(await findByText('10 × 135 lbs, 8 × 155 lbs, 10 × 135 lbs')).toBeTruthy();
   });
 
   it('dates the share card with the workout, not today', async () => {

@@ -38,7 +38,7 @@ const HERO_TINT = '#0F2018';
 const TIERS = [
   { type: 'ANNUAL',   label: 'Annual',   badge: 'Best Value' },
   { type: 'MONTHLY',  label: 'Monthly',  badge: '' },
-  { type: 'LIFETIME', label: 'Lifetime', badge: 'Launch Promo' },
+  { type: 'LIFETIME', label: 'Lifetime', badge: 'Launch Offer' },
 ];
 
 // What to tell the user when a purchase doesn't go through. Cancelling is

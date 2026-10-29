@@ -1,20 +1,26 @@
 """Build the App Store screenshots: each raw capture in ios-6.9/ inside a phone
-frame, under a headline, at the 6.9" size App Store Connect requires.
+frame, under a headline, at the 6.9" size, plus a 6.3" copy for the Dynamic
+Island (medium) slot, which App Store Connect requires and which refuses 6.9".
 
     src/venv/Scripts/python.exe src/brand/store/build.py
 
 Renders with headless Chrome (fonts come from Google Fonts, so it needs a
-network connection) and writes ios-6.9-framed/. Edit SLIDES to change a caption.
+network connection) and writes ios-6.9-framed/ and ios-6.3-framed/. Edit SLIDES
+to change a caption.
 """
 import base64, pathlib, subprocess, tempfile
 
 from PIL import Image
 
 HERE = pathlib.Path(__file__).parent
+FONT = HERE / 'fonts' / 'ArchivoBlack-Regular.ttf'
 RAW = HERE / 'ios-6.9'
 OUT = HERE / 'ios-6.9-framed'
+OUT_63 = HERE / 'ios-6.3-framed'
 CHROME = r'C:\Program Files\Google\Chrome\Application\chrome.exe'
 W, H = 1320, 2868
+# Same aspect as 6.9" to within a pixel, so a resize doesn't distort the frame
+W_63, H_63 = 1206, 2622
 
 SLIDES = [
     ('01-home.png', 'Log your workouts with ease'),
@@ -39,8 +45,8 @@ def page(shot: pathlib.Path, caption: str) -> str:
     img = 'data:image/png;base64,' + base64.b64encode(shot.read_bytes()).decode()
     return f"""<!DOCTYPE html>
 <html><head><meta charset="UTF-8">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&display=block">
 <style>
+  @font-face {{ font-family: 'Archivo Black'; src: url('{FONT.as_uri()}'); font-display: block; }}
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   html, body {{ width: {W}px; height: {H}px; overflow: hidden; }}
   body {{
@@ -73,6 +79,7 @@ def page(shot: pathlib.Path, caption: str) -> str:
 
 def main():
     OUT.mkdir(exist_ok=True)
+    OUT_63.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         for name, caption in SLIDES:
             html = pathlib.Path(tmp) / (name + '.html')
@@ -84,7 +91,9 @@ def main():
                 '--virtual-time-budget=8000', f'--screenshot={target}', html.as_uri(),
             ], check=True, capture_output=True)
             # App Store Connect refuses screenshots with an alpha channel
-            Image.open(target).convert('RGB').save(target)
+            framed = Image.open(target).convert('RGB')
+            framed.save(target)
+            framed.resize((W_63, H_63), Image.LANCZOS).save(OUT_63 / name)
             print('wrote', target.name)
 
 

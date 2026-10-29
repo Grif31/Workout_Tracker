@@ -11,6 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { usePurchase } from '../../context/PurchaseContext';
 import { handlePremiumRequired } from '../../utils/premiumSync';
+import { FREE_ROUTINE_LIMIT, FREE_TEMPLATE_LIMIT } from '../../utils/paywall';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { COACH_INSIGHTS_KEY } from '../../constants/storageKeys';
@@ -62,10 +63,6 @@ const INSIGHT_REASONS: { key: InsightReason; label: string }[] = [
   { key: 'vague', label: 'Too vague' },
 ];
 
-// How many a free account can keep; the paywall's wording states the same numbers (utils/paywall.ts).
-// What onboarding generated (`starter`) is not counted.
-const FREE_TEMPLATE_LIMIT = 5;
-const FREE_ROUTINE_LIMIT = 2;
 
 
 

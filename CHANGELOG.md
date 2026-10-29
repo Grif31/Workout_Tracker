@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.2 (2026-10-29)
+
+### Improved: Workout summary
+- Your exercises now sit in one compact list, one line per exercise.
+- Identical sets in a row are combined, so five straight sets read as "5× 8 × 185 lbs".
+- Warm-up, drop and failure sets are each marked, and a failure or drop set is never folded into your working sets.
+
+### Improved: Free accounts
+- Free accounts can now keep 7 templates, up from 5.
+
+### Bug Fixes
+- Warm-up markers and other orange labels are easier to read in light mode.
+- On the Strength Score, a long lift name no longer runs under its rank badge.
+
 ## 1.2.1 (2026-10-27)
 
 ### New: Rides are their own activity

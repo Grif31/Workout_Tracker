@@ -64,7 +64,7 @@ export const LIGHT_BASE = {
   prGoldBorder:  PR_GOLD_BORDER_ON_LIGHT,
   danger:        '#D70015', // iOS's #FF3B30 is 3.5:1 on white, too faint for error text
   dangerText:    '#FFFFFF', // 5.4:1 on danger
-  warmup:        '#FF9500',
+  warmup:        '#B25000', // 5.2:1 on white; #FF9500 is 2.2:1, and warm-up tags are text
   dropset:       '#AF52DE',
 };
 

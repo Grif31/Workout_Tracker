@@ -151,6 +151,14 @@ Check off items as you complete them.
   - [ ] Wire the Facebook auth SDK in the frontend
   - [ ] Test full sign-in flow for each provider on a real iOS and Android device
 
+- [ ] **Save preferences to the account, not only the phone** (found 2026-10-28, after launch)
+  > Weekly goal, accent color and the profile frame live only in AsyncStorage (`${WEEKLY_GOAL_KEY}_${userId}`, `${KEY_ACCENT}_${userId}`, `${PROFILE_FRAME_RANK_KEY}_${userId}`). Signing out and back in keeps them, but deleting the app or moving to a new phone resets them to defaults. Losing a frame earned on Greek Rank feels like losing progress. Weight unit already lives on the server and survives.
+  - [ ] Decide which keys move: at least the weekly workout and distance goals, accent, profile frame; probably home streak type, RPE toggle, GPS distance unit. Device-only on purpose (leave local): reminders, notification toggles, GPS keep-screen-on, widget snapshot, tokens
+  - [ ] One `User.preferences` JSON column (plus migration) rather than a column per setting, validated in `schemas.py` against an allowed-keys list
+  - [ ] `GET`/`PATCH /api/me/preferences` (`@jwt_required()`), or fold them into the existing `/api/me` payload
+  - [ ] App: write to the server whenever a setting changes (keep AsyncStorage as the fast local copy), and at sign-in load the server copy before `loadAccentForUser` runs; a missing server value keeps whatever is on the phone, so existing users don't lose settings on the first sync
+  - [ ] Tests: backend route + guardrail; app sync on change and restore after a fresh install (empty AsyncStorage)
+
 ---
 
 ## ⭐ Pre-Launch Features
@@ -1177,7 +1185,7 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 ## 💎 21. Premium Worth Buying
 > Goal: a free user who trains for a few weeks should *want* Premium, see exactly what it would show them about their own training, and be able to buy it without friction or doubt. Written 2026-10-04 from a review of `PaywallScreen.tsx`, `PurchaseContext.tsx` and every `isPremium` gate.
 >
-> **Where it stands.** Premium today is: AI Coach generation, AI insights, Strength Score, Endurance Score, muscle volume zones (MEV/MAV/MRV), and lifting two caps (5 templates, 2 routines). Everything else is free: logging, GPS cardio, PRs, charts, Weekly Summary, Greek Rank, measurements, Health sync. Three weaknesses:
+> **Where it stands.** Premium today is: AI Coach generation, AI insights, Strength Score, Endurance Score, muscle volume zones (MEV/MAV/MRV), and lifting two caps (7 templates, 2 routines). Everything else is free: logging, GPS cardio, PRs, charts, Weekly Summary, Greek Rank, measurements, Health sync. Three weaknesses:
 > 1. **Most of it is one-time value.** A generated program is used for months; a score is checked now and then. Little in Premium gives a reason to stay subscribed in month 4.
 > 2. **Free users can't see what they're missing.** The score screens and insights are locked outright, so the paywall sells a description, not the user's own numbers.
 > 3. **The purchase path has holes** (silent failures, stale entitlement, no savings shown, one generic pitch for eleven different entry points).
@@ -1187,7 +1195,7 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 > **Branch note.** `launch/premium-gate` (5058e0c, PR open, not yet in `main` or the `improve/*` stack) already adds the paywall's Terms/Privacy links, removes `EXPO_PUBLIC_BETA_PREMIUM` from the production profile and adds `flask grant-beta-premium`. Merge it before starting Phase 0 so this work builds on it rather than redoing it. On the `improve/*` stack all three eas.json profiles still set `EXPO_PUBLIC_BETA_PREMIUM=true`.
 
 ### Decisions needed first (owner)
-- [x] **Prices and trial** (owner, 2026-10-08): monthly $4.99, annual $29.99 with a 1-week free trial, lifetime $59.99. Set these in App Store Connect; the paywall reads the store's prices, so nothing in code changes (annual saves 50% against twelve monthlies).
+- [x] **Prices and trial** (owner, 2026-10-08): monthly $4.99, annual $29.99 with a 1-week free trial, lifetime $69.99 (raised from $59.99 before launch). Set these in App Store Connect; the paywall reads the store's prices, so nothing in code changes (annual saves 50% against twelve monthlies).
 - [x] **Template/routine caps** (owner, 2026-10-08): keep them, but the onboarding-generated routine and its day templates don't count (`starter` flag, see CLAUDE.md).
 - [x] **How much AI is free** (owner, 2026-10-08): the onboarding program is free, and free accounts get one part of the weekly review a week. They no longer get insights in the Coach tab (it shows a lock and points to the Weekly Summary).
 - [x] **What a free user sees of the scores.** Their overall tier and ring, with the breakdown blurred (Phase 2).
@@ -1545,3 +1553,32 @@ One screen that says whether anything needs attention today, then links into the
 - [x] Custom tag moved off the name's line (bottom right of the card) in the Exercises list and the workout picker, so a long name keeps the full width (2026-10-20)
 - [ ] "Last 255 × 5 · Mon" on the equipment line, or the gold "PR 205 × 5" when the PR is recent. Needs each exercise's last top set and latest PR date from the server; find the cheapest source (extend `/api/stats/recent-exercises` or one batch endpoint), never one request per row
 - [x] The workout picker's "Added" tag moved to the bottom right beside Custom (2026-10-20)
+
+---
+
+## ♿ 26. Accessibility (App Store Accessibility Nutrition Labels)
+> Apple's labels say a feature is supported only when the app's common tasks work with it: logging a workout, Progress, scores and Greek Rank, a GPS run, the paywall, sign-in. At launch (2026-10-28) only Dark Interface is claimed; Larger Text and Sufficient Contrast pending a device test and the contrast audit. Tick each one in App Store Connect only once its "done when" holds.
+
+### Reduced Motion
+- [ ] Route the big animations through `hooks/useReduceMotion.ts` (only `WorkoutSummaryScreen` and `SplashExit` use it today, against about 35 animated files): PR celebration, rank-up and frame unlocks, the count-up score rings, list entrances, chart bar animations. With Reduce Motion on, swap motion for an instant change or a short crossfade
+- [ ] Done when: every common task above shows no sliding, scaling or bouncing with Settings → Accessibility → Motion → Reduce Motion on
+
+### VoiceOver and Voice Control
+- [ ] Label every icon-only control (about 140 labels against about 420 touchables today): set checkmark, set type, RPE, rest timer, exercise menu, reorder handles, the GPS Pause/Stop/minimize buttons, share, chart range and metric pickers
+- [ ] Set inputs announce what they are ("Set 2 reps", "Set 2 weight, lbs") and checked sets announce "completed"
+- [ ] Score rings, the week dots and charts get one summary label each ("Strength Score 79, Advanced") instead of reading their parts
+- [ ] Done when: a full workout can be logged and saved, Progress read, and a run started and stopped with VoiceOver alone; then the same with Voice Control ("Tap Save")
+
+### Larger Text
+- [ ] At the largest Dynamic Type size (and the larger accessibility sizes), fix anything that clips or overlaps: fixed-height cards, set rows, tab and segment labels, stat tiles. Cap only where a layout truly can't grow (`maxFontSizeMultiplier`), never turn scaling off
+
+### Sufficient Contrast (first update after launch; audit 2026-10-28)
+> Contrast audit of 114 files, both modes, every accent preset. Base tokens, PR gold, switches and the GPS screen pass. These five block the label; most are one constant each.
+- [ ] Score rank colors in light mode: `SCORE_RANK_COLORS` (`constants/strengthRanks.ts`) are 1.40 to 2.64 on white in `ScoreRing.tsx:63`, `ScoresCard.tsx:88,106`, `StrengthScoreScreen.tsx` (420, 445, 547, 579, 597, 635, 653) and `EnduranceScoreScreen.tsx:402,427`. Add a light text set (candidates: #4B5563, #0369A1, #047857, #C2410C, #7E22CE, Legend #8A6D00) and use it for text; keep the bright ones for rings and fills
+- [ ] Greek Rank names: make `rankTextColor()` (`constants/greekRanks.ts`) return `GREEK_RANK_TEXT_COLORS[mode][name]` for every rank, not just Aretē, and route `GreekRankCard.tsx:53` through it (also `GreekRankScreen.tsx:142,376,516`, `ProfileScreen.tsx:404`, `CoachScreen.tsx:866`, `GreekRankIntroScreen.tsx:85-87,117`). Fails today: light Aretē 1.40, Demigod 2.16, Athlete 2.75, Hero 2.78; dark Olympian 2.70, Titan 4.03
+- [ ] Set-type markers: light `warmup` #FF9500 (2.20) to #B25000 (5.20), which also fixes the "plateau"/status orange in `MuscleVolumeCard`, `AdvancedStatsCard`, `ProgressRateCard`, `PRDashboardScreen:612`; `dropset` #AF52DE (4.13) to #9A3FC7 light / #BF7FF0 dark
+- [ ] Dark accents: Indigo #5E5CE6 (3.36 on surface) to #7D7AFF with black `text`; Blue #007AFF (4.24) to #0A84FF. Update BRAND.md's accent tables with the new values
+- [ ] RPE picker: the selected tile's description (`WorkoutLog.tsx:2132`, `rgba(255,255,255,0.85)` on accent, as low as 1.72) to `colors.accentText`
+- [ ] Sign-in placeholders: `AUTH.placeholder` (`theme/authColors.ts`) #636366 (2.84) to #8E8E93 (5.22); they are each field's only label
+- [ ] Lower priority: app `placeholder` token where it's used as text (`SetRow.tsx:268`, `EditProfileScreen.tsx:265`, `CreateRoutineScreen.tsx:543`, `NewExerciseForm.tsx:186`, `OnboardingAboutYouScreen.tsx:323`; light #767680 = 4.49); light `border` 1.26 (dividers vanish)
+- [ ] Done when: rerun the `contrast-auditor` agent and it reports no blocking findings; check light and dark on a device, then tick Sufficient Contrast in App Store Connect

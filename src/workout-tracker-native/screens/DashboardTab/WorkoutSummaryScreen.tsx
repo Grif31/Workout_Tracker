@@ -124,6 +124,9 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
   const { isPremium } = usePurchase();
   const s = useMemo(() => createStyles(colors), [colors]);
+  const setTypeTagColors = useMemo<Record<string, string>>(() => ({
+    W: colors.warmup, D: colors.dropset, F: colors.danger,
+  }), [colors]);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const weightUnit: WeightUnit = user?.weight_unit === 'kg' ? 'kg' : 'lbs';
@@ -298,6 +301,21 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
     if (set.reps && set.weight) return `${set.reps} × ${set.weight} ${weightUnit}`;
     if (set.reps) return `${set.reps} reps`;
     return '—';
+  }
+
+  // Back-to-back identical sets read as one "3× 8 × 185 lbs", so a straight-sets
+  // lift takes a line instead of a wall of badges. A set of another type never
+  // joins the run, or a failure set matching the working sets would vanish into it
+  function groupSets(ex: ExerciseData) {
+    const groups: { text: string; type: string; count: number }[] = [];
+    for (const set of ex.sets) {
+      const text = formatSet(ex, set);
+      const type = set.set_type || 'N';
+      const last = groups[groups.length - 1];
+      if (last && last.text === text && last.type === type) last.count++;
+      else groups.push({ text, type, count: 1 });
+    }
+    return groups;
   }
 
   // The day the workout is dated, not today: a session logged the next morning
@@ -620,25 +638,27 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
                 <Text style={s.retryText}>Try Again</Text>
               </TouchableOpacity>
             </View>
-          ) : routeExercise ? null : (
-            exercises.map(ex => (
-              <View key={ex.id} style={s.exCard}>
-                <Text style={s.exName}>{ex.name}</Text>
-                <View style={s.setBadgeRow}>
-                  {ex.sets.map((set, i) => {
-                    const warmup = set.set_type === 'W';
-                    return (
-                      <View key={set.id ?? i} style={[s.setBadge, warmup && s.setBadgeWarmup]}>
-                        <Text style={s.setBadgeText}>
-                          {warmup && <Text style={s.setBadgeWarmupTag}>W  </Text>}
-                          {formatSet(ex, set)}
-                        </Text>
-                      </View>
-                    );
-                  })}
+          ) : routeExercise || exercises.length === 0 ? null : (
+            <View style={s.exCard}>
+              {exercises.map((ex, i) => (
+                <View key={ex.id} style={[s.exRow, i > 0 && s.exRowDivider]}>
+                  <Text style={s.exName} numberOfLines={1}>{ex.name}</Text>
+                  <Text style={s.exSets}>
+                    {groupSets(ex).map((g, j) => (
+                      <Text key={j}>
+                        {/* A comma, since a cardio bout's own text already uses " · " */}
+                        {j > 0 && ', '}
+                        {g.type in setTypeTagColors && (
+                          <Text style={[s.setTypeTag, { color: setTypeTagColors[g.type] }]}>{g.type} </Text>
+                        )}
+                        {g.count > 1 && <Text style={s.setCount}>{g.count}× </Text>}
+                        {g.text}
+                      </Text>
+                    ))}
+                  </Text>
                 </View>
-              </View>
-            ))
+              ))}
+            </View>
           )}
         </Animated.View>
 
@@ -722,17 +742,16 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   effortValue: { fontWeight: '700', color: colors.textPrimary },
   diagramCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
   diagramTitle: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary, marginBottom: spacing.sm },
-  exCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
-  exName: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary, marginBottom: spacing.sm },
+  exCard: { backgroundColor: colors.surface, borderRadius: radius.md, paddingHorizontal: spacing.md },
+  exRow: { paddingVertical: spacing.sm },
+  exRowDivider: { borderTopWidth: 1, borderTopColor: colors.border },
+  exName: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
+  exSets: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
+  setCount: { fontWeight: '700', color: colors.textPrimary },
+  setTypeTag: { fontWeight: '800' },
   setBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs + 2 },
-  setBadge: {
-    backgroundColor: colors.background, borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm, paddingVertical: 3,
-    borderWidth: 1, borderColor: 'transparent',
-  },
-  setBadgeWarmup: { borderColor: colors.warmup + '88' },
+  setBadge: { backgroundColor: colors.background, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 3 },
   setBadgeText: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
-  setBadgeWarmupTag: { fontWeight: '800', color: colors.warmup },
   loadError: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md },
   loadErrorText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center' },
   retryBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border },

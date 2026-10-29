@@ -134,7 +134,7 @@ describe('free template and routine caps', () => {
       '/api/workout-templates': [tmpl(1, true), tmpl(2, true), tmpl(3, true), tmpl(4, true), tmpl(5, true), tmpl(6, true)],
     });
     const { nav, ...r } = await openTab('Plans');
-    expect(await r.findByText('0 of 5 free')).toBeTruthy();
+    expect(await r.findByText('0 of 7 free')).toBeTruthy();
     expect(r.getByText('0 of 2 free')).toBeTruthy();
     r.getAllByText('New').forEach(b => fireEvent.press(b));
     expect(nav.navigate).not.toHaveBeenCalledWith('Paywall', expect.anything());
@@ -147,8 +147,24 @@ describe('free template and routine caps', () => {
     });
     const { nav, ...r } = await openTab('Plans');
     expect(await r.findByText('2 of 2 free')).toBeTruthy();
-    expect(r.getByText('1 of 5 free')).toBeTruthy();
+    expect(r.getByText('1 of 7 free')).toBeTruthy();
     fireEvent.press(r.getAllByText('New')[1]);
     expect(nav.navigate).toHaveBeenCalledWith('Paywall', { source: 'routines' });
+  });
+
+  it('let a sixth template through and lock at the seventh', async () => {
+    installServer({ '/api/workout-templates': [1, 2, 3, 4, 5, 6].map(id => tmpl(id)) });
+    const six = await openTab('Plans');
+    expect(await six.findByText('6 of 7 free')).toBeTruthy();
+    fireEvent.press(six.getAllByText('New')[0]);
+    expect(six.nav.navigate).not.toHaveBeenCalledWith('Paywall', expect.anything());
+    six.unmount();
+
+    appCache.clear();
+    installServer({ '/api/workout-templates': [1, 2, 3, 4, 5, 6, 7].map(id => tmpl(id)) });
+    const seven = await openTab('Plans');
+    expect(await seven.findByText('7 of 7 free')).toBeTruthy();
+    fireEvent.press(seven.getAllByText('New')[0]);
+    expect(seven.nav.navigate).toHaveBeenCalledWith('Paywall', { source: 'templates' });
   });
 });
