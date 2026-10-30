@@ -16,7 +16,7 @@ flask-cors==6.0.5
 Flask-Migrate==4.1.0
 psycopg2-binary==2.9.13
 python-dotenv==1.2.3
-Werkzeug==3.1.8
+Werkzeug==3.1.9
 pytest==9.1.1
 pytest-flask==1.3.0
 anthropic==1.8.0
@@ -26,6 +26,7 @@ requests==2.34.2
 Flask-Mail==0.10.0
 APScheduler==3.11.3
 marshmallow==4.3.1
+sentry-sdk[flask]==2.73.0
 
 # Transitive, pinned for reproducible deploys
 alembic==1.20.0
