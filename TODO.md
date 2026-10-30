@@ -1272,7 +1272,7 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 ### Phase 4 — Enforce it and protect the cost
 - [x] **Server-side premium** (§5 "Server-side premium enforcement"): built 2026-10-13. `User.is_premium` (migration `t8u9v0w1x2y3`), RevenueCat webhook, `POST /api/premium/sync`, `is_pro` now reads `has_premium`. **Off until `PREMIUM_ENFORCED=true`**; the turn-on checklist is in CLAUDE.md under Server-side premium
 - [x] Gate the AI routes on the server (built 2026-10-13): insights premium only, generate and save premium except the onboarding routine (3 generations a day for free), weekly review trimmed to one part for free
-- [ ] `flask grant-beta-premium` re-run on release day (see launch notes)
+- [x] `flask grant-beta-premium` re-run on release day: not needed, no beta testers joined after the 2026-10-01 grant (owner, 2026-10-30)
 
 ### Phase 5 — Know whether it's working
 > There is no product analytics in the app today, so conversion can't be measured.
