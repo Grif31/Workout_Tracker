@@ -10,6 +10,8 @@ from models import (
     ExerciseTemplate, ExerciseMuscleMapping,
 )
 from flask_jwt_extended import  jwt_required, get_jwt_identity
+from sqlalchemy.orm import selectinload
+from limiter import limiter
 from schemas import UpdateProfileSchema, DeviceTokenSchema
 from utils.validation import validate_body
 
@@ -245,6 +247,59 @@ def deregister_device_token():
     DeviceToken.query.filter_by(user_id=user_id).delete()
     db.session.commit()
     return jsonify({'message': 'ok'}), 200
+
+
+@user_bp.get('/api/me/export')
+@jwt_required()
+@limiter.limit('10 per hour', key_func=lambda: f"me_export:{get_jwt_identity()}")
+def export_all_data():
+    """Everything stored about the user, for the GDPR right of access.
+
+    The workouts CSV covers lifting only; this is the complete copy. Keep it in
+    step with _delete_all_user_data: a table that gets deleted with the account
+    is one the user can ask to see. Device push tokens are left out, since
+    they identify the phone to Apple rather than describe the user.
+    """
+    user_id = int(get_jwt_identity())
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+
+    def rows(model, order_by):
+        return model.query.filter_by(user_id=user_id).order_by(order_by).all()
+
+    workouts = (
+        Workout.query.filter_by(user_id=user_id)
+        .options(selectinload(Workout.exercises).selectinload(Exercise.sets))
+        .order_by(Workout.date.asc())
+        .all()
+    )
+    data = {
+        'exported_at': datetime.now().isoformat(),
+        'profile': user.to_dict(),
+        'workouts': [w.to_dict(include_exercises=True) for w in workouts],
+        'workout_templates': [t.to_dict(include_exercises=True) for t in rows(WorkoutTemplate, WorkoutTemplate.id)],
+        'routines': [r.to_dict(include_days=True) for r in rows(Routine, Routine.id)],
+        'custom_exercises': [
+            {'id': e.id, 'name': e.name, 'equipment': e.equipment, 'exercise_type': e.exercise_type}
+            for e in rows(ExerciseTemplate, ExerciseTemplate.id)
+        ],
+        'bodyweight_logs': [b.to_dict() for b in rows(BodyweightLog, BodyweightLog.date)],
+        'body_measurements': [m.to_dict() for m in rows(BodyMeasurement, BodyMeasurement.date)],
+        'progress_photos': [p.to_dict() for p in rows(ProgressPhoto, ProgressPhoto.date)],
+        'personal_records': [p.to_dict() for p in rows(PersonalRecord, PersonalRecord.id)],
+        'pr_history': [e.to_dict() for e in rows(PREvent, PREvent.id)],
+        'score_history': [s.to_dict() for s in rows(StrengthScoreSnapshot, StrengthScoreSnapshot.id)],
+        'insight_feedback': [
+            {'insight_type': f.insight_type, 'title': f.title, 'body': f.body,
+             'helpful': f.helpful, 'reason': f.reason,
+             'created_at': f.created_at.isoformat() if f.created_at else None}
+            for f in rows(InsightFeedback, InsightFeedback.id)
+        ],
+    }
+    response = jsonify(data)
+    response.headers['Content-Disposition'] = 'attachment; filename="arete_data.json"'
+    return response
 
 
 def _delete_all_user_data(user_id: int) -> None:

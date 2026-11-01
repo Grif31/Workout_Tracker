@@ -39,6 +39,19 @@ logging.basicConfig(
     datefmt='%Y-%m-%dT%H:%M:%S',
 )
 
+# The catch-all errorhandler below answers every exception before Flask's
+# got_request_exception signal fires, so the Flask integration never sees a
+# 500. Sentry's logging integration does: any logger.error / .exception
+# becomes an event, which covers that handler and the routes that log and
+# return 500 themselves.
+if os.environ.get('SENTRY_DSN'):
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=os.environ['SENTRY_DSN'],
+        environment=os.environ.get('SENTRY_ENVIRONMENT', 'production'),
+        send_default_pii=False,
+    )
+
 def create_app(test_config=None):
     app = Flask(__name__)
     # Railway's edge is the one proxy in front of us. Without this, remote_addr
@@ -64,6 +77,9 @@ def create_app(test_config=None):
     app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
     app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///workout_tracker.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    # A pooled connection Postgres has dropped (restart, password rotation)
+    # otherwise fails the next request that draws it; the ping replaces it.
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
     app.config['JWT_TOKEN_LOCATION'] = ['headers']
     # Werkzeug buffers a whole body before any route runs, so without a cap one
     # request can hold arbitrary memory on the single Railway instance. 10 MB

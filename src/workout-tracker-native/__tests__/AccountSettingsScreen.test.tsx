@@ -7,6 +7,13 @@ import AccountSettingsScreen from '../screens/ProfileTab/AccountSettingsScreen';
 jest.mock('../theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 } }));
 jest.mock('../theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20 } } }));
 jest.mock('../utils/toast', () => ({ showToast: jest.fn() }));
+jest.mock('expo-file-system/legacy', () => ({
+  documentDirectory: 'file:///docs/',
+  cacheDirectory: null,
+  EncodingType: { UTF8: 'utf8' },
+  writeAsStringAsync: jest.fn(() => Promise.resolve()),
+}));
+jest.mock('expo-sharing', () => ({ shareAsync: jest.fn(() => Promise.resolve()) }));
 
 const { logout } = require('../context/AuthContext').useAuth();
 const nav = createMockNavigation();
@@ -45,6 +52,31 @@ describe('AccountSettingsScreen', () => {
     mockDeleteResponse({ status: 200 });
   });
   afterEach(() => alertSpy?.mockRestore());
+
+  describe('Export', () => {
+    beforeEach(() => {
+      (global.fetch as jest.Mock) = jest.fn(() =>
+        Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('{"workouts":[]}') }),
+      );
+    });
+
+    it.each([
+      ['Export Workouts (CSV)', '/api/workouts/export', 'file:///docs/aretefitnessapp_workouts.csv', 'text/csv'],
+      ['Export All My Data (JSON)', '/api/me/export', 'file:///docs/aretefitnessapp_all_data.json', 'application/json'],
+    ])('%s fetches its endpoint and shares the file', async (label, path, fileUri, mimeType) => {
+      const { shareAsync } = require('expo-sharing');
+      const { writeAsStringAsync } = require('expo-file-system/legacy');
+      const { getByText } = renderScreen();
+
+      fireEvent.press(getByText(label));
+
+      await waitFor(() => expect(shareAsync).toHaveBeenCalledTimes(1));
+      const urls = (global.fetch as jest.Mock).mock.calls.map(([url]) => String(url));
+      expect(urls.some(u => u.endsWith(path))).toBe(true);
+      expect(writeAsStringAsync).toHaveBeenCalledWith(fileUri, '{"workouts":[]}', expect.anything());
+      expect(shareAsync).toHaveBeenCalledWith(fileUri, expect.objectContaining({ mimeType }));
+    });
+  });
 
   describe('Delete Account', () => {
     it('deletes the account and logs out after both confirmations', async () => {

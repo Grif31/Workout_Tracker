@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, ScrollView,
+  Alert, ActivityIndicator, ScrollView, Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system/legacy';
+import { shareAsync } from 'expo-sharing';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ProfileStackParamsList } from '../../navigation/types';
 import { useTheme, type Colors } from '../../context/ThemeContext';
@@ -18,6 +20,20 @@ type Props = NativeStackScreenProps<ProfileStackParamsList, 'AccountSettings'>;
 
 // Where iOS lists and cancels subscriptions, for when RevenueCat gives no link of its own
 const APPLE_SUBSCRIPTIONS_URL = 'https://apps.apple.com/account/subscriptions';
+
+// The CSV is lifting sets only, for spreadsheets; the JSON is everything the
+// account holds (body stats, PRs, routines, photos), the GDPR copy.
+const EXPORTS = {
+  workouts: {
+    label: 'Export Workouts (CSV)', icon: 'download-outline', path: '/api/workouts/export',
+    fileName: 'aretefitnessapp_workouts.csv', mimeType: 'text/csv', title: 'Export Workout Data',
+  },
+  all: {
+    label: 'Export All My Data (JSON)', icon: 'archive-outline', path: '/api/me/export',
+    fileName: 'aretefitnessapp_all_data.json', mimeType: 'application/json', title: 'Export All My Data',
+  },
+} as const;
+type ExportKind = keyof typeof EXPORTS;
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -47,29 +63,27 @@ export default function AccountSettingsScreen({ navigation }: Props) {
   const { isPremium, subscription } = usePurchase();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const plan = subscription ? describePlan(subscription) : null;
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<ExportKind | null>(null);
 
-  const handleExport = async () => {
-    setExporting(true);
+  const handleExport = async (kind: ExportKind) => {
+    const { path, fileName, mimeType, title } = EXPORTS[kind];
+    setExporting(kind);
     try {
-      const res = await apiFetch('/api/workouts/export');
-      if (!res.ok) { Alert.alert("Couldn't Export Workouts", 'Try again in a moment.'); return; }
-      const csvText = await res.text();
-      const FileSystem = await import('expo-file-system/legacy');
-      const { shareAsync } = await import('expo-sharing');
+      const res = await apiFetch(path);
+      if (!res.ok) { Alert.alert("Couldn't Export", 'Try again in a moment.'); return; }
+      const text = await res.text();
       const dir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
       if (dir) {
-        const fileUri = dir + 'aretefitnessapp_workouts.csv';
-        await FileSystem.writeAsStringAsync(fileUri, csvText, { encoding: FileSystem.EncodingType.UTF8 });
-        await shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export Workout Data' });
+        const fileUri = dir + fileName;
+        await FileSystem.writeAsStringAsync(fileUri, text, { encoding: FileSystem.EncodingType.UTF8 });
+        await shareAsync(fileUri, { mimeType, dialogTitle: title });
       } else {
-        const { Share } = await import('react-native');
-        await Share.share({ title: 'Workout Export', message: csvText });
+        await Share.share({ title, message: text });
       }
     } catch (err) {
-      if (!isNetworkError(err)) Alert.alert("Couldn't Export Workouts", 'Try again in a moment.');
+      if (!isNetworkError(err)) Alert.alert("Couldn't Export", 'Try again in a moment.');
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   };
 
@@ -199,15 +213,20 @@ export default function AccountSettingsScreen({ navigation }: Props) {
 
       <Text style={styles.sectionLabel}>Data</Text>
       <View style={styles.group}>
-        <TouchableOpacity style={styles.row} onPress={handleExport} disabled={exporting}>
-          <View style={styles.rowLeft}>
-            <Ionicons name="download-outline" size={20} color={colors.textSecondary} />
-            <Text style={styles.rowLabel}>Export Data</Text>
-          </View>
-          {exporting
-            ? <ActivityIndicator size="small" color={colors.textSecondary} />
-            : <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />}
-        </TouchableOpacity>
+        {(Object.keys(EXPORTS) as ExportKind[]).map((kind, i) => (
+          <React.Fragment key={kind}>
+            {i > 0 && <View style={styles.divider} />}
+            <TouchableOpacity style={styles.row} onPress={() => handleExport(kind)} disabled={exporting !== null}>
+              <View style={styles.rowLeft}>
+                <Ionicons name={EXPORTS[kind].icon} size={20} color={colors.textSecondary} />
+                <Text style={styles.rowLabel}>{EXPORTS[kind].label}</Text>
+              </View>
+              {exporting === kind
+                ? <ActivityIndicator size="small" color={colors.textSecondary} />
+                : <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />}
+            </TouchableOpacity>
+          </React.Fragment>
+        ))}
       </View>
 
       <Text style={styles.sectionLabel}>Session</Text>

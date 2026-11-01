@@ -370,6 +370,48 @@ class TestDeleteAccount:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/me/export
+# ---------------------------------------------------------------------------
+
+class TestExportAllData:
+
+    def test_requires_auth(self, client):
+        assert client.get('/api/me/export').status_code == 401
+
+    def test_contains_every_record_type(self, client, auth_token):
+        _build_full_account(client, auth_token)
+        res = client.get('/api/me/export', headers=auth_headers(auth_token))
+        assert res.status_code == 200
+        assert 'attachment' in res.headers['Content-Disposition']
+        data = res.get_json()
+
+        assert data['profile']['email']
+        workout = data['workouts'][0]
+        assert workout['name'] == 'Push Day'
+        assert [s['weight'] for s in workout['exercises'][0]['sets']] == [100, 120]
+        assert [t['name'] for t in data['workout_templates']] == ['Push Template']
+        assert [r['name'] for r in data['routines']] == ['My Routine']
+        assert [e['name'] for e in data['custom_exercises']] == ['Custom Press']
+        assert [b['weight'] for b in data['bodyweight_logs']] == [180]
+        assert data['body_measurements'][0]['waist'] == 32
+        assert data['personal_records'] and data['pr_history']
+
+    def test_never_includes_credentials(self, client, auth_token):
+        _build_full_account(client, auth_token)
+        body = client.get('/api/me/export', headers=auth_headers(auth_token)).get_data(as_text=True)
+        assert 'password' not in body
+        assert 'otp' not in body
+        assert 'token' not in body
+
+    def test_contains_only_own_data(self, client, auth_token, auth_token2):
+        _build_full_account(client, auth_token)
+        data = client.get('/api/me/export', headers=auth_headers(auth_token2)).get_json()
+        for key in ('workouts', 'workout_templates', 'routines', 'custom_exercises',
+                    'bodyweight_logs', 'body_measurements', 'personal_records', 'pr_history'):
+            assert data[key] == [], key
+
+
+# ---------------------------------------------------------------------------
 # PATCH /api/me — weight unit switch converts stored data
 # ---------------------------------------------------------------------------
 

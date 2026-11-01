@@ -26,6 +26,7 @@ requests==2.34.2
 Flask-Mail==0.10.0
 APScheduler==3.11.3
 marshmallow==4.3.1
+sentry-sdk[flask]==2.73.0
 
 # Transitive, pinned for reproducible deploys
 alembic==1.20.0
