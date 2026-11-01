@@ -19,6 +19,7 @@ import { showToast } from '../utils/toast';
 import { navigationRef } from '../navigation/navigationRef';
 import { openExternalLink } from '../utils/links';
 import { scheduleTrialReminder } from '../utils/notifications';
+import { trackPaywall, planOf } from '../utils/paywallEvents';
 import { annualSavings, ctaLabel, featuresFor, headlineFor, trialOf, trialReminderDay } from '../utils/paywall';
 import { type RootStackParamsList } from '../navigation/types';
 
@@ -101,6 +102,7 @@ export default function PaywallScreen({ navigation, route }: Props) {
   // Plans are fetched at sign-in; if that failed, opening the paywall tries again
   useEffect(() => {
     if (offeringsState === 'failed') reloadOfferings();
+    if (!alreadyPremium) trackPaywall({ event: 'paywall_viewed', source });
   }, []);
 
   const [trialEligible, setTrialEligible] = useState<Record<string, boolean>>({});
@@ -143,9 +145,12 @@ export default function PaywallScreen({ navigation, route }: Props) {
     const pkg = selected?.pkg;
     if (!pkg) return;
     const trial = selectedTrial;
+    const plan = planOf(selected.type);
+    if (plan) trackPaywall({ event: 'purchase_started', source, plan, trial: !!trial });
     setPurchasing(true);
     const outcome = await purchasePackage(pkg);
     setPurchasing(false);
+    if (plan) trackPaywall({ event: 'purchase', source, plan, trial: !!trial, outcome });
     if (outcome === 'purchased') {
       // A heads-up before the first charge, so the trial ending isn't a surprise
       const day = trial ? trialReminderDay(trial) : null;
@@ -163,6 +168,7 @@ export default function PaywallScreen({ navigation, route }: Props) {
     setRestoring(true);
     const outcome = await restorePurchases();
     setRestoring(false);
+    trackPaywall({ event: 'restore', source, outcome });
     if (outcome === 'restored') {
       finish('Premium Restored');
     } else if (outcome === 'none') {
@@ -175,7 +181,11 @@ export default function PaywallScreen({ navigation, route }: Props) {
   };
 
   const selectTier = (i: number) => {
-    if (i !== selectedIndex) Haptics.selectionAsync();
+    if (i !== selectedIndex) {
+      Haptics.selectionAsync();
+      const plan = planOf(tierPackages[i]?.type);
+      if (plan) trackPaywall({ event: 'plan_selected', source, plan });
+    }
     setSelectedIndex(i);
   };
 

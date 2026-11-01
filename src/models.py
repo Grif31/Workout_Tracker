@@ -691,6 +691,25 @@ class AiCallLog(db.Model):
     created_at    = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
 
 
+# ── PaywallEvent ──────────────────────────────────────────────
+# One row per step a user takes toward Premium (a teaser shown, the paywall
+# opened, a plan picked, a purchase or restore and how it ended), posted by
+# utils/paywallEvents.ts, for the admin's Paywall page. Every row carries the
+# paywall source, so a purchase is credited to what opened the paywall.
+# user_id survives as NULL when the account is deleted, like AiCallLog.
+class PaywallEvent(db.Model):
+    __tablename__ = 'paywall_events'
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+    event      = db.Column(db.String(32), nullable=False)
+    source     = db.Column(db.String(32), nullable=True)
+    plan       = db.Column(db.String(16), nullable=True)
+    trial      = db.Column(db.Boolean, nullable=True)
+    # How a purchase or restore ended: PURCHASE_OUTCOMES / RESTORE_OUTCOMES in schemas.py
+    outcome    = db.Column(db.String(16), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
 # ── AdminState ────────────────────────────────────────────────
 # Small facts the admin remembers between visits, such as when the Coach
 # page was last opened (so the dashboard can count what's new since).

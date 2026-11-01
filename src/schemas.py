@@ -276,6 +276,31 @@ class AiInsightsSchema(_Base):
 INSIGHT_FEEDBACK_REASONS = ['known', 'irrelevant', 'wrong', 'vague']
 
 
+# ── Paywall events ───────────────────────────────────────────
+# The app's PurchaseOutcome and RestoreOutcome (context/PurchaseContext.tsx)
+PAYWALL_EVENTS = ['upsell_shown', 'paywall_viewed', 'plan_selected', 'purchase_started', 'purchase', 'restore']
+PAYWALL_PLANS = ['annual', 'monthly', 'lifetime']
+PURCHASE_OUTCOMES = ['purchased', 'cancelled', 'pending', 'network', 'already_owned', 'failed']
+RESTORE_OUTCOMES = ['restored', 'none', 'failed']
+
+
+class PaywallEventSchema(_Base):
+    event   = fields.Str(required=True, validate=validate.OneOf(PAYWALL_EVENTS))
+    # Free-form so a new paywall entry point needs no server change
+    source  = fields.Str(load_default=None, allow_none=True,
+                         validate=validate.Regexp(r'^[a-z0-9_]{1,32}$'))
+    plan    = fields.Str(load_default=None, allow_none=True, validate=validate.OneOf(PAYWALL_PLANS))
+    trial   = fields.Bool(load_default=None, allow_none=True)
+    outcome = fields.Str(load_default=None, allow_none=True,
+                         validate=validate.OneOf(sorted(set(PURCHASE_OUTCOMES + RESTORE_OUTCOMES))))
+
+    @validates_schema
+    def outcome_fits_event(self, data, **kwargs):
+        allowed = {'purchase': PURCHASE_OUTCOMES, 'restore': RESTORE_OUTCOMES}.get(data.get('event'))
+        if allowed is not None and data.get('outcome') not in allowed:
+            raise ValidationError(f"Must be one of: {', '.join(allowed)}.", 'outcome')
+
+
 class AiInsightFeedbackSchema(_Base):
     type    = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=32))
     title   = fields.Str(required=True, validate=validate.Length(min=1, max=200))

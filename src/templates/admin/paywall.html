@@ -1,0 +1,211 @@
+{% extends "admin/base.html" %}
+{% import "admin/_charts.html" as charts %}
+{% block title %}Paywall{% endblock %}
+{% macro pct(v) %}{{ '%d%%' % v if v is not none else '–' }}{% endmacro %}
+{% block content %}
+  <div class="page">
+    <div class="page-head">
+      <div>
+        <h1>Paywall</h1>
+        <p class="sub">
+          What gets people to Premium. Counts people, not taps.
+          {% if first_logged %}Logged since {{ first_logged.strftime('%m/%d/%Y') }}.{% else %}Nothing logged yet.{% endif %}
+          Renewals and cancellations live in RevenueCat.
+        </p>
+      </div>
+      <div class="segmented" role="group" aria-label="Range">
+        {% for key, label in [('30', '30 days'), ('90', '90 days'), ('all', 'All time')] %}
+          <a href="?range={{ key }}" class="{{ 'active' if range_key == key }}">{{ label }}</a>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% set trials = by_plan|sum(attribute='trials') %}
+    {% set problems = purchase_outcomes|rejectattr('outcome', 'in', ['purchased', 'cancelled'])|sum(attribute='count') %}
+    <div class="tiles">
+      <div class="tile">
+        <div class="tile-label">Opened the paywall</div>
+        <div class="tile-value">{{ funnel.viewed }}</div>
+        <div class="tile-note">{{ funnel.shown }} saw a locked teaser</div>
+      </div>
+      <div class="tile">
+        <div class="tile-label">Bought Premium</div>
+        <div class="tile-value">{{ funnel.purchased }}</div>
+        <div class="tile-note">{% if trials %}{{ trials }} started on a free trial{% else %}No trials started{% endif %}</div>
+      </div>
+      <div class="tile">
+        <div class="tile-label">Conversion</div>
+        <div class="tile-value">{{ funnel.conversion if funnel.conversion is not none else '–' }}{% if funnel.conversion is not none %}<span class="unit">%</span>{% endif %}</div>
+        <div class="tile-note">Of people who opened the paywall</div>
+      </div>
+      <div class="tile">
+        <div class="tile-label">Purchases that went wrong</div>
+        <div class="tile-value">{{ problems }}</div>
+        <div class="tile-note">
+          {% if problems %}<span class="status warn">Pending, offline or failed</span>
+          {% else %}<span class="status good">None</span>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Funnel</h2>
+            <p class="sub">People who reached each step. A teaser is a free user's own numbers shown blurred; other entry points open the paywall straight away.</p>
+          </div>
+        </div>
+        {% set top = [funnel.shown, funnel.viewed, 1]|max %}
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Step</th><th class="num">People</th><th class="meter-cell"></th><th class="num">Of openers</th></tr></thead>
+            <tbody>
+              {% for key, label in steps %}
+                <tr>
+                  <td class="nowrap">{{ label }}</td>
+                  <td class="num">{{ funnel[key] }}</td>
+                  <td class="meter-cell"><div class="meter rate"><b style="width: {{ (100 * funnel[key] / top)|round(1) }}%"></b></div></td>
+                  <td class="num">{% if key in ('started', 'purchased') %}{{ pct((100 * funnel[key] / funnel.viewed)|round|int if funnel.viewed else none) }}{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Paywall opens per day</h2>
+            <p class="sub">Last 30 days, whatever the range above.</p>
+          </div>
+          {{ charts.legend([('Bought', 'key-0'), ("Opened, didn't buy", 'key-1')]) }}
+        </div>
+        <div class="card-body">
+          {% if by_day|sum(attribute='viewed') %}
+            {{ charts.columns(daily_chart, 'People opening the paywall per day') }}
+          {% else %}
+            <div class="empty">Nobody opened the paywall in the last 30 days.</div>
+          {% endif %}
+        </div>
+        <details class="table-toggle">
+          <summary>Show table</summary>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Day</th><th class="num">Opened</th><th class="num">Bought</th></tr></thead>
+              <tbody>
+                {% for d in by_day|reverse %}
+                  <tr><td class="nowrap">{{ d.day.strftime('%a %m/%d') }}</td><td class="num">{{ d.viewed }}</td><td class="num">{{ d.purchased }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>By source</h2>
+            <p class="sub">What opened the paywall. A purchase counts toward the source that opened it.</p>
+          </div>
+        </div>
+        {% if by_source %}
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Source</th><th class="num">Saw teaser</th><th class="num">Opened</th>
+                <th class="num">Started</th><th class="num">Bought</th><th class="meter-cell">Conversion</th>
+              </tr></thead>
+              <tbody>
+                {% for s in by_source %}
+                  <tr>
+                    <td class="nowrap"><b>{{ s.label }}</b></td>
+                    <td class="num">{{ s.shown }}</td>
+                    <td class="num">{{ s.viewed }}</td>
+                    <td class="num">{{ s.started }}</td>
+                    <td class="num">{{ s.purchased }}</td>
+                    <td class="meter-cell">
+                      {% if s.conversion is not none %}
+                        <div class="meter-row">
+                          <div class="meter rate" data-tip='{{ {"head": s.label, "rows": [[s.conversion ~ "%", "bought", none], [s.purchased|string, "of " ~ s.viewed ~ " who opened it", none]]}|tojson }}'><b style="width: {{ s.conversion }}%"></b></div>
+                          <span class="meter-value">{{ s.conversion }}%</span>
+                        </div>
+                      {% else %}
+                        <span class="muted">Not opened</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="empty">No paywall activity in this range.</div>
+        {% endif %}
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>By plan</h2>
+            <p class="sub">Times each plan was picked, purchases started, and purchases made. Annual is selected when the paywall opens, so picks count taps on another plan or back.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Plan</th><th class="num">Picked</th><th class="num">Started</th><th class="num">Bought</th><th class="num">On a trial</th></tr></thead>
+            <tbody>
+              {% for p in by_plan %}
+                <tr>
+                  <td class="nowrap"><b>{{ p.plan|capitalize }}</b></td>
+                  <td class="num">{{ p.selected }}</td>
+                  <td class="num">{{ p.started }}</td>
+                  <td class="num">{{ p.purchased }}</td>
+                  <td class="num">{{ p.trials }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="cols">
+        <section class="card">
+          <div class="card-head"><div><h2>How purchases ended</h2><p class="sub">Every attempt, not people.</p></div></div>
+          <div class="table-wrap">
+            <table>
+              <tbody>
+                {% for o in purchase_outcomes %}
+                  <tr><td>{{ o.label }}</td><td class="num">{{ o.count }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><div><h2>Restores</h2><p class="sub">Every tap on Restore Purchases.</p></div></div>
+          <div class="table-wrap">
+            <table>
+              <tbody>
+                {% for o in restore_outcomes %}
+                  <tr><td>{{ o.label }}</td><td class="num">{{ o.count }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+{% block head %}
+  <style>
+    td.meter-cell, th.meter-cell { min-width: 160px; width: 30%; }
+    .meter-row { display: flex; align-items: center; gap: 10px; }
+    .meter-row .meter { flex: 1; cursor: default; }
+    .meter-value { font-size: 12px; font-weight: 600; min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+  </style>
+{% endblock %}

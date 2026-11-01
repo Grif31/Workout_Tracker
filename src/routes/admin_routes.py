@@ -7,7 +7,7 @@ from functools import wraps
 from flask import Blueprint, Response, current_app, jsonify, render_template, request, url_for
 from limiter import limiter
 from models import (db, AdminAuditLog, AdminState, AiCallLog, ExerciseDBEntry, ExerciseDBThumbnail,
-                    ExerciseTemplate, InsightFeedback, User, Workout)
+                    ExerciseTemplate, InsightFeedback, PaywallEvent, User, Workout)
 from utils import (admin_charts, admin_dashboard, admin_stats, admin_users, exercisedb, library_edits, premium,
                    system_status)
 from utils.admin_audit import audit
@@ -229,6 +229,39 @@ def admin_ai():
         top_users=admin_stats.ai_top_users(month, _usernames(r.user_id for r in month)),
         failures=failures, usernames=_usernames(r.user_id for r in failures),
         first_logged=first,
+    )
+
+
+@admin_bp.get('/paywall')
+@_require_admin
+def admin_paywall():
+    """What gets people to Premium, from paywall_events: people at each step,
+    per source and plan. Counts people rather than events, so one user
+    opening the paywall five times is one opener."""
+    range_key = request.args.get('range', '30')
+    if range_key not in _COACH_RANGES:
+        range_key = '30'
+    now = datetime.now()
+    since30 = datetime.combine(now.date() - timedelta(days=29), datetime.min.time())
+    days = _COACH_RANGES[range_key]
+    since = now - timedelta(days=days) if days else None
+    query = PaywallEvent.query
+    if since:
+        query = query.filter(PaywallEvent.created_at >= min(since, since30))
+    rows = query.all()
+    window = [r for r in rows if since is None or r.created_at >= since]
+    by_day = admin_stats.paywall_by_day([r for r in rows if r.created_at >= since30], now.date())
+    return render_template(
+        'admin/paywall.html', active='paywall', range_key=range_key,
+        funnel=admin_stats.paywall_funnel(window),
+        steps=admin_stats.PAYWALL_STEPS,
+        by_source=admin_stats.paywall_by_source(window),
+        by_plan=admin_stats.paywall_by_plan(window),
+        purchase_outcomes=admin_stats.paywall_outcomes(window, 'purchase', admin_stats.PURCHASE_OUTCOME_LABELS),
+        restore_outcomes=admin_stats.paywall_outcomes(window, 'restore', admin_stats.RESTORE_OUTCOME_LABELS),
+        by_day=by_day,
+        daily_chart=admin_stats.paywall_daily_chart(by_day),
+        first_logged=db.session.query(db.func.min(PaywallEvent.created_at)).scalar(),
     )
 
 

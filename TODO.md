@@ -1276,8 +1276,10 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 
 ### Phase 5 — Know whether it's working
 > There is no product analytics in the app today, so conversion can't be measured.
-- [ ] Pick a tool (PostHog or similar) and add a thin `track()` wrapper; ids only, no PII, same rule as Sentry
-- [ ] Events: `paywall_viewed {source}`, `plan_selected`, `purchase_started`, `purchase_completed {plan, trial}`, `purchase_failed {reason}`, `restore_*`, `upsell_shown {where}`, `upsell_tapped`
+- [x] Our own table rather than a vendor (owner, 2026-10-31): `paywall_events`, written by `POST /api/paywall/events` from `utils/paywallEvents.ts`, read by `/admin/paywall`. No new third party, so the privacy policy's Usage data paragraph only had to say what's recorded
+- [x] Events (built 2026-10-31): `upsell_shown {source}` (once per source per launch, from `PremiumTeaser`), `paywall_viewed`, `plan_selected {plan}`, `purchase_started {plan, trial}`, `purchase {plan, trial, outcome}`, `restore {outcome}`, every one with the paywall's source. "Upsell tapped" is `paywall_viewed`'s source
+- [ ] Before the build that sends these ships: App Store Connect → App Privacy, add Usage Data → Product Interaction (linked to the user, not used for tracking, purpose Analytics)
+- [ ] After that build is live: open `/admin/paywall` and check a purchase on a sandbox account lands in the funnel
 - [ ] Watch in RevenueCat: trial start rate, trial-to-paid, month-1 and month-3 retention, plan mix
 - [ ] First things to test once there's traffic: trial vs no trial, annual-first vs monthly-first, teaser depth on the score screens
 

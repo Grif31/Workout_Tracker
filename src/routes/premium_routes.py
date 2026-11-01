@@ -1,11 +1,14 @@
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from limiter import limiter
-from models import db, User
+from models import db, PaywallEvent, User
+from schemas import PaywallEventSchema
 from utils import premium
+from utils.validation import validate_body
 
 premium_bp = Blueprint('premium_bp', __name__)
+_paywall_event_schema = PaywallEventSchema()
 
 
 @premium_bp.post('/api/webhooks/revenuecat')
@@ -44,3 +47,20 @@ def sync_premium():
         user.is_premium = active
         db.session.commit()
     return jsonify({'message': 'ok', 'is_premium': active, 'enforced': premium.enforced()}), 200
+
+
+@premium_bp.post('/api/paywall/events')
+@jwt_required()
+@limiter.limit('200 per hour', key_func=lambda: f"paywall_events:{get_jwt_identity()}")
+@validate_body(_paywall_event_schema)
+def post_paywall_event():
+    """One step toward Premium, for the admin's Paywall page. The app sends
+    these fire-and-forget, so nothing here may block or fail a purchase."""
+    data = g.validated
+    db.session.add(PaywallEvent(
+        user_id=int(get_jwt_identity()), event=data['event'], source=data['source'],
+        plan=data['plan'], trial=data['trial'],
+        outcome=data['outcome'] if data['event'] in ('purchase', 'restore') else None,
+    ))
+    db.session.commit()
+    return jsonify({'message': 'ok'}), 201

@@ -11,11 +11,17 @@ jest.mock('../context/PurchaseContext', () => ({
 jest.mock('../utils/toast', () => ({ showToast: jest.fn() }));
 jest.mock('../utils/links', () => ({ openExternalLink: jest.fn() }));
 jest.mock('../utils/notifications', () => ({ scheduleTrialReminder: jest.fn() }));
+jest.mock('../utils/paywallEvents', () => ({
+  ...jest.requireActual('../utils/paywallEvents'),
+  trackPaywall: jest.fn(),
+}));
 
 const mockUsePurchase = usePurchase as jest.Mock;
 const { showToast } = require('../utils/toast');
 const { openExternalLink } = require('../utils/links');
 const { scheduleTrialReminder } = require('../utils/notifications');
+const { trackPaywall } = require('../utils/paywallEvents');
+const tracked = () => (trackPaywall as jest.Mock).mock.calls.map(([e]) => e);
 
 const nav = createMockNavigation();
 
@@ -305,6 +311,54 @@ describe('PaywallScreen', () => {
       fireEvent.press(getByText('Restore Purchases'));
       await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("Couldn't Restore", expect.any(String)));
       expect(showToast).not.toHaveBeenCalledWith('No purchases found');
+    });
+  });
+
+  describe('tracking for the admin Paywall page', () => {
+    it('records the opening with its source', () => {
+      renderPaywall('templates');
+      expect(tracked()).toEqual([{ event: 'paywall_viewed', source: 'templates' }]);
+    });
+
+    it('records nothing for someone already premium', () => {
+      purchase({ isPremium: true });
+      renderPaywall('templates');
+      expect(trackPaywall).not.toHaveBeenCalled();
+    });
+
+    it('records a plan change, but not a tap on the plan already picked', () => {
+      const { getByText } = renderPaywall('ai_coach');
+      fireEvent.press(getByText('Annual'));
+      fireEvent.press(getByText('Monthly'));
+      expect(tracked().filter(e => e.event === 'plan_selected'))
+        .toEqual([{ event: 'plan_selected', source: 'ai_coach', plan: 'monthly' }]);
+    });
+
+    it('records the start and the end of a purchase, with the trial', async () => {
+      purchase({ checkTrialEligibility: jest.fn(() => Promise.resolve({ annual: true })),
+        offerings: withOfferings([withTrial(ANNUAL), MONTHLY]) });
+      const { findByText, findByTestId } = renderPaywall('muscle_volume');
+      fireEvent.press(await findByText('Start 7-Day Free Trial'));
+      await findByTestId('purchase-success');
+      expect(tracked().slice(1)).toEqual([
+        { event: 'purchase_started', source: 'muscle_volume', plan: 'annual', trial: true },
+        { event: 'purchase', source: 'muscle_volume', plan: 'annual', trial: true, outcome: 'purchased' },
+      ]);
+    });
+
+    it('records how a failed purchase ended', async () => {
+      purchase({ purchasePackage: jest.fn(() => Promise.resolve('network')) });
+      const { getByText } = renderPaywall();
+      fireEvent.press(getByText(BUY_ANNUAL));
+      await waitFor(() => expect(tracked()).toContainEqual(
+        { event: 'purchase', source: undefined, plan: 'annual', trial: false, outcome: 'network' }));
+    });
+
+    it('records a restore and its outcome', async () => {
+      purchase({ restorePurchases: jest.fn(() => Promise.resolve('none')) });
+      const { getByText } = renderPaywall('account');
+      fireEvent.press(getByText('Restore Purchases'));
+      await waitFor(() => expect(tracked()).toContainEqual({ event: 'restore', source: 'account', outcome: 'none' }));
     });
   });
 
