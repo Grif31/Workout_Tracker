@@ -25,7 +25,7 @@ import { appCache } from '../../utils/appCache';
 import { GPS_DISTANCE_UNIT_KEY, type DistanceUnit } from '../../utils/units';
 import { fmtPaceForUnit, fmtRaceTime } from '../../utils/cardioFormat';
 import { ProgressStackParamsList } from '../../navigation/types';
-import { STRENGTH_TIERS, SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
+import { STRENGTH_TIERS, SCORE_RANK_COLORS, SCORE_RANK_ICONS, scoreRankTextColor } from '../../constants/strengthRanks';
 import { toLocalDateStr, timeAgo } from '../../utils/date';
 import ScoreRing, { AnimatedPercentText } from '../../components/ScoreRing';
 import PercentileBar from '../../components/PercentileBar';
@@ -77,7 +77,7 @@ interface EnduranceData {
 
 
 export default function EnduranceScoreScreen({ navigation }: Props) {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const { isPremium } = usePurchase();
   const { user } = useAuth();
   const uid = user?.id;
@@ -180,6 +180,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
   const rankColor = data?.overall_rank
     ? (SCORE_RANK_COLORS[data.overall_rank.label] ?? colors.accent)
     : colors.accent;
+  const rankText = scoreRankTextColor(data?.overall_rank?.label, mode, colors.accent);
 
   // Sweep the ring to the score. useNativeDriver is off because SVG stroke
   // props can't use it; the count-up text drives its own state instead of
@@ -266,6 +267,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
 
   const renderDistanceRow = (row: DistanceRow, i: number) => {
     const rowColor = SCORE_RANK_COLORS[row.rank.label] ?? colors.accent;
+    const rowText = scoreRankTextColor(row.rank.label, mode, colors.accent);
     // The first boundary above the current percentile is what to chase next
     const next = row.thresholds.find(t => t.percentile > row.percentile);
     // Runners quote a finish time at every distance (a 1:50 400m, not a
@@ -284,7 +286,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
           <View style={{ flex: 1 }}>
             <View style={styles.distanceTitleRow}>
               <Text style={styles.distanceName}>{row.label}</Text>
-              <Text style={[styles.raceTime, { color: rowColor }]}>
+              <Text style={[styles.raceTime, { color: rowText }]}>
                 {fmtRaceTime(row.pace_min_per_km * row.distance_km)}
               </Text>
               {showPace && (
@@ -302,7 +304,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
           </View>
           <View style={styles.rowTrailing}>
             <View style={[styles.miniRankBadge, { backgroundColor: rowColor + '22', borderColor: rowColor }]}>
-              <Text style={[styles.miniRankText, { color: rowColor }]}>{row.rank.display}</Text>
+              <Text style={[styles.miniRankText, { color: rowText }]}>{row.rank.display}</Text>
             </View>
             <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
           </View>
@@ -398,12 +400,12 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
                 },
               ]}
             >
-              <Ionicons name={SCORE_RANK_ICONS[data.overall_rank.label] ?? 'star'} size={18} color={rankColor} />
-              <Text style={[styles.rankUpText, { color: rankColor }]}>
+              <Ionicons name={SCORE_RANK_ICONS[data.overall_rank.label] ?? 'star'} size={18} color={rankText} />
+              <Text style={[styles.rankUpText, { color: rankText }]}>
                 {`You've reached ${data.overall_rank.display}`}
               </Text>
               <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={8} style={styles.rankUpShareBtn}>
-                <Ionicons name="share-outline" size={16} color={rankColor} />
+                <Ionicons name="share-outline" size={16} color={rankText} />
               </TouchableOpacity>
             </Animated.View>
           )}
@@ -419,12 +421,12 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
             >
               <LinearGradient colors={[rankColor + '26', colors.surface]} style={StyleSheet.absoluteFill} />
               <View style={styles.heroTopRow}>
-                <ScoreRing anim={ringAnim} color={rankColor} trackColor={colors.border} />
+                <ScoreRing anim={ringAnim} color={rankColor} textColor={rankText} trackColor={colors.border} />
                 <View style={styles.heroTextCol}>
                   {data.overall_rank && (
                     <View style={[styles.rankBadge, { backgroundColor: rankColor + '22', borderColor: rankColor }]}>
-                      <Ionicons name={SCORE_RANK_ICONS[data.overall_rank.label] ?? 'ellipse-outline'} size={13} color={rankColor} />
-                      <Text style={[styles.rankLabel, { color: rankColor }]}>{data.overall_rank.display}</Text>
+                      <Ionicons name={SCORE_RANK_ICONS[data.overall_rank.label] ?? 'ellipse-outline'} size={13} color={rankText} />
+                      <Text style={[styles.rankLabel, { color: rankText }]}>{data.overall_rank.display}</Text>
                     </View>
                   )}
                   <Text style={styles.percentileText}>

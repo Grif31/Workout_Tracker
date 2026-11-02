@@ -9,33 +9,32 @@ jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
 describe('SocialAuthButtons', () => {
   const onApple = jest.fn();
   const onGoogle = jest.fn();
-  const onFacebook = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   it('renders without crashing', () => {
-    render(<SocialAuthButtons onApple={onApple} onGoogle={onGoogle} onFacebook={onFacebook} />);
+    render(<SocialAuthButtons onApple={onApple} onGoogle={onGoogle} />);
   });
 
   it('displays the default label', () => {
     const { getByText } = render(
-      <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} onFacebook={onFacebook} />
+      <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} />
     );
     expect(getByText('or continue with')).toBeTruthy();
   });
 
   it('displays a custom label', () => {
     const { getByText } = render(
-      <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} onFacebook={onFacebook} label="or sign in with" />
+      <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} label="or sign in with" />
     );
     expect(getByText('or sign in with')).toBeTruthy();
   });
 
   it('calls onApple when Apple button pressed', () => {
     const { getByText } = render(
-      <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} onFacebook={onFacebook} />
+      <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} />
     );
     fireEvent.press(getByText('Apple'));
     expect(onApple).toHaveBeenCalledTimes(1);
@@ -43,7 +42,7 @@ describe('SocialAuthButtons', () => {
 
   it('adds Google beside Apple when it is set up', () => {
     const { getByText } = render(
-      <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} onFacebook={onFacebook} google />
+      <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} google />
     );
     expect(getByText('Apple')).toBeTruthy();
     fireEvent.press(getByText('Google'));
@@ -55,7 +54,7 @@ describe('SocialAuthButtons', () => {
     Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'android' });
     try {
       const { getByText, queryByText } = render(
-        <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} onFacebook={onFacebook} google label="or sign up with" />
+        <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} google label="or sign up with" />
       );
       expect(getByText('or sign up with')).toBeTruthy();
       expect(getByText('Google')).toBeTruthy();
@@ -70,7 +69,7 @@ describe('SocialAuthButtons', () => {
     Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'android' });
     try {
       const { queryByText } = render(
-        <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} onFacebook={onFacebook} label="or sign up with" />
+        <SocialAuthButtons onApple={onApple} onGoogle={onGoogle} label="or sign up with" />
       );
       // Not even the divider: it used to lead to an empty row
       expect(queryByText('or sign up with')).toBeNull();

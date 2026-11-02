@@ -199,3 +199,139 @@ def ai_daily_charts(by_day):
                                                     [str(d['calls']), 'calls', None]]}})
     return (admin_charts.stacked_columns(calls, AI_ENDPOINTS, label_every=5),
             admin_charts.stacked_columns(cost, ['cost'], fmt='money', height=170, label_every=5))
+
+
+# The paywall `source` each entry point passes (utils/paywall.ts in the app),
+# named for the page. An unknown source shows as itself.
+PAYWALL_SOURCE_LABELS = {
+    'templates': 'Template limit',
+    'routines': 'Routine limit',
+    'ai_coach': 'AI Coach',
+    'muscle_volume': 'Muscle volume',
+    'weekly_review': 'Weekly review',
+    'pr_velocity': 'PR velocity',
+    'strength_score': 'Strength Score',
+    'endurance_score': 'Endurance Score',
+    'app_icon': 'App icon',
+    'account': 'Account settings',
+    None: 'No source',
+}
+
+# Funnel steps in order: (key, label)
+PAYWALL_STEPS = [
+    ('shown', 'Saw a locked teaser'),
+    ('viewed', 'Opened the paywall'),
+    ('started', 'Started a purchase'),
+    ('purchased', 'Bought Premium'),
+]
+
+PURCHASE_OUTCOME_LABELS = {
+    'purchased': 'Bought',
+    'cancelled': 'Cancelled at the App Store sheet',
+    'pending': 'Waiting for approval (Ask to Buy)',
+    'network': "Couldn't reach the App Store",
+    'already_owned': 'Already owned',
+    'failed': 'Failed',
+}
+
+RESTORE_OUTCOME_LABELS = {
+    'restored': 'Restored',
+    'none': 'Nothing to restore',
+    'failed': "Couldn't reach the App Store",
+}
+
+
+def _who(r):
+    # A deleted account's rows keep counting, each as its own person
+    return r.user_id if r.user_id is not None else ('row', r.id)
+
+
+def _step_of(r):
+    if r.event == 'upsell_shown':
+        return 'shown'
+    if r.event == 'paywall_viewed':
+        return 'viewed'
+    if r.event == 'purchase_started':
+        return 'started'
+    if r.event == 'purchase' and r.outcome == 'purchased':
+        return 'purchased'
+    return None
+
+
+def _funnel(rows):
+    people = {key: set() for key, _ in PAYWALL_STEPS}
+    for r in rows:
+        step = _step_of(r)
+        if step:
+            people[step].add(_who(r))
+    counts = {key: len(p) for key, p in people.items()}
+    counts['conversion'] = _rate(counts['purchased'], counts['viewed'])
+    return counts
+
+
+def paywall_funnel(rows):
+    """People (not events) at each step, and the share of paywall openers
+    who bought."""
+    return _funnel(rows)
+
+
+def paywall_by_source(rows):
+    """The funnel per source, most opened first. Every event carries the
+    source that opened the paywall, so a purchase is credited to it."""
+    groups = defaultdict(list)
+    for r in rows:
+        groups[r.source].append(r)
+    out = [{'source': s, 'label': PAYWALL_SOURCE_LABELS.get(s, s), **_funnel(g)} for s, g in groups.items()]
+    out.sort(key=lambda g: (-g['viewed'], -g['shown'], g['label']))
+    return out
+
+
+def paywall_by_plan(rows):
+    """Picked, started and bought per plan, and how many of the purchases
+    began with a free trial."""
+    out = {p: {'plan': p, 'selected': 0, 'started': 0, 'purchased': 0, 'trials': 0}
+           for p in ('annual', 'monthly', 'lifetime')}
+    for r in rows:
+        g = out.get(r.plan)
+        if g is None:
+            continue
+        if r.event == 'plan_selected':
+            g['selected'] += 1
+        elif r.event == 'purchase_started':
+            g['started'] += 1
+        elif r.event == 'purchase' and r.outcome == 'purchased':
+            g['purchased'] += 1
+            g['trials'] += 1 if r.trial else 0
+    return list(out.values())
+
+
+def paywall_outcomes(rows, event, labels):
+    counts = Counter(r.outcome for r in rows if r.event == event)
+    return [{'outcome': k, 'label': label, 'count': counts.get(k, 0)} for k, label in labels.items()]
+
+
+def paywall_by_day(rows, today, days=30):
+    """Oldest first, every day in the window even with no events."""
+    buckets = {today - timedelta(days=i): {'viewed': set(), 'purchased': set()} for i in reversed(range(days))}
+    for r in rows:
+        b = buckets.get(r.created_at.date())
+        step = _step_of(r)
+        if b is not None and step in b:
+            b[step].add(_who(r))
+    return [{'day': d, 'viewed': len(b['viewed']), 'purchased': len(b['purchased'])} for d, b in buckets.items()]
+
+
+def paywall_daily_chart(by_day):
+    """People opening the paywall each day, purchases stacked on top of the
+    rest so a column's height is everyone who opened it."""
+    columns = []
+    for d in by_day:
+        rest = max(d['viewed'] - d['purchased'], 0)
+        columns.append({
+            'label': d['day'].strftime('%m/%d'),
+            'parts': {'purchased': d['purchased'], 'viewed': rest},
+            'tip': {'head': d['day'].strftime('%a %m/%d'),
+                    'rows': [[str(d['viewed']), 'opened the paywall', None],
+                             [str(d['purchased']), 'bought', 'key-0']]},
+        })
+    return admin_charts.stacked_columns(columns, ['purchased', 'viewed'], label_every=5)

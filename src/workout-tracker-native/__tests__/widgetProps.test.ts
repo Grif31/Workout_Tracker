@@ -206,8 +206,9 @@ describe('widget links for Up Next', () => {
 });
 
 describe('Start text on the accent', () => {
-  it('follows the preset: dark text on the dark-mode green, white on indigo and in light mode', () => {
+  it('follows the preset: dark text on the dark-mode accent, white in light mode', () => {
     expect(upNextProps(snap({}), THU, IMAGES)).toMatchObject({ onAccentDark: '#000000', onAccentLight: '#FFFFFF' });
-    expect(upNextProps(snap({ accent: { dark: '#5E5CE6', light: '#5E5CE6' } }), THU, IMAGES)).toMatchObject({ onAccentDark: '#FFFFFF' });
+    expect(upNextProps(snap({ accent: { dark: '#7D7AFF', light: '#5E5CE6' } }), THU, IMAGES))
+      .toMatchObject({ onAccentDark: '#000000', onAccentLight: '#FFFFFF' });
   });
 });

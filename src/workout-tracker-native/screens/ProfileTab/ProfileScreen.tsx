@@ -30,6 +30,7 @@ import type { GreekRankData } from '../../utils/greekRank';
 import { apiFetch, resolveMediaUrl } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
 import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
+import { rankTextColor } from '../../constants/greekRanks';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { fmtHold } from '../../components/workout/types';
 import CalendarModal from '../../components/CalendarModal';
@@ -74,7 +75,7 @@ type Pin = { exerciseId: number; prType: PR['pr_type']; context: number | null }
 
 export default function ProfileScreen({ navigation }: Props) {
   const { user } = useAuth();
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const unit = user?.weight_unit || 'lbs';
   const prPinsKey = `${PR_PINS_BASE}_${user?.id}`;
@@ -401,7 +402,7 @@ export default function ProfileScreen({ navigation }: Props) {
               accessibilityLabel={`Greek Rank: ${greekRank}`}
               style={[styles.rankBadgePill, { backgroundColor: (GREEK_RANK_COLORS[greekRank] ?? GREEK_RANK_COLORS.Neophyte) + '22', borderColor: GREEK_RANK_COLORS[greekRank] ?? GREEK_RANK_COLORS.Neophyte }]}
             >
-              <Text style={[styles.rankBadgeText, { color: GREEK_RANK_COLORS[greekRank] ?? GREEK_RANK_COLORS.Neophyte }]}>
+              <Text style={[styles.rankBadgeText, { color: rankTextColor(greekRank, GREEK_RANK_COLORS.Neophyte, mode) }]}>
                 {greekRank}
               </Text>
             </TouchableOpacity>

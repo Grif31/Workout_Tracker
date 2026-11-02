@@ -27,6 +27,7 @@ ADMIN_ROUTES = [
     ('get', '/admin/audit'),
     ('get', '/admin/coach'),
     ('get', '/admin/ai'),
+    ('get', '/admin/paywall'),
     ('get', '/admin/exercises'),
     ('get', '/admin/exercises/data'),
     ('post', '/admin/exercises/1/image'),
@@ -238,7 +239,7 @@ class TestAdminHome:
 
     def test_pages_share_the_nav(self, client, monkeypatch):
         monkeypatch.setenv('ADMIN_PASSWORD', 'pw')
-        links = ('/admin/', '/admin/coach', '/admin/ai', '/admin/exercises', '/admin/audit')
+        links = ('/admin/', '/admin/coach', '/admin/ai', '/admin/paywall', '/admin/exercises', '/admin/audit')
         for path in links:
             html = client.get(path, headers=_basic_auth('pw')).get_data(as_text=True)
             assert all(f'href="{link}"' in html for link in links), path

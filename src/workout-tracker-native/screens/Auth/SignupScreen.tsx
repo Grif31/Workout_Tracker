@@ -33,7 +33,7 @@ const serverMessage = (msg: unknown) =>
 
 export default function SignupScreen({ navigation }: Props) {
   const { login } = useAuth();
-  const { handleApple, handleGoogle, handleFacebook, googleAvailable } = useSocialAuth();
+  const { handleApple, handleGoogle, googleAvailable } = useSocialAuth();
 
   const [username, setUsername]           = useState('');
   const [email, setEmail]                 = useState('');
@@ -227,7 +227,6 @@ export default function SignupScreen({ navigation }: Props) {
             onApple={handleApple}
             onGoogle={handleGoogle}
             google={googleAvailable}
-            onFacebook={handleFacebook}
             label="or sign up with"
           />
 

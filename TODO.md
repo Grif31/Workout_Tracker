@@ -143,12 +143,10 @@ Check off items as you complete them.
   - [x] Add a "Records" section to ProfileScreen listing all-time bests per exercise
   - [x] Wire `GET /api/personal-records` (already exists) into the Profile screen UI
 
-- [ ] **Social login — complete Google & Facebook setup**
+- [ ] **Social login — complete Google setup** (Facebook dropped 2026-11-02: removed from the app, and the backend already refuses it)
   > Apple Sign-In works end-to-end. Google and Facebook buttons exist in `SocialAuthButtons.tsx` and the backend endpoint (`POST /api/auth/social`) is built, but Google/Facebook buttons currently show a "Coming Soon" alert because `EXPO_PUBLIC_GOOGLE_CLIENT_ID` and `EXPO_PUBLIC_FACEBOOK_APP_ID` are not configured.
   - [ ] Set up a Google OAuth client ID (Google Cloud Console) and add `EXPO_PUBLIC_GOOGLE_CLIENT_ID` to `.env`
   - [ ] Wire `@react-native-google-signin/google-signin` in the frontend to get the ID token and pass it to `/api/auth/social`
-  - [ ] Set up a Facebook App ID and add `EXPO_PUBLIC_FACEBOOK_APP_ID` to `.env`
-  - [ ] Wire the Facebook auth SDK in the frontend
   - [ ] Test full sign-in flow for each provider on a real iOS and Android device
 
 - [ ] **Save preferences to the account, not only the phone** (found 2026-10-28, after launch)
@@ -1272,12 +1270,14 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 ### Phase 4 — Enforce it and protect the cost
 - [x] **Server-side premium** (§5 "Server-side premium enforcement"): built 2026-10-13. `User.is_premium` (migration `t8u9v0w1x2y3`), RevenueCat webhook, `POST /api/premium/sync`, `is_pro` now reads `has_premium`. **Off until `PREMIUM_ENFORCED=true`**; the turn-on checklist is in CLAUDE.md under Server-side premium
 - [x] Gate the AI routes on the server (built 2026-10-13): insights premium only, generate and save premium except the onboarding routine (3 generations a day for free), weekly review trimmed to one part for free
-- [ ] `flask grant-beta-premium` re-run on release day (see launch notes)
+- [x] `flask grant-beta-premium` re-run on release day: not needed, no beta testers joined after the 2026-10-01 grant (owner, 2026-10-30)
 
 ### Phase 5 — Know whether it's working
 > There is no product analytics in the app today, so conversion can't be measured.
-- [ ] Pick a tool (PostHog or similar) and add a thin `track()` wrapper; ids only, no PII, same rule as Sentry
-- [ ] Events: `paywall_viewed {source}`, `plan_selected`, `purchase_started`, `purchase_completed {plan, trial}`, `purchase_failed {reason}`, `restore_*`, `upsell_shown {where}`, `upsell_tapped`
+- [x] Our own table rather than a vendor (owner, 2026-10-31): `paywall_events`, written by `POST /api/paywall/events` from `utils/paywallEvents.ts`, read by `/admin/paywall`. No new third party, so the privacy policy's Usage data paragraph only had to say what's recorded
+- [x] Events (built 2026-10-31): `upsell_shown {source}` (once per source per launch, from `PremiumTeaser`), `paywall_viewed`, `plan_selected {plan}`, `purchase_started {plan, trial}`, `purchase {plan, trial, outcome}`, `restore {outcome}`, every one with the paywall's source. "Upsell tapped" is `paywall_viewed`'s source
+- [ ] Before the build that sends these ships: App Store Connect → App Privacy, add Usage Data → Product Interaction (linked to the user, not used for tracking, purpose Analytics)
+- [ ] After that build is live: open `/admin/paywall` and check a purchase on a sandbox account lands in the funnel
 - [ ] Watch in RevenueCat: trial start rate, trial-to-paid, month-1 and month-3 retention, plan mix
 - [ ] First things to test once there's traffic: trial vs no trial, annual-first vs monthly-first, teaser depth on the score screens
 
@@ -1574,11 +1574,11 @@ One screen that says whether anything needs attention today, then links into the
 
 ### Sufficient Contrast (first update after launch; audit 2026-10-28)
 > Contrast audit of 114 files, both modes, every accent preset. Base tokens, PR gold, switches and the GPS screen pass. These five block the label; most are one constant each.
-- [ ] Score rank colors in light mode: `SCORE_RANK_COLORS` (`constants/strengthRanks.ts`) are 1.40 to 2.64 on white in `ScoreRing.tsx:63`, `ScoresCard.tsx:88,106`, `StrengthScoreScreen.tsx` (420, 445, 547, 579, 597, 635, 653) and `EnduranceScoreScreen.tsx:402,427`. Add a light text set (candidates: #4B5563, #0369A1, #047857, #C2410C, #7E22CE, Legend #8A6D00) and use it for text; keep the bright ones for rings and fills
-- [ ] Greek Rank names: make `rankTextColor()` (`constants/greekRanks.ts`) return `GREEK_RANK_TEXT_COLORS[mode][name]` for every rank, not just Aretē, and route `GreekRankCard.tsx:53` through it (also `GreekRankScreen.tsx:142,376,516`, `ProfileScreen.tsx:404`, `CoachScreen.tsx:866`, `GreekRankIntroScreen.tsx:85-87,117`). Fails today: light Aretē 1.40, Demigod 2.16, Athlete 2.75, Hero 2.78; dark Olympian 2.70, Titan 4.03
-- [ ] Set-type markers: light `warmup` #FF9500 (2.20) to #B25000 (5.20), which also fixes the "plateau"/status orange in `MuscleVolumeCard`, `AdvancedStatsCard`, `ProgressRateCard`, `PRDashboardScreen:612`; `dropset` #AF52DE (4.13) to #9A3FC7 light / #BF7FF0 dark
-- [ ] Dark accents: Indigo #5E5CE6 (3.36 on surface) to #7D7AFF with black `text`; Blue #007AFF (4.24) to #0A84FF. Update BRAND.md's accent tables with the new values
-- [ ] RPE picker: the selected tile's description (`WorkoutLog.tsx:2132`, `rgba(255,255,255,0.85)` on accent, as low as 1.72) to `colors.accentText`
-- [ ] Sign-in placeholders: `AUTH.placeholder` (`theme/authColors.ts`) #636366 (2.84) to #8E8E93 (5.22); they are each field's only label
-- [ ] Lower priority: app `placeholder` token where it's used as text (`SetRow.tsx:268`, `EditProfileScreen.tsx:265`, `CreateRoutineScreen.tsx:543`, `NewExerciseForm.tsx:186`, `OnboardingAboutYouScreen.tsx:323`; light #767680 = 4.49); light `border` 1.26 (dividers vanish)
-- [ ] Done when: rerun the `contrast-auditor` agent and it reports no blocking findings; check light and dark on a device, then tick Sufficient Contrast in App Store Connect
+- [x] (2026-11-02: `scoreRankTextColor` in `constants/strengthRanks.ts`, Legend #7A6000; `ScoreRing` takes a `textColor`) Score rank colors in light mode: `SCORE_RANK_COLORS` (`constants/strengthRanks.ts`) are 1.40 to 2.64 on white in `ScoreRing.tsx:63`, `ScoresCard.tsx:88,106`, `StrengthScoreScreen.tsx` (420, 445, 547, 579, 597, 635, 653) and `EnduranceScoreScreen.tsx:402,427`. Add a light text set (candidates: #4B5563, #0369A1, #047857, #C2410C, #7E22CE, Legend #8A6D00) and use it for text; keep the bright ones for rings and fills
+- [x] (2026-11-02; light Aretē text darkened to #7A6000, 4.4:1 on the background before) Greek Rank names: make `rankTextColor()` (`constants/greekRanks.ts`) return `GREEK_RANK_TEXT_COLORS[mode][name]` for every rank, not just Aretē, and route `GreekRankCard.tsx:53` through it (also `GreekRankScreen.tsx:142,376,516`, `ProfileScreen.tsx:404`, `CoachScreen.tsx:866`, `GreekRankIntroScreen.tsx:85-87,117`). Fails today: light Aretē 1.40, Demigod 2.16, Athlete 2.75, Hero 2.78; dark Olympian 2.70, Titan 4.03
+- [x] (warm-up was already done; drop set 2026-11-02) Set-type markers: light `warmup` #FF9500 (2.20) to #B25000 (5.20), which also fixes the "plateau"/status orange in `MuscleVolumeCard`, `AdvancedStatsCard`, `ProgressRateCard`, `PRDashboardScreen:612`; `dropset` #AF52DE (4.13) to #9A3FC7 light / #BF7FF0 dark
+- [x] (2026-11-02) Dark accents: Indigo #5E5CE6 (3.36 on surface) to #7D7AFF with black `text`; Blue #007AFF (4.24) to #0A84FF. Update BRAND.md's accent tables with the new values
+- [x] (2026-11-02) RPE picker: the selected tile's description (`WorkoutLog.tsx:2132`, `rgba(255,255,255,0.85)` on accent, as low as 1.72) to `colors.accentText`
+- [x] (2026-11-02) Sign-in placeholders: `AUTH.placeholder` (`theme/authColors.ts`) #636366 (2.84) to #8E8E93 (5.22); they are each field's only label
+- [ ] Lower priority (the light token is actually #AEAEB2, 2.2:1, and real text-field placeholders share it; those five are placeholders in all but name, so fix them with the token, not one by one): app `placeholder` token where it's used as text (`SetRow.tsx:268`, `EditProfileScreen.tsx:265`, `CreateRoutineScreen.tsx:543`, `NewExerciseForm.tsx:186`, `OnboardingAboutYouScreen.tsx:323`; light #767680 = 4.49); light `border` 1.26 (dividers vanish)
+- [ ] Done when: rerun the `contrast-auditor` agent and it reports no blocking findings (`__tests__/rankTextColors.test.ts` now holds rank names and set markers to 4.5:1); check light and dark on a device, then tick Sufficient Contrast in App Store Connect

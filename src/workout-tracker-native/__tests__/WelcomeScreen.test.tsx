@@ -7,7 +7,6 @@ jest.mock('../hooks/useSocialAuth', () => ({
   useSocialAuth: () => ({
     handleApple: jest.fn(),
     handleGoogle: jest.fn(),
-    handleFacebook: jest.fn(),
   }),
 }));
 

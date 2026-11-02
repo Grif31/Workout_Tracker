@@ -2129,7 +2129,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                   <Text style={[styles.rpeItemNum, { color: selected ? colors.accentText : colors.textPrimary }]}>
                     {value}
                   </Text>
-                  <Text style={[styles.rpeItemDesc, { color: selected ? 'rgba(255,255,255,0.85)' : colors.textSecondary }]}>
+                  <Text style={[styles.rpeItemDesc, { color: selected ? colors.accentText : colors.textSecondary }]}>
                     {desc}
                   </Text>
                 </TouchableOpacity>

@@ -40,8 +40,8 @@ function isExpoNative(dir: string): boolean {
 const toPosix = (p: string) => p.split(path.sep).join('/');
 
 describe('native Expo packages', () => {
-  // A package nested with no top-level copy is fine (expo-auth-session's own
-  // expo-crypto): there is still only one pod. Two copies are the problem.
+  // A package nested with no top-level copy is fine (a dependency's own
+  // native module): there is still only one pod. Two copies are the problem.
   it('never have a second copy nested under another package', () => {
     const topLevel = new Set(packageDirs(NODE_MODULES).map(packageName));
     const duplicates = packageDirs(NODE_MODULES).flatMap(dir =>

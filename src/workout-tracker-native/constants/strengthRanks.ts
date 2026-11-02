@@ -20,6 +20,24 @@ export const SCORE_RANK_COLORS: Record<string, string> = Object.fromEntries(
   STRENGTH_TIERS.map(t => [t.label, t.color]),
 );
 
+// The tier colors as TEXT (rank names, the ring's numeral, badge icons) in
+// light mode, where the bright ones are 1.4 to 2.6:1 on white. Each is 4.5:1 or
+// better on the light background and surface. Dark mode keeps the tier color
+// (6.4:1 or better on its surface), and rings, bars and borders always do.
+const SCORE_RANK_LIGHT_TEXT: Record<string, string> = {
+  Novice:       '#4B5563',
+  Beginner:     '#0369A1',
+  Intermediate: '#047857',
+  Advanced:     '#C2410C',
+  Elite:        '#7E22CE',
+  Legend:       '#7A6000',
+};
+
+export function scoreRankTextColor(label: string | undefined, mode: 'dark' | 'light', fallback: string): string {
+  if (!label || !(label in SCORE_RANK_COLORS)) return fallback;
+  return mode === 'light' ? SCORE_RANK_LIGHT_TEXT[label] : SCORE_RANK_COLORS[label];
+}
+
 export const SCORE_RANK_ICONS: Record<string, typeof STRENGTH_TIERS[number]['icon']> = Object.fromEntries(
   STRENGTH_TIERS.map(t => [t.label, t.icon]),
 );

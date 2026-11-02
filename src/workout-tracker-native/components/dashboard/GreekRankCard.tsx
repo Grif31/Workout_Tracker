@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { GREEK_RANKS, GREEK_RANK_COLORS } from '../../constants/greekRanks';
+import { GREEK_RANKS, GREEK_RANK_COLORS, rankTextColor } from '../../constants/greekRanks';
 import type { CardSize } from '../../constants/dashboardCards';
 
 type Props = {
@@ -23,7 +23,7 @@ type Props = {
  * gate won't give them.
  */
 export default function GreekRankCard({ rank, score, heldByGate, size }: Props) {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const index = GREEK_RANKS.findIndex(r => r.name === rank);
@@ -50,7 +50,7 @@ export default function GreekRankCard({ rank, score, heldByGate, size }: Props) 
       <Text style={styles.label}>Greek Rank</Text>
       <View style={styles.nameRow}>
         <View style={[styles.dot, { backgroundColor: color }]} />
-        <Text style={[styles.rankName, { color }]} numberOfLines={1}>{rank ?? '—'}</Text>
+        <Text style={[styles.rankName, { color: rank ? rankTextColor(rank, color, mode) : color }]} numberOfLines={1}>{rank ?? '—'}</Text>
         {size === 'full' && score != null && (
           <Text style={styles.score}>{Math.round(score)}</Text>
         )}

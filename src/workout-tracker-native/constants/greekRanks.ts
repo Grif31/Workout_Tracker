@@ -18,8 +18,8 @@ export const GREEK_RANKS = [
   { name: 'Aretē',    color: GREEK_RANK_COLORS['Aretē'], low: 92, high: 100, icon: 'Ā' },
 ];
 
-// Each rank's color when it is TEXT (the rank name on a widget), per
-// background. GREEK_RANK_COLORS stays the badge and bar color; as text it fails
+// Each rank's color when it is TEXT (a rank name, in the app or on a widget),
+// per background. GREEK_RANK_COLORS stays the badge and bar color; as text it fails
 // 4.5:1 on one side or the other (Olympian purple on dark 2.7:1, Hero green,
 // Athlete blue and Demigod orange on white under 3:1). Each value here is 4.5:1
 // or better on the widget surfaces, #1C1C1E and #FFFFFF.
@@ -40,12 +40,11 @@ export const GREEK_RANK_TEXT_COLORS: Record<'dark' | 'light', Record<string, str
     Demigod:  '#A85A00',
     Olympian: '#8E24AA',
     Titan:    '#C62828',
-    'Aretē':  '#8A6D00',
+    'Aretē':  '#7A6000', // 5.4:1 on the light background; #8A6D00 was 4.4:1
   },
 };
 
-// In the app only Aretē swaps to its text color: its gold is 1.4:1 on a white
-// card. The other ranks keep their badge color as text on purpose.
+/** A rank name's text color in this mode; `color` for a name that isn't a rank. */
 export function rankTextColor(name: string, color: string, mode: 'dark' | 'light'): string {
-  return name === 'Aretē' ? GREEK_RANK_TEXT_COLORS[mode]['Aretē'] : color;
+  return GREEK_RANK_TEXT_COLORS[mode][name] ?? color;
 }

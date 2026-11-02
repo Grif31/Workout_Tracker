@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import LoginScreen from '../screens/Auth/LoginScreen';
 
 jest.mock('../hooks/useSocialAuth', () => ({
-  useSocialAuth: () => ({ handleApple: jest.fn(), handleGoogle: jest.fn(), handleFacebook: jest.fn() }),
+  useSocialAuth: () => ({ handleApple: jest.fn(), handleGoogle: jest.fn() }),
 }));
 jest.mock('../theme/authColors', () => ({ AUTH: { bg: '#000', text: '#fff', accent: '#30D158', subtext: '#aaa', placeholder: '#666', card: '#1c1c1e', border: '#333', inputBg: '#1c1c1e', danger: '#FF453A' } }));
 

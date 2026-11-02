@@ -26,7 +26,7 @@ type Props = NativeStackScreenProps<AuthStackParamsList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
   const { login } = useAuth();
-  const { handleApple, handleGoogle, handleFacebook, googleAvailable } = useSocialAuth();
+  const { handleApple, handleGoogle, googleAvailable } = useSocialAuth();
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword]     = useState('');
@@ -155,7 +155,6 @@ export default function LoginScreen({ navigation }: Props) {
             onApple={handleApple}
             onGoogle={handleGoogle}
             google={googleAvailable}
-            onFacebook={handleFacebook}
             label="or continue with"
           />
 

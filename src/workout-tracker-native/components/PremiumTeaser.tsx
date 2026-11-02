@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,6 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import { trackUpsellShown } from '../utils/paywallEvents';
 
 type Props = {
   locked: boolean;
@@ -32,6 +33,10 @@ export default function PremiumTeaser({ locked, source, title, body, onUnlock, l
   const { colors, mode } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const navigation = useNavigation<any>();
+
+  useEffect(() => {
+    if (locked) trackUpsellShown(source);
+  }, [locked, source]);
 
   if (!locked) return <>{children}</>;
 
