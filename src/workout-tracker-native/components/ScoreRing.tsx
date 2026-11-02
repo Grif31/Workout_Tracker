@@ -25,8 +25,10 @@ export function AnimatedPercentText({ anim, style }: { anim: Animated.Value; sty
 type Props = {
   /** Drives both the arc sweep and the numeral, over an input range of 0..1. */
   anim: Animated.Value;
-  /** Rank color for the arc and the numeral. */
+  /** Rank color for the arc, and the numeral unless textColor is given. */
   color: string;
+  /** The numeral's color, where the arc's color is too faint as text (light mode). */
+  textColor?: string;
   /** Unfilled track behind the arc. */
   trackColor: string;
   /** Diameter; the score screens use the default, the Progress overview a smaller ring. */
@@ -35,7 +37,7 @@ type Props = {
 
 /** Hero percentile ring shared by the Strength and Endurance score screens,
  *  which are meant to read as the same screen for two different metrics. */
-export default function ScoreRing({ anim, color, trackColor, size = RING_SIZE }: Props) {
+export default function ScoreRing({ anim, color, textColor, trackColor, size = RING_SIZE }: Props) {
   const stroke = Math.round(size * 10 / RING_SIZE);
   const r = (size - stroke) / 2;
   const circumference = 2 * Math.PI * r;
@@ -60,7 +62,7 @@ export default function ScoreRing({ anim, color, trackColor, size = RING_SIZE }:
         />
       </Svg>
       <View style={styles.ringCenter}>
-        <AnimatedPercentText anim={anim} style={[styles.ringNum, small && styles.ringNumSmall, { color }]} />
+        <AnimatedPercentText anim={anim} style={[styles.ringNum, small && styles.ringNumSmall, { color: textColor ?? color }]} />
       </View>
     </View>
   );

@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
-import { SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../constants/strengthRanks';
+import { SCORE_RANK_COLORS, SCORE_RANK_ICONS, scoreRankTextColor } from '../constants/strengthRanks';
 import { scoreChangeLabel } from '../utils/scoreTrend';
 import ScoreRing from './ScoreRing';
 
@@ -68,9 +68,11 @@ function ScoreHalf({ title, score, emptyIcon, emptyText, onPress, styles, colors
   styles: ReturnType<typeof createStyles>;
   colors: Colors;
 }) {
+  const { mode } = useTheme();
   const anim = useRef(new Animated.Value(0)).current;
   const { percentile, rank, change } = score;
   const rankColor = rank ? (SCORE_RANK_COLORS[rank] ?? colors.accent) : colors.textSecondary;
+  const rankText = rank ? scoreRankTextColor(rank, mode, colors.accent) : colors.textSecondary;
 
   // strokeDashoffset is an SVG prop, which the native driver can't animate
   useEffect(() => {
@@ -85,7 +87,7 @@ function ScoreHalf({ title, score, emptyIcon, emptyText, onPress, styles, colors
   return (
     <TouchableOpacity style={styles.half} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
       {percentile != null ? (
-        <ScoreRing anim={anim} color={rankColor} trackColor={colors.border} size={RING_SIZE} />
+        <ScoreRing anim={anim} color={rankColor} textColor={rankText} trackColor={colors.border} size={RING_SIZE} />
       ) : (
         <View style={styles.emptyRing}>
           <Svg width={RING_SIZE} height={RING_SIZE}>
@@ -102,8 +104,8 @@ function ScoreHalf({ title, score, emptyIcon, emptyText, onPress, styles, colors
       <Text style={styles.title}>{title}</Text>
       {percentile != null && rank ? (
         <View style={[styles.rankPill, { borderColor: rankColor, backgroundColor: rankColor + '22' }]}>
-          <Ionicons name={SCORE_RANK_ICONS[rank] ?? 'ellipse-outline'} size={11} color={rankColor} />
-          <Text style={[styles.rankText, { color: rankColor }]}>{rank}</Text>
+          <Ionicons name={SCORE_RANK_ICONS[rank] ?? 'ellipse-outline'} size={11} color={rankText} />
+          <Text style={[styles.rankText, { color: rankText }]}>{rank}</Text>
         </View>
       ) : null}
       {percentile == null ? (

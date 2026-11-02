@@ -7,5 +7,6 @@ export const AUTH = {
   accent:    '#30D158',
   inputBg:   '#1C1C1E',
   danger:    '#FF453A',
-  placeholder: '#636366',
+  // The fields' only label, so it is text: 5.2:1 on the field (#636366 was 2.8:1)
+  placeholder: '#8E8E93',
 } as const;

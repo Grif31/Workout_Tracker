@@ -344,13 +344,13 @@ shade with white text:
 | Preset | Dark mode | Text on fill | Light mode | Text on fill |
 |---|---|---|---|---|
 | **Green (default)** | `#30D158` | `#000000` | `#1C7F35` | `#FFFFFF` |
-| Blue | `#007AFF` | `#000000` | `#006BE0` | `#FFFFFF` |
+| Blue | `#0A84FF` | `#000000` | `#006BE0` | `#FFFFFF` |
 | Purple | `#BF5AF2` | `#000000` | `#A922EE` | `#FFFFFF` |
 | Orange | `#FF9F0A` | `#000000` | `#C93400` | `#FFFFFF` |
 | Red | `#FF453A` | `#000000` | `#D70015` | `#FFFFFF` |
 | Pink | `#FF375F` | `#000000` | `#D30F45` | `#FFFFFF` |
 | Teal | `#5AC8FA` | `#000000` | `#0576AA` | `#FFFFFF` |
-| Indigo | `#5E5CE6` | `#FFFFFF` | `#5E5CE6` | `#FFFFFF` |
+| Indigo | `#7D7AFF` | `#000000` | `#5E5CE6` | `#FFFFFF` |
 
 **No Yellow preset.** Removed September 2026. In dark mode it was nearly
 identical to the Aretē rank gold (`#FFD700`), and a yellow dark enough to
@@ -415,13 +415,15 @@ Two distinct golds, used for two distinct things. Don't conflate them:
 | Text secondary | `#6C6C70` | Captions, muted labels |
 | Placeholder | `#AEAEB2` | Input placeholder text |
 
-### Semantic (same in both modes)
+### Semantic
 
-| Token | Hex | Meaning |
-|---|---|---|
-| Danger | `#FF3B30` (light) / `#FF453A` (dark) | Destructive actions, errors |
-| Warm-up set | `#FF9500` | Warm-up set indicator |
-| Drop set | `#AF52DE` | Drop-set indicator |
+Light values are darker so they read as text on white (4.5:1 or better).
+
+| Token | Light | Dark | Meaning |
+|---|---|---|---|
+| Danger | `#D70015` | `#FF453A` | Destructive actions, errors |
+| Warm-up set | `#B25000` | `#FF9500` | Warm-up set indicator |
+| Drop set | `#9A3FC7` | `#BF7FF0` | Drop-set indicator |
 
 ---
 

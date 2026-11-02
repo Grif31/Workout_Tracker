@@ -22,7 +22,7 @@ import { computeChartXFit, showChartXLabel, CHART_X_LABEL_WIDTH, CHART_Y_AXIS_WI
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import { ProgressStackParamsList } from '../../navigation/types';
 import MuscleDiagram from '../../components/MuscleDiagram';
-import { STRENGTH_TIERS, SCORE_RANK_COLORS, SCORE_RANK_ICONS } from '../../constants/strengthRanks';
+import { STRENGTH_TIERS, SCORE_RANK_COLORS, SCORE_RANK_ICONS, scoreRankTextColor } from '../../constants/strengthRanks';
 import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModal';
 import StrengthScoreShareCard from '../../components/share/StrengthScoreShareCard';
 import { toLocalDateStr, timeAgo } from '../../utils/date';
@@ -81,7 +81,7 @@ interface HistoryPoint { date: string; score: number }
 type MuscleGroup = { name: string; score: number; rank: { label: string; tier: number; display: string } };
 
 export default function StrengthScoreScreen({ navigation }: Props) {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const { user } = useAuth();
   const uid = user?.id;
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -236,6 +236,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
   }, []));
 
   const rankColor = scoreData ? (SCORE_RANK_COLORS[scoreData.overall_rank.label] ?? colors.accent) : colors.accent;
+  const rankText = scoreRankTextColor(scoreData?.overall_rank.label, mode, colors.accent);
 
   // Sweep the hero ring to the actual score whenever it changes. The count-up
   // number is driven by its own leaf component (AnimatedPercentText) rather
@@ -416,10 +417,10 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                 },
               ]}
             >
-              <Ionicons name={SCORE_RANK_ICONS[scoreData.overall_rank.label] ?? 'star'} size={18} color={rankColor} />
-              <Text style={[styles.rankUpText, { color: rankColor }]}>{`You've reached ${scoreData.overall_rank.display}`}</Text>
+              <Ionicons name={SCORE_RANK_ICONS[scoreData.overall_rank.label] ?? 'star'} size={18} color={rankText} />
+              <Text style={[styles.rankUpText, { color: rankText }]}>{`You've reached ${scoreData.overall_rank.display}`}</Text>
               <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={8} style={styles.rankUpShareBtn}>
-                <Ionicons name="share-outline" size={16} color={rankColor} />
+                <Ionicons name="share-outline" size={16} color={rankText} />
               </TouchableOpacity>
             </Animated.View>
           )}
@@ -438,11 +439,11 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                 style={StyleSheet.absoluteFill}
               />
               <View style={styles.heroTopRow}>
-                <ScoreRing anim={ringAnim} color={rankColor} trackColor={colors.border} />
+                <ScoreRing anim={ringAnim} color={rankColor} textColor={rankText} trackColor={colors.border} />
                 <View style={styles.heroTextCol}>
                   <View style={[styles.rankBadge, { backgroundColor: rankColor + '22', borderColor: rankColor }]}>
-                    <Ionicons name={SCORE_RANK_ICONS[scoreData.overall_rank.label] ?? 'ellipse-outline'} size={13} color={rankColor} />
-                    <Text style={[styles.rankLabel, { color: rankColor }]}>{scoreData.overall_rank.display}</Text>
+                    <Ionicons name={SCORE_RANK_ICONS[scoreData.overall_rank.label] ?? 'ellipse-outline'} size={13} color={rankText} />
+                    <Text style={[styles.rankLabel, { color: rankText }]}>{scoreData.overall_rank.display}</Text>
                   </View>
                   <Text style={styles.percentileText}>
                     Stronger than <AnimatedPercentText anim={ringAnim} style={styles.percentileText} />% of lifters
@@ -530,6 +531,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               <View style={styles.card}>
                 {scoreData.muscle_groups.map((mg, i) => {
                   const mgColor = SCORE_RANK_COLORS[mg.rank.label] ?? colors.accent;
+                  const mgText = scoreRankTextColor(mg.rank.label, mode, colors.accent);
                   return (
                     <React.Fragment key={mg.name}>
                       {i > 0 && <View style={styles.divider} />}
@@ -543,8 +545,8 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                         </View>
                         <View style={{ alignItems: 'flex-end', gap: 2 }}>
                           <View style={[styles.miniRankBadge, { backgroundColor: mgColor + '22', borderColor: mgColor }]}>
-                            <Ionicons name={SCORE_RANK_ICONS[mg.rank.label] ?? 'ellipse-outline'} size={10} color={mgColor} />
-                            <Text style={[styles.miniRankText, { color: mgColor }]}>{mg.rank.display}</Text>
+                            <Ionicons name={SCORE_RANK_ICONS[mg.rank.label] ?? 'ellipse-outline'} size={10} color={mgText} />
+                            <Text style={[styles.miniRankText, { color: mgText }]}>{mg.rank.display}</Text>
                           </View>
                           <Text style={styles.mgScore}>{mg.score}</Text>
                         </View>
@@ -563,6 +565,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               <View style={styles.card}>
                 {scoreData.big6.map((ex, i) => {
                   const exColor = ex.rank ? (SCORE_RANK_COLORS[ex.rank.label] ?? colors.accent) : colors.border;
+                  const exText = ex.rank ? scoreRankTextColor(ex.rank.label, mode, colors.accent) : colors.textSecondary;
                   return (
                     <React.Fragment key={ex.exercise}>
                       {i > 0 && <View style={styles.divider} />}
@@ -576,7 +579,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                           <View style={styles.exNameRow}>
                             <Text style={[styles.exName, !ex.has_data && { color: colors.textSecondary }]}>{ex.exercise}</Text>
                             {ex.has_data && bwLbs && ex.estimated_1rm != null && ex.estimated_1rm > 0 && (
-                              <Text style={[styles.bwMultiplier, { color: exColor }]}>
+                              <Text style={[styles.bwMultiplier, { color: exText }]}>
                                 {(ex.estimated_1rm / bwLbs).toFixed(1)}× BW
                               </Text>
                             )}
@@ -587,14 +590,14 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                             <Text style={styles.noDataText}>No data logged</Text>
                           )}
                           {ex.has_data && (ex.percentile ?? 0) < 10 && (
-                            <Text style={[styles.noDataText, { color: exColor }]}>{'< 10th percentile'}</Text>
+                            <Text style={[styles.noDataText, { color: exText }]}>{'< 10th percentile'}</Text>
                           )}
                         </View>
                         {ex.rank ? (
                           <View style={styles.rankRow}>
                             <View style={[styles.miniRankBadge, { backgroundColor: exColor + '22', borderColor: exColor }]}>
-                              <Ionicons name={SCORE_RANK_ICONS[ex.rank.label] ?? 'ellipse-outline'} size={10} color={exColor} />
-                              <Text style={[styles.miniRankText, { color: exColor }]}>{ex.rank.display}</Text>
+                              <Ionicons name={SCORE_RANK_ICONS[ex.rank.label] ?? 'ellipse-outline'} size={10} color={exText} />
+                              <Text style={[styles.miniRankText, { color: exText }]}>{ex.rank.display}</Text>
                             </View>
                             <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
                           </View>
@@ -619,6 +622,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
               <View style={styles.card}>
                 {scoreData.supplemental.map((ex, i) => {
                   const exColor = ex.rank ? (SCORE_RANK_COLORS[ex.rank.label] ?? colors.accent) : colors.border;
+                  const exText = ex.rank ? scoreRankTextColor(ex.rank.label, mode, colors.accent) : colors.textSecondary;
                   return (
                     <React.Fragment key={ex.exercise}>
                       {i > 0 && <View style={styles.divider} />}
@@ -632,7 +636,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                           <View style={styles.exNameRow}>
                             <Text style={[styles.exName, !ex.has_data && { color: colors.textSecondary }]}>{ex.exercise}</Text>
                             {ex.has_data && bwLbs && ex.estimated_1rm != null && ex.estimated_1rm > 0 && (
-                              <Text style={[styles.bwMultiplier, { color: exColor }]}>
+                              <Text style={[styles.bwMultiplier, { color: exText }]}>
                                 {(ex.estimated_1rm / bwLbs).toFixed(1)}× BW
                               </Text>
                             )}
@@ -643,14 +647,14 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                             <Text style={styles.noDataText}>No data logged</Text>
                           )}
                           {ex.has_data && (ex.percentile ?? 0) < 10 && (
-                            <Text style={[styles.noDataText, { color: exColor }]}>{'< 10th percentile'}</Text>
+                            <Text style={[styles.noDataText, { color: exText }]}>{'< 10th percentile'}</Text>
                           )}
                         </View>
                         {ex.rank ? (
                           <View style={styles.rankRow}>
                             <View style={[styles.miniRankBadge, { backgroundColor: exColor + '22', borderColor: exColor }]}>
-                              <Ionicons name={SCORE_RANK_ICONS[ex.rank.label] ?? 'ellipse-outline'} size={10} color={exColor} />
-                              <Text style={[styles.miniRankText, { color: exColor }]}>{ex.rank.display}</Text>
+                              <Ionicons name={SCORE_RANK_ICONS[ex.rank.label] ?? 'ellipse-outline'} size={10} color={exText} />
+                              <Text style={[styles.miniRankText, { color: exText }]}>{ex.rank.display}</Text>
                             </View>
                             <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
                           </View>
@@ -807,13 +811,14 @@ export default function StrengthScoreScreen({ navigation }: Props) {
           <View style={styles.modalSheet}>
             {selectedGroup && (() => {
               const mgColor = SCORE_RANK_COLORS[(selectedGroup as any).rank?.label] ?? colors.accent;
+              const mgText = scoreRankTextColor((selectedGroup as any).rank?.label, mode, colors.accent);
               return (
                 <>
                   <View style={styles.modalHandle} />
-                  <Text style={[styles.modalTitle, { color: mgColor }]}>{(selectedGroup as any).name}</Text>
+                  <Text style={[styles.modalTitle, { color: mgText }]}>{(selectedGroup as any).name}</Text>
                   <View style={[styles.miniRankBadge, { backgroundColor: mgColor + '22', borderColor: mgColor, alignSelf: 'center', marginBottom: spacing.md }]}>
-                    <Ionicons name={SCORE_RANK_ICONS[(selectedGroup as any).rank?.label] ?? 'ellipse-outline'} size={11} color={mgColor} />
-                    <Text style={[styles.miniRankText, { color: mgColor }]}>{(selectedGroup as any).rank?.display}</Text>
+                    <Ionicons name={SCORE_RANK_ICONS[(selectedGroup as any).rank?.label] ?? 'ellipse-outline'} size={11} color={mgText} />
+                    <Text style={[styles.miniRankText, { color: mgText }]}>{(selectedGroup as any).rank?.display}</Text>
                   </View>
                   <View style={styles.tierRow}>
                     {[1, 2, 3].map(t => (

@@ -139,7 +139,7 @@ function RankCircle({
         )}
       </View>
 
-      <Text style={[circleStyles.rankName, { color: isLocked ? colors.textSecondary : rank.color }]}>
+      <Text style={[circleStyles.rankName, { color: isLocked ? colors.textSecondary : rankTextColor(rank.name, rank.color, mode) }]}>
         {rank.name}
       </Text>
       {isSelected && (
@@ -514,8 +514,8 @@ export default function GreekRankScreen({ navigation }: Props) {
                         const gateColor = GREEK_RANK_COLORS[gateRank] ?? heldRank.color;
                         return (
                           <View key={gateRank} testID={`greek-gate-${gateRank}-${met ? 'met' : 'locked'}`} style={styles.gateRow}>
-                            <Ionicons name={met ? 'checkmark-circle' : 'lock-closed'} size={16} color={met ? gateColor : colors.textSecondary} />
-                            <Text style={[styles.gateRank, { color: met ? gateColor : colors.textPrimary }]}>{gateRank}</Text>
+                            <Ionicons name={met ? 'checkmark-circle' : 'lock-closed'} size={16} color={met ? rankTextColor(gateRank, gateColor, mode) : colors.textSecondary} />
+                            <Text style={[styles.gateRank, { color: met ? rankTextColor(gateRank, gateColor, mode) : colors.textPrimary }]}>{gateRank}</Text>
                             <Text style={styles.gateRequirement}>
                               {fmtOrdinal(required)} percentile
                               {performance.best != null && !met && ` · you're at ${fmtOrdinal(performance.best)}`}

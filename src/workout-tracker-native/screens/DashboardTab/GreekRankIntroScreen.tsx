@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { GREEK_RANKS, GREEK_RANK_COLORS } from '../../constants/greekRanks';
+import { GREEK_RANKS, GREEK_RANK_COLORS, rankTextColor } from '../../constants/greekRanks';
 
 // Registered in both DashboardStack (the post-first-workout moment) and
 // ProfileStack (the info button on GreekRankScreen), so the prop is the
@@ -33,7 +33,7 @@ const PILLARS = [
 ];
 
 export default function GreekRankIntroScreen({ navigation }: Props) {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
 
   const goBack = () =>
@@ -82,9 +82,9 @@ export default function GreekRankIntroScreen({ navigation }: Props) {
             renderItem={({ item, index }) => (
               <View style={s.rankItem}>
                 <View style={[s.rankCircle, { borderColor: item.color, backgroundColor: item.color + '22' }]}>
-                  <Text style={[s.rankCircleIcon, { color: item.color }]}>{item.icon}</Text>
+                  <Text style={[s.rankCircleIcon, { color: rankTextColor(item.name, item.color, mode) }]}>{item.icon}</Text>
                 </View>
-                <Text style={[s.rankItemName, { color: item.color }]} numberOfLines={1}>
+                <Text style={[s.rankItemName, { color: rankTextColor(item.name, item.color, mode) }]} numberOfLines={1}>
                   {item.name}
                 </Text>
                 {index > 0 && <Text style={s.rankItemScore}>{item.low}+</Text>}
@@ -114,7 +114,7 @@ export default function GreekRankIntroScreen({ navigation }: Props) {
           <Text style={s.sectionTitle}>Rank Rewards</Text>
           <Text style={s.bodyText}>
             Each rank unlocks a unique profile frame you can equip on your avatar. Reach{' '}
-            <Text style={{ color: GREEK_RANK_COLORS['Olympian'], fontWeight: '700' }}>Olympian</Text>
+            <Text style={{ color: rankTextColor('Olympian', GREEK_RANK_COLORS.Olympian, mode), fontWeight: '700' }}>Olympian</Text>
             {' '}and above to unlock animated frames that pulse with your rank colour.
           </Text>
         </Animated.View>

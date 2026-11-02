@@ -17,13 +17,13 @@ export type AccentPreset = {
 // yellow dark enough to read in light mode lands on PR gold's hue. Gold means achievement.
 export const ACCENT_PRESETS: AccentPreset[] = [
   { name: 'Green',  value: '#30D158', text: '#000000', light: '#1C7F35', lightText: '#FFFFFF' },
-  { name: 'Blue',   value: '#007AFF', text: '#000000', light: '#006BE0', lightText: '#FFFFFF' },
+  { name: 'Blue',   value: '#0A84FF', text: '#000000', light: '#006BE0', lightText: '#FFFFFF' },
   { name: 'Purple', value: '#BF5AF2', text: '#000000', light: '#A922EE', lightText: '#FFFFFF' },
   { name: 'Orange', value: '#FF9F0A', text: '#000000', light: '#C93400', lightText: '#FFFFFF' },
   { name: 'Red',    value: '#FF453A', text: '#000000', light: '#D70015', lightText: '#FFFFFF' },
   { name: 'Pink',   value: '#FF375F', text: '#000000', light: '#D30F45', lightText: '#FFFFFF' },
   { name: 'Teal',   value: '#5AC8FA', text: '#000000', light: '#0576AA', lightText: '#FFFFFF' },
-  { name: 'Indigo', value: '#5E5CE6', text: '#FFFFFF', light: '#5E5CE6', lightText: '#FFFFFF' },
+  { name: 'Indigo', value: '#7D7AFF', text: '#000000', light: '#5E5CE6', lightText: '#FFFFFF' },
 ];
 
 // ── Color type ────────────────────────────────────────────────────────────────
@@ -65,7 +65,7 @@ export const LIGHT_BASE = {
   danger:        '#D70015', // iOS's #FF3B30 is 3.5:1 on white, too faint for error text
   dangerText:    '#FFFFFF', // 5.4:1 on danger
   warmup:        '#B25000', // 5.2:1 on white; #FF9500 is 2.2:1, and warm-up tags are text
-  dropset:       '#AF52DE',
+  dropset:       '#9A3FC7', // 5.4:1 on white; #AF52DE is 4.1:1
 };
 
 export const DARK_BASE = {
@@ -82,7 +82,7 @@ export const DARK_BASE = {
   danger:        '#FF453A',
   dangerText:    '#000000', // 6.2:1 on danger; white is 3.4:1
   warmup:        '#FF9500',
-  dropset:       '#AF52DE',
+  dropset:       '#BF7FF0', // 6.1:1 on surface; #AF52DE is 4.1:1
 };
 
 function buildColors(mode: 'light' | 'dark', preset: AccentPreset): Colors {
