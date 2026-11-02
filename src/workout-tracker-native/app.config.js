@@ -123,7 +123,6 @@ module.exports = {
         { faceIDPermission: false },
       ],
       'expo-asset',
-      'expo-web-browser',
       [
         // react-native-health-connect's androidx.health.connect:connect-client
         // dependency requires API 26+ — Expo's default minSdk (24) fails the

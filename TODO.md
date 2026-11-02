@@ -143,12 +143,10 @@ Check off items as you complete them.
   - [x] Add a "Records" section to ProfileScreen listing all-time bests per exercise
   - [x] Wire `GET /api/personal-records` (already exists) into the Profile screen UI
 
-- [ ] **Social login — complete Google & Facebook setup**
+- [ ] **Social login — complete Google setup** (Facebook dropped 2026-11-02: removed from the app, and the backend already refuses it)
   > Apple Sign-In works end-to-end. Google and Facebook buttons exist in `SocialAuthButtons.tsx` and the backend endpoint (`POST /api/auth/social`) is built, but Google/Facebook buttons currently show a "Coming Soon" alert because `EXPO_PUBLIC_GOOGLE_CLIENT_ID` and `EXPO_PUBLIC_FACEBOOK_APP_ID` are not configured.
   - [ ] Set up a Google OAuth client ID (Google Cloud Console) and add `EXPO_PUBLIC_GOOGLE_CLIENT_ID` to `.env`
   - [ ] Wire `@react-native-google-signin/google-signin` in the frontend to get the ID token and pass it to `/api/auth/social`
-  - [ ] Set up a Facebook App ID and add `EXPO_PUBLIC_FACEBOOK_APP_ID` to `.env`
-  - [ ] Wire the Facebook auth SDK in the frontend
   - [ ] Test full sign-in flow for each provider on a real iOS and Android device
 
 - [ ] **Save preferences to the account, not only the phone** (found 2026-10-28, after launch)

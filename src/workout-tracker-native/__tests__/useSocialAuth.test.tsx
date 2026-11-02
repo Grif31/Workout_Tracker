@@ -18,8 +18,6 @@ jest.mock('expo-constants', () => ({
   expoConfig: { extra: { googleSignIn: { iosClientId: 'ios-client.apps.googleusercontent.com', webClientId: 'web-client.apps.googleusercontent.com' } } },
 }));
 jest.mock('expo-application', () => ({ applicationId: 'com.aretefitness.app.dev' }));
-jest.mock('expo-auth-session/providers/facebook', () => ({ useAuthRequest: () => [null, null, jest.fn()] }));
-jest.mock('expo-web-browser', () => ({ maybeCompleteAuthSession: jest.fn() }));
 const mockLogin = jest.fn();
 jest.mock('../context/AuthContext', () => ({ useAuth: () => ({ login: mockLogin }) }));
 jest.mock('../utils/api', () => ({ apiFetch: jest.fn(), isNetworkError: () => false }));

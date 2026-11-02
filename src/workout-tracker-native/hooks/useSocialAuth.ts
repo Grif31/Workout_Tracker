@@ -1,18 +1,8 @@
-import { useEffect } from 'react';
 import { Platform, Alert } from 'react-native';
-import * as Facebook from 'expo-auth-session/providers/facebook';
 import Constants from 'expo-constants';
 import * as Application from 'expo-application';
-import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, isNetworkError } from '../utils/api';
-
-WebBrowser.maybeCompleteAuthSession();
-
-// Fallback prevents expo-auth-session from throwing during hook init
-// when credentials aren't configured yet.
-const FACEBOOK_ID   = process.env.EXPO_PUBLIC_FACEBOOK_APP_ID ?? 'not-configured';
-const facebookReady = FACEBOOK_ID !== 'not-configured';
 
 // Native Google sign-in (Google's own account sheet), lazy-loaded: the module
 // only exists in builds made since it was added, never in Expo Go, and a
@@ -47,10 +37,6 @@ let googleConfigured = false;
 export function useSocialAuth() {
   const { login } = useAuth();
 
-  const [, fbResponse, promptFbAsync] = Facebook.useAuthRequest({
-    clientId: FACEBOOK_ID,
-  });
-
   const socialLogin = async (provider: string, token: string) => {
     try {
       const res = await apiFetch('/api/auth/social', {
@@ -68,13 +54,6 @@ export function useSocialAuth() {
       if (!isNetworkError(err)) Alert.alert("Couldn't Sign In", 'Try again in a moment.');
     }
   };
-
-  useEffect(() => {
-    if (facebookReady && fbResponse?.type === 'success') {
-      const token = fbResponse.authentication?.accessToken;
-      if (token) socialLogin('facebook', token);
-    }
-  }, [fbResponse]);
 
   const handleApple = async () => {
     if (Platform.OS !== 'ios') return;
@@ -127,13 +106,5 @@ ${(err as any)?.code ?? 'no code'}: ${(err as any)?.message ?? err}` : '';
     }
   };
 
-  const handleFacebook = () => {
-    if (!facebookReady) {
-      Alert.alert('Coming Soon', 'Facebook Sign In requires configuration. See setup instructions.');
-      return;
-    }
-    promptFbAsync();
-  };
-
-  return { handleApple, handleGoogle, handleFacebook, googleAvailable };
+  return { handleApple, handleGoogle, googleAvailable };
 }

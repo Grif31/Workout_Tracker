@@ -8,7 +8,6 @@ import { typography } from '../theme/typography';
 type Props = {
   onApple:    () => void;
   onGoogle:   () => void;
-  onFacebook: () => void;
   /** Google is set up for this platform (useSocialAuth's googleAvailable). */
   google?: boolean;
   label?: string;
@@ -17,7 +16,6 @@ type Props = {
 export default function SocialAuthButtons({
   onApple,
   onGoogle,
-  onFacebook,
   google = false,
   label = 'or continue with',
 }: Props) {
