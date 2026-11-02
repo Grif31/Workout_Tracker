@@ -25,6 +25,7 @@ import { useWidgetLinks } from './useWidgetLinks';
 import WidgetDiagramRenderer from '../components/WidgetDiagramRenderer';
 import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import { motionTiming, motionSpring } from '../utils/motion';
 
 const Tab = createBottomTabNavigator<AppStack>();
 
@@ -81,7 +82,7 @@ function MiniWorkoutBar() {
   useEffect(() => {
     if (session && !hadSessionRef.current) {
       entranceAnim.setValue(0);
-      Animated.spring(entranceAnim, {
+      motionSpring(entranceAnim, {
         toValue: 1,
         useNativeDriver: true,
         damping: 18,
@@ -204,7 +205,7 @@ function AnimatedTabBar({ state, navigation, colors, pendingCount }: {
 
   useEffect(() => {
     state.routes.forEach((_, i) => {
-      Animated.spring(anims[i], {
+      motionSpring(anims[i], {
         toValue: i === state.index ? 1 : 0,
         useNativeDriver: true,
         damping: 18,
@@ -246,9 +247,9 @@ function AnimatedTabBar({ state, navigation, colors, pendingCount }: {
                 canPreventDefault: true,
               });
               if (!isActive && !event.defaultPrevented) {
-                Animated.timing(screenFadeAnim, { toValue: 0, duration: 80, useNativeDriver: true }).start(() => {
+                motionTiming(screenFadeAnim, { toValue: 0, duration: 80, useNativeDriver: true }).start(() => {
                   navigation.navigate(route.name);
-                  Animated.timing(screenFadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+                  motionTiming(screenFadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
                 });
               }
             }}
@@ -309,16 +310,16 @@ function CustomTabBar(props: BottomTabBarProps) {
     prevSubScreen.current = isOnSubScreen;
     if (isOnSubScreen) {
       Animated.parallel([
-        Animated.timing(translateY, { toValue: heightRef.current, duration: 220, useNativeDriver: true }),
-        Animated.timing(opacity,    { toValue: 0,                 duration: 160, useNativeDriver: true }),
+        motionTiming(translateY, { toValue: heightRef.current, duration: 220, useNativeDriver: true }),
+        motionTiming(opacity,    { toValue: 0,                 duration: 160, useNativeDriver: true }),
       ]).start(() => setCollapsed(true));
     } else {
       setCollapsed(false);
       translateY.setValue(heightRef.current);
       opacity.setValue(0);
       Animated.parallel([
-        Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 180, mass: 0.8 }),
-        Animated.timing(opacity,    { toValue: 1, duration: 200, useNativeDriver: true }),
+        motionSpring(translateY, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 180, mass: 0.8 }),
+        motionTiming(opacity,    { toValue: 1, duration: 200, useNativeDriver: true }),
       ]).start();
     }
   }, [isOnSubScreen]);

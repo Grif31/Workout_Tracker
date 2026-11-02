@@ -40,6 +40,7 @@ import {
   trailingAverages,
   type MeasurementKey,
 } from '../../utils/bodyMetrics';
+import { reduceMotion } from '../../utils/motion';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'Measurements'>;
 
@@ -602,7 +603,7 @@ export default function MeasurementsScreen({ navigation }: Props) {
           initialSpacing={10}
           endSpacing={10}
           noOfSections={CHART_SECTIONS}
-          isAnimated
+          isAnimated={!reduceMotion()}
         />
       </View>
     );

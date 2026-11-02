@@ -33,6 +33,7 @@ import ProgressRateCard from '../../components/ProgressRateCard';
 import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModal';
 import SegmentedControl from '../../components/SegmentedControl';
 import { usePurchase } from '../../context/PurchaseContext';
+import { motionTiming, reduceMotion } from '../../utils/motion';
 
 const RANGE_SEGMENTS = (['1M', '3M', '6M', 'All'] as const).map(r => ({ key: r, label: r }));
 
@@ -262,7 +263,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const handleTabChange = (tab: TabKey) => {
     if (tab === activeTab) return;
     const idx = visibleTabs.findIndex(t => t.key === tab);
-    Animated.timing(tabAnimRef, { toValue: idx, duration: 200, useNativeDriver: true }).start();
+    motionTiming(tabAnimRef, { toValue: idx, duration: 200, useNativeDriver: true }).start();
 
     setPrevTab(activeTab);
     contentFadeAnim.setValue(0);
@@ -270,8 +271,8 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     setActiveTab(tab);
 
     Animated.parallel([
-      Animated.timing(contentFadeAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
-      Animated.timing(prevFadeAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
+      motionTiming(contentFadeAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+      motionTiming(prevFadeAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
     ]).start(() => setPrevTab(null));
   };
 
@@ -440,7 +441,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     if (activeTab !== 'overview' || stats.totalSets === 0) return;
     statAnims.forEach(a => a.setValue(0));
     Animated.stagger(50, statAnims.map(a =>
-      Animated.timing(a, { toValue: 1, duration: 260, useNativeDriver: true })
+      motionTiming(a, { toValue: 1, duration: 260, useNativeDriver: true })
     )).start();
   }, [activeTab, stats.totalSets]);
 
@@ -453,7 +454,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
     while (histAnims.current.length < count) histAnims.current.push(new Animated.Value(0));
     histAnims.current.slice(0, count).forEach(a => a.setValue(0));
     Animated.stagger(60, histAnims.current.slice(0, count).map(a =>
-      Animated.timing(a, { toValue: 1, duration: 260, useNativeDriver: true })
+      motionTiming(a, { toValue: 1, duration: 260, useNativeDriver: true })
     )).start();
   }, [activeTab, historySessions.length, cardioHistory.length, holdHistory.length]);
 
@@ -571,7 +572,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           xAxisThickness={1}
           xAxisColor={colors.border}
           yAxisThickness={0}
-          isAnimated
+          isAnimated={!reduceMotion()}
           pointerConfig={{
             activatePointersOnLongPress: true,
             pointerStripColor: colors.border,
@@ -638,7 +639,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
           xAxisThickness={1}
           xAxisColor={colors.border}
           yAxisThickness={0}
-          isAnimated
+          isAnimated={!reduceMotion()}
           renderTooltip={(item: ChartPoint) => renderTooltipBubble(item, spec)}
         />
       </View>

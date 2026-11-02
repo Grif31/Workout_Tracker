@@ -19,6 +19,7 @@ import { AUTH } from '../../theme/authColors';
 import { apiFetch } from '../../utils/api';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
+import { motionSpring } from '../../utils/motion';
 
 type Props = NativeStackScreenProps<AuthStackParamsList, 'ResetPassword'>;
 
@@ -55,7 +56,7 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
       });
       if (res.ok) {
         setOtpVerified(true);
-        Animated.spring(checkAnim, {
+        motionSpring(checkAnim, {
           toValue: 1,
           friction: 4,
           tension: 90,

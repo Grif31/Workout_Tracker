@@ -37,6 +37,7 @@ import ScoresCard from '../../components/ScoresCard';
 import PremiumTeaser from '../../components/PremiumTeaser';
 import { computeBarChartMax } from '../../utils/prFormat';
 import { writeWidgetScore } from '../../utils/widgetData';
+import { motionTiming, reduceMotion } from '../../utils/motion';
 
 type Props = { navigation: NativeStackNavigationProp<ProgressStackParamsList, 'ProgressHome'> };
 
@@ -161,7 +162,7 @@ export default function ProgressOverview({ navigation }: Props) {
   useEffect(() => {
     if (!hasMuscleVolume) return;
     barsAnim.setValue(0);
-    Animated.timing(barsAnim, { toValue: 1, duration: 900, useNativeDriver: true }).start();
+    motionTiming(barsAnim, { toValue: 1, duration: 900, useNativeDriver: true }).start();
   }, [hasMuscleVolume, barsAnim]);
 
   // ── Data fetching ───────────────────────────────────────────────────────────
@@ -530,7 +531,7 @@ export default function ProgressOverview({ navigation }: Props) {
                       if (activeMetric === 'distance') return formatDistanceValue(n >= 10 ? Math.round(n) : roundTenth(n));
                       return v;
                     }}
-                    isAnimated
+                    isAnimated={!reduceMotion()}
                     showReferenceLine1={weeklyTarget != null}
                     referenceLine1Position={referenceLinePos}
                     referenceLine1Config={{

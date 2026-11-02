@@ -332,9 +332,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     if (openMenuIdx !== null) {
       setRenderedMenuIdx(openMenuIdx);
       setMenuRendered(true);
-      Animated.spring(exMenuAnim, { toValue: 1, useNativeDriver: true, tension: 200, friction: 16 }).start();
+      motionSpring(exMenuAnim, { toValue: 1, useNativeDriver: true, tension: 200, friction: 16 }).start();
     } else {
-      Animated.timing(exMenuAnim, { toValue: 0, duration: 120, useNativeDriver: true }).start();
+      motionTiming(exMenuAnim, { toValue: 0, duration: 120, useNativeDriver: true }).start();
       // Unmount on a timer, not the animation's completion callback — a
       // native-driver animation interrupted by a background/foreground can
       // resolve with finished:false, which would leave this Modal (and its
@@ -742,9 +742,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     setPrBanner({ name: exerciseName, type: prType });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     prAnim.setValue(0);
-    Animated.spring(prAnim, { toValue: 1, useNativeDriver: true, tension: 70, friction: 10 }).start();
+    motionSpring(prAnim, { toValue: 1, useNativeDriver: true, tension: 70, friction: 10 }).start();
     prTimerRef.current = setTimeout(() => {
-      Animated.timing(prAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
+      motionTiming(prAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
         setPrBanner(null);
       });
     }, 3500);
@@ -2240,6 +2240,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 }
 
 import { type Colors } from '../context/ThemeContext';
+import { motionTiming, motionSpring } from '../utils/motion';
 
 const createStyles = (colors: Colors) => StyleSheet.create({
   container: { paddingBottom: spacing.xl * 2 },

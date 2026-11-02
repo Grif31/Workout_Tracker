@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { motionTiming } from '../utils/motion';
 
 /**
  * Drives a collapse from a single Animated.Value so height and opacity can
@@ -21,7 +22,7 @@ export function useCollapseAnim(expanded: boolean, duration = 240) {
       anim.setValue(expanded ? 1 : 0);
       return;
     }
-    Animated.timing(anim, {
+    motionTiming(anim, {
       toValue: expanded ? 1 : 0,
       duration,
       easing: Easing.out(Easing.cubic),

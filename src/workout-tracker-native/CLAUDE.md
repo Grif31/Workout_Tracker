@@ -10,6 +10,9 @@ cp .env.purchase-testing .env && npx expo start -c     # RevenueCat key on, beta
 ```
 A dev client takes its `EXPO_PUBLIC_*` values from the local `.env` at bundle time, not from the profile's `env`, which is why the swap is needed; `.env.purchase-testing` is local and gitignored. Sign in with an account that has no premium grant, with a Sandbox Apple Account set on the phone (Settings → Developer). Put the normal one back afterwards (`cp .env.normal .env`, then restart with `-c`), or every account in dev reads as free. Keep `.env.normal` in step with `.env` when adding a variable.
 
+### Animations follow Reduce Motion
+Decorative `Animated` motion (slides, scales, springs, count-ups, entrances) goes through `motionTiming` / `motionSpring` from `utils/motion.ts`, not `Animated.timing` / `Animated.spring`: with the system's Reduce Motion on they jump straight to the end, callbacks included. Not for an infinite `Animated.loop` (it would spin at 0 ms: check `reduceMotion()` and don't start a loop that moves or scales) or timing that means something (`HoldButton`'s hold-to-confirm, dragging). List layout changes go through `utils/layoutAnimation.ts`, gifted-charts take `isAnimated={!reduceMotion()}`, and Reanimated's `entering=` animations follow the setting by themselves. Opacity-only pulses and fades may stay. `__tests__/codeGuardrails.test.ts` enforces all three: a raw `Animated.timing`/`spring` is allowed only in the files listed in `RAW_ANIMATION_ALLOWED`, each with its reason and count, so a deliberate exception goes there with why.
+
 ### AsyncStorage keys — define as named constants, share when used across files
 ```typescript
 const MY_KEY = 'my_feature_key';

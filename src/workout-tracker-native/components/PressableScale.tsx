@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { Animated, TouchableWithoutFeedback, ViewStyle, StyleProp, AccessibilityRole } from 'react-native';
+import { motionSpring } from '../utils/motion';
 
 type Props = {
   onPress?: () => void;
@@ -18,10 +19,10 @@ export default function PressableScale({ onPress, style, children, accessibility
   const scale = useRef(new Animated.Value(1)).current;
 
   const pressIn = () => {
-    Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
+    motionSpring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
   };
   const pressOut = () => {
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 6 }).start();
+    motionSpring(scale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 6 }).start();
   };
 
   return (

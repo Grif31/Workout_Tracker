@@ -26,6 +26,7 @@ import { fmtOrdinal } from '../../utils/prFormat';
 import { writeWidgetGreekRank } from '../../utils/widgetData';
 import PercentileBar from '../../components/PercentileBar';
 import { AnimatedPercentText } from '../../components/ScoreRing';
+import { motionTiming } from '../../utils/motion';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'GreekRank'>;
 
@@ -237,7 +238,7 @@ export default function GreekRankScreen({ navigation }: Props) {
   // rings do. AnimatedPercentText shows value × 100, so it's fed score / 100.
   const scoreAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(scoreAnim, {
+    motionTiming(scoreAnim, {
       toValue: greekScore / 100, duration: 700, easing: Easing.out(Easing.cubic), useNativeDriver: false,
     }).start();
   }, [greekScore, scoreAnim]);

@@ -36,6 +36,7 @@ import { usePurchase } from '../../context/PurchaseContext';
 
 const RANGE_SEGMENTS = (['1M', '3M', '6M', 'All'] as const).map(r => ({ key: r, label: r }));
 import { writeWidgetScore } from '../../utils/widgetData';
+import { motionTiming, motionSpring, reduceMotion } from '../../utils/motion';
 
 type Props = NativeStackScreenProps<ProgressStackParamsList, 'EnduranceScore'>;
 
@@ -122,10 +123,10 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
     if (!isNaN(storedIdx) && tierIdx > storedIdx) {
       setRankUpVisible(true);
       rankUpAnim.setValue(0);
-      Animated.spring(rankUpAnim, { toValue: 1, useNativeDriver: true, tension: 70, friction: 10 }).start();
+      motionSpring(rankUpAnim, { toValue: 1, useNativeDriver: true, tension: 70, friction: 10 }).start();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setTimeout(() => {
-        Animated.timing(rankUpAnim, { toValue: 0, duration: 250, useNativeDriver: true })
+        motionTiming(rankUpAnim, { toValue: 0, duration: 250, useNativeDriver: true })
           .start(() => setRankUpVisible(false));
       }, 3500);
     }
@@ -187,7 +188,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
   // this component's, so the sweep doesn't re-render the whole screen.
   useEffect(() => {
     if (overall == null) return;
-    Animated.timing(ringAnim, {
+    motionTiming(ringAnim, {
       toValue: overall / 100,
       duration: 1000,
       delay: 450,
@@ -573,7 +574,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
                       roundToDigits={0}
                       initialSpacing={CHART_EDGE_SPACING}
                       endSpacing={CHART_EDGE_SPACING}
-                      isAnimated
+                      isAnimated={!reduceMotion()}
                       pointerConfig={{
                         activatePointersOnLongPress: true,
                         pointerStripColor: colors.border,

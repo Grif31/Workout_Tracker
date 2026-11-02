@@ -143,6 +143,49 @@ describe('code guardrails', () => {
     const dupes = [...byKey].filter(([, f]) => f.size > 1).map(([k, f]) => `${k}: ${[...f].join(', ')}`);
     expect(dupes).toEqual([]);
   });
+
+  // Reduce Motion (CLAUDE.md in the app, "Animations follow Reduce Motion").
+  // Each file allowed a raw Animated.timing/spring, with why and how many: a
+  // new call anywhere else, or one more here, fails until it uses motionTiming /
+  // motionSpring or is added with its reason.
+  const RAW_ANIMATION_ALLOWED: Record<string, [number, string]> = {
+    'utils/motion.ts': [3, 'the helpers themselves'],
+    'components/HoldButton.tsx': [2, 'the hold-to-confirm fill is the confirmation'],
+    'components/DraggableList.tsx': [2, 'follows the finger while dragging'],
+    'components/SplashExit.tsx': [1, 'reads Reduce Motion itself and fades instead of zooming'],
+    'components/RankUpCard.tsx': [8, 'reads Reduce Motion itself and crossfades'],
+    'screens/DashboardTab/WorkoutSummaryScreen.tsx': [1, 'the trophy pop is skipped by its own Reduce Motion check'],
+    'screens/PreloadScreen.tsx': [1, 'a loading progress fill'],
+    'components/ProfileAvatarFrame.tsx': [1, 'an opacity-only loop'],
+    'components/workout/WorkoutHeader.tsx': [2, 'an opacity-only loop'],
+    'screens/DashboardTab/DashboardScreen.tsx': [2, 'an opacity-only loop'],
+    'screens/Auth/OnboardingScreen.tsx': [4, 'opacity-only loops'],
+    'components/GenerateAction.tsx': [2, 'a loop that does not start with Reduce Motion on'],
+    'screens/TrainingTab/CoachCharacter.tsx': [2, 'unused, not rendered anywhere'],
+  };
+
+  it('sends decorative animation through utils/motion so Reduce Motion stops it', () => {
+    const bad: string[] = [];
+    const counts: Record<string, number> = {};
+    for (const s of sources) {
+      for (const m of s.code.matchAll(/\b(?:RNAnimated|Animated)\.(?:timing|spring)\(/g)) {
+        counts[s.file] = (counts[s.file] ?? 0) + 1;
+        if (!RAW_ANIMATION_ALLOWED[s.file]) bad.push(`${s.file}:${lineOf(s.code, m.index!)}  use motionTiming / motionSpring`);
+      }
+    }
+    for (const [file, [allowed, why]] of Object.entries(RAW_ANIMATION_ALLOWED)) {
+      if ((counts[file] ?? 0) > allowed) bad.push(`${file}: ${counts[file]} raw calls, ${allowed} allowed (${why})`);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('runs LayoutAnimation only through utils/layoutAnimation, which skips it under Reduce Motion', () => {
+    expect(findAll(/LayoutAnimation\.configureNext\(/g, s => s.file !== 'utils/layoutAnimation.ts')).toEqual([]);
+  });
+
+  it('turns chart animation off under Reduce Motion', () => {
+    expect(findAll(/\bisAnimated(?!=\{[^}]*reduceMotion\(\))(?=[\s=/>])[^\n]*/g)).toEqual([]);
+  });
 });
 
 describe('image assets', () => {

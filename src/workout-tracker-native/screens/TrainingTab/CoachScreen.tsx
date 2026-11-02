@@ -35,6 +35,7 @@ import MusclePickerModal from '../../components/coach/MusclePickerModal';
 import PlateauNudge from '../../components/PlateauNudge';
 import GenerateAction from '../../components/GenerateAction';
 import { writeWidgetGreekRank } from '../../utils/widgetData';
+import { motionTiming } from '../../utils/motion';
 
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'TrainingHome'>;
@@ -164,9 +165,9 @@ export default function CoachScreen({ navigation }: Props) {
   ).current;
 
   const handleTabChange = (tab: typeof TAB_NAMES[number]) => {
-    Animated.timing(contentOpacity, { toValue: 0, duration: 80, useNativeDriver: true }).start(() => {
+    motionTiming(contentOpacity, { toValue: 0, duration: 80, useNativeDriver: true }).start(() => {
       setActiveTab(tab);
-      Animated.timing(contentOpacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+      motionTiming(contentOpacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
     });
   };
 
@@ -258,7 +259,7 @@ export default function CoachScreen({ navigation }: Props) {
     const anims = insightAnimsRef.current.slice(0, insights.length);
     anims.forEach(a => a.setValue(0));
     Animated.stagger(60, anims.map(a =>
-      Animated.timing(a, { toValue: 1, duration: 280, useNativeDriver: true })
+      motionTiming(a, { toValue: 1, duration: 280, useNativeDriver: true })
     )).start();
   }, [insightsFetchedAt, insights.length]);
 

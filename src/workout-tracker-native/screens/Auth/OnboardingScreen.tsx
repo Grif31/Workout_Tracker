@@ -26,6 +26,7 @@ import { typography } from '../../theme/typography';
 import { navigationRef } from '../../navigation/navigationRef';
 import { COACH_PROFILE_KEY, DEFAULT_PROFILE, CoachProfile } from '../../components/coach/CoachProfileModal';
 import PressableScale from '../../components/PressableScale';
+import { motionSpring } from '../../utils/motion';
 
 type Props = NativeStackScreenProps<OnboardingStackParamsList, 'Onboarding'> & { onComplete: () => void };
 
@@ -181,7 +182,7 @@ function GeneratingCard() {
 function ReadyBadge() {
   const scale = useRef(new RNAnimated.Value(0)).current;
   useEffect(() => {
-    RNAnimated.spring(scale, { toValue: 1, friction: 5, tension: 90, useNativeDriver: true }).start();
+    motionSpring(scale, { toValue: 1, friction: 5, tension: 90, useNativeDriver: true }).start();
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, []);
   return (

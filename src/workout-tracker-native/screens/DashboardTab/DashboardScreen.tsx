@@ -45,6 +45,7 @@ import { writeWidgetSnapshot, writeWidgetWeek } from '../../utils/widgetData';
 import { buildRoutine } from '../../utils/widgetSnapshot';
 import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../../utils/templatePrefill';
 import { routineRotation, type RotationWorkout } from '../../utils/routineRotation';
+import { motionTiming, motionSpring } from '../../utils/motion';
 
 const GREETINGS = [
   'Ready to work out', 'Welcome back', 'Ready to train', "Let's work out",
@@ -135,7 +136,7 @@ function WeekCalendar({
     const dir = weekOffset < prevOffsetRef.current ? -1 : 1;
     prevOffsetRef.current = weekOffset;
     slideAnim.setValue(dir * 50);
-    Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 200, mass: 0.8 }).start();
+    motionSpring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 200, mass: 0.8 }).start();
   }, [weekOffset]);
 
   const weekLabel = weekOffset === 0
@@ -559,7 +560,7 @@ export default function DashboardScreen({ navigation }: Props) {
   // Home fades in once, when the first load finishes; later refreshes update in place
   const contentAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (!loading) Animated.timing(contentAnim, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    if (!loading) motionTiming(contentAnim, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
   }, [loading, contentAnim]);
 
   const handleRefresh = () => {

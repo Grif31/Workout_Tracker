@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import { motionTiming, reduceMotion } from '../utils/motion';
 
 const BUTTON_WIDTH = 180;
 const BUTTON_HEIGHT = 48;
@@ -37,11 +38,12 @@ export default function GenerateAction({ message, label, loading, onPress, acces
   const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(morph, {
+    motionTiming(morph, {
       toValue: loading ? 1 : 0, duration: loading ? 420 : 300,
       easing: Easing.out(Easing.cubic), useNativeDriver: false,
     }).start();
-    if (!loading) return;
+    // The pulse scales the star, so Reduce Motion keeps it still
+    if (!loading || reduceMotion()) return;
     const loop = Animated.loop(Animated.sequence([
       Animated.timing(pulse, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
       Animated.timing(pulse, { toValue: 0, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),

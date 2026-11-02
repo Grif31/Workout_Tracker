@@ -6,6 +6,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { type WorkoutSet, type PreviousSet, type SetType, colStyles, fmtPrevSet } from './types';
+import { motionTiming, motionSpring } from '../../utils/motion';
 
 // Resting width of the revealed Delete button. Swipeable measures the actions
 // container to set the row's drag range, so this has to be a real width.
@@ -91,7 +92,7 @@ function SetRow({
     // Nothing measured yet (shouldn't happen for a visible row) — just remove it
     if (rowHeight <= 0) { onDelete(); return; }
     setCollapsing(true);
-    Animated.timing(collapseAnim, {
+    motionTiming(collapseAnim, {
       toValue: 0,
       duration: 180,
       easing: Easing.out(Easing.cubic),
@@ -111,7 +112,7 @@ function SetRow({
   useEffect(() => {
     if (isDone && !wasDone.current) {
       checkScale.setValue(0.6);
-      Animated.spring(checkScale, { toValue: 1, friction: 4, tension: 220, useNativeDriver: true }).start();
+      motionSpring(checkScale, { toValue: 1, friction: 4, tension: 220, useNativeDriver: true }).start();
     }
     wasDone.current = isDone;
   }, [isDone, checkScale]);

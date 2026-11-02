@@ -24,6 +24,7 @@ import CardioShareCard from '../../components/share/CardioShareCard';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { PR_GOLD } from '../../constants/prColors';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
+import { motionTiming } from '../../utils/motion';
 import RankUpCard from '../../components/RankUpCard';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import { DashboardStackParamsList } from '../../navigation/types';
@@ -111,7 +112,7 @@ function CountUpText({ value, format, delay, style }: {
     const id = anim.addListener(({ value: v }) => setShown(v));
     // JS-driven (text can't use the native driver), so it's kept short: on
     // Fabric every frame commits, and this screen is otherwise idle.
-    RNAnimated.timing(anim, {
+    motionTiming(anim, {
       toValue: value, duration: 700, delay, easing: Easing.out(Easing.cubic), useNativeDriver: false,
     }).start();
     return () => { anim.removeListener(id); anim.stopAnimation(); };

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated, Easing, type StyleProp, type ViewStyle } from 'react-native';
+import { motionTiming } from '../utils/motion';
 
 type Props = {
   percent: number;
@@ -27,7 +28,7 @@ export default function PercentileBar({
 }: Props) {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(anim, {
+    motionTiming(anim, {
       toValue: percent > 0 ? Math.max(percent, minPercent) : 0,
       duration: 700,
       delay,
