@@ -148,6 +148,9 @@ REVIEW_SCHEMA = {
     'additionalProperties': False,
 }
 
+# Compare a new model with scripts/coach_prompt_check.py before changing this
+INSIGHTS_MODEL = 'claude-haiku-4-5-20251001'
+
 PRIORITY_ORDER = {'high': 0, 'medium': 1, 'low': 2}
 MAX_INSIGHTS = 5
 
@@ -1290,19 +1293,7 @@ def get_ai_insights():
     try:
         ctx = _build_insights_context(user_id, experience=data.get('experience'), goal=data.get('goal'), avoid=data.get('avoid'))
         ctx['insight_feedback'] = _recent_insight_feedback(user_id, ctx['now'])
-        prompt = _build_insights_prompt(ctx)
-        msg = create_message('insights', user_id, api_key,
-            model='claude-haiku-4-5-20251001',
-            max_tokens=2048,
-            system=COACH_VOICE,
-            output_config={'format': {'type': 'json_schema', 'schema': INSIGHT_SCHEMA}},
-            messages=[{'role': 'user', 'content': prompt}],
-        )
-        result = _parse_ai_json(msg.content[0].text)
-        insights = [
-            {**i, 'title': _brand_copy(i.get('title'), heading=True), 'body': _brand_copy(i.get('body'))}
-            for i in result.get('insights', [])
-        ]
+        _, insights = _request_insights(ctx, user_id, api_key)
         return jsonify({
             'insights': _with_past_votes(user_id, _verify_insights(insights, ctx)),
             'generated_at': datetime.now().isoformat(),
@@ -1316,6 +1307,25 @@ def get_ai_insights():
     except Exception:
         current_app.logger.exception('AI insights generation failed')
         return jsonify({'message': 'Failed to generate insights'}), 500
+
+
+def _request_insights(ctx: dict, user_id: int | None, api_key: str, model: str = INSIGHTS_MODEL):
+    """One insights call: the prompt from ctx, the model's answer parsed and
+    put through the brand voice, before _verify_insights. Returns the message
+    (for usage) and the insights. scripts/coach_prompt_check.py runs this same
+    path against fixture users."""
+    msg = create_message('insights', user_id, api_key,
+        model=model,
+        max_tokens=2048,
+        system=COACH_VOICE,
+        output_config={'format': {'type': 'json_schema', 'schema': INSIGHT_SCHEMA}},
+        messages=[{'role': 'user', 'content': _build_insights_prompt(ctx)}],
+    )
+    result = _parse_ai_json(msg.content[0].text)
+    return msg, [
+        {**i, 'title': _brand_copy(i.get('title'), heading=True), 'body': _brand_copy(i.get('body'))}
+        for i in result.get('insights', [])
+    ]
 
 
 def _recent_insight_feedback(user_id: int, now: datetime) -> list[dict]:
