@@ -304,6 +304,9 @@ def _compute_and_upsert_prs(user_id, exercise_set_pairs, workout_date):
                 weight_context=-1.0,
             ).first()
 
+            # Compare what would be stored: an estimated 1RM like 233.33 against
+            # the stored 233.3 read as a new PR every time the lift was repeated
+            workout_value = round(workout_value, 1)
             if existing and workout_value <= existing.value:
                 continue
 
@@ -409,7 +412,8 @@ def _compute_and_upsert_duration_prs(user_id, exercise_set_pairs, workout_date):
             weight_context=-1.0,
         ).first()
 
-        if existing and best <= existing.value:
+        # Compared as stored, so repeating a hold isn't a new PR
+        if existing and round(best, 4) <= existing.value:
             continue
 
         previous = existing.value if existing else None

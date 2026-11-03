@@ -108,6 +108,30 @@ class TestEventWrites:
         post_strength_workout(client, auth_token, tid, [{'reps': 3, 'weight': 225}])
         assert len(events_for(user_id)) == before
 
+    def test_repeating_a_lift_whose_1rm_rounds_adds_no_events(self, client, auth_token, registered_user):
+        # 200 x 5 is an estimated 1RM of 233.33, stored as 233.3: compared
+        # unrounded, every repeat of the same lift read as a new PR
+        user_id = registered_user['user']['id']
+        tid = create_template(client, auth_token)
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 200}])
+        before = len(events_for(user_id))
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 200}])
+        assert len(events_for(user_id)) == before
+        assert PersonalRecord.query.filter_by(user_id=user_id, pr_type='estimated_1rm').one().value == 233.3
+
+    def test_repeating_a_hold_adds_no_events(self, client, auth_token, registered_user):
+        user_id = registered_user['user']['id']
+        tid = create_template(client, auth_token, name='Plank', muscle_group='Core')
+        hold = {'workoutName': 'Core', 'exercises': [{
+            'name': 'Plank', 'exercise_template_id': tid, 'exercise_type': 'duration',
+            'sets': [{'cardio_duration': 20 / 60}],
+        }]}
+        client.post('/api/workouts', json=hold, headers=auth_headers(auth_token))
+        before = len(events_for(user_id, 'max_duration'))
+        client.post('/api/workouts', json=hold, headers=auth_headers(auth_token))
+        assert before == 1
+        assert len(events_for(user_id, 'max_duration')) == 1
+
     def test_estimated_1rm_events_are_written(self, client, auth_token, registered_user):
         user_id = registered_user['user']['id']
         tid = create_template(client, auth_token)
