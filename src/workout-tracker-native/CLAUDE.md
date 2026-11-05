@@ -134,6 +134,7 @@ A tracked run (`GPSCardioScreen`) lives in `context/GpsRunContext.tsx`, mounted 
 | `profile_frame_rank_${uid}` | 'Neophyte' | Selected avatar frame rank name |
 | `home_streak_type_${uid}` | 'weekly' | Which streak Home's top bar shows ('weekly' \| 'monthly' \| 'daily'), picked in its streak modal |
 | `@pr_pins_${uid}` | — | JSON array of 3 pinned PR slots on Profile (Pin\|null)[] |
+| `profile_history_view_${uid}` | 'list' | How Profile shows Workout History: 'list' \| 'month' \| 'year' \| 'multiyear' (the calendar views are `components/WorkoutCalendar.tsx`) |
 | `pr_dashboard_pins_${uid}` | — | Exercises (optionally a specific PR type + context) pinned to PR Dashboard's Pinned Progression section — JSON `{id, name, prType?, weightContext?}[]`, max 6 slots total; an exercise can have more than one pin for different PR types (keyed by exercise+type+context, not exercise id alone). Toggled from PRProgressionScreen. Legacy pins with no `prType` loosely match any type on that exercise |
 | `weekly_coach_review_${uid}` | — | The Coach's Read for one Weekly Summary week (JSON `{weekStart, review}`, `components/WeeklyReviewCard.tsx`), so a week is asked for once. A free account is shown the first present part and the others locked; a premium account all three. Replaces `coach_free_insight_${uid}`, which older builds wrote and nothing reads now: free accounts get no insights in the Coach tab |
 | `coach_profile_${uid}` | — | Coach personalization JSON (goal/equipment/schedule/injuries) |

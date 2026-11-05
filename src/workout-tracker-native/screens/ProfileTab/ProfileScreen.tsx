@@ -33,13 +33,23 @@ import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileA
 import { rankTextColor } from '../../constants/greekRanks';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { fmtHold } from '../../components/workout/types';
-import CalendarModal from '../../components/CalendarModal';
+import WorkoutCalendar, { type CalView } from '../../components/WorkoutCalendar';
+import SegmentedControl from '../../components/SegmentedControl';
 import SectionRule from '../../components/SectionRule';
 import { writeWidgetGreekRank } from '../../utils/widgetData';
 
 const PR_PINS_BASE = '@pr_pins';
 const DEFAULT_PIN_COUNT = 3;
 const PAGE_SIZE = 20;
+const HISTORY_VIEW_BASE = 'profile_history_view';
+
+type HistoryView = 'list' | CalView;
+const HISTORY_VIEWS: readonly { key: HistoryView; label: string }[] = [
+  { key: 'list', label: 'List' },
+  { key: 'month', label: 'Month' },
+  { key: 'year', label: 'Year' },
+  { key: 'multiyear', label: 'All Years' },
+];
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'ProfileHome'>;
 
@@ -92,7 +102,22 @@ export default function ProfileScreen({ navigation }: Props) {
   }, [user?.id]);
   const [greekRank, setGreekRank]         = useState<string | null>(null);
 
-  const [calendarVisible, setCalendarVisible]       = useState(false);
+  const historyViewKey = `${HISTORY_VIEW_BASE}_${user?.id}`;
+  const [historyView, setHistoryView] = useState<HistoryView>('list');
+  // Bumped with every fetchAll so the calendar refetches its logged days alongside the list
+  const [historyRefresh, setHistoryRefresh] = useState(0);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    AsyncStorage.getItem(historyViewKey).then(v => {
+      if (HISTORY_VIEWS.some(o => o.key === v)) setHistoryView(v as HistoryView);
+    });
+  }, [user?.id]);
+
+  const changeHistoryView = (v: HistoryView) => {
+    setHistoryView(v);
+    AsyncStorage.setItem(historyViewKey, v);
+  };
 
   const [workouts, setWorkouts]     = useState<Workout[]>([]);
   const [page, setPage]             = useState(1);
@@ -179,6 +204,7 @@ export default function ProfileScreen({ navigation }: Props) {
   };
 
   const fetchAll = async () => {
+    setHistoryRefresh(n => n + 1);
     try {
       const goalRaw = await AsyncStorage.getItem(weeklyGoalKey);
       const weeklyGoal = goalRaw ? (parseInt(goalRaw, 10) || 3) : 3;
@@ -257,12 +283,12 @@ export default function ProfileScreen({ navigation }: Props) {
 
   const handleRefresh = () => { setRefreshing(true); fetchAll(); };
 
-  const handleSelectCalendarWorkout = (workout: { id: number; workout_type?: string }) => {
-    setCalendarVisible(false);
+  // Stable, so the memoized calendar skips the screen's unrelated re-renders
+  const handleSelectCalendarWorkout = useCallback((workout: { id: number; workout_type?: string }) => {
     workout.workout_type === 'cardio'
       ? navigation.navigate('CardioDetails', { workoutId: workout.id })
       : navigation.navigate('WorkoutDetails', { workoutId: workout.id });
-  };
+  }, [navigation]);
 
   const fmtVolume = (v: number) => {
     if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
@@ -495,36 +521,30 @@ export default function ProfileScreen({ navigation }: Props) {
       {renderPRBar()}
 
       <View style={styles.historyHeader}>
-        <View style={{ flex: 1 }}>
-          <SectionRule label="Workout History" />
-        </View>
-        <TouchableOpacity
-          onPress={() => setCalendarVisible(true)}
-          hitSlop={8}
-          style={styles.calendarIconBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Workout calendar"
-        >
-          <Ionicons name="calendar-outline" size={22} color={colors.accent} />
-        </TouchableOpacity>
+        <SectionRule label="Workout History" />
+        <SegmentedControl options={HISTORY_VIEWS} value={historyView} onChange={changeHistoryView} style={styles.historyViewSwitch} />
       </View>
     </View>
-  ), [styles, avatarSource, selectedFrame, displayName, user, stats, greekRank, prs, pins, weightUnit, unit, distanceUnit, colors]);
+  ), [styles, avatarSource, selectedFrame, displayName, user, stats, greekRank, prs, pins, weightUnit, unit, distanceUnit, colors, historyView]);
+
+  const showList = historyView === 'list';
 
   return (
     <>
       <FlatList
         style={styles.container}
-        data={workouts}
+        data={showList ? workouts : []}
         keyExtractor={(item) => item.id.toString()}
         ListHeaderComponent={listHeader}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>No workouts logged yet</Text>
+        ListEmptyComponent={showList
+          ? <Text style={styles.emptyText}>No workouts logged yet</Text>
+          // Drilling in moves the switch but isn't saved: the view picked by hand stays the one Profile opens on
+          : <WorkoutCalendar view={historyView} refreshKey={historyRefresh} onSelectWorkout={handleSelectCalendarWorkout} onChangeView={setHistoryView} />
         }
-        ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.md }} /> : null}
+        ListFooterComponent={showList && loadingMore ? <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.md }} /> : null}
         refreshing={refreshing}
         onRefresh={handleRefresh}
-        onEndReached={fetchMoreWorkouts}
+        onEndReached={showList ? fetchMoreWorkouts : undefined}
         onEndReachedThreshold={0.3}
         renderItem={({ item }) => (
           <PressableScale
@@ -575,13 +595,6 @@ export default function ProfileScreen({ navigation }: Props) {
             })()}
           </PressableScale>
         )}
-      />
-
-      {/* Calendar modal */}
-      <CalendarModal
-        visible={calendarVisible}
-        onClose={() => setCalendarVisible(false)}
-        onSelectWorkout={handleSelectCalendarWorkout}
       />
 
       {/* Exercise picker modal for swapping a pinned PR */}
@@ -987,10 +1000,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   prChipText: { fontSize: typography.fontSize.xs, fontWeight: '600' },
 
-  historyHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-  },
-  calendarIconBtn: { padding: spacing.xs },
+  historyHeader: { paddingHorizontal: spacing.md },
+  historyViewSwitch: { marginBottom: spacing.md },
 });

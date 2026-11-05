@@ -134,11 +134,7 @@ def get_current_user():
     user = User.query.filter_by(id=userId).first()
     if not user:
         return jsonify({'message': 'User not found'}), 404
-    workouts = Workout.query.filter_by(user_id=userId).all()
-    return jsonify({
-        **user.to_dict(),
-        'workouts': [{'id': w.id, 'name': w.name, 'date': w.date.isoformat(), 'notes': w.notes} for w in workouts],
-    }), 200
+    return jsonify(user.to_dict()), 200
 
 @user_bp.patch('/api/me')
 @jwt_required()

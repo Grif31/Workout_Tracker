@@ -104,6 +104,63 @@ describe('ProfileScreen', () => {
     expect(queryByText('Total Distance')).toBeNull();
   });
 
+  describe('workout history view', () => {
+    const today = new Date();
+    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    // The calendar fetches alongside the screen, so answer by URL rather than in order
+    const routeFetch = () => {
+      (global.fetch as jest.Mock) = jest.fn((url: string) => {
+        const u = String(url);
+        const data = u.includes('/api/workouts/dates') ? { dates: [todayIso] }
+          : u.includes('/api/workouts?page=') ? workoutsResponse.data
+          : u.includes('/api/stats/profile') ? statsResponse.data
+          : u.includes('/api/personal-records') ? []
+          : {};
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(data) });
+      });
+    };
+
+    it('swaps the list for the calendar and remembers the choice', async () => {
+      routeFetch();
+      const { findByText, getByRole, findByTestId, queryByText } = render(<ProfileScreen navigation={nav as any} route={route as any} />);
+      expect(await findByText('Push Day')).toBeTruthy();
+
+      fireEvent.press(getByRole('button', { name: 'Month' }));
+
+      expect(await findByTestId(`calendar-day-${todayIso}`)).toBeTruthy();
+      expect(queryByText('Push Day')).toBeNull();
+      await waitFor(async () => expect(await AsyncStorage.getItem('profile_history_view_1')).toBe('month'));
+    });
+
+    it('opens on the view picked last time', async () => {
+      await AsyncStorage.setItem('profile_history_view_1', 'multiyear');
+      routeFetch();
+      const { findByText, getByRole, queryByText } = render(<ProfileScreen navigation={nav as any} route={route as any} />);
+      expect(await findByText(String(today.getFullYear()))).toBeTruthy();
+      expect(getByRole('button', { name: 'All Years' }).props.accessibilityState).toEqual({ selected: true });
+      expect(queryByText('Push Day')).toBeNull();
+    });
+
+    it('drills from All Years into a year without changing the saved view', async () => {
+      await AsyncStorage.setItem('profile_history_view_1', 'multiyear');
+      routeFetch();
+      const { findByTestId, getByRole } = render(<ProfileScreen navigation={nav as any} route={route as any} />);
+      fireEvent.press(await findByTestId(`calendar-year-${today.getFullYear()}`));
+
+      await waitFor(() => expect(getByRole('button', { name: 'Year' }).props.accessibilityState).toEqual({ selected: true }));
+      expect(await findByTestId(`calendar-month-${today.getFullYear()}-1`)).toBeTruthy();
+      expect(await AsyncStorage.getItem('profile_history_view_1')).toBe('multiyear');
+    });
+
+    it('ignores a stored view it does not know', async () => {
+      await AsyncStorage.setItem('profile_history_view_1', 'week');
+      routeFetch();
+      const { findByText, getByRole } = render(<ProfileScreen navigation={nav as any} route={route as any} />);
+      expect(await findByText('Push Day')).toBeTruthy();
+      expect(getByRole('button', { name: 'List' }).props.accessibilityState).toEqual({ selected: true });
+    });
+  });
+
   it('renders without crashing', () => {
     render(<ProfileScreen navigation={nav as any} route={route as any} />);
   });

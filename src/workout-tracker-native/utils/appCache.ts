@@ -40,9 +40,20 @@ export const appCache = {
   },
 };
 
+// What a gated fetcher returns for a non-OK response. A 4xx is the server's
+// real answer (a score's 422 for a missing gender) and asking again gets the
+// same one; only a 5xx is worth retrying on the next focus.
+export function answered(res: { status: number }): boolean {
+  return res.status < 500;
+}
+
 // Per-screen gate for focus refetches. `seed` is read on first render only,
 // so a screen mounted right after PreloadScreen can count the preloaded data
 // as its first fetch instead of repeating it.
+//
+// A fetcher resolves `false` when its load failed: fetchers catch their own
+// errors, so without that the gate would count a failed load as fresh and skip
+// the next focus's retry for the whole TTL.
 export function useRefetchGate(seed: () => Record<string, FetchStamp | null>) {
   const stamps = useRef<Record<string, FetchStamp | null> | null>(null);
   if (stamps.current === null) stamps.current = seed();
@@ -50,7 +61,13 @@ export function useRefetchGate(seed: () => Record<string, FetchStamp | null>) {
     if (!force && isFresh(stamps.current![key])) return Promise.resolve();
     // Stamped before the request, so a write that lands while it's in flight
     // still marks this data stale.
-    stamps.current![key] = fetchStamp();
-    return fetcher();
+    const stamp = fetchStamp();
+    stamps.current![key] = stamp;
+    // Only this call's own stamp is dropped; a later call may have re-stamped
+    const unstamp = () => { if (stamps.current![key] === stamp) stamps.current![key] = null; };
+    return fetcher().then(
+      ok => { if (ok === false) unstamp(); },
+      err => { unstamp(); throw err; },
+    );
   }, []);
 }

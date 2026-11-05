@@ -46,9 +46,17 @@ export async function deregisterPushToken(): Promise<void> {
 // ── Rest Timer Alert ─────────────────────────────────────────
 
 export async function scheduleRestTimerAlert(seconds: number): Promise<void> {
+  const endsAt = Date.now() + seconds * 1000;
   await cancelRestTimerAlert();
-  const { status } = await Notifications.getPermissionsAsync();
+  // Rest alerts default to on, so the Settings switch (the only other place
+  // that asks) is never flipped and permission was never requested. Ask at
+  // the first rest; the system prompt covers the workout, so only the time
+  // it was up comes off the alert.
+  let { status } = await Notifications.getPermissionsAsync();
+  if (status === 'undetermined') ({ status } = await Notifications.requestPermissionsAsync());
   if (status !== 'granted') return;
+  seconds = Math.ceil((endsAt - Date.now()) / 1000);
+  if (seconds <= 0) return;
   try {
     restTimerNotifId = await Notifications.scheduleNotificationAsync({
       content: {

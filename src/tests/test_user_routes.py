@@ -38,27 +38,17 @@ class TestGetCurrentUser:
         assert data['email'] == 'test@example.com'
         assert data['username'] == 'testuser'
 
-    def test_includes_workouts_list(self, client, auth_token):
-        res = client.get('/api/me', headers=auth_headers(auth_token))
-        assert res.status_code == 200
-        assert 'workouts' in res.get_json()
-
-    def test_workouts_empty_by_default(self, client, auth_token):
-        res = client.get('/api/me', headers=auth_headers(auth_token))
-        assert res.get_json()['workouts'] == []
-
     def test_requires_auth(self, client):
         res = client.get('/api/me')
         assert res.status_code == 401
 
-    def test_workout_appears_in_workouts_list(self, client, auth_token):
+    def test_does_not_embed_workout_history(self, client, auth_token):
+        # Loaded on every launch and cached whole in AsyncStorage; history comes from paged /api/workouts
         client.post('/api/workouts', json={
             'workoutName': 'Push Day', 'notes': '', 'duration': 45, 'exercises': []
         }, headers=auth_headers(auth_token))
         res = client.get('/api/me', headers=auth_headers(auth_token))
-        workouts = res.get_json()['workouts']
-        assert len(workouts) == 1
-        assert workouts[0]['name'] == 'Push Day'
+        assert 'workouts' not in res.get_json()
 
 
 # ---------------------------------------------------------------------------
