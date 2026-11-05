@@ -156,7 +156,7 @@ describe('code guardrails', () => {
     'components/RankUpCard.tsx': [8, 'reads Reduce Motion itself and crossfades'],
     'screens/DashboardTab/WorkoutSummaryScreen.tsx': [1, 'the trophy pop is skipped by its own Reduce Motion check'],
     'screens/PreloadScreen.tsx': [1, 'a loading progress fill'],
-    'components/ProfileAvatarFrame.tsx': [1, 'an opacity-only loop'],
+    'components/ProfileAvatarFrame.tsx': [1, 'a loop that does not start with Reduce Motion on'],
     'components/workout/WorkoutHeader.tsx': [2, 'an opacity-only loop'],
     'screens/DashboardTab/DashboardScreen.tsx': [2, 'an opacity-only loop'],
     'screens/Auth/OnboardingScreen.tsx': [4, 'opacity-only loops'],

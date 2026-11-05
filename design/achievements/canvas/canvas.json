@@ -1,0 +1,124 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Back.dc.html": {
+      "h": 700,
+      "title": "Badge back · tap to flip",
+      "w": 880,
+      "x": 3310,
+      "y": 820
+    },
+    "Badges.dc.html": {
+      "h": 1340,
+      "title": "Badge system · shape = track, metal = tier",
+      "w": 2270,
+      "x": 0,
+      "y": 0
+    },
+    "Hall.dc.html": {
+      "h": 1830,
+      "title": "C · Trophy Hall (chosen)",
+      "w": 390,
+      "x": 940,
+      "y": 1580
+    },
+    "Journey.dc.html": {
+      "h": 1222,
+      "title": "Your Journey · redesign (1, 2, 3, 5), score closed and opened",
+      "w": 1318,
+      "x": 3740,
+      "y": 1580
+    },
+    "Ladders.dc.html": {
+      "h": 1500,
+      "title": "B · Progression ladders (your idea 2)",
+      "w": 390,
+      "x": 470,
+      "y": 1580
+    },
+    "Main.dc.html": {
+      "h": 1900,
+      "title": "A · Badge grid (your idea 1)",
+      "w": 390,
+      "x": 0,
+      "y": 1580
+    },
+    "Plates.dc.html": {
+      "h": 700,
+      "title": "Plates · design options",
+      "w": 1480,
+      "x": 2350,
+      "y": 0
+    },
+    "Share.dc.html": {
+      "h": 700,
+      "title": "Share card · Workouts badge (gold and top rung)",
+      "w": 880,
+      "x": 2350,
+      "y": 820
+    },
+    "Track.dc.html": {
+      "h": 1060,
+      "title": "Milestone tapped · track ladder, Plates, locked badge",
+      "w": 1346,
+      "x": 2350,
+      "y": 1580
+    },
+    "Unlock.dc.html": {
+      "h": 844,
+      "title": "Unlock moment · Workout Summary",
+      "w": 390,
+      "x": 1880,
+      "y": 1580
+    },
+    "Frames.dc.html": {
+      "h": 920,
+      "title": "Profile frames · one ornament per rank",
+      "w": 2082,
+      "x": 0,
+      "y": 3560
+    },
+    "FrameOptions.dc.html": {
+      "h": 640,
+      "title": "Demigod ornament · options to replace the palmettes",
+      "w": 1480,
+      "x": 2160,
+      "y": 3560
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-11-03T12:00:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "t1": {
+      "kind": "title1",
+      "maxW": 2270,
+      "text": "Aretē Achievements: three layouts + badge system",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    }
+  },
+  "order": [
+    "Badges.dc.html",
+    "Main.dc.html",
+    "Ladders.dc.html",
+    "Hall.dc.html",
+    "Journey.dc.html",
+    "Unlock.dc.html",
+    "Plates.dc.html",
+    "Share.dc.html",
+    "Back.dc.html",
+    "Track.dc.html",
+    "Frames.dc.html",
+    "FrameOptions.dc.html"
+  ],
+  "pages": [],
+  "title": "Aretē Achievements Designs"
+}

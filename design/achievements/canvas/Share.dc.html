@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Achievement share card</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.bs{stroke-width:3;stroke-linejoin:round}
+.bi{fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.bt{font:800 9px Inter,sans-serif;text-anchor:middle}
+</style>
+</helmet>
+<div style="width: 880px; height: 600px; box-sizing: border-box; background: #000000; font-family: Inter, -apple-system, sans-serif; color: #FFFFFF; padding: 40px 60px; display: flex; gap: 40px; justify-content: center; align-items: flex-start;">
+  <svg width="0" height="0" aria-hidden="true" style="position: absolute;"><defs>
+    <radialGradient id="m-gold" cx="0.38" cy="0.3" r="0.85"><stop offset="0" style="stop-color: #7C6628;"></stop><stop offset="0.55" style="stop-color: #3A3015;"></stop><stop offset="1" style="stop-color: #1E180A;"></stop></radialGradient>
+    <linearGradient id="r-gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color: #FFF0B3;"></stop><stop offset="0.45" style="stop-color: #E8C25A;"></stop><stop offset="0.78" style="stop-color: #8F6B14;"></stop><stop offset="1" style="stop-color: #E8C25A;"></stop></linearGradient>
+    <linearGradient id="i-gold" gradientUnits="userSpaceOnUse" x1="0" y1="4" x2="0" y2="60"><stop offset="0" style="stop-color: #FFF0B3;"></stop><stop offset="1" style="stop-color: #E8C25A;"></stop></linearGradient>
+    <linearGradient id="j-gold" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="24"><stop offset="0" style="stop-color: #FFF0B3;"></stop><stop offset="1" style="stop-color: #E8C25A;"></stop></linearGradient>
+    <radialGradient id="m-marble" cx="0.38" cy="0.3" r="0.85"><stop offset="0" style="stop-color: #8A836F;"></stop><stop offset="0.55" style="stop-color: #4A4436;"></stop><stop offset="1" style="stop-color: #2A2620;"></stop></radialGradient>
+    <linearGradient id="r-marble" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color: #FFFFFF;"></stop><stop offset="0.45" style="stop-color: #F2EEE4;"></stop><stop offset="0.78" style="stop-color: #A8A08E;"></stop><stop offset="1" style="stop-color: #F2EEE4;"></stop></linearGradient>
+    <linearGradient id="i-marble" gradientUnits="userSpaceOnUse" x1="0" y1="4" x2="0" y2="60"><stop offset="0" style="stop-color: #FFFFFF;"></stop><stop offset="1" style="stop-color: #F2EEE4;"></stop></linearGradient>
+    <linearGradient id="j-marble" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="24"><stop offset="0" style="stop-color: #FFFFFF;"></stop><stop offset="1" style="stop-color: #F2EEE4;"></stop></linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: #FFFFFF; stop-opacity: 0.16;"></stop><stop offset="0.5" style="stop-color: #FFFFFF; stop-opacity: 0;"></stop></linearGradient>
+    <linearGradient id="spec" x1="0" y1="0" x2="1" y2="1"><stop offset="0.36" style="stop-color: #FFFFFF; stop-opacity: 0;"></stop><stop offset="0.44" style="stop-color: #FFFFFF; stop-opacity: 0.13;"></stop><stop offset="0.5" style="stop-color: #FFFFFF; stop-opacity: 0;"></stop></linearGradient>
+  </defs></svg>
+  <sc-for list="{{cards}}" as="c" hint-placeholder-count="2">
+    <div style="width: 360px; border-radius: 20px; background: #0D0D0D; overflow: hidden; display: flex; flex-direction: column;">
+      <div style="height: 5px; background: {{accent}};"></div>
+      <div style="padding: 22px 24px 26px; display: flex; flex-direction: column; align-items: center;">
+        <img src="/_blob/a9cae06e84c6807e87547b5d20224669" alt="Aretē" style="width: 86px; height: 28px; object-fit: contain;">
+
+        <div style="margin-top: 22px; width: 230px; height: 230px; border-radius: 115px; background: radial-gradient(circle, {{c.glow}} 0%, rgba(0,0,0,0) 66%); display: flex; align-items: center; justify-content: center;">
+          <svg viewBox="-8 -8 80 80" width="196" height="196" role="img" aria-label="{{c.title}} badge"><path d="{{c.crown}}" fill="#A3B18A"></path><path d="{{c.shape}}" fill="rgba(0,0,0,0.45)" transform="translate(0.8 1.6)"></path><path d="{{c.shape}}" fill="none" stroke="rgba(0,0,0,0.55)" style="stroke-width: 4.4; stroke-linejoin: round;"></path><path class="bs" d="{{c.shape}}" fill="{{c.fillUrl}}" stroke="url(#r-{{c.metal}})"></path><path d="{{c.shape}}" fill="url(#spec)"></path><path d="{{c.shape}}" fill="url(#gloss)"></path><path d="{{c.veins}}" fill="none" stroke="#A39D8E" style="stroke-width: 0.6; opacity: 0.6;"></path><path d="{{c.shape}}" fill="none" stroke="url(#r-{{c.metal}})" transform="translate(5.12 5.12) scale(0.84)" style="stroke-width: 3; stroke-dasharray: 3 1.5;"></path><g transform="translate(20.00 15.25) scale(1.000)"><path class="bi" d="{{c.icon}}" stroke="rgba(0,0,0,0.55)" transform="translate(0.6 0.8)"></path><path class="bi" d="{{c.icon}}" stroke="rgba(255,255,255,0.3)" transform="translate(-0.4 -0.5)"></path><path class="bi" d="{{c.icon}}" stroke="url(#j-{{c.metal}})"></path></g><text class="bt" x="32.4" y="51.1" fill="rgba(0,0,0,0.55)">{{c.stamp}}</text><text class="bt" x="32" y="50.5" fill="url(#i-{{c.metal}})">{{c.stamp}}</text></svg>
+        </div>
+
+        <div style="margin-top: 14px; font-size: 32px; font-weight: 800; letter-spacing: -0.3px;">{{c.title}}</div>
+        <div style="margin-top: 6px; font-size: 15px; color: #8E8E93;">{{c.line}}</div>
+
+        <div style="margin-top: 26px; align-self: stretch; height: 1px; background: #2C2C2E;"></div>
+        <div style="margin-top: 14px; font-size: 12px; color: #8E8E93; letter-spacing: 0.3px;">Excellence, logged.</div>
+      </div>
+    </div>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#30D158","options":["#30D158","#0A84FF","#BF5AF2","#FF9F0A"]},"$preview":{"width":880,"height":600}}'>
+const C = 32;
+function f(n) { return n.toFixed(2); }
+function crownPath() {
+  let d = '';
+  [1, -1].forEach((side) => {
+    for (let t = 0; t < 7; t++) {
+      const a = (90 + side * (22 + t * 22)) * Math.PI / 180;
+      const rx = Math.cos(a), ry = Math.sin(a), tx = -side * Math.sin(a), ty = side * Math.cos(a);
+      const px = C + 32 * rx, py = C + 32 * ry;
+      [0.8, 0.3].forEach((w) => {
+        let dx = tx * (1 - w) + rx * w, dy = ty * (1 - w) + ry * w;
+        const len = Math.hypot(dx, dy); dx /= len; dy /= len;
+        const qx = px + dx * 7.5, qy = py + dy * 7.5, mx = (px + qx) / 2, my = (py + qy) / 2, nx = -dy * 2.4, ny = dx * 2.4;
+        d += 'M' + f(px) + ' ' + f(py) + ' Q' + f(mx + nx) + ' ' + f(my + ny) + ' ' + f(qx) + ' ' + f(qy) + ' Q' + f(mx - nx) + ' ' + f(my - ny) + ' ' + f(px) + ' ' + f(py) + ' Z ';
+      });
+    }
+  });
+  return d;
+}
+const ASPIS = 'M32 4 A28 28 0 1 1 31.99 4 Z';
+const COLUMN = 'M3 4.5h18M5 4.5a1.6 1.6 0 1 0 1.6 1.6M19 4.5a1.6 1.6 0 1 1-1.6 1.6M6 7.5h12M7.5 7.5v10.5M10.5 7.5v10.5M13.5 7.5v10.5M16.5 7.5v10.5M5.5 18h13M4 20.5h16';
+const VEINS = 'M17 23 C23 20 27 29 35 26 S45 21 49 25 M19 40 C25 36 31 43 39 38 S46 35 48 37 M28 30 C30 33 33 33 34 36';
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#30D158',
+      cards: [
+        { title: 'Hekaton', line: 'Your 100th workout · Sep 28, 2026', stamp: '100', metal: 'gold', shape: ASPIS, icon: COLUMN, ring: '#E8C25A', ink: '#F6DE8E', fillUrl: 'url(#m-gold)', veins: '', crown: '', glow: 'rgba(232,194,90,0.30)' },
+        { title: 'Chiliad', line: 'Your 1,000th workout · Jun 14, 2029', stamp: '1K', metal: 'marble', shape: ASPIS, icon: COLUMN, ring: '#F2EEE4', ink: '#FFFFFF', fillUrl: 'url(#m-marble)', veins: VEINS, crown: crownPath(), glow: 'rgba(242,238,228,0.24)' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

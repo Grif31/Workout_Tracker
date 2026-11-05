@@ -1,0 +1,9 @@
+{
+  "name": "achievements-design-tools",
+  "private": true,
+  "description": "Generators and checks for the achievement badges and profile frames (see ../README.md)",
+  "type": "commonjs",
+  "dependencies": {
+    "clipper-lib": "^6.4.2"
+  }
+}
