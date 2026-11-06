@@ -6,7 +6,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import ConfettiCannon from 'react-native-confetti-cannon';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -18,7 +17,7 @@ import { captureAndShare } from '../../utils/shareCapture';
 import { motionSpring, motionTiming } from '../../utils/motion';
 import { orderUnlocks, shareLine, unlockLine, type NewAchievement } from '../../utils/achievements';
 import { BACK_INK, badgeAccessibilityLabel, badgeLook } from '../../constants/achievements';
-import { BADGE_METALS, type BadgeMetal } from '../../constants/badgeArt';
+import type { BadgeMetal } from '../../constants/badgeArt';
 import type { DistanceUnit } from '../../utils/units';
 
 interface Props {
@@ -27,7 +26,7 @@ interface Props {
   visible: boolean;
   weightUnit: string;
   distanceUnit: DistanceUnit;
-  /** Read once when the sheet opens: with it on the badge is simply there, with no drop and no confetti */
+  /** Read once when the sheet opens: with it on the badge is simply there, with no drop */
   reduceMotion: boolean;
   onClose: () => void;
   /** Opens the Trophy Hall, once the sheet has slid away */
@@ -102,7 +101,6 @@ export default function AchievementUnlockSheet({
   // Pages whose badge has been set down: each lands the first time it's shown, once the sheet is up
   const [placed, setPlaced] = useState<Set<number>>(new Set());
   const sheetUp = useRef(false);
-  const confettiRef = useRef<ConfettiCannon>(null);
   const shareRef = useRef<View>(null);
   const pagerRef = useRef<ScrollView>(null);
   const closing = useRef(false);
@@ -138,11 +136,6 @@ export default function AchievementUnlockSheet({
     showPage(index);
   };
 
-  // Confetti is for the first badge only; the rest land with their own thud and glow
-  const leadLanded = () => {
-    if (!reduceMotion) confettiRef.current?.start();
-  };
-
   const close = (then?: () => void) => {
     if (closing.current) return;
     closing.current = true;
@@ -169,12 +162,10 @@ export default function AchievementUnlockSheet({
   const current = ordered[Math.min(page, ordered.length - 1)];
   const metalOf = (item: NewAchievement): BadgeMetal => badgeLook(item.key, { threshold: item.threshold, weightUnit }).metal;
   const metal = metalOf(current);
-  const leadMetal = metalOf(lead);
   const unit = current.unit ?? distanceUnit;
   const several = ordered.length > 1;
   // The badge's own metal names the moment; its pale ink fails on white, so light mode takes the dark face
   const labelColor = mode === 'light' ? BACK_INK[metal].faceTop : BACK_INK[metal].rule;
-  const confettiColors = [BADGE_METALS[leadMetal].rim[0][1], BADGE_METALS[leadMetal].rim[1][1], BADGE_METALS[leadMetal].rim[2][1]];
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={() => close()} statusBarTranslucent>
@@ -222,7 +213,6 @@ export default function AchievementUnlockSheet({
               weightUnit={weightUnit}
               distanceUnit={distanceUnit}
               reduceMotion={reduceMotion}
-              onLand={i === 0 ? leadLanded : undefined}
             />
           ))}
         </ScrollView>
@@ -269,17 +259,6 @@ export default function AchievementUnlockSheet({
           <Text style={[styles.hallLinkText, { color: colors.accent }]}>See your Trophy Hall</Text>
         </TouchableOpacity>
       </Animated.View>
-
-      {!reduceMotion && (
-        <ConfettiCannon
-          ref={confettiRef}
-          count={80}
-          origin={{ x: Dimensions.get('window').width / 2, y: -20 }}
-          colors={confettiColors}
-          fadeOut
-          autoStart={false}
-        />
-      )}
     </Modal>
   );
 }
