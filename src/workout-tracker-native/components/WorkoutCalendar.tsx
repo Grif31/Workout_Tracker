@@ -303,21 +303,21 @@ function WorkoutCalendar({ view: calView, refreshKey, onSelectWorkout, onChangeV
                 const yearStartDow = (new Date(year, 0, 1).getDay() + 6) % 7;
                 const daysInYear = isLeapYear(year) ? 366 : 365;
                 return (
-                  // A scroll across the heatmap cancels the tap, so the row still pans
-                  <TouchableOpacity
-                    key={year}
-                    testID={`calendar-year-${year}`}
-                    style={{ marginBottom: spacing.lg }}
-                    activeOpacity={0.6}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${year}`}
-                    accessibilityHint="Shows this year by month"
-                    onPress={() => { setCalYear(year); onChangeView('year'); }}
-                  >
-                    <View style={styles.calYearRow}>
+                  <View key={year} style={styles.calYearBlock}>
+                    {/* Only the header opens the year: a touchable around the heatmap swallowed its horizontal swipes */}
+                    <TouchableOpacity
+                      testID={`calendar-year-${year}`}
+                      style={styles.calYearRow}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 16 }}
+                      activeOpacity={0.6}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${year}`}
+                      accessibilityHint="Shows this year by month"
+                      onPress={() => { setCalYear(year); onChangeView('year'); }}
+                    >
                       <Text style={[styles.calYearLabel, { color: colors.textPrimary }]}>{year}</Text>
                       <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
-                    </View>
+                    </TouchableOpacity>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                       <View style={{ flexDirection: 'row', gap: GAP }}>
                         {Array.from({ length: NUM_WEEKS }, (_, wi) => (
@@ -337,7 +337,7 @@ function WorkoutCalendar({ view: calView, refreshKey, onSelectWorkout, onChangeV
                         ))}
                       </View>
                     </ScrollView>
-                  </TouchableOpacity>
+                  </View>
                 );
               })}
 
@@ -362,7 +362,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.md,
   },
   calNavBtn: { padding: spacing.xs },
-  calYearRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginBottom: spacing.sm },
+  calYearBlock: { marginBottom: spacing.lg },
+  calYearRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 2, marginBottom: spacing.sm },
   calYearLabel: { fontSize: 13, fontWeight: '700' },
   calMonthLabel: { fontSize: typography.fontSize.md, fontWeight: '700' },
   calDowRow: {
