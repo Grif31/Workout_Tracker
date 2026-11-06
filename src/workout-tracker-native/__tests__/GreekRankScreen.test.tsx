@@ -186,7 +186,7 @@ describe('GreekRankScreen', () => {
       }));
       const list = UNSAFE_getByType(FlatList);
       fireEvent(list, 'layout', { nativeEvent: { layout: { width: 500, height: 120, x: 0, y: 0 } } });
-      expect(list.props.contentContainerStyle).toEqual({ paddingHorizontal: (500 - 110) / 2 });
+      expect(list.props.contentContainerStyle).toMatchObject({ paddingHorizontal: (500 - 110) / 2 });
       fireEvent(list, 'contentSizeChange', 1124, 120);
       // Hero is index 2, independent of width
       expect(scrollSpy).toHaveBeenLastCalledWith({ offset: 220, animated: false });
@@ -368,15 +368,15 @@ describe('GreekRankScreen', () => {
   describe('gate rows', () => {
     it('shows where the user currently stands on a locked gate', async () => {
       const { getByText } = await renderNearTopRanks(payload(34, null));
-      expect(getByText(/50th percentile · you're at 34th/)).toBeTruthy();
+      expect(getByText(/50th percentile needed · you're at 34th/)).toBeTruthy();
     });
 
     it('drops the standing from a gate already met', async () => {
       // 64th clears Titan (50) but not Aretē (80), so only the locked row
       // needs to say where the user stands
       const { getByText, queryByText } = await renderNearTopRanks(payload(64, null));
-      expect(queryByText(/50th percentile ·/)).toBeNull();
-      expect(getByText(/80th percentile · you're at 64th/)).toBeTruthy();
+      expect(getByText('50th percentile, reached')).toBeTruthy();
+      expect(getByText(/80th percentile needed · you're at 64th/)).toBeTruthy();
     });
 
     it('lists gates in rank order whatever order they arrive in', async () => {

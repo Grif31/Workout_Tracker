@@ -30,7 +30,7 @@ import { GREEK_RANK_CACHED_KEY, WEEKLY_GOAL_KEY, PROFILE_FRAME_RANK_KEY } from '
 import type { GreekRankData } from '../../utils/greekRank';
 import { apiFetch, resolveMediaUrl } from '../../utils/api';
 import { appCache } from '../../utils/appCache';
-import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileAvatarFrame';
+import ProfileAvatarFrame, { GREEK_RANK_COLORS, frameOverflow } from '../../components/ProfileAvatarFrame';
 import { rankTextColor } from '../../constants/greekRanks';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { fmtHold } from '../../components/workout/types';
@@ -59,7 +59,8 @@ const HISTORY_VIEWS: readonly { key: HistoryView; label: string }[] = [
 ];
 
 // Profile's pinned badges, under the name
-const PINNED_BADGE = 40;
+const PINNED_BADGE = 48;
+const PINNED_SLOT = 52;
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'ProfileHome'>;
 
@@ -499,6 +500,7 @@ export default function ProfileScreen({ navigation }: Props) {
     );
   };
 
+  const avatarBleed = frameOverflow(selectedFrame, 72, 64);
   // The pinned badges, or the finest three until the user picks (TODO §27 Phase 4)
   const pinnedBadges = useMemo(() => (badgeData ? showcaseBadges(badgeData) : []), [badgeData]);
 
@@ -534,7 +536,8 @@ export default function ProfileScreen({ navigation }: Props) {
         style={[styles.card, { backgroundColor: colors.surface, padding: spacing.md }]}
         onPress={() => navigation.navigate('EditProfile')}
       >
-        <View style={styles.avatarContainer}>
+        {/* The frame's ornaments draw past its box: room on every side so they clear the card edge */}
+        <View style={[styles.avatarContainer, { margin: avatarBleed, marginRight: avatarBleed + spacing.md }]}>
           <Image
             source={avatarSource}
             style={styles.image}
@@ -555,7 +558,8 @@ export default function ProfileScreen({ navigation }: Props) {
               accessibilityLabel={`Pinned badges: ${pinnedBadges.map(b => b.title).join(', ')}. Opens the Trophy Hall`}
             >
               {pinnedBadges.map(b => (
-                <View key={b.key} accessible={false} importantForAccessibility="no-hide-descendants">
+                // Equal slots, centred: the outlines differ (plaque, octagon, compass), so a plain gap looks uneven
+                <View key={b.key} style={styles.pinnedSlot} accessible={false} importantForAccessibility="no-hide-descendants">
                   <AchievementBadge badgeKey={b.key} threshold={b.threshold} weightUnit={badgeData!.weight_unit} size={PINNED_BADGE} />
                 </View>
               ))}
@@ -567,7 +571,7 @@ export default function ProfileScreen({ navigation }: Props) {
       {/* Stats: one card, with the cardio totals as a second row when there are any */}
       <View
         testID="profile-stats-card"
-        style={[styles.statsCard, { borderTopColor: GREEK_RANK_COLORS[greekRank ?? 'Neophyte'] ?? GREEK_RANK_COLORS.Neophyte }]}
+        style={styles.statsCard}
       >
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
@@ -952,7 +956,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     height: 72,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.md,
   },
   image: {
     width: 64,
@@ -968,7 +971,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   rankBadgeText: { fontSize: typography.fontSize.sm, fontWeight: '700', letterSpacing: 0.5 },
   userInfo: { flex: 1 },
-  pinnedBadges: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, alignSelf: 'flex-start', minHeight: 44, alignItems: 'center' },
+  pinnedBadges: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.sm, alignSelf: 'flex-start', minHeight: 44, alignItems: 'center' },
+  pinnedSlot: { width: PINNED_SLOT, height: PINNED_SLOT, alignItems: 'center', justifyContent: 'center' },
   value: { fontSize: typography.fontSize.md, fontWeight: '600', marginBottom: spacing.xs },
   workoutCount: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
   emptyText: {
@@ -1019,8 +1023,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: spacing.sm,
     overflow: 'hidden',
-    borderTopWidth: 2,
-    borderTopColor: colors.border,
   },
   statsRow: { flexDirection: 'row' },
   // Between the lifting row and the cardio row, matching the column dividers.

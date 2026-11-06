@@ -120,6 +120,9 @@ describe('achievement helpers', () => {
     expect(goalText('streak', 26, 'any', 'mi')).toBe('26 weeks in a row');
     expect(goalText('plates_bench', 315, 'lbs', 'mi')).toBe('315 lbs bench');
     expect(amountText('elevation', 2917, 'any', 'mi')).toBe('9,570 ft');
+    // Under an hour to go reads as minutes, never "0.5 hours"
+    expect(amountText('hours', 0.5, 'any', 'mi')).toBe('30 minutes');
+    expect(amountText('hours', 1, 'any', 'mi')).toBe('1 hour');
     expect(amountText('elevation', 2917, 'any', 'km')).toBe('2,917 m');
     expect(earnedLine('workouts_5', 100, 'any', 'mi')).toBe('Your 100th workout');
     expect(earnedLine('feat_century', undefined, 'mi', 'km')).toBe('100 km in one ride');

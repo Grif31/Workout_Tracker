@@ -50,9 +50,11 @@ const ITEM_WIDTH = CIRCLE_SIZE + CIRCLE_GAP;
 
 
 const CIRCLE_INNER = CIRCLE_SIZE - 20;
-// The Aretē frame's crown draws below the circle, so every label clears it.
-// Applied to all ranks so the labels keep a common baseline.
-const LABEL_GAP = frameOverflow(ARETE_RANK, CIRCLE_SIZE, CIRCLE_INNER) + spacing.xs;
+// How far the widest frame (Aretē's crown) draws past a circle. The list clips
+// to its bounds, so it's room above the circles too, and every label clears it
+// below, all ranks alike so the labels keep a common baseline
+const CAROUSEL_BLEED = frameOverflow(ARETE_RANK, CIRCLE_SIZE, CIRCLE_INNER);
+const LABEL_GAP = CAROUSEL_BLEED + spacing.xs;
 
 // The frame's ornaments are a fixed share of the photo, so a bigger photo is
 // the only way to keep a high rank's frame from swallowing it
@@ -429,7 +431,7 @@ export default function GreekRankScreen({ navigation }: Props) {
             showsHorizontalScrollIndicator={false}
             snapToInterval={ITEM_WIDTH}
             decelerationRate="fast"
-            contentContainerStyle={{ paddingHorizontal: sidePadding }}
+            contentContainerStyle={{ paddingHorizontal: sidePadding, paddingTop: CAROUSEL_BLEED }}
             onLayout={e => setListWidth(e.nativeEvent.layout.width)}
             onContentSizeChange={centerOnHeldRank}
             onMomentumScrollEnd={syncSelectionToScroll}
@@ -443,7 +445,7 @@ export default function GreekRankScreen({ navigation }: Props) {
                 onSelect={() => selectIndex(index)}
               />
             )}
-            style={{ marginVertical: spacing.md }}
+            style={{ marginTop: spacing.sm, marginBottom: spacing.md }}
             getItemLayout={(_, index) => ({ length: ITEM_WIDTH, offset: sidePadding + ITEM_WIDTH * index, index })}
           />
 
@@ -463,6 +465,9 @@ export default function GreekRankScreen({ navigation }: Props) {
               </View>
             </View>
           )}
+
+          {/* Above Top ranks, which only the top of the ladder sees, so the card isn't three down for them */}
+          <TrophyHallCard onOpen={() => navigation.navigate('Achievements')} />
 
           {/* Performance adds no points; the higher score unlocks the top ranks */}
           {performance && rankData && showTopRanks && (
@@ -508,6 +513,7 @@ export default function GreekRankScreen({ navigation }: Props) {
                     <Text style={[styles.gateRank, { color: met ? rankTextColor(gateRank, gateColor, mode) : colors.textPrimary }]}>{gateRank}</Text>
                     <Text style={styles.gateRequirement}>
                       {fmtOrdinal(required)} percentile
+                      {met ? ', reached' : ' needed'}
                       {performance.best != null && !met && ` · you're at ${fmtOrdinal(performance.best)}`}
                     </Text>
                   </View>
@@ -546,8 +552,6 @@ export default function GreekRankScreen({ navigation }: Props) {
               ) : null}
             </View>
           )}
-
-          <TrophyHallCard onOpen={() => navigation.navigate('Achievements')} />
 
           <View style={{ height: spacing.xl * 2 }} />
         </ScrollView>

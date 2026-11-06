@@ -13,6 +13,8 @@ import { badgeAccessibilityLabel } from '../../constants/achievements';
 import AchievementBadge from './AchievementBadge';
 
 const BADGE = 64;
+// The newest four, one per equal column, so a short row doesn't leave the right side empty
+const SHOWN = 4;
 
 /**
  * Your Journey's way into the Trophy Hall (TODO §27): the count, the three
@@ -33,7 +35,7 @@ export default function TrophyHallCard({ onOpen }: { onOpen: () => void }) {
 
   if (!data) return null;
 
-  const latest = earnedBadges(data).slice(0, 3);
+  const latest = earnedBadges(data).slice(0, SHOWN);
   const unseen = new Set(data.unseen);
   const close = almostThere(data, 1)[0];
   const closeText = close?.next
@@ -79,9 +81,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   title: { flex: 1, fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
   count: { fontSize: 13, color: colors.textSecondary },
-  badges: { flexDirection: 'row', gap: spacing.md },
-  badgeSlot: { width: BADGE, height: BADGE },
-  dot: { position: 'absolute', top: 2, right: 2, width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: colors.surface },
+  badges: { flexDirection: 'row' },
+  badgeSlot: { width: `${100 / SHOWN}%`, height: BADGE, alignItems: 'center' },
+  dot: { position: 'absolute', top: 2, right: '50%', marginRight: -BADGE / 2 + 2, width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: colors.surface },
   line: { fontSize: 13, color: colors.textSecondary },
   lineLabel: { fontWeight: '700', color: colors.textPrimary },
 });

@@ -90,7 +90,10 @@ const PLATE_LIFTS: Record<string, string> = { plates_bench: 'bench', plates_squa
 export function amountText(track: string, amount: number, unit: string, distanceUnit: DistanceUnit): string {
   switch (track) {
     case 'workouts': return `${n(amount)} workout${amount === 1 ? '' : 's'}`;
-    case 'hours': return `${n(amount)} hour${amount === 1 ? '' : 's'}`;
+    // "30 minutes to go" reads better than "0.5 hours"
+    case 'hours': return amount > 0 && amount < 1
+      ? `${Math.round(amount * 60)} minutes`
+      : `${n(amount)} hour${amount === 1 ? '' : 's'}`;
     case 'streak': return `${n(amount)} week${amount === 1 ? '' : 's'}`;
     case 'prs': return `${n(amount)} PR${amount === 1 ? '' : 's'}`;
     case 'explorer': return `${n(amount)} exercise${amount === 1 ? '' : 's'}`;
