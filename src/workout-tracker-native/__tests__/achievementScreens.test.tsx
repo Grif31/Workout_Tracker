@@ -19,7 +19,7 @@ jest.mock('../utils/shareCapture', () => ({ captureAndShare: jest.fn() }));
 jest.mock('react-native-confetti-cannon', () => () => null);
 jest.mock('expo-haptics', () => ({
   notificationAsync: jest.fn(), impactAsync: jest.fn(),
-  NotificationFeedbackType: { Success: 'success' }, ImpactFeedbackStyle: { Heavy: 'heavy', Light: 'light' },
+  NotificationFeedbackType: { Success: 'success' }, ImpactFeedbackStyle: { Heavy: 'heavy', Medium: 'medium', Light: 'light' },
 }));
 
 jest.mock('@react-navigation/native', () => {
@@ -173,14 +173,16 @@ describe('AchievementUnlockSheet', () => {
   beforeEach(() => setReduceMotionForTests(true));
   afterEach(() => setReduceMotionForTests(false));
 
-  it('shows the finest badge, its line and the rest as "+N more", with no ladder count', () => {
-    const { getAllByText, getByText, queryByText } = render(
-      <AchievementUnlockSheet items={items} visible weightUnit="lbs" distanceUnit="mi" reduceMotion onClose={jest.fn()} />,
+  it('opens on the finest badge, with the rest a swipe away and no ladder count', () => {
+    const { getAllByText, getByText, queryByText, getByLabelText } = render(
+      <AchievementUnlockSheet items={items} visible weightUnit="lbs" distanceUnit="mi" reduceMotion onClose={jest.fn()} onOpenTrophyHall={jest.fn()} />,
     );
-    expect(getByText('ACHIEVEMENT UNLOCKED')).toBeTruthy();
     expect(getByText('Hekaton')).toBeTruthy();
     expect(getByText('Your 100th workout logged. Next: Phalanx, at 250.')).toBeTruthy();
-    expect(getByText('+1 more unlocked: First PR')).toBeTruthy();
+    expect(getByText('2 ACHIEVEMENTS UNLOCKED')).toBeTruthy();
+    expect(getByLabelText('Badge 1 of 2')).toBeTruthy();
+    // Every badge has its own page in the pager, in order
+    expect(getByText('First PR')).toBeTruthy();
     // The off-screen share card, hidden from screen readers behind the modal sheet
     expect(getAllByText('Your 100th workout · Sep 28, 2026', { includeHiddenElements: true })).toHaveLength(1);
     expect(queryByText(/of 8/)).toBeNull();
@@ -189,14 +191,69 @@ describe('AchievementUnlockSheet', () => {
   it('sets the badge down with a thud, even under Reduce Motion where nothing moves', async () => {
     const Haptics = require('expo-haptics');
     Haptics.impactAsync.mockClear();
-    render(<AchievementUnlockSheet items={items} visible weightUnit="lbs" distanceUnit="mi" reduceMotion onClose={jest.fn()} />);
+    render(<AchievementUnlockSheet items={items} visible weightUnit="lbs" distanceUnit="mi" reduceMotion onClose={jest.fn()} onOpenTrophyHall={jest.fn()} />);
     await waitFor(() => expect(Haptics.impactAsync).toHaveBeenCalledWith('heavy'));
+  });
+
+  it('follows the swipe: the next badge is set down, and Share and the heading go with it', async () => {
+    const Haptics = require('expo-haptics');
+    const { getByTestId, getByLabelText, getAllByText } = render(
+      <AchievementUnlockSheet items={items} visible weightUnit="lbs" distanceUnit="mi" reduceMotion onClose={jest.fn()} onOpenTrophyHall={jest.fn()} />,
+    );
+    await waitFor(() => expect(Haptics.impactAsync).toHaveBeenCalledWith('heavy'));
+    Haptics.impactAsync.mockClear();
+    const pager = getByTestId('unlock-pager');
+    fireEvent(pager, 'layout', { nativeEvent: { layout: { width: 350, height: 300, x: 0, y: 0 } } });
+    fireEvent(pager, 'momentumScrollEnd', { nativeEvent: { contentOffset: { x: 350, y: 0 } } });
+    await waitFor(() => expect(Haptics.impactAsync).toHaveBeenCalledWith('medium'));
+    expect(getByLabelText('Badge 2 of 2')).toBeTruthy();
+    expect(getByLabelText('Share First PR')).toBeTruthy();
+    // The off-screen share card now draws the badge on show
+    expect(getAllByText('First PR', { includeHiddenElements: true }).length).toBeGreaterThan(1);
+  });
+
+  it('jumps to a badge from its dot, and sets each down only once', async () => {
+    const Haptics = require('expo-haptics');
+    const { getByTestId, getByLabelText } = render(
+      <AchievementUnlockSheet items={items} visible weightUnit="lbs" distanceUnit="mi" reduceMotion onClose={jest.fn()} onOpenTrophyHall={jest.fn()} />,
+    );
+    // Only the second badge thuds 'medium'; a straggling 'heavy' from an earlier test's sheet doesn't count
+    const secondLandings = () => Haptics.impactAsync.mock.calls.filter((c: string[]) => c[0] === 'medium').length;
+    await waitFor(() => expect(Haptics.impactAsync).toHaveBeenCalledWith('heavy'));
+    Haptics.impactAsync.mockClear();
+    fireEvent.press(getByTestId('unlock-dot-1'));
+    await waitFor(() => expect(getByLabelText('Badge 2 of 2')).toBeTruthy());
+    await waitFor(() => expect(secondLandings()).toBe(1));
+    fireEvent.press(getByTestId('unlock-dot-0'));
+    fireEvent.press(getByTestId('unlock-dot-1'));
+    await new Promise(r => setTimeout(r, 50));
+    expect(secondLandings()).toBe(1);
+  });
+
+  it('has no pager dots for a single badge', () => {
+    const { getByText, queryByLabelText } = render(
+      <AchievementUnlockSheet items={[items[1]]} visible weightUnit="lbs" distanceUnit="mi" reduceMotion onClose={jest.fn()} onOpenTrophyHall={jest.fn()} />,
+    );
+    expect(getByText('ACHIEVEMENT UNLOCKED')).toBeTruthy();
+    expect(queryByLabelText(/^Badge \d of/)).toBeNull();
+  });
+
+  it('opens the Trophy Hall once the sheet has closed', async () => {
+    const order: string[] = [];
+    const { getByText } = render(
+      <AchievementUnlockSheet
+        items={items} visible weightUnit="lbs" distanceUnit="mi" reduceMotion
+        onClose={() => order.push('close')} onOpenTrophyHall={() => order.push('hall')}
+      />,
+    );
+    fireEvent.press(getByText('See your Trophy Hall'));
+    await waitFor(() => expect(order).toEqual(['close', 'hall']));
   });
 
   it('shares the lead badge and closes on Continue', async () => {
     const onClose = jest.fn();
     const { getByText } = render(
-      <AchievementUnlockSheet items={items} visible weightUnit="lbs" distanceUnit="mi" reduceMotion onClose={onClose} />,
+      <AchievementUnlockSheet items={items} visible weightUnit="lbs" distanceUnit="mi" reduceMotion onClose={onClose} onOpenTrophyHall={jest.fn()} />,
     );
     fireEvent.press(getByText('Share'));
     expect(captureAndShare).toHaveBeenCalledWith(expect.anything(), 'Share your badge');

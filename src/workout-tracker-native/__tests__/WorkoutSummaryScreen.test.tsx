@@ -13,7 +13,7 @@ jest.mock('../context/AuthContext', () => ({
 jest.mock('react-native-confetti-cannon', () => () => null);
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(), notificationAsync: jest.fn(),
-  ImpactFeedbackStyle: { Light: 'light', Heavy: 'heavy' }, NotificationFeedbackType: { Success: 'success' },
+  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' }, NotificationFeedbackType: { Success: 'success' },
 }));
 jest.mock('../utils/shareCapture', () => ({ captureAndShare: jest.fn() }));
 jest.mock('../components/MuscleDiagram', () => () => null);
@@ -233,6 +233,22 @@ describe('WorkoutSummaryScreen', () => {
     const { findByText } = renderSummary({ newAchievements });
     expect(await findByText('ACHIEVEMENT UNLOCKED', {}, { timeout: 3000 })).toBeTruthy();
     expect(await findByText('Your 100th workout logged. Next: Phalanx, at 250.')).toBeTruthy();
+  });
+
+  it("opens the Trophy Hall in the Profile tab from the unlock sheet", async () => {
+    mockServer({ workout: strengthWorkout });
+    const navigation = createMockNavigation();
+    const { findByText } = render(
+      <WorkoutSummaryScreen
+        navigation={navigation as any}
+        route={{ key: 'k', name: 'WorkoutSummary', params: params({ newAchievements: [{
+          key: 'workouts_5', kind: 'ladder', title: 'Hekaton', earned_at: '2026-03-05T18:00:00', workout_id: 42,
+          track: 'workouts', rung: 5, of: 8, threshold: 100, unit: 'any', next: null,
+        }] }) } as any}
+      />,
+    );
+    fireEvent.press(await findByText('See your Trophy Hall', {}, { timeout: 3000 }));
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith('ProfileTab', { screen: 'Achievements', initial: false }));
   });
 
   it('shows no unlock sheet when the save earned nothing', async () => {

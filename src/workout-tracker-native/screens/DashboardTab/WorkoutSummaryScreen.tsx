@@ -709,6 +709,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           distanceUnit={distanceUnit}
           reduceMotion={reduceMotion}
           onClose={() => setUnlockOpen(false)}
+          onOpenTrophyHall={() => (navigation as any).navigate('ProfileTab', { screen: 'Achievements', initial: false })}
         />
       )}
     </View>
