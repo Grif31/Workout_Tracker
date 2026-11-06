@@ -340,3 +340,14 @@ def test_reported_distance_unit_beats_the_last_logged_set(client, auth_token):
     assert data['distance_unit'] == 'mi'
     assert _track(data, 'running')['value'] == 3.1
     assert client.patch('/api/me', json={'distance_unit': 'miles'}, headers=hdrs(auth_token)).status_code == 400
+
+
+def test_earned_badges_name_their_workout(app, client, auth_token):
+    tid = _template(app, 'Bench Press', 'Bench Press')
+    _lift(client, auth_token, tid, 100)
+    _cardio(client, auth_token, 'Running', 5)
+    data = _get(client, auth_token)
+    ephebe = _track(data, 'workouts')['badges'][0]
+    assert ephebe['workout_name'] == 'Push Day' and ephebe['workout_cardio'] is False
+    first_5k = _feat(data, 'feat_first_5k')
+    assert first_5k['workout_name'] == 'Running' and first_5k['workout_cardio'] is True

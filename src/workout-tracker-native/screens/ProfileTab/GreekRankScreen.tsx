@@ -27,6 +27,7 @@ import { writeWidgetGreekRank } from '../../utils/widgetData';
 import PercentileBar from '../../components/PercentileBar';
 import { AnimatedPercentText } from '../../components/ScoreRing';
 import { motionTiming } from '../../utils/motion';
+import TrophyHallCard from '../../components/achievements/TrophyHallCard';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'GreekRank'>;
 
@@ -561,6 +562,8 @@ export default function GreekRankScreen({ navigation }: Props) {
               )}
             </View>
           )}
+
+          <TrophyHallCard onOpen={() => navigation.navigate('Achievements')} />
 
           {/* Full score breakdowns — both screens are premium */}
           <View style={styles.scoreLinksRow}>

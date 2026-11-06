@@ -431,12 +431,26 @@ def achievements_payload(user):
     wu, du = replay.weight_unit, replay.distance_unit
     rows = {r.key: r for r in UserAchievement.query.filter_by(user_id=user.id)}
 
+    # The badge back names the workout that earned it, and View Workout opens
+    # the cardio screen for an all-cardio one (the workout_type rule)
+    workout_ids = {r.workout_id for r in rows.values() if r.workout_id}
+    names = dict(
+        db.session.query(Workout.id, Workout.name).filter(Workout.id.in_(workout_ids)).all()
+    ) if workout_ids else {}
+    types = defaultdict(set)
+    if workout_ids:
+        for wid, ex_type in (db.session.query(Exercise.workout_id, Exercise.exercise_type)
+                             .filter(Exercise.workout_id.in_(workout_ids)).all()):
+            types[wid].add((ex_type or 'strength').lower())
+
     def earned(key):
         row = rows.get(key)
         if not row:
-            return {'earned': False, 'earned_at': None, 'workout_id': None, 'seen': True}
+            return {'earned': False, 'earned_at': None, 'workout_id': None,
+                    'workout_name': None, 'workout_cardio': False, 'seen': True}
         return {'earned': True, 'earned_at': row.earned_at.isoformat(),
-                'workout_id': row.workout_id, 'seen': row.seen}
+                'workout_id': row.workout_id, 'workout_name': names.get(row.workout_id),
+                'workout_cardio': types.get(row.workout_id) == {'cardio'}, 'seen': row.seen}
 
     tracks = []
     for ladder in LADDERS:

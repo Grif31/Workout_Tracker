@@ -22,6 +22,8 @@ jest.mock('../context/PurchaseContext', () => ({
   }),
   PurchaseProvider: ({ children }: any) => children,
 }));
+// Its own request and tests (achievementScreens.test.tsx); here it would read the rank payload
+jest.mock('../components/achievements/TrophyHallCard', () => () => null);
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 
 const route = createMockRoute('GreekRank');
