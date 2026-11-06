@@ -8,6 +8,7 @@ import {
 import { BADGE_ART } from '../constants/badgeArt';
 import AchievementBadge from '../components/achievements/AchievementBadge';
 import BadgeBack, { backLines, fitBack } from '../components/achievements/BadgeBack';
+import { amountText, earnedLine, goalText } from '../utils/achievements';
 import FlipBadge from '../components/achievements/FlipBadge';
 import { estimateWidth, layoutBack } from '../utils/badgeBackLayout';
 import { setReduceMotionForTests } from '../utils/motion';
@@ -171,6 +172,57 @@ describe('badge back layout', () => {
       const locked = backLines({ badgeKey: key, title: 'Hippodrome', progress: { goal: '2,500 workouts', soFar: '1,370 so far', toGo: '1,130 to go' } });
       expect([key, fitBack(look.art, locked) !== null]).toEqual([key, true]);
     }
+  });
+
+  // Each badge's own lines, as the badge card builds them. A feat's line is a
+  // sentence ("Deadlifted twice your bodyweight"); before it could wrap, the
+  // back of every feat, most hidden badges and Dodekatheon came out blank
+  it("shows every line of every badge's real back, earned and locked", () => {
+    const ladders: { track: string; unit: string; thresholds: number[] }[] = [];
+    for (const m of SERVER.matchAll(/Ladder\('(\w+)',[^{]*\{([^}]*)\}/g)) {
+      for (const u of m[2].matchAll(/'(\w+)': \[([^\]]*)\]/g)) {
+        ladders.push({ track: m[1], unit: u[1], thresholds: u[2].split(',').filter(s => s.trim()).map(s => Number(s.replace(/_/g, ''))) });
+      }
+    }
+    for (const lift of ['bench', 'squat', 'deadlift']) {
+      ladders.push({ track: `plates_${lift}`, unit: 'lbs', thresholds: [135, 225, 315, 405] }, { track: `plates_${lift}`, unit: 'kg', thresholds: [60, 100, 140, 180] });
+    }
+    expect(ladders.length).toBeGreaterThan(15);
+    const badges = [
+      ...ladders.flatMap(l => l.thresholds.map((t, i) => ({ key: `${l.track}_${i + 1}`, track: l.track as string | null, threshold: t as number | undefined, unit: l.unit }))),
+      ...Object.keys(ONE_OFF_ART).map(key => ({ key, track: null, threshold: undefined, unit: 'any' })),
+    ];
+    const shown = (fitted: ReturnType<typeof fitBack>) => fitted!.layout.lines.map(l => l.text).join(' ');
+    for (const b of badges) {
+      const du = b.unit === 'km' || b.unit === 'kg' ? 'km' : 'mi';
+      const unit = b.unit === 'any' ? du : b.unit;
+      const what = earnedLine(b.key, b.threshold, unit, du);
+      // The longest single-word title in the catalogue, which can only shrink
+      const title = 'Dodekatheon';
+      const earnedSpecs = backLines({ badgeKey: b.key, title, earned: { date: 'Sep 28, 2026', workoutName: 'Push Day', countLine: what || null } });
+      const progress = b.track && b.threshold != null
+        ? { goal: goalText(b.track, b.threshold, unit, du), soFar: `${amountText(b.track, b.threshold * 0.55, unit, du)} so far`, toGo: `${amountText(b.track, b.threshold * 0.45, unit, du)} to go` }
+        : { goal: what };
+      const lockedSpecs = backLines({ badgeKey: b.key, title, progress });
+      for (const [state, specs] of [['earned', earnedSpecs], ['locked', lockedSpecs]] as const) {
+        const fitted = fitBack(badgeLook(b.key, { threshold: b.threshold, locked: state === 'locked' }).art, specs);
+        expect([b.key, b.unit, state, fitted !== null]).toEqual([b.key, b.unit, state, true]);
+        // Nothing but the meaning may be left out
+        const words = shown(fitted).replace(/…/g, '').split(/\s+/);
+        for (const spec of specs.filter(s => !s.meaning && !s.ellipsize)) {
+          for (const word of spec.text.split(' ')) expect([b.key, state, words.includes(word)]).toEqual([b.key, state, true]);
+        }
+      }
+    }
+  });
+
+  it('never leaves a back blank: past the round plate it drops lines from the bottom', () => {
+    const specs = backLines({
+      badgeKey: 'workouts_5', title: 'Hekaton',
+      earned: { date: 'Sep 28, 2026', workoutName: 'Push Day', countLine: 'An absurdly long line that could never possibly fit on any badge back at all, however small' },
+    });
+    const fitted = fitBack('work', specs);
+    expect(fitted?.layout.lines[0].text).toBe('HEKATON');
   });
 
   it('gives up (null) when nothing can fit, so the caller can fall back', () => {

@@ -27,7 +27,8 @@ interface Props {
 
 export function backLines(props: Pick<Props, 'badgeKey' | 'title' | 'earned' | 'progress'>): BackLineSpec[] {
   const { badgeKey, title, earned, progress } = props;
-  const name: BackLineSpec = { text: title.toUpperCase(), size: 4.6, weight: '800', spacing: 0.9, tone: 'strong', emboss: true, ruleAfter: true, maxLines: 2 };
+  // A long single word (DODEKATHEON) can't wrap, so the name may shrink further than the rest
+  const name: BackLineSpec = { text: title.toUpperCase(), size: 4.6, floor: 0.62, weight: '800', spacing: 0.9, tone: 'strong', emboss: true, ruleAfter: true, maxLines: 2 };
   if (!badgeKey) {
     return [
       { ...name, text: 'HIDDEN' },
@@ -40,12 +41,13 @@ export function backLines(props: Pick<Props, 'badgeKey' | 'title' | 'earned' | '
     lines.push({ text: 'EARNED', size: 2.9, weight: '600', spacing: 0.5, tone: 'soft' });
     lines.push({ text: earned.date, size: 4.4, weight: '800', tone: 'strong', emboss: true });
     if (earned.workoutName) lines.push({ text: earned.workoutName, size: 3.2, weight: '700', tone: 'strong', ellipsize: true });
-    if (earned.countLine) lines.push({ text: earned.countLine, size: 3, weight: '500', tone: 'strong' });
+    if (earned.countLine) lines.push({ text: earned.countLine, size: 3, weight: '500', tone: 'strong', maxLines: 2 });
   } else {
     lines.push({ text: 'NOT YET', size: 2.9, weight: '600', spacing: 0.5, tone: 'soft' });
-    if (progress?.goal) lines.push({ text: progress.goal, size: 4.4, weight: '800', tone: 'strong', emboss: true });
-    if (progress?.soFar) lines.push({ text: progress.soFar, size: 3.2, weight: '700', tone: 'strong' });
-    if (progress?.toGo) lines.push({ text: progress.toGo, size: 3, weight: '500', tone: 'strong' });
+    // A feat's goal is a sentence ("Deadlifted twice your bodyweight"), so it may wrap
+    if (progress?.goal) lines.push({ text: progress.goal, size: 4.4, weight: '800', tone: 'strong', emboss: true, maxLines: 3 });
+    if (progress?.soFar) lines.push({ text: progress.soFar, size: 3.2, weight: '700', tone: 'strong', maxLines: 2 });
+    if (progress?.toGo) lines.push({ text: progress.toGo, size: 3, weight: '500', tone: 'strong', maxLines: 2 });
   }
   if (meaning) {
     lines[lines.length - 1] = { ...lines[lines.length - 1], ruleAfter: true };
@@ -60,9 +62,14 @@ export function fitBack(art: BadgeArtKey, specs: BackLineSpec[]): { shape: Badge
     const layout = layoutBack(BADGE_ART[shape].backRows, specs);
     if (layout) return { shape, layout };
   }
-  const withoutMeaning = specs.filter(s => !s.meaning);
-  const layout = layoutBack(BADGE_ART[FALLBACK_SHAPE].backRows, withoutMeaning);
-  return layout ? { shape: FALLBACK_SHAPE, layout } : null;
+  // Then lines from the bottom up, so a back is never left blank: the name always shows
+  const kept = specs.filter(s => !s.meaning);
+  while (kept.length) {
+    const layout = layoutBack(BADGE_ART[FALLBACK_SHAPE].backRows, kept);
+    if (layout) return { shape: FALLBACK_SHAPE, layout };
+    kept.pop();
+  }
+  return null;
 }
 
 function BadgeBack({ badgeKey, size, title, threshold, weightUnit, earned, progress, accessibilityLabel }: Props) {

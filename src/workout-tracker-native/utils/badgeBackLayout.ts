@@ -125,7 +125,8 @@ export function layoutBack(rows: BackRow[], specs: BackLineSpec[]): BackLayout |
   for (const opt of options) combos = combos.flatMap(c => opt.map(n => [...c, n]));
   combos.sort((a, b) => a.reduce((x, y) => x + y, 0) - b.reduce((x, y) => x + y, 0));
 
-  for (let scale = 1; scale >= 0.74; scale -= 0.04) {
+  // Below 0.74 only a line with a lower floor keeps shrinking; the rest hold at theirs
+  for (let scale = 1; scale >= 0.6; scale -= 0.04) {
     for (const combo of combos) {
       const expanded: { spec: BackLineSpec; text: string; ruleAfter: boolean }[] = [];
       let splittable = true;
