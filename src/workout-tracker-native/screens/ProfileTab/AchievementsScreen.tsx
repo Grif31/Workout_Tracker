@@ -5,6 +5,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -12,17 +13,21 @@ import { ProfileStackParamsList } from '../../navigation/types';
 import { appCache } from '../../utils/appCache';
 import {
   ACHIEVEMENTS_CACHE_KEY, almostThere, amountText, badgeDate, earnedBadges, earnedLine, fetchAchievements,
-  markAchievementsSeen, milestoneTiles, notYetShownLines, rungProgress, topBadges,
+  markAchievementsSeen, milestoneTiles, notYetShown, rungProgress, topBadges,
   type AchievementsData, type EarnedItem,
 } from '../../utils/achievements';
-import { badgeAccessibilityLabel } from '../../constants/achievements';
+import { badgeAccessibilityLabel, badgeLook } from '../../constants/achievements';
 import AchievementBadge from '../../components/achievements/AchievementBadge';
+import SetDownBadge from '../../components/achievements/SetDownBadge';
 import BadgeRing from '../../components/achievements/BadgeRing';
 import BadgeDetailModal, { type BadgeDetail } from '../../components/achievements/BadgeDetailModal';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'Achievements'>;
 
 const SHOWCASE_SIZES = [84, 108, 84];
+// The top badges are set down one by one as the Hall opens, finest first
+const SET_DOWN_START = 150;
+const SET_DOWN_STAGGER = 140;
 
 /**
  * The Trophy Hall (TODO §27, layout C): top badges, Almost there, Milestones
@@ -36,6 +41,8 @@ export default function AchievementsScreen({ navigation }: Props) {
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [detail, setDetail] = useState<BadgeDetail | null>(null);
+  // The untrained track whose sentence is showing under Still to discover
+  const [discoverOpen, setDiscoverOpen] = useState<string | null>(null);
   // Dots stay for this visit even though the server is told they've been seen
   const [newKeys, setNewKeys] = useState<Set<string>>(new Set());
   const reported = useRef(new Set<string>());
@@ -101,7 +108,8 @@ export default function AchievementsScreen({ navigation }: Props) {
   const top = topBadges(data);
   const close = almostThere(data);
   const tiles = milestoneTiles(data);
-  const notes = notYetShownLines(data);
+  const undiscovered = notYetShown(data);
+  const openNote = undiscovered.find(u => u.track === discoverOpen);
   const feats = data.feats.filter(f => f.visible);
   const recent = earnedBadges(data).slice(0, 3);
   const unfound = Array.from({ length: data.hidden_remaining });
@@ -130,7 +138,13 @@ export default function AchievementsScreen({ navigation }: Props) {
                     accessibilityRole="button"
                     accessibilityLabel={badgeAccessibilityLabel(item.title, { earnedAt: item.state.earned_at })}
                   >
-                    <AchievementBadge badgeKey={item.key} threshold={item.threshold} weightUnit={wu} size={size} />
+                    {/* Set down finest first, as the unlock sheet sets down a new badge */}
+                    <SetDownBadge
+                      play size={size} metal={badgeLook(item.key, { threshold: item.threshold }).metal}
+                      delay={SET_DOWN_START + top.indexOf(item) * SET_DOWN_STAGGER} haptic={Haptics.ImpactFeedbackStyle.Light}
+                    >
+                      <AchievementBadge badgeKey={item.key} threshold={item.threshold} weightUnit={wu} size={size} />
+                    </SetDownBadge>
                     <Text style={styles.showcaseTitle} numberOfLines={2}>{item.title}</Text>
                   </TouchableOpacity>
                 );
@@ -182,7 +196,30 @@ export default function AchievementsScreen({ navigation }: Props) {
             </TouchableOpacity>
           ))}
         </View>
-        {notes.map(line => <Text key={line} style={[styles.muted, styles.note]}>{line}</Text>)}
+        {undiscovered.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle} accessibilityRole="header">Still to discover</Text>
+            <View style={styles.discoverRow}>
+              {undiscovered.map(u => (
+                <TouchableOpacity
+                  key={u.track} style={styles.discoverItem}
+                  onPress={() => setDiscoverOpen(open => (open === u.track ? null : u.track))}
+                  accessibilityRole="button"
+                  accessibilityLabel={u.line}
+                  accessibilityState={{ expanded: discoverOpen === u.track }}
+                >
+                  {/* The track's shape in the locked greys, with no stamp, so no badge is given away */}
+                  <View style={discoverOpen && discoverOpen !== u.track ? styles.discoverDim : undefined}>
+                    <AchievementBadge badgeKey={`${u.track}_1`} size={56} locked />
+                  </View>
+                  <Text style={styles.tileTrack} numberOfLines={1}>{u.label.toUpperCase()}</Text>
+                  <Text style={[styles.muted, styles.center]} numberOfLines={2}>{u.trigger}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {openNote && <Text style={[styles.muted, styles.note]}>{openNote.line}</Text>}
+          </>
+        )}
 
         {feats.length > 0 && (
           <>
@@ -310,6 +347,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   tileTrack: { marginTop: 2, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, color: colors.textSecondary },
   tileTitle: { fontSize: 15, fontWeight: '800', color: colors.textPrimary, paddingHorizontal: 2 },
   note: { marginHorizontal: spacing.md, marginTop: spacing.md },
+  discoverRow: { marginHorizontal: spacing.md, flexDirection: 'row', flexWrap: 'wrap', rowGap: spacing.md },
+  discoverItem: { width: '25%', alignItems: 'center', gap: 2, minHeight: 44, paddingHorizontal: 2 },
+  discoverDim: { opacity: 0.5 },
+  center: { textAlign: 'center' },
   panel: {
     marginHorizontal: spacing.md, backgroundColor: colors.surface, borderRadius: radius.lg,
     paddingVertical: spacing.sm + 4, paddingHorizontal: 6, flexDirection: 'row', flexWrap: 'wrap', rowGap: spacing.sm,

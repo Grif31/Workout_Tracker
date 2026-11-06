@@ -3,13 +3,24 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { createMockNavigation, createMockRoute } from './testUtils';
 import { appCache } from '../utils/appCache';
 import {
-  almostThere, amountText, earnedLine, goalText, milestoneTiles, notYetShownLines, rungProgress, topBadges,
-  type AchievementsData, type LadderBadge, type Track,
+  almostThere, amountText, earnedLine, goalText, milestoneTiles, notYetShown, orderUnlocks, rungProgress,
+  shareLine, topBadges, unlockLine,
+  type AchievementsData, type LadderBadge, type NewAchievement, type Track,
 } from '../utils/achievements';
 import AchievementsScreen from '../screens/ProfileTab/AchievementsScreen';
 import AchievementTrackScreen from '../screens/ProfileTab/AchievementTrackScreen';
 import TrophyHallCard from '../components/achievements/TrophyHallCard';
 import BadgeDetailModal from '../components/achievements/BadgeDetailModal';
+import AchievementUnlockSheet from '../components/achievements/AchievementUnlockSheet';
+import { captureAndShare } from '../utils/shareCapture';
+import { setReduceMotionForTests } from '../utils/motion';
+
+jest.mock('../utils/shareCapture', () => ({ captureAndShare: jest.fn() }));
+jest.mock('react-native-confetti-cannon', () => () => null);
+jest.mock('expo-haptics', () => ({
+  notificationAsync: jest.fn(), impactAsync: jest.fn(),
+  NotificationFeedbackType: { Success: 'success' }, ImpactFeedbackStyle: { Heavy: 'heavy', Light: 'light' },
+}));
 
 jest.mock('@react-navigation/native', () => {
   const actual = jest.requireActual('@react-navigation/native');
@@ -97,7 +108,9 @@ describe('achievement helpers', () => {
   });
 
   it('says why an untrained track is missing', () => {
-    expect(notYetShownLines(fixture())).toEqual(['Ride distance appears after your first ride.']);
+    expect(notYetShown(fixture())).toEqual([
+      { track: 'ride', label: 'Ride', trigger: 'After your first ride', line: 'Ride distance appears after your first ride.' },
+    ]);
   });
 
   it('writes amounts and goals in the track’s own terms', () => {
@@ -116,6 +129,83 @@ describe('achievement helpers', () => {
   });
 });
 
+describe('unlock helpers', () => {
+  const hekaton: NewAchievement = {
+    key: 'workouts_5', kind: 'ladder', title: 'Hekaton', earned_at: '2026-09-28T18:00:00', workout_id: 9,
+    track: 'workouts', rung: 5, of: 8, threshold: 100, unit: 'any', next: { title: 'Phalanx', threshold: 250 },
+  };
+  const firstPr: NewAchievement = {
+    key: 'prs_1', kind: 'ladder', title: 'First PR', earned_at: '2026-09-28T18:00:00', workout_id: 9,
+    track: 'prs', rung: 1, of: 8, threshold: 1, unit: 'any', next: { title: '25 PRs', threshold: 25 },
+  };
+  const nostos: NewAchievement = { key: 'feat_nostos', kind: 'feat', title: 'Nostos', earned_at: '2026-09-28T18:00:00', workout_id: 9 };
+
+  it('leads with the finest new badge, not the first the server lists', () => {
+    expect(orderUnlocks([firstPr, hekaton]).map(a => a.key)).toEqual(['workouts_5', 'prs_1']);
+    // Gold feat against a gold rung: the newer one leads
+    expect(orderUnlocks([hekaton, nostos])[0].key).toBe('feat_nostos');
+  });
+
+  it('says what it took and what comes next, in one line', () => {
+    expect(unlockLine(hekaton, 'mi')).toBe('Your 100th workout logged. Next: Phalanx, at 250.');
+    expect(unlockLine(nostos, 'mi')).toBe('Back at it.');
+    const volume: NewAchievement = {
+      key: 'volume_5', kind: 'ladder', title: 'Half Million', earned_at: '2026-09-28T18:00:00', workout_id: 9,
+      track: 'volume', rung: 5, of: 8, threshold: 500000, unit: 'kg', next: { title: 'Atlas', threshold: 1000000 },
+    };
+    expect(unlockLine(volume, 'km')).toBe('500,000 kg lifted, all time. Next: Atlas, at 1,000,000 kg.');
+    expect(unlockLine({ ...hekaton, key: 'workouts_8', title: 'Chiliad', threshold: 1000, next: null }, 'mi')).toBe('Your 1,000th workout logged.');
+  });
+
+  it('dates the share line with the workout, without a doubled stop', () => {
+    expect(shareLine('workouts_5', 100, 'any', 'mi', '2026-09-28T23:30:00')).toBe('Your 100th workout · Sep 28, 2026');
+    expect(shareLine('feat_nostos', undefined, 'mi', 'mi', '2026-09-28T00:00:00')).toBe('Back at it · Sep 28, 2026');
+  });
+});
+
+describe('AchievementUnlockSheet', () => {
+  const items: NewAchievement[] = [
+    { key: 'prs_1', kind: 'ladder', title: 'First PR', earned_at: '2026-09-28T18:00:00', workout_id: 9,
+      track: 'prs', rung: 1, of: 8, threshold: 1, unit: 'any', next: { title: '25 PRs', threshold: 25 } },
+    { key: 'workouts_5', kind: 'ladder', title: 'Hekaton', earned_at: '2026-09-28T18:00:00', workout_id: 9,
+      track: 'workouts', rung: 5, of: 8, threshold: 100, unit: 'any', next: { title: 'Phalanx', threshold: 250 } },
+  ];
+  beforeEach(() => setReduceMotionForTests(true));
+  afterEach(() => setReduceMotionForTests(false));
+
+  it('shows the finest badge, its line and the rest as "+N more", with no ladder count', () => {
+    const { getAllByText, getByText, queryByText } = render(
+      <AchievementUnlockSheet items={items} visible weightUnit="lbs" distanceUnit="mi" reduceMotion onClose={jest.fn()} />,
+    );
+    expect(getByText('ACHIEVEMENT UNLOCKED')).toBeTruthy();
+    expect(getByText('Hekaton')).toBeTruthy();
+    expect(getByText('Your 100th workout logged. Next: Phalanx, at 250.')).toBeTruthy();
+    expect(getByText('+1 more unlocked: First PR')).toBeTruthy();
+    // The off-screen share card, hidden from screen readers behind the modal sheet
+    expect(getAllByText('Your 100th workout · Sep 28, 2026', { includeHiddenElements: true })).toHaveLength(1);
+    expect(queryByText(/of 8/)).toBeNull();
+  });
+
+  it('sets the badge down with a thud, even under Reduce Motion where nothing moves', async () => {
+    const Haptics = require('expo-haptics');
+    Haptics.impactAsync.mockClear();
+    render(<AchievementUnlockSheet items={items} visible weightUnit="lbs" distanceUnit="mi" reduceMotion onClose={jest.fn()} />);
+    await waitFor(() => expect(Haptics.impactAsync).toHaveBeenCalledWith('heavy'));
+  });
+
+  it('shares the lead badge and closes on Continue', async () => {
+    const onClose = jest.fn();
+    const { getByText } = render(
+      <AchievementUnlockSheet items={items} visible weightUnit="lbs" distanceUnit="mi" reduceMotion onClose={onClose} />,
+    );
+    fireEvent.press(getByText('Share'));
+    expect(captureAndShare).toHaveBeenCalledWith(expect.anything(), 'Share your badge');
+    fireEvent.press(getByText('Continue'));
+    // After the slide away, which Reduce Motion makes instant
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+});
+
 describe('AchievementsScreen', () => {
   it('shows each section, the hidden count, and never an untrained track', async () => {
     mockApi(fixture());
@@ -128,9 +218,32 @@ describe('AchievementsScreen', () => {
     expect(getByText('Milestones')).toBeTruthy();
     expect(getByText('1 found · 5 to find')).toBeTruthy();
     expect(getAllByLabelText('Hidden badge, not found yet')).toHaveLength(5);
-    expect(getByText('Ride distance appears after your first ride.')).toBeTruthy();
     expect(queryByText('Century')).toBeNull();
     expect(queryByText('Hippeus')).toBeNull();
+  });
+
+  it('lists untrained tracks under Still to discover, explaining one on a tap', async () => {
+    mockApi(fixture());
+    const { findByText, getByText, queryByText, getByLabelText } = render(
+      <AchievementsScreen navigation={createMockNavigation() as any} route={createMockRoute('Achievements') as any} />,
+    );
+    expect(await findByText('Still to discover')).toBeTruthy();
+    expect(getByText('RIDE')).toBeTruthy();
+    expect(getByText('After your first ride')).toBeTruthy();
+    expect(queryByText('Ride distance appears after your first ride.')).toBeNull();
+    fireEvent.press(getByLabelText('Ride distance appears after your first ride.'));
+    expect(getByText('Ride distance appears after your first ride.')).toBeTruthy();
+  });
+
+  it('sets each top badge down with a light tap', async () => {
+    const Haptics = require('expo-haptics');
+    Haptics.impactAsync.mockClear();
+    setReduceMotionForTests(true);
+    mockApi(fixture());
+    render(<AchievementsScreen navigation={createMockNavigation() as any} route={createMockRoute('Achievements') as any} />);
+    await waitFor(() => expect(Haptics.impactAsync).toHaveBeenCalledTimes(3), { timeout: 3000 });
+    expect(Haptics.impactAsync).toHaveBeenCalledWith('light');
+    setReduceMotionForTests(false);
   });
 
   it('tells the server the new badges were seen, but keeps their dot for this visit', async () => {
@@ -193,9 +306,21 @@ describe('BadgeDetailModal', () => {
     expect(onViewWorkout).toHaveBeenCalledWith(3, true);
   });
 
+  it('shares an earned badge on its own card', () => {
+    (captureAndShare as jest.Mock).mockClear();
+    const neo = fixture().hidden[0];
+    const { getByText } = render(
+      <BadgeDetailModal {...props} detail={{ key: neo.key, title: neo.title, unit: 'mi', state: neo }} />,
+    );
+    expect(getByText('A workout on New Year’s Day · Jan 1, 2026')).toBeTruthy();
+    expect(getByText('Excellence, logged.')).toBeTruthy();
+    fireEvent.press(getByText('Share'));
+    expect(captureAndShare).toHaveBeenCalledTimes(1);
+  });
+
   it('has no buttons but Close on a locked badge', () => {
     const { queryByText, getByText } = render(
-      <BadgeDetailModal {...props} onViewWorkout={jest.fn()} onShare={jest.fn()}
+      <BadgeDetailModal {...props} onViewWorkout={jest.fn()}
         detail={{ key: 'workouts_6', title: 'Phalanx', threshold: 250, unit: 'any', value: 137, state: { ...unearned } }} />,
     );
     expect(queryByText('View Workout')).toBeNull();
@@ -209,10 +334,28 @@ describe('BadgeDetailModal', () => {
       <BadgeDetailModal {...props}
         detail={{ key: 'workouts_6', title: 'Phalanx', threshold: 250, unit: 'any', value: 137, state: { ...unearned } }} />,
     );
+    // Face up first, long enough to be seen
+    act(() => { jest.advanceTimersByTime(400); });
+    expect(getByLabelText('Phalanx, locked, 137 of 250')).toBeTruthy();
     act(() => { jest.advanceTimersByTime(300); });
     const back = getByLabelText(/^Back of Phalanx/);
     expect(back.props.accessibilityLabel).toContain('137 workouts so far');
     fireEvent.press(back);
+    expect(getByLabelText('Phalanx, locked, 137 of 250')).toBeTruthy();
+    jest.useRealTimers();
+  });
+});
+
+describe('BadgeDetailModal reopened', () => {
+  it('opens the next badge face up, never on the last badge back', () => {
+    jest.useFakeTimers();
+    const detail = { key: 'workouts_6', title: 'Phalanx', threshold: 250, unit: 'any', value: 137, state: { ...unearned } };
+    const props = { weightUnit: 'lbs', distanceUnit: 'mi' as const, onClose: jest.fn() };
+    const { getByLabelText, rerender } = render(<BadgeDetailModal {...props} detail={detail} />);
+    act(() => { jest.advanceTimersByTime(700); });
+    expect(getByLabelText(/^Back of Phalanx/)).toBeTruthy();
+    rerender(<BadgeDetailModal {...props} detail={null} />);
+    rerender(<BadgeDetailModal {...props} detail={{ ...detail }} />);
     expect(getByLabelText('Phalanx, locked, 137 of 250')).toBeTruthy();
     jest.useRealTimers();
   });

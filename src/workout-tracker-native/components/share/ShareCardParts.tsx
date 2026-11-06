@@ -1,5 +1,5 @@
 import React, { forwardRef } from 'react';
-import { View, Text, Image, StyleSheet, StyleProp, ViewStyle } from 'react-native';
+import { View, Text, Image, StyleSheet, StyleProp, ViewStyle, ImageStyle } from 'react-native';
 import { LaurelBranch } from '../LaurelWreath';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -15,7 +15,7 @@ import {
 } from '../../constants/shareCardTheme';
 
 // Shared chrome for the share-card family (PRShareCard, WorkoutShareCard,
-// WeeklySummaryShareCard, StrengthScoreShareCard, CardioShareCard). Each card
+// WeeklySummaryShareCard, StrengthScoreShareCard, CardioShareCard, AchievementShareCard). Each card
 // composes these pieces with its own middle section — editing a piece here
 // changes every card that uses it; editing one card's file changes only that card.
 
@@ -40,10 +40,15 @@ type ShareCardHeaderProps = { date: string; style?: StyleProp<ViewStyle> };
 export function ShareCardHeader({ date, style }: ShareCardHeaderProps) {
   return (
     <View style={[styles.header, style]}>
-      <Image source={require('../../assets/Arete_name.png')} style={styles.logo} resizeMode="contain" />
+      <ShareCardWordmark />
       <Text style={styles.date}>{date}</Text>
     </View>
   );
+}
+
+// The wordmark alone, for a card with no date row
+export function ShareCardWordmark({ style }: { style?: StyleProp<ImageStyle> }) {
+  return <Image source={require('../../assets/Arete_name.png')} style={[styles.logo, style]} resizeMode="contain" />;
 }
 
 // Laurel-flanked PR / rank-up callout — gold-bordered outline on the surface

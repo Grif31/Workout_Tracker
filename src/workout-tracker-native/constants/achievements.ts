@@ -18,6 +18,18 @@ export const BACK_INK: Record<BadgeMetal, { strong: string; soft: string; rule: 
   locked: { strong: '#AEAEB2', soft: '#8E8E93', rule: '#5A5A5E', faceTop: '#2C2C30', faceMid: '#232325', faceEnd: '#18181A' },
 };
 
+/** The soft light behind a badge on the unlock sheet and the share card, in its metal */
+export const BADGE_GLOW: Record<BadgeMetal, string> = {
+  bronze: 'rgba(201,138,90,0.30)',
+  silver: 'rgba(199,205,214,0.24)',
+  gold:   'rgba(232,194,90,0.30)',
+  marble: 'rgba(242,238,228,0.24)',
+  locked: 'rgba(0,0,0,0)',
+};
+
+/** The shadow a badge casts on the surface as it's set down (SetDownBadge) */
+export const SET_DOWN_SHADOW = 'rgba(0,0,0,0.35)';
+
 /** Ladder tracks as the server names them, with their art and rung count */
 export const LADDER_ART: Record<string, { art: BadgeArtKey; rungs: number }> = {
   workouts:        { art: 'work',    rungs: 8 },

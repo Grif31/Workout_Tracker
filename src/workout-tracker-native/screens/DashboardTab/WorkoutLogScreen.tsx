@@ -40,6 +40,7 @@ export default function WorkoutLogScreen({ route, navigation }: Props) {
             isFirstWorkout: summary.isFirstWorkout,
             isBestVolume: summary.isBestVolume,
             isBestReps: summary.isBestReps,
+            newAchievements: summary.newAchievements,
           });
         } else {
           navigation.goBack();

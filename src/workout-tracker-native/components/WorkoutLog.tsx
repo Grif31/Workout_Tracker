@@ -74,6 +74,7 @@ import RestTimer from './workout/RestTimer';
 import PlateCalculatorModal from './PlateCalculatorModal';
 import UndoBar from './UndoBar';
 import { syncFinishedWorkout } from '../utils/healthSync';
+import type { NewAchievement } from '../utils/achievements';
 
 type EditableSetField = 'reps' | 'weight';
 
@@ -123,7 +124,7 @@ type Props = {
   prefill?: PrefillWorkoutData;
   editMode?: boolean;
   workoutId?: number;
-  onSubmit?: (workoutId?: number, summary?: { workoutName: string; prs: any[]; totalVolume: number; totalReps: number; totalSets: number; muscles: string[]; isFirstWorkout: boolean; isBestVolume: boolean; isBestReps: boolean }) => void;
+  onSubmit?: (workoutId?: number, summary?: { workoutName: string; prs: any[]; totalVolume: number; totalReps: number; totalSets: number; muscles: string[]; isFirstWorkout: boolean; isBestVolume: boolean; isBestReps: boolean; newAchievements: NewAchievement[] }) => void;
   onCancel?: () => void;
   onViewExerciseHistory?: (
     exerciseName: string,
@@ -1566,6 +1567,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           isFirstWorkout: data.is_first_workout ?? false,
           isBestVolume: data.is_best_volume ?? false,
           isBestReps: data.is_best_reps ?? false,
+          newAchievements: data.new_achievements ?? [],
         }
       );
     } catch (err) {

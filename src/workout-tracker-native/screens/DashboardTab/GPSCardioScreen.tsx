@@ -359,6 +359,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
         isFirstWorkout: data.is_first_workout ?? false,
         isBestVolume: false,
         isBestReps: false,
+        newAchievements: data.new_achievements ?? [],
       });
     } catch {
       // NetInfo said online but the request still died (flaky signal) or the

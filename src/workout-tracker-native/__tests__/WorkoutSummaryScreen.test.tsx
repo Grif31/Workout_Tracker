@@ -13,7 +13,7 @@ jest.mock('../context/AuthContext', () => ({
 jest.mock('react-native-confetti-cannon', () => () => null);
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(), notificationAsync: jest.fn(),
-  ImpactFeedbackStyle: { Light: 'light' }, NotificationFeedbackType: { Success: 'success' },
+  ImpactFeedbackStyle: { Light: 'light', Heavy: 'heavy' }, NotificationFeedbackType: { Success: 'success' },
 }));
 jest.mock('../utils/shareCapture', () => ({ captureAndShare: jest.fn() }));
 jest.mock('../components/MuscleDiagram', () => () => null);
@@ -222,6 +222,25 @@ describe('WorkoutSummaryScreen', () => {
       fireEvent.press(r.getByText('View Full Details'));
       expect(navigation.replace).toHaveBeenCalledWith('CardioDetails', { workoutId: 42 });
     });
+  });
+
+  it('opens the unlock sheet for the badges this save earned, and only then', async () => {
+    mockServer({ workout: strengthWorkout });
+    const newAchievements = [{
+      key: 'workouts_5', kind: 'ladder', title: 'Hekaton', earned_at: '2026-03-05T18:00:00', workout_id: 42,
+      track: 'workouts', rung: 5, of: 8, threshold: 100, unit: 'any', next: { title: 'Phalanx', threshold: 250 },
+    }];
+    const { findByText } = renderSummary({ newAchievements });
+    expect(await findByText('ACHIEVEMENT UNLOCKED', {}, { timeout: 3000 })).toBeTruthy();
+    expect(await findByText('Your 100th workout logged. Next: Phalanx, at 250.')).toBeTruthy();
+  });
+
+  it('shows no unlock sheet when the save earned nothing', async () => {
+    mockServer({ workout: strengthWorkout });
+    const { findByText, queryByText } = renderSummary({ newAchievements: [] });
+    await findByText('Volume (lbs)');
+    await new Promise(r => setTimeout(r, 1000));
+    expect(queryByText('ACHIEVEMENT UNLOCKED')).toBeNull();
   });
 
   it('says so and offers a retry when the sets fail to load', async () => {

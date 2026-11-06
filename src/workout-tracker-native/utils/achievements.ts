@@ -203,16 +203,20 @@ export function milestoneTiles(data: AchievementsData): MilestoneTile[] {
   return tiles;
 }
 
-const NOT_YET_SHOWN: Record<string, string> = {
-  volume: 'Volume appears after your first lifting workout.',
-  running: 'Running distance appears after your first run.',
-  ride: 'Ride distance appears after your first ride.',
-  elevation: 'Elevation appears after your first GPS activity with a climb.',
+const NOT_YET_SHOWN: Record<string, { trigger: string; line: string }> = {
+  volume: { trigger: 'After your first lift', line: 'Volume appears after your first lifting workout.' },
+  running: { trigger: 'After your first run', line: 'Running distance appears after your first run.' },
+  ride: { trigger: 'After your first ride', line: 'Ride distance appears after your first ride.' },
+  elevation: { trigger: 'After a GPS climb', line: 'Elevation appears after your first GPS activity with a climb.' },
 };
 
-/** A line for each track the user doesn't train yet, so its absence isn't a mystery */
-export function notYetShownLines(data: AchievementsData): string[] {
-  return data.tracks.filter(t => !t.visible && NOT_YET_SHOWN[t.track]).map(t => NOT_YET_SHOWN[t.track]);
+export interface UndiscoveredTrack { track: string; label: string; trigger: string; line: string }
+
+/** Each track the user doesn't train yet, so its absence isn't a mystery (Still to discover) */
+export function notYetShown(data: AchievementsData): UndiscoveredTrack[] {
+  return data.tracks
+    .filter(t => !t.visible && NOT_YET_SHOWN[t.track])
+    .map(t => ({ track: t.track, label: t.label, ...NOT_YET_SHOWN[t.track] }));
 }
 
 export interface EarnedItem { key: string; title: string; threshold?: number; unit: string; state: EarnedState }
@@ -226,16 +230,53 @@ export function earnedBadges(data: AchievementsData): EarnedItem[] {
   return items.sort((a, b) => (b.state.earned_at ?? '').localeCompare(a.state.earned_at ?? ''));
 }
 
+/** How fine a badge is: its metal, and a crown on top of that */
+function badgeRank(key: string, threshold?: number): number {
+  const look = badgeLook(key, { threshold });
+  return METAL_RANK[look.metal] + (look.top ? 1 : 0);
+}
+
 /** The three finest earned badges (metal, then newest), until pinning (TODO §27 Phase 4) */
 export function topBadges(data: AchievementsData, count = 3): EarnedItem[] {
-  const rank = (item: EarnedItem) => {
-    const look = badgeLook(item.key, { threshold: item.threshold });
-    return METAL_RANK[look.metal] + (look.top ? 1 : 0);
-  };
   return earnedBadges(data)
-    .map((item, i) => ({ item, i, r: rank(item) }))
+    .map((item, i) => ({ item, i, r: badgeRank(item.key, item.threshold) }))
     .sort((a, b) => b.r - a.r || a.i - b.i)
     .slice(0, count)
     .map(x => x.item);
 }
 
+
+/** The unlock sheet leads with the finest of a save's new badges, the newest
+ *  of those (the server lists them oldest first); the rest are "+N more" */
+export function orderUnlocks(items: NewAchievement[]): NewAchievement[] {
+  return items
+    .map((item, i) => ({ item, i, r: badgeRank(item.key, item.threshold) }))
+    .sort((a, b) => b.r - a.r || b.i - a.i)
+    .map(x => x.item);
+}
+
+const COUNTED = new Set(['workouts', 'prs', 'explorer']);
+
+/** The next badge's threshold after "at": "250", "1,000,000 lbs", "52 weeks" */
+function nextAt(track: string, threshold: number, unit: string, distanceUnit: DistanceUnit): string {
+  if (COUNTED.has(track)) return n(threshold);
+  if (track === 'streak' || track === 'hours' || track === 'elevation') return amountText(track, threshold, unit, distanceUnit);
+  return `${n(threshold)} ${unit}`;
+}
+
+const sentence = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
+
+/** The unlock sheet's one line: "Your 100th workout logged. Next: Phalanx, at 250." */
+export function unlockLine(item: NewAchievement, distanceUnit: DistanceUnit): string {
+  const unit = item.unit ?? distanceUnit;
+  let what = earnedLine(item.key, item.threshold, unit, distanceUnit);
+  if (item.track === 'workouts') what += ' logged';
+  if (!item.next || !item.track) return sentence(what);
+  return `${sentence(what)} Next: ${item.next.title}, at ${nextAt(item.track, item.next.threshold, unit, distanceUnit)}.`;
+}
+
+/** The share card's line: "Your 100th workout · Sep 28, 2026" */
+export function shareLine(key: string, threshold: number | undefined, unit: string, distanceUnit: DistanceUnit, earnedAt: string | null): string {
+  const what = earnedLine(key, threshold, unit, distanceUnit).replace(/\.$/, '');
+  return [what, earnedAt ? badgeDate(earnedAt) : null].filter(Boolean).join(' · ');
+}
