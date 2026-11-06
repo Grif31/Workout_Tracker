@@ -53,6 +53,7 @@ class UpdateProfileSchema(_Base):
     bodyweight      = fields.Float(allow_none=True)
     height          = fields.Float(allow_none=True, validate=validate.Range(min=20, max=108))
     weight_unit     = fields.Str(validate=validate.OneOf(['kg', 'lbs']))
+    distance_unit   = fields.Str(validate=validate.OneOf(['mi', 'km']))
     # gender had a load_default and so was injected as None into every partial
     # PATCH, wiping it whenever Settings sent only weight_unit. Sending an
     # explicit null still clears it.
@@ -313,3 +314,10 @@ class AiInsightFeedbackSchema(_Base):
 class AiWeeklyReviewSchema(AiInsightsSchema):
     # The Monday of the Weekly Summary week being reviewed; absent = the last 7 days
     week_start = fields.Date(load_default=None)
+
+
+# ── Achievements ─────────────────────────────────────────────
+class AchievementsSeenSchema(_Base):
+    # Omitted: every unseen badge is marked seen
+    keys = fields.List(fields.Str(validate=validate.Length(min=1, max=48)),
+                       load_default=None, allow_none=True, validate=validate.Length(max=200))

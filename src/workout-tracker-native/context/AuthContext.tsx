@@ -10,6 +10,7 @@ import { GREEK_RANK_CACHED_KEY, COACH_INSIGHTS_KEY, USER_KEY } from '../constant
 import { loadTokens, saveTokenPair, clearStoredTokens } from '../utils/tokenStorage';
 import { clearWidgetSnapshot } from '../utils/widgetData';
 import { endLiveActivity } from '../utils/liveActivity';
+import { syncDistanceUnit } from '../utils/distanceUnitSync';
 
 type AuthContextType = {
     user: any;
@@ -86,6 +87,7 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
                         Sentry.setUser({ id: String(data.id) });
                         setUser(data);
                         await AsyncStorage.setItem(USER_KEY, JSON.stringify(data));
+                        syncDistanceUnit(data.id, data.distance_unit);
                         // Read whatever token is current (may have been refreshed)
                         const currentAccess = (await loadTokens()).access;
                         setToken(currentAccess);

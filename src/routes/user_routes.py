@@ -7,7 +7,7 @@ from models import (
     db, User, Workout, Exercise, Set, DeviceToken, PersonalRecord, PREvent,
     StrengthScoreSnapshot, BodyweightLog, BodyMeasurement, ProgressPhoto, InsightFeedback,
     Routine, RoutineDay, WorkoutTemplate, WorkoutTemplateExercise,
-    ExerciseTemplate, ExerciseMuscleMapping,
+    ExerciseTemplate, ExerciseMuscleMapping, UserAchievement,
 )
 from flask_jwt_extended import  jwt_required, get_jwt_identity
 from schemas import UpdateProfileSchema, DeviceTokenSchema
@@ -165,6 +165,8 @@ def update_user_info():
             if "bodyweight" not in data and user.bodyweight is not None:
                 user.bodyweight = convert_weight_value(user.bodyweight, new_unit)
         user.weight_unit = new_unit
+    if "distance_unit" in data:
+        user.distance_unit = data["distance_unit"]
     if "gender" in data:
         user.gender = data["gender"] if data["gender"] in ('male', 'female') else None
     if "birth_date" in data:
@@ -254,7 +256,7 @@ def _delete_all_user_data(user_id: int) -> None:
     # PREvent also cascades from workouts in Postgres, but deleting it here
     # doesn't rely on DB-level cascades (SQLite, which tests use, skips them).
     for model in (PersonalRecord, PREvent, StrengthScoreSnapshot, DeviceToken,
-                  BodyweightLog, BodyMeasurement, ProgressPhoto, InsightFeedback):
+                  BodyweightLog, BodyMeasurement, ProgressPhoto, InsightFeedback, UserAchievement):
         model.query.filter_by(user_id=user_id).delete(synchronize_session=False)
 
     # Sets → Exercises → Workouts

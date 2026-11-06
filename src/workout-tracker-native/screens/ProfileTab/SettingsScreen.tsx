@@ -37,6 +37,7 @@ import {
 import { HEALTH_SYNC_KEY, requestHealthKitPermission } from '../../utils/healthKit';
 import { requestHealthConnectPermission } from '../../utils/healthConnect';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
+import { reportDistanceUnit } from '../../utils/distanceUnitSync';
 import { openExternalLink } from '../../utils/links';
 
 // Reads the live app.config.js version so this never drifts out of sync again.
@@ -308,6 +309,7 @@ export default function SettingsScreen({ navigation }: Props) {
                 const unit = isKm ? 'km' : 'mi';
                 setDistanceIsKm(isKm);
                 await AsyncStorage.setItem(perUserGpsKey, unit);
+                reportDistanceUnit(unit);
               }}
             />
             <Text style={[styles.unitLabel, distanceIsKm && styles.unitActive]}>km</Text>

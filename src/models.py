@@ -15,6 +15,9 @@ class User(db.Model):
     bodyweight = db.Column(db.Float, nullable=True)
     height = db.Column(db.Float, nullable=True)
     weight_unit = db.Column(db.String(3), default='lbs', nullable=True)
+    # 'mi' | 'km', chosen on the phone (Settings, onboarding) and sent here so
+    # the server's distance badges use the same ladder. NULL until the app reports it.
+    distance_unit = db.Column(db.String(2), nullable=True)
     active_routine_id = db.Column(db.Integer, db.ForeignKey('routines.id', ondelete='SET NULL'), nullable=True)
     reset_otp_hash     = db.Column(db.String(64), nullable=True)
     reset_otp_expiry   = db.Column(db.DateTime,   nullable=True)
@@ -50,6 +53,7 @@ class User(db.Model):
             'bodyweight': self.bodyweight,
             'height': self.height,
             'weight_unit': self.weight_unit or 'lbs',
+            'distance_unit': self.distance_unit,
             'active_routine_id': self.active_routine_id,
             'gender': self.gender,
             'birth_date': self.birth_date.isoformat() if self.birth_date else None,
@@ -592,6 +596,25 @@ class PREvent(db.Model):
             'improved_by': self.improved_by(),
             'achieved_at': self.achieved_at.isoformat() if self.achieved_at else None,
         }
+
+
+# ── UserAchievement ───────────────────────────────────────────
+# One row per badge earned, kept for good: editing or deleting a workout never
+# takes one back, so only account deletion removes a row. The key names a rung
+# (`volume_6`), never a value, so a kg/lbs switch has nothing to convert and
+# can't award the other unit's matching rung again. Catalogue: utils/achievements.py
+class UserAchievement(db.Model):
+    __tablename__ = 'user_achievements'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    key = db.Column(db.String(48), nullable=False)
+    earned_at = db.Column(db.DateTime, nullable=False)
+    workout_id = db.Column(db.Integer, db.ForeignKey('workouts.id', ondelete='SET NULL'), nullable=True)
+    seen = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'key', name='uq_user_achievements_user_key'),
+    )
 
 
 # ── StrengthScoreSnapshot ─────────────────────────────────────

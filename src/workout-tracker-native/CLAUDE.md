@@ -119,7 +119,7 @@ A tracked run (`GPSCardioScreen`) lives in `context/GpsRunContext.tsx`, mounted 
 | `plate_calc_bar_${uid}` | 'standard' | Last-used bar type in plate calculator |
 | `plate_calc_plates_${uid}` | all on | Plate sizes switched **off** in the plate calculator, per unit: JSON `{lbsOff, kgOff}`, so a plate added in a later release starts on. Older builds stored one unitless array of plates switched on; `enabledPlatesFor` in `utils/plateCalc.ts` reads both and applies an old array only to the unit whose plates it names |
 | `default_rest_timer_${uid}` | '90' | Default rest timer duration in seconds |
-| `gps_distance_unit_${uid}` | 'mi' | Distance unit for GPS cardio activities ('km' or 'mi') |
+| `gps_distance_unit_${uid}` | 'mi' | Distance unit for GPS cardio activities ('km' or 'mi'). Mirrored to `User.distance_unit` for the distance badges: Settings and onboarding report a change, and `syncDistanceUnit` (`utils/distanceUnitSync.ts`) re-reports it at startup when the server disagrees |
 | `gps_auto_pause_${uid}` | true | Auto-pause for GPS activities (Settings, GPS Activities). Read when a run starts or resumes (`GPS_AUTO_PAUSE_KEY`) |
 | `gps_keep_screen_on_${uid}` | false | Keeps the screen awake while the GPS map is open and the activity is running (`GPS_KEEP_SCREEN_ON_KEY`) |
 | `workout_weekly_goal_${uid}` | '3' | Weekly workout target (integer string) |
