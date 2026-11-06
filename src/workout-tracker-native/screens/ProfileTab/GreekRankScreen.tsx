@@ -19,7 +19,6 @@ import { GREEK_RANK_COLORS, GREEK_RANKS, rankTextColor } from '../../constants/g
 import ProfileAvatarFrame, { frameOverflow } from '../../components/ProfileAvatarFrame';
 import { GREEK_RANK_CACHED_KEY, PROFILE_FRAME_RANK_KEY } from '../../constants/storageKeys';
 import { appCache } from '../../utils/appCache';
-import { contrastTextColor } from '../../utils/contrast';
 import { resolveMediaUrl } from '../../utils/api';
 import { type GreekRankData, bestPerformanceLeg, gateRequirementText } from '../../utils/greekRank';
 import { fmtOrdinal } from '../../utils/prFormat';
@@ -28,13 +27,21 @@ import PercentileBar from '../../components/PercentileBar';
 import { AnimatedPercentText } from '../../components/ScoreRing';
 import { motionTiming } from '../../utils/motion';
 import TrophyHallCard from '../../components/achievements/TrophyHallCard';
+import ChooseFrameSheet from '../../components/ChooseFrameSheet';
+import { animateNextLayout } from '../../utils/layoutAnimation';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'GreekRank'>;
 
 const ARETE_RANK = 'Aretē';
 const SCORE_LINKS = [
-  { label: 'Strength Score',  screen: 'StrengthScore' },
-  { label: 'Endurance Score', screen: 'EnduranceScore' },
+  { key: 'strength',  label: 'Strength Score',  screen: 'StrengthScore' },
+  { key: 'endurance', label: 'Endurance Score', screen: 'EnduranceScore' },
+] as const;
+// What each part of the score counts, and the fixed tip shown when it's the lowest
+const SCORE_PARTS = [
+  { key: 'consistency', label: 'Consistency', what: 'Weeks you trained, out of the last 12', tip: 'Training in more weeks moves it most.' },
+  { key: 'dedication',  label: 'Dedication',  what: 'Workouts in the last 3 months',         tip: 'Each workout adds to it.' },
+  { key: 'volume',      label: 'Volume',      what: 'Working sets and cardio a week',        tip: 'A couple more working sets each session moves it most.' },
 ] as const;
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CIRCLE_SIZE = 88;
@@ -56,21 +63,19 @@ const circleStyles = StyleSheet.create({
   touchable:   { alignItems: 'center', width: ITEM_WIDTH },
   svgWrapper:  { width: CIRCLE_SIZE, height: CIRCLE_SIZE, alignItems: 'center', justifyContent: 'center' },
   innerCircle: { width: CIRCLE_INNER, height: CIRCLE_INNER, borderRadius: CIRCLE_INNER / 2, alignItems: 'center', justifyContent: 'center' },
-  equippedDot: { position: 'absolute', top: 2, right: 2, borderRadius: radius.sm, width: 16, height: 16, alignItems: 'center', justifyContent: 'center' },
   rankName:    { fontSize: typography.fontSize.xs, fontWeight: '600', marginTop: LABEL_GAP, textAlign: 'center' },
   rankRange:   { fontSize: typography.fontSize.xs, marginTop: 2 },
   iconText:    { fontSize: typography.fontSize.lg, fontWeight: '800' as const },
 });
 
 function RankCircle({
-  rank, rankIdx, heldIdx, greekScore, isSelected, selectedFrame, onSelect,
+  rank, rankIdx, heldIdx, greekScore, isSelected, onSelect,
 }: {
   rank: typeof GREEK_RANKS[number];
   rankIdx: number;
   heldIdx: number;
   greekScore: number;
   isSelected: boolean;
-  selectedFrame: string;
   onSelect: () => void;
 }) {
   const { colors, mode } = useTheme();
@@ -80,7 +85,6 @@ function RankCircle({
   const isCompleted = rankIdx < heldIdx;
   const isCurrent   = rankIdx === heldIdx;
   const isLocked    = rankIdx > heldIdx;
-  const isEquipped  = selectedFrame === rank.name;
 
   const r            = CIRCLE_SIZE / 2 - 6;
   const circumference = 2 * Math.PI * r;
@@ -131,12 +135,6 @@ function RankCircle({
                 </Text>
               )}
             </View>
-
-            {isEquipped && (
-              <View style={[circleStyles.equippedDot, { backgroundColor: rank.color }]}>
-                <Ionicons name="star" size={10} color="#fff" />
-              </View>
-            )}
           </>
         )}
       </View>
@@ -165,6 +163,9 @@ export default function GreekRankScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [selectedFrame, setSelectedFrame] = useState('Neophyte');
+  const [framePickerOpen, setFramePickerOpen] = useState(false);
+  // Closed whenever the screen opens; the score button opens it
+  const [scorePartsOpen, setScorePartsOpen] = useState(false);
 
   const listRef = useRef<FlatList>(null);
   // Measured rather than the window width, so centering holds wherever the
@@ -281,33 +282,33 @@ export default function GreekRankScreen({ navigation }: Props) {
   const handleEquip = async (rankName: string) => {
     if (!isUnlocked(rankName)) return;
     setSelectedFrame(rankName);
+    setFramePickerOpen(false);
     await AsyncStorage.setItem(frameKey, rankName);
   };
 
-  const isEquipped = selectedFrame === viewedRank.name;
+  const toggleScoreParts = () => {
+    animateNextLayout();
+    setScorePartsOpen(open => !open);
+  };
+
   const components = rankData?.components;
   const performance = rankData?.performance;
   const bestLeg = performance ? bestPerformanceLeg(performance) : null;
-  // The first top rank still locked, and what unlocks it, unless the progress
-  // label above already says it
+  // The first top rank still locked, and what unlocks it, unless the hero line
+  // already says it
   const lockedGate = rankData ? Object.keys(rankData.gates).find(r => gateRequirementText(rankData, r)) : undefined;
   const lockedGateText = rankData && lockedGate ? gateRequirementText(rankData, lockedGate) : null;
   // The score earned a higher rank than the user holds, so a gate is the only
-  // thing in the way. Worth stating outright rather than leaving in the
-  // gate list at the bottom of the card.
+  // thing in the way, and that's what the hero says instead of points
   const heldBackText = rankData?.held_by_gate
     ? gateRequirementText(rankData, rankData.score_rank)
     : null;
-  // At 0 points the score already earns the next rank, so a top-rank gate is
-  // what's holding it back. When the banner above is already saying which gate
-  // and what it needs, this line would only repeat it, so it drops out.
-  const progressLabel = !nextRank
+  const heroLine = !nextRank
     ? "You've reached the highest rank."
-    : ptsToNext > 0
-      ? `${ptsToNext} more point${ptsToNext !== 1 ? 's' : ''} to reach ${nextRank.name}`
-      : heldBackText
-        ? null
-        : nextGateText ?? `Keep training to reach ${nextRank.name}`;
+    : heldBackText
+      ?? (ptsToNext > 0
+        ? `${ptsToNext} point${ptsToNext !== 1 ? 's' : ''} to ${nextRank.name}`
+        : nextGateText ?? `Keep training to reach ${nextRank.name}`);
 
   // Which ranks the gates apply to, straight from the response so the screen
   // follows the backend if a gate ever moves.
@@ -329,6 +330,13 @@ export default function GreekRankScreen({ navigation }: Props) {
     ? Object.entries(rankData.gates)
         .sort((a, b) => GREEK_RANKS.findIndex(r => r.name === a[0]) - GREEK_RANKS.findIndex(r => r.name === b[0]))
     : [];
+
+  const parts = components && rankData
+    ? SCORE_PARTS.map(p => ({ ...p, value: components[p.key], weight: rankData.weights[p.key] }))
+    : [];
+  // A tie goes to the part listed first, the one weighted most
+  const lowestPart = parts.reduce<typeof parts[number] | null>((low, p) => (!low || p.value < low.value ? p : low), null);
+  const heldTextColor = rankTextColor(heldRank.name, heldRank.color, mode);
 
   const avatarSource = user?.profile_pic_url
     ? { uri: resolveMediaUrl(user.profile_pic_url) }
@@ -369,30 +377,64 @@ export default function GreekRankScreen({ navigation }: Props) {
           }
         >
 
-          {/* Hero — the equipped frame at full size, on the real avatar */}
+          {/* Hero: the frame in use on the real avatar, then the gap to the next rank */}
           <View style={styles.heroSection}>
-            <View style={styles.heroAvatarWrap}>
+            <TouchableOpacity
+              style={styles.heroAvatarWrap}
+              onPress={() => setFramePickerOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Change frame. ${selectedFrame} frame in use`}
+            >
               <Image source={avatarSource} style={styles.heroAvatar} />
               <ProfileAvatarFrame rankName={selectedFrame} size={HERO_FRAME} avatarSize={HERO_AVATAR} />
-            </View>
-            <Text style={[styles.rankNameLarge, { color: rankTextColor(heldRank.name, heldRank.color, mode) }]}>
+              <View style={styles.pencilBadge}>
+                <Ionicons name="pencil" size={15} color={colors.textPrimary} />
+              </View>
+            </TouchableOpacity>
+            <Text style={[styles.rankNameLarge, { color: heldTextColor }]}>
               {rankData?.greek_rank ?? 'Neophyte'}
             </Text>
-            <Text style={styles.scoreSubtitle}>
-              Score: <AnimatedPercentText anim={scoreAnim} style={styles.scoreSubtitle} /> / 100
-            </Text>
+            <Text style={styles.heroLine}>{heroLine}</Text>
+            <TouchableOpacity
+              style={styles.scoreBtn}
+              onPress={toggleScoreParts}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: scorePartsOpen }}
+              accessibilityLabel={`Score ${Math.round(greekScore)} of 100. ${scorePartsOpen ? 'Hide' : 'Show'} what builds it`}
+            >
+              <Text style={styles.scoreBtnText}>
+                Score <AnimatedPercentText anim={scoreAnim} style={styles.scoreBtnText} /> of 100
+              </Text>
+              <Ionicons name={scorePartsOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
+            </TouchableOpacity>
           </View>
 
-          {/* The score earned more than the rank held */}
-          {heldBackText && rankData && (
-            <View style={[styles.heldBackBanner, { borderColor: heldRank.color + '55', backgroundColor: heldRank.color + '14' }]}>
-              <Ionicons name="lock-closed" size={16} color={heldRank.color} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.heldBackTitle}>
-                  Your score has earned {rankData.score_rank}
-                </Text>
-                <Text style={styles.heldBackText}>{heldBackText}</Text>
-              </View>
+          {scorePartsOpen && parts.length > 0 && (
+            <View style={[styles.card, styles.cardInset]}>
+              <Text style={styles.cardTitle}>What builds your score</Text>
+              {parts.map((part, i) => (
+                <View key={part.key} style={styles.partBlock}>
+                  <View style={styles.partHead}>
+                    <Text style={styles.partLabel}>{part.label}</Text>
+                    <Text style={styles.partWeight}>{Math.round(part.weight * 100)}% of your score</Text>
+                    <Text style={styles.partValue}>{Math.round(part.value)}</Text>
+                  </View>
+                  <PercentileBar
+                    percent={part.value} color={heldRank.color} trackColor={colors.border}
+                    delay={80 * i} style={styles.partBar}
+                  />
+                  <Text style={styles.partWhat}>{part.what}</Text>
+                </View>
+              ))}
+              {lowestPart && (
+                <View style={styles.tip}>
+                  <Ionicons name="bulb-outline" size={18} color={colors.accent} />
+                  <Text style={styles.tipText}>
+                    <Text style={styles.tipStrong}>{lowestPart.label} is your lowest. </Text>
+                    {lowestPart.tip}
+                  </Text>
+                </View>
+              )}
             </View>
           )}
 
@@ -417,7 +459,6 @@ export default function GreekRankScreen({ navigation }: Props) {
                 heldIdx={heldIdx}
                 greekScore={greekScore}
                 isSelected={index === selectedIdx}
-                selectedFrame={selectedFrame}
                 onSelect={() => selectIndex(index)}
               />
             )}
@@ -425,168 +466,120 @@ export default function GreekRankScreen({ navigation }: Props) {
             getItemLayout={(_, index) => ({ length: ITEM_WIDTH, offset: sidePadding + ITEM_WIDTH * index, index })}
           />
 
-          {/* Equip button for selected rank — locked ranks show the unlock hint */}
-          {isUnlocked(viewedRank.name) ? (
-            <TouchableOpacity
-              style={[styles.equipBtn, {
-                backgroundColor: isEquipped ? viewedRank.color + '22' : viewedRank.color,
-                borderColor: viewedRank.color,
-              }]}
-              onPress={() => handleEquip(viewedRank.name)}
-            >
-              <Text style={[styles.equipBtnText, {
-                color: isEquipped ? viewedRank.color : contrastTextColor(viewedRank.color),
-              }]}>
-                {isEquipped ? 'Frame Equipped' : 'Use This Frame'}
-              </Text>
-              {isEquipped && (
-                <Ionicons name="star" size={14} color={viewedRank.color} style={{ marginLeft: 6 }} />
-              )}
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.lockedHint}>
-              <Ionicons name="lock-closed" size={14} color={colors.textSecondary} />
-              <Text style={styles.lockedHintText}>Rank up to unlock frame</Text>
-            </View>
-          )}
-
-          {/* Progress detail */}
           {rankData && (
-            <View style={[styles.card, { marginHorizontal: spacing.md }]}>
-              <Text style={styles.cardTitle}>Progress to {nextRank?.name ?? 'Max Rank'}</Text>
+            <View style={[styles.card, styles.cardInset]}>
+              <View style={styles.cardTitleRow}>
+                <Text style={styles.cardTitle}>{nextRank ? `Progress to ${nextRank.name}` : heldRank.name}</Text>
+                <Text style={styles.cardMeta}>{Math.round(progress * 100)}%</Text>
+              </View>
               <PercentileBar
                 percent={Math.round(progress * 100)} color={heldRank.color} trackColor={colors.border}
                 style={styles.progressTrack}
               />
-              {progressLabel && <Text style={styles.progressLabel}>{progressLabel}</Text>}
+              <View style={styles.bandEnds}>
+                <Text style={styles.cardMeta}>{heldRank.name} · {heldRank.low}</Text>
+                <Text style={styles.cardMeta}>{nextRank ? `${nextRank.name} · ${nextRank.low}` : heldRank.high}</Text>
+              </View>
+            </View>
+          )}
 
-              {components && (
-                <>
-                  <View style={styles.divider} />
-                  <Text style={styles.componentTitle}>Score Breakdown</Text>
-                  {[
-                    { label: 'Consistency', value: components.consistency, icon: 'calendar-outline' as const },
-                    { label: 'Dedication',  value: components.dedication,  icon: 'trophy-outline' as const },
-                    { label: 'Volume',      value: components.volume,      icon: 'flame-outline' as const },
-                  ].map((comp, i) => (
-                    <View key={comp.label} style={styles.compRow}>
-                      <View style={styles.compLeft}>
-                        <Ionicons name={comp.icon} size={16} color={colors.textSecondary} />
-                        <Text style={styles.compLabel}>{comp.label}</Text>
+          {/* Performance adds no points; the higher score unlocks the top ranks */}
+          {performance && rankData && showTopRanks && (
+            <View style={[styles.card, styles.cardInset]}>
+              <Text style={styles.cardTitle}>Top ranks</Text>
+              <Text style={styles.gateHint}>
+                Effort earns the points. The top two ranks also need your best performance score.
+              </Text>
+              <View style={styles.legRow}>
+                {SCORE_LINKS.map(leg => {
+                  const value = performance[leg.key];
+                  const counts = bestLeg === leg.key;
+                  const pct = value != null ? fmtOrdinal(value) : null;
+                  return (
+                    <TouchableOpacity
+                      key={leg.key}
+                      testID={`greek-leg-${leg.key}${counts ? '-counts' : ''}`}
+                      style={[styles.legCard, { borderColor: counts ? heldTextColor : colors.background }]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${leg.label}, ${pct ? `${pct} percentile` : 'no score yet'}${counts ? ', counts toward the top ranks' : ''}`}
+                      // Open to everyone: the score screens lock their own breakdown for free accounts
+                      onPress={() => (navigation as any).navigate('ProgressTab', { screen: leg.screen, initial: false })}
+                    >
+                      <View style={styles.legHead}>
+                        <Text style={styles.legLabel} numberOfLines={1}>{leg.label}</Text>
+                        <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
                       </View>
-                      <PercentileBar
-                        percent={comp.value} color={heldRank.color} trackColor={colors.border}
-                        delay={80 * (i + 1)} style={styles.compBarTrack}
-                      />
-                      <Text style={styles.compValue}>{Math.round(comp.value)}</Text>
-                    </View>
-                  ))}
-
-                  {/* Performance adds no points; the higher score unlocks the top ranks */}
-                  {performance && rankData && showTopRanks && (
-                    <>
-                      <View style={styles.divider} />
-                      <Text style={styles.componentTitle}>Unlock Top Ranks</Text>
-                      {([
-                        { key: 'strength' as const,  label: 'Strength',  value: performance.strength },
-                        { key: 'endurance' as const, label: 'Endurance', value: performance.endurance },
-                      ]).map((leg, i) => {
-                        const counts = bestLeg === leg.key;
-                        return (
-                          <View
-                            key={leg.key}
-                            testID={`greek-leg-${leg.key}${counts ? '-counts' : ''}`}
-                            style={[styles.compRow, styles.legRow, counts && { backgroundColor: heldRank.color + '1F' }]}
-                          >
-                            <View style={styles.compLeft}>
-                              <Text style={[styles.legLabel, counts && styles.legTextCounts]}>{leg.label}</Text>
-                            </View>
-                            <PercentileBar
-                              percent={leg.value ?? 0} color={counts ? heldRank.color : colors.textSecondary}
-                              trackColor={colors.border} delay={80 * (i + 4)} style={styles.compBarTrack}
-                            />
-                            <Text style={[styles.compValue, counts && styles.legTextCounts]}>
-                              {leg.value != null ? Math.round(leg.value) : '\u2013'}
-                            </Text>
-                          </View>
-                        );
-                      })}
-                      {gateEntries.map(([gateRank, required]) => {
-                        const met = performance.best != null && performance.best >= required;
-                        const gateColor = GREEK_RANK_COLORS[gateRank] ?? heldRank.color;
-                        return (
-                          <View key={gateRank} testID={`greek-gate-${gateRank}-${met ? 'met' : 'locked'}`} style={styles.gateRow}>
-                            <Ionicons name={met ? 'checkmark-circle' : 'lock-closed'} size={16} color={met ? rankTextColor(gateRank, gateColor, mode) : colors.textSecondary} />
-                            <Text style={[styles.gateRank, { color: met ? rankTextColor(gateRank, gateColor, mode) : colors.textPrimary }]}>{gateRank}</Text>
-                            <Text style={styles.gateRequirement}>
-                              {fmtOrdinal(required)} percentile
-                              {performance.best != null && !met && ` · you're at ${fmtOrdinal(performance.best)}`}
-                            </Text>
-                          </View>
-                        );
-                      })}
-                      {noPerformanceYet ? (
-                        <View style={styles.unlockCta}>
-                          <Text style={styles.gateHint}>
-                            {needsGender
-                              ? 'Both scores are measured against your age and gender, so add those to your profile to start scoring.'
-                              : needsBodyweight
-                                ? 'Strength percentiles are bodyweight ratios, so log your bodyweight to score your lifts. A logged run scores on its own.'
-                                : 'Log a lift that counts toward your Strength Score, or a run, and a score will appear here.'}
-                          </Text>
-                          <View style={styles.unlockBtnRow}>
-                            {needsGender && (
-                              <TouchableOpacity
-                                style={[styles.unlockBtn, { backgroundColor: colors.accent }]}
-                                onPress={() => navigation.navigate('EditProfile')}
-                              >
-                                <Text style={[styles.unlockBtnText, { color: colors.accentText }]}>Complete Profile</Text>
-                              </TouchableOpacity>
-                            )}
-                            {needsBodyweight && (
-                              <TouchableOpacity
-                                style={[styles.unlockBtn, { borderWidth: 1.5, borderColor: colors.accent }]}
-                                onPress={() => navigation.navigate('Measurements')}
-                              >
-                                <Text style={[styles.unlockBtnText, { color: colors.accent }]}>Log Bodyweight</Text>
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        </View>
-                      ) : lockedGateText && lockedGateText !== nextGateText ? (
-                        <Text style={styles.gateHint}>{lockedGateText}</Text>
-                      ) : null}
-                    </>
-                  )}
-                </>
-              )}
+                      <Text style={styles.legValue}>
+                        {pct ?? '–'}
+                        {pct && <Text style={styles.legUnit}> percentile</Text>}
+                      </Text>
+                      <Text style={[styles.legCounts, { color: heldTextColor, opacity: counts ? 1 : 0 }]}>Counts</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {gateEntries.map(([gateRank, required]) => {
+                const met = performance.best != null && performance.best >= required;
+                const gateColor = GREEK_RANK_COLORS[gateRank] ?? heldRank.color;
+                return (
+                  <View key={gateRank} testID={`greek-gate-${gateRank}-${met ? 'met' : 'locked'}`} style={styles.gateRow}>
+                    <Ionicons name={met ? 'checkmark-circle' : 'lock-closed'} size={16} color={met ? rankTextColor(gateRank, gateColor, mode) : colors.textSecondary} />
+                    <Text style={[styles.gateRank, { color: met ? rankTextColor(gateRank, gateColor, mode) : colors.textPrimary }]}>{gateRank}</Text>
+                    <Text style={styles.gateRequirement}>
+                      {fmtOrdinal(required)} percentile
+                      {performance.best != null && !met && ` · you're at ${fmtOrdinal(performance.best)}`}
+                    </Text>
+                  </View>
+                );
+              })}
+              {noPerformanceYet ? (
+                <View style={styles.unlockCta}>
+                  <Text style={styles.gateHint}>
+                    {needsGender
+                      ? 'Both scores are measured against your age and gender, so add those to your profile to start scoring.'
+                      : needsBodyweight
+                        ? 'Strength percentiles are bodyweight ratios, so log your bodyweight to score your lifts. A logged run scores on its own.'
+                        : 'Log a lift that counts toward your Strength Score, or a run, and a score will appear here.'}
+                  </Text>
+                  <View style={styles.unlockBtnRow}>
+                    {needsGender && (
+                      <TouchableOpacity
+                        style={[styles.unlockBtn, { backgroundColor: colors.accent }]}
+                        onPress={() => navigation.navigate('EditProfile')}
+                      >
+                        <Text style={[styles.unlockBtnText, { color: colors.accentText }]}>Complete Profile</Text>
+                      </TouchableOpacity>
+                    )}
+                    {needsBodyweight && (
+                      <TouchableOpacity
+                        style={[styles.unlockBtn, { borderWidth: 1.5, borderColor: colors.accent }]}
+                        onPress={() => navigation.navigate('Measurements')}
+                      >
+                        <Text style={[styles.unlockBtnText, { color: colors.accent }]}>Log Bodyweight</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              ) : lockedGateText && lockedGateText !== heroLine ? (
+                <Text style={styles.gateHint}>{lockedGateText}</Text>
+              ) : null}
             </View>
           )}
 
           <TrophyHallCard onOpen={() => navigation.navigate('Achievements')} />
 
-          {/* Full score breakdowns — both screens are premium */}
-          <View style={styles.scoreLinksRow}>
-            {SCORE_LINKS.map(link => (
-              <TouchableOpacity
-                key={link.screen}
-                style={[styles.scoreLinkBtn, { borderColor: colors.accent }]}
-                accessibilityRole="button"
-                accessibilityLabel={link.label}
-                // Open to everyone: the score screens lock their own breakdown for free accounts
-                onPress={() => (navigation as any).navigate('ProgressTab', { screen: link.screen, initial: false })}
-              >
-                <Text style={[styles.fullBreakdownText, { color: colors.accent }]} numberOfLines={1}>
-                  {link.label}
-                </Text>
-                <Ionicons name="chevron-forward" size={16} color={colors.accent} />
-              </TouchableOpacity>
-            ))}
-          </View>
-
           <View style={{ height: spacing.xl * 2 }} />
         </ScrollView>
       )}
+
+      <ChooseFrameSheet
+        visible={framePickerOpen}
+        onClose={() => setFramePickerOpen(false)}
+        avatarSource={avatarSource}
+        selectedFrame={selectedFrame}
+        heldIdx={heldIdx}
+        onChoose={handleEquip}
+      />
     </View>
   );
 }
@@ -608,55 +601,60 @@ const createStyles = (colors: Colors) =>
     },
     retryBtnText: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.accent },
     scroll: { paddingTop: spacing.lg, gap: spacing.md },
-    heroSection: { alignItems: 'center', gap: spacing.xs },
+    heroSection: { alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
     heroAvatarWrap: {
       width: HERO_FRAME, height: HERO_FRAME,
       alignItems: 'center', justifyContent: 'center',
       marginBottom: HERO_LABEL_GAP,
     },
     heroAvatar: { width: HERO_AVATAR, height: HERO_AVATAR, borderRadius: HERO_AVATAR / 2 },
-    rankNameLarge: { fontSize: 36, fontWeight: '900', letterSpacing: 1 },
-    scoreSubtitle: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
-    heldBackBanner: {
-      flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-      marginHorizontal: spacing.md, padding: spacing.md,
-      borderWidth: 1, borderRadius: radius.md,
+    // 34pt drawn, inside the avatar's own much larger touch target
+    pencilBadge: {
+      position: 'absolute', right: -2, bottom: 2, width: 34, height: 34, borderRadius: 17,
+      backgroundColor: colors.border, borderWidth: 3, borderColor: colors.background,
+      alignItems: 'center', justifyContent: 'center',
     },
-    heldBackTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
-    heldBackText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 2 },
+    rankNameLarge: { fontSize: 36, fontWeight: '900', letterSpacing: 1 },
+    heroLine: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
+    scoreBtn: {
+      marginTop: spacing.xs, flexDirection: 'row', alignItems: 'center', gap: 6,
+      backgroundColor: colors.surface, borderRadius: radius.full,
+      paddingHorizontal: 14, minHeight: 36,
+    },
+    scoreBtnText: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
     card: {
       backgroundColor: colors.surface, borderRadius: 14,
       padding: spacing.md, gap: spacing.sm,
     },
+    cardInset: { marginHorizontal: spacing.md },
+    cardTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
     cardTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
+    cardMeta: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
     progressTrack: { height: 8, borderRadius: 4 },
-    progressLabel: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
-    divider: { height: 1, backgroundColor: colors.border },
-    componentTitle: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.6 },
-    compRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-    compLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, width: 110 },
-    compLabel: { fontSize: typography.fontSize.sm, color: colors.textPrimary },
-    compBarTrack: { flex: 1, height: 6, borderRadius: 3 },
-    compValue: { fontSize: typography.fontSize.sm, color: colors.textSecondary, width: 28, textAlign: 'right' },
-    equipBtn: {
-      alignSelf: 'center', flexDirection: 'row', alignItems: 'center',
-      borderRadius: 20, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
-      borderWidth: 1.5,
+    bandEnds: { flexDirection: 'row', justifyContent: 'space-between' },
+    partBlock: { gap: 6, marginTop: spacing.xs },
+    partHead: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
+    partLabel: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
+    partWeight: { fontSize: typography.fontSize.xs, color: colors.textSecondary, flex: 1 },
+    partValue: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
+    partBar: { height: 6, borderRadius: 3 },
+    partWhat: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
+    tip: {
+      flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: spacing.xs,
+      backgroundColor: colors.background, borderRadius: radius.md, padding: 12,
     },
-    equipBtnText: { fontSize: typography.fontSize.md, fontWeight: '700' },
-    lockedHint: {
-      alignSelf: 'center', flexDirection: 'row', alignItems: 'center',
-      gap: spacing.xs, paddingVertical: spacing.sm,
+    tipText: { flex: 1, fontSize: typography.fontSize.sm, lineHeight: 19, color: colors.textPrimary },
+    tipStrong: { fontWeight: '700' },
+    legRow: { flexDirection: 'row', gap: spacing.sm },
+    legCard: {
+      flex: 1, backgroundColor: colors.background, borderRadius: radius.md, borderWidth: 1.5,
+      paddingHorizontal: 12, paddingVertical: 10, gap: 2, minHeight: 44,
     },
-    lockedHintText: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
-    // The highlight pill's padding is cancelled by a matching negative margin
-    // so the sub-row bars stay aligned with the rows above them.
-    legRow: {
-      marginHorizontal: -spacing.xs, paddingHorizontal: spacing.xs,
-      paddingVertical: 3, borderRadius: radius.sm,
-    },
-    legLabel: { fontSize: typography.fontSize.sm, color: colors.textSecondary, paddingLeft: 20 },
-    legTextCounts: { color: colors.textPrimary, fontWeight: '700' },
+    legHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs },
+    legLabel: { flexShrink: 1, fontSize: typography.fontSize.xs, color: colors.textSecondary },
+    legValue: { fontSize: typography.fontSize.lg, fontWeight: '800', color: colors.textPrimary },
+    legUnit: { fontSize: typography.fontSize.xs, fontWeight: '500', color: colors.textSecondary },
+    legCounts: { fontSize: typography.fontSize.xs, fontWeight: '700' },
     gateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
     gateRank: { fontSize: typography.fontSize.sm, fontWeight: '700', width: 72 },
     gateRequirement: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
@@ -665,11 +663,4 @@ const createStyles = (colors: Colors) =>
     unlockBtnRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
     unlockBtn: { borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
     unlockBtnText: { fontSize: typography.fontSize.sm, fontWeight: '700' },
-    scoreLinksRow: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.md },
-    scoreLinkBtn: {
-      flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      gap: spacing.xs, borderWidth: 1,
-      borderRadius: radius.md, paddingVertical: spacing.sm,
-    },
-    fullBreakdownText: { fontSize: typography.fontSize.md, fontWeight: '600' },
   });

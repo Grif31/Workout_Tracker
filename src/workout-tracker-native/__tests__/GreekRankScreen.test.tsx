@@ -1,5 +1,5 @@
 import React from 'react';
-import { FlatList } from 'react-native';
+import { FlatList, LayoutAnimation } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { render, waitFor, fireEvent } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,6 +8,7 @@ import GreekRankScreen from '../screens/ProfileTab/GreekRankScreen';
 import type { GreekRankData } from '../utils/greekRank';
 import { appCache } from '../utils/appCache';
 import ProfileAvatarFrame from '../components/ProfileAvatarFrame';
+import { setReduceMotionForTests } from '../utils/motion';
 
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));
 // jest.setup mocks this as always-premium; this screen needs both states
@@ -57,11 +58,11 @@ async function renderWith(data: GreekRankData) {
   mockFetch(data);
   const nav = createMockNavigation();
   const utils = render(<GreekRankScreen navigation={nav as any} route={route as any} />);
-  await waitFor(() => expect(utils.getByText('Score Breakdown')).toBeTruthy());
+  await waitFor(() => expect(utils.getByLabelText(/^Score \d+ of 100/)).toBeTruthy());
   return { ...utils, nav };
 }
 
-/** Unlock Top Ranks only renders at or next to the gated ranks, so anything
+/** Top ranks only renders at or next to the gated ranks, so anything
  *  asserting on that section has to be held high enough to see it. */
 async function renderNearTopRanks(data: GreekRankData) {
   const utils = await renderWith({
@@ -70,8 +71,13 @@ async function renderNearTopRanks(data: GreekRankData) {
     score_rank: data.score_rank === 'Hero' ? 'Olympian' : data.score_rank,
     greek_score: data.greek_score === 40 ? 70 : data.greek_score,
   });
-  await waitFor(() => expect(utils.getByText('Unlock Top Ranks')).toBeTruthy());
+  await waitFor(() => expect(utils.getByText('Top ranks')).toBeTruthy());
   return utils;
+}
+
+/** What builds your score is closed until the score button is pressed */
+function openScoreParts(utils: { getByLabelText: (m: RegExp) => any }) {
+  fireEvent.press(utils.getByLabelText(/^Score \d+ of 100/));
 }
 
 describe('GreekRankScreen', () => {
@@ -90,7 +96,9 @@ describe('GreekRankScreen', () => {
   });
 
   it('shows the three effort components and no Performance points row', async () => {
-    const { getByText, queryByText } = await renderWith(payload(41, 67));
+    const utils = await renderWith(payload(41, 67));
+    const { getByText, queryByText } = utils;
+    openScoreParts(utils);
     expect(getByText('Consistency')).toBeTruthy();
     expect(getByText('Dedication')).toBeTruthy();
     expect(getByText('Volume')).toBeTruthy();
@@ -148,15 +156,12 @@ describe('GreekRankScreen', () => {
     });
 
     it("doesn't offer the frame of a rank the score reached but a gate holds back", async () => {
-      const { getByText, getAllByText, queryByText } = await renderWith(payload(null, 41, {
+      const { getByLabelText } = await renderWith(payload(null, 41, {
         greek_rank: 'Olympian', greek_score: 90, score_rank: 'Titan', held_by_gate: true,
       }));
-      // The carousel opens on the held rank; Olympian's frame is usable
-      expect(getByText('Use This Frame')).toBeTruthy();
-      // "Titan" also labels its gate row further down; the carousel comes first
-      fireEvent.press(getAllByText('Titan')[0]);
-      await waitFor(() => expect(getByText('Rank up to unlock frame')).toBeTruthy());
-      expect(queryByText('Use This Frame')).toBeNull();
+      fireEvent.press(getByLabelText(/^Change frame/));
+      expect(getByLabelText('Olympian frame').props.accessibilityState.disabled).toBe(false);
+      expect(getByLabelText('Titan frame, locked. Unlocks at 80').props.accessibilityState.disabled).toBe(true);
     });
   });
 
@@ -238,33 +243,125 @@ describe('GreekRankScreen', () => {
   });
 
   describe('a rank held back by a gate', () => {
-    it('says outright which rank the score earned, once', async () => {
-      const { getByText, getAllByText } = await renderWith(payload(41, null, {
+    it('puts the gate line where the points would be, once', async () => {
+      const { getAllByText, queryByText } = await renderWith(payload(41, null, {
         greek_rank: 'Olympian', greek_score: 82, score_rank: 'Titan', held_by_gate: true,
       }));
-      expect(getByText('Your score has earned Titan')).toBeTruthy();
-      // The banner replaces the progress label rather than repeating it
+      // The Top ranks hint would repeat it, so it drops out
       expect(getAllByText(/Reach the 50th percentile in Strength or Endurance to unlock Titan/))
         .toHaveLength(1);
+      expect(queryByText(/points? to Titan/)).toBeNull();
     });
 
-    it('stays quiet when the rank held is the rank earned', async () => {
-      const { queryByText } = await renderWith(payload(41, null, {
-        greek_rank: 'Hero', score_rank: 'Hero', held_by_gate: false,
+    it('leads with the points when the rank held is the rank earned', async () => {
+      const { getByText } = await renderWith(payload(41, null, {
+        greek_rank: 'Hero', greek_score: 41, score_rank: 'Hero', held_by_gate: false,
       }));
-      expect(queryByText(/Your score has earned/)).toBeNull();
+      expect(getByText('7 points to Demigod')).toBeTruthy();
     });
   });
 
-  describe('score breakdown', () => {
-    it('still shows the score and breakdown at zero', async () => {
-      const { getByText } = await renderWith(payload(null, null, {
+  describe('what builds your score', () => {
+    afterEach(() => { setReduceMotionForTests(false); jest.restoreAllMocks(); });
+
+    it('still shows the score and its parts at zero', async () => {
+      const utils = await renderWith(payload(null, null, {
         greek_rank: 'Neophyte', greek_score: 0, score_rank: 'Neophyte',
         components: { consistency: 0, dedication: 0, volume: 0 },
       }));
-      expect(getByText('Score: 0 / 100')).toBeTruthy();
-      expect(getByText('Score Breakdown')).toBeTruthy();
-      expect(getByText('12 more points to reach Athlete')).toBeTruthy();
+      expect(utils.getByText('Score 0 of 100')).toBeTruthy();
+      expect(utils.getByText('12 points to Athlete')).toBeTruthy();
+      openScoreParts(utils);
+      expect(utils.getByText('What builds your score')).toBeTruthy();
+    });
+
+    it('opens from the score button and closes again', async () => {
+      const utils = await renderWith(payload(null, null));
+      const button = () => utils.getByLabelText(/^Score \d+ of 100/);
+      expect(utils.queryByText('What builds your score')).toBeNull();
+      expect(button().props.accessibilityState).toEqual({ expanded: false });
+      fireEvent.press(button());
+      expect(utils.getByText('What builds your score')).toBeTruthy();
+      expect(button().props.accessibilityState).toEqual({ expanded: true });
+      fireEvent.press(button());
+      expect(utils.queryByText('What builds your score')).toBeNull();
+    });
+
+    it("gives each part's weight and what it counts", async () => {
+      const utils = await renderWith(payload(null, null));
+      openScoreParts(utils);
+      expect(utils.getByText('40% of your score')).toBeTruthy();
+      expect(utils.getAllByText('30% of your score')).toHaveLength(2);
+      expect(utils.getByText('Weeks you trained, out of the last 12')).toBeTruthy();
+      expect(utils.getByText('Workouts in the last 3 months')).toBeTruthy();
+      expect(utils.getByText('Working sets and cardio a week')).toBeTruthy();
+    });
+
+    it('names the lowest part with its tip', async () => {
+      const utils = await renderWith(payload(null, null, {
+        components: { consistency: 20, dedication: 60, volume: 50 },
+      }));
+      openScoreParts(utils);
+      expect(utils.getByText(/Consistency is your lowest/)).toBeTruthy();
+      expect(utils.getByText(/Training in more weeks moves it most/)).toBeTruthy();
+      expect(utils.queryByText(/Volume is your lowest/)).toBeNull();
+    });
+
+    it('animates the open, except under Reduce Motion', async () => {
+      const spy = jest.spyOn(LayoutAnimation, 'configureNext').mockImplementation(() => {});
+      const utils = await renderWith(payload(null, null));
+      openScoreParts(utils);
+      expect(spy).toHaveBeenCalledTimes(1);
+      setReduceMotionForTests(true);
+      openScoreParts(utils);
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('progress card', () => {
+    it("shows the percent and the band's ends", async () => {
+      const { getByText } = await renderWith(payload(null, null, {
+        greek_rank: 'Hero', greek_score: 41, score_rank: 'Hero',
+      }));
+      expect(getByText('Progress to Demigod')).toBeTruthy();
+      expect(getByText('65%')).toBeTruthy();
+      expect(getByText('Hero · 28')).toBeTruthy();
+      expect(getByText('Demigod · 48')).toBeTruthy();
+    });
+
+    it('says so at the top rank', async () => {
+      const { getByText } = await renderWith(payload(90, null, {
+        greek_rank: ARETE, greek_score: 96, score_rank: ARETE,
+      }));
+      expect(getByText("You've reached the highest rank.")).toBeTruthy();
+    });
+  });
+
+  describe('choose a frame', () => {
+    it('opens from the avatar and puts on a tapped frame', async () => {
+      const { getByLabelText, getByText, UNSAFE_getAllByType } = await renderWith(payload(null, null, {
+        greek_rank: 'Hero', score_rank: 'Hero',
+      }));
+      fireEvent.press(getByLabelText('Change frame. Neophyte frame in use'));
+      expect(getByText('3 of 7 unlocked')).toBeTruthy();
+      expect(getByLabelText('Neophyte frame, in use')).toBeTruthy();
+      expect(getByLabelText('Demigod frame, locked. Unlocks at 48')).toBeTruthy();
+      fireEvent.press(getByLabelText('Hero frame'));
+      await waitFor(() => expect(getByLabelText('Change frame. Hero frame in use')).toBeTruthy());
+      const hero = UNSAFE_getAllByType(ProfileAvatarFrame).find(f => f.props.size > 88);
+      expect(hero!.props.rankName).toBe('Hero');
+      const keys = await AsyncStorage.getAllKeys();
+      const frameKey = keys.find(k => k.startsWith('profile_frame_rank'));
+      expect(frameKey && await AsyncStorage.getItem(frameKey)).toBe('Hero');
+    });
+
+    it('ignores a locked frame', async () => {
+      const { getByLabelText } = await renderWith(payload(null, null, {
+        greek_rank: 'Hero', score_rank: 'Hero',
+      }));
+      fireEvent.press(getByLabelText(/^Change frame/));
+      fireEvent.press(getByLabelText('Titan frame, locked. Unlocks at 80'));
+      expect(getByLabelText('Change frame. Neophyte frame in use')).toBeTruthy();
     });
   });
 
@@ -312,28 +409,28 @@ describe('GreekRankScreen', () => {
     expect(hero).toBeTruthy();
     expect(hero!.props.rankName).toBe('Neophyte'); // nothing equipped yet
   });
-  describe('who sees Unlock Top Ranks', () => {
+  describe('who sees Top ranks', () => {
     afterEach(() => jest.restoreAllMocks());
 
     it('hides it from a rank nowhere near the gates', async () => {
       const { queryByText } = await renderWith(payload(41, null, {
         greek_rank: 'Hero', score_rank: 'Hero',
       }));
-      expect(queryByText('Unlock Top Ranks')).toBeNull();
+      expect(queryByText('Top ranks')).toBeNull();
     });
 
     it('shows it to an Olympian, who is one rank away', async () => {
       const { getByText } = await renderWith(payload(41, null, {
         greek_rank: 'Olympian', greek_score: 70, score_rank: 'Olympian',
       }));
-      expect(getByText('Unlock Top Ranks')).toBeTruthy();
+      expect(getByText('Top ranks')).toBeTruthy();
     });
 
     it('shows it to someone already at a gated rank', async () => {
       const { getByText } = await renderWith(payload(84, null, {
         greek_rank: 'Titan', greek_score: 84, score_rank: 'Titan',
       }));
-      expect(getByText('Unlock Top Ranks')).toBeTruthy();
+      expect(getByText('Top ranks')).toBeTruthy();
     });
 
     it('shows it to anyone browsing a gated circle', async () => {
@@ -341,9 +438,9 @@ describe('GreekRankScreen', () => {
       const { getAllByText, getByText, queryByText } = await renderWith(payload(41, null, {
         greek_rank: 'Hero', score_rank: 'Hero',
       }));
-      expect(queryByText('Unlock Top Ranks')).toBeNull();
+      expect(queryByText('Top ranks')).toBeNull();
       fireEvent.press(getAllByText('Titan')[0]);
-      await waitFor(() => expect(getByText('Unlock Top Ranks')).toBeTruthy());
+      await waitFor(() => expect(getByText('Top ranks')).toBeTruthy());
     });
   });
 
@@ -369,9 +466,28 @@ describe('GreekRankScreen', () => {
       expect(queryByText(/Log a lift that counts toward/)).toBeNull();
     });
   });
-  describe('score links', () => {
+  describe('score cards', () => {
+    it('are only in Top ranks, with no links at the bottom of the screen', async () => {
+      const { queryByText } = await renderWith(payload(41, 67));
+      expect(queryByText('Strength Score')).toBeNull();
+      expect(queryByText('Endurance Score')).toBeNull();
+    });
+
+    it('show each percentile, and Counts on the higher', async () => {
+      const { getByTestId } = await renderNearTopRanks(payload(41, 67));
+      expect(getByTestId('greek-leg-endurance-counts').props.accessibilityLabel)
+        .toBe('Endurance Score, 67th percentile, counts toward the top ranks');
+      expect(getByTestId('greek-leg-strength').props.accessibilityLabel).toBe('Strength Score, 41st percentile');
+    });
+
+    it('still open a score screen with no score yet', async () => {
+      const { getByTestId, nav } = await renderNearTopRanks(payload(null, 67));
+      fireEvent.press(getByTestId('greek-leg-strength'));
+      expect(nav.navigate).toHaveBeenCalledWith('ProgressTab', { screen: 'StrengthScore', initial: false });
+    });
+
     it('opens each score screen', async () => {
-      const { getByText, nav } = await renderWith(payload(41, 67));
+      const { getByText, nav } = await renderNearTopRanks(payload(41, 67));
       fireEvent.press(getByText('Strength Score'));
       expect(nav.navigate).toHaveBeenCalledWith('ProgressTab', { screen: 'StrengthScore', initial: false });
       fireEvent.press(getByText('Endurance Score'));
@@ -382,11 +498,11 @@ describe('GreekRankScreen', () => {
     // themselves, so the links no longer stop at the paywall
     it('opens them for a free account too, with no lock', async () => {
       mockIsPremium = false;
-      const { getByText, getByLabelText, nav } = await renderWith(payload(41, 67));
+      const { getByText, getByTestId, nav } = await renderNearTopRanks(payload(41, 67));
       fireEvent.press(getByText('Strength Score'));
       expect(nav.navigate).toHaveBeenCalledWith('ProgressTab', { screen: 'StrengthScore', initial: false });
       expect(nav.navigate).not.toHaveBeenCalledWith('Paywall', expect.anything());
-      const icons = getByLabelText('Strength Score').findAllByType(Ionicons as any);
+      const icons = getByTestId('greek-leg-strength').findAllByType(Ionicons as any);
       expect(icons.map((i: any) => i.props.name)).not.toContain('lock-closed');
     });
   });
