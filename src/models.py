@@ -40,6 +40,9 @@ class User(db.Model):
     starter_granted    = db.Column(db.Boolean,    default=False, nullable=False, server_default=db.false())
     gender           = db.Column(db.String(10),  nullable=True)   # 'male' | 'female' | None
     birth_date        = db.Column(db.Date,          nullable=True)
+    # True once the user picks Profile's displayed PRs, so choosing none is
+    # told apart from never choosing (which shows defaults worked out from their PRs)
+    pr_pins_saved     = db.Column(db.Boolean,    default=False, nullable=False, server_default=db.false())
     workouts = db.relationship('Workout', backref='user', lazy=True)
 
     def to_dict(self):
@@ -595,6 +598,30 @@ class PREvent(db.Model):
             'previous_value': self.previous_value,
             'improved_by': self.improved_by(),
             'achieved_at': self.achieved_at.isoformat() if self.achieved_at else None,
+        }
+
+
+# ── ProfilePRPin ──────────────────────────────────────────────
+# A PR the user chose to show on Profile's Personal Records card, up to three,
+# kept on the server so the choice survives a reinstall or a new phone. Points
+# at a PR by exercise, type and context rather than personal_records.id, since
+# editing a workout rebuilds those rows.
+class ProfilePRPin(db.Model):
+    __tablename__ = 'profile_pr_pins'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    position = db.Column(db.Integer, nullable=False)
+    exercise_template_id = db.Column(db.Integer, db.ForeignKey('exerciseTemplates.id', ondelete='CASCADE'), nullable=False)
+    pr_type = db.Column(db.String(20), nullable=False)
+    # As on personal_records: -1.0 for none, a weight for max_reps, a km or
+    # minute milestone for cardio
+    weight_context = db.Column(db.Float, nullable=False, default=-1.0)
+
+    def to_dict(self):
+        return {
+            'exercise_template_id': self.exercise_template_id,
+            'pr_type': self.pr_type,
+            'weight_context': None if self.weight_context < 0 else self.weight_context,
         }
 
 

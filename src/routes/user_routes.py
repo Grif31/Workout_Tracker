@@ -7,7 +7,7 @@ from models import (
     db, User, Workout, Exercise, Set, DeviceToken, PersonalRecord, PREvent,
     StrengthScoreSnapshot, BodyweightLog, BodyMeasurement, ProgressPhoto, InsightFeedback,
     Routine, RoutineDay, WorkoutTemplate, WorkoutTemplateExercise,
-    ExerciseTemplate, ExerciseMuscleMapping, UserAchievement,
+    ExerciseTemplate, ExerciseMuscleMapping, UserAchievement, ProfilePRPin,
 )
 from flask_jwt_extended import  jwt_required, get_jwt_identity
 from schemas import UpdateProfileSchema, DeviceTokenSchema
@@ -114,6 +114,14 @@ def _convert_stored_weights(user_id: int, new_unit: str) -> None:
         PREvent.pr_type == 'max_reps',
         PREvent.weight_context > 0,
     ).update({PREvent.weight_context: _converted(PREvent.weight_context)}, synchronize_session=False)
+
+    # A pinned Max Reps PR names the weight it was done at, which converted
+    # above; the pin must follow or it stops matching its record
+    ProfilePRPin.query.filter(
+        ProfilePRPin.user_id == user_id,
+        ProfilePRPin.pr_type == 'max_reps',
+        ProfilePRPin.weight_context > 0,
+    ).update({ProfilePRPin.weight_context: _converted(ProfilePRPin.weight_context)}, synchronize_session=False)
 
     BodyweightLog.query.filter_by(user_id=user_id).update(
         {BodyweightLog.weight: _converted(BodyweightLog.weight)}, synchronize_session=False)
@@ -256,7 +264,8 @@ def _delete_all_user_data(user_id: int) -> None:
     # PREvent also cascades from workouts in Postgres, but deleting it here
     # doesn't rely on DB-level cascades (SQLite, which tests use, skips them).
     for model in (PersonalRecord, PREvent, StrengthScoreSnapshot, DeviceToken,
-                  BodyweightLog, BodyMeasurement, ProgressPhoto, InsightFeedback, UserAchievement):
+                  BodyweightLog, BodyMeasurement, ProgressPhoto, InsightFeedback, UserAchievement,
+                  ProfilePRPin):
         model.query.filter_by(user_id=user_id).delete(synchronize_session=False)
 
     # Sets → Exercises → Workouts

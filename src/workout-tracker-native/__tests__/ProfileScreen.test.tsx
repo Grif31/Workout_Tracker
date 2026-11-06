@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, waitFor, fireEvent } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from 'react-native';
 import { mockFetchSequence, createMockNavigation, createMockRoute } from './testUtils';
 import ProfileScreen from '../screens/ProfileTab/ProfileScreen';
 
@@ -199,12 +200,208 @@ describe('ProfileScreen', () => {
     expect(nav.navigate).toHaveBeenCalledWith('PRDashboard');
   });
 
-  it('opens the exercise picker instead of the PR Dashboard when a swap button is tapped', async () => {
+  it('opens the PR editor instead of the PR Dashboard when the pencil is tapped', async () => {
     mockFetchSequence([workoutsResponse, statsResponse, onePrResponse, strengthScoreResponse]);
-    const { getByText, getAllByLabelText } = render(<ProfileScreen navigation={nav as any} route={route as any} />);
+    const { getByText, getByLabelText } = render(<ProfileScreen navigation={nav as any} route={route as any} />);
     await waitFor(() => expect(getByText('Personal Records')).toBeTruthy());
-    fireEvent.press(getAllByLabelText('Change pinned PR')[0]);
-    await waitFor(() => expect(getByText('Choose Exercise')).toBeTruthy());
+    fireEvent.press(getByLabelText('Edit displayed PRs'));
+    await waitFor(() => expect(getByText('Displayed PRs')).toBeTruthy());
     expect(nav.navigate).not.toHaveBeenCalledWith('PRDashboard');
+  });
+
+  describe('displayed PRs', () => {
+    const pr = (id: number, name: string, value: number, over: Record<string, unknown> = {}) => ({
+      id, exercise_template_id: id, exercise_name: name, pr_type: 'max_weight', value,
+      weight_context: null, pr_label: 'Max Weight', achieved_at: '2026-01-01T00:00:00', previous_value: null, ...over,
+    });
+    const threePrs = [pr(1, 'Bench Press', 245), pr(2, 'Squat', 315), pr(3, 'Deadlift', 405)];
+    const fourPrs = [...threePrs, pr(4, 'Overhead Press', 135)];
+    const stored = async () => JSON.parse((await AsyncStorage.getItem('@pr_pins_1'))!);
+    const serverPin = (id: number) => ({ exercise_template_id: id, pr_type: 'max_weight', weight_context: null });
+
+    // Answers by URL and records each PUT of the pins. pins: null fails that GET, as when offline
+    let puts: any[];
+    const routeFetch = (
+      prs: unknown[],
+      pins: { saved: boolean; pins: unknown[] } | null = { saved: false, pins: [] },
+      putOk = true,
+    ) => {
+      puts = [];
+      (global.fetch as jest.Mock) = jest.fn((url: string, init?: { method?: string; body?: string }) => {
+        const u = String(url);
+        const reply = (data: unknown, ok = true) =>
+          Promise.resolve({ ok, status: ok ? 200 : 500, json: () => Promise.resolve(data) });
+        if (u.includes('/api/personal-records/pins')) {
+          if (init?.method === 'PUT') {
+            puts.push(JSON.parse(init.body!).pins);
+            return reply({}, putOk);
+          }
+          return pins ? reply(pins) : reply({}, false);
+        }
+        return reply(u.includes('/api/personal-records') ? prs
+          : u.includes('/api/workouts?page=') ? workoutsResponse.data
+          : u.includes('/api/stats/profile') ? statsResponse.data
+          : {});
+      });
+    };
+    const renderScreen = () => render(<ProfileScreen navigation={nav as any} route={route as any} />);
+
+    it('shows the top three max weights by default without saving them', async () => {
+      routeFetch(fourPrs);
+      const { findByTestId, getByText, queryByText } = renderScreen();
+      expect(await findByTestId('pr-cards-sm')).toBeTruthy();
+      expect(getByText('405 lbs')).toBeTruthy();
+      expect(queryByText('Overhead Press')).toBeNull();
+      expect(await AsyncStorage.getItem('@pr_pins_1')).toBeNull();
+      expect(puts).toEqual([]);
+    });
+
+    it('fills in for a new account once its first PRs exist', async () => {
+      routeFetch([]);
+      const first = renderScreen();
+      await waitFor(() => expect(first.getByText('10')).toBeTruthy());
+      first.unmount();
+
+      routeFetch([pr(1, 'Bench Press', 135)]);
+      const { findByTestId, getByText } = renderScreen();
+      expect(await findByTestId('pr-cards-lg')).toBeTruthy();
+      expect(getByText('135 lbs')).toBeTruthy();
+    });
+
+    it('shows the choice the server holds over the phone cache', async () => {
+      await AsyncStorage.setItem('@pr_pins_1', JSON.stringify([{ exerciseId: 1, prType: 'max_weight', context: null }]));
+      routeFetch(threePrs, { saved: true, pins: [serverPin(3)] });
+      const { findByText, queryByText } = renderScreen();
+      expect(await findByText('405 lbs')).toBeTruthy();
+      expect(queryByText('Bench Press')).toBeNull();
+      expect(await stored()).toEqual([{ exerciseId: 3, prType: 'max_weight', context: null }]);
+    });
+
+    it('hands a choice made before the server kept one up to it', async () => {
+      await AsyncStorage.setItem('@pr_pins_1', JSON.stringify([null, 2, null]));
+      routeFetch(threePrs);
+      const { findByTestId, getByText, queryByText } = renderScreen();
+      expect(await findByTestId('pr-cards-lg')).toBeTruthy();
+      expect(getByText('315 lbs')).toBeTruthy();
+      expect(queryByText('Bench Press')).toBeNull();
+      await waitFor(() => expect(puts).toEqual([[serverPin(2)]]));
+    });
+
+    it('grows the cards as PRs are removed, and saves the choice', async () => {
+      routeFetch(threePrs);
+      const { findByTestId, getByLabelText } = renderScreen();
+      await findByTestId('pr-cards-sm');
+      fireEvent.press(getByLabelText('Edit displayed PRs'));
+
+      fireEvent.press(getByLabelText('Remove Squat'));
+      expect(await findByTestId('pr-cards-md')).toBeTruthy();
+      fireEvent.press(getByLabelText('Remove Bench Press'));
+      expect(await findByTestId('pr-cards-lg')).toBeTruthy();
+
+      await waitFor(() => expect(puts[puts.length - 1]).toEqual([serverPin(3)]));
+      expect(await stored()).toEqual([{ exerciseId: 3, prType: 'max_weight', context: null }]);
+    });
+
+    it('reorders', async () => {
+      routeFetch(threePrs, { saved: true, pins: [serverPin(1), serverPin(2), serverPin(3)] });
+      const { findByTestId, getByLabelText } = renderScreen();
+      await findByTestId('pr-cards-sm');
+      fireEvent.press(getByLabelText('Edit displayed PRs'));
+      expect(getByLabelText('Move Bench Press up').props.accessibilityState).toEqual({ disabled: true });
+
+      fireEvent.press(getByLabelText('Move Deadlift up'));
+      await waitFor(() => expect(puts).toEqual([[serverPin(1), serverPin(3), serverPin(2)]]));
+    });
+
+    it('adds a PR through the exercise and type pickers, up to three', async () => {
+      routeFetch(fourPrs, { saved: true, pins: [serverPin(1)] });
+      const { findByTestId, getByLabelText, getByText, getAllByText, queryByText } = renderScreen();
+      await findByTestId('pr-cards-lg');
+      fireEvent.press(getByLabelText('Edit displayed PRs'));
+
+      const add = (name: string) => {
+        fireEvent.press(getByText('Add a PR'));
+        fireEvent.press(getByText(name));
+        fireEvent.press(getAllByText('Max Weight').slice(-1)[0]);
+      };
+      add('Squat');
+      expect(await findByTestId('pr-cards-md')).toBeTruthy();
+      add('Deadlift');
+      expect(await findByTestId('pr-cards-sm')).toBeTruthy();
+
+      expect(getByText('3 of 3 chosen.', { exact: false })).toBeTruthy();
+      expect(queryByText('Add a PR')).toBeNull();
+      await waitFor(() => expect(puts[puts.length - 1]).toEqual([serverPin(1), serverPin(2), serverPin(3)]));
+    });
+
+    it('puts the choice back when the server refuses it', async () => {
+      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      routeFetch(threePrs, { saved: true, pins: [serverPin(1), serverPin(2)] }, false);
+      const { findByTestId, getByLabelText } = renderScreen();
+      await findByTestId('pr-cards-md');
+      fireEvent.press(getByLabelText('Edit displayed PRs'));
+      fireEvent.press(getByLabelText('Remove Squat'));
+
+      await waitFor(() => expect(alert).toHaveBeenCalled());
+      expect(await findByTestId('pr-cards-md')).toBeTruthy();
+      expect(await stored()).toEqual([
+        { exerciseId: 1, prType: 'max_weight', context: null },
+        { exerciseId: 2, prType: 'max_weight', context: null },
+      ]);
+      alert.mockRestore();
+    });
+
+    it('drops a pin whose PR is gone, so it frees its slot', async () => {
+      await AsyncStorage.setItem('@pr_pins_1', JSON.stringify([
+        { exerciseId: 99, prType: 'max_weight', context: null },
+        { exerciseId: 1, prType: 'max_weight', context: null },
+      ]));
+      routeFetch(threePrs, null);
+      const { findByTestId, getByLabelText, getByText } = renderScreen();
+      expect(await findByTestId('pr-cards-lg')).toBeTruthy();
+      fireEvent.press(getByLabelText('Edit displayed PRs'));
+      expect(getByText('1 of 3 chosen.', { exact: false })).toBeTruthy();
+    });
+
+    it('opens the tapped PR in its progression', async () => {
+      routeFetch([pr(1, 'Bench Press', 8, { pr_type: 'max_reps', weight_context: 185, pr_label: 'Max Reps' })],
+        { saved: true, pins: [{ exercise_template_id: 1, pr_type: 'max_reps', weight_context: 185 }] });
+      const { findByText } = renderScreen();
+      fireEvent.press(await findByText('8 reps'));
+      expect(nav.navigate).toHaveBeenCalledWith('PRProgression', {
+        exerciseTemplateId: 1, exerciseName: 'Bench Press', prType: 'max_reps', weightContext: 185,
+      });
+      expect(nav.navigate).not.toHaveBeenCalledWith('PRDashboard');
+    });
+
+    it('opens the dashboard from See all', async () => {
+      routeFetch(threePrs);
+      const { findByText } = renderScreen();
+      fireEvent.press(await findByText('See all PRs'));
+      expect(nav.navigate).toHaveBeenCalledWith('PRDashboard');
+    });
+
+    it('shows what a recent PR beat, and calls a recent first PR new', async () => {
+      const d = new Date(Date.now() - 2 * 86_400_000);
+      const recent = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T00:00:00`;
+      routeFetch([
+        pr(1, 'Bench Press', 235, { previous_value: 225, achieved_at: recent }),
+        pr(2, 'Squat', 315, { achieved_at: recent }),
+        // Old: nothing under it
+        pr(3, 'Deadlift', 405, { previous_value: 395 }),
+      ]);
+      const { findByText, getAllByText, queryByText } = renderScreen();
+      expect(await findByText('+10 lbs')).toBeTruthy();
+      expect(getAllByText('New PR')).toHaveLength(1);
+      expect(queryByText(/^\+/)).toBeTruthy();
+      expect(getAllByText(/^\+/)).toHaveLength(1);
+    });
+
+    it('offers to choose PRs when none are displayed', async () => {
+      routeFetch(threePrs, { saved: true, pins: [] });
+      const { findByText } = renderScreen();
+      fireEvent.press(await findByText('Choose up to 3 PRs to show here'));
+      expect(await findByText('Displayed PRs')).toBeTruthy();
+    });
   });
 });

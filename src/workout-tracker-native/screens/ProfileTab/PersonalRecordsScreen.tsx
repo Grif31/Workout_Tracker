@@ -37,6 +37,8 @@ export type PR = {
   achieved_at: string;
   muscle_group: string;
   reps?: number | null;
+  /** The value this PR beat, from its latest PR event; null for a first PR */
+  previous_value?: number | null;
   /** The lift's entry in /api/stats/strength-score; null when it has no standards */
   standards_key?: string | null;
 };
