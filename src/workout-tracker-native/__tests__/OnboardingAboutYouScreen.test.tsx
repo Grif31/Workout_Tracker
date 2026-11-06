@@ -66,7 +66,7 @@ describe('OnboardingAboutYouScreen', () => {
     fireEvent.press(getByText('Continue'));
 
     await waitFor(() => expect(nav.navigate).toHaveBeenCalledWith('Onboarding'));
-    expect(bodyOf(/\/api\/me$/)).toEqual({ weight_unit: 'kg', name: 'Griffin', gender: 'female' });
+    expect(bodyOf(/\/api\/me$/)).toEqual({ weight_unit: 'kg', distance_unit: 'km', name: 'Griffin', gender: 'female' });
     expect(await AsyncStorage.getItem('gps_distance_unit_1')).toBe('km');
   });
 

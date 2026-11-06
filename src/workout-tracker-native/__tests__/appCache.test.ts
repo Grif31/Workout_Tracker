@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react-native';
 import {
-  appCache, fetchStamp, isFresh, markDataChanged, useRefetchGate, FOCUS_REFETCH_TTL_MS,
+  answered, appCache, fetchStamp, isFresh, markDataChanged, useRefetchGate, FOCUS_REFETCH_TTL_MS,
 } from '../utils/appCache';
 import { apiFetch } from '../utils/api';
 
@@ -56,6 +56,43 @@ describe('useRefetchGate', () => {
     expect(fetcher).toHaveBeenCalledTimes(3);
   });
 
+  it('retries on the next focus after a load that reported failure', async () => {
+    const { result } = renderHook(() => useRefetchGate(() => ({})));
+    const gate = result.current;
+    const failing = jest.fn(() => Promise.resolve(false));
+
+    await gate('k', failing);
+    await gate('k', failing);
+    expect(failing).toHaveBeenCalledTimes(2);
+
+    const ok = jest.fn(() => Promise.resolve());
+    await gate('k', ok);
+    await gate('k', ok);
+    expect(ok).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries after a fetcher that throws, and still rejects', async () => {
+    const { result } = renderHook(() => useRefetchGate(() => ({})));
+    const gate = result.current;
+    await expect(gate('k', () => Promise.reject(new Error('boom')))).rejects.toThrow('boom');
+    const fetcher = jest.fn(() => Promise.resolve());
+    await gate('k', fetcher);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("a stale failure doesn't clear a newer call's stamp", async () => {
+    const { result } = renderHook(() => useRefetchGate(() => ({})));
+    const gate = result.current;
+    let failFirst!: (v: boolean) => void;
+    const first = gate('k', () => new Promise<boolean>(r => { failFirst = r; }));
+    await gate('k', () => Promise.resolve(), true);
+    failFirst(false);
+    await first;
+    const fetcher = jest.fn(() => Promise.resolve());
+    await gate('k', fetcher);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it('counts a preloaded cache entry as the first fetch', async () => {
     appCache.set('seeded', { x: 1 });
     const { result } = renderHook(() =>
@@ -64,6 +101,15 @@ describe('useRefetchGate', () => {
     const fetcher = jest.fn(() => Promise.resolve());
     await result.current('seeded', fetcher);
     expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe('answered', () => {
+  it('counts a 4xx as an answer and a 5xx as a failure', () => {
+    expect(answered({ status: 422 })).toBe(true);
+    expect(answered({ status: 404 })).toBe(true);
+    expect(answered({ status: 500 })).toBe(false);
+    expect(answered({ status: 503 })).toBe(false);
   });
 });
 

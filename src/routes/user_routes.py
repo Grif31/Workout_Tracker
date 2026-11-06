@@ -7,7 +7,7 @@ from models import (
     db, User, Workout, Exercise, Set, DeviceToken, PersonalRecord, PREvent,
     StrengthScoreSnapshot, BodyweightLog, BodyMeasurement, ProgressPhoto, InsightFeedback,
     Routine, RoutineDay, WorkoutTemplate, WorkoutTemplateExercise,
-    ExerciseTemplate, ExerciseMuscleMapping,
+    ExerciseTemplate, ExerciseMuscleMapping, UserAchievement, ProfilePRPin,
 )
 from flask_jwt_extended import  jwt_required, get_jwt_identity
 from sqlalchemy.orm import selectinload
@@ -117,6 +117,14 @@ def _convert_stored_weights(user_id: int, new_unit: str) -> None:
         PREvent.weight_context > 0,
     ).update({PREvent.weight_context: _converted(PREvent.weight_context)}, synchronize_session=False)
 
+    # A pinned Max Reps PR names the weight it was done at, which converted
+    # above; the pin must follow or it stops matching its record
+    ProfilePRPin.query.filter(
+        ProfilePRPin.user_id == user_id,
+        ProfilePRPin.pr_type == 'max_reps',
+        ProfilePRPin.weight_context > 0,
+    ).update({ProfilePRPin.weight_context: _converted(ProfilePRPin.weight_context)}, synchronize_session=False)
+
     BodyweightLog.query.filter_by(user_id=user_id).update(
         {BodyweightLog.weight: _converted(BodyweightLog.weight)}, synchronize_session=False)
 
@@ -136,11 +144,7 @@ def get_current_user():
     user = User.query.filter_by(id=userId).first()
     if not user:
         return jsonify({'message': 'User not found'}), 404
-    workouts = Workout.query.filter_by(user_id=userId).all()
-    return jsonify({
-        **user.to_dict(),
-        'workouts': [{'id': w.id, 'name': w.name, 'date': w.date.isoformat(), 'notes': w.notes} for w in workouts],
-    }), 200
+    return jsonify(user.to_dict()), 200
 
 @user_bp.patch('/api/me')
 @jwt_required()
@@ -171,6 +175,8 @@ def update_user_info():
             if "bodyweight" not in data and user.bodyweight is not None:
                 user.bodyweight = convert_weight_value(user.bodyweight, new_unit)
         user.weight_unit = new_unit
+    if "distance_unit" in data:
+        user.distance_unit = data["distance_unit"]
     if "gender" in data:
         user.gender = data["gender"] if data["gender"] in ('male', 'female') else None
     if "birth_date" in data:
@@ -313,7 +319,8 @@ def _delete_all_user_data(user_id: int) -> None:
     # PREvent also cascades from workouts in Postgres, but deleting it here
     # doesn't rely on DB-level cascades (SQLite, which tests use, skips them).
     for model in (PersonalRecord, PREvent, StrengthScoreSnapshot, DeviceToken,
-                  BodyweightLog, BodyMeasurement, ProgressPhoto, InsightFeedback):
+                  BodyweightLog, BodyMeasurement, ProgressPhoto, InsightFeedback, UserAchievement,
+                  ProfilePRPin):
         model.query.filter_by(user_id=user_id).delete(synchronize_session=False)
 
     # Sets → Exercises → Workouts

@@ -24,7 +24,9 @@ import CardioShareCard from '../../components/share/CardioShareCard';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { PR_GOLD } from '../../constants/prColors';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
+import { motionTiming } from '../../utils/motion';
 import RankUpCard from '../../components/RankUpCard';
+import AchievementUnlockSheet from '../../components/achievements/AchievementUnlockSheet';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import { DashboardStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
@@ -111,7 +113,7 @@ function CountUpText({ value, format, delay, style }: {
     const id = anim.addListener(({ value: v }) => setShown(v));
     // JS-driven (text can't use the native driver), so it's kept short: on
     // Fabric every frame commits, and this screen is otherwise idle.
-    RNAnimated.timing(anim, {
+    motionTiming(anim, {
       toValue: value, duration: 700, delay, easing: Easing.out(Easing.cubic), useNativeDriver: false,
     }).start();
     return () => { anim.removeListener(id); anim.stopAnimation(); };
@@ -121,6 +123,7 @@ function CountUpText({ value, format, delay, style }: {
 
 export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const { workoutId, workoutName, prs, totalVolume, totalReps, totalSets, muscles, isFirstWorkout, isBestVolume, isBestReps } = route.params;
+  const newAchievements = route.params.newAchievements ?? [];
   const { colors } = useTheme();
   const { isPremium } = usePurchase();
   const s = useMemo(() => createStyles(colors), [colors]);
@@ -150,6 +153,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
   const reduceMotion = useReduceMotion();
   const [selectedFrame, setSelectedFrame] = useState('Neophyte');
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>('mi');
+  const [unlockOpen, setUnlockOpen] = useState(false);
 
   const exercises = workout?.exercises ?? [];
   // Cardio only when every exercise is (Workout.to_dict), so a lifting session
@@ -254,6 +258,16 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
     }
     return () => timers.forEach(clearTimeout);
   }, [reduceMotion]);
+
+  // The unlock comes last, once the PRs and any promotion have had their moment,
+  // so it never covers them mid-animation. Shown once: closing it doesn't bring it back
+  const unlockShown = useRef(false);
+  useEffect(() => {
+    if (!newAchievements.length || unlockShown.current || !rankSettled || reduceMotion === null) return;
+    const after = previousRank ? 3000 : filteredPrs.length > 0 ? 1700 : 900;
+    const t = setTimeout(() => { unlockShown.current = true; setUnlockOpen(true); }, Math.max(0, after - (Date.now() - mountedAt)));
+    return () => clearTimeout(t);
+  }, [rankSettled, reduceMotion]);
 
   // The promotion waits for the card's entrance and, with PRs, for the PR
   // haptic (600ms), so the moments land one after the other
@@ -686,6 +700,17 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           </TouchableOpacity>
         </Animated.View>
       </ScrollView>
+
+      {newAchievements.length > 0 && reduceMotion !== null && (
+        <AchievementUnlockSheet
+          items={newAchievements}
+          visible={unlockOpen}
+          weightUnit={weightUnit}
+          distanceUnit={distanceUnit}
+          reduceMotion={reduceMotion}
+          onClose={() => setUnlockOpen(false)}
+        />
+      )}
     </View>
   );
 }

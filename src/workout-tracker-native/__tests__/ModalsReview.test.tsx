@@ -2,7 +2,7 @@ import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PlateCalculatorModal from '../components/PlateCalculatorModal';
-import CalendarModal from '../components/CalendarModal';
+import WorkoutCalendar from '../components/WorkoutCalendar';
 import CoachProfileModal from '../components/coach/CoachProfileModal';
 import RoutinePickerModal from '../components/coach/RoutinePickerModal';
 
@@ -52,22 +52,21 @@ describe('PlateCalculatorModal', () => {
   });
 });
 
-describe('CalendarModal', () => {
+describe('WorkoutCalendar', () => {
   const today = new Date();
   const iso = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const todayIso = iso(today);
 
-  it('refetches the logged days every time it opens', async () => {
+  it('refetches the logged days when the parent refreshes', async () => {
     routeFetch({ '/api/workouts/dates': { dates: [] } });
-    const props = { onClose: jest.fn(), onSelectWorkout: jest.fn() };
-    const { rerender, findByTestId } = render(<CalendarModal visible {...props} />);
+    const onSelectWorkout = jest.fn();
+    const { rerender, findByTestId } = render(<WorkoutCalendar view="month" refreshKey={0} onSelectWorkout={onSelectWorkout} onChangeView={jest.fn()} />);
     expect((await findByTestId(`calendar-day-${todayIso}`)).props.accessibilityState).toBeUndefined();
 
-    // A workout logged today while the calendar was closed
+    // A workout logged today, then the Profile comes back into focus
     routeFetch({ '/api/workouts/dates': { dates: [todayIso] } });
-    rerender(<CalendarModal visible={false} {...props} />);
-    rerender(<CalendarModal visible {...props} />);
+    rerender(<WorkoutCalendar view="month" refreshKey={1} onSelectWorkout={onSelectWorkout} onChangeView={jest.fn()} />);
 
     await waitFor(() => expect(fetchCalls('/api/workouts/dates')).toBe(1));
     await waitFor(async () =>
@@ -83,7 +82,7 @@ describe('CalendarModal', () => {
       ],
     });
     const { findByTestId, findByText } = render(
-      <CalendarModal visible onClose={jest.fn()} onSelectWorkout={jest.fn()} />,
+      <WorkoutCalendar view="month" refreshKey={0} onSelectWorkout={jest.fn()} onChangeView={jest.fn()} />,
     );
     fireEvent.press(await findByTestId(`calendar-day-${todayIso}`));
     expect(await findByText('32 min')).toBeTruthy();
@@ -92,7 +91,7 @@ describe('CalendarModal', () => {
   it('offers a retry when a day fails to load instead of saying it has no workouts', async () => {
     routeFetch({ '/api/workouts/dates': { dates: [todayIso] } });
     const { findByTestId, findByText, queryByText } = render(
-      <CalendarModal visible onClose={jest.fn()} onSelectWorkout={jest.fn()} />,
+      <WorkoutCalendar view="month" refreshKey={0} onSelectWorkout={jest.fn()} onChangeView={jest.fn()} />,
     );
     fireEvent.press(await findByTestId(`calendar-day-${todayIso}`));
     expect(await findByText("Couldn't load this day. Tap to try again.")).toBeTruthy();
@@ -101,7 +100,7 @@ describe('CalendarModal', () => {
 
   it('marks the tapped day as selected', async () => {
     routeFetch({ '/api/workouts/dates': { dates: [todayIso] }, '/api/workouts?date=': [] });
-    const { findByTestId } = render(<CalendarModal visible onClose={jest.fn()} onSelectWorkout={jest.fn()} />);
+    const { findByTestId } = render(<WorkoutCalendar view="month" refreshKey={0} onSelectWorkout={jest.fn()} onChangeView={jest.fn()} />);
     const cell = await findByTestId(`calendar-day-${todayIso}`);
     expect(cell.props.accessibilityState).toEqual({ selected: false });
     fireEvent.press(cell);
@@ -110,10 +109,46 @@ describe('CalendarModal', () => {
     );
   });
 
+  it('opens a month tapped in Year view, landing on that month', async () => {
+    const lastYear = today.getFullYear() - 1;
+    routeFetch({ '/api/workouts/dates': { dates: [`${lastYear}-03-14`] } });
+    const onChangeView = jest.fn();
+    const props = { refreshKey: 0, onSelectWorkout: jest.fn(), onChangeView };
+    const { rerender, findByLabelText, findByTestId } = render(<WorkoutCalendar view="year" {...props} />);
+    fireEvent.press(await findByLabelText('Previous year'));
+    fireEvent.press(await findByTestId(`calendar-month-${lastYear}-3`));
+    expect(onChangeView).toHaveBeenCalledWith('month');
+
+    rerender(<WorkoutCalendar view="month" {...props} />);
+    expect((await findByTestId(`calendar-day-${lastYear}-03-14`)).props.accessibilityState).toEqual({ selected: false });
+  });
+
+  it("won't open a month that hasn't happened yet", async () => {
+    if (today.getMonth() === 11) return; // December has no later month this year
+    routeFetch({ '/api/workouts/dates': { dates: [] } });
+    const onChangeView = jest.fn();
+    const { findByTestId } = render(<WorkoutCalendar view="year" refreshKey={0} onSelectWorkout={jest.fn()} onChangeView={onChangeView} />);
+    fireEvent.press(await findByTestId(`calendar-month-${today.getFullYear()}-${today.getMonth() + 2}`));
+    expect(onChangeView).not.toHaveBeenCalled();
+  });
+
+  it('opens a year tapped in All Years', async () => {
+    const lastYear = today.getFullYear() - 1;
+    routeFetch({ '/api/workouts/dates': { dates: [`${lastYear}-06-01`] } });
+    const onChangeView = jest.fn();
+    const props = { refreshKey: 0, onSelectWorkout: jest.fn(), onChangeView };
+    const { rerender, findByTestId, findByText } = render(<WorkoutCalendar view="multiyear" {...props} />);
+    fireEvent.press(await findByTestId(`calendar-year-${lastYear}`));
+    expect(onChangeView).toHaveBeenCalledWith('year');
+
+    rerender(<WorkoutCalendar view="year" {...props} />);
+    expect(await findByText(String(lastYear))).toBeTruthy();
+  });
+
   it('starts the week on Monday', async () => {
     routeFetch({ '/api/workouts/dates': { dates: [] } });
     const { findAllByText, getByText } = render(
-      <CalendarModal visible onClose={jest.fn()} onSelectWorkout={jest.fn()} />,
+      <WorkoutCalendar view="month" refreshKey={0} onSelectWorkout={jest.fn()} onChangeView={jest.fn()} />,
     );
     await findAllByText('Mo');
     const header = getByText('Mo').parent?.parent;

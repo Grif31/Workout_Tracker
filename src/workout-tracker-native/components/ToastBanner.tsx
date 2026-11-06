@@ -6,6 +6,7 @@ import { registerToastCallback, type ToastOptions } from '../utils/toast';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import { motionTiming } from '../utils/motion';
 
 const SLIDE_DURATION = 250;
 const DISPLAY_DURATION = 3000;
@@ -24,7 +25,7 @@ export function ToastBanner() {
 
   const hide = () => {
     if (timer.current) clearTimeout(timer.current);
-    Animated.timing(translateY, {
+    motionTiming(translateY, {
       toValue: HIDDEN_OFFSET,
       duration: SLIDE_DURATION,
       useNativeDriver: true,
@@ -40,7 +41,7 @@ export function ToastBanner() {
       setVisible(true);
       translateY.setValue(HIDDEN_OFFSET);
 
-      Animated.timing(translateY, {
+      motionTiming(translateY, {
         toValue: 0,
         duration: SLIDE_DURATION,
         useNativeDriver: true,

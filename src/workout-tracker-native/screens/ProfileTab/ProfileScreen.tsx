@@ -10,6 +10,7 @@ import {
   Image,
   Modal,
   Pressable,
+  Alert,
   ScrollView,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -33,13 +34,25 @@ import ProfileAvatarFrame, { GREEK_RANK_COLORS } from '../../components/ProfileA
 import { rankTextColor } from '../../constants/greekRanks';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { fmtHold } from '../../components/workout/types';
-import CalendarModal from '../../components/CalendarModal';
+import WorkoutCalendar, { type CalView } from '../../components/WorkoutCalendar';
+import SegmentedControl from '../../components/SegmentedControl';
 import SectionRule from '../../components/SectionRule';
 import { writeWidgetGreekRank } from '../../utils/widgetData';
+import {
+  MAX_PROFILE_PINS as MAX_PINS, PR_PINS_BASE, type Pin, type ServerPin,
+  samePin, defaultPins, parseStoredPins, resolvePin, recentPrChange, toServerPin, fromServerPin,
+} from '../../utils/profilePins';
 
-const PR_PINS_BASE = '@pr_pins';
-const DEFAULT_PIN_COUNT = 3;
 const PAGE_SIZE = 20;
+const HISTORY_VIEW_BASE = 'profile_history_view';
+
+type HistoryView = 'list' | CalView;
+const HISTORY_VIEWS: readonly { key: HistoryView; label: string }[] = [
+  { key: 'list', label: 'List' },
+  { key: 'month', label: 'Month' },
+  { key: 'year', label: 'Year' },
+  { key: 'multiyear', label: 'All Years' },
+];
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'ProfileHome'>;
 
@@ -70,8 +83,7 @@ type ProfileStats = {
 
 // Unique exercises that have at least one PR record
 type ExerciseOption = { exercise_template_id: number; exercise_name: string; equipment?: string | null; muscle_group?: string };
-// A pinned PR slot — stores the exercise, which metric type, and (for contextual PRs) the context value
-type Pin = { exerciseId: number; prType: PR['pr_type']; context: number | null } | null;
+type EditStep = 'closed' | 'list' | 'exercise' | 'type';
 
 export default function ProfileScreen({ navigation }: Props) {
   const { user } = useAuth();
@@ -92,7 +104,22 @@ export default function ProfileScreen({ navigation }: Props) {
   }, [user?.id]);
   const [greekRank, setGreekRank]         = useState<string | null>(null);
 
-  const [calendarVisible, setCalendarVisible]       = useState(false);
+  const historyViewKey = `${HISTORY_VIEW_BASE}_${user?.id}`;
+  const [historyView, setHistoryView] = useState<HistoryView>('list');
+  // Bumped with every fetchAll so the calendar refetches its logged days alongside the list
+  const [historyRefresh, setHistoryRefresh] = useState(0);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    AsyncStorage.getItem(historyViewKey).then(v => {
+      if (HISTORY_VIEWS.some(o => o.key === v)) setHistoryView(v as HistoryView);
+    });
+  }, [user?.id]);
+
+  const changeHistoryView = (v: HistoryView) => {
+    setHistoryView(v);
+    AsyncStorage.setItem(historyViewKey, v);
+  };
 
   const [workouts, setWorkouts]     = useState<Workout[]>([]);
   const [page, setPage]             = useState(1);
@@ -102,10 +129,10 @@ export default function ProfileScreen({ navigation }: Props) {
   const [stats, setStats]           = useState<ProfileStats | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [prs, setPrs]               = useState<PR[]>([]);
-  const [pins, setPins]               = useState<Pin[]>([null, null, null]);
-  // Which slot is being swapped (0/1/2), or -1 = modal closed
-  const [swapSlot, setSwapSlot]       = useState<number>(-1);
-  // Step 2 of modal: exercise chosen, waiting for PR type pick
+  // null until the user chooses, and the card shows defaults worked out from their PRs
+  const [savedPins, setSavedPins]     = useState<Pin[] | null>(null);
+  const [editStep, setEditStep]       = useState<EditStep>('closed');
+  // Exercise chosen in the editor, waiting for its PR type pick
   const [pendingExercise, setPendingExercise] = useState<{ id: number; name: string } | null>(null);
   const [prSearch, setPrSearch]       = useState('');
   const [prMuscle, setPrMuscle]       = useState<string | null>(null);
@@ -131,21 +158,7 @@ export default function ProfileScreen({ navigation }: Props) {
       setHasMore(pw.has_more);
     }
     if (ps) setStats(ps);
-    if (cachedPrs) {
-      setPrs(cachedPrs);
-      AsyncStorage.getItem(prPinsKey).then(raw => {
-        if (!raw) {
-          const top = cachedPrs
-            .filter(p => p.pr_type === 'max_weight')
-            .sort((a, b) => b.value - a.value)
-            .slice(0, DEFAULT_PIN_COUNT)
-            .map(p => p.exercise_template_id);
-          const filled: Pin[] = [null, null, null];
-          top.forEach((id, i) => { filled[i] = { exerciseId: id, prType: 'max_weight', context: null }; });
-          savePins(filled);
-        }
-      });
-    }
+    if (cachedPrs) setPrs(cachedPrs);
     if (greek?.greek_rank) {
       setGreekRank(greek.greek_rank);
       AsyncStorage.setItem(GREEK_RANK_CACHED_KEY, greek.greek_rank);
@@ -156,38 +169,63 @@ export default function ProfileScreen({ navigation }: Props) {
   useEffect(() => {
     AsyncStorage.multiGet([prPinsKey, `${PROFILE_FRAME_RANK_KEY}_${user?.id}`, GREEK_RANK_CACHED_KEY]).then(pairs => {
       const [pinsRaw, frameRaw, rankRaw] = pairs.map(p => p[1]);
-      if (pinsRaw) {
-        try {
-          const parsed = JSON.parse(pinsRaw);
-          const migrated: Pin[] = parsed.map((p: any) =>
-            p == null ? null :
-            typeof p === 'number' ? { exerciseId: p, prType: 'max_weight' as const, context: null } :
-            p
-          );
-          setPins(migrated);
-        } catch {}
-      }
+      setSavedPins(prev => prev ?? parseStoredPins(pinsRaw));
       if (frameRaw) setSelectedFrame(frameRaw);
       if (rankRaw) setGreekRank(rankRaw);
     });
   }, []);
 
 
-  const savePins = (next: Pin[]) => {
-    setPins(next);
-    AsyncStorage.setItem(prPinsKey, JSON.stringify(next));
+  const cachePins = (next: Pin[] | null) =>
+    next ? AsyncStorage.setItem(prPinsKey, JSON.stringify(next)) : AsyncStorage.removeItem(prPinsKey);
+
+  const putPins = (next: Pin[]) =>
+    apiFetch('/api/personal-records/pins', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pins: next.map(toServerPin) }),
+    });
+
+  // Optimistic, put back if the server refuses
+  const savePins = async (next: Pin[]) => {
+    const prev = savedPins;
+    setSavedPins(next);
+    cachePins(next);
+    let ok = false;
+    try { ok = (await putPins(next)).ok; } catch {}
+    if (!ok) {
+      setSavedPins(prev);
+      cachePins(prev);
+      Alert.alert("Couldn't save your PRs", 'Check your connection and try again.');
+    }
+  };
+
+  // The server holds the choice. A phone that chose before it did (the cache
+  // only) hands its choice up the first time the server says it has none.
+  const syncPins = async (data: { saved?: boolean; pins?: ServerPin[] }) => {
+    if (data.saved) {
+      const next = (data.pins ?? []).map(fromServerPin);
+      setSavedPins(next);
+      cachePins(next);
+      return;
+    }
+    const local = parseStoredPins(await AsyncStorage.getItem(prPinsKey));
+    setSavedPins(local);
+    if (local) putPins(local).catch(() => {});
   };
 
   const fetchAll = async () => {
+    setHistoryRefresh(n => n + 1);
     try {
       const goalRaw = await AsyncStorage.getItem(weeklyGoalKey);
       const weeklyGoal = goalRaw ? (parseInt(goalRaw, 10) || 3) : 3;
 
-      const [workoutsRes, statsRes, prsRes, scoreRes] = await Promise.all([
+      const [workoutsRes, statsRes, prsRes, scoreRes, pinsRes] = await Promise.all([
         apiFetch(`/api/workouts?page=1&per_page=${PAGE_SIZE}`),
         apiFetch(`/api/stats/profile?weekly_goal=${weeklyGoal}`),
         apiFetch('/api/personal-records'),
         apiFetch('/api/stats/greek-rank'),
+        apiFetch('/api/personal-records/pins'),
       ]);
       if (workoutsRes.ok) {
         const data = await workoutsRes.json();
@@ -207,20 +245,9 @@ export default function ProfileScreen({ navigation }: Props) {
       if (prsRes.ok) {
         const data: PR[] = await prsRes.json();
         setPrs(data);
-        // Auto-populate empty pins with top max_weight exercises on first load
-        AsyncStorage.getItem(prPinsKey).then(raw => {
-          if (!raw) {
-            const top = data
-              .filter(p => p.pr_type === 'max_weight')
-              .sort((a, b) => b.value - a.value)
-              .slice(0, DEFAULT_PIN_COUNT)
-              .map(p => p.exercise_template_id);
-            const filled: Pin[] = [null, null, null];
-            top.forEach((id, i) => { filled[i] = { exerciseId: id, prType: 'max_weight', context: null }; });
-            savePins(filled);
-          }
-        });
       }
+      // Offline keeps the phone's cached choice
+      if (pinsRes.ok) await syncPins(await pinsRes.json());
     } catch {
     } finally {
       setRefreshing(false);
@@ -257,12 +284,12 @@ export default function ProfileScreen({ navigation }: Props) {
 
   const handleRefresh = () => { setRefreshing(true); fetchAll(); };
 
-  const handleSelectCalendarWorkout = (workout: { id: number; workout_type?: string }) => {
-    setCalendarVisible(false);
+  // Stable, so the memoized calendar skips the screen's unrelated re-renders
+  const handleSelectCalendarWorkout = useCallback((workout: { id: number; workout_type?: string }) => {
     workout.workout_type === 'cardio'
       ? navigation.navigate('CardioDetails', { workoutId: workout.id })
       : navigation.navigate('WorkoutDetails', { workoutId: workout.id });
-  };
+  }, [navigation]);
 
   const fmtVolume = (v: number) => {
     if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
@@ -273,15 +300,14 @@ export default function ProfileScreen({ navigation }: Props) {
   const fmtTime = (min: number) =>
     `${Math.floor(min)}:${String(Math.round((min % 1) * 60)).padStart(2, '0')}`;
 
-  const getPinnedPR = (pin: Pin): PR | undefined => {
-    // Pins saved before estimated 1RM was dropped from the picker show as an empty slot.
-    if (!pin || pin.prType === 'estimated_1rm') return undefined;
-    const { exerciseId, prType, context } = pin;
-    const matches = prs.filter(p => p.exercise_template_id === exerciseId && p.pr_type === prType);
-    if (context != null) return matches.find(p => p.weight_context === context) ?? matches[0];
-    if (prType === 'max_reps') return matches.sort((a, b) => b.value - a.value)[0];
-    return matches[0];
-  };
+  // What the card shows, each with its record. A pin whose PR is gone drops
+  // out here, and with it from the next save, so it never holds a slot.
+  const shownPins = useMemo(() =>
+    (savedPins ?? defaultPins(prs))
+      .map(pin => ({ pin, pr: resolvePin(prs, pin) }))
+      .filter((s): s is { pin: Pin; pr: PR } => s.pr != null),
+  [savedPins, prs]);
+  const pins = useMemo(() => shownPins.map(s => s.pin), [shownPins]);
 
   // Unique exercises available to pin
   const exerciseOptions: ExerciseOption[] = useMemo(() => {
@@ -309,82 +335,154 @@ export default function ProfileScreen({ navigation }: Props) {
     );
   }, [exerciseOptions, prSearch, prMuscle]);
 
-  const handleSelectPin = (exerciseId: number, prType: PR['pr_type'], context: number | null) => {
-    const next = [...pins];
-    next[swapSlot] = { exerciseId, prType, context };
-    savePins(next);
-    setSwapSlot(-1);
+  const closeEditor = () => {
+    setEditStep('closed');
     setPendingExercise(null);
     setPrSearch('');
     setPrMuscle(null);
   };
 
-  // The whole box is the entry point into the PR Dashboard — the swap button
-  // on each card is a nested Touchable, so tapping it claims the gesture
-  // responder and doesn't also fire this outer navigation (standard RN
-  // touch-responder behavior, not DOM bubbling).
+  const handleAddPin = (pin: Pin) => {
+    if (pins.length >= MAX_PINS || pins.some(p => samePin(p, pin))) return;
+    savePins([...pins, pin]);
+    setPendingExercise(null);
+    setPrSearch('');
+    setPrMuscle(null);
+    setEditStep('list');
+  };
+
+  const handleRemovePin = (index: number) => savePins(pins.filter((_, i) => i !== index));
+
+  const handleMovePin = (index: number, by: -1 | 1) => {
+    const to = index + by;
+    if (to < 0 || to >= pins.length) return;
+    const next = [...pins];
+    [next[index], next[to]] = [next[to], next[index]];
+    savePins(next);
+  };
+
+  const prValueText = (pr: PR) =>
+    pr.pr_type === 'max_weight' ? `${pr.value} ${unit}`
+      : pr.pr_type === 'max_reps' ? `${pr.value} reps`
+      : pr.pr_type === 'best_time' ? fmtTime(pr.value)
+      : pr.pr_type === 'max_duration' ? fmtHold(pr.value)
+      : pr.pr_type === 'max_elevation' ? `${Math.round(toDisplayElevation(pr.value, distanceUnit))} ${elevationLabel(distanceUnit)}`
+      : `${toDisplayDistance(pr.value, distanceUnit).toFixed(1)} ${distanceUnit}`;
+
+  const prTypeText = (pr: PR) =>
+    pr.pr_type === 'max_weight' ? 'Max Weight'
+      : pr.pr_type === 'max_reps' ? (pr.weight_context != null ? `@ ${pr.weight_context} ${unit}` : 'Max Reps')
+      : pr.pr_label;
+
+  // Only for a PR from the last two weeks: what it beat by, or that it's a first
+  const prChangeText = (pr: PR): string | null => {
+    const change = recentPrChange(pr, new Date());
+    if (change === null) return null;
+    if (change === 'new') return 'New PR';
+    switch (pr.pr_type) {
+      case 'max_weight':  return `+${roundTenth(change)} ${unit}`;
+      case 'max_reps':    return `+${change} rep${change === 1 ? '' : 's'}`;
+      case 'best_time':   return `${fmtTime(change)} faster`;
+      case 'max_duration': return `+${fmtHold(change)}`;
+      case 'max_elevation': return `+${Math.round(toDisplayElevation(change, distanceUnit))} ${elevationLabel(distanceUnit)}`;
+      case 'best_distance':
+      case 'longest_distance': return `+${toDisplayDistance(change, distanceUnit).toFixed(1)} ${distanceUnit}`;
+      default: return null;
+    }
+  };
+
+  const openProgression = (pr: PR) => navigation.navigate('PRProgression', {
+    exerciseTemplateId: pr.exercise_template_id,
+    exerciseName: pr.exercise_name,
+    prType: pr.pr_type,
+    weightContext: pr.weight_context,
+  });
+
+  // Each card opens its own progression; the title and "See all" open the
+  // dashboard. Separate touchables rather than one around the box: an
+  // accessible wrapper hides the cards and the pencil from VoiceOver.
   const renderPRBar = () => {
     if (prs.length === 0) return null;
+    // Fewer PRs get bigger cards, so one or two don't sit small in an empty box
+    const size = shownPins.length >= 3 ? 'sm' : shownPins.length === 2 ? 'md' : 'lg';
+    const openDashboard = () => navigation.navigate('PRDashboard');
     return (
-      <PressableScale
-        style={styles.prSectionBox}
-        onPress={() => navigation.navigate('PRDashboard')}
-      >
+      <View style={styles.prSectionBox}>
         <View style={styles.prSectionHeader}>
-          <LaurelBranch height={16} color={colors.prGoldBorder} />
-          <Text style={styles.prSectionTitle}>Personal Records</Text>
-          <LaurelBranch side="right" height={16} color={colors.prGoldBorder} />
+          <View style={styles.prEditSpacer} />
+          <TouchableOpacity
+            style={styles.prSectionTitleRow}
+            onPress={openDashboard}
+            accessibilityRole="button"
+            accessibilityLabel="Personal Records, see all"
+          >
+            <LaurelBranch height={16} color={colors.prGoldBorder} />
+            <Text style={styles.prSectionTitle}>Personal Records</Text>
+            <LaurelBranch side="right" height={16} color={colors.prGoldBorder} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.prEditBtn}
+            onPress={() => setEditStep('list')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Edit displayed PRs"
+          >
+            <Ionicons name="pencil" size={14} color={colors.textSecondary} />
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.prCards}>
-          {pins.map((pin, slot) => {
-            const pr = getPinnedPR(pin);
-            return (
-              <View key={slot} style={{ flex: 1 }}>
-                <View style={[styles.prCard, { backgroundColor: colors.surface }]}>
-                  <Ionicons name="trophy" size={22} color={colors.prGold} style={styles.trophyIcon} />
-                  {pr ? (
-                    <>
-                      <Text style={[styles.prCardName, { color: colors.textPrimary }]} numberOfLines={2}>
-                        {pr.exercise_name}
-                      </Text>
-                      <Text style={[styles.prCardValue, { color: colors.prGold }]}>
-                        {pr.pr_type === 'max_weight'
-                          ? `${pr.value} ${unit}`
-                          : pr.pr_type === 'max_reps'
-                            ? `${pr.value} reps`
-                            : pr.pr_type === 'best_time'
-                              ? fmtTime(pr.value)
-                              : pr.pr_type === 'max_duration'
-                                ? fmtHold(pr.value)
-                                : pr.pr_type === 'max_elevation'
-                                  ? `${Math.round(toDisplayElevation(pr.value, distanceUnit))} ${elevationLabel(distanceUnit)}`
-                                  : `${toDisplayDistance(pr.value, distanceUnit).toFixed(1)} ${distanceUnit}`}
-                      </Text>
-                      <Text style={styles.prCardType}>
-                        {pr.pr_type === 'max_weight' ? 'Max Weight'
-                          : pr.pr_type === 'max_reps'
-                            ? (pr.weight_context != null ? `@ ${pr.weight_context} ${unit}` : 'Max Reps')
-                            : pr.pr_label}
-                      </Text>
-                    </>
-                  ) : (
-                    <Text style={styles.prCardEmpty}>Tap ↺ to{'\n'}pick exercise</Text>
-                  )}
-                  <TouchableOpacity
-                    style={[styles.swapBtn, { backgroundColor: colors.background }]}
-                    onPress={() => setSwapSlot(slot)}
-                    hitSlop={6}
-                    accessibilityLabel="Change pinned PR"
+        {shownPins.length === 0 ? (
+          <TouchableOpacity style={styles.prEmptyBox} onPress={() => setEditStep('list')} accessibilityRole="button">
+            <Text style={styles.prCardEmpty}>Choose up to {MAX_PINS} PRs to show here</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.prCards} testID={`pr-cards-${size}`}>
+            {shownPins.map(({ pr }, i) => {
+              const change = prChangeText(pr);
+              const text = (
+                <>
+                  <Text
+                    style={[styles.prCardName, size === 'md' && styles.prCardNameMd, size === 'lg' && styles.prCardNameLg]}
+                    numberOfLines={2}
                   >
-                    <Ionicons name="swap-horizontal" size={13} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      </PressableScale>
+                    {pr.exercise_name}
+                  </Text>
+                  <Text style={[styles.prCardValue, size === 'md' && styles.prCardValueMd, size === 'lg' && styles.prCardValueLg]}>
+                    {prValueText(pr)}
+                  </Text>
+                  <Text style={[styles.prCardType, size === 'lg' && styles.prCardTypeLg]}>
+                    {prTypeText(pr)}
+                  </Text>
+                  {change && <Text style={styles.prCardChange} numberOfLines={1}>{change}</Text>}
+                </>
+              );
+              return (
+                <PressableScale
+                  key={`${pr.exercise_template_id}:${pr.pr_type}:${pr.weight_context ?? ''}:${i}`}
+                  style={[styles.prCard, size === 'lg' && styles.prCardLg]}
+                  onPress={() => openProgression(pr)}
+                  accessibilityRole="button"
+                  accessibilityLabel={[pr.exercise_name, prTypeText(pr), prValueText(pr), change].filter(Boolean).join(', ')}
+                >
+                  <Ionicons
+                    name="trophy"
+                    size={size === 'lg' ? 34 : size === 'md' ? 26 : 22}
+                    color={colors.prGold}
+                    style={size === 'lg' ? styles.trophyIconLg : styles.trophyIcon}
+                  />
+                  {/* One PR has the whole width: trophy beside the text, not above it */}
+                  {size === 'lg' ? <View style={styles.prCardTextLg}>{text}</View> : text}
+                </PressableScale>
+              );
+            })}
+          </View>
+        )}
+
+        <TouchableOpacity style={styles.prSeeAll} onPress={openDashboard} accessibilityRole="button">
+          <Text style={styles.prSeeAllText}>See all PRs</Text>
+          <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -495,36 +593,30 @@ export default function ProfileScreen({ navigation }: Props) {
       {renderPRBar()}
 
       <View style={styles.historyHeader}>
-        <View style={{ flex: 1 }}>
-          <SectionRule label="Workout History" />
-        </View>
-        <TouchableOpacity
-          onPress={() => setCalendarVisible(true)}
-          hitSlop={8}
-          style={styles.calendarIconBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Workout calendar"
-        >
-          <Ionicons name="calendar-outline" size={22} color={colors.accent} />
-        </TouchableOpacity>
+        <SectionRule label="Workout History" />
+        <SegmentedControl options={HISTORY_VIEWS} value={historyView} onChange={changeHistoryView} style={styles.historyViewSwitch} size="md" />
       </View>
     </View>
-  ), [styles, avatarSource, selectedFrame, displayName, user, stats, greekRank, prs, pins, weightUnit, unit, distanceUnit, colors]);
+  ), [styles, avatarSource, selectedFrame, displayName, user, stats, greekRank, prs, shownPins, weightUnit, unit, distanceUnit, colors, historyView]);
+
+  const showList = historyView === 'list';
 
   return (
     <>
       <FlatList
         style={styles.container}
-        data={workouts}
+        data={showList ? workouts : []}
         keyExtractor={(item) => item.id.toString()}
         ListHeaderComponent={listHeader}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>No workouts logged yet</Text>
+        ListEmptyComponent={showList
+          ? <Text style={styles.emptyText}>No workouts logged yet</Text>
+          // Drilling in moves the switch but isn't saved: the view picked by hand stays the one Profile opens on
+          : <WorkoutCalendar view={historyView} refreshKey={historyRefresh} onSelectWorkout={handleSelectCalendarWorkout} onChangeView={setHistoryView} />
         }
-        ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.md }} /> : null}
+        ListFooterComponent={showList && loadingMore ? <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.md }} /> : null}
         refreshing={refreshing}
         onRefresh={handleRefresh}
-        onEndReached={fetchMoreWorkouts}
+        onEndReached={showList ? fetchMoreWorkouts : undefined}
         onEndReachedThreshold={0.3}
         renderItem={({ item }) => (
           <PressableScale
@@ -577,32 +669,94 @@ export default function ProfileScreen({ navigation }: Props) {
         )}
       />
 
-      {/* Calendar modal */}
-      <CalendarModal
-        visible={calendarVisible}
-        onClose={() => setCalendarVisible(false)}
-        onSelectWorkout={handleSelectCalendarWorkout}
-      />
-
-      {/* Exercise picker modal for swapping a pinned PR */}
+      {/* Editor for the PRs shown on the Personal Records card */}
       <Modal
-        visible={swapSlot >= 0}
+        visible={editStep !== 'closed'}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => { setSwapSlot(-1); setPendingExercise(null); setPrSearch(''); setPrMuscle(null); }}
+        onRequestClose={closeEditor}
       >
         <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-          {pendingExercise ? (
-            /* ── Step 2: pick PR type ── */
+          {editStep === 'list' ? (
             <>
               <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-                <TouchableOpacity onPress={() => setPendingExercise(null)} hitSlop={8}>
+                <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Displayed PRs</Text>
+                <TouchableOpacity onPress={closeEditor} hitSlop={8} accessibilityRole="button" accessibilityLabel="Done">
+                  <Text style={[styles.modalDone, { color: colors.accent }]}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView contentContainerStyle={{ padding: spacing.md, gap: spacing.sm }}>
+                <Text style={styles.editHint}>
+                  Pick up to {MAX_PINS} to show on your profile. {pins.length} of {MAX_PINS} chosen.
+                </Text>
+                {shownPins.map(({ pin, pr }, i) => (
+                  <View
+                    key={`${pin.exerciseId}:${pin.prType}:${pin.context ?? ''}`}
+                    style={[styles.optionRow, { backgroundColor: colors.surface, borderColor: 'transparent' }]}
+                  >
+                    <View style={styles.editRowText}>
+                      <Text style={[styles.optionName, { color: colors.textPrimary }]} numberOfLines={1}>
+                        {pr.exercise_name}
+                      </Text>
+                      <Text style={[styles.optionEquipment, { color: colors.textSecondary }]}>
+                        {prValueText(pr)}  ·  {prTypeText(pr)}
+                      </Text>
+                    </View>
+                    <View style={styles.editRowActions}>
+                      <TouchableOpacity
+                        onPress={() => handleMovePin(i, -1)}
+                        disabled={i === 0}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Move ${pr.exercise_name} up`}
+                        accessibilityState={{ disabled: i === 0 }}
+                      >
+                        <Ionicons name="chevron-up" size={20} color={i === 0 ? colors.border : colors.textSecondary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleMovePin(i, 1)}
+                        disabled={i === shownPins.length - 1}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Move ${pr.exercise_name} down`}
+                        accessibilityState={{ disabled: i === shownPins.length - 1 }}
+                      >
+                        <Ionicons name="chevron-down" size={20} color={i === shownPins.length - 1 ? colors.border : colors.textSecondary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleRemovePin(i)}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${pr.exercise_name}`}
+                      >
+                        <Ionicons name="remove-circle-outline" size={22} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+                {pins.length < MAX_PINS && (
+                  <Pressable
+                    style={[styles.optionRow, styles.addRow, { borderColor: colors.border }]}
+                    onPress={() => setEditStep('exercise')}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name="add" size={20} color={colors.accent} />
+                    <Text style={[styles.optionName, { color: colors.accent }]}>Add a PR</Text>
+                  </Pressable>
+                )}
+              </ScrollView>
+            </>
+          ) : editStep === 'type' && pendingExercise ? (
+            /* ── Pick PR type ── */
+            <>
+              <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                <TouchableOpacity onPress={() => { setPendingExercise(null); setEditStep('exercise'); }} hitSlop={8}>
                   <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
                 </TouchableOpacity>
                 <Text style={[styles.modalTitle, { color: colors.textPrimary }]} numberOfLines={1}>
                   {pendingExercise.name}
                 </Text>
-                <TouchableOpacity onPress={() => { setSwapSlot(-1); setPendingExercise(null); setPrSearch(''); setPrMuscle(null); }} hitSlop={8}>
+                <TouchableOpacity onPress={closeEditor} hitSlop={8}>
                   <Ionicons name="close" size={24} color={colors.textPrimary} />
                 </TouchableOpacity>
               </View>
@@ -635,16 +789,17 @@ export default function ProfileScreen({ navigation }: Props) {
                   <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: spacing.lg }}>No PR data for this exercise</Text>
                 }
                 renderItem={({ item }) => {
-                  const currentPin = swapSlot >= 0 ? pins[swapSlot] : null;
-                  const selected = currentPin?.exerciseId === pendingExercise.id &&
-                    currentPin.prType === item.prType && currentPin.context === item.context;
+                  const pin: Pin = { exerciseId: pendingExercise.id, prType: item.prType, context: item.context };
+                  // Already on the card: shown checked, and can't be added twice
+                  const selected = pins.some(p => samePin(p, pin));
                   return (
                     <Pressable
                       style={[styles.optionRow, {
                         backgroundColor: selected ? colors.accent + '22' : colors.surface,
                         borderColor: selected ? colors.accent : 'transparent',
                       }]}
-                      onPress={() => handleSelectPin(pendingExercise.id, item.prType, item.context)}
+                      disabled={selected}
+                      onPress={() => handleAddPin(pin)}
                     >
                       <View>
                         <Text style={[styles.optionName, { color: colors.textPrimary }]}>{item.label}</Text>
@@ -657,11 +812,14 @@ export default function ProfileScreen({ navigation }: Props) {
               />
             </>
           ) : (
-            /* ── Step 1: pick exercise ── */
+            /* ── Pick exercise ── */
             <>
               <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                <TouchableOpacity onPress={() => { setPrSearch(''); setPrMuscle(null); setEditStep('list'); }} hitSlop={8} accessibilityLabel="Back">
+                  <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+                </TouchableOpacity>
                 <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Choose Exercise</Text>
-                <TouchableOpacity onPress={() => { setSwapSlot(-1); setPrSearch(''); setPrMuscle(null); }} hitSlop={8}>
+                <TouchableOpacity onPress={closeEditor} hitSlop={8}>
                   <Ionicons name="close" size={24} color={colors.textPrimary} />
                 </TouchableOpacity>
               </View>
@@ -706,14 +864,14 @@ export default function ProfileScreen({ navigation }: Props) {
                   <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: spacing.lg }}>No exercises found</Text>
                 }
                 renderItem={({ item }) => {
-                  const selected = swapSlot >= 0 && pins[swapSlot]?.exerciseId === item.exercise_template_id;
+                  const selected = pins.some(p => p.exerciseId === item.exercise_template_id);
                   return (
                     <Pressable
                       style={[styles.optionRow, {
                         backgroundColor: selected ? colors.accent + '22' : colors.surface,
                         borderColor: selected ? colors.accent : 'transparent',
                       }]}
-                      onPress={() => setPendingExercise({ id: item.exercise_template_id, name: item.exercise_name })}
+                      onPress={() => { setPendingExercise({ id: item.exercise_template_id, name: item.exercise_name }); setEditStep('type'); }}
                     >
                       <View>
                         <Text style={[styles.optionName, { color: colors.textPrimary }]}>
@@ -880,6 +1038,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingHorizontal: spacing.xs,
     paddingBottom: spacing.sm,
   },
+  prSectionTitleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   prSectionTitle: {
     flex: 1,
     textAlign: 'center',
@@ -893,6 +1052,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
+  // The spacer matches the pencil's width so the title stays centred
+  prEditSpacer: { width: 22 },
+  prEditBtn: { width: 22, alignItems: 'center', justifyContent: 'center' },
+  prEmptyBox: { paddingVertical: spacing.md },
   prCard: {
     flex: 1,
     borderRadius: 10,
@@ -900,19 +1063,35 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingBottom: spacing.md,
     alignItems: 'center',
     minHeight: 110,
+    backgroundColor: colors.surface,
   },
+  prCardLg: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 0,
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  prCardTextLg: { flex: 1, alignItems: 'flex-start' },
   trophyIcon: { marginBottom: spacing.xs },
+  trophyIconLg: { marginLeft: spacing.sm },
   prCardName: {
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
     marginBottom: spacing.xs,
+    color: colors.textPrimary,
   },
+  prCardNameMd: { fontSize: 13 },
+  prCardNameLg: { fontSize: 15, textAlign: 'left' },
   prCardValue: {
     fontSize: 15,
     fontWeight: '700',
     textAlign: 'center',
+    color: colors.prGold,
   },
+  prCardValueMd: { fontSize: 19 },
+  prCardValueLg: { fontSize: 24, textAlign: 'left' },
   prCardType: {
     fontSize: 10,
     fontWeight: '500',
@@ -921,19 +1100,32 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     letterSpacing: 0.5,
     marginTop: 2,
   },
+  prCardTypeLg: { fontSize: typography.fontSize.xs, textAlign: 'left' },
+  prCardChange: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.prGold,
+    marginTop: spacing.xs,
+  },
+  prSeeAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    paddingTop: spacing.sm,
+  },
+  prSeeAllText: { fontSize: typography.fontSize.xs, fontWeight: '600', color: colors.textSecondary },
+  editRowText: { flex: 1 },
+  editRowActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginLeft: spacing.sm },
   prCardEmpty: {
     fontSize: typography.fontSize.xs,
     color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.xs,
   },
-  swapBtn: {
-    position: 'absolute',
-    bottom: spacing.xs,
-    right: spacing.xs,
-    padding: spacing.xs,
-    borderRadius: 6,
-  },
+  modalDone: { fontSize: typography.fontSize.md, fontWeight: '600' },
+  editHint: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginBottom: spacing.xs },
+  addRow: { justifyContent: 'center', gap: spacing.xs, borderStyle: 'dashed' },
 
   // Modal
   modalContainer: { flex: 1 },
@@ -987,10 +1179,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   prChipText: { fontSize: typography.fontSize.xs, fontWeight: '600' },
 
-  historyHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-  },
-  calendarIconBtn: { padding: spacing.xs },
+  historyHeader: { paddingHorizontal: spacing.md },
+  historyViewSwitch: { marginTop: spacing.md, marginBottom: spacing.md },
 });

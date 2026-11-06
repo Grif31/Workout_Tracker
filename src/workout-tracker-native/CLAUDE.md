@@ -10,6 +10,9 @@ cp .env.purchase-testing .env && npx expo start -c     # RevenueCat key on, beta
 ```
 A dev client takes its `EXPO_PUBLIC_*` values from the local `.env` at bundle time, not from the profile's `env`, which is why the swap is needed; `.env.purchase-testing` is local and gitignored. Sign in with an account that has no premium grant, with a Sandbox Apple Account set on the phone (Settings → Developer). Put the normal one back afterwards (`cp .env.normal .env`, then restart with `-c`), or every account in dev reads as free. Keep `.env.normal` in step with `.env` when adding a variable.
 
+### Animations follow Reduce Motion
+Decorative `Animated` motion (slides, scales, springs, count-ups, entrances) goes through `motionTiming` / `motionSpring` from `utils/motion.ts`, not `Animated.timing` / `Animated.spring`: with the system's Reduce Motion on they jump straight to the end, callbacks included. Not for an infinite `Animated.loop` (it would spin at 0 ms: check `reduceMotion()` and don't start a loop that moves or scales) or timing that means something (`HoldButton`'s hold-to-confirm, dragging). List layout changes go through `utils/layoutAnimation.ts`, gifted-charts take `isAnimated={!reduceMotion()}`, and Reanimated's `entering=` animations follow the setting by themselves. Opacity-only pulses and fades may stay. `__tests__/codeGuardrails.test.ts` enforces all three: a raw `Animated.timing`/`spring` is allowed only in the files listed in `RAW_ANIMATION_ALLOWED`, each with its reason and count, so a deliberate exception goes there with why.
+
 ### AsyncStorage keys — define as named constants, share when used across files
 ```typescript
 const MY_KEY = 'my_feature_key';
@@ -116,7 +119,7 @@ A tracked run (`GPSCardioScreen`) lives in `context/GpsRunContext.tsx`, mounted 
 | `plate_calc_bar_${uid}` | 'standard' | Last-used bar type in plate calculator |
 | `plate_calc_plates_${uid}` | all on | Plate sizes switched **off** in the plate calculator, per unit: JSON `{lbsOff, kgOff}`, so a plate added in a later release starts on. Older builds stored one unitless array of plates switched on; `enabledPlatesFor` in `utils/plateCalc.ts` reads both and applies an old array only to the unit whose plates it names |
 | `default_rest_timer_${uid}` | '90' | Default rest timer duration in seconds |
-| `gps_distance_unit_${uid}` | 'mi' | Distance unit for GPS cardio activities ('km' or 'mi') |
+| `gps_distance_unit_${uid}` | 'mi' | Distance unit for GPS cardio activities ('km' or 'mi'). Mirrored to `User.distance_unit` for the distance badges: Settings and onboarding report a change, and `syncDistanceUnit` (`utils/distanceUnitSync.ts`) re-reports it at startup when the server disagrees |
 | `gps_auto_pause_${uid}` | true | Auto-pause for GPS activities (Settings, GPS Activities). Read when a run starts or resumes (`GPS_AUTO_PAUSE_KEY`) |
 | `gps_keep_screen_on_${uid}` | false | Keeps the screen awake while the GPS map is open and the activity is running (`GPS_KEEP_SCREEN_ON_KEY`) |
 | `workout_weekly_goal_${uid}` | '3' | Weekly workout target (integer string) |
@@ -130,7 +133,8 @@ A tracked run (`GPSCardioScreen`) lives in `context/GpsRunContext.tsx`, mounted 
 | `onboarding_complete_${uid}` | — | This account finished or skipped onboarding on this phone (`utils/onboarding.ts`). Checked after the preload: an account with logged workouts skips onboarding and gets the flag. The unsuffixed `onboarding_complete` from older builds was one flag for the whole phone, which let a second account skip onboarding; it's handed to whichever account is signed in when the update lands, then deleted |
 | `profile_frame_rank_${uid}` | 'Neophyte' | Selected avatar frame rank name |
 | `home_streak_type_${uid}` | 'weekly' | Which streak Home's top bar shows ('weekly' \| 'monthly' \| 'daily'), picked in its streak modal |
-| `@pr_pins_${uid}` | — | JSON array of 3 pinned PR slots on Profile (Pin\|null)[] |
+| `@pr_pins_${uid}` | — | Cache of the PRs shown on Profile's Personal Records card (`utils/profilePins.ts`): JSON `Pin[]`, 0 to 3, in display order. The server holds the choice (`profile_pr_pins`); absent = never chosen, and the card shows `defaultPins` worked out from the PRs, never saved. A cache from before the server kept it is uploaded once. Older builds stored three slots with `null` for empty ones; all three empty reads as no choice |
+| `profile_history_view_${uid}` | 'list' | How Profile shows Workout History: 'list' \| 'month' \| 'year' \| 'multiyear' (the calendar views are `components/WorkoutCalendar.tsx`) |
 | `pr_dashboard_pins_${uid}` | — | Exercises (optionally a specific PR type + context) pinned to PR Dashboard's Pinned Progression section — JSON `{id, name, prType?, weightContext?}[]`, max 6 slots total; an exercise can have more than one pin for different PR types (keyed by exercise+type+context, not exercise id alone). Toggled from PRProgressionScreen. Legacy pins with no `prType` loosely match any type on that exercise |
 | `weekly_coach_review_${uid}` | — | The Coach's Read for one Weekly Summary week (JSON `{weekStart, review}`, `components/WeeklyReviewCard.tsx`), so a week is asked for once. A free account is shown the first present part and the others locked; a premium account all three. Replaces `coach_free_insight_${uid}`, which older builds wrote and nothing reads now: free accounts get no insights in the Coach tab |
 | `coach_profile_${uid}` | — | Coach personalization JSON (goal/equipment/schedule/injuries) |

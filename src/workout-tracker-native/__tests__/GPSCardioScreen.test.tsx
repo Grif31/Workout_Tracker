@@ -151,15 +151,16 @@ describe('GPSCardioScreen', () => {
   });
 
   describe('saving a tracked run', () => {
-    it("opens the summary with the save's PRs, so they're celebrated", async () => {
+    it("opens the summary with the save's PRs and badges, so they're celebrated", async () => {
       const prs = [{ exercise_name: 'Running', pr_type: 'best_time', value: 4.2, label: '1K' }];
-      mockServer({ status: 201, body: { id: 77, new_prs: prs, is_first_workout: true } });
+      const badges = [{ key: 'feat_first_5k', kind: 'feat', title: 'First 5K', earned_at: '2026-11-05T08:00:00', workout_id: 77 }];
+      mockServer({ status: 201, body: { id: 77, new_prs: prs, new_achievements: badges, is_first_workout: true } });
       const r = await renderReady();
       await runAndStop(r, [point(0), point(1), point(2), point(3)]);
       await act(async () => { fireEvent.press(r.getByText('Save')); });
       await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('WorkoutSummary', {
         workoutId: 77, workoutName: 'Run', prs, totalVolume: 0, totalReps: 0, totalSets: 0,
-        muscles: [], isFirstWorkout: true, isBestVolume: false, isBestReps: false,
+        muscles: [], isFirstWorkout: true, isBestVolume: false, isBestReps: false, newAchievements: badges,
       }));
     });
 

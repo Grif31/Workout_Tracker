@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Animated, LayoutChangeEvent }
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import { motionSpring } from '../utils/motion';
 
 type Props<T extends string> = {
   tabs: readonly { key: T; label: string }[];
@@ -19,7 +20,7 @@ export default function TopTabBar<T extends string>({ tabs, active, onChange }: 
   const x = useRef(new Animated.Value(index)).current;
 
   useEffect(() => {
-    Animated.spring(x, { toValue: index, useNativeDriver: true, damping: 18, stiffness: 220, mass: 0.6 }).start();
+    motionSpring(x, { toValue: index, useNativeDriver: true, damping: 18, stiffness: 220, mass: 0.6 }).start();
   }, [index, x]);
 
   const tabW = width / tabs.length;

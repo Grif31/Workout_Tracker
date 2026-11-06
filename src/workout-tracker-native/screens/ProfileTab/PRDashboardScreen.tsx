@@ -28,6 +28,7 @@ import {
   prTypeIcon, stalledUrgency, stalledCategoryToPrType, pickDefaultPrSeries, PR_METRIC_OPTIONS,
   type PREventItem, type StalledCategory,
 } from '../../utils/prFormat';
+import { reduceMotion } from '../../utils/motion';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'PRDashboard'>;
 
@@ -232,7 +233,7 @@ const PinnedProgressionSection = React.memo(function PinnedProgressionSection({
                     thickness={2}
                     hideDataPoints
                     areaChart
-                    isAnimated={animate}
+                    isAnimated={animate && !reduceMotion()}
                     rulesType="dashed"
                     rulesColor={colors.border}
                     rulesThickness={1}

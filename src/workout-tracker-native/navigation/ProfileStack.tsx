@@ -16,6 +16,8 @@ import PRDashboardScreen from '../screens/ProfileTab/PRDashboardScreen';
 import PRProgressionScreen from '../screens/ProfileTab/PRProgressionScreen';
 import GreekRankScreen from '../screens/ProfileTab/GreekRankScreen';
 import GreekRankIntroScreen from '../screens/DashboardTab/GreekRankIntroScreen';
+import AchievementsScreen from '../screens/ProfileTab/AchievementsScreen';
+import AchievementTrackScreen from '../screens/ProfileTab/AchievementTrackScreen';
 import { useTheme } from '../context/ThemeContext';
 
 const Stack = createNativeStackNavigator<ProfileStackParamsList>();
@@ -41,6 +43,8 @@ export function ProfileStack() {
       <Stack.Screen name="PRProgression" component={PRProgressionScreen} />
       <Stack.Screen name="GreekRank" component={GreekRankScreen} />
       <Stack.Screen name="GreekRankIntro" component={GreekRankIntroScreen} options={{ contentStyle: { paddingTop: 0 } }} />
+      <Stack.Screen name="Achievements" component={AchievementsScreen} />
+      <Stack.Screen name="AchievementTrack" component={AchievementTrackScreen} />
     </Stack.Navigator>
   );
 }

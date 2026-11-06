@@ -26,6 +26,7 @@ CONVERTED = {
     ('pr_events', 'value'),                    # weight-typed prs only
     ('pr_events', 'previous_value'),           # weight-typed prs only
     ('pr_events', 'weight_context'),           # max_reps weight context
+    ('profile_pr_pins', 'weight_context'),     # a pinned max_reps PR's weight
 }
 
 # Deliberately NOT converted — each entry needs a reason.

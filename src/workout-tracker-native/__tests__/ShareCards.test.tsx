@@ -13,6 +13,7 @@ import WorkoutShareCard, { bestWorkingSet } from '../components/share/WorkoutSha
 import CardioShareCard from '../components/share/CardioShareCard';
 import TemplateShareCard from '../components/share/TemplateShareCard';
 import RoutineShareCard from '../components/share/RoutineShareCard';
+import AchievementShareCard from '../components/share/AchievementShareCard';
 
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
@@ -181,6 +182,16 @@ describe('share cards', () => {
     expect(getByText('Lift 10')).toBeTruthy();
     expect(queryByText('Lift 11')).toBeNull();
     expect(getByText('+2 more')).toBeTruthy();
+  });
+
+  it('Achievement card shows its name, what and when, and the motto', () => {
+    const { getByText } = render(
+      <AchievementShareCard badgeKey="workouts_5" title="Hekaton" threshold={100} weightUnit="lbs"
+        line="Your 100th workout · Sep 28, 2026" accentColor={ACCENT} />,
+    );
+    expect(getByText('Hekaton')).toBeTruthy();
+    expect(getByText('Your 100th workout · Sep 28, 2026')).toBeTruthy();
+    expect(getByText('Excellence, logged.')).toBeTruthy();
   });
 
   it('Routine card lists every day with its exercises and programming', () => {

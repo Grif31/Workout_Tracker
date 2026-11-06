@@ -53,6 +53,7 @@ class UpdateProfileSchema(_Base):
     bodyweight      = fields.Float(allow_none=True)
     height          = fields.Float(allow_none=True, validate=validate.Range(min=20, max=108))
     weight_unit     = fields.Str(validate=validate.OneOf(['kg', 'lbs']))
+    distance_unit   = fields.Str(validate=validate.OneOf(['mi', 'km']))
     # gender had a load_default and so was injected as None into every partial
     # PATCH, wiping it whenever Settings sent only weight_unit. Sending an
     # explicit null still clears it.
@@ -276,6 +277,24 @@ class AiInsightsSchema(_Base):
 INSIGHT_FEEDBACK_REASONS = ['known', 'irrelevant', 'wrong', 'vague']
 
 
+# ── Profile PR pins ──────────────────────────────────────────
+# estimated_1rm is left out: it is never shown to users as a PR
+PROFILE_PIN_PR_TYPES = ['max_weight', 'max_reps', 'best_time', 'best_distance',
+                        'max_duration', 'longest_distance', 'max_elevation']
+MAX_PROFILE_PR_PINS = 3
+
+
+class ProfilePRPinSchema(_Base):
+    exercise_template_id = fields.Int(required=True, strict=True)
+    pr_type        = fields.Str(required=True, validate=validate.OneOf(PROFILE_PIN_PR_TYPES))
+    weight_context = fields.Float(load_default=None, allow_none=True, allow_nan=False)
+
+
+class ProfilePRPinsSchema(_Base):
+    pins = fields.List(fields.Nested(ProfilePRPinSchema), required=True,
+                       validate=validate.Length(max=MAX_PROFILE_PR_PINS))
+
+
 # ── Paywall events ───────────────────────────────────────────
 # The app's PurchaseOutcome and RestoreOutcome (context/PurchaseContext.tsx)
 PAYWALL_EVENTS = ['upsell_shown', 'paywall_viewed', 'plan_selected', 'purchase_started', 'purchase', 'restore']
@@ -313,3 +332,10 @@ class AiInsightFeedbackSchema(_Base):
 class AiWeeklyReviewSchema(AiInsightsSchema):
     # The Monday of the Weekly Summary week being reviewed; absent = the last 7 days
     week_start = fields.Date(load_default=None)
+
+
+# ── Achievements ─────────────────────────────────────────────
+class AchievementsSeenSchema(_Base):
+    # Omitted: every unseen badge is marked seen
+    keys = fields.List(fields.Str(validate=validate.Length(min=1, max=48)),
+                       load_default=None, allow_none=True, validate=validate.Length(max=200))

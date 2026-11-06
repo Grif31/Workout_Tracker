@@ -28,6 +28,7 @@ from routes.measurement_routes import measurement_bp
 from routes.legal_routes import legal_bp
 from routes.admin_routes import admin_bp
 from routes.health_routes import health_bp
+from routes.achievement_routes import achievement_bp
 from limiter import limiter
 from mail_ext import mail
 
@@ -172,6 +173,7 @@ def create_app(test_config=None):
     app.register_blueprint(legal_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(health_bp)
+    app.register_blueprint(achievement_bp)
 
     if not app.config.get('TESTING'):
         scheduler = BackgroundScheduler()
@@ -347,6 +349,39 @@ def create_app(test_config=None):
 
         click.echo(f'{"[DRY RUN] " if not do_apply else ""}{processed} user(s) processed, '
                    f'{skipped} skipped (already have events), {total_events} event(s) generated.')
+        if do_apply:
+            db.session.commit()
+            click.echo('Done.')
+        else:
+            db.session.rollback()
+            click.echo('Re-run with --apply to write these changes.')
+
+    @app.cli.command('backfill-achievements')
+    @click.option('--apply', 'do_apply', is_flag=True, default=False, help='Write changes to DB (omit for dry run)')
+    @click.option('--user-id', default=None, type=int, help='Limit to one user (omit for all users)')
+    def backfill_achievements(do_apply, user_id):
+        """Award existing users every badge their history has already crossed,
+        dated by the workout that crossed it, never by today. The same replay
+        as the check after a save, so it's safe to re-run: held badges are
+        skipped. Backfilled badges are marked seen, so nobody opens the app to
+        forty NEW dots for training they did months ago."""
+        from models import User
+        from utils.achievements import evaluate_achievements
+
+        user_query = User.query.order_by(User.id)
+        if user_id is not None:
+            user_query = user_query.filter_by(id=user_id)
+
+        users_awarded = total = 0
+        for user in user_query.all():
+            new = evaluate_achievements(user, seen=True)
+            if new:
+                users_awarded += 1
+                total += len(new)
+                click.echo(f'  user {user.id} ({user.username}): {len(new)} badge(s), '
+                           f'{new[0]["earned_at"][:10]} to {new[-1]["earned_at"][:10]}')
+
+        click.echo(f'{"[DRY RUN] " if not do_apply else ""}{total} badge(s) for {users_awarded} user(s).')
         if do_apply:
             db.session.commit()
             click.echo('Done.')

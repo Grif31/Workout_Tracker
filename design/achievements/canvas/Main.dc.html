@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Achievements grid</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.bs{stroke-width:3;stroke-linejoin:round}
+.bx{fill:none;stroke-width:2.4;stroke-linecap:round}
+.bi{fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.bt{font:800 9px Inter,sans-serif;text-anchor:middle}
+.tile{appearance:none;background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;cursor:pointer;text-align:center}
+</style>
+</helmet>
+<div style="width: 390px; height: 1900px; box-sizing: border-box; background: #141416; color: #FFFFFF; font-family: Inter, -apple-system, sans-serif; display: flex; flex-direction: column;">
+  <div style="height: 54px;"></div>
+  <div style="display: flex; align-items: center; gap: 12px; padding: 8px 16px 12px;">
+    <button aria-label="Go back" style="appearance: none; background: none; border: 0; padding: 10px; margin: -10px; color: #FFFFFF; display: flex;">
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </button>
+    <h1 style="margin: 0; font-size: 20px; font-weight: 700; flex: 1;">Achievements</h1>
+  </div>
+
+  <div style="margin: 4px 16px 16px; background: #1C1C1E; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+    <div style="display: flex; align-items: baseline; justify-content: space-between;">
+      <div style="font-size: 28px; font-weight: 800;">{{earned}} <span style="font-size: 16px; font-weight: 600; color: #8E8E93;">of {{total}} earned</span></div>
+      <div style="font-size: 13px; color: #8E8E93;">{{pct}}%</div>
+    </div>
+    <div style="height: 8px; border-radius: 4px; background: #38383A; overflow: hidden;"><div style="height: 8px; border-radius: 4px; background: {{accent}}; width: {{pctW}};"></div></div>
+  </div>
+
+  <div style="display: flex; gap: 8px; padding: 0 16px 8px;">
+    <button style="appearance: none; border: 0; border-radius: 18px; padding: 8px 16px; font: 600 14px Inter, sans-serif; background: {{accent}}; color: #000000;">All</button>
+    <button style="appearance: none; border: 1px solid #38383A; border-radius: 18px; padding: 8px 16px; font: 600 14px Inter, sans-serif; background: #1C1C1E; color: #FFFFFF;">Earned</button>
+    <button style="appearance: none; border: 1px solid #38383A; border-radius: 18px; padding: 8px 16px; font: 600 14px Inter, sans-serif; background: #1C1C1E; color: #FFFFFF;">Locked</button>
+  </div>
+
+  <sc-for list="{{sections}}" as="sec" hint-placeholder-count="6">
+    <div style="padding: 16px 16px 4px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; justify-content: space-between;">
+        <h2 style="margin: 0; font-size: 17px; font-weight: 700;">{{sec.name}}</h2>
+        <span style="font-size: 13px; color: #8E8E93;">{{sec.count}}</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 8px; background: #1C1C1E; border-radius: 16px; padding: 16px 8px;">
+        <sc-for list="{{sec.badges}}" as="b" hint-placeholder-count="8">
+          <button class="tile" aria-label="{{b.label}}" style="display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; min-height: 44px;">
+            <div style="position: relative; width: 68px; height: 68px;">
+              <svg viewBox="-8 -8 80 80" width="68" height="68" aria-hidden="true"><path d="{{b.crown}}" fill="#A3B18A"></path><path class="bs" d="{{b.shape}}" fill="{{b.fill}}" stroke="{{b.ring}}"></path><path d="{{b.shape}}" fill="none" stroke="{{b.ring}}" transform="translate(5.12 5.12) scale(0.84)" style="stroke-width: {{b.bandW}}; stroke-dasharray: {{b.bandDash}};"></path><path class="bx" d="{{b.extra}}" stroke="{{b.ring}}"></path><g transform="{{b.iconT}}"><path class="bi" d="{{b.icon}}" stroke="{{b.iconColor}}"></path></g><text class="bt" x="32" y="52" fill="{{b.iconColor}}">{{b.short}}</text></svg>
+              <sc-if value="{{b.locked}}" hint-placeholder-val="{{false}}">
+                <div style="position: absolute; right: -4px; top: -4px; width: 20px; height: 20px; border-radius: 10px; background: #2C2C2E; border: 1px solid #48484A; display: flex; align-items: center; justify-content: center;">
+                  <svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" fill="#8E8E93"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="#8E8E93" stroke-width="2.4"></path></svg>
+                </div>
+              </sc-if>
+            </div>
+            <div style="font-size: 11px; font-weight: 600; line-height: 1.25; color: {{b.titleColor}};">{{b.title}}</div>
+            <div style="font-size: 11px; line-height: 1.2; color: {{b.subColor}};">{{b.sub}}</div>
+          </button>
+        </sc-for>
+      </div>
+    </div>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#30D158","options":["#30D158","#0A84FF","#BF5AF2","#FF9F0A"]},"$preview":{"width":390,"height":1900}}'>
+const C = 32;
+function f(n) { return n.toFixed(2); }
+function milled() {
+  const pts = [];
+  for (let i = 0; i < 40; i++) {
+    const a = i / 40 * 2 * Math.PI, r = i % 2 ? 26.8 : 29;
+    pts.push(f(C + r * Math.sin(a)) + ' ' + f(C - r * Math.cos(a)));
+  }
+  return 'M' + pts.join(' L') + ' Z';
+}
+function crownPath() {
+  let d = '';
+  [1, -1].forEach((side) => {
+    for (let t = 0; t < 7; t++) {
+      const a = (90 + side * (22 + t * 22)) * Math.PI / 180;
+      const rx = Math.cos(a), ry = Math.sin(a), tx = -side * Math.sin(a), ty = side * Math.cos(a);
+      const px = C + 32 * rx, py = C + 32 * ry;
+      [0.8, 0.3].forEach((w) => {
+        let dx = tx * (1 - w) + rx * w, dy = ty * (1 - w) + ry * w;
+        const len = Math.hypot(dx, dy); dx /= len; dy /= len;
+        const qx = px + dx * 7.5, qy = py + dy * 7.5, mx = (px + qx) / 2, my = (py + qy) / 2, nx = -dy * 2.4, ny = dx * 2.4;
+        d += 'M' + f(px) + ' ' + f(py) + ' Q' + f(mx + nx) + ' ' + f(my + ny) + ' ' + f(qx) + ' ' + f(qy) + ' Q' + f(mx - nx) + ' ' + f(my - ny) + ' ' + f(px) + ' ' + f(py) + ' Z ';
+      });
+    }
+  });
+  return d;
+}
+const SH = {
+  work: 'M32 4 A28 28 0 1 1 31.99 4 Z',
+  vol: 'M18 7 L44 5 L58 21 L57 44 L41 59 L19 57 L5 39 L7 19 Z',
+  streak: 'M32 3 C38 13 54 22 54 38 A22 22 0 0 1 10 38 C10 27 18 22 23 11 C26 16 29 18 31 20 C30 14 30 8 32 3 Z',
+  pr: 'M12 60 V26 A20 20 0 0 1 52 26 V60 Z',
+  dist: milled(),
+  feat: 'M25 5 H39 V9 C39 12 36 13 36 16 C47 19 53 29 50 41 C47 51 40 56 32 59 C24 56 17 51 14 41 C11 29 17 19 28 16 C28 13 25 12 25 9 Z'
+};
+const EXTRA = { feat: 'M26 10 C17 9 16 16 20 20 M38 10 C47 9 48 16 44 20' };
+const IC = {
+  work: 'M3 4.5h18M5 4.5a1.6 1.6 0 1 0 1.6 1.6M19 4.5a1.6 1.6 0 1 1-1.6 1.6M6 7.5h12M7.5 7.5v10.5M10.5 7.5v10.5M13.5 7.5v10.5M16.5 7.5v10.5M5.5 18h13M4 20.5h16',
+  vol: 'M12 2.5a7.5 7.5 0 1 0 .01 0zM4.5 10h15M5.6 6.3h12.8M5.6 13.7h12.8M12 2.5c3 2.5 3 12.5 0 15M12 2.5c-3 2.5-3 12.5 0 15M3.5 21.5c1.8-2.2 4.6-3.3 8.5-3.3s6.7 1.1 8.5 3.3',
+  streak: 'M12 1.5c2.4 2.2 3.8 4 3.8 6a3.8 3.8 0 0 1-7.6 0c0-2 1.4-3.8 3.8-6zM12 5.6c1 1 1.6 1.8 1.6 2.6a1.6 1.6 0 0 1-3.2 0c0-.8.6-1.6 1.6-2.6zM7 11.5h10l-1 2H8zM9 13.5l1.2 8h3.6l1.2-8M9.6 16.5h4.8M10 19h4',
+  pr: 'M3 19.5c5.5 0 10.5-3.5 13.5-9.5 1-2 2.5-4.5 4.5-6 .3 3-.5 5.5-2 7.5 1 0 2-.3 2.8-.8-.8 2.6-2.8 4.6-5.3 5.6 1 .2 2 .1 2.8-.2-2 2.2-5.3 3.4-9 3.4H3M7 18.6c2.6-.9 5-2.7 6.8-5.2M10.5 19.2c2.4-.6 4.8-2 6.4-3.9M5 19.5c3-2 5.5-5 7-8.5',
+  dist: 'M2.5 18.5h12.5l5.5 1.4v1.6h-18zM5 18.5l2.2-6.5h3.3M8.7 18.5l1.5-4.5M12 18.5l1-3M7.2 12c0-1.6 1.2-2.6 2.8-2.6h1.5M13.5 11.5c1.8-3.2 5-4.7 8-4-2 .5-3.3 1.4-4.2 2.6 1.3-.2 2.6 0 3.7.6-1.6.2-3 .8-4 1.8 1 0 2 .2 2.8.6-2 .4-4.3.2-6.3-1.6',
+  feat: 'M13.5 2.5a1.9 1.9 0 1 0 .01 0zM7.5 10l3.5-3 3.5 1.8 2.8 3.4M11 7l-1.6 6 3.8 2.8-1.2 5.7M9.4 13l-3.9 4M13.2 15.8l3.8 1.6M4 21.5h16'
+};
+// Each icon's measured bounding box centred in the widest part of its badge, clear of the stamp
+const ICT = {
+  work: 'translate(20.00 15.50) scale(1.000)', vol: 'translate(20.68 16.63) scale(0.947)', streak: 'translate(23.00 27.38) scale(0.750)',
+  pr: 'translate(20.79 20.38) scale(0.904)', dist: 'translate(20.63 14.34) scale(0.947)', feat: 'translate(23.16 24.16) scale(0.737)'
+};
+const BAND = { bronze: [0, 'none'], silver: [1.6, '2 2'], gold: [3, '3 1.5'], marble: [3, '3 1.5'], locked: [1, 'none'] };
+const CROWN = crownPath();
+const MT = {
+  bronze: { name: 'Bronze', rungs: '1 to 2', ring: '#C98A5A', fill: '#3A2618', icon: '#E7B48A' },
+  silver: { name: 'Silver', rungs: '3 to 4', ring: '#C7CDD6', fill: '#2A2E35', icon: '#E6EAF0' },
+  gold: { name: 'Gold', rungs: '5 to 7', ring: '#E8C25A', fill: '#3A3015', icon: '#F6DE8E' },
+  marble: { name: 'Marble', rungs: 'Top rung', ring: '#F2EEE4', fill: '#4A4436', icon: '#FFFFFF' },
+  locked: { name: 'Locked', rungs: 'Not yet', ring: '#48484A', fill: '#232325', icon: '#636366' }
+};
+function look(key, metal) {
+  const m = MT[metal];
+  return { shape: SH[key], extra: EXTRA[key] || '', icon: IC[key], iconT: ICT[key] || 'translate(20 15)', ring: m.ring, fill: m.fill, iconColor: m.icon, bandW: BAND[metal][0], bandDash: BAND[metal][1], crown: metal === 'marble' ? CROWN : '' };
+}
+const TRACKS = [
+  { key: 'work', name: 'Workouts', value: 137, unit: '', steps: [1, 10, 25, 50, 100, 250, 500, 1000], shorts: ['1', '10', '25', '50', '100', '250', '500', '1K'], titles: ['Ephebe', 'Palaestra', 'Gymnasion', 'Hoplite', 'Hekaton', 'Phalanx', 'Spartan', 'Chiliad'], dates: ['Mar 2', 'Mar 21', 'Apr 30', 'Jun 14', 'Sep 28'] },
+  { key: 'vol', name: 'Volume lifted', value: 612400, unit: ' lbs', steps: [10000, 50000, 100000, 250000, 500000, 1000000, 2500000, 5000000], shorts: ['10K', '50K', '100K', '250K', '500K', '1M', '2.5M', '5M'], titles: ['10K lbs', '50K lbs', '100K lbs', 'Quarter Million', 'Half Million', 'Atlas', 'Colossus', 'Herculean'], dates: ['Mar 9', 'Apr 18', 'May 22', 'Jul 30', 'Oct 6'] },
+  { key: 'streak', name: 'Weekly streak', value: 14, unit: ' wk', steps: [2, 4, 8, 12, 26, 52, 104], shorts: ['2', '4', '8', '12', '26', '52', '104'], titles: ['Fortnight', 'Month Strong', '8 Weeks', 'Quarter', 'Half Year', 'One Year', 'Two Years'], dates: ['Mar 15', 'Mar 29', 'Apr 26', 'May 24'] },
+  { key: 'pr', name: 'Personal records', value: 74, unit: ' PRs', steps: [1, 10, 25, 50, 100, 250, 500], shorts: ['1', '10', '25', '50', '100', '250', '500'], titles: ['First PR', '10 PRs', '25 PRs', '50 PRs', '100 PRs', '250 PRs', '500 PRs'], dates: ['Mar 2', 'Mar 30', 'May 3', 'Aug 9'] },
+  { key: 'dist', name: 'Distance', value: 182, unit: ' mi', steps: [10, 26.2, 50, 100, 250, 500, 1000], shorts: ['10', '26.2', '50', '100', '250', '500', '1K'], titles: ['10 Miles', 'Pheidippides', '50 Miles', '100 Miles', '250 Miles', '500 Miles', 'Odyssey'], dates: ['Apr 4', 'May 11', 'Jun 20', 'Sep 2'] }
+];
+const FEATS = [
+  { title: 'Bodyweight Bench', short: '1×', earned: true, date: 'Jul 12' },
+  { title: '1,000 lb Club', short: '1000', earned: false, hint: '880 / 1,000' },
+  { title: 'First 5K', short: '5K', earned: true, date: 'Apr 4' },
+  { title: 'Sub-25 5K', short: '25', earned: false, hint: 'Best 26:41' },
+  { title: '2× BW Deadlift', short: '2×', earned: false, hint: '1.7× now' },
+  { title: 'Marathon', short: '42K', earned: false, hint: 'Longest 13.1 mi' }
+];
+function metalFor(i, n) {
+  if (n >= 6 && i === n - 1) return 'marble';
+  return i < 2 ? 'bronze' : i < 4 ? 'silver' : 'gold';
+}
+function fmt(n) { return Math.round(n).toLocaleString('en-US'); }
+function art(key, metal) { return look(key, metal); }
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#30D158';
+    let earned = 0, total = 0;
+    const sections = TRACKS.map((t) => {
+      const n = t.steps.length;
+      let got = 0, nextShown = false;
+      const badges = t.steps.map((s, i) => {
+        const has = t.value >= s;
+        if (has) got++;
+        let sub = has ? t.dates[i] : 'Locked';
+        if (!has && !nextShown) { sub = fmt(t.value) + ' / ' + fmt(s); nextShown = true; }
+        return Object.assign(art(t.key, has ? metalFor(i, n) : 'locked'), {
+          short: t.shorts[i], title: t.titles[i], sub: sub, locked: !has,
+          titleColor: has ? '#FFFFFF' : '#8E8E93', subColor: has ? '#8E8E93' : (sub === 'Locked' ? '#8E8E93' : accent),
+          label: t.titles[i] + (has ? ', earned ' + t.dates[i] : ', locked, ' + sub)
+        });
+      });
+      earned += got; total += n;
+      return { name: t.name, count: got + ' / ' + n, badges: badges };
+    });
+    let fGot = 0;
+    const feats = FEATS.map((f) => {
+      if (f.earned) fGot++;
+      return Object.assign(art('feat', f.earned ? 'gold' : 'locked'), {
+        short: f.short, title: f.title, sub: f.earned ? f.date : f.hint, locked: !f.earned,
+        titleColor: f.earned ? '#FFFFFF' : '#8E8E93', subColor: '#8E8E93',
+        label: f.title + (f.earned ? ', earned ' + f.date : ', locked, ' + f.hint)
+      });
+    });
+    earned += fGot; total += FEATS.length;
+    sections.push({ name: 'Feats', count: fGot + ' / ' + FEATS.length, badges: feats });
+    const pct = Math.round(earned / total * 100);
+    return { accent: accent, sections: sections, earned: earned, total: total, pct: pct, pctW: pct + '%' };
+  }
+}
+</script>
+</body>
+</html>

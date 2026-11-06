@@ -3,6 +3,7 @@ import { Animated, Easing } from 'react-native';
 import Svg, { Circle, Defs, G, LinearGradient, Stop } from 'react-native-svg';
 import { GREEK_RANK_COLORS } from '../constants/greekRanks';
 import { LaurelRing } from './LaurelWreath';
+import { reduceMotion } from '../utils/motion';
 
 export { GREEK_RANK_COLORS };
 
@@ -46,8 +47,9 @@ export default function ProfileAvatarFrame({ rankName, size, avatarSize }: Props
   // Native driver on a wrapping view, not SVG props: a JS-driven loop here
   // re-laid out Home every frame for as long as it stayed mounted, including
   // under a GPS run with the phone locked, until iOS's watchdog killed the app.
+  // The pulse never ends, so with Reduce Motion on it doesn't start and the frame stays at full opacity
   useEffect(() => {
-    if (!frame.animated) return;
+    if (!frame.animated || reduceMotion()) return;
     const loop = Animated.loop(
       Animated.timing(animRef, {
         toValue: 1,

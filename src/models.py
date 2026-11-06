@@ -15,6 +15,9 @@ class User(db.Model):
     bodyweight = db.Column(db.Float, nullable=True)
     height = db.Column(db.Float, nullable=True)
     weight_unit = db.Column(db.String(3), default='lbs', nullable=True)
+    # 'mi' | 'km', chosen on the phone (Settings, onboarding) and sent here so
+    # the server's distance badges use the same ladder. NULL until the app reports it.
+    distance_unit = db.Column(db.String(2), nullable=True)
     active_routine_id = db.Column(db.Integer, db.ForeignKey('routines.id', ondelete='SET NULL'), nullable=True)
     reset_otp_hash     = db.Column(db.String(64), nullable=True)
     reset_otp_expiry   = db.Column(db.DateTime,   nullable=True)
@@ -37,6 +40,9 @@ class User(db.Model):
     starter_granted    = db.Column(db.Boolean,    default=False, nullable=False, server_default=db.false())
     gender           = db.Column(db.String(10),  nullable=True)   # 'male' | 'female' | None
     birth_date        = db.Column(db.Date,          nullable=True)
+    # True once the user picks Profile's displayed PRs, so choosing none is
+    # told apart from never choosing (which shows defaults worked out from their PRs)
+    pr_pins_saved     = db.Column(db.Boolean,    default=False, nullable=False, server_default=db.false())
     workouts = db.relationship('Workout', backref='user', lazy=True)
 
     def to_dict(self):
@@ -50,6 +56,7 @@ class User(db.Model):
             'bodyweight': self.bodyweight,
             'height': self.height,
             'weight_unit': self.weight_unit or 'lbs',
+            'distance_unit': self.distance_unit,
             'active_routine_id': self.active_routine_id,
             'gender': self.gender,
             'birth_date': self.birth_date.isoformat() if self.birth_date else None,
@@ -592,6 +599,49 @@ class PREvent(db.Model):
             'improved_by': self.improved_by(),
             'achieved_at': self.achieved_at.isoformat() if self.achieved_at else None,
         }
+
+
+# ── ProfilePRPin ──────────────────────────────────────────────
+# A PR the user chose to show on Profile's Personal Records card, up to three,
+# kept on the server so the choice survives a reinstall or a new phone. Points
+# at a PR by exercise, type and context rather than personal_records.id, since
+# editing a workout rebuilds those rows.
+class ProfilePRPin(db.Model):
+    __tablename__ = 'profile_pr_pins'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    position = db.Column(db.Integer, nullable=False)
+    exercise_template_id = db.Column(db.Integer, db.ForeignKey('exerciseTemplates.id', ondelete='CASCADE'), nullable=False)
+    pr_type = db.Column(db.String(20), nullable=False)
+    # As on personal_records: -1.0 for none, a weight for max_reps, a km or
+    # minute milestone for cardio
+    weight_context = db.Column(db.Float, nullable=False, default=-1.0)
+
+    def to_dict(self):
+        return {
+            'exercise_template_id': self.exercise_template_id,
+            'pr_type': self.pr_type,
+            'weight_context': None if self.weight_context < 0 else self.weight_context,
+        }
+
+
+# ── UserAchievement ───────────────────────────────────────────
+# One row per badge earned, kept for good: editing or deleting a workout never
+# takes one back, so only account deletion removes a row. The key names a rung
+# (`volume_6`), never a value, so a kg/lbs switch has nothing to convert and
+# can't award the other unit's matching rung again. Catalogue: utils/achievements.py
+class UserAchievement(db.Model):
+    __tablename__ = 'user_achievements'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    key = db.Column(db.String(48), nullable=False)
+    earned_at = db.Column(db.DateTime, nullable=False)
+    workout_id = db.Column(db.Integer, db.ForeignKey('workouts.id', ondelete='SET NULL'), nullable=True)
+    seen = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'key', name='uq_user_achievements_user_key'),
+    )
 
 
 # ── StrengthScoreSnapshot ─────────────────────────────────────

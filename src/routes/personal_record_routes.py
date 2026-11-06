@@ -1,13 +1,17 @@
 from datetime import datetime, time, timedelta
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from sqlalchemy import func
-from models import db, PersonalRecord, PREvent, ExerciseTemplate, Exercise, Set, Workout
+from sqlalchemy import func, or_
+from models import db, PersonalRecord, PREvent, ExerciseTemplate, Exercise, Set, Workout, User, ProfilePRPin
+from schemas import ProfilePRPinsSchema
+from utils.validation import validate_body
 from utils.local_date import user_today
 from utils.endurance_standards import ALL_DISTANCE_LABELS, ALL_DURATION_LABELS
 
 pr_bp = Blueprint('pr_bp', __name__)
+
+_profile_pins_schema = ProfilePRPinsSchema()
 
 PR_LABELS = {
     'max_weight':    'Max Weight',
@@ -195,6 +199,19 @@ def get_personal_records():
         .all()
     )
 
+    # The value each PR beat, from its latest PR event, so Profile can show
+    # how much a recent PR moved. Newest first, so the first seen per key wins.
+    latest_event = {}
+    events = (
+        db.session.query(PREvent.exercise_template_id, PREvent.pr_type, PREvent.weight_context,
+                         PREvent.value, PREvent.previous_value)
+        .filter(PREvent.user_id == user_id)
+        .order_by(PREvent.achieved_at.desc(), PREvent.id.desc())
+        .all()
+    )
+    for e in events:
+        latest_event.setdefault((e.exercise_template_id, e.pr_type, e.weight_context), e)
+
     result = []
     for pr, tmpl, set_row in rows:
         if pr.pr_type in ('best_time', 'best_distance'):
@@ -214,8 +231,73 @@ def get_personal_records():
         }
         if pr.pr_type == 'max_weight' and set_row:
             d['reps'] = set_row.reps
+        event = latest_event.get((pr.exercise_template_id, pr.pr_type, pr.weight_context))
+        # An event for an older value means the history is out of step with
+        # the record (pre-backfill data): say nothing rather than a wrong delta
+        d['previous_value'] = event.previous_value if event and event.value == pr.value else None
         result.append(d)
     return jsonify(result)
+
+
+@pr_bp.get('/api/personal-records/pins')
+@jwt_required()
+def get_profile_pr_pins():
+    """The PRs the user chose for Profile's Personal Records card, in order.
+
+    `saved` is false until they first choose, and the app then shows defaults
+    worked out from their PRs. A pin whose PR no longer exists is left out.
+    """
+    user_id = int(get_jwt_identity())
+    user = db.session.get(User, user_id)
+    pins = ProfilePRPin.query.filter_by(user_id=user_id).order_by(ProfilePRPin.position).all()
+    existing = {
+        (r.exercise_template_id, r.pr_type)
+        for r in db.session.query(PersonalRecord.exercise_template_id, PersonalRecord.pr_type)
+        .filter(PersonalRecord.user_id == user_id)
+    }
+    return jsonify({
+        'message': 'ok',
+        'saved': bool(user and user.pr_pins_saved),
+        'pins': [p.to_dict() for p in pins if (p.exercise_template_id, p.pr_type) in existing],
+    }), 200
+
+
+@pr_bp.put('/api/personal-records/pins')
+@jwt_required()
+@validate_body(_profile_pins_schema)
+def put_profile_pr_pins():
+    """Replace the user's displayed PRs with `pins` (up to three, in order)."""
+    user_id = int(get_jwt_identity())
+    pins = g.validated['pins']
+    keys = [(p['exercise_template_id'], p['pr_type'], p['weight_context']) for p in pins]
+    if len(set(keys)) != len(keys):
+        return jsonify({'message': 'The same PR is pinned twice'}), 400
+    template_ids = {p['exercise_template_id'] for p in pins}
+    if template_ids:
+        # Library exercises or the user's own custom ones, never someone else's
+        visible = {
+            t.id for t in ExerciseTemplate.query
+            .filter(ExerciseTemplate.id.in_(template_ids))
+            .filter(or_(ExerciseTemplate.user_id.is_(None), ExerciseTemplate.user_id == user_id))
+        }
+        if visible != template_ids:
+            return jsonify({'message': 'Unknown exercise'}), 400
+
+    ProfilePRPin.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    rows = []
+    for i, p in enumerate(pins):
+        context = p['weight_context']
+        rows.append(ProfilePRPin(
+            user_id=user_id, position=i,
+            exercise_template_id=p['exercise_template_id'], pr_type=p['pr_type'],
+            weight_context=-1.0 if context is None or context < 0 else context,
+        ))
+    db.session.add_all(rows)
+    user = db.session.get(User, user_id)
+    if user:
+        user.pr_pins_saved = True
+    db.session.commit()
+    return jsonify({'message': 'ok', 'saved': True, 'pins': [r.to_dict() for r in rows]}), 200
 
 
 @pr_bp.get('/api/personal-records/dashboard')

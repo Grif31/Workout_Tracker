@@ -1,4 +1,5 @@
 import { PrefillWorkoutData } from "../components/WorkoutDetails";
+import type { NewAchievement } from "../utils/achievements";
 
 export type ExerciseDetailParams = {
   exerciseId: number;
@@ -24,6 +25,8 @@ export type WorkoutSummaryParams = {
   isFirstWorkout: boolean;
   isBestVolume: boolean;
   isBestReps: boolean;
+  /** Badges this save earned (the save's `new_achievements`), for the unlock sheet */
+  newAchievements?: NewAchievement[];
 };
 
 export type WeeklySummaryData = {
@@ -138,6 +141,9 @@ export type ProfileStackParamsList = {
     };
     GreekRank: undefined;
     GreekRankIntro: undefined;
+    Achievements: undefined;
+    /** A ladder track as the server names it, or 'plates' for the three lifts */
+    AchievementTrack: { track: string };
 };
 
 export type AppStack = {

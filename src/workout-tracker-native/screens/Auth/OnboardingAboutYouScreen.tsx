@@ -59,6 +59,7 @@ export default function OnboardingAboutYouScreen({ navigation }: Props) {
 
   const [weightUnit, setWeightUnit] = useState<WeightUnit>(savedUnit);
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>('mi');
+  const [savedDistanceUnit, setSavedDistanceUnit] = useState<DistanceUnit>('mi');
   const [name, setName] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | null>(null);
   const [weight, setWeight] = useState('');
@@ -72,7 +73,10 @@ export default function OnboardingAboutYouScreen({ navigation }: Props) {
   useEffect(() => {
     if (!user?.id) return;
     AsyncStorage.getItem(`${GPS_DISTANCE_UNIT_KEY}_${user.id}`).then(v => {
-      if (v === 'km') setDistanceUnit('km');
+      if (v === 'km') {
+        setDistanceUnit('km');
+        setSavedDistanceUnit('km');
+      }
     });
   }, [user?.id]);
 
@@ -89,6 +93,8 @@ export default function OnboardingAboutYouScreen({ navigation }: Props) {
     const updates: Record<string, unknown> = {};
     const unitChanged = weightUnit !== savedUnit;
     if (unitChanged) updates.weight_unit = weightUnit;
+    // The server's distance badges read it; an unchanged one is reported at startup (syncDistanceUnit)
+    if (distanceUnit !== savedDistanceUnit) updates.distance_unit = distanceUnit;
     if (name.trim()) updates.name = name.trim();
     if (gender) updates.gender = gender;
     if (birthDate) updates.birth_date = toLocalDateStr(birthDate);

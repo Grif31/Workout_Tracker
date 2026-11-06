@@ -16,7 +16,7 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { COACH_INSIGHTS_KEY } from '../../constants/storageKeys';
 import { apiFetch, isNetworkError } from '../../utils/api';
-import { appCache, useRefetchGate } from '../../utils/appCache';
+import { answered, appCache, useRefetchGate } from '../../utils/appCache';
 import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../../utils/templatePrefill';
 import { routineRotation, type RotationWorkout } from '../../utils/routineRotation';
 import { toLocalDateStr } from '../../utils/date';
@@ -35,6 +35,7 @@ import MusclePickerModal from '../../components/coach/MusclePickerModal';
 import PlateauNudge from '../../components/PlateauNudge';
 import GenerateAction from '../../components/GenerateAction';
 import { writeWidgetGreekRank } from '../../utils/widgetData';
+import { motionTiming } from '../../utils/motion';
 
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'TrainingHome'>;
@@ -164,9 +165,9 @@ export default function CoachScreen({ navigation }: Props) {
   ).current;
 
   const handleTabChange = (tab: typeof TAB_NAMES[number]) => {
-    Animated.timing(contentOpacity, { toValue: 0, duration: 80, useNativeDriver: true }).start(() => {
+    motionTiming(contentOpacity, { toValue: 0, duration: 80, useNativeDriver: true }).start(() => {
       setActiveTab(tab);
-      Animated.timing(contentOpacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+      motionTiming(contentOpacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
     });
   };
 
@@ -258,55 +259,67 @@ export default function CoachScreen({ navigation }: Props) {
     const anims = insightAnimsRef.current.slice(0, insights.length);
     anims.forEach(a => a.setValue(0));
     Animated.stagger(60, anims.map(a =>
-      Animated.timing(a, { toValue: 1, duration: 280, useNativeDriver: true })
+      motionTiming(a, { toValue: 1, duration: 280, useNativeDriver: true })
     )).start();
   }, [insightsFetchedAt, insights.length]);
 
   const fetchTemplates = async () => {
     try {
       const res = await apiFetch('/api/workout-templates');
-      if (res.ok) setTemplates(await res.json());
-    } catch { }
+      if (!res.ok) return answered(res);
+      setTemplates(await res.json());
+    } catch {
+      return false;
+    }
   };
 
   const fetchRoutines = async () => {
     try {
       const res = await apiFetch('/api/routines');
-      if (res.ok) setRoutines(await res.json());
-    } catch { }
+      if (!res.ok) return answered(res);
+      setRoutines(await res.json());
+    } catch {
+      return false;
+    }
   };
 
   // Same request as Home's: /api/workouts/recent caps at 5, too few to find the last routine day or a layoff
   const fetchRoutineHistory = async () => {
     try {
       const res = await apiFetch('/api/workouts?page=1&per_page=50');
-      if (!res.ok) return;
+      if (!res.ok) return answered(res);
       const data = await res.json();
       const history: RotationWorkout[] = (data.workouts ?? []).map((w: any) => ({ id: w.id, name: w.name ?? '', date: String(w.date) }));
       setRoutineHistory(history);
       appCache.set('routine_history', history);
-    } catch { }
+    } catch {
+      return false;
+    }
   };
 
   const fetchActiveRoutine = async () => {
     if (!user?.active_routine_id) { setActiveRoutine(null); return; }
     try {
       const res = await apiFetch(`/api/routines/${user.active_routine_id}`);
-      if (res.ok) setActiveRoutine(await res.json());
-    } catch { }
+      if (!res.ok) return answered(res);
+      setActiveRoutine(await res.json());
+    } catch {
+      return false;
+    }
   };
 
   // Separate from strength-score, which needs gender: the rank doesn't
   const fetchGreekRank = async () => {
     try {
       const res = await apiFetch('/api/stats/greek-rank');
-      if (res.ok) {
-        const data: GreekRankData = await res.json();
-        setGreekRank(data.greek_rank);
-        appCache.set('greek_rank', data);
-        writeWidgetGreekRank(user?.id, data);
-      }
-    } catch { }
+      if (!res.ok) return answered(res);
+      const data: GreekRankData = await res.json();
+      setGreekRank(data.greek_rank);
+      appCache.set('greek_rank', data);
+      writeWidgetGreekRank(user?.id, data);
+    } catch {
+      return false;
+    }
   };
 
   // Seeded from the preload so the data the mount effect above just painted counts as fetched

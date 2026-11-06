@@ -6,6 +6,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { type WorkoutSet, type PreviousSet, colStyles, fmtHold } from './types';
+import { motionSpring } from '../../utils/motion';
 
 // Timed-hold sets (planks, wall sits): SET | PREVIOUS | SECONDS | ✓
 // The UI works in seconds; WorkoutLog converts to minutes for the payload.
@@ -40,7 +41,7 @@ function DurationSetRow({
   useEffect(() => {
     if (isDone && !wasDone.current) {
       checkScale.setValue(0.6);
-      Animated.spring(checkScale, { toValue: 1, friction: 4, tension: 220, useNativeDriver: true }).start();
+      motionSpring(checkScale, { toValue: 1, friction: 4, tension: 220, useNativeDriver: true }).start();
     }
     wasDone.current = isDone;
   }, [isDone, checkScale]);

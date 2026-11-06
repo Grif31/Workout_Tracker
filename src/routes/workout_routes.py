@@ -3,7 +3,7 @@ import math
 from datetime import datetime
 from io import StringIO
 from flask import Blueprint, request, jsonify, current_app, g, make_response
-from models import db, Workout, Set, Exercise, PersonalRecord, PREvent, ExerciseTemplate, User, CardioBestEffort
+from models import db, Workout, Set, Exercise, PersonalRecord, PREvent, ExerciseTemplate, User, CardioBestEffort, UserAchievement
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
@@ -16,8 +16,22 @@ from utils.volume import get_bodyweight_at
 # Milestone tables moved to utils/endurance_standards.py so the Endurance
 # Score's pace tables share the exact float keys PR rows are written with.
 from utils.endurance_standards import cardio_milestones, is_cycling
+from utils.achievements import evaluate_achievements
 
 workout_bp = Blueprint('workout_bp', __name__)
+
+
+def _award_achievements(user):
+    """Badges the save just crossed. Runs after the workout is committed, so a
+    failure here costs the user an unlock sheet, never their workout."""
+    try:
+        new = evaluate_achievements(user)
+        db.session.commit()
+        return new
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('evaluate_achievements failed for user %s', user.id)
+        return []
 
 _workout_schema        = WorkoutSchema()
 _update_workout_schema = UpdateWorkoutSchema()
@@ -697,6 +711,7 @@ def _already_saved(workout):
         'message': 'Already saved',
         'already_saved': True,
         'new_prs': [],
+        'new_achievements': [],
         'total_volume': round(workout.volume or 0.0),
         'total_reps': sum(s.reps or 0 for s in sets),
         'total_sets': len(sets),
@@ -838,6 +853,8 @@ def add_workout():
         prev_max_reps = db.session.query(func.max(reps_subq.c.reps_sum)).scalar() or 0
         is_best_reps = total_reps > 0 and total_reps > prev_max_reps
 
+        new_achievements = _award_achievements(user)
+
         return jsonify({
             'id': new_workout.id,
             'message': 'New Workout Added',
@@ -849,6 +866,7 @@ def add_workout():
             'is_first_workout': is_first,
             'is_best_volume': is_best_volume,
             'is_best_reps': is_best_reps,
+            'new_achievements': new_achievements,
         }), 201
     except IntegrityError:
         # Two saves with the same client_id at once: the first won the unique
@@ -877,6 +895,10 @@ def delete_workout(workoutId):
     if not workout:
         return jsonify({'message': 'Workout not found'}), 404
     template_ids = [ex.exercise_template_id for ex in workout.exercises]
+    # The badge it earned stays; only the link to the workout goes (Postgres
+    # would SET NULL itself, SQLite in tests doesn't)
+    UserAchievement.query.filter_by(user_id=current_user_id, workout_id=workout.id).update(
+        {'workout_id': None}, synchronize_session=False)
     db.session.delete(workout)
     db.session.commit()
     _recompute_prs_for_templates(current_user_id, template_ids)
@@ -1054,7 +1076,8 @@ def update_workout(workout_id):
     _recompute_prs_for_templates(current_user_id, template_ids)
     db.session.commit()
 
-    return jsonify(workout.to_dict(include_exercises=True)), 200
+    new_achievements = _award_achievements(user)
+    return jsonify({**workout.to_dict(include_exercises=True), 'new_achievements': new_achievements}), 200
 
 
 @workout_bp.route('/api/workouts/export', methods=['GET'])

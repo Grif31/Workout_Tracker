@@ -20,6 +20,7 @@ import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
 import { fmtPrValue, fmtPrDelta, fmtChartDate, prChartValue, prChartYLabel, computeChartYAxisRange, PR_METRIC_OPTIONS, prWorkoutScreen, type PREventItem } from '../../utils/prFormat';
 import { loadPrPins, togglePrPin, pinMatches, MAX_PR_PINS } from '../../utils/prPins';
 import { showToast } from '../../utils/toast';
+import { reduceMotion } from '../../utils/motion';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'PRProgression'>;
 
@@ -323,7 +324,7 @@ export default function PRProgressionScreen({ navigation, route }: Props) {
                 areaChart
                 // Straight segments: a PR only changes when a new one is set, and
                 // a curve implies steady gains in between (and can overshoot them)
-                isAnimated
+                isAnimated={!reduceMotion()}
                 rulesType="dashed"
                 rulesColor={colors.border}
                 rulesThickness={1}

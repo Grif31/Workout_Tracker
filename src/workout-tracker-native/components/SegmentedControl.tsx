@@ -5,6 +5,7 @@ import * as Haptics from 'expo-haptics';
 import { useTheme } from '../context/ThemeContext';
 import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import { motionTiming, motionSpring } from '../utils/motion';
 
 export type SegmentOption<T> = { key: T; label: string; icon?: React.ComponentProps<typeof Ionicons>['name'] };
 
@@ -66,13 +67,13 @@ export default function SegmentedControl<T>({
     if (index >= 0) {
       const to = index * segWidth;
       if (placed.current) {
-        Animated.spring(x, { toValue: to, useNativeDriver: true, speed: 18, bounciness: 5 }).start();
+        motionSpring(x, { toValue: to, useNativeDriver: true, speed: 18, bounciness: 5 }).start();
       } else {
         x.setValue(to);
         placed.current = true;
       }
     }
-    Animated.timing(opacity, { toValue: index >= 0 ? 1 : 0, duration: 150, useNativeDriver: true }).start();
+    motionTiming(opacity, { toValue: index >= 0 ? 1 : 0, duration: 150, useNativeDriver: true }).start();
   }, [index, segWidth]);
 
   const onLayout = (e: LayoutChangeEvent) => setTrackWidth(e.nativeEvent.layout.width);

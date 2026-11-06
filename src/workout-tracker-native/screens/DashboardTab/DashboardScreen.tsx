@@ -26,7 +26,7 @@ import {
   onPendingCountChange, onStuckCountChange, retryStuckWorkout, type StuckWorkout,
 } from '../../utils/offlineQueue';
 import { showToast } from '../../utils/toast';
-import { appCache, useRefetchGate } from '../../utils/appCache';
+import { answered, appCache, useRefetchGate } from '../../utils/appCache';
 import { LaurelBranch } from '../../components/LaurelWreath';
 import { WEEKLY_SUMMARY_LAST_SHOWN_KEY } from './WeeklySummaryScreen';
 import SectionRule from '../../components/SectionRule';
@@ -45,6 +45,7 @@ import { writeWidgetSnapshot, writeWidgetWeek } from '../../utils/widgetData';
 import { buildRoutine } from '../../utils/widgetSnapshot';
 import { buildTemplatePrefill, parseProgramming, type TemplateExercise } from '../../utils/templatePrefill';
 import { routineRotation, type RotationWorkout } from '../../utils/routineRotation';
+import { motionTiming, motionSpring } from '../../utils/motion';
 
 const GREETINGS = [
   'Ready to work out', 'Welcome back', 'Ready to train', "Let's work out",
@@ -135,7 +136,7 @@ function WeekCalendar({
     const dir = weekOffset < prevOffsetRef.current ? -1 : 1;
     prevOffsetRef.current = weekOffset;
     slideAnim.setValue(dir * 50);
-    Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 200, mass: 0.8 }).start();
+    motionSpring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 200, mass: 0.8 }).start();
   }, [weekOffset]);
 
   const weekLabel = weekOffset === 0
@@ -559,7 +560,7 @@ export default function DashboardScreen({ navigation }: Props) {
   // Home fades in once, when the first load finishes; later refreshes update in place
   const contentAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (!loading) Animated.timing(contentAnim, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    if (!loading) motionTiming(contentAnim, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
   }, [loading, contentAnim]);
 
   const handleRefresh = () => {
@@ -570,7 +571,7 @@ export default function DashboardScreen({ navigation }: Props) {
   const fetchUser = async () => {
     try {
       const res = await apiFetch('/api/me');
-      if (!res.ok) return;
+      if (!res.ok) return answered(res);
       const data = await res.json();
       setUser(data);
       if (data.active_routine_id) fetchActiveRoutine(data.active_routine_id);
@@ -580,6 +581,7 @@ export default function DashboardScreen({ navigation }: Props) {
       }
     } catch (err) {
       if (!isNetworkError(err)) Alert.alert("Couldn't Load Profile", 'Try again in a moment.');
+      return false;
     }
   };
 
@@ -593,9 +595,11 @@ export default function DashboardScreen({ navigation }: Props) {
   const fetchRecentWorkouts = async () => {
     try {
       const res = await apiFetch('/api/workouts/recent');
-      if (res.ok) setWorkouts(await res.json());
+      if (!res.ok) return answered(res);
+      setWorkouts(await res.json());
     } catch (err) {
       if (!isNetworkError(err)) Alert.alert("Couldn't Load Workouts", 'Try again in a moment.');
+      return false;
     }
   };
 
@@ -605,13 +609,15 @@ export default function DashboardScreen({ navigation }: Props) {
   const fetchRoutineHistory = async () => {
     try {
       const res = await apiFetch('/api/workouts?page=1&per_page=50');
-      if (!res.ok) return;
+      if (!res.ok) return answered(res);
       const data = await res.json();
       const history: RotationWorkout[] = (data.workouts ?? []).map((w: Workout) => ({ id: w.id, name: w.name ?? '', date: String(w.date) }));
       setRoutineHistory(history);
       // The Coach tab's Plans reads the same rotation for its Up Next
       appCache.set('routine_history', history);
-    } catch { /* silently fail — the card falls back to day 1 */ }
+    } catch {
+      return false; // the card falls back to day 1
+    }
   };
 
   // The latest day asked for. A response for any other day is dropped, so
@@ -644,13 +650,14 @@ export default function DashboardScreen({ navigation }: Props) {
   const fetchAllWorkoutDates = async () => {
     try {
       const res = await apiFetch('/api/workouts/dates');
-      if (res.ok) {
-        const data = await res.json();
-        setAllWorkoutDates(data.dates ?? []);
-        widgetWeek.current.allWorkoutDates = data.dates ?? [];
-        writeWidgetWeek(authUser?.id, widgetWeek.current);
-      }
-    } catch { /* silently fail */ }
+      if (!res.ok) return answered(res);
+      const data = await res.json();
+      setAllWorkoutDates(data.dates ?? []);
+      widgetWeek.current.allWorkoutDates = data.dates ?? [];
+      writeWidgetWeek(authUser?.id, widgetWeek.current);
+    } catch {
+      return false;
+    }
   };
 
   const fetchGreekRank = async () => {
@@ -658,7 +665,7 @@ export default function DashboardScreen({ navigation }: Props) {
       const cached = await AsyncStorage.getItem(GREEK_RANK_CACHED_KEY);
       if (cached) setGreekRank(prev => (prev.rank ? prev : { rank: cached, score: null, heldByGate: false }));
       const res = await apiFetch('/api/stats/greek-rank');
-      if (!res.ok) return;
+      if (!res.ok) return answered(res);
       const data: GreekRankData = await res.json();
       setGreekRank({
         rank: data.greek_rank ?? null,
@@ -666,7 +673,9 @@ export default function DashboardScreen({ navigation }: Props) {
         heldByGate: !!data.held_by_gate,
       });
       if (data.greek_rank) AsyncStorage.setItem(GREEK_RANK_CACHED_KEY, data.greek_rank).catch(() => {});
-    } catch { /* silently fail — the card shows its cached or empty state */ }
+    } catch {
+      return false; // the card shows its cached or empty state
+    }
   };
 
   const fetchStreak = async () => {

@@ -28,6 +28,7 @@ import WeeklySummaryShareCard from '../../components/share/WeeklySummaryShareCar
 import WeekPickerModal from '../../components/WeekPickerModal';
 import WeeklyReviewCard from '../../components/WeeklyReviewCard';
 import { PR_TYPE_LABELS, PR_TYPE_ORDER } from '../../utils/prFormat';
+import { motionTiming, motionSpring } from '../../utils/motion';
 
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WeeklySummary'>;
 
@@ -219,8 +220,8 @@ export default function WeeklySummaryScreen({ navigation, route }: Props) {
     const v = getLegendScale(muscle);
     v.setValue(1);
     RNAnimated.sequence([
-      RNAnimated.timing(v, { toValue: 1.08, duration: 100, useNativeDriver: true }),
-      RNAnimated.spring(v, { toValue: 1, friction: 4, useNativeDriver: true }),
+      motionTiming(v, { toValue: 1.08, duration: 100, useNativeDriver: true }),
+      motionSpring(v, { toValue: 1, friction: 4, useNativeDriver: true }),
     ]).start();
   };
 

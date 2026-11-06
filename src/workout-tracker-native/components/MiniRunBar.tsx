@@ -11,6 +11,7 @@ import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance } from '../utils/units';
 import { fmtClock, runElapsedSeconds } from '../utils/gpsRun';
+import { motionSpring } from '../utils/motion';
 
 // Stands in for GPSCardioScreen while a run is minimized, the way the workout
 // mini bar stands in for WorkoutLog. Open goes back to the map; Discard asks
@@ -49,7 +50,7 @@ export default function MiniRunBar() {
   useEffect(() => {
     if (visible && !wasVisible.current) {
       entranceAnim.setValue(0);
-      Animated.spring(entranceAnim, {
+      motionSpring(entranceAnim, {
         toValue: 1,
         useNativeDriver: true,
         damping: 18,

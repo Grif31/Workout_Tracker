@@ -22,6 +22,7 @@ import { scheduleTrialReminder } from '../utils/notifications';
 import { trackPaywall, planOf } from '../utils/paywallEvents';
 import { annualSavings, ctaLabel, featuresFor, headlineFor, trialOf, trialReminderDay } from '../utils/paywall';
 import { type RootStackParamsList } from '../navigation/types';
+import { motionSpring } from '../utils/motion';
 
 type Props = NativeStackScreenProps<RootStackParamsList, 'Paywall'>;
 
@@ -130,7 +131,7 @@ export default function PaywallScreen({ navigation, route }: Props) {
   const finish = (title: string) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setWelcome(title);
-    RNAnimated.spring(successScale, { toValue: 1, friction: 5, tension: 90, useNativeDriver: true }).start();
+    motionSpring(successScale, { toValue: 1, friction: 5, tension: 90, useNativeDriver: true }).start();
   };
 
   // Close the paywall, then open what they just unlocked

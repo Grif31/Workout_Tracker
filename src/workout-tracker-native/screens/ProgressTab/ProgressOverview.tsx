@@ -16,7 +16,7 @@ import { toLocalDateStr, trainedDaysOfWeek } from '../../utils/date';
 import { monthlyScoreChange, type ScoreSnapshot } from '../../utils/scoreTrend';
 import { WEEKLY_DISTANCE_GOAL_KEY, WEEKLY_GOAL_KEY } from '../../constants/storageKeys';
 import { apiFetch } from '../../utils/api';
-import { appCache, useRefetchGate } from '../../utils/appCache';
+import { answered, appCache, useRefetchGate } from '../../utils/appCache';
 import { ProgressStackParamsList } from '../../navigation/types';
 import WeeklyGoalModal from '../../components/coach/WeeklyGoalModal';
 import WorkingSetsInfoModal from '../../components/coach/WorkingSetsInfoModal';
@@ -37,6 +37,7 @@ import ScoresCard from '../../components/ScoresCard';
 import PremiumTeaser from '../../components/PremiumTeaser';
 import { computeBarChartMax } from '../../utils/prFormat';
 import { writeWidgetScore } from '../../utils/widgetData';
+import { motionTiming, reduceMotion } from '../../utils/motion';
 
 type Props = { navigation: NativeStackNavigationProp<ProgressStackParamsList, 'ProgressHome'> };
 
@@ -161,7 +162,7 @@ export default function ProgressOverview({ navigation }: Props) {
   useEffect(() => {
     if (!hasMuscleVolume) return;
     barsAnim.setValue(0);
-    Animated.timing(barsAnim, { toValue: 1, duration: 900, useNativeDriver: true }).start();
+    motionTiming(barsAnim, { toValue: 1, duration: 900, useNativeDriver: true }).start();
   }, [hasMuscleVolume, barsAnim]);
 
   // ── Data fetching ───────────────────────────────────────────────────────────
@@ -191,17 +192,18 @@ export default function ProgressOverview({ navigation }: Props) {
   const fetchProgressData = async (range: ChartRange) => {
     try {
       const res = await apiFetch(`/api/stats/progress?range=${range}`);
-      if (res.ok) {
-        const data: ProgressResponse = await res.json();
-        // A quick 3M → 6M tap can land the 3M answer last; it mustn't draw under 6M
-        if (range !== chartRangeRef.current) return;
-        setProgressData(data.buckets ?? []);
-        setProgressLeadIn(data.lead_in ?? []);
-        if (data.metrics_logged) setMetricsLogged(data.metrics_logged);
-        // The same request fetchThisWeekCount makes, so it fills this week too
-        if (range === THIS_WEEK_RANGE) applyThisWeek(data);
-      }
-    } catch { } finally {
+      if (!res.ok) return answered(res);
+      const data: ProgressResponse = await res.json();
+      // A quick 3M → 6M tap can land the 3M answer last; it mustn't draw under 6M
+      if (range !== chartRangeRef.current) return;
+      setProgressData(data.buckets ?? []);
+      setProgressLeadIn(data.lead_in ?? []);
+      if (data.metrics_logged) setMetricsLogged(data.metrics_logged);
+      // The same request fetchThisWeekCount makes, so it fills this week too
+      if (range === THIS_WEEK_RANGE) applyThisWeek(data);
+    } catch {
+      return false;
+    } finally {
       if (range === chartRangeRef.current) setProgressLoading(false);
     }
   };
@@ -209,47 +211,53 @@ export default function ProgressOverview({ navigation }: Props) {
   const fetchStrengthScore = async () => {
     try {
       const res = await apiFetch('/api/stats/strength-score');
-      if (res.ok) {
-        const data = await res.json();
-        setStrengthPercentile(data.overall ?? null);
-        if (data.overall_rank?.label) setStrengthRankLabel(data.overall_rank.label);
-        setStrengthHistory(data.history ?? []);
-        writeWidgetScore(user?.id, 'strength', data);
-      }
-    } catch { }
+      if (!res.ok) return answered(res);
+      const data = await res.json();
+      setStrengthPercentile(data.overall ?? null);
+      if (data.overall_rank?.label) setStrengthRankLabel(data.overall_rank.label);
+      setStrengthHistory(data.history ?? []);
+      writeWidgetScore(user?.id, 'strength', data);
+    } catch {
+      return false;
+    }
   };
 
   const fetchEnduranceScore = async () => {
     try {
       const res = await apiFetch('/api/stats/endurance-score');
-      if (res.ok) {
-        const data = await res.json();
-        setEndurancePercentile(data.overall ?? null);
-        setEnduranceRankLabel(data.overall_rank?.label ?? null);
-        setEnduranceHistory(data.history ?? []);
-        appCache.set('endurance_score', data);
-        writeWidgetScore(user?.id, 'endurance', data);
-      }
-    } catch { }
+      if (!res.ok) return answered(res);
+      const data = await res.json();
+      setEndurancePercentile(data.overall ?? null);
+      setEnduranceRankLabel(data.overall_rank?.label ?? null);
+      setEnduranceHistory(data.history ?? []);
+      appCache.set('endurance_score', data);
+      writeWidgetScore(user?.id, 'endurance', data);
+    } catch {
+      return false;
+    }
   };
 
   // Same list Home's calendar and the widget read; this screen only needs this week's days
   const fetchWorkoutDates = async () => {
     try {
       const res = await apiFetch('/api/workouts/dates');
-      if (res.ok) {
-        const data = await res.json();
-        setWorkoutDates(data.dates ?? []);
-        appCache.set('workout_dates', data);
-      }
-    } catch { }
+      if (!res.ok) return answered(res);
+      const data = await res.json();
+      setWorkoutDates(data.dates ?? []);
+      appCache.set('workout_dates', data);
+    } catch {
+      return false;
+    }
   };
 
   const fetchThisWeekCount = async () => {
     try {
       const res = await apiFetch(`/api/stats/progress?range=${THIS_WEEK_RANGE}`);
-      if (res.ok) applyThisWeek(await res.json());
-    } catch { }
+      if (!res.ok) return answered(res);
+      applyThisWeek(await res.json());
+    } catch {
+      return false;
+    }
   };
 
   const fetchMuscleGroupData = async () => {
@@ -257,27 +265,29 @@ export default function ProgressOverview({ navigation }: Props) {
       const now = new Date();
       const localDate = toLocalDateStr(now);
       const res = await apiFetch(`/api/stats/muscle-volume?local_date=${localDate}`);
-      if (res.ok) {
-        const data = await res.json();
-        setMuscleVolume(data);
-        appCache.set('muscle_volume', data);
-      }
-    } catch { }
+      if (!res.ok) return answered(res);
+      const data = await res.json();
+      setMuscleVolume(data);
+      appCache.set('muscle_volume', data);
+    } catch {
+      return false;
+    }
   };
 
   const fetchWeeklySummaryPreview = async () => {
     try {
       const res = await apiFetch('/api/stats/weekly-summary');
-      if (res.ok) {
-        const data = await res.json();
-        const preview: WeeklySummaryPreview = {
-          week_start: data.week_start, workouts: data.workouts, total_volume: data.total_volume,
-          distance_km: data.distance_km, weight_unit: data.weight_unit,
-        };
-        setWeeklySummaryPreview(preview);
-        appCache.set('weekly_summary_preview', preview);
-      }
-    } catch { }
+      if (!res.ok) return answered(res);
+      const data = await res.json();
+      const preview: WeeklySummaryPreview = {
+        week_start: data.week_start, workouts: data.workouts, total_volume: data.total_volume,
+        distance_km: data.distance_km, weight_unit: data.weight_unit,
+      };
+      setWeeklySummaryPreview(preview);
+      appCache.set('weekly_summary_preview', preview);
+    } catch {
+      return false;
+    }
   };
 
   // Seeded from the preload so the data the mount effect above just painted
@@ -530,7 +540,7 @@ export default function ProgressOverview({ navigation }: Props) {
                       if (activeMetric === 'distance') return formatDistanceValue(n >= 10 ? Math.round(n) : roundTenth(n));
                       return v;
                     }}
-                    isAnimated
+                    isAnimated={!reduceMotion()}
                     showReferenceLine1={weeklyTarget != null}
                     referenceLine1Position={referenceLinePos}
                     referenceLine1Config={{

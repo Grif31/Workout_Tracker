@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Badge front and back</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.bs{stroke-width:3;stroke-linejoin:round}
+.bi{fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.bt{font:800 9px Inter,sans-serif;text-anchor:middle}
+.e1{font:800 4.6px Inter,sans-serif;text-anchor:middle;letter-spacing:.9px}
+.e2{font:600 2.9px Inter,sans-serif;text-anchor:middle;letter-spacing:.5px}
+.e3{font:800 4.4px Inter,sans-serif;text-anchor:middle}
+.e4{font:500 3px Inter,sans-serif;text-anchor:middle}
+.e5{font:italic 500 2.5px Inter,sans-serif;text-anchor:middle}
+.e6{font:700 3.2px Inter,sans-serif;text-anchor:middle}
+</style>
+</helmet>
+<div style="width: 880px; height: 700px; box-sizing: border-box; background: #141416; color: #FFFFFF; font-family: Inter, -apple-system, sans-serif; padding: 40px 48px; display: flex; flex-direction: column; gap: 24px;">
+  <svg width="0" height="0" aria-hidden="true" style="position: absolute;"><defs>
+    <linearGradient id="m-gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color: #6B5822;"></stop><stop offset="0.55" style="stop-color: #3A3015;"></stop><stop offset="1" style="stop-color: #241D0B;"></stop></linearGradient>
+    <linearGradient id="m-gold-back" x1="1" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: #55461B;"></stop><stop offset="0.6" style="stop-color: #33290F;"></stop><stop offset="1" style="stop-color: #211A09;"></stop></linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: #FFFFFF; stop-opacity: 0.18;"></stop><stop offset="0.5" style="stop-color: #FFFFFF; stop-opacity: 0;"></stop></linearGradient>
+      <linearGradient id="r-gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color: #FFF0B3;"></stop><stop offset="0.45" style="stop-color: #E8C25A;"></stop><stop offset="0.78" style="stop-color: #8F6B14;"></stop><stop offset="1" style="stop-color: #E8C25A;"></stop></linearGradient>
+    <linearGradient id="i-gold" gradientUnits="userSpaceOnUse" x1="0" y1="4" x2="0" y2="60"><stop offset="0" style="stop-color: #FFF0B3;"></stop><stop offset="1" style="stop-color: #E8C25A;"></stop></linearGradient>
+    <linearGradient id="j-gold" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="24"><stop offset="0" style="stop-color: #FFF0B3;"></stop><stop offset="1" style="stop-color: #E8C25A;"></stop></linearGradient>
+    <linearGradient id="spec" x1="0" y1="0" x2="1" y2="1"><stop offset="0.36" style="stop-color: #FFFFFF; stop-opacity: 0;"></stop><stop offset="0.44" style="stop-color: #FFFFFF; stop-opacity: 0.13;"></stop><stop offset="0.5" style="stop-color: #FFFFFF; stop-opacity: 0;"></stop></linearGradient>
+  </defs></svg>
+  <div style="display: flex; flex-direction: column; gap: 6px;">
+    <h1 style="margin: 0; font-size: 26px; font-weight: 800;">Badge back</h1>
+    <p style="margin: 0; font-size: 14px; color: #8E8E93; line-height: 1.5; max-width: 720px;">Tap a badge in the trophy case to flip it. The back is engraved with when and how it was earned and the story behind the name. With Reduce Motion on, the flip becomes a crossfade.</p>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px;">
+    <section style="background: #1C1C1E; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+      <div style="font-size: 12px; font-weight: 700; letter-spacing: 1.5px; color: #8E8E93;">FRONT</div>
+      <svg viewBox="-8 -8 80 80" width="280" height="280" role="img" aria-label="Hekaton badge, gold, front">
+        <path d="{{shape}}" fill="rgba(0,0,0,0.45)" transform="translate(0.8 1.6)"></path><path d="{{shape}}" fill="none" stroke="rgba(0,0,0,0.55)" style="stroke-width: 4.4;"></path><path class="bs" d="{{shape}}" fill="url(#m-gold)" stroke="url(#r-gold)"></path><path d="{{shape}}" fill="url(#spec)"></path><path d="{{shape}}" fill="url(#gloss)"></path>
+        <path d="{{shape}}" fill="none" stroke="url(#r-gold)" transform="translate(5.12 5.12) scale(0.84)" style="stroke-width: 3; stroke-dasharray: 3 1.5;"></path>
+        <g transform="translate(20.00 15.50) scale(1.000)"><path class="bi" d="{{icon}}" stroke="rgba(0,0,0,0.55)" transform="translate(0.6 0.8)"></path><path class="bi" d="{{icon}}" stroke="rgba(255,255,255,0.3)" transform="translate(-0.4 -0.5)"></path><path class="bi" d="{{icon}}" stroke="url(#j-gold)"></path></g>
+        <text class="bt" x="32.4" y="51.1" fill="rgba(0,0,0,0.55)">100</text><text class="bt" x="32" y="50.5" fill="url(#i-gold)">100</text>
+      </svg>
+      <div style="font-size: 22px; font-weight: 800;">Hekaton</div>
+      <div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #8E8E93;">
+        <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3M18 3v4h-4M6 21v-4h4" fill="none" stroke="#8E8E93" style="stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;"></path></svg>
+        Tap to flip
+      </div>
+    </section>
+    <section style="background: #1C1C1E; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+      <div style="font-size: 12px; font-weight: 700; letter-spacing: 1.5px; color: #8E8E93;">BACK</div>
+      <svg viewBox="-8 -8 80 80" width="280" height="280" role="img" aria-label="Back of Hekaton: earned September 28, 2026 on Push Day, your 100th workout. Hekaton is Greek for one hundred.">
+        <path d="{{shape}}" fill="rgba(0,0,0,0.45)" transform="translate(0.8 1.6)"></path><path d="{{shape}}" fill="none" stroke="rgba(0,0,0,0.55)" style="stroke-width: 4.4;"></path><path class="bs" d="{{shape}}" fill="url(#m-gold-back)" stroke="url(#r-gold)"></path><path d="{{shape}}" fill="url(#gloss)"></path>
+        <path d="{{shape}}" fill="none" stroke="url(#r-gold)" transform="translate(5.12 5.12) scale(0.84)" style="stroke-width: 1.2; stroke-dasharray: 1.2 1;"></path>
+        <text class="e1" x="32" y="21.3" fill="#F6DE8E">HEKATON</text>
+        <path d="M24 24.1 H40" stroke="#E8C25A" style="stroke-width: 0.4; opacity: 0.7;"></path>
+        <text class="e2" x="32" y="28" fill="#C9B477">EARNED</text>
+        <text class="e3" x="32.35" y="33.05" fill="rgba(0,0,0,0.5)">Sep 28, 2026</text>
+        <text class="e3" x="32" y="32.6" fill="#F6DE8E">Sep 28, 2026</text>
+        <text class="e6" x="32" y="37.3" fill="#E6D7A6">Push Day</text>
+        <text class="e4" x="32" y="41" fill="#E6D7A6">your 100th workout</text>
+        <path d="M26 44 H38" stroke="#E8C25A" style="stroke-width: 0.4; opacity: 0.7;"></path>
+        <text class="e5" x="32" y="47.6" fill="#C9B477">Hekaton is Greek for</text>
+        <text class="e5" x="32" y="51" fill="#C9B477">one hundred.</text>
+      </svg>
+      <div style="display: flex; gap: 10px; align-self: stretch;">
+        <button style="flex: 1; appearance: none; border: 1px solid #38383A; background: #2C2C2E; color: #FFFFFF; border-radius: 12px; padding: 13px; font: 600 15px Inter, sans-serif;">View Workout</button>
+        <button style="flex: 1; appearance: none; border: 0; background: {{accent}}; color: #000000; border-radius: 12px; padding: 13px; font: 700 15px Inter, sans-serif;">Share</button>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#30D158","options":["#30D158","#0A84FF","#BF5AF2","#FF9F0A"]},"$preview":{"width":880,"height":700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#30D158',
+      shape: 'M32 4 A28 28 0 1 1 31.99 4 Z',
+      icon: 'M3 4.5h18M5 4.5a1.6 1.6 0 1 0 1.6 1.6M19 4.5a1.6 1.6 0 1 1-1.6 1.6M6 7.5h12M7.5 7.5v10.5M10.5 7.5v10.5M13.5 7.5v10.5M16.5 7.5v10.5M5.5 18h13M4 20.5h16'
+    };
+  }
+}
+</script>
+</body>
+</html>

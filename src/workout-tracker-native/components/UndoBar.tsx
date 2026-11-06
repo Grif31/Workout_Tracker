@@ -3,6 +3,7 @@ import { Animated, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme, type Colors } from '../context/ThemeContext';
 import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import { motionTiming } from '../utils/motion';
 
 type Props = {
   visible: boolean;
@@ -31,7 +32,7 @@ export default function UndoBar({ visible, message, onUndo, onDismiss, actionLab
     if (timer.current) clearTimeout(timer.current);
     if (visible) {
       anim.setValue(0);
-      Animated.timing(anim, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+      motionTiming(anim, { toValue: 1, duration: 180, useNativeDriver: true }).start();
       timer.current = setTimeout(() => onDismissRef.current(), AUTO_DISMISS_MS);
     }
     return () => { if (timer.current) clearTimeout(timer.current); };

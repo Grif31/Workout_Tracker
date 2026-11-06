@@ -8,6 +8,7 @@ import { typography } from '../theme/typography';
 import { SCORE_RANK_COLORS, SCORE_RANK_ICONS, scoreRankTextColor } from '../constants/strengthRanks';
 import { scoreChangeLabel } from '../utils/scoreTrend';
 import ScoreRing from './ScoreRing';
+import { motionTiming } from '../utils/motion';
 
 // Smaller than the score screens' 108px hero ring; an empty half matches it, so the layout doesn't shift
 const RING_SIZE = 84;
@@ -77,7 +78,7 @@ function ScoreHalf({ title, score, emptyIcon, emptyText, onPress, styles, colors
   // strokeDashoffset is an SVG prop, which the native driver can't animate
   useEffect(() => {
     if (percentile == null) return;
-    Animated.timing(anim, { toValue: percentile / 100, duration: 900, useNativeDriver: false }).start();
+    motionTiming(anim, { toValue: percentile / 100, duration: 900, useNativeDriver: false }).start();
   }, [percentile, anim]);
 
   const label = percentile != null

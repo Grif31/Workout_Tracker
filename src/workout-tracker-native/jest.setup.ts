@@ -133,7 +133,7 @@ jest.mock('react-native-svg', () => {
     __esModule: true,
     default: View, Svg: View, Path: View, Circle: View, G: View,
     Rect: View, Line: View, Ellipse: View, Polygon: View, Polyline: View,
-    Defs: View, LinearGradient: View, Stop: View, Text: View, TSpan: View,
+    Defs: View, LinearGradient: View, RadialGradient: View, Stop: View, Text: View, TSpan: View,
   };
 });
 

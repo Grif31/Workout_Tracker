@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Achievement ladders</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.bs{stroke-width:3;stroke-linejoin:round}
+.bo{fill:none;stroke-width:1.2;opacity:.55}
+.bi{fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.bt{font:800 9px Inter,sans-serif;text-anchor:middle}
+.node{appearance:none;background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 1500px; box-sizing: border-box; background: #141416; color: #FFFFFF; font-family: Inter, -apple-system, sans-serif; display: flex; flex-direction: column;">
+  <div style="height: 54px;"></div>
+  <div style="display: flex; align-items: center; gap: 12px; padding: 8px 16px 12px;">
+    <button aria-label="Go back" style="appearance: none; background: none; border: 0; padding: 10px; margin: -10px; color: #FFFFFF; display: flex;">
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </button>
+    <h1 style="margin: 0; font-size: 20px; font-weight: 700; flex: 1;">Achievements</h1>
+    <span style="font-size: 14px; color: #8E8E93;">{{earned}} / {{total}}</span>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 16px; padding: 4px 16px 24px;">
+    <sc-for list="{{tracks}}" as="t" hint-placeholder-count="5">
+      <section style="background: #1C1C1E; border-radius: 16px; padding: 16px 0 16px; display: flex; flex-direction: column; gap: 14px; overflow: hidden;">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; padding: 0 16px; gap: 12px;">
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <h2 style="margin: 0; font-size: 17px; font-weight: 700;">{{t.name}}</h2>
+            <div style="font-size: 13px; color: #8E8E93;">{{t.valueText}}</div>
+          </div>
+          <div style="font-size: 13px; color: #8E8E93; text-align: right;">{{t.got}} of {{t.n}} earned</div>
+        </div>
+
+        <div style="position: relative; height: 112px;">
+          <div style="position: absolute; left: 0; top: 0; display: flex; margin-left: {{t.offset}};">
+            <div style="position: absolute; left: 42px; top: 27px; height: 3px; border-radius: 2px; background: #38383A; width: {{t.lineW}};"></div>
+            <div style="position: absolute; left: 42px; top: 27px; height: 3px; border-radius: 2px; background: {{accent}}; width: {{t.doneW}};"></div>
+            <sc-for list="{{t.badges}}" as="b" hint-placeholder-count="7">
+              <button class="node" aria-label="{{b.label}}" style="position: relative; width: 84px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                <div style="width: 62px; height: 62px; margin-top: -3px; border-radius: 31px; display: flex; align-items: center; justify-content: center; border: 2px solid {{b.halo}};">
+                  <svg viewBox="-8 -8 80 80" width="60" height="60" aria-hidden="true"><path d="{{b.crown}}" fill="#A3B18A"></path><path class="bs" d="{{b.shape}}" fill="{{b.fill}}" stroke="{{b.ring}}"></path><path d="{{b.shape}}" fill="none" stroke="{{b.ring}}" transform="translate(5.12 5.12) scale(0.84)" style="stroke-width: {{b.bandW}}; stroke-dasharray: {{b.bandDash}};"></path><g transform="{{b.iconT}}"><path class="bi" d="{{b.icon}}" stroke="{{b.iconColor}}"></path></g><text class="bt" x="32" y="52" fill="{{b.iconColor}}">{{b.short}}</text></svg>
+                </div>
+                <div style="font-size: 11px; font-weight: 600; color: {{b.titleColor}}; max-width: 80px; line-height: 1.25; text-align: center;">{{b.title}}</div>
+                <sc-if value="{{b.isNext}}" hint-placeholder-val="{{false}}">
+                  <div style="width: 52px; height: 4px; border-radius: 2px; background: #38383A; overflow: hidden;"><div style="height: 4px; background: {{accent}}; width: {{b.pctW}};"></div></div>
+                </sc-if>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+
+        <sc-if value="{{t.showDetail}}" hint-placeholder-val="{{false}}">
+          <div style="margin: 0 16px; border-top: 1px solid #38383A; padding-top: 14px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <div style="font-size: 15px; font-weight: 700;">Next: {{t.nextTitle}}</div>
+              <div style="font-size: 13px; color: #8E8E93;">{{t.toGo}}</div>
+            </div>
+            <div style="height: 8px; border-radius: 4px; background: #38383A; overflow: hidden;"><div style="height: 8px; background: {{accent}}; width: {{t.pctW}};"></div></div>
+            <div style="font-size: 13px; color: #8E8E93;">Last earned: {{t.lastTitle}}, {{t.lastDate}}</div>
+          </div>
+        </sc-if>
+      </section>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#30D158","options":["#30D158","#0A84FF","#BF5AF2","#FF9F0A"]},"$preview":{"width":390,"height":1500}}'>
+const C = 32;
+function f(n) { return n.toFixed(2); }
+function milled() {
+  const pts = [];
+  for (let i = 0; i < 40; i++) {
+    const a = i / 40 * 2 * Math.PI, r = i % 2 ? 26.8 : 29;
+    pts.push(f(C + r * Math.sin(a)) + ' ' + f(C - r * Math.cos(a)));
+  }
+  return 'M' + pts.join(' L') + ' Z';
+}
+function crownPath() {
+  let d = '';
+  [1, -1].forEach((side) => {
+    for (let t = 0; t < 7; t++) {
+      const a = (90 + side * (22 + t * 22)) * Math.PI / 180;
+      const rx = Math.cos(a), ry = Math.sin(a), tx = -side * Math.sin(a), ty = side * Math.cos(a);
+      const px = C + 32 * rx, py = C + 32 * ry;
+      [0.8, 0.3].forEach((w) => {
+        let dx = tx * (1 - w) + rx * w, dy = ty * (1 - w) + ry * w;
+        const len = Math.hypot(dx, dy); dx /= len; dy /= len;
+        const qx = px + dx * 7.5, qy = py + dy * 7.5, mx = (px + qx) / 2, my = (py + qy) / 2, nx = -dy * 2.4, ny = dx * 2.4;
+        d += 'M' + f(px) + ' ' + f(py) + ' Q' + f(mx + nx) + ' ' + f(my + ny) + ' ' + f(qx) + ' ' + f(qy) + ' Q' + f(mx - nx) + ' ' + f(my - ny) + ' ' + f(px) + ' ' + f(py) + ' Z ';
+      });
+    }
+  });
+  return d;
+}
+const SH = {
+  work: 'M32 4 A28 28 0 1 1 31.99 4 Z',
+  vol: 'M18 7 L44 5 L58 21 L57 44 L41 59 L19 57 L5 39 L7 19 Z',
+  streak: 'M32 3 C38 13 54 22 54 38 A22 22 0 0 1 10 38 C10 27 18 22 23 11 C26 16 29 18 31 20 C30 14 30 8 32 3 Z',
+  pr: 'M12 60 V26 A20 20 0 0 1 52 26 V60 Z',
+  dist: milled()
+};
+const IC = {
+  work: 'M3 4.5h18M5 4.5a1.6 1.6 0 1 0 1.6 1.6M19 4.5a1.6 1.6 0 1 1-1.6 1.6M6 7.5h12M7.5 7.5v10.5M10.5 7.5v10.5M13.5 7.5v10.5M16.5 7.5v10.5M5.5 18h13M4 20.5h16',
+  vol: 'M12 2.5a7.5 7.5 0 1 0 .01 0zM4.5 10h15M5.6 6.3h12.8M5.6 13.7h12.8M12 2.5c3 2.5 3 12.5 0 15M12 2.5c-3 2.5-3 12.5 0 15M3.5 21.5c1.8-2.2 4.6-3.3 8.5-3.3s6.7 1.1 8.5 3.3',
+  streak: 'M12 1.5c2.4 2.2 3.8 4 3.8 6a3.8 3.8 0 0 1-7.6 0c0-2 1.4-3.8 3.8-6zM12 5.6c1 1 1.6 1.8 1.6 2.6a1.6 1.6 0 0 1-3.2 0c0-.8.6-1.6 1.6-2.6zM7 11.5h10l-1 2H8zM9 13.5l1.2 8h3.6l1.2-8M9.6 16.5h4.8M10 19h4',
+  pr: 'M3 19.5c5.5 0 10.5-3.5 13.5-9.5 1-2 2.5-4.5 4.5-6 .3 3-.5 5.5-2 7.5 1 0 2-.3 2.8-.8-.8 2.6-2.8 4.6-5.3 5.6 1 .2 2 .1 2.8-.2-2 2.2-5.3 3.4-9 3.4H3M7 18.6c2.6-.9 5-2.7 6.8-5.2M10.5 19.2c2.4-.6 4.8-2 6.4-3.9M5 19.5c3-2 5.5-5 7-8.5',
+  dist: 'M2.5 18.5h12.5l5.5 1.4v1.6h-18zM5 18.5l2.2-6.5h3.3M8.7 18.5l1.5-4.5M12 18.5l1-3M7.2 12c0-1.6 1.2-2.6 2.8-2.6h1.5M13.5 11.5c1.8-3.2 5-4.7 8-4-2 .5-3.3 1.4-4.2 2.6 1.3-.2 2.6 0 3.7.6-1.6.2-3 .8-4 1.8 1 0 2 .2 2.8.6-2 .4-4.3.2-6.3-1.6'
+};
+// Each icon's measured bounding box centred in the widest part of its badge, clear of the stamp
+const ICT = {
+  work: 'translate(20.00 15.50) scale(1.000)', vol: 'translate(20.68 16.63) scale(0.947)', streak: 'translate(23.00 27.38) scale(0.750)',
+  pr: 'translate(20.79 20.38) scale(0.904)', dist: 'translate(20.63 14.34) scale(0.947)'
+};
+const BAND = { bronze: [0, 'none'], silver: [1.6, '2 2'], gold: [3, '3 1.5'], marble: [3, '3 1.5'], locked: [1, 'none'] };
+const CROWN = crownPath();
+const MT = {
+  bronze: { ring: '#C98A5A', fill: '#3A2618', icon: '#E7B48A' },
+  silver: { ring: '#C7CDD6', fill: '#2A2E35', icon: '#E6EAF0' },
+  gold: { ring: '#E8C25A', fill: '#3A3015', icon: '#F6DE8E' },
+  marble: { ring: '#F2EEE4', fill: '#4A4436', icon: '#FFFFFF' },
+  locked: { ring: '#48484A', fill: '#232325', icon: '#636366' }
+};
+function look(key, metal) {
+  const m = MT[metal];
+  return { shape: SH[key], icon: IC[key], iconT: ICT[key] || 'translate(20 15)', ring: m.ring, fill: m.fill, iconColor: m.icon, bandW: BAND[metal][0], bandDash: BAND[metal][1], crown: metal === 'marble' ? CROWN : '' };
+}
+const TRACKS = [
+  { key: 'work', name: 'Workouts', value: 137, unit: 'workouts', steps: [1, 10, 25, 50, 100, 250, 500, 1000], shorts: ['1', '10', '25', '50', '100', '250', '500', '1K'], titles: ['Ephebe', 'Palaestra', 'Gymnasion', 'Hoplite', 'Hekaton', 'Phalanx', 'Spartan', 'Chiliad'], dates: ['Mar 2', 'Mar 21', 'Apr 30', 'Jun 14', 'Sep 28'] },
+  { key: 'vol', name: 'Volume lifted', value: 612400, unit: 'lbs', steps: [10000, 50000, 100000, 250000, 500000, 1000000, 2500000, 5000000], shorts: ['10K', '50K', '100K', '250K', '500K', '1M', '2.5M', '5M'], titles: ['10K lbs', '50K lbs', '100K lbs', 'Quarter Million', 'Half Million', 'Atlas', 'Colossus', 'Herculean'], dates: ['Mar 9', 'Apr 18', 'May 22', 'Jul 30', 'Oct 6'] },
+  { key: 'streak', name: 'Weekly streak', value: 14, unit: 'weeks best', steps: [2, 4, 8, 12, 26, 52, 104], shorts: ['2', '4', '8', '12', '26', '52', '104'], titles: ['Fortnight', 'Month Strong', '8 Weeks', 'Quarter', 'Half Year', 'One Year', 'Two Years'], dates: ['Mar 15', 'Mar 29', 'Apr 26', 'May 24'] },
+  { key: 'pr', name: 'Personal records', value: 74, unit: 'PRs', steps: [1, 10, 25, 50, 100, 250, 500], shorts: ['1', '10', '25', '50', '100', '250', '500'], titles: ['First PR', '10 PRs', '25 PRs', '50 PRs', '100 PRs', '250 PRs', '500 PRs'], dates: ['Mar 2', 'Mar 30', 'May 3', 'Aug 9'] },
+  { key: 'dist', name: 'Distance', value: 182, unit: 'miles', steps: [10, 26.2, 50, 100, 250, 500, 1000], shorts: ['10', '26.2', '50', '100', '250', '500', '1K'], titles: ['10 Miles', 'Pheidippides', '50 Miles', '100 Miles', '250 Miles', '500 Miles', 'Odyssey'], dates: ['Apr 4', 'May 11', 'Jun 20', 'Sep 2'] }
+];
+const NODE = 84, VIEW = 390 - 32;
+function metalFor(i, n) {
+  if (n >= 6 && i === n - 1) return 'marble';
+  return i < 2 ? 'bronze' : i < 4 ? 'silver' : 'gold';
+}
+function fmt(n) { return Math.round(n).toLocaleString('en-US'); }
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#30D158';
+    let earned = 0, total = 0;
+    const tracks = TRACKS.map((t, ti) => {
+      const n = t.steps.length;
+      const got = t.steps.filter((s) => t.value >= s).length;
+      const next = Math.min(got, n - 1);
+      const pct = got >= n ? 1 : t.value / t.steps[next];
+      earned += got; total += n;
+      const badges = t.steps.map((s, i) => {
+        const has = t.value >= s;
+        const isNext = !has && i === got;
+        return Object.assign(look(t.key, has ? metalFor(i, n) : 'locked'), {
+          short: t.shorts[i], title: t.titles[i], isNext: isNext, pctW: Math.round(pct * 100) + '%',
+          halo: isNext ? accent : 'transparent', titleColor: has || isNext ? '#FFFFFF' : '#8E8E93',
+          label: t.titles[i] + (has ? ', earned ' + t.dates[i] : isNext ? ', next, ' + Math.round(pct * 100) + ' percent' : ', locked')
+        });
+      });
+      const offset = Math.min(0, Math.max(VIEW - n * NODE, VIEW / 2 - (next * NODE + NODE / 2))) + 16;
+      return {
+        name: t.name, valueText: fmt(t.value) + ' ' + t.unit, got: got, n: n, badges: badges,
+        offset: offset + 'px', lineW: ((n - 1) * NODE) + 'px', doneW: (Math.max(0, got - 1) * NODE + (got < n ? pct * NODE : 0)) + 'px',
+        showDetail: ti === 0, nextTitle: t.titles[next] + ' (' + t.shorts[next] + ')',
+        toGo: fmt(t.steps[next] - t.value) + ' to go', pctW: Math.round(pct * 100) + '%',
+        lastTitle: t.titles[got - 1], lastDate: t.dates[got - 1]
+      };
+    });
+    return { accent: accent, tracks: tracks, earned: earned, total: total };
+  }
+}
+</script>
+</body>
+</html>
