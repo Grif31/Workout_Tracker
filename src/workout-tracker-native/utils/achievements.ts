@@ -38,6 +38,10 @@ export interface AchievementsData {
   hidden: OneOff[];
   hidden_remaining: number;
   unseen: string[];
+  /** Pinned to the profile, in order (TODO §27 Phase 4) */
+  pinned: string[];
+  /** False until the user has chosen, when the profile shows their finest three */
+  pins_saved: boolean;
 }
 /** One item of a save's `new_achievements` */
 export interface NewAchievement {
@@ -236,7 +240,9 @@ function badgeRank(key: string, threshold?: number): number {
   return METAL_RANK[look.metal] + (look.top ? 1 : 0);
 }
 
-/** The three finest earned badges (metal, then newest), until pinning (TODO §27 Phase 4) */
+export const MAX_PINS = 3;
+
+/** The three finest earned badges (metal, then newest): the profile's badges until the user pins their own */
 export function topBadges(data: AchievementsData, count = 3): EarnedItem[] {
   return earnedBadges(data)
     .map((item, i) => ({ item, i, r: badgeRank(item.key, item.threshold) }))
@@ -245,6 +251,30 @@ export function topBadges(data: AchievementsData, count = 3): EarnedItem[] {
     .map(x => x.item);
 }
 
+
+/** The badges on the profile and atop the Hall: the pinned ones once chosen, else the finest three */
+export function showcaseBadges(data: AchievementsData): EarnedItem[] {
+  if (!data.pins_saved) return topBadges(data);
+  const earned = new Map(earnedBadges(data).map(item => [item.key, item]));
+  return data.pinned.map(k => earned.get(k)).filter((item): item is EarnedItem => !!item);
+}
+
+/** PUT /api/achievements/pins. Updates the cache so the profile shows the choice on the way back */
+export async function savePins(keys: string[]): Promise<boolean> {
+  try {
+    const res = await apiFetch('/api/achievements/pins', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keys }),
+    });
+    if (!res.ok) return false;
+    const cached = appCache.get<AchievementsData>(ACHIEVEMENTS_CACHE_KEY);
+    if (cached) appCache.set(ACHIEVEMENTS_CACHE_KEY, { ...cached, pinned: keys, pins_saved: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** The unlock sheet leads with the finest of a save's new badges, the newest
  *  of those (the server lists them oldest first); the rest are "+N more" */

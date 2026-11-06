@@ -1428,6 +1428,11 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     notes,
     date: toLocalDateStr(selectedDate),
     duration: editMode ? undefined : Math.floor(elapsed / 60),
+    // For the Eos badge (before 6 AM). Only a workout dated today started at a
+    // time the phone knows; the server's own clock is UTC
+    ...(!editMode && toLocalDateStr(selectedDate) === toLocalDateStr(new Date())
+      ? { local_start_hour: new Date(Date.now() - elapsed * 1000).getHours() }
+      : {}),
     exercises: exercisesToSave.map((ex, exIndex) => ({
       id: ex.id,
       name: ex.name,

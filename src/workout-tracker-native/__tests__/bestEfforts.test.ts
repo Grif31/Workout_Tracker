@@ -1,4 +1,4 @@
-import { extractBestEfforts, bestEffortLabel, type TrackPoint } from '../utils/bestEfforts';
+import { extractBestEfforts, bestEffortLabel, isNegativeSplit, type TrackPoint } from '../utils/bestEfforts';
 
 // One degree of latitude is ~111.195 km on the sphere haversine assumes, so a
 // straight north leg lets a test ask for an exact distance at an exact pace.
@@ -156,5 +156,21 @@ describe('bestEffortLabel', () => {
   it('names ride milestones too', () => {
     expect(bestEffortLabel({ milestone_type: 'distance', distance_km: 40, duration_min: 70 })).toBe('40K');
     expect(bestEffortLabel({ milestone_type: 'duration', distance_km: 50, duration_min: 120 })).toBe('2 hr');
+  });
+});
+
+describe('isNegativeSplit', () => {
+  it('is true when the second half is faster', () => {
+    expect(isNegativeSplit(track([[1, 6], [1, 5]]))).toBe(true);
+  });
+
+  it('is false for an even or fading run', () => {
+    expect(isNegativeSplit(track([[2, 5]]))).toBe(false);
+    expect(isNegativeSplit(track([[1, 5], [1, 6]]))).toBe(false);
+  });
+
+  it('has nothing to say about a short track', () => {
+    expect(isNegativeSplit(track([[1, 6], [0.5, 4]]))).toBeNull();
+    expect(isNegativeSplit([])).toBeNull();
   });
 });

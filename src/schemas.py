@@ -97,6 +97,8 @@ def _validate_exercises(exercises):
             and all(isinstance(seg, str) and len(seg) <= MAX_SEGMENT_LENGTH for seg in segments)
         ):
             raise ValidationError(f'exercise {i + 1} route_segments must be a list of encoded polylines')
+        if ex.get('negative_split') is not None and not isinstance(ex['negative_split'], bool):
+            raise ValidationError(f'exercise {i + 1} negative_split must be true or false')
         # A top speed feeds what the app shows, never PRs, but a string would
         # reach the Float column and fail the save as a 500
         for s in sets:
@@ -151,6 +153,8 @@ class WorkoutSchema(_Base):
     max_heart_rate = fields.Int(load_default=None, allow_none=True, validate=validate.Range(min=20, max=260))
     # The app's id for this workout, so a repeated save returns the first one
     client_id = fields.Str(load_default=None, allow_none=True, validate=validate.Length(min=8, max=64))
+    # The phone's local hour the workout started (the Eos badge)
+    local_start_hour = fields.Int(load_default=None, allow_none=True, validate=validate.Range(min=0, max=23))
 
 # No load_default — missing fields excluded to preserve 'if field in data' PATCH semantics.
 class UpdateWorkoutSchema(_Base):
@@ -335,6 +339,11 @@ class AiWeeklyReviewSchema(AiInsightsSchema):
 
 
 # ── Achievements ─────────────────────────────────────────────
+class AchievementPinsSchema(_Base):
+    # In display order; an empty list pins nothing
+    keys = fields.List(fields.Str(validate=validate.Length(min=1, max=48)),
+                       required=True, validate=validate.Length(max=3))
+
 class AchievementsSeenSchema(_Base):
     # Omitted: every unseen badge is marked seen
     keys = fields.List(fields.Str(validate=validate.Length(min=1, max=48)),

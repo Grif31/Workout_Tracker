@@ -169,14 +169,14 @@ describe('GreekRankScreen', () => {
     afterEach(() => jest.restoreAllMocks());
 
     it('centers the held rank once the list has content', async () => {
-      // Circle 88 + gap 16 = 104 per item. With half the leftover width as side
-      // padding, index 4 (Olympian) is dead center at exactly 4 * 104.
+      // Circle 88 + gap 22 = 110 per item. With half the leftover width as side
+      // padding, index 4 (Olympian) is dead center at exactly 4 * 110.
       const scrollSpy = jest.spyOn(FlatList.prototype, 'scrollToOffset').mockImplementation(() => {});
       const { UNSAFE_getByType } = await renderWith(payload(null, 41, {
         greek_rank: 'Olympian', greek_score: 70, score_rank: 'Olympian',
       }));
       fireEvent(UNSAFE_getByType(FlatList), 'contentSizeChange', 1000, 120);
-      expect(scrollSpy).toHaveBeenCalledWith({ offset: 416, animated: false });
+      expect(scrollSpy).toHaveBeenCalledWith({ offset: 440, animated: false });
     });
 
     it('recenters when the measured width changes the padding', async () => {
@@ -186,10 +186,10 @@ describe('GreekRankScreen', () => {
       }));
       const list = UNSAFE_getByType(FlatList);
       fireEvent(list, 'layout', { nativeEvent: { layout: { width: 500, height: 120, x: 0, y: 0 } } });
-      expect(list.props.contentContainerStyle).toEqual({ paddingHorizontal: (500 - 104) / 2 });
+      expect(list.props.contentContainerStyle).toEqual({ paddingHorizontal: (500 - 110) / 2 });
       fireEvent(list, 'contentSizeChange', 1124, 120);
       // Hero is index 2, independent of width
-      expect(scrollSpy).toHaveBeenLastCalledWith({ offset: 208, animated: false });
+      expect(scrollSpy).toHaveBeenLastCalledWith({ offset: 220, animated: false });
     });
 
     it('follows the circle the carousel snapped to, not just taps', async () => {
@@ -199,7 +199,7 @@ describe('GreekRankScreen', () => {
       }));
       // Scroll Athlete (index 1) into the center
       fireEvent(UNSAFE_getByType(FlatList), 'momentumScrollEnd', {
-        nativeEvent: { contentOffset: { x: 104 } },
+        nativeEvent: { contentOffset: { x: 110 } },
       });
       await waitFor(() => expect(getByText('12–28')).toBeTruthy());
     });
@@ -211,7 +211,7 @@ describe('GreekRankScreen', () => {
       }));
       scrollSpy.mockClear();
       fireEvent.press(getAllByText('Titan')[0]);
-      expect(scrollSpy).toHaveBeenCalledWith({ offset: 5 * 104, animated: true });
+      expect(scrollSpy).toHaveBeenCalledWith({ offset: 5 * 110, animated: true });
     });
   });
 

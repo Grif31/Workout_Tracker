@@ -239,7 +239,7 @@ class TestHidden:
         res = client.get('/api/achievements', headers=hdrs(auth_token))
         data = res.get_json()
         assert data['hidden'] == []
-        assert data['hidden_remaining'] == 6
+        assert data['hidden_remaining'] == 8
         from utils.achievements import HIDDEN
         for key, title in HIDDEN.items():
             assert key.encode() not in res.data and title.encode() not in res.data
@@ -259,7 +259,99 @@ class TestHidden:
         assert 'hidden_neomenia' in _keys(body['new_achievements'])
         data = _get(client, auth_token)
         assert [h['title'] for h in data['hidden']] == ['Neomenia']
-        assert data['hidden_remaining'] == 5
+        assert data['hidden_remaining'] == 7
+
+    def _timed(self, client, token, hour):
+        payload = {'workoutName': 'Early', 'duration': 45, 'local_start_hour': hour,
+                   'exercises': [{'name': 'Push-up', 'sets': [{'reps': 10}]}]}
+        res = client.post('/api/workouts', json=payload, headers=hdrs(token))
+        assert res.status_code == 201, res.get_json()
+        return res.get_json()
+
+    def test_eos_needs_a_start_before_six(self, client, auth_token):
+        assert 'hidden_eos' not in _keys(self._timed(client, auth_token, 6)['new_achievements'])
+        assert 'hidden_eos' in _keys(self._timed(client, auth_token, 5)['new_achievements'])
+
+    def test_a_save_without_a_start_hour_never_finds_eos(self, client, auth_token):
+        assert 'hidden_eos' not in _keys(self._timed(client, auth_token, None)['new_achievements'])
+
+    def test_rejects_an_impossible_start_hour(self, client, auth_token):
+        payload = {'workoutName': 'Early', 'local_start_hour': 24,
+                   'exercises': [{'name': 'Push-up', 'sets': [{'reps': 10}]}]}
+        assert client.post('/api/workouts', json=payload, headers=hdrs(auth_token)).status_code == 400
+
+    def _run(self, client, token, name, split):
+        payload = {'workoutName': name, 'exercises': [{
+            'name': name, 'exercise_type': 'cardio', 'negative_split': split,
+            'sets': [{'cardio_duration': 30, 'distance': 5, 'distance_unit': 'km'}]}]}
+        res = client.post('/api/workouts', json=payload, headers=hdrs(token))
+        assert res.status_code == 201, res.get_json()
+        return res.get_json()
+
+    def test_kairos_is_a_negative_split_run(self, client, auth_token):
+        assert 'hidden_kairos' not in _keys(self._run(client, auth_token, 'Running', False)['new_achievements'])
+        assert 'hidden_kairos' not in _keys(self._run(client, auth_token, 'Cycling', True)['new_achievements'])
+        assert 'hidden_kairos' in _keys(self._run(client, auth_token, 'Running', True)['new_achievements'])
+
+    def test_editing_a_runs_sets_clears_its_split(self, app, client, auth_token):
+        from models import Exercise
+        wid = self._run(client, auth_token, 'Running', True)['id']
+        detail = client.get(f'/api/workouts/{wid}', headers=hdrs(auth_token)).get_json()
+        ex = detail['exercises'][0]
+        ex['sets'][0]['distance'] = 6
+        res = client.put(f'/api/workouts/{wid}', json={'exercises': [ex]}, headers=hdrs(auth_token))
+        assert res.status_code == 200, res.get_json()
+        with app.app_context():
+            assert db.session.get(Exercise, ex['id']).negative_split is None
+
+    def test_rejects_a_non_boolean_split(self, client, auth_token):
+        payload = {'workoutName': 'Run', 'exercises': [{
+            'name': 'Running', 'exercise_type': 'cardio', 'negative_split': 'yes',
+            'sets': [{'cardio_duration': 30, 'distance': 5}]}]}
+        assert client.post('/api/workouts', json=payload, headers=hdrs(auth_token)).status_code == 400
+
+
+class TestPins:
+
+    def _earn(self, app, client, token):
+        tid = _template(app, 'Bench Press', 'Bench Press')
+        _lift(client, token, tid, 135)   # workouts_1, prs_1, plates_bench_1
+        return tid
+
+    def test_unchosen_until_saved(self, app, client, auth_token):
+        self._earn(app, client, auth_token)
+        data = _get(client, auth_token)
+        assert data['pins_saved'] is False and data['pinned'] == []
+
+    def test_pins_keep_their_order(self, app, client, auth_token):
+        self._earn(app, client, auth_token)
+        keys = ['plates_bench_1', 'workouts_1']
+        res = client.put('/api/achievements/pins', json={'keys': keys}, headers=hdrs(auth_token))
+        assert res.status_code == 200, res.get_json()
+        assert res.get_json()['pinned'] == keys
+        full = _get(client, auth_token)
+        assert full['pinned'] == keys and full['pins_saved'] is True
+
+        # Choosing none is kept apart from never choosing
+        client.put('/api/achievements/pins', json={'keys': []}, headers=hdrs(auth_token))
+        data = _get(client, auth_token)
+        assert data['pinned'] == [] and data['pins_saved'] is True
+
+    def test_only_earned_badges_pin(self, app, client, auth_token):
+        self._earn(app, client, auth_token)
+        for keys in (['workouts_8'], ['hidden_pi'], ['workouts_1', 'workouts_1'], ['nope_1']):
+            res = client.put('/api/achievements/pins', json={'keys': keys}, headers=hdrs(auth_token))
+            assert res.status_code == 400, keys
+
+    def test_at_most_three(self, app, client, auth_token):
+        self._earn(app, client, auth_token)
+        res = client.put('/api/achievements/pins', json={'keys': ['a_1', 'b_1', 'c_1', 'd_1']}, headers=hdrs(auth_token))
+        assert res.status_code == 400
+
+    def test_another_users_badge_cannot_be_pinned(self, app, client, auth_token, auth_token2):
+        self._earn(app, client, auth_token)
+        res = client.put('/api/achievements/pins', json={'keys': ['workouts_1']}, headers=hdrs(auth_token2))
+        assert res.status_code == 400
 
 
 class TestSeen:

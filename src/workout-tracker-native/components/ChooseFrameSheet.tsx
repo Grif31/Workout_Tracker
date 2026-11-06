@@ -10,8 +10,8 @@ import ProfileAvatarFrame, { frameOverflow } from './ProfileAvatarFrame';
 
 const FRAME = 64;
 const AVATAR = 54;
-// Aretē's wreath draws past the frame; every cell leaves the same room so the names line up
-const BLEED = frameOverflow('Aretē', FRAME);
+// Aretē's crown reaches furthest; every cell leaves that room so the names line up
+const BLEED = frameOverflow('Aretē', FRAME, AVATAR);
 
 type Props = {
   visible: boolean;

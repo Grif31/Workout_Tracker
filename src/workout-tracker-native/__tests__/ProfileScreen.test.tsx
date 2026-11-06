@@ -4,6 +4,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 import { mockFetchSequence, createMockNavigation, createMockRoute } from './testUtils';
 import ProfileScreen from '../screens/ProfileTab/ProfileScreen';
+import { fetchAchievements } from '../utils/achievements';
+
+// Fetched beside the screen's own calls, so it would take a slot in the ordered mocks
+jest.mock('../utils/achievements', () => ({
+  ...jest.requireActual('../utils/achievements'),
+  fetchAchievements: jest.fn(() => Promise.resolve(null)),
+}));
 
 jest.mock('theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: { fontSize: 30 }, body: {}, button: {} } }));
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
@@ -56,6 +63,21 @@ describe('ProfileScreen', () => {
     // The logging timer said 1 min; 5 km in the default mi
     expect(await findByText('45 min  ·  3.11 mi')).toBeTruthy();
     expect(queryByText(/^1 min/)).toBeNull();
+  });
+
+  it('shows the pinned badges under the name and opens the Trophy Hall', async () => {
+    const earned = (key: string, title: string) => ({
+      key, title, visible: true, earned: true, earned_at: '2026-06-01T00:00:00', workout_id: 1,
+      workout_name: 'Push Day', workout_cardio: false, seen: true,
+    });
+    (fetchAchievements as jest.Mock).mockResolvedValueOnce({
+      weight_unit: 'lbs', distance_unit: 'mi', earned_count: 2, total_count: 10, tracks: [],
+      feats: [earned('feat_bw_bench', 'Bodyweight Bench'), earned('feat_nostos', 'Nostos')],
+      hidden: [], hidden_remaining: 8, unseen: [], pinned: ['feat_nostos'], pins_saved: true,
+    });
+    const { findByLabelText } = render(<ProfileScreen navigation={nav as any} route={route as any} />);
+    fireEvent.press(await findByLabelText('Pinned badges: Nostos. Opens the Trophy Hall'));
+    expect(nav.navigate).toHaveBeenCalledWith('Achievements');
   });
 
   it('hides the cardio totals for a user with no cardio', async () => {

@@ -39,6 +39,10 @@ import SegmentedControl from '../../components/SegmentedControl';
 import SectionRule from '../../components/SectionRule';
 import { writeWidgetGreekRank } from '../../utils/widgetData';
 import {
+  ACHIEVEMENTS_CACHE_KEY, fetchAchievements, showcaseBadges, type AchievementsData,
+} from '../../utils/achievements';
+import AchievementBadge from '../../components/achievements/AchievementBadge';
+import {
   MAX_PROFILE_PINS as MAX_PINS, PR_PINS_BASE, type Pin, type ServerPin,
   samePin, defaultPins, parseStoredPins, resolvePin, recentPrChange, toServerPin, fromServerPin,
 } from '../../utils/profilePins';
@@ -53,6 +57,9 @@ const HISTORY_VIEWS: readonly { key: HistoryView; label: string }[] = [
   { key: 'year', label: 'Year' },
   { key: 'multiyear', label: 'All Years' },
 ];
+
+// Profile's pinned badges, under the name
+const PINNED_BADGE = 40;
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'ProfileHome'>;
 
@@ -274,9 +281,15 @@ export default function ProfileScreen({ navigation }: Props) {
     }
   };
 
+  const [badgeData, setBadgeData] = useState<AchievementsData | null>(() => appCache.get<AchievementsData>(ACHIEVEMENTS_CACHE_KEY));
+
   useFocusEffect(useCallback(() => {
 
     fetchAll();
+    // The cache holds a pin choice made in the Trophy Hall, before the fetch lands
+    const cachedBadges = appCache.get<AchievementsData>(ACHIEVEMENTS_CACHE_KEY);
+    if (cachedBadges) setBadgeData(cachedBadges);
+    fetchAchievements().then(fresh => { if (fresh) setBadgeData(fresh); });
     AsyncStorage.getItem(`${PROFILE_FRAME_RANK_KEY}_${user?.id}`).then(val => {
       if (val) setSelectedFrame(val);
     });
@@ -486,6 +499,9 @@ export default function ProfileScreen({ navigation }: Props) {
     );
   };
 
+  // The pinned badges, or the finest three until the user picks (TODO §27 Phase 4)
+  const pinnedBadges = useMemo(() => (badgeData ? showcaseBadges(badgeData) : []), [badgeData]);
+
   // Memoized as an element (not a function ref) so FlatList never remounts it
   // and the Image never reloads between tab visits.
   const listHeader = useMemo(() => (
@@ -531,6 +547,19 @@ export default function ProfileScreen({ navigation }: Props) {
           </Text>
           {!!user?.bio && (
             <Text style={styles.workoutCount} numberOfLines={2}>{user.bio}</Text>
+          )}
+          {pinnedBadges.length > 0 && (
+            <TouchableOpacity
+              style={styles.pinnedBadges} onPress={() => navigation.navigate('Achievements')}
+              accessibilityRole="button"
+              accessibilityLabel={`Pinned badges: ${pinnedBadges.map(b => b.title).join(', ')}. Opens the Trophy Hall`}
+            >
+              {pinnedBadges.map(b => (
+                <View key={b.key} accessible={false} importantForAccessibility="no-hide-descendants">
+                  <AchievementBadge badgeKey={b.key} threshold={b.threshold} weightUnit={badgeData!.weight_unit} size={PINNED_BADGE} />
+                </View>
+              ))}
+            </TouchableOpacity>
           )}
         </View>
       </PressableScale>
@@ -597,7 +626,7 @@ export default function ProfileScreen({ navigation }: Props) {
         <SegmentedControl options={HISTORY_VIEWS} value={historyView} onChange={changeHistoryView} style={styles.historyViewSwitch} size="md" />
       </View>
     </View>
-  ), [styles, avatarSource, selectedFrame, displayName, user, stats, greekRank, prs, shownPins, weightUnit, unit, distanceUnit, colors, historyView]);
+  ), [styles, avatarSource, selectedFrame, displayName, user, stats, greekRank, prs, shownPins, weightUnit, unit, distanceUnit, colors, historyView, pinnedBadges, badgeData]);
 
   const showList = historyView === 'list';
 
@@ -939,6 +968,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   rankBadgeText: { fontSize: typography.fontSize.sm, fontWeight: '700', letterSpacing: 0.5 },
   userInfo: { flex: 1 },
+  pinnedBadges: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, alignSelf: 'flex-start', minHeight: 44, alignItems: 'center' },
   value: { fontSize: typography.fontSize.md, fontWeight: '600', marginBottom: spacing.xs },
   workoutCount: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
   emptyText: {

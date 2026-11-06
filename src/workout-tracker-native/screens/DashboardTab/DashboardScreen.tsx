@@ -758,7 +758,7 @@ export default function DashboardScreen({ navigation }: Props) {
                 <TouchableOpacity
                   onPress={() => (navigation as any).navigate('ProfileTab')}
                   // Only the Aretē wreath draws outside the ring; keep it off the edge.
-                  style={[styles.avatarButton, { marginRight: frameOverflow(frameRank, AVATAR_FRAME_SIZE) }]}
+                  style={[styles.avatarButton, { marginRight: frameOverflow(frameRank, AVATAR_FRAME_SIZE, AVATAR_SIZE) }]}
                   accessibilityRole="button"
                   accessibilityLabel="Open your profile"
                   testID="home-avatar"

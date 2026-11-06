@@ -756,7 +756,7 @@ def add_workout():
         new_workout = Workout(
             user_id=current_user_id, name=name, notes=notes, date=workout_date, duration=duration,
             avg_heart_rate=data.get('avg_heart_rate'), max_heart_rate=data.get('max_heart_rate'),
-            client_id=client_id,
+            client_id=client_id, local_start_hour=data.get('local_start_hour'),
         )
         db.session.add(new_workout)
         db.session.flush()
@@ -776,6 +776,7 @@ def add_workout():
                 exercise_type=ex.get('exercise_type', 'strength'),
                 route_polyline=ex.get('route_polyline'),
                 route_segments=ex.get('route_segments'),
+                negative_split=ex.get('negative_split'),
                 notes=ex.get('notes'),
             )
             new_ex.best_efforts = _build_best_efforts(ex)
@@ -1034,6 +1035,9 @@ def update_workout(workout_id):
 
                 if cardio_edited and ex.best_efforts:
                     ex.best_efforts = []
+                # Worked out from the recorded track, which an edited set no longer matches
+                if cardio_edited:
+                    ex.negative_split = None
             else:
                 new_ex = Exercise(
                     name=exData["name"],
@@ -1046,6 +1050,7 @@ def update_workout(workout_id):
                     exercise_type=exData.get('exercise_type', 'strength'),
                     route_polyline=exData.get('route_polyline'),
                     route_segments=exData.get('route_segments'),
+                    negative_split=exData.get('negative_split'),
                     notes=exData.get('notes'),
                 )
                 new_ex.best_efforts = _build_best_efforts(exData)

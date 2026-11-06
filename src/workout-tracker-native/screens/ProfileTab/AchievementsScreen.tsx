@@ -13,7 +13,7 @@ import { ProfileStackParamsList } from '../../navigation/types';
 import { appCache } from '../../utils/appCache';
 import {
   ACHIEVEMENTS_CACHE_KEY, almostThere, amountText, badgeDate, earnedBadges, earnedLine, fetchAchievements,
-  markAchievementsSeen, milestoneTiles, notYetShown, rungProgress, topBadges,
+  markAchievementsSeen, milestoneTiles, notYetShown, rungProgress, savePins, showcaseBadges,
   type AchievementsData, type EarnedItem,
 } from '../../utils/achievements';
 import { badgeAccessibilityLabel, badgeLook } from '../../constants/achievements';
@@ -21,6 +21,7 @@ import AchievementBadge from '../../components/achievements/AchievementBadge';
 import SetDownBadge from '../../components/achievements/SetDownBadge';
 import BadgeRing from '../../components/achievements/BadgeRing';
 import BadgeDetailModal, { type BadgeDetail } from '../../components/achievements/BadgeDetailModal';
+import PinBadgesSheet from '../../components/achievements/PinBadgesSheet';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'Achievements'>;
 
@@ -46,6 +47,9 @@ export default function AchievementsScreen({ navigation }: Props) {
   // Dots stay for this visit even though the server is told they've been seen
   const [newKeys, setNewKeys] = useState<Set<string>>(new Set());
   const reported = useRef(new Set<string>());
+  const [pinning, setPinning] = useState(false);
+  const [savingPins, setSavingPins] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const fresh = await fetchAchievements();
@@ -69,6 +73,19 @@ export default function AchievementsScreen({ navigation }: Props) {
     setRefreshing(true);
     await load();
     setRefreshing(false);
+  };
+
+  const handleSavePins = async (keys: string[]) => {
+    setSavingPins(true);
+    setPinError(null);
+    const ok = await savePins(keys);
+    setSavingPins(false);
+    if (!ok) {
+      setPinError('Your pinned badges weren’t saved. Try again.');
+      return;
+    }
+    setData(prev => (prev ? { ...prev, pinned: keys, pins_saved: true } : prev));
+    setPinning(false);
   };
 
   const openWorkout = (workoutId: number, cardio: boolean) => {
@@ -105,17 +122,18 @@ export default function AchievementsScreen({ navigation }: Props) {
 
   const wu = data.weight_unit;
   const du = data.distance_unit;
-  const top = topBadges(data);
+  const top = showcaseBadges(data);
+  const allEarned = earnedBadges(data);
   const close = almostThere(data);
   const tiles = milestoneTiles(data);
   const undiscovered = notYetShown(data);
   const openNote = undiscovered.find(u => u.track === discoverOpen);
   const feats = data.feats.filter(f => f.visible);
-  const recent = earnedBadges(data).slice(0, 3);
+  const recent = allEarned.slice(0, 3);
   const unfound = Array.from({ length: data.hidden_remaining });
 
   const itemDetail = (item: EarnedItem): BadgeDetail => ({ key: item.key, title: item.title, threshold: item.threshold, unit: item.unit, state: item.state });
-  // Shown in the order earned, the middle one largest
+  // The first (finest, or first pinned) in the middle, largest
   const showcase = top.length === 3 ? [top[1], top[0], top[2]] : top;
 
   return (
@@ -127,8 +145,9 @@ export default function AchievementsScreen({ navigation }: Props) {
       >
         {error && <Text style={[styles.muted, styles.staleNote]}>Showing your trophies from earlier. Pull to refresh.</Text>}
 
-        {showcase.length > 0 && (
+        {allEarned.length > 0 && (
           <View style={styles.showcase}>
+            {showcase.length === 0 && <Text style={[styles.muted, styles.center]}>Pin up to 3 badges to your profile.</Text>}
             <View style={styles.showcaseRow}>
               {showcase.map((item, i) => {
                 const size = showcase.length === 3 ? SHOWCASE_SIZES[i] : 96;
@@ -150,7 +169,12 @@ export default function AchievementsScreen({ navigation }: Props) {
                 );
               })}
             </View>
-            <Text style={styles.showcaseCaption}>Your top badges</Text>
+            <View style={styles.captionRow}>
+              <Text style={styles.showcaseCaption}>{data.pins_saved ? 'Pinned to your profile' : 'Your top badges'}</Text>
+              <TouchableOpacity onPress={() => setPinning(true)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Change pinned badges">
+                <Text style={[styles.changeText, { color: colors.accent }]}>Change</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -293,6 +317,17 @@ export default function AchievementsScreen({ navigation }: Props) {
         )}
       </ScrollView>
 
+      <PinBadgesSheet
+        visible={pinning}
+        onClose={() => { setPinning(false); setPinError(null); }}
+        earned={allEarned}
+        current={top.map(item => item.key)}
+        weightUnit={wu}
+        saving={savingPins}
+        error={pinError}
+        onSave={handleSavePins}
+      />
+
       <BadgeDetailModal
         detail={detail}
         weightUnit={wu}
@@ -327,6 +362,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   showcaseItem: { width: 108, alignItems: 'center', gap: 6 },
   showcaseTitle: { fontSize: 13, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
   showcaseCaption: { fontSize: 13, color: colors.textSecondary },
+  captionRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm + 4 },
+  changeText: { fontSize: 13, fontWeight: '700' },
   sectionTitle: {
     marginTop: spacing.lg, marginBottom: spacing.sm + 2, marginHorizontal: spacing.md,
     fontSize: 17, fontWeight: '700', color: colors.textPrimary,

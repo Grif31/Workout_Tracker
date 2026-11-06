@@ -114,6 +114,21 @@ describe('buildGpsRunBody', () => {
   };
   const set = (body: ReturnType<typeof buildGpsRunBody>) => body.exercises[0].sets[0];
 
+  it('sends the hour the run started, for the Eos badge', () => {
+    const first = base.coords[0].timestamp;
+    expect(buildGpsRunBody(base).local_start_hour).toBe(new Date(first).getHours());
+    // No fixes: the time out counted back from now
+    expect(buildGpsRunBody({ ...base, coords: [], elapsedSec: 2 * 3600 }).local_start_hour).toBe(21);
+  });
+
+  it('sends a negative split for runs only', () => {
+    const run = buildGpsRunBody({ ...base, coords: walk(45).coords });
+    expect(typeof (run.exercises[0] as { negative_split?: boolean }).negative_split).toBe('boolean');
+    expect(buildGpsRunBody({ ...base, activity: 'Cycle', coords: walk(45).coords }).exercises[0]).not.toHaveProperty('negative_split');
+    // Too short to say
+    expect(buildGpsRunBody(base).exercises[0]).not.toHaveProperty('negative_split');
+  });
+
   it('sends distance and pace in the display unit', () => {
     const body = buildGpsRunBody(base);
     const miles = 2 / 1.60934;

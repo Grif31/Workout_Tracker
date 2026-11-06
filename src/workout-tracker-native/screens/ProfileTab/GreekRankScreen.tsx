@@ -4,7 +4,6 @@ import {
   ActivityIndicator, Dimensions, FlatList, RefreshControl,
   NativeSyntheticEvent, NativeScrollEvent, Animated, Easing,
 } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -45,36 +44,42 @@ const SCORE_PARTS = [
 ] as const;
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CIRCLE_SIZE = 88;
-const CIRCLE_GAP = 16;
+// Wide enough that Titan's blocks and Aretē's crown, side by side, don't touch
+const CIRCLE_GAP = 22;
 const ITEM_WIDTH = CIRCLE_SIZE + CIRCLE_GAP;
 
 
 const CIRCLE_INNER = CIRCLE_SIZE - 20;
-// The Aretē frame's wreath draws below the circle, so every label clears it.
+// The Aretē frame's crown draws below the circle, so every label clears it.
 // Applied to all ranks so the labels keep a common baseline.
-const LABEL_GAP = frameOverflow(ARETE_RANK, CIRCLE_SIZE) + spacing.xs;
+const LABEL_GAP = frameOverflow(ARETE_RANK, CIRCLE_SIZE, CIRCLE_INNER) + spacing.xs;
 
-const HERO_FRAME = 116;
-const HERO_AVATAR = 104;
-// Same clearance for the hero: its wreath is bigger, so the name sits lower
-const HERO_LABEL_GAP = frameOverflow(ARETE_RANK, HERO_FRAME) + spacing.xs;
+// The frame's ornaments are a fixed share of the photo, so a bigger photo is
+// the only way to keep a high rank's frame from swallowing it
+const HERO_FRAME = 132;
+const HERO_AVATAR = 120;
+// Room for the widest frame (Aretē's crown) above and below, so the hero
+// doesn't shift when the frame changes
+const HERO_BLEED = frameOverflow(ARETE_RANK, HERO_FRAME, HERO_AVATAR);
+const PENCIL = 34;
 
 const circleStyles = StyleSheet.create({
   touchable:   { alignItems: 'center', width: ITEM_WIDTH },
   svgWrapper:  { width: CIRCLE_SIZE, height: CIRCLE_SIZE, alignItems: 'center', justifyContent: 'center' },
   innerCircle: { width: CIRCLE_INNER, height: CIRCLE_INNER, borderRadius: CIRCLE_INNER / 2, alignItems: 'center', justifyContent: 'center' },
   rankName:    { fontSize: typography.fontSize.xs, fontWeight: '600', marginTop: LABEL_GAP, textAlign: 'center' },
+  // Faded so the frames still to come never outshine the ones held
+  lockedFrame: { opacity: 0.35 },
   rankRange:   { fontSize: typography.fontSize.xs, marginTop: 2 },
   iconText:    { fontSize: typography.fontSize.lg, fontWeight: '800' as const },
 });
 
 function RankCircle({
-  rank, rankIdx, heldIdx, greekScore, isSelected, onSelect,
+  rank, rankIdx, heldIdx, isSelected, onSelect,
 }: {
   rank: typeof GREEK_RANKS[number];
   rankIdx: number;
   heldIdx: number;
-  greekScore: number;
   isSelected: boolean;
   onSelect: () => void;
 }) {
@@ -86,60 +91,30 @@ function RankCircle({
   const isCurrent   = rankIdx === heldIdx;
   const isLocked    = rankIdx > heldIdx;
 
-  const r            = CIRCLE_SIZE / 2 - 6;
-  const circumference = 2 * Math.PI * r;
-  const progress     = isCurrent
-    ? Math.max(0, Math.min(1, (greekScore - rank.low) / (rank.high - rank.low)))
-    : isCompleted ? 1 : 0;
-  const strokeOffset = circumference * (1 - progress);
+  const tint = rankTextColor(rank.name, rank.color, mode);
 
   return (
-    <TouchableOpacity onPress={onSelect} style={[circleStyles.touchable, { opacity: isLocked ? 0.6 : 1 }]}>
+    <TouchableOpacity onPress={onSelect} style={circleStyles.touchable} accessibilityRole="button"
+      accessibilityLabel={`${rank.name}${isLocked ? ', locked' : isCurrent ? ', your rank' : ', reached'}`}
+      accessibilityState={{ selected: isSelected }}
+    >
+      {/* Each rank's own frame, so the carousel shows what every rank adds */}
       <View style={circleStyles.svgWrapper}>
-        {isLocked ? (
-          <>
-            {/* Preview the real frame this rank unlocks, lock in front */}
-            <ProfileAvatarFrame rankName={rank.name} size={CIRCLE_SIZE} avatarSize={CIRCLE_INNER} />
-            <View style={[circleStyles.innerCircle, { backgroundColor: colors.surface }]}>
-              <Ionicons name="lock-closed" size={20} color={colors.textSecondary} />
-            </View>
-          </>
-        ) : (
-          <>
-            <Svg width={CIRCLE_SIZE} height={CIRCLE_SIZE} style={{ position: 'absolute' }}>
-              <Circle
-                cx={CIRCLE_SIZE / 2} cy={CIRCLE_SIZE / 2} r={r}
-                stroke={rank.color + '33'}
-                strokeWidth={6} fill="none"
-              />
-              {(isCurrent || isCompleted) && (
-                <Circle
-                  cx={CIRCLE_SIZE / 2} cy={CIRCLE_SIZE / 2} r={r}
-                  stroke={rank.color}
-                  strokeWidth={6} fill="none"
-                  strokeDasharray={circumference}
-                  strokeDashoffset={strokeOffset}
-                  strokeLinecap="round"
-                  rotation="-90"
-                  origin={`${CIRCLE_SIZE / 2}, ${CIRCLE_SIZE / 2}`}
-                />
-              )}
-            </Svg>
-
-            <View style={[circleStyles.innerCircle, { backgroundColor: rank.color + '22' }]}>
-              {isCompleted ? (
-                <Ionicons name="checkmark" size={22} color={rankTextColor(rank.name, rank.color, mode)} />
-              ) : (
-                <Text style={[circleStyles.iconText, { color: rankTextColor(rank.name, rank.color, mode) }]}>
-                  {rank.icon}
-                </Text>
-              )}
-            </View>
-          </>
-        )}
+        <View style={[StyleSheet.absoluteFill, isLocked && circleStyles.lockedFrame]}>
+          <ProfileAvatarFrame rankName={rank.name} size={CIRCLE_SIZE} avatarSize={CIRCLE_INNER} />
+        </View>
+        <View style={[circleStyles.innerCircle, { backgroundColor: isLocked ? colors.surface : rank.color + '22' }]}>
+          {isLocked ? (
+            <Ionicons name="lock-closed" size={20} color={colors.textSecondary} />
+          ) : isCompleted ? (
+            <Ionicons name="checkmark" size={22} color={tint} />
+          ) : (
+            <Text style={[circleStyles.iconText, { color: tint }]}>{rank.icon}</Text>
+          )}
+        </View>
       </View>
 
-      <Text style={[circleStyles.rankName, { color: isLocked ? colors.textSecondary : rankTextColor(rank.name, rank.color, mode) }]}>
+      <Text style={[circleStyles.rankName, { color: isLocked ? colors.textSecondary : tint }]}>
         {rank.name}
       </Text>
       {isSelected && (
@@ -149,6 +124,13 @@ function RankCircle({
       )}
     </TouchableOpacity>
   );
+}
+
+// Just outside the frame in use at the lower right, so it never sits on the ornaments
+function pencilAt(frame: string) {
+  const reach = HERO_FRAME / 2 + frameOverflow(frame, HERO_FRAME, HERO_AVATAR);
+  const d = reach * Math.SQRT1_2 + 2;
+  return { left: HERO_FRAME / 2 + d - PENCIL / 2, top: HERO_FRAME / 2 + d - PENCIL / 2 };
 }
 
 export default function GreekRankScreen({ navigation }: Props) {
@@ -387,7 +369,7 @@ export default function GreekRankScreen({ navigation }: Props) {
             >
               <Image source={avatarSource} style={styles.heroAvatar} />
               <ProfileAvatarFrame rankName={selectedFrame} size={HERO_FRAME} avatarSize={HERO_AVATAR} />
-              <View style={styles.pencilBadge}>
+              <View style={[styles.pencilBadge, pencilAt(selectedFrame)]}>
                 <Ionicons name="pencil" size={15} color={colors.textPrimary} />
               </View>
             </TouchableOpacity>
@@ -457,7 +439,6 @@ export default function GreekRankScreen({ navigation }: Props) {
                 rank={item}
                 rankIdx={index}
                 heldIdx={heldIdx}
-                greekScore={greekScore}
                 isSelected={index === selectedIdx}
                 onSelect={() => selectIndex(index)}
               />
@@ -605,12 +586,12 @@ const createStyles = (colors: Colors) =>
     heroAvatarWrap: {
       width: HERO_FRAME, height: HERO_FRAME,
       alignItems: 'center', justifyContent: 'center',
-      marginBottom: HERO_LABEL_GAP,
+      marginTop: HERO_BLEED, marginBottom: HERO_BLEED + spacing.xs,
     },
     heroAvatar: { width: HERO_AVATAR, height: HERO_AVATAR, borderRadius: HERO_AVATAR / 2 },
     // 34pt drawn, inside the avatar's own much larger touch target
     pencilBadge: {
-      position: 'absolute', right: -2, bottom: 2, width: 34, height: 34, borderRadius: 17,
+      position: 'absolute', width: PENCIL, height: PENCIL, borderRadius: PENCIL / 2,
       backgroundColor: colors.border, borderWidth: 3, borderColor: colors.background,
       alignItems: 'center', justifyContent: 'center',
     },

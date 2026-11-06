@@ -4,7 +4,7 @@ import { createMockNavigation, createMockRoute } from './testUtils';
 import { appCache } from '../utils/appCache';
 import {
   almostThere, amountText, earnedLine, goalText, milestoneTiles, notYetShown, orderUnlocks, rungProgress,
-  shareLine, topBadges, unlockLine,
+  shareLine, showcaseBadges, topBadges, unlockLine,
   type AchievementsData, type LadderBadge, type NewAchievement, type Track,
 } from '../utils/achievements';
 import AchievementsScreen from '../screens/ProfileTab/AchievementsScreen';
@@ -74,6 +74,8 @@ function fixture(): AchievementsData {
     hidden: [{ key: 'hidden_neomenia', title: 'Neomenia', ...earnedOn('2026-01-01', 3, { workout_cardio: true }) }],
     hidden_remaining: 5,
     unseen: ['workouts_5'],
+    pinned: [],
+    pins_saved: false,
   };
 }
 
@@ -127,6 +129,16 @@ describe('achievement helpers', () => {
     // Both gold: the newer (Oct 13) leads
     expect(topBadges(fixture()).map(b => b.key)).toEqual(['plates_squat_3', 'workouts_5', 'feat_bw_bench']);
   });
+});
+
+describe('pinned badges', () => {
+  it('shows the finest three until the user picks, then exactly the pins in order', () => {
+    expect(showcaseBadges(fixture()).map(b => b.key)).toEqual(['plates_squat_3', 'workouts_5', 'feat_bw_bench']);
+    const picked = { ...fixture(), pins_saved: true, pinned: ['hidden_neomenia', 'prs_1'] };
+    expect(showcaseBadges(picked).map(b => b.key)).toEqual(['hidden_neomenia', 'prs_1']);
+    expect(showcaseBadges({ ...fixture(), pins_saved: true, pinned: [] })).toEqual([]);
+  });
+
 });
 
 describe('unlock helpers', () => {
@@ -431,5 +443,48 @@ describe('TrophyHallCard', () => {
     (global.fetch as jest.Mock) = jest.fn(() => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) }));
     const { toJSON } = render(<TrophyHallCard onOpen={jest.fn()} />);
     expect(toJSON()).toBeNull();
+  });
+});
+
+// Last: the Hall's set-down timers would otherwise land in the unlock sheet's haptic counts
+describe('pinning from the Trophy Hall', () => {
+  it('pins from the Trophy Hall, in the order tapped', async () => {
+    mockApi(fixture());
+    const { findByLabelText, getByLabelText, getByText, findByText } = render(
+      <AchievementsScreen navigation={createMockNavigation() as any} route={createMockRoute('Achievements') as any} />,
+    );
+    fireEvent.press(await findByLabelText('Change pinned badges'));
+    // Opens on what's shown: the finest three, so a fourth can't be added
+    expect(getByLabelText('Neomenia').props.accessibilityState).toMatchObject({ disabled: true });
+    fireEvent.press(getByLabelText('3 Plate Squat, pinned 1 of 3'));
+    fireEvent.press(getByLabelText('Hekaton, pinned 1 of 3'));
+    fireEvent.press(getByLabelText('Neomenia'));
+    expect(getByLabelText('Neomenia, pinned 2 of 3')).toBeTruthy();
+    fireEvent.press(getByText('Save'));
+    await waitFor(() => {
+      const put = (global.fetch as jest.Mock).mock.calls.find(([url]) => String(url).includes('/api/achievements/pins'));
+      expect(put[1].method).toBe('PUT');
+      expect(JSON.parse(put[1].body)).toEqual({ keys: ['feat_bw_bench', 'hidden_neomenia'] });
+    });
+    expect(await findByText('Pinned to your profile')).toBeTruthy();
+  });
+});
+
+describe('pinned badges, failed save', () => {
+  it('says so inside the sheet and keeps the picks, rather than closing', async () => {
+    const data = fixture();
+    (global.fetch as jest.Mock) = jest.fn((url: string, init?: { method?: string }) => Promise.resolve(
+      init?.method === 'PUT'
+        ? { ok: false, status: 404, json: () => Promise.resolve({}) }
+        : { ok: true, status: 200, json: () => Promise.resolve(url.includes('/seen') ? { message: 'ok' } : data) },
+    ));
+    const { findByLabelText, getByLabelText, getByText, findByText } = render(
+      <AchievementsScreen navigation={createMockNavigation() as any} route={createMockRoute('Achievements') as any} />,
+    );
+    fireEvent.press(await findByLabelText('Change pinned badges'));
+    fireEvent.press(getByLabelText('3 Plate Squat, pinned 1 of 3'));
+    fireEvent.press(getByText('Save'));
+    expect(await findByText('Your pinned badges weren’t saved. Try again.')).toBeTruthy();
+    expect(getByLabelText('Hekaton, pinned 1 of 3')).toBeTruthy();
   });
 });

@@ -1,5 +1,5 @@
 import polylineLib from '@mapbox/polyline';
-import { extractBestEfforts, haversineKm, type BestEffort, type TrackPoint } from './bestEfforts';
+import { extractBestEfforts, haversineKm, isNegativeSplit, type BestEffort, type TrackPoint } from './bestEfforts';
 import { addAltitude, freshClimb, isCycling, median3, DOPPLER_FRESH_SEC, type ClimbState } from './gpsMetrics';
 import { toDisplayDistance, type DistanceUnit } from './units';
 import { toLocalDateStr } from './date';
@@ -315,12 +315,17 @@ export function buildGpsRunBody(input: {
   // efforts. Timing lives only in this array: the encoded polyline drops it, so
   // this can never be done after the fact.
   const bestEfforts: BestEffort[] = extractBestEfforts(input.coords, isCycling(input.activity));
+  // The Kairos badge is for runs. Same reason as above: timing is gone after the save
+  const negativeSplit = input.activity === 'Run' ? isNegativeSplit(input.coords) : null;
+  // The Eos badge: the hour the first fix came in, else the time out counted back
+  const startMs = input.coords[0]?.timestamp ?? input.now.getTime() - input.elapsedSec * 1000;
 
   return {
     ...(input.clientId ? { client_id: input.clientId } : {}),
     workoutName: input.workoutName.trim() || input.activity,
     date: toLocalDateStr(input.now),
     duration: Math.round(input.elapsedSec / 60),
+    local_start_hour: new Date(startMs).getHours(),
     exercises: [{
       name: ACTIVITY_TEMPLATE_NAME[input.activity],
       exercise_template_id: input.exerciseTemplateId,
@@ -328,6 +333,7 @@ export function buildGpsRunBody(input: {
       route_polyline: encodedPolyline,
       ...(segments.length > 0 ? { route_segments: segments } : {}),
       ...(bestEfforts.length > 0 ? { best_efforts: bestEfforts } : {}),
+      ...(negativeSplit != null ? { negative_split: negativeSplit } : {}),
       sets: [{
         cardio_duration: durationMin,
         distance: displayDistance,

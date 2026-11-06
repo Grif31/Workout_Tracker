@@ -1585,7 +1585,7 @@ One screen that says whether anything needs attention today, then links into the
 
 ---
 
-## 🏅 27. Achievements (planned 2026-11-03, not started)
+## 🏅 27. Achievements (planned 2026-11-03, built through 2026-11-06)
 > Lifetime milestones (100 workouts, 1 million lbs) as badges, each one unique, earned once and kept. Designs: https://claude.ai/artifact/EzWhWnkzJqDaoxVgXqid1K (A grid, B ladders, C Trophy Hall, placement on Your Journey, unlock sheet, badge system). Greek Rank stays effort-only: achievements add no rank points.
 
 ### Decisions (owner)
@@ -1684,7 +1684,7 @@ Leave out anything that rewards skipping rest or training through illness (no "w
     - At the top rank the Progress card is titled with the rank and its ends read "Aretē · 92" and "100"
     - A tie for the lowest part goes to the part listed first (Consistency, the heaviest)
     - The pencil badge is drawn at 34 pt; the whole avatar is the button, so the target is well over 44 pt
-- [ ] Profile frames redesign (`components/ProfileAvatarFrame.tsx`, owner asked 2026-11-04, mocked on the canvas): each rank keeps everything below it and adds one Greek ornament. Neophyte a plain ring; Athlete + a fine outer line; Hero + a Greek key band between two rails; Demigod + an egg-and-dart border outside the outer rail, eggs nearly touching with fine darts between and a thin rim around them (owner, 2026-11-04, chosen over four palmettes, which they didn't like, phalerae and bead-and-reel); Olympian + twelve studs (one per Olympian), large and in a pale tint of the rank colour so they read against the border; Titan + a ring of carved stone blocks, kept thin (about 4 units deep in the 120-unit frame) with the egg-and-dart right against it, or the frame grows past every other rank; Aretē gold, with the olive crown in place of the egg-and-dart (the crown sat hidden behind the border when both were drawn)
+- [x] (built 2026-11-06: geometry in `utils/frameArt.ts`, ported from `design/achievements/tools/gen_frames.js`; `LaurelRing` removed, nothing else used it) Profile frames redesign (`components/ProfileAvatarFrame.tsx`, owner asked 2026-11-04, mocked on the canvas): each rank keeps everything below it and adds one Greek ornament. Neophyte a plain ring; Athlete + a fine outer line; Hero + a Greek key band between two rails; Demigod + an egg-and-dart border outside the outer rail, eggs nearly touching with fine darts between and a thin rim around them (owner, 2026-11-04, chosen over four palmettes, which they didn't like, phalerae and bead-and-reel); Olympian + twelve studs (one per Olympian), large and in a pale tint of the rank colour so they read against the border; Titan + a ring of carved stone blocks, kept thin (about 4 units deep in the 120-unit frame) with the egg-and-dart right against it, or the frame grows past every other rank; Aretē gold, with the olive crown in place of the egg-and-dart (the crown sat hidden behind the border when both were drawn)
   - Readiness review (2026-11-04, every rank at hero, 72 and 44 px on the dark, light grey and white backgrounds), all fixed in the mock:
     - Every rank starts at the same distance from the photo (inner edge about 2 units out on a 36-unit photo radius), so changing frames never moves the photo; Neophyte and Athlete used to sit further out, which showed as a white halo in light mode
     - The egg-and-dart and Titan's blocks sit on a ground band in the rank's dark tint, so the page never shows through as white ticks between eggs or blocks
@@ -1695,8 +1695,13 @@ Leave out anything that rewards skipping rest or training through illness (no "w
   - Aretē's `LaurelRing` (the PR laurel) becomes the olive crown the top badges wear, so ranks, badges and PRs never share an ornament
   - Under 64 px (the 44 px rank-up card, the Home avatar) the key band drops out and the rails merge into one ring; ornaments stay. Ornaments draw outside the box through `frameOverflow`, extended from the wreath to every rank that has one, so callers keep their layout
   - The whole-frame opacity pulse (Olympian and up) becomes a glint rotating around the rim on the native driver. It must check `reduceMotion()` and stay still, as the current pulse now does (2026-11-04, `__tests__/ProfileAvatarFrame.test.tsx`)
-- [ ] Eos: the app sends the local start hour with the save (`WorkoutLog` has `startRef`; GPS has its start), stored in a new nullable `Workout.local_start_hour`; Eos joins `HIDDEN` and checks it < 6. New workouts only, no backfill
-- [ ] Kairos: the phone works out a negative split at save beside `utils/bestEfforts.ts` (second half's pace faster than the first's) and sends it on the exercise; stored on `Exercise` (nullable bool), since the replay rebuilds badges from history and a value only in the request would be lost. New runs only
+  - Calls made building it (owner to confirm):
+    - `frameOverflow(rank, size, avatarSize)` now takes the avatar size, since reach is a multiple of the photo radius; every caller passes it. The frame's 120-unit box is scaled so the photo radius (36 units) matches `avatarSize`
+    - Your Journey's rank circles are 22 apart, was 16, so Titan's blocks and Aretē's crown side by side don't touch
+    - "Small" is a frame `size` under 64 px: Home (44) and the rank-up card (44). Choose a frame (64) and Profile (72) get the full frame
+    - Not checked on a device yet: the hero (116) now reaches 25 px past its box with Aretē, was 15
+- [x] (built 2026-11-06, migration `d9e2f6a3b8c5`; WorkoutLog sends it only for a new workout dated today, counted back from the timer; a GPS save uses its first fix) Eos: the app sends the local start hour with the save (`WorkoutLog` has `startRef`; GPS has its start), stored in a new nullable `Workout.local_start_hour`; Eos joins `HIDDEN` and checks it < 6. New workouts only, no backfill
+- [x] (built 2026-11-06, `isNegativeSplit` in `utils/bestEfforts.ts`: the second half of the distance in less moving time than the first, Run activity only, 1.6 km or longer; editing a run's sets clears it) Kairos: the phone works out a negative split at save beside `utils/bestEfforts.ts` (second half's pace faster than the first's) and sends it on the exercise; stored on `Exercise` (nullable bool), since the replay rebuilds badges from history and a value only in the request would be lost. New runs only
 - [x] (built 2026-11-05, `AchievementUnlockSheet`; the save's `new_achievements` ride to the summary as `newAchievements` from both `WorkoutLog` and GPS saves) Unlock sheet on `WorkoutSummaryScreen` from `new_achievements` (several at once: show the highest, "+N more"). Kept to the badge, its name and one line of what it took and what's next ("Your 100th workout logged. Next: Phalanx, at 250."); no ladder dots and no "5 of 8 earned" (owner, 2026-11-04), which live on the track ladder screen. Follow Reduce Motion (`utils/motion.ts`), no confetti when it's on
 - [x] (built 2026-11-05, `AchievementShareCard`, shared from the unlock sheet and the badge modal) Share card in `components/share/`, kept uncluttered (owner, 2026-11-04): the standard frame (accent strip, `#0D0D0D`), the wordmark alone at the top, the badge large with a soft glow in its metal, its name, one line of what and when ("Your 100th workout · Sep 28, 2026"), a divider and "Excellence, logged.". No ladder dots, no stats strip, no laurel (that's the PR card's)
 - Calls made building the unlock sheet and share card (owner to confirm):
@@ -1711,8 +1716,11 @@ Leave out anything that rewards skipping rest or training through illness (no "w
   - Untrained tracks (owner picked option 1, 2026-11-06): a "Still to discover" row after Milestones replaces the grey text lines, one locked silhouette per track (its shape and icon, no stamp, no name) with the label and "After your first ride"; a tap shows the full sentence. Not yet covered, offered as follow-ups: untrained Plates lifts, a count of feats still hidden, and a "New in your Trophy Hall" line when a save first reveals a track
 
 ### Phase 4: Showcase
-- [ ] Pin up to 3 badges to the profile (`ProfileScreen` under the avatar), stored server-side so followers see them once §11 social ships
-- [ ] Optional push notification for an unlock earned outside a workout save (backfill, a streak week closing)
+- [x] (built 2026-11-06) Pin up to 3 badges to the profile (`ProfileScreen` under the avatar), stored server-side so followers see them once §11 social ships
+  - `user_achievements.pin_position` plus `User.badge_pins_saved` (the PR-pins pattern: choosing none is told apart from never choosing); `PUT /api/achievements/pins` takes earned keys in order; `GET /api/achievements` adds `pinned` and `pins_saved`
+  - Until the user picks, Profile and the top of the Hall show the three finest, as before. The Hall's top section gets Change, opening `PinBadgesSheet` (tap order is display order, up to 3); its caption reads "Pinned to your profile" once chosen
+  - Profile shows them at 40 pt under the name and bio, inside the profile card; a tap opens the Trophy Hall
+- [ ] Optional push notification for an unlock earned outside a workout save (backfill, a streak week closing). Not built: nothing awards a badge outside a save today (a streak only counts on the save that extends it, and the backfill marks its badges seen), so there is no unlock for it to announce yet
 
 ### Ideas for later
 - Seasonal or monthly challenges (e.g. 12 workouts in November) as a separate track that expires

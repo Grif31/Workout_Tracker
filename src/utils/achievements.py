@@ -134,16 +134,20 @@ CLUB_TOTAL = {'lbs': 1000, 'kg': 450}
 CENTURY_KM = {'mi': 100 * KM_PER_MI, 'km': 100}
 
 # Shown only once earned. GET /api/achievements never sends an unearned one's
-# name, only how many are left. Eos (before 6 AM) and Kairos (negative split)
-# are planned but need data the app doesn't send yet, so they aren't here.
+# name, only how many are left.
 HIDDEN = {
     'hidden_neomenia':      'Neomenia',
     'hidden_embolimos':     'Embolimos',
     'hidden_three_hundred': 'The Three Hundred',
+    'hidden_eos':           'Eos',
+    'hidden_kairos':        'Kairos',
     'hidden_triad':         'Triad',
     'hidden_eniautos':      'Eniautos',
     'hidden_pi':            'Pi',
 }
+
+# Eos: a workout started before this local hour. Only new saves carry the hour
+EOS_BEFORE_HOUR = 6
 
 # PR types the app shows: estimated_1rm is never surfaced as a PR
 _COUNTED_PR_TYPES_EXCLUDE = ('estimated_1rm',)
@@ -198,7 +202,8 @@ class _Replay:
     def _load(self):
         uid = self.user.id
         workouts = (
-            db.session.query(Workout.id, Workout.date, Workout.duration, Workout.volume)
+            db.session.query(Workout.id, Workout.date, Workout.duration, Workout.volume,
+                             Workout.local_start_hour)
             .filter(Workout.user_id == uid)
             .order_by(Workout.date.asc(), Workout.id.asc())
             .all()
@@ -209,7 +214,7 @@ class _Replay:
                 Exercise.workout_id, Exercise.id, Exercise.exercise_type, Exercise.name,
                 Exercise.exercise_template_id, ExerciseTemplate.name, ExerciseTemplate.standards_key,
                 Set.reps, Set.weight, Set.set_type, Set.cardio_duration, Set.distance,
-                Set.distance_unit, Set.elevation_gain,
+                Set.distance_unit, Set.elevation_gain, Exercise.negative_split,
             )
             .join(Workout, Exercise.workout_id == Workout.id)
             .join(Set, Set.exercise_id == Exercise.id)
@@ -259,7 +264,7 @@ class _Replay:
         streak_run = streak_longest = 0
         triad_weeks = defaultdict(set)
 
-        for workout_id, when, duration, volume in workouts:
+        for workout_id, when, duration, volume, start_hour in workouts:
             rows = [r for r in sets_by_workout.get(workout_id, ()) if _qualifies(r[7], r[10], r[11])]
             if not rows:
                 continue
@@ -272,8 +277,9 @@ class _Replay:
             w_run_km = w_ride_km = w_cardio_min = 0.0
             foot_by_exercise = defaultdict(float)   # exercise id -> distance in its own unit
             w_best = {lift: 0.0 for lift in BIG_THREE}
+            w_negative_split = False
             for (_, ex_id, ex_type, ex_name, tmpl_id, tmpl_name, standards_key,
-                 reps, weight, set_type, cardio_min, distance, dist_unit, elevation) in rows:
+                 reps, weight, set_type, cardio_min, distance, dist_unit, elevation, negative_split) in rows:
                 ex_type = (ex_type or 'strength').lower()
                 tried.add(tmpl_id if tmpl_id else f'name:{(ex_name or "").strip().lower()}')
                 if ex_type == 'cardio':
@@ -288,6 +294,8 @@ class _Replay:
                         w_run_km += km
                         if distance and distance > 0:
                             foot_by_exercise[(ex_id, dist_unit or 'km')] += distance
+                        if negative_split:
+                            w_negative_split = True
                     if elevation and elevation > 0:
                         self.kinds.add('elevation')
                         elevation_m += elevation
@@ -365,6 +373,10 @@ class _Replay:
                 cross('hidden_embolimos')
             if count == 300:
                 cross('hidden_three_hundred')
+            if start_hour is not None and start_hour < EOS_BEFORE_HOUR:
+                cross('hidden_eos')
+            if w_negative_split:
+                cross('hidden_kairos')
             if first_day is None:
                 first_day = day
             elif (day.month, day.day) == (first_day.month, first_day.day) and day.year > first_day.year:
@@ -394,12 +406,12 @@ def evaluate_achievements(user, seen=False):
     for key, workout_id, when in new:
         db.session.add(UserAchievement(user_id=user.id, key=key, earned_at=when,
                                        workout_id=workout_id, seen=seen))
-    return [_describe(key, replay, workout_id, when) for key, workout_id, when in new]
-
-
-def _describe(key, replay, workout_id, when):
-    """One badge as the unlock sheet needs it: what it is, and what's next."""
     wu, du = replay.weight_unit, replay.distance_unit
+    return [_describe(key, wu, du, workout_id, when) for key, workout_id, when in new]
+
+
+def _describe(key, wu, du, workout_id, when):
+    """One badge as the unlock sheet needs it: what it is, and what's next."""
     out = {'key': key, 'earned_at': when.isoformat(), 'workout_id': workout_id}
     if key in FEATS:
         out.update(kind='feat', title=_title(FEATS[key][0], du if key == 'feat_century' else wu))
@@ -505,7 +517,28 @@ def achievements_payload(user):
         'hidden_remaining': len(HIDDEN) - len(hidden),
         'unseen': sorted((k for k, r in rows.items() if not r.seen and _known(k)),
                          key=lambda k: rows[k].earned_at),
+        'pinned': _pinned_keys(rows.values()),
+        'pins_saved': bool(user.badge_pins_saved),
     }
+
+
+def _pinned_keys(rows):
+    pinned = sorted((r for r in rows if r.pin_position is not None and _known(r.key)),
+                    key=lambda r: r.pin_position)
+    return [r.key for r in pinned]
+
+
+def set_pins(user, keys):
+    """Pin earned badges in the given order. Returns an error message, or None."""
+    if len(set(keys)) != len(keys):
+        return 'The same badge is pinned twice'
+    rows = {r.key: r for r in UserAchievement.query.filter_by(user_id=user.id)}
+    if any(k not in rows or not _known(k) for k in keys):
+        return 'Only an earned badge can be pinned'
+    for row in rows.values():
+        row.pin_position = keys.index(row.key) if row.key in keys else None
+    user.badge_pins_saved = True
+    return None
 
 
 def _known(key):

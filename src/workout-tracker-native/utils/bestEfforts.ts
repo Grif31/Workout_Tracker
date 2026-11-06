@@ -176,6 +176,26 @@ export function extractBestEfforts(points: TrackPoint[], cycling = false): BestE
   return efforts;
 }
 
+// Shorter than this, a split is GPS noise more than pacing
+const MIN_SPLIT_KM = 1.6;
+
+/**
+ * Whether the second half of the distance took less moving time than the
+ * first: a negative split, for the Kairos badge. Null when the track is too
+ * short or sparse to say. Like the best efforts, only possible at save time.
+ */
+export function isNegativeSplit(points: TrackPoint[]): boolean | null {
+  if (!Array.isArray(points) || points.length < MIN_POINTS_PER_WINDOW) return null;
+  const { km, sec } = accumulate(points);
+  const totalKm = km[km.length - 1];
+  const totalSec = sec[sec.length - 1];
+  if (totalKm < MIN_SPLIT_KM || totalSec <= 0) return null;
+  const half = totalKm / 2;
+  const i = km.findIndex((d, j) => j + 1 < km.length && km[j + 1] >= half);
+  const firstHalfSec = interpolate(sec, i, fraction(km, i, half));
+  return totalSec - firstHalfSec < firstHalfSec;
+}
+
 /** "1 Mile" / "10 min" — the milestone an effort was measured against. */
 export function bestEffortLabel(effort: BestEffort): string {
   // A value in both lists has the same label in both, so either one answers

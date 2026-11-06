@@ -43,6 +43,9 @@ class User(db.Model):
     # True once the user picks Profile's displayed PRs, so choosing none is
     # told apart from never choosing (which shows defaults worked out from their PRs)
     pr_pins_saved     = db.Column(db.Boolean,    default=False, nullable=False, server_default=db.false())
+    # Set once the user picks their pinned badges, even none: until then the
+    # profile shows their three finest
+    badge_pins_saved  = db.Column(db.Boolean,    default=False, nullable=False, server_default=db.false())
     workouts = db.relationship('Workout', backref='user', lazy=True)
 
     def to_dict(self):
@@ -84,6 +87,10 @@ class Workout(db.Model):
     # client_id returns the workout already saved instead of a second copy.
     # NULL for workouts from builds before it; NULLs never collide.
     client_id = db.Column(db.String(64), nullable=True)
+    # The hour (0-23, the phone's local time) the workout started, sent with a
+    # new save for the Eos badge. Workout.date is the server's clock or a bare
+    # date, so it can't tell. NULL for edits, past-dated logs and older builds.
+    local_start_hour = db.Column(db.Integer, nullable=True)
     exercises = db.relationship('Exercise', backref='workouts', cascade="all, delete-orphan", lazy=True)
 
     __table_args__ = (
@@ -177,6 +184,10 @@ class Exercise(db.Model):
     # so nothing draws a straight line across ground nobody recorded.
     # route_polyline keeps the whole joined line for app builds from before this.
     route_segments = db.Column(db.JSON, nullable=True)
+    # A GPS run's second half faster than its first (the Kairos badge). Worked
+    # out on the phone from per-point timing, which the polyline doesn't keep,
+    # so it's stored: the achievements replay rebuilds badges from history.
+    negative_split = db.Column(db.Boolean, nullable=True)
     sets = db.relationship('Set', backref='exercises', cascade="all, delete-orphan", lazy=True, order_by='Set.order')
     best_efforts = db.relationship('CardioBestEffort', backref='exercise', cascade="all, delete-orphan", lazy=True)
 
@@ -638,6 +649,8 @@ class UserAchievement(db.Model):
     earned_at = db.Column(db.DateTime, nullable=False)
     workout_id = db.Column(db.Integer, db.ForeignKey('workouts.id', ondelete='SET NULL'), nullable=True)
     seen = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    # 0-2: where the badge sits on the profile's pinned row. NULL when unpinned
+    pin_position = db.Column(db.Integer, nullable=True)
 
     __table_args__ = (
         db.UniqueConstraint('user_id', 'key', name='uq_user_achievements_user_key'),
