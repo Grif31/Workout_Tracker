@@ -154,6 +154,7 @@ describe('code guardrails', () => {
     'components/DraggableList.tsx': [2, 'follows the finger while dragging'],
     'components/SplashExit.tsx': [1, 'reads Reduce Motion itself and fades instead of zooming'],
     'components/RankUpCard.tsx': [8, 'reads Reduce Motion itself and crossfades'],
+    'components/achievements/FlipBadge.tsx': [1, 'reads Reduce Motion itself and crossfades instead of turning'],
     'screens/DashboardTab/WorkoutSummaryScreen.tsx': [1, 'the trophy pop is skipped by its own Reduce Motion check'],
     'screens/PreloadScreen.tsx': [1, 'a loading progress fill'],
     'components/ProfileAvatarFrame.tsx': [1, 'a loop that does not start with Reduce Motion on'],

@@ -22,9 +22,10 @@ Run from `tools/` after `npm ci` (clipper-lib, for the even band offsets).
 | `gen_track.js <sheet> <out>` | Track ladder, Plates and the locked-badge flip |
 | `gen_journey.js <sheet> <out>` | Your Journey redesign, score button closed and open |
 | `gen_frames.js <out> [options-out]` | Profile frame sheet; with a second path, the Demigod ornament options. `REVIEW=<out>` writes every frame at hero, 72 and 44 px on dark, light grey and white with measured reach (`ONLYR=5,6` limits the ranks) |
+| `export_rn.js <sheet> <out.ts>` | Writes the sheet's shapes, bands, icons, crowns, metals and each outline's room for back text to the app's `constants/badgeArt.ts`. Rerun after any sheet change; never edit that file by hand |
 | `render*.js` | Plain-HTML renders of badges or artboards for screenshots (`ONLY`, `SIZE`, `COLS` env vars on `render.js`) |
 
-After changing a shape or icon: `node layout.js ../canvas/Badges.dc.html && node splice.js ../canvas/Badges.dc.html`, then regenerate the screens that show it. Check by rendering, e.g. headless Chrome: `chrome --headless=new --screenshot=out.png --window-size=W,H file:///.../page.html`.
+After changing a shape or icon: `node layout.js ../canvas/Badges.dc.html && node splice.js ../canvas/Badges.dc.html`, then `node export_rn.js ../canvas/Badges.dc.html ../../../src/workout-tracker-native/constants/badgeArt.ts`, then regenerate the screens that show it. Check by rendering, e.g. headless Chrome: `chrome --headless=new --screenshot=out.png --window-size=W,H file:///.../page.html`.
 
 ## Rules the geometry follows
 
