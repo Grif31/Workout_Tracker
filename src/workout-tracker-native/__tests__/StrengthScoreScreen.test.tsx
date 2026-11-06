@@ -109,6 +109,24 @@ describe('StrengthScoreScreen', () => {
       await waitFor(() => expect(getByText('No exercise data yet')).toBeTruthy());
     });
 
+    // PreloadScreen caches the raw response, no-score payload included. Shown
+    // straight from the cache, its null overall_rank crashed the screen
+    // ("Cannot read property 'label' of null") before the fetch could land.
+    it('opens on a cached no-score payload without crashing', async () => {
+      appCache.set('strength_score', scorePayload({ overall: null, overall_rank: null, exercises_used: 0, big6: [], muscle_groups: [] }));
+      (global.fetch as jest.Mock) = jest.fn(() => new Promise(() => {}));
+      const { getByText, queryByText } = await renderScreen();
+      expect(getByText('No exercise data yet')).toBeTruthy();
+      expect(queryByText('Advanced')).toBeNull();
+    });
+
+    it('shows the cached score at once when there is one', async () => {
+      appCache.set('strength_score', scorePayload());
+      (global.fetch as jest.Mock) = jest.fn(() => new Promise(() => {}));
+      const { getByText } = await renderScreen();
+      expect(getByText('Bench Press')).toBeTruthy();
+    });
+
     it('shows the profile gate, not the empty state, when the strength leg was skipped', async () => {
       // 200 with no lifts used because bodyweight is missing: the user has
       // data, so "log some workouts" would be wrong advice.

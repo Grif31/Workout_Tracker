@@ -180,31 +180,40 @@ export default function StrengthScoreScreen({ navigation }: Props) {
       const data: ScoreData = await res.json();
       // Before the no-lifts branch below: a null score is news to the widget too
       writeWidgetScore(user?.id, 'strength', data);
-      // No strength lifts tracked (e.g. cardio-only user) — the endpoint still
-      // returns 200 with a real Greek rank (the endurance leg and
-      // consistency/dedication/volume don't need strength data), but this
-      // screen is specifically about lifts, so it shows its own empty state.
-      // missing_for_strength means the strength leg was skipped for a missing
-      // profile field (bodyweight) — show the setup gate, not "no data".
-      if (data.exercises_used === 0) {
-        if (data.missing_for_strength?.length) {
-          setMissingFields(data.missing_for_strength);
-          setNoData(false);
-        } else {
-          setNoData(true);
-          setMissingFields([]);
-        }
-        setError(false);
-        return;
-      }
-      setScoreData(data);
-      if (data.history) setHistory(data.history);
-      setMissingFields([]);
-      setNoData(false);
       setError(false);
-      appCache.set('strength_score', data);
-      checkRankUp(data);
+      if (applyScore(data)) {
+        appCache.set('strength_score', data);
+        checkRankUp(data);
+      }
     } catch (e) { if (__DEV__) console.warn('[StrengthScore] fetch failed', e); setError(true); }
+  };
+
+  // Shared by the fetch and the cache, which PreloadScreen fills with the raw
+  // response, so a cached no-score payload (overall_rank null) never renders as
+  // a score. Returns whether there was a score to show.
+  const applyScore = (data: ScoreData): boolean => {
+    // No strength lifts tracked (e.g. cardio-only user) — the endpoint still
+    // returns 200 with a real Greek rank (the endurance leg and
+    // consistency/dedication/volume don't need strength data), but this
+    // screen is specifically about lifts, so it shows its own empty state.
+    // missing_for_strength means the strength leg was skipped for a missing
+    // profile field (bodyweight) — show the setup gate, not "no data".
+    if (data.exercises_used === 0 || !data.overall_rank) {
+      setScoreData(null);
+      if (data.missing_for_strength?.length) {
+        setMissingFields(data.missing_for_strength);
+        setNoData(false);
+      } else {
+        setNoData(true);
+        setMissingFields([]);
+      }
+      return false;
+    }
+    setScoreData(data);
+    if (data.history) setHistory(data.history);
+    setMissingFields([]);
+    setNoData(false);
+    return true;
   };
 
   const handleRefresh = async () => {
@@ -227,8 +236,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
   useFocusEffect(useCallback(() => {
     const cached = appCache.get<ScoreData>('strength_score');
     if (cached) {
-      setScoreData(cached);
-      if (cached.history) setHistory(cached.history);
+      applyScore(cached);
       setLoading(false);
     } else {
       setLoading(true);
