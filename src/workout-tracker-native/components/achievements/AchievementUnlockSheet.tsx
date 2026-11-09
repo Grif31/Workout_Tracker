@@ -101,6 +101,8 @@ export default function AchievementUnlockSheet({
   // Pages whose badge has been set down: each lands the first time it's shown, once the sheet is up
   const [placed, setPlaced] = useState<Set<number>>(new Set());
   const sheetUp = useRef(false);
+  // The page on screen, read when the sheet finishes arriving
+  const pageRef = useRef(0);
   const shareRef = useRef<View>(null);
   const pagerRef = useRef<ScrollView>(null);
   const closing = useRef(false);
@@ -111,18 +113,21 @@ export default function AchievementUnlockSheet({
     sheetUp.current = false;
     slide.setValue(offscreen);
     setPage(0);
+    pageRef.current = 0;
     setPlaced(new Set());
     pagerRef.current?.scrollTo({ x: 0, animated: false });
     motionTiming(slide, { toValue: 0, duration: 320, useNativeDriver: true }).start(({ finished }) => {
       // Not when cut short by the sheet going away
       if (!finished) return;
       sheetUp.current = true;
-      setPlaced(new Set([0]));
+      // A swipe during the slide-in would otherwise leave that page's badge never set down
+      setPlaced(new Set([0, pageRef.current]));
     });
   }, [visible]);
 
   const showPage = (index: number) => {
     setPage(index);
+    pageRef.current = index;
     if (sheetUp.current) setPlaced(prev => (prev.has(index) ? prev : new Set(prev).add(index)));
   };
 

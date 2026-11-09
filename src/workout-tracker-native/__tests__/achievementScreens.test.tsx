@@ -212,15 +212,15 @@ describe('AchievementUnlockSheet', () => {
 
   it('follows the swipe: the next badge is set down, and Share and the heading go with it', async () => {
     const Haptics = require('expo-haptics');
+    Haptics.impactAsync.mockClear();
     const { getByTestId, getByLabelText, getAllByText } = render(
       <AchievementUnlockSheet items={items} visible weightUnit="lbs" distanceUnit="mi" reduceMotion onClose={jest.fn()} onOpenTrophyHall={jest.fn()} />,
     );
-    await waitFor(() => expect(Haptics.impactAsync).toHaveBeenCalledWith('heavy'));
-    Haptics.impactAsync.mockClear();
+    // Swiped at once, before the sheet has finished arriving: the badge must still be set down
     const pager = getByTestId('unlock-pager');
     fireEvent(pager, 'layout', { nativeEvent: { layout: { width: 350, height: 300, x: 0, y: 0 } } });
     fireEvent(pager, 'momentumScrollEnd', { nativeEvent: { contentOffset: { x: 350, y: 0 } } });
-    await waitFor(() => expect(Haptics.impactAsync).toHaveBeenCalledWith('medium'));
+    await waitFor(() => expect(Haptics.impactAsync).toHaveBeenCalledWith('medium'), { timeout: 3000 });
     expect(getByLabelText('Badge 2 of 2')).toBeTruthy();
     expect(getByLabelText('Share First PR')).toBeTruthy();
     // The off-screen share card now draws the badge on show
@@ -234,11 +234,10 @@ describe('AchievementUnlockSheet', () => {
     );
     // Only the second badge thuds 'medium'; a straggling 'heavy' from an earlier test's sheet doesn't count
     const secondLandings = () => Haptics.impactAsync.mock.calls.filter((c: string[]) => c[0] === 'medium').length;
-    await waitFor(() => expect(Haptics.impactAsync).toHaveBeenCalledWith('heavy'));
     Haptics.impactAsync.mockClear();
     fireEvent.press(getByTestId('unlock-dot-1'));
     await waitFor(() => expect(getByLabelText('Badge 2 of 2')).toBeTruthy());
-    await waitFor(() => expect(secondLandings()).toBe(1));
+    await waitFor(() => expect(secondLandings()).toBe(1), { timeout: 3000 });
     fireEvent.press(getByTestId('unlock-dot-0'));
     fireEvent.press(getByTestId('unlock-dot-1'));
     await new Promise(r => setTimeout(r, 50));
