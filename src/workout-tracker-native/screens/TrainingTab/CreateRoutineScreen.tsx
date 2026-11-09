@@ -327,6 +327,8 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
               style={styles.dayLabelInput}
               value={day.label}
               onChangeText={text => updateLabel(dayIdx, text)}
+              // RoutineDay.label is 100 characters; the server refuses longer
+              maxLength={100}
               placeholderTextColor={colors.placeholder}
             />
             <TouchableOpacity onPress={() => removeDay(dayIdx)}>

@@ -81,12 +81,75 @@ MAX_SEGMENT_LENGTH = 500_000
 MAX_SPEED_KMH = 200
 
 
+EXERCISE_TYPES = ('strength', 'cardio', 'duration')
+SET_TYPES = ('N', 'W', 'D', 'F')
+MAX_NAME_LENGTH = 250      # Exercise.name
+MAX_LABEL_LENGTH = 100     # RoutineDay.label
+MAX_ORDER = 10_000
+MAX_REPS = 10_000
+MAX_LIST = 200             # exercises in a day, programming rows
+
+
+def _whole(value, name, lo, hi):
+    """A whole number for an Integer column, or None. A decimal is rounded and
+    a numeric string read, never refused: SQLAlchemy keeps a float as it came in
+    memory while Postgres stores it rounded, and that desync (a decimal reps)
+    crashed the PR maths and lost a whole save on 2026-09-10."""
+    if value is None or value == '':
+        return None
+    if isinstance(value, bool) or isinstance(value, (list, dict)):
+        raise ValidationError(f'{name} must be a whole number')
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        raise ValidationError(f'{name} must be a whole number')
+    if not math.isfinite(number) or not lo <= round(number) <= hi:
+        raise ValidationError(f'{name} must be between {lo} and {hi}')
+    return int(round(number))
+
+
+def _row_id(value, name):
+    """An existing row's id, or None. Matched against sets of ids, where a list
+    or dict would raise a TypeError (unhashable) and fail the save as a 500."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValidationError(f'{name} must be a whole number id')
+    return value
+
+
+def _text(value, name, max_length=None):
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValidationError(f'{name} must be text')
+    if max_length is not None and len(value) > max_length:
+        raise ValidationError(f'{name} is longer than {max_length} characters')
+    return value
+
+
 def _validate_exercises(exercises):
-    # The routes index ex['name'] and iterate ex['sets'] directly, so a
-    # malformed exercise has to fail here as a 400 rather than there as a 500.
+    # Every value here reaches a typed column, so junk has to fail as a 400
+    # that names the field rather than as a 500 that rolls the save back.
+    # Values are written back normalised: the routes read the same dicts.
     for i, ex in enumerate(exercises):
+        where = f'exercise {i + 1}'
         if not isinstance(ex.get('name'), str) or not ex['name'].strip():
-            raise ValidationError(f'exercise {i + 1} needs a name')
+            raise ValidationError(f'{where} needs a name')
+        _text(ex['name'], f'{where} name', MAX_NAME_LENGTH)
+        if ex.get('exercise_type') is not None:
+            kind = ex['exercise_type'].lower() if isinstance(ex['exercise_type'], str) else None
+            if kind not in EXERCISE_TYPES:
+                raise ValidationError(f'{where} exercise_type must be one of {", ".join(EXERCISE_TYPES)}')
+            ex['exercise_type'] = kind
+        for field in ('id', 'exercise_template_id'):
+            if field in ex:
+                ex[field] = _row_id(ex[field], f'{where} {field}')
+        if 'order' in ex:
+            ex['order'] = _whole(ex['order'], f'{where} order', 0, MAX_ORDER)
+        for field in ('notes', 'route_polyline'):
+            if field in ex:
+                _text(ex[field], f'{where} {field}')
         sets = ex.get('sets', [])
         if not isinstance(sets, list) or not all(isinstance(s, dict) for s in sets):
             raise ValidationError(f'exercise {i + 1} sets must be a list of objects')
@@ -101,15 +164,26 @@ def _validate_exercises(exercises):
             raise ValidationError(f'exercise {i + 1} negative_split must be true or false')
         # A top speed feeds what the app shows, never PRs, but a string would
         # reach the Float column and fail the save as a 500
-        for s in sets:
+        for k, s in enumerate(sets):
+            at = f'{where} set {k + 1}'
             speed = s.get('max_speed')
             if speed is not None and (isinstance(speed, bool) or not isinstance(speed, (int, float)) or not 0 <= speed <= MAX_SPEED_KMH):
-                raise ValidationError(f'exercise {i + 1} max_speed must be a number of km/h')
+                raise ValidationError(f'{at} max_speed must be a number of km/h')
             for field, bound in SET_NUMBER_BOUNDS.items():
                 if field in s:
-                    s[field] = _set_number(s[field], bound, f'exercise {i + 1} {field}')
+                    s[field] = _set_number(s[field], bound, f'{at} {field}')
             if s.get('distance_unit') not in (None, '', 'km', 'mi'):
-                raise ValidationError(f'exercise {i + 1} distance_unit must be km or mi')
+                raise ValidationError(f'{at} distance_unit must be km or mi')
+            if 'id' in s:
+                s['id'] = _row_id(s['id'], f'{at} id')
+            for field, lo, hi in (('reps', 0, MAX_REPS), ('rpe', 1, 10), ('order', 0, MAX_ORDER)):
+                if field in s:
+                    s[field] = _whole(s[field], f'{at} {field}', lo, hi)
+            if 'set_type' in s:
+                if s['set_type'] in (None, ''):
+                    s['set_type'] = 'N'
+                elif s['set_type'] not in SET_TYPES:
+                    raise ValidationError(f'{at} set_type must be one of {", ".join(SET_TYPES)}')
 
 
 # Far past any real set: they exist to keep Infinity, 1e300 and the like out
@@ -119,6 +193,7 @@ SET_NUMBER_BOUNDS = {
     'cardio_duration': 100_000,   # minutes
     'distance': 10_000,           # km or mi
     'elevation_gain': 100_000,    # metres
+    'intensity': 10_000,          # pace per unit, or watts
 }
 
 
@@ -167,15 +242,44 @@ class UpdateWorkoutSchema(_Base):
     max_heart_rate = fields.Int(allow_none=True, validate=validate.Range(min=20, max=260))
 
 # ── Routine ───────────────────────────────────────────────────
+def _validate_programming(rows, name='programming'):
+    """Sets/reps/RPE per exercise, stored as JSON and read back by the app's
+    template prefill, which expects a list of objects."""
+    if rows is None:
+        return
+    if not isinstance(rows, list) or len(rows) > MAX_LIST or not all(isinstance(r, dict) for r in rows):
+        raise ValidationError(f'{name} must be a list of objects')
+
+
+def _validate_days(days):
+    # Same reasoning as _validate_exercises: each value reaches a typed column
+    # or a query, where junk was a 500
+    for i, day in enumerate(days):
+        where = f'day {i + 1}'
+        if not isinstance(day, dict):
+            raise ValidationError(f'{where} must be an object')
+        if 'label' in day:
+            _text(day['label'], f'{where} label', MAX_LABEL_LENGTH)
+        if 'workout_template_id' in day:
+            day['workout_template_id'] = _row_id(day['workout_template_id'], f'{where} workout_template_id')
+        ids = day.get('exercise_template_ids')
+        if ids is not None and not (
+            isinstance(ids, list) and len(ids) <= MAX_LIST
+            and all(isinstance(x, int) and not isinstance(x, bool) for x in ids)
+        ):
+            raise ValidationError(f'{where} exercise_template_ids must be a list of ids')
+        _validate_programming(day.get('programming'), f'{where} programming')
+
+
 class RoutineSchema(_Base):
     name        = fields.Str(required=True, validate=validate.Length(min=1))
-    days        = fields.List(fields.Dict(), required=True)
+    days        = fields.List(fields.Dict(), required=True, validate=_validate_days)
     description = fields.Str(load_default=None)
 
 # No load_default, so 'if field in data' PATCH semantics hold.
 class UpdateRoutineSchema(_Base):
     name        = fields.Str()
-    days        = fields.List(fields.Dict())
+    days        = fields.List(fields.Dict(), validate=_validate_days)
     description = fields.Str(allow_none=True)
 
 # ── Workout Template ──────────────────────────────────────────
@@ -185,12 +289,12 @@ class WorkoutTemplateSchema(_Base):
     # Per-exercise sets/reps. Accepted on create because the app now creates a
     # template on its first save, so programming entered beforehand has to
     # arrive with the POST rather than a later PATCH.
-    programming           = fields.List(fields.Dict(), load_default=None)
+    programming           = fields.List(fields.Dict(), load_default=None, validate=validate.Length(max=MAX_LIST))
 
 class UpdateWorkoutTemplateSchema(_Base):
     name                  = fields.Str()
     exercise_template_ids = fields.List(fields.Int())
-    programming           = fields.List(fields.Dict(), allow_none=True)
+    programming           = fields.List(fields.Dict(), allow_none=True, validate=validate.Length(max=MAX_LIST))
 
 # ── Bodyweight ────────────────────────────────────────────────
 class BodyweightSchema(_Base):
