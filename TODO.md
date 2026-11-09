@@ -1347,8 +1347,12 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 
 ### Done when
 - [ ] On a device: walk with the phone locked on the map screen and minimized, force-quit mid-walk and Keep Recording, pause and resume, and switch to airplane mode before Stop. The full route is recoverable in every case, with no straight line across a gap, pause or resume
-- [ ] No path deletes a tracked activity without a second confirmation
-- [ ] A workout the server rejects stays on the phone and is visible
+- [x] (audited 2026-11-09) No path deletes a tracked activity without a second confirmation
+  - GPS: the save sheet's Discard, a recovered run's Discard and the mini bar's Discard all ask "Discard this activity?" first (tests in `GPSCardioScreen` and `MiniRunBar`); every other `clearRun` follows a save to the server or the offline queue. A checkpoint is dropped unasked only when it holds under 2 fixes, which is no route. A sign-out checkpoints a run in progress under its owner
+  - Saved activities: Delete on Cardio Details and Workout Details asks first. A queued workout the server refused is deleted only from its Home card, behind "Delete this workout?"
+  - Found and fixed: a sign-out deleted a minimized lifting workout with no warning beyond "Are you sure you want to log out?", and since `WorkoutSessionProvider` outlives the sign-out, the next account to sign in on the phone saw it on their mini bar. It is now stashed under its owner's key (`SESSION_KEY_FOR`) and comes back when they sign in, as a GPS run does (2 tests in `WorkoutSessionContext.test.tsx`)
+  - Still open, smaller: the crash backup of a workout that was *open* when the app was killed (`WORKOUT_BACKUP_KEY`) is one shared key, restored at the next launch whoever signs in
+- [x] (audited 2026-11-09) A workout the server rejects stays on the phone and is visible: after 3 refusals it's kept, marked with the server's reason, and listed on Home's "couldn't sync" card with Retry and Delete (`offlineQueue.test.ts`, `DashboardScreen.test.tsx`). Since 2026-11-09 the server also converts rather than refuses values an older build might have queued (§5)
 - [ ] A hike's elevation gain is in the right range
 
 ---

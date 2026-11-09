@@ -5,8 +5,7 @@ import { setTokens, clearTokens, registerUnauthCallback, apiFetch } from '../uti
 import { appCache } from '../utils/appCache';
 import { registerPushToken, deregisterPushToken, cancelWorkoutReminder, restoreWorkoutReminder } from '../utils/notifications';
 import { useTheme, KEY_ACCENT } from './ThemeContext';
-import { SESSION_KEY } from './WorkoutSessionContext';
-import { GREEK_RANK_CACHED_KEY, COACH_INSIGHTS_KEY, USER_KEY } from '../constants/storageKeys';
+import { GREEK_RANK_CACHED_KEY, COACH_INSIGHTS_KEY, USER_KEY, SESSION_KEY } from '../constants/storageKeys';
 import { loadTokens, saveTokenPair, clearStoredTokens } from '../utils/tokenStorage';
 import { clearWidgetSnapshot } from '../utils/widgetData';
 import { endLiveActivity } from '../utils/liveActivity';

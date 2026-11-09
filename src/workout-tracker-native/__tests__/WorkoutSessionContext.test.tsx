@@ -12,12 +12,17 @@ jest.unmock('../context/WorkoutSessionContext');
 jest.mock('../utils/notifications', () => ({ cancelLiveWorkoutNotification: jest.fn() }));
 const { cancelLiveWorkoutNotification } = require('../utils/notifications');
 
+// The signed-in account, changed by the sign-out tests
+let mockUser: { id: number } | null = { id: 1 };
+jest.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: mockUser }) }));
+
 let ctx: ReturnType<typeof useWorkoutSession>;
 function Probe() {
   ctx = useWorkoutSession();
   return <Text>{ctx.session ? `session:${ctx.session.workoutName}` : 'no session'}</Text>;
 }
-const mount = () => render(<WorkoutSessionProvider><Probe /></WorkoutSessionProvider>);
+const tree = () => <WorkoutSessionProvider><Probe /></WorkoutSessionProvider>;
+const mount = () => render(tree());
 
 const NOW = new Date('2026-09-17T10:00:00').getTime();
 const backup = {
@@ -31,6 +36,7 @@ describe('WorkoutSessionContext', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     await AsyncStorage.clear();
+    mockUser = { id: 1 };
   });
 
   it('starts with no session when nothing is stored', async () => {
@@ -168,6 +174,60 @@ describe('WorkoutSessionContext', () => {
     expect(await findByText('no session')).toBeTruthy();
     expect(cancelLiveWorkoutNotification).toHaveBeenCalled();
     await waitFor(async () => expect(await AsyncStorage.getItem(SESSION_KEY)).toBeNull());
+  });
+});
+
+describe('a minimized workout across sign-out', () => {
+  const minimized: MinimizedSession = {
+    workoutName: 'Pull Day', notes: '', exercises: [], selectedDate: new Date(NOW), startedAt: new Date(NOW), baseElapsed: 300,
+  };
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    mockUser = { id: 1 };
+  });
+
+  // Signs out, as AuthContext's logout does: the account goes, then the shared key
+  const signOut = async (view: ReturnType<typeof render>) => {
+    mockUser = null;
+    view.rerender(tree());
+    await AsyncStorage.removeItem(SESSION_KEY);
+  };
+
+  it('never shows on the next account, and its owner gets it back', async () => {
+    const view = mount();
+    await view.findByText('no session');
+    act(() => ctx.saveSession(minimized));
+    expect(view.getByText('session:Pull Day')).toBeTruthy();
+
+    await signOut(view);
+    expect(view.getByText('no session')).toBeTruthy();
+
+    // Someone else signs in on this phone
+    mockUser = { id: 2 };
+    view.rerender(tree());
+    await new Promise(r => setTimeout(r, 0));
+    expect(view.getByText('no session')).toBeTruthy();
+
+    await signOut(view);
+    mockUser = { id: 1 };
+    view.rerender(tree());
+    expect(await view.findByText('session:Pull Day')).toBeTruthy();
+    expect(ctx.session!.startedAt).toBeInstanceOf(Date);
+    // Back under the shared key, so a relaunch still finds it
+    expect(JSON.parse((await AsyncStorage.getItem(SESSION_KEY))!).workoutName).toBe('Pull Day');
+  });
+
+  it('survives a relaunch while signed out', async () => {
+    const view = mount();
+    await view.findByText('no session');
+    act(() => ctx.saveSession(minimized));
+    await signOut(view);
+    view.unmount();
+
+    // The app is closed and opened again, then the owner signs in
+    mockUser = { id: 1 };
+    const again = mount();
+    expect(await again.findByText('session:Pull Day')).toBeTruthy();
   });
 });
 

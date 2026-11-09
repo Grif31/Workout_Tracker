@@ -1,8 +1,10 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { cancelLiveWorkoutNotification } from '../utils/notifications';
 import { endLiveActivity } from '../utils/liveActivity';
 import { WORKOUT_BACKUP_KEY, TIMER_CHECKPOINT_KEY } from '../components/workout/types';
+import { SESSION_KEY, SESSION_KEY_FOR } from '../constants/storageKeys';
+import { useAuth } from './AuthContext';
 
 export type SessionSet = {
   id?: number;
@@ -52,7 +54,7 @@ export function sessionElapsedSeconds(
   return s.baseElapsed + Math.floor((now - s.startedAt.getTime()) / 1000);
 }
 
-export const SESSION_KEY = 'minimized_workout_session';
+export { SESSION_KEY };
 
 type WorkoutSessionCtx = {
   session: MinimizedSession | null;
@@ -73,6 +75,9 @@ const WorkoutSessionContext = createContext<WorkoutSessionCtx>({
 export function WorkoutSessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<MinimizedSession | null>(null);
   const [isWorkoutOpen, setWorkoutOpen] = useState(false);
+  const { user } = useAuth();
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
 
   // Restore any session that survived an app kill
   useEffect(() => {
@@ -137,6 +142,31 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
       } catch {}
     })();
   }, []);
+
+  // This provider outlives a sign-out, so a workout in memory would show on the
+  // next account's mini bar, and logout deletes the stored copy. It goes under
+  // its owner's key instead, and comes back when they sign in, as a GPS run does.
+  useEffect(() => {
+    const ownerId = user?.id;
+    if (ownerId == null) return;
+    AsyncStorage.getItem(SESSION_KEY_FOR(ownerId)).then(raw => {
+      if (!raw || sessionRef.current) return;
+      try {
+        const parsed = JSON.parse(raw);
+        parsed.selectedDate = new Date(parsed.selectedDate);
+        parsed.startedAt    = new Date(parsed.startedAt);
+        setSession(parsed);
+        AsyncStorage.setItem(SESSION_KEY, raw);
+        AsyncStorage.removeItem(SESSION_KEY_FOR(ownerId));
+      } catch {}
+    }).catch(() => {});
+    return () => {
+      const held = sessionRef.current;
+      if (!held) return;
+      AsyncStorage.setItem(SESSION_KEY_FOR(ownerId), JSON.stringify(held)).catch(() => {});
+      setSession(null);
+    };
+  }, [user?.id]);
 
   const saveSession = useCallback((s: MinimizedSession) => {
     setSession(s);

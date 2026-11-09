@@ -13,6 +13,13 @@ export const COACH_INSIGHTS_KEY = 'coach_insights_cache';
 export const TOKEN_KEY = 'token';
 export const REFRESH_TOKEN_KEY = 'refresh_token';
 export const USER_KEY = 'user';
+
+// The minimized lifting workout. Shared, not per account: a sign-out stashes it
+// under SESSION_KEY_FOR(userId) instead (WorkoutSessionContext), so the next
+// account never inherits it and its owner gets it back on signing in.
+export const SESSION_KEY = 'minimized_workout_session';
+export const SESSION_KEY_FOR = (userId: number | string) => `${SESSION_KEY}_${userId}`;
+
 // AsyncStorage marker that this install has set up its SecureStore tokens.
 // Device-level, never cleared on logout: see loadTokens in utils/tokenStorage.ts.
 export const TOKEN_STORE_READY_KEY = 'secure_token_store_ready';
