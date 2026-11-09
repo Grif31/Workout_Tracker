@@ -83,11 +83,11 @@ A tracked run (`GPSCardioScreen`) lives in `context/GpsRunContext.tsx`, mounted 
 |---|---|---|
 | `rest_timer_alerts_enabled` | true | Rest timer local notification |
 | `live_workout_notif_enabled` | true | Live Workout on Lock Screen: the workout's and the GPS run's Live Activities on iOS, and the live workout notification where no activity can run |
-| `minimized_workout_session` | — | Serialized minimized workout state (WorkoutSessionContext) |
+| `minimized_workout_session` | — | Serialized minimized workout state, tagged with its `ownerId` (WorkoutSessionContext). Restored only once an account signs in, and only to its owner: another account's copy moves to `minimized_workout_session_${ownerId}` |
 | `minimized_workout_session_${uid}` | per user | A minimized workout stashed by a sign-out, moved back to `minimized_workout_session` when that account signs in (WorkoutSessionContext) |
 | `greek_rank_cached` | — | Cached current Greek rank name (avoids fetch on cold open) |
 | `coach_insights_cache` | — | Cached AI coaching insights JSON + fetchedAt timestamp |
-| `@workout_open_backup` | — | Crash insurance for an open workout: WorkoutLog writes it while open, `WorkoutSessionContext` reads it on cold start to resurrect a killed workout (`WORKOUT_BACKUP_KEY`, `components/workout/types.ts`) |
+| `@workout_open_backup` | — | Crash insurance for an open workout: WorkoutLog writes it while open, tagged with `ownerId`; `WorkoutSessionContext` turns it into a minimized workout when its owner signs in (`WORKOUT_BACKUP_KEY`, `components/workout/types.ts`) |
 | `@workout_timer_checkpoint` | — | The open workout's timer, saved with the backup above so a resurrected workout keeps its elapsed time (`TIMER_CHECKPOINT_KEY`) |
 | `@theme_mode` | — | Pinned light/dark mode; absent = follow the system (`ThemeContext`) |
 | `@theme_accent` | — | Accent preset for whoever is signed in. Cleared on logout and login; each account's choice is kept in `@theme_accent_${uid}` and loaded back by `loadAccentForUser` |

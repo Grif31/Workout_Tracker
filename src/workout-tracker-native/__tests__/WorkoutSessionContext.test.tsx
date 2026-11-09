@@ -229,6 +229,48 @@ describe('a minimized workout across sign-out', () => {
     const again = mount();
     expect(await again.findByText('session:Pull Day')).toBeTruthy();
   });
+
+  // The app was killed mid-workout and reopens signed out (an expired
+  // session), then someone else signs in on this phone
+  const relaunchSignedOutThenOtherAccount = async () => {
+    mockUser = null;
+    const view = mount();
+    await new Promise(r => setTimeout(r, 0));
+    expect(view.getByText('no session')).toBeTruthy();
+    mockUser = { id: 2 };
+    view.rerender(tree());
+    await new Promise(r => setTimeout(r, 0));
+    expect(view.getByText('no session')).toBeTruthy();
+    return view;
+  };
+
+  it('a minimized workout from a killed app goes only to its owner', async () => {
+    await AsyncStorage.setItem(SESSION_KEY, JSON.stringify({ ...minimized, ownerId: 1 }));
+    const view = await relaunchSignedOutThenOtherAccount();
+    mockUser = null;
+    view.rerender(tree());
+    mockUser = { id: 1 };
+    view.rerender(tree());
+    expect(await view.findByText('session:Pull Day')).toBeTruthy();
+  });
+
+  it('an open workout from a killed app goes only to its owner', async () => {
+    await AsyncStorage.setItem(WORKOUT_BACKUP_KEY, JSON.stringify({ ...backup, ownerId: 1 }));
+    const view = await relaunchSignedOutThenOtherAccount();
+    expect(await AsyncStorage.getItem(WORKOUT_BACKUP_KEY)).toBeNull();
+    mockUser = null;
+    view.rerender(tree());
+    mockUser = { id: 1 };
+    view.rerender(tree());
+    expect(await view.findByText('session:Leg Day')).toBeTruthy();
+  });
+
+  it('a saved session records whose it is', async () => {
+    const view = mount();
+    await view.findByText('no session');
+    act(() => ctx.saveSession(minimized));
+    await waitFor(async () => expect(JSON.parse((await AsyncStorage.getItem(SESSION_KEY))!).ownerId).toBe(1));
+  });
 });
 
 describe('sessionElapsedSeconds', () => {

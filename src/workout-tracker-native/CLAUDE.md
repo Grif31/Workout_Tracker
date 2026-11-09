@@ -44,5 +44,5 @@ Anything that sends a template or routine day to WorkoutLog goes through `buildT
 ### AsyncStorage keys
 Full key tables (device-level and per-user `_${uid}`) are in `docs/app-reference.md`; add new keys there.
 - Per-user keys carry the `_${userId}` suffix and need no clearing on logout.
-- **Logout and login** clear `greek_rank_cached`, `@theme_accent`, `coach_insights_cache`, `minimized_workout_session` (`AuthContext.tsx`); logout also clears `user` and the SecureStore tokens. A minimized workout survives a sign-out under `minimized_workout_session_${uid}` (`WorkoutSessionContext`) and comes back for that account only. The daily reminder is cancelled on logout and rescheduled on login.
+- **Logout and login** clear `greek_rank_cached`, `@theme_accent`, `coach_insights_cache` (`AuthContext.tsx`); logout also clears `minimized_workout_session`, `user` and the SecureStore tokens. A stored workout (minimized or crash backup) carries its `ownerId`: `WorkoutSessionContext` restores nothing until an account signs in, gives each copy only to its owner, and stashes it under `minimized_workout_session_${uid}` across a sign-out. The daily reminder is cancelled on logout and rescheduled on login.
 - `offline_workout_queue_${uid}` is never cleared on logout and nothing in it is deleted for the user. `secure_token_store_ready` is never cleared.

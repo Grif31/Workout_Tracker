@@ -106,11 +106,12 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
     }, []);
 
     const login = async (userData: any, accessToken: string, refreshToken: string) => {
-        // Clear any previous user's cached data before setting up the new session
+        // Clear any previous user's cached data before setting up the new session.
+        // Not the minimized workout: WorkoutSessionContext hands it to its owner.
         appCache.clear();
         await AsyncStorage.multiRemove([
             GREEK_RANK_CACHED_KEY, KEY_ACCENT,
-            COACH_INSIGHTS_KEY, SESSION_KEY,
+            COACH_INSIGHTS_KEY,
         ]);
         endLiveActivity();
         await clearWidgetSnapshot();

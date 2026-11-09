@@ -465,6 +465,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         if (raw) {
           try {
             const backup = JSON.parse(raw);
+            // Another account's: WorkoutSessionContext files it under theirs
+            if (typeof backup.ownerId === 'number' && backup.ownerId !== uid) return;
             setWorkoutName(backup.workoutName ?? '');
             setNotes(backup.notes ?? '');
             setExercises((backup.exercises as ExerciseEntry[]) ?? []);
@@ -662,6 +664,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           exercises,
           selectedDate: selectedDateRef.current.toISOString(),
           clientId,
+          ownerId: uid,
         }));
 
         const liveOff = await AsyncStorage.getItem(LIVE_WORKOUT_NOTIF_KEY);
@@ -695,7 +698,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     });
     return () => sub.remove();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exercises, workoutName, editMode, clientId]);
+  }, [exercises, workoutName, editMode, clientId, uid]);
 
   // iOS Live Activity: the lock screen / Dynamic Island copy of this workout.
   // Pushed when what it shows changes (not on every keystroke in a set), since
