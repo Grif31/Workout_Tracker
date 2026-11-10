@@ -33,7 +33,7 @@ import ProgressRateCard from '../../components/ProgressRateCard';
 import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModal';
 import SegmentedControl from '../../components/SegmentedControl';
 import { usePurchase } from '../../context/PurchaseContext';
-import { motionTiming, reduceMotion } from '../../utils/motion';
+import { EASE_IN_OUT, motionTiming, reduceMotion } from '../../utils/motion';
 
 const RANGE_SEGMENTS = (['1M', '3M', '6M', 'All'] as const).map(r => ({ key: r, label: r }));
 
@@ -263,7 +263,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const handleTabChange = (tab: TabKey) => {
     if (tab === activeTab) return;
     const idx = visibleTabs.findIndex(t => t.key === tab);
-    motionTiming(tabAnimRef, { toValue: idx, duration: 200, useNativeDriver: true }).start();
+    motionTiming(tabAnimRef, { toValue: idx, duration: 200, easing: EASE_IN_OUT, useNativeDriver: true }).start();
 
     setPrevTab(activeTab);
     contentFadeAnim.setValue(0);
