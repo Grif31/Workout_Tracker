@@ -33,6 +33,7 @@ SEEDER_STANDARDS_MAP: dict[tuple[str, str | None], str] = {
     ('bent over row',        'dumbbell'):     'Dumbbell Row',
     ('bent over row',        'cable'):        'Cable Row',
     ('seated cable row',     'cable'):        'Cable Row',
+    ('seated row',           'machine'):      'Cable Row',
     ('deadlift',             'barbell'):      'Deadlift',
     ('deadlift',             'smith machine'):'Deadlift',
     ('t-bar row',            'barbell'):      'T-Bar Row',
