@@ -6,7 +6,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { type WorkoutSet, type PreviousSet, type SetType, SET_TYPE_NAMES, colStyles, fmtPrevSet } from './types';
-import { motionTiming, motionSpring } from '../../utils/motion';
+import { motionTiming } from '../../utils/motion';
 
 // Resting width of the revealed Delete button. Swipeable measures the actions
 // container to set the row's drag range, so this has to be a real width.
@@ -105,14 +105,16 @@ function SetRow({
   const prevText = prevSet ? fmtPrevSet(prevSet, !!bodyweight) : '—';
   const canCopyPrevious = !!prevSet && !isDone && !!onCopyPrevious;
 
-  // A short pop on the checkmark when a set is logged. Skips the first render,
-  // so a restored or prefilled done set doesn't animate on open.
+  // A short settle on the checkmark when a set is logged. Skips the first
+  // render, so a restored or prefilled done set doesn't animate on open. Kept
+  // small and bounce-free: it plays dozens of times a workout, and the light
+  // haptic already marks the moment.
   const checkScale = useRef(new Animated.Value(1)).current;
   const wasDone = useRef(isDone);
   useEffect(() => {
     if (isDone && !wasDone.current) {
-      checkScale.setValue(0.6);
-      motionSpring(checkScale, { toValue: 1, friction: 4, tension: 220, useNativeDriver: true }).start();
+      checkScale.setValue(0.85);
+      motionTiming(checkScale, { toValue: 1, duration: 150, useNativeDriver: true }).start();
     }
     wasDone.current = isDone;
   }, [isDone, checkScale]);
