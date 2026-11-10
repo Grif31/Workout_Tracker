@@ -93,6 +93,7 @@ EXERCISES = [
     ('Bent Over Row',           'Back, Biceps',              'Dumbbell'),
     ('Bent Over Row',           'Back, Biceps',              'Cable'),
     ('Seated Cable Row',        'Back, Biceps',              'Cable'),
+    ('Seated Row',              'Back, Biceps',              'Machine'),
     ('Deadlift',                'Back, Hamstrings, Quads',   'Barbell'),
     ('Deadlift',                'Back, Hamstrings, Quads',   'Smith Machine'),
     ('T-Bar Row',               'Back, Biceps',              'Barbell'),
