@@ -140,7 +140,6 @@ export default function CoachScreen({ navigation }: Props) {
   // ── Tab animations ──────────────────────────────────────────────────────────
   const TAB_NAMES = ['plans', 'coach'] as const;
   const TABS = TAB_NAMES.map(key => ({ key, label: key.charAt(0).toUpperCase() + key.slice(1) }));
-  const contentOpacity = useRef(new Animated.Value(1)).current;
   const insightAnimsRef = useRef<Animated.Value[]>([]);
 
   
@@ -164,12 +163,9 @@ export default function CoachScreen({ navigation }: Props) {
     })
   ).current;
 
-  const handleTabChange = (tab: typeof TAB_NAMES[number]) => {
-    motionTiming(contentOpacity, { toValue: 0, duration: 80, useNativeDriver: true }).start(() => {
-      setActiveTab(tab);
-      motionTiming(contentOpacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
-    });
-  };
+  // Switches on the tap's frame: the segmented control's sliding thumb already
+  // shows the change, and a fade-out first delayed every switch.
+  const handleTabChange = (tab: typeof TAB_NAMES[number]) => setActiveTab(tab);
 
   // Keep mutable refs in sync so PanResponder always reads current values
   activeTabRef.current = activeTab;
@@ -666,7 +662,7 @@ export default function CoachScreen({ navigation }: Props) {
     <View style={styles.container}>
       <TopTabBar tabs={TABS} active={activeTab} onChange={handleTabChange} />
 
-      <Animated.View style={{ flex: 1, opacity: contentOpacity }} {...swipeResponder.panHandlers}>
+      <View style={{ flex: 1 }} {...swipeResponder.panHandlers}>
       {/* ── PLANS TAB ── */}
       {activeTab === 'plans' && (
         <ScrollView style={styles.trainingScroll} contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.xl }}>
@@ -1001,7 +997,7 @@ export default function CoachScreen({ navigation }: Props) {
         </ScrollView>
       )}
 
-      </Animated.View>
+      </View>
 
       {/* ── Modals ──────────────────────────────────────────────────────────── */}
 

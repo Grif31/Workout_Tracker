@@ -50,20 +50,6 @@ const TAB_CONFIG: Array<{ route: string; icon: keyof typeof Ionicons.glyphMap; l
 const ICON_SIZE = 24;
 const ICON_LIFT = 5;
 
-const screenFadeAnim = new Animated.Value(1);
-
-// Fade wrapper applied per-scene so tab switches animate only the screen
-// content — the tab bar and MiniWorkoutBar render inside Tab.Navigator and
-// must stay solid.
-const withScreenFade = (Stack: React.ComponentType<any>) => () => (
-  <Animated.View style={{ flex: 1, opacity: screenFadeAnim }}>
-    <Stack />
-  </Animated.View>
-);
-const FadedDashboardStack = withScreenFade(DashboardStack);
-const FadedProgressStack  = withScreenFade(ProgressStack);
-const FadedTrainingStack  = withScreenFade(TrainingStack);
-const FadedProfileStack   = withScreenFade(ProfileStack);
 
 
 function MiniWorkoutBar() {
@@ -254,12 +240,10 @@ function AnimatedTabBar({ state, navigation, colors, pendingCount }: {
                 target: route.key,
                 canPreventDefault: true,
               });
-              if (!isActive && !event.defaultPrevented) {
-                motionTiming(screenFadeAnim, { toValue: 0, duration: 80, useNativeDriver: true }).start(() => {
-                  navigation.navigate(route.name);
-                  motionTiming(screenFadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
-                });
-              }
+              // No screen fade: tabs are switched dozens of times a session, and
+              // the old 80ms fade-out delayed every switch. The icon lift above
+              // is the feedback.
+              if (!isActive && !event.defaultPrevented) navigation.navigate(route.name);
             }}
             onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })}
           >
@@ -367,10 +351,10 @@ export function AppTabs() {
         tabBar={(props) => <CustomTabBar {...props} />}
         screenOptions={{ headerShown: false }}
       >
-        <Tab.Screen name="DashboardTab" component={FadedDashboardStack} options={{ title: 'Dashboard' }} />
-        <Tab.Screen name="ProgressTab" component={FadedProgressStack} options={{ title: 'Progress' }} />
-        <Tab.Screen name="TrainingTab" component={FadedTrainingStack} options={{ title: 'Coach' }} />
-        <Tab.Screen name="ProfileTab" component={FadedProfileStack} options={{ title: 'Profile' }} />
+        <Tab.Screen name="DashboardTab" component={DashboardStack} options={{ title: 'Dashboard' }} />
+        <Tab.Screen name="ProgressTab" component={ProgressStack} options={{ title: 'Progress' }} />
+        <Tab.Screen name="TrainingTab" component={TrainingStack} options={{ title: 'Coach' }} />
+        <Tab.Screen name="ProfileTab" component={ProfileStack} options={{ title: 'Profile' }} />
       </Tab.Navigator>
     </>
   );
