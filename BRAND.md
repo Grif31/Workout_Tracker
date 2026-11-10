@@ -16,14 +16,21 @@ the character set can't render it (e.g. file names, bundle identifiers,
 URLs) — those already use the plain-ASCII **Arete** / **arete** form
 (`aretefitnessapp.com`, `com.aretefitness.app`).
 
-**Full name: Aretē Workout Tracker.** Use it where the product is named on
-its own: page titles, legal pages, email headers, the App Store listing.
-In running copy ("Aretē uses your location...") and the home screen label
-(iOS truncates past about 12 characters) the short **Aretē** is right.
-Never "Aretē Fitness": that was the old name, and `aretefitness` now lives
+**Full name: Aretē: Strength & Cardio Log** (adopted November 9, 2026). Use
+it where the product is named on its own: page titles, legal page headers,
+the email header, the App Store name. The App Store subtitle is
+**Workout Tracker & AI Coach**, which keeps "workout tracker" as a search
+phrase.
+
+In running copy ("Aretē uses your location..."), email subjects, and the home
+screen label (iOS truncates past about 12 characters), the short **Aretē** is
+right. Email `From` display names stay ASCII (`Arete`) so every mail client
+renders them.
+
+**Old names, never use them:** "Aretē Fitness" (the original name) and
+"Aretē Workout Tracker" (October 2026; dropped because another App Store app,
+"Arete: Workout Tracker", launched with a clashing name). `aretefitness` lives
 on only in identifiers that can't change (domain, bundle ID, URL scheme).
-Email `From` display names stay ASCII (`Arete Workout Tracker`) so every
-mail client renders them.
 
 From Greek ἀρετή (*arete*) — "excellence" or "virtue," specifically the
 excellence realized through struggle and pursuit rather than given. That's
@@ -388,8 +395,10 @@ Two distinct golds, used for two distinct things. Don't conflate them:
 
 | Token | Hex | Use |
 |---|---|---|
-| `PR_GOLD` | `#f9de73` | Personal-record indicators — trophies, laurel borders, PR banners |
-| `PR_GOLD_TEXT` | `#ad9206` | Dark text/laurel color on gold or surface backgrounds |
+| `PR_GOLD` | `#f9de73` | Personal-record indicators on dark surfaces — trophies, laurel borders, PR banners. In-app dark mode (`colors.prGold` / `colors.prGoldBorder`), share cards, the website |
+| `PR_GOLD_ON_LIGHT` | `#8A6D00` | `colors.prGold` in light mode: PR text and icons (4.9:1 on white; `PR_GOLD` is 1.3:1) |
+| `PR_GOLD_BORDER_ON_LIGHT` | `#B8941F` | `colors.prGoldBorder` in light mode: PR card borders, laurels, glows |
+| `PR_GOLD_TEXT` | `#7A6000` | Dark text on the cream `PR_GOLD_BG` only (5.4:1). Too dark for dark mode |
 | `PR_GOLD_BG` | `#FFF3C4` | Cream background for PR banners |
 | **Aretē rank gold** | `#FFD700` | The single highest Greek Rank ("Aretē" itself) — brighter, more saturated than PR gold, deliberately reserved for the pinnacle rank so it reads as rarer |
 
@@ -555,7 +564,7 @@ and shared outside the app, so they always use a fixed dark look
 |---|---|
 | Frame | 360 px wide, `#0D0D0D`, 20 px corner radius, 5 px accent-color bar across the top |
 | Header | White wordmark (86 × 28) on the left, date on the right in `#8E8E93` at 12 px |
-| Banner (PRs and rank ups only) | Laurel branches around centered text; 1.5 px `PR_GOLD` outline on `#1C1C1E`; text in `PR_GOLD_TEXT`, 13 px bold |
+| Banner (PRs and rank ups only) | Laurel branches around centered text; 1.5 px `PR_GOLD` outline on `#1C1C1E`; text in `PR_GOLD`, 13 px bold (`PR_GOLD_TEXT` is for the cream background and reads dim here) |
 | Hero | One large number in the user's accent color, 42 px, weight 800, with a muted uppercase label below |
 | Stats row | Stats on `#1C1C1E` with `#2C2C2E` dividers; values white 17 px bold, labels `#8E8E93` 10 px |
 | Footer | `aretefitnessapp.com`, centered, `#636366` |
