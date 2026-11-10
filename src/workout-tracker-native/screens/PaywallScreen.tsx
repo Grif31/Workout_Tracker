@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, ScrollView, StyleSheet,
+  View, Text, Image, TouchableOpacity, ScrollView, StyleSheet,
   ActivityIndicator, Alert, Animated as RNAnimated,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -34,8 +34,9 @@ const SUBTEXT = AUTH.subtext;
 const PW_BG     = AUTH.bg;
 const PW_CARD   = AUTH.card;
 const PW_BORDER = AUTH.border;
-// Top of the hero's fade into the background
-const HERO_TINT = '#0F2018';
+// A 1290px copy of src/brand/store/header/arete-header-logo.png: the 3840px original is 2.5 MB
+const HERO_IMAGE = require('../assets/paywall-header.jpg');
+const HERO_IMAGE_HEIGHT = 190;
 
 const TIERS = [
   { type: 'ANNUAL',   label: 'Annual',   badge: 'Best Value' },
@@ -194,8 +195,12 @@ export default function PaywallScreen({ navigation, route }: Props) {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-        {/* Hero */}
-        <LinearGradient colors={[HERO_TINT, PW_BG]} style={[styles.hero, { paddingTop: insets.top + spacing.md }]}>
+        {/* Hero: the App Store header, bleeding under the status bar */}
+        <View style={[styles.heroImageWrap, { height: insets.top + HERO_IMAGE_HEIGHT }]}>
+          <Image source={HERO_IMAGE} style={styles.heroImage} resizeMode="cover" accessibilityIgnoresInvertColors />
+          <LinearGradient colors={[PW_BG + '00', PW_BG]} style={styles.heroFade} />
+        </View>
+        <View style={styles.hero}>
           <View style={styles.badgeRow}>
             <Ionicons name="leaf-outline" size={12} color={ACCENT} />
             <Text style={styles.badgeText}>ARETĒ PREMIUM</Text>
@@ -205,7 +210,7 @@ export default function PaywallScreen({ navigation, route }: Props) {
           <Text style={styles.subtitle}>
             {alreadyPremium ? 'Everything below is already unlocked' : headline.subtitle}
           </Text>
-        </LinearGradient>
+        </View>
 
         <View style={styles.accentDivider} />
 
@@ -401,11 +406,22 @@ const styles = StyleSheet.create({
 
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl * 2 },
 
+  heroImageWrap: {
+    marginHorizontal: -spacing.lg,
+    overflow: 'hidden',
+  },
+  heroImage: { width: '100%', height: '100%' },
+  heroFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 64,
+  },
   hero: {
     alignItems: 'center',
     paddingBottom: spacing.md,
-    marginHorizontal: -spacing.lg,
-    paddingHorizontal: spacing.lg,
+    marginTop: -spacing.sm,
     marginBottom: spacing.sm,
   },
   badgeRow: {
