@@ -159,10 +159,17 @@ jest.mock('react-native-worklets', () => ({
   isShareableRef: jest.fn(() => false),
   runOnUI: jest.fn((fn: any) => fn),
   runOnJS: jest.fn((fn: any) => fn),
+  scheduleOnRN: jest.fn((fn: any, ...args: any[]) => fn(...args)),
 }));
 jest.mock('react-native-reanimated', () => {
   const RN = require('react-native');
-  const shared = (v: any) => ({ value: v });
+  // .get()/.set() are the compiler-safe accessors app code uses (set also takes an updater)
+  const shared = (v: any) => {
+    const s: any = { value: v };
+    s.get = () => s.value;
+    s.set = (n: any) => { s.value = typeof n === 'function' ? n(s.value) : n; };
+    return s;
+  };
   // Entering/exiting animations are builders: FadeInDown.delay(200).duration(400).
   // Every method returns the builder, so any chain the screens use resolves.
   const entering = () => {

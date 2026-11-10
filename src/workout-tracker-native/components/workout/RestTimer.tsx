@@ -1,25 +1,24 @@
-import React, { useMemo, useRef, useState } from 'react';
-import {
-  View, Text, TouchableOpacity, StyleSheet, Animated,
-  PanResponder, Dimensions,
-} from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import Reanimated, { useSharedValue, useAnimatedStyle, withSpring, type SharedValue } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { scheduleOnRN } from 'react-native-worklets';
+import * as Haptics from 'expo-haptics';
 import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { fmtCountdown } from './types';
+import { BUBBLE_SIZE, bubbleBounds, bubbleRestPoint, rubberBand } from './restBubble';
 
 const RING_CIRCUMFERENCE = 2 * Math.PI * 85;
 
 // Minimized floating bubble
-const BUBBLE_SIZE = 72;
 const BUBBLE_RING_R = 31; // (72 - strokeWidth 5) / 2 - inset
 const BUBBLE_CIRCUMFERENCE = 2 * Math.PI * BUBBLE_RING_R;
-const EDGE_MARGIN = 8;
-const TOP_BOUND = 70;      // stay below the header
-const BOTTOM_BOUND = 120;  // stay above the save bar / keyboard toolbar
 const TAP_SLOP = 6;
+const lightImpact = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); };
 
 type Props = {
   restRemaining: number;
@@ -53,50 +52,28 @@ export default function RestTimer({
   // every rest: 57% CPU on an iPhone 13 in 1.1.8, and a main thread too busy
   // mounting to exit within 5s once backgrounded, so iOS killed it (0x8badf00d).
 
-  // ── Draggable bubble position ────────────────────────────────
-  const { width: W, height: H } = Dimensions.get('window');
-  const clampX = (x: number) => Math.max(EDGE_MARGIN, Math.min(W - BUBBLE_SIZE - EDGE_MARGIN, x));
-  const clampY = (y: number) => Math.max(TOP_BOUND, Math.min(H - BUBBLE_SIZE - BOTTOM_BOUND, y));
-  const posRef = useRef({ x: W - BUBBLE_SIZE - spacing.md, y: H - BUBBLE_SIZE - 220 });
-  const pan = useRef(new Animated.ValueXY(posRef.current)).current;
-  const minimizedRef = useRef(false);
-  minimizedRef.current = minimized;
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, g) => {
-        pan.setValue({
-          x: clampX(posRef.current.x + g.dx),
-          y: clampY(posRef.current.y + g.dy),
-        });
-      },
-      onPanResponderRelease: (_, g) => {
-        posRef.current = {
-          x: clampX(posRef.current.x + g.dx),
-          y: clampY(posRef.current.y + g.dy),
-        };
-        // Barely moved = tap → expand back to the full overlay
-        if (Math.abs(g.dx) < TAP_SLOP && Math.abs(g.dy) < TAP_SLOP) {
-          setMinimized(false);
-        }
-      },
-      onPanResponderTerminationRequest: () => false,
-    })
-  ).current;
+  // Bubble position lives here, not in RestBubble, so it survives expanding
+  // and minimizing again during the same rest.
+  const [bounds] = useState(() => {
+    const { width, height } = Dimensions.get('window');
+    return bubbleBounds(width, height);
+  });
+  const bubbleX = useSharedValue(bounds.maxX);
+  const bubbleY = useSharedValue(Math.max(bounds.minY, bounds.maxY - 100));
+  const expand = useCallback(() => setMinimized(false), []);
 
   const ringColor = restPaused ? colors.textSecondary : colors.accent;
 
   if (minimized) {
     return (
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-        <Animated.View
-          {...panResponder.panHandlers}
-          style={[
-            styles.bubble,
-            { backgroundColor: colors.surface, borderColor: colors.border },
-            { transform: pan.getTranslateTransform() },
-          ]}
+        <RestBubble
+          x={bubbleX}
+          y={bubbleY}
+          bounds={bounds}
+          onExpand={expand}
+          accessibilityLabel={`Rest timer, ${fmtCountdown(restRemaining)} left${restPaused ? ', paused' : ''}. Expand`}
+          style={[styles.bubble, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
           <Svg width={BUBBLE_SIZE} height={BUBBLE_SIZE} viewBox={`0 0 ${BUBBLE_SIZE} ${BUBBLE_SIZE}`} style={StyleSheet.absoluteFill}>
             <Circle
@@ -119,7 +96,7 @@ export default function RestTimer({
           <Text style={[styles.bubbleTime, { color: colors.textPrimary }]}>
             {fmtCountdown(restRemaining)}
           </Text>
-        </Animated.View>
+        </RestBubble>
       </View>
     );
   }
@@ -205,6 +182,68 @@ export default function RestTimer({
         </View>
       </View>
     </View>
+  );
+}
+
+// The minimized bubble. Drag runs on the UI thread, so it stays smooth while
+// WorkoutLog re-renders every second for its clock. On release it springs to
+// the side the flick was heading for, carrying the flick's speed; a tap
+// expands it. withSpring follows the system Reduce Motion setting by default.
+function RestBubble({ x, y, bounds, onExpand, accessibilityLabel, style, children }: {
+  x: SharedValue<number>;
+  y: SharedValue<number>;
+  bounds: ReturnType<typeof bubbleBounds>;
+  onExpand: () => void;
+  accessibilityLabel: string;
+  style: React.ComponentProps<typeof View>['style'];
+  children: React.ReactNode;
+}) {
+  const startX = useSharedValue(0);
+  const startY = useSharedValue(0);
+
+  // Memoized: the bubble re-renders every second as the countdown changes, and
+  // a rebuilt gesture mid-drag would reattach its handlers.
+  const gesture = useMemo(() => {
+    const pan = Gesture.Pan()
+      .minDistance(TAP_SLOP)
+      .onStart(() => {
+        startX.set(x.get());
+        startY.set(y.get());
+      })
+      .onUpdate(e => {
+        x.set(rubberBand(startX.get() + e.translationX, bounds.minX, bounds.maxX));
+        y.set(rubberBand(startY.get() + e.translationY, bounds.minY, bounds.maxY));
+      })
+      .onEnd(e => {
+        const to = bubbleRestPoint(x.get(), y.get(), e.velocityX, e.velocityY, bounds);
+        x.set(withSpring(to.x, { duration: 400, dampingRatio: 0.8, velocity: e.velocityX }));
+        y.set(withSpring(to.y, { duration: 400, dampingRatio: 0.8, velocity: e.velocityY }));
+        scheduleOnRN(lightImpact);
+      });
+    const tap = Gesture.Tap()
+      .maxDistance(TAP_SLOP)
+      .onEnd((_e, success) => {
+        if (success) scheduleOnRN(onExpand);
+      });
+    return Gesture.Race(pan, tap);
+  }, [x, y, startX, startY, bounds, onExpand]);
+
+  const position = useAnimatedStyle(() => ({
+    transform: [{ translateX: x.get() }, { translateY: y.get() }],
+  }));
+
+  return (
+    <GestureDetector gesture={gesture}>
+      <Reanimated.View
+        style={[style, position]}
+        accessible
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        onAccessibilityTap={onExpand}
+      >
+        {children}
+      </Reanimated.View>
+    </GestureDetector>
   );
 }
 
