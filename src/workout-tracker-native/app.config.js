@@ -22,6 +22,16 @@ module.exports = {
     slug: 'workout-tracker-native',
     scheme: 'aretefitness',
     version: '1.2.2',
+    // Over-the-air updates only reach builds whose native code hashes the same,
+    // so an update that needs a native change can't land on an older binary.
+    // Publish with `npm run update:<channel>`, never bare `eas update`.
+    runtimeVersion: { policy: 'fingerprint' },
+    updates: {
+      url: 'https://u.expo.dev/356b88e9-4302-43fc-b50a-6d83030b8fa6',
+      // Downloaded in the background and applied on the next cold start, so an
+      // update never reloads the app under a workout or run in progress.
+      fallbackToCacheTimeout: 0,
+    },
     orientation: 'portrait',
     icon: './assets/Arete_icon.png',
     userInterfaceStyle: 'automatic',
