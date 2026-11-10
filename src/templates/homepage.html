@@ -9,6 +9,19 @@
   <meta name="theme-color" content="#0D0D0D">
   <link rel="icon" type="image/png" href="/brand/favicon.png">
   <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png">
+  <meta name="apple-itunes-app" content="app-id=6771064342">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "MobileApplication",
+    "name": "Aretē Workout Tracker",
+    "operatingSystem": "iOS",
+    "applicationCategory": "HealthApplication",
+    "url": "https://aretefitnessapp.com/",
+    "downloadUrl": "https://apps.apple.com/app/id6771064342",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Aretē Workout Tracker">
@@ -63,6 +76,7 @@
       display: flex;
       gap: 14px;
       justify-content: center;
+      align-items: center;
       flex-wrap: wrap;
       margin-top: 40px;
     }
@@ -79,7 +93,10 @@
     .btn-green  { background: #30D158; color: #000; }
     .btn-ghost  { background: transparent; color: #F2F2F7; border: 1.5px solid #3A3A3C; }
     .btn-ghost:hover { border-color: #636366; opacity: 1; }
-    .btn-soon   { background: #1C1C1E; color: #8E8E93; border: 1.5px solid #2C2C2E; cursor: default; }
+    /* Apple's badge artwork must not be recolored or cropped, so it is sized only by height */
+    .store-badge { display: inline-block; transition: opacity 0.15s; }
+    .store-badge:hover { opacity: 0.82; }
+    .store-badge img { display: block; height: 52px; width: auto; }
 
     /* -- Features -- */
     .feature-row {
@@ -273,7 +290,9 @@
     <div class="logo"><img src="/brand/Arete_name.png" alt="Aretē Workout Tracker"></div>
     <h1 class="tagline">Pursue excellence. Track every rep.</h1>
     <div class="cta-row">
-      <span class="btn btn-soon">Coming soon to the App Store</span>
+      <a href="https://apps.apple.com/app/id6771064342" class="store-badge">
+        <img src="https://tools.applemarketingtools.com/api/badges/download-on-the-app-store/black/en-us" width="156" height="52" alt="Download on the App Store">
+      </a>
       <a href="mailto:support@aretefitnessapp.com" class="btn btn-ghost">Contact Support</a>
     </div>
   </header>
@@ -373,6 +392,20 @@
                alt="Profile screen showing Titan Greek Rank, lifetime stats and personal records">
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Download -->
+  <div class="section" id="download">
+    <p class="section-label">Download</p>
+    <h2 class="section-title">Start training today</h2>
+    <div class="support-card">
+      <p>Aretē is free on the App Store for iPhone. Log your first workout in under a minute.</p>
+      <a href="https://apps.apple.com/app/id6771064342" class="store-badge">
+        <img src="https://tools.applemarketingtools.com/api/badges/download-on-the-app-store/black/en-us" width="156" height="52" alt="Download on the App Store">
+      </a>
     </div>
   </div>
 
@@ -495,6 +528,7 @@
   <!-- Footer -->
   <footer>
     <div class="footer-links">
+      <a href="https://apps.apple.com/app/id6771064342">App Store</a>
       <a href="/privacy">Privacy Policy</a>
       <a href="/terms">Terms of Service</a>
       <a href="mailto:support@aretefitnessapp.com">Contact Support</a>
