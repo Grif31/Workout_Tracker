@@ -23,6 +23,7 @@ export const RPE_LABELS = [
 
 export const SET_TYPES = ['N', 'W', 'D', 'F'] as const;
 export type SetType = typeof SET_TYPES[number];
+export const SET_TYPE_NAMES: Record<SetType, string> = { N: 'Normal', W: 'Warm-up', D: 'Drop Set', F: 'Failure' };
 
 export type WorkoutSet = {
   uid: string;

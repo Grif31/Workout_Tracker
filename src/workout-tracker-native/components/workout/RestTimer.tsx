@@ -128,10 +128,22 @@ export default function RestTimer({
     <View style={styles.restOverlay}>
       <View style={styles.restBackdrop} />
       <View style={[styles.restModal, { backgroundColor: colors.surface }]}>
-        <TouchableOpacity style={styles.restMinimizeBtn} onPress={() => setMinimized(true)} hitSlop={8}>
+        <TouchableOpacity
+          style={styles.restMinimizeBtn}
+          onPress={() => setMinimized(true)}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Minimize rest timer"
+        >
           <Ionicons name="chevron-down" size={22} color={colors.textSecondary} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.restCloseBtn} onPress={onStop} hitSlop={8}>
+        <TouchableOpacity
+          style={styles.restCloseBtn}
+          onPress={onStop}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Stop rest timer"
+        >
           <Ionicons name="close" size={22} color={colors.textSecondary} />
         </TouchableOpacity>
 
@@ -167,6 +179,8 @@ export default function RestTimer({
           <TouchableOpacity
             style={[styles.restAdjBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
             onPress={() => onAdjust(-30)}
+            accessibilityRole="button"
+            accessibilityLabel="Subtract 30 seconds"
           >
             <Text style={[styles.restAdjText, { color: colors.textPrimary }]}>−30s</Text>
           </TouchableOpacity>
@@ -174,6 +188,8 @@ export default function RestTimer({
           <TouchableOpacity
             style={[styles.restPauseBtn, { backgroundColor: colors.accent }]}
             onPress={restPaused ? onResume : onPause}
+            accessibilityRole="button"
+            accessibilityLabel={restPaused ? 'Resume rest timer' : 'Pause rest timer'}
           >
             <Ionicons name={restPaused ? 'play' : 'pause'} size={26} color={colors.accentText} />
           </TouchableOpacity>
@@ -181,6 +197,8 @@ export default function RestTimer({
           <TouchableOpacity
             style={[styles.restAdjBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
             onPress={() => onAdjust(30)}
+            accessibilityRole="button"
+            accessibilityLabel="Add 30 seconds"
           >
             <Text style={[styles.restAdjText, { color: colors.textPrimary }]}>+30s</Text>
           </TouchableOpacity>
@@ -267,7 +285,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   restAdjBtn: {
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs + 2,
+    minWidth: 64,
+    minHeight: 44,
     borderRadius: 20,
     borderWidth: 1,
     alignItems: 'center',

@@ -90,14 +90,21 @@ function ExerciseBlock({
               <Text style={[styles.exerciseEquipment, { color: colors.textSecondary }]}>{exercise.equipment}</Text>
             )}
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-            <TouchableOpacity onPress={onStartRest} style={styles.exIconBtn}>
+          <View style={styles.exIconRow}>
+            <TouchableOpacity
+              onPress={onStartRest}
+              style={styles.exIconBtn}
+              accessibilityRole="button"
+              accessibilityLabel={`Start rest timer for ${exercise.name}`}
+            >
               <Ionicons name="timer-outline" size={20} color={colors.save} />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={e => onOpenMenu(exIndex, e)}
               style={styles.exIconBtn}
               testID={`exercise-menu-${exIndex}`}
+              accessibilityRole="button"
+              accessibilityLabel={`${exercise.name} options`}
             >
               <Ionicons name="ellipsis-vertical" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
@@ -263,7 +270,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   exerciseName: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
   exerciseEquipment: { fontSize: typography.fontSize.sm, marginTop: 1 },
-  exIconBtn: { padding: spacing.xs },
+  // Adjacent 44pt boxes with no gap: tapped mid-set, so the full target matters
+  // more than the space between them.
+  exIconRow: { flexDirection: 'row', alignItems: 'center' },
+  exIconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 
   exNotesInput: {
     fontStyle: 'italic',

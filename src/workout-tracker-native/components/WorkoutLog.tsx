@@ -62,6 +62,7 @@ import {
   makeInitialSet,
   usesBodyweightForVolume,
   bodyweightLoadFactor,
+  SET_TYPE_NAMES,
 } from './workout/types';
 import WorkoutHeader from './workout/WorkoutHeader';
 import ExerciseBlock from './workout/ExerciseBlock';
@@ -78,7 +79,10 @@ import type { NewAchievement } from '../utils/achievements';
 
 type EditableSetField = 'reps' | 'weight';
 
-const SET_TYPE_LABELS: Record<SetType, string> = { N: 'Normal', W: 'Warm-up', D: 'Drop Set', F: 'Failure' };
+
+// Header buttons are 60pt wide but only icon-tall; growing them to 44pt would
+// push the header down, so the extra height is tap area only.
+const HEADER_HIT_SLOP = { top: 10, bottom: 10 };
 
 // A prefill (template, routine day, or a logged workout for Edit / Perform
 // Again) as editable entries
@@ -1704,17 +1708,29 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <View style={{ flexDirection: 'row', gap: spacing.xs }}>
           {onCancel && !editMode ? (
-            <TouchableOpacity onPress={minimizeWorkout} style={styles.headerBtn}>
+            <TouchableOpacity
+              onPress={minimizeWorkout}
+              style={styles.headerBtn}
+              hitSlop={HEADER_HIT_SLOP}
+              accessibilityRole="button"
+              accessibilityLabel="Minimize workout"
+            >
               <Ionicons name="chevron-down" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
           ) : onCancel ? (
-            <TouchableOpacity onPress={onCancel} style={styles.headerBtn}>
+            <TouchableOpacity
+              onPress={onCancel}
+              style={styles.headerBtn}
+              hitSlop={HEADER_HIT_SLOP}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel editing"
+            >
               <Ionicons name="close" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
           ) : <View style={styles.headerBtn} />}
         </View>
         <Text style={styles.headerTitle}>{editMode ? 'Edit Workout' : 'Log Workout'}</Text>
-        <TouchableOpacity onPress={submitWorkout} style={styles.headerBtn} disabled={saving}>
+        <TouchableOpacity onPress={submitWorkout} style={styles.headerBtn} disabled={saving} hitSlop={HEADER_HIT_SLOP}>
           {saving
             ? <ActivityIndicator size="small" color={colors.save} />
             : <Text style={styles.saveText}>{editMode ? 'Update' : 'Save'}</Text>
@@ -2065,7 +2081,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
               <Ionicons name="checkmark" size={20} color={colors.accentText} />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={() => { Keyboard.dismiss(); setFocusedInput(null); }} style={styles.keyboardDismissBtn}>
+          <TouchableOpacity
+            onPress={() => { Keyboard.dismiss(); setFocusedInput(null); }}
+            style={styles.keyboardDismissBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Hide keyboard"
+          >
             <Ionicons name="chevron-down" size={20} color={colors.textPrimary} />
           </TouchableOpacity>
         </View>
@@ -2099,7 +2120,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           <View style={[styles.rpeModalHandle, { backgroundColor: colors.border }]} />
           <View style={styles.rpeModalHeader}>
             <Text style={[styles.rpeModalTitle, { color: colors.textPrimary }]}>Rate of Perceived Exertion</Text>
-            <TouchableOpacity onPress={() => setRpePickerTarget(null)} hitSlop={8}>
+            <TouchableOpacity
+              onPress={() => setRpePickerTarget(null)}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close RPE picker"
+            >
               <Ionicons name="close" size={22} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
@@ -2173,7 +2199,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           <View style={[styles.rpeModalHandle, { backgroundColor: colors.border }]} />
           <View style={styles.setTypeHeader}>
             <Text style={[styles.rpeModalTitle, { color: colors.textPrimary }]}>Set Type</Text>
-            <TouchableOpacity onPress={() => setSetTypePickerTarget(null)} hitSlop={8}>
+            <TouchableOpacity
+              onPress={() => setSetTypePickerTarget(null)}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close set type picker"
+            >
               <Ionicons name="close" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
@@ -2207,7 +2238,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                     style={[styles.setTypeLabel, { color: colors.textPrimary }]}
                     numberOfLines={1}
                   >
-                    {SET_TYPE_LABELS[t]}
+                    {SET_TYPE_NAMES[t]}
                   </Text>
                 </TouchableOpacity>
               );
@@ -2372,7 +2403,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
   },
-  keyboardDismissBtn: { padding: spacing.sm },
+  keyboardDismissBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
 
   rpeModal: {
     position: 'absolute',

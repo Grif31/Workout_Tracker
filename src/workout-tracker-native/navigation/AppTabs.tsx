@@ -183,6 +183,8 @@ function MiniWorkoutBar() {
               ]
             );
           }}
+          accessibilityRole="button"
+          accessibilityLabel="Discard workout"
         >
           <Ionicons name="trash-outline" size={14} color={colors.danger} />
         </TouchableOpacity>
@@ -220,11 +222,14 @@ function AnimatedTabBar({ state, navigation, colors, pendingCount }: {
     : { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border };
 
   return (
-    <View style={[
-      styles.animBar,
-      borderStyle,
-      { backgroundColor: colors.surface, paddingBottom: bottom || 8 },
-    ]}>
+    <View
+      accessibilityRole="tabbar"
+      style={[
+        styles.animBar,
+        borderStyle,
+        { backgroundColor: colors.surface, paddingBottom: bottom || 8 },
+      ]}
+    >
       {state.routes.map((route, i) => {
         const isActive = state.index === i;
         const anim    = anims[i];
@@ -240,6 +245,9 @@ function AnimatedTabBar({ state, navigation, colors, pendingCount }: {
             key={route.key}
             style={styles.animTab}
             activeOpacity={1}
+            accessibilityRole="tab"
+            accessibilityLabel={config.label}
+            accessibilityState={{ selected: isActive }}
             onPress={() => {
               const event = navigation.emit({
                 type: 'tabPress',

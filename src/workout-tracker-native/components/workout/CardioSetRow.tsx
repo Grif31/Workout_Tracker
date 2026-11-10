@@ -63,6 +63,7 @@ function CardioSetRow({ set, setIndex, onChangeField, onDelete }: Props) {
               placeholder="min"
               placeholderTextColor={colors.placeholder}
               keyboardType="decimal-pad"
+              accessibilityLabel={`Set ${setIndex + 1} duration, minutes`}
               value={running ? fmtWatch(elapsedSecs) : (set.cardio_duration || '')}
               onChangeText={val => !running && onChangeField('cardio_duration', val)}
               editable={!running}
@@ -88,6 +89,7 @@ function CardioSetRow({ set, setIndex, onChangeField, onDelete }: Props) {
               placeholder="dist"
               placeholderTextColor={colors.placeholder}
               keyboardType="decimal-pad"
+              accessibilityLabel={`Set ${setIndex + 1} distance`}
               value={set.distance || ''}
               onChangeText={val => onChangeField('distance', val)}
             />
@@ -97,6 +99,9 @@ function CardioSetRow({ set, setIndex, onChangeField, onDelete }: Props) {
                   key={u}
                   style={[styles.cardioUnitBtn, (set.distance_unit || 'mi') === u && { backgroundColor: colors.accent }]}
                   onPress={() => onChangeField('distance_unit', u)}
+                  accessibilityRole="button"
+                  accessibilityLabel={u === 'km' ? 'Kilometers' : 'Miles'}
+                  accessibilityState={{ selected: (set.distance_unit || 'mi') === u }}
                 >
                   <Text style={{ fontSize: typography.fontSize.xs, fontWeight: '700', color: (set.distance_unit || 'mi') === u ? colors.accentText : colors.textSecondary }}>
                     {u}
@@ -109,6 +114,7 @@ function CardioSetRow({ set, setIndex, onChangeField, onDelete }: Props) {
               placeholder="pace"
               placeholderTextColor={colors.placeholder}
               keyboardType="decimal-pad"
+              accessibilityLabel={`Set ${setIndex + 1} pace`}
               value={set.intensity || ''}
               onChangeText={val => onChangeField('intensity', val)}
             />

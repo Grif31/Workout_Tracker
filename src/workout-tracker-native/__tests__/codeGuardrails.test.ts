@@ -187,6 +187,60 @@ describe('code guardrails', () => {
   it('turns chart animation off under Reduce Motion', () => {
     expect(findAll(/\bisAnimated(?!=\{[^}]*reduceMotion\(\))(?=[\s=/>])[^\n]*/g)).toEqual([]);
   });
+
+  // VoiceOver reads a touchable whose only child is an icon as "button" with no
+  // name (impeccable native audit of WorkoutLog, 2026-11-10). Files that already
+  // had some when this rule landed are allowed that many and no more: label them
+  // and lower the count. A new file gets none.
+  const ICON_ONLY_ALLOWED: Record<string, number> = {
+    'components/ExerciseProgrammingModal.tsx': 2,
+    'components/WorkoutDetails.tsx': 1,
+    'screens/Auth/ForgotPasswordScreen.tsx': 1,
+    'screens/Auth/ResetPasswordScreen.tsx': 3,
+    'screens/DashboardTab/DashboardScreen.tsx': 2,
+    'screens/DashboardTab/WeeklySummaryScreen.tsx': 3,
+    'screens/ProfileTab/MeasurementsScreen.tsx': 3,
+    'screens/ProfileTab/PersonalRecordsScreen.tsx': 3,
+    'screens/ProfileTab/PRDashboardScreen.tsx': 1,
+    'screens/ProfileTab/ProfileScreen.tsx': 3,
+    'screens/ProfileTab/PRProgressionScreen.tsx': 1,
+    'screens/ProgressTab/EnduranceScoreScreen.tsx': 4,
+    'screens/ProgressTab/ExerciseDetailScreen.tsx': 1,
+    'screens/ProgressTab/StrengthScoreScreen.tsx': 6,
+    'screens/TrainingTab/CoachScreen.tsx': 1,
+    'screens/TrainingTab/CreateRoutineScreen.tsx': 3,
+    'screens/TrainingTab/RoutineDetailScreen.tsx': 2,
+  };
+
+  it('gives every icon-only button a VoiceOver label', () => {
+    const TOUCHABLE = /<(TouchableOpacity|Pressable|TouchableHighlight|TouchableWithoutFeedback)\b/g;
+    const ICON = /<(Ionicons|MaterialCommunityIcons|MaterialIcons|Feather|FontAwesome5?)\b/;
+    const bad: string[] = [];
+    const counts: Record<string, number> = {};
+    for (const s of sources) {
+      for (const m of s.code.matchAll(TOUCHABLE)) {
+        // The element runs to its matching close tag; nested touchables of the
+        // same kind are counted so an outer one doesn't stop at an inner close.
+        const tag = new RegExp(`<${m[1]}\\b|</${m[1]}>`, 'g');
+        tag.lastIndex = m.index! + 1;
+        let depth = 1;
+        let end = -1;
+        for (let t = tag.exec(s.code); t; t = tag.exec(s.code)) {
+          if (t[0][1] !== '/') depth++;
+          else if (--depth === 0) { end = t.index; break; }
+        }
+        if (end < 0) continue; // self-closing: no children to be icon-only
+        const el = s.code.slice(m.index!, end);
+        if (!ICON.test(el) || /<(Animated\.)?Text\b/.test(el) || /accessibilityLabel/.test(el)) continue;
+        counts[s.file] = (counts[s.file] ?? 0) + 1;
+        if (!ICON_ONLY_ALLOWED[s.file]) bad.push(`${s.file}:${lineOf(s.code, m.index!)}  add accessibilityRole="button" and an accessibilityLabel`);
+      }
+    }
+    for (const [file, allowed] of Object.entries(ICON_ONLY_ALLOWED)) {
+      if ((counts[file] ?? 0) > allowed) bad.push(`${file}: ${counts[file]} unlabeled icon buttons, ${allowed} allowed`);
+    }
+    expect(bad).toEqual([]);
+  });
 });
 
 describe('image assets', () => {

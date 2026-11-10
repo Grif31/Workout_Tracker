@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { type WorkoutSet, type PreviousSet, type SetType, colStyles, fmtPrevSet } from './types';
+import { type WorkoutSet, type PreviousSet, type SetType, SET_TYPE_NAMES, colStyles, fmtPrevSet } from './types';
 import { motionTiming, motionSpring } from '../../utils/motion';
 
 // Resting width of the revealed Delete button. Swipeable measures the actions
@@ -212,6 +212,10 @@ function SetRow({
         <TouchableOpacity
           style={[styles.setTypeBadge, colStyles.setType, { borderColor: typeColor }]}
           onPress={() => !isDone && onOpenTypePicker()}
+          disabled={isDone}
+          accessibilityRole="button"
+          accessibilityLabel={`Set ${setIndex + 1}, ${SET_TYPE_NAMES[setType]}`}
+          accessibilityHint={isDone ? undefined : 'Changes the set type'}
         >
           <Text style={[styles.setTypeBadgeNum, { color: typeColor }]}>{setIndex + 1}</Text>
           {setType !== 'N' && <Text style={[styles.setTypeBadgeLabel, { color: typeColor }]}>{setType}</Text>}
@@ -237,6 +241,7 @@ function SetRow({
           // keypad offers a decimal point. Weight below stays numeric — it is
           // legitimately fractional.
           keyboardType="number-pad"
+          accessibilityLabel={`Set ${setIndex + 1} reps`}
           editable={!isDone}
           value={set.reps}
           onChangeText={onChangeReps}
@@ -251,6 +256,7 @@ function SetRow({
             placeholder="—"
             placeholderTextColor={colors.placeholder}
             keyboardType="numeric"
+            accessibilityLabel={`Set ${setIndex + 1} weight`}
             editable={!isDone}
             value={set.weight}
             onChangeText={onChangeWeight}
@@ -265,6 +271,8 @@ function SetRow({
             onPress={() => !isDone && onOpenRpePicker()}
             disabled={isDone}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`Set ${setIndex + 1} RPE, ${set.rpe || 'not set'}`}
           >
             <Text style={[styles.rpeValueText, !set.rpe && { color: colors.placeholder }]}>
               {set.rpe || '—'}

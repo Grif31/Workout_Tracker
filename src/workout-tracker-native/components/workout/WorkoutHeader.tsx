@@ -125,7 +125,14 @@ function WorkoutHeader({
           </Text>
           <Ionicons name={showDatePicker ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setSettingsModalVisible(true)} style={styles.settingsGearBtn} activeOpacity={0.7}>
+        <TouchableOpacity
+          onPress={() => setSettingsModalVisible(true)}
+          style={styles.settingsGearBtn}
+          activeOpacity={0.7}
+          hitSlop={9}
+          accessibilityRole="button"
+          accessibilityLabel="Workout settings"
+        >
           <Ionicons name="settings-outline" size={18} color={settingsModalVisible ? colors.accent : colors.textSecondary} />
         </TouchableOpacity>
       </View>
