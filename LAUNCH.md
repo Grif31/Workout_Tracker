@@ -1,4 +1,4 @@
-# Aretē Workout Tracker — Launch Timeline
+# Aretē — Launch Timeline
 
 ---
 
