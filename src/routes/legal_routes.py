@@ -25,6 +25,14 @@ def homepage():
     return render_template('homepage.html')
 
 
+# The link to share instead of the App Store's: a page, not a 302, because link
+# previewers follow redirects and would show Apple's preview (the first
+# screenshot) instead of our og-image.
+@legal_bp.route('/download')
+def download():
+    return render_template('download.html')
+
+
 @legal_bp.route('/privacy')
 def privacy():
     return render_template('privacy.html')

@@ -22,7 +22,7 @@ def hdrs(token):
 # Routes that are public on purpose (CLAUDE.md: auth endpoints, legal pages,
 # the health probe). /admin/* uses HTTP Basic Auth and is checked separately.
 PUBLIC = {
-    '/', '/privacy', '/terms', '/health',
+    '/', '/download', '/privacy', '/terms', '/health',
     '/static/<path:filename>', '/brand/<path:filename>',
     '/api/signup', '/api/login', '/api/refresh', '/api/auth/social',
     '/api/forgot-password', '/api/verify-otp', '/api/reset-password',
