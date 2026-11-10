@@ -199,6 +199,28 @@ describe('ProgressOverview', () => {
       expect(r.queryByText('Nothing logged in this range yet.')).toBeNull();
     });
 
+    it('keeps the old bars up while a new range loads', async () => {
+      installServer({ '/api/stats/progress': progress(ALL) });
+      const r = await renderScreen();
+      await waitFor(() => expect(r.getByTestId('chart-headline')).toBeTruthy());
+      fireEvent.press(r.getByText('3M'));
+      expect(r.getByLabelText('Loading chart')).toBeTruthy();
+      expect(r.getByTestId('chart-headline')).toBeTruthy();
+      expect(lastChart()).toBeTruthy();
+      await waitFor(() => expect(r.queryByLabelText('Loading chart')).toBeNull());
+    });
+
+    it('repaints a range it has already loaded without a spinner', async () => {
+      installServer({ '/api/stats/progress': progress(ALL) });
+      const r = await renderScreen();
+      await waitFor(() => expect(r.getByText('3M')).toBeTruthy());
+      fireEvent.press(r.getByText('3M'));
+      await waitFor(() => expect(r.queryByLabelText('Loading chart')).toBeNull());
+      fireEvent.press(r.getByText('30D'));
+      expect(r.queryByLabelText('Loading chart')).toBeNull();
+      expect(r.getByTestId('chart-headline')).toBeTruthy();
+    });
+
     it('ignores a slow answer for a range the user has already left', async () => {
       installServer({ '/api/stats/progress': progress(ALL) });
       const r = await renderScreen();

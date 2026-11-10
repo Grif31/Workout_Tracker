@@ -89,8 +89,14 @@ export default function ProgressOverview({ navigation }: Props) {
   const [progressData, setProgressData] = useState<ProgressBucket[]>([]);
   const [progressLeadIn, setProgressLeadIn] = useState<ProgressBucket[]>([]);
   const [chartRange, setChartRange] = useState<ChartRange>('30d');
-  // True from a range tap until its answer lands, so the cleared chart shows a
-  // spinner rather than "Nothing logged" for the length of the request
+  // The range progressData belongs to. It trails chartRange while a new range
+  // loads, so the old bars stay up (dimmed) with their own labels and goal line.
+  const [shownRange, setShownRange] = useState<ChartRange>('30d');
+  const shownRangeRef = useRef(shownRange);
+  shownRangeRef.current = shownRange;
+  // Every range answered this visit, so returning to one paints instantly
+  const rangeCacheRef = useRef<Partial<Record<ChartRange, ProgressResponse>>>({});
+  // True from a range tap until its answer lands
   const [progressLoading, setProgressLoading] = useState(false);
   const [chartMetric, setChartMetric] = useState<ChartMetric>('volume');
   const [weeklyGoal, setWeeklyGoal] = useState(3);
@@ -169,6 +175,7 @@ export default function ProgressOverview({ navigation }: Props) {
   useEffect(() => {
     const prog = appCache.get<ProgressResponse>('progress');
     if (prog) {
+      rangeCacheRef.current['30d'] = prog;
       setProgressData(prog.buckets ?? []);
       setProgressLeadIn(prog.lead_in ?? []);
       applyThisWeek(prog);
@@ -189,22 +196,38 @@ export default function ProgressOverview({ navigation }: Props) {
     if (wsp) setWeeklySummaryPreview(wsp);
   }, []);
 
+  const showProgress = (range: ChartRange, data: ProgressResponse) => {
+    setProgressData(data.buckets ?? []);
+    setProgressLeadIn(data.lead_in ?? []);
+    setShownRange(range);
+    shownRangeRef.current = range;
+  };
+
   const fetchProgressData = async (range: ChartRange) => {
+    let landed = false;
     try {
       const res = await apiFetch(`/api/stats/progress?range=${range}`);
       if (!res.ok) return answered(res);
       const data: ProgressResponse = await res.json();
+      rangeCacheRef.current[range] = data;
       // A quick 3M → 6M tap can land the 3M answer last; it mustn't draw under 6M
       if (range !== chartRangeRef.current) return;
-      setProgressData(data.buckets ?? []);
-      setProgressLeadIn(data.lead_in ?? []);
+      landed = true;
+      showProgress(range, data);
       if (data.metrics_logged) setMetricsLogged(data.metrics_logged);
       // The same request fetchThisWeekCount makes, so it fills this week too
       if (range === THIS_WEEK_RANGE) applyThisWeek(data);
     } catch {
       return false;
     } finally {
-      if (range === chartRangeRef.current) setProgressLoading(false);
+      if (range === chartRangeRef.current) {
+        setProgressLoading(false);
+        // A failed load leaves the old range's bars up; point the control back at them
+        if (!landed && shownRangeRef.current !== range) {
+          chartRangeRef.current = shownRangeRef.current;
+          setChartRange(shownRangeRef.current);
+        }
+      }
     }
   };
 
@@ -333,9 +356,10 @@ export default function ProgressOverview({ navigation }: Props) {
 
   const handleRangeChange = (newRange: ChartRange) => {
     if (newRange === chartRange) return;
-    setProgressData([]);
-    setProgressLeadIn([]);
-    setProgressLoading(true);
+    const cached = rangeCacheRef.current[newRange];
+    if (cached) showProgress(newRange, cached);
+    // A cached range repaints now and refreshes quietly; an unseen one dims the old bars
+    setProgressLoading(!cached);
     setSelectedBarIndex(null);
     // Set now, not on the next render, so the answer for this range is recognised as current
     chartRangeRef.current = newRange;
@@ -378,7 +402,7 @@ export default function ProgressOverview({ navigation }: Props) {
           // each, and the library sizes a label to its bar, so "9/22" won't
           // fit. Every other week gets a label, drawn wider and recentred
           // over its bar; the newest week always keeps one.
-          const THIN_LABELS = chartRange === '3m';
+          const THIN_LABELS = shownRange === '3m';
           const X_LABEL_WIDTH = 36;
           const lastIndex = progressData.length - 1;
           // The headline reads the picked bar, else the newest (this week or month)
@@ -408,7 +432,7 @@ export default function ProgressOverview({ navigation }: Props) {
           // Goal line: the weekly goal on weekly bars (30D, 3M), four weeks'
           // worth on monthly bars (6M, 1Y). Distance only has one once the
           // user has set a distance goal.
-          const isMonthlyRange = chartRange === '6m' || chartRange === '1y';
+          const isMonthlyRange = shownRange === '6m' || shownRange === '1y';
           const weeklyTarget = activeMetric === 'workouts' ? weeklyGoal
             : activeMetric === 'distance' && weeklyDistanceGoalKm != null
               ? goalKmToDisplay(weeklyDistanceGoalKm, distanceUnit)
@@ -495,7 +519,10 @@ export default function ProgressOverview({ navigation }: Props) {
                   })}
                 </View>
 
-                {hasData && headline && (
+                {hasData ? (
+                <View>
+                <View style={progressLoading && styles.chartStale}>
+                {headline && (
                   <View style={styles.headline} testID="chart-headline">
                     <View style={styles.headlineValueRow}>
                       <Text style={styles.headlineValue}>{headline.value}</Text>
@@ -512,9 +539,8 @@ export default function ProgressOverview({ navigation }: Props) {
                   </View>
                 )}
 
-                {hasData ? (
                   <BarChart
-                    key={`${chartRange}-${activeMetric}`}
+                    key={`${shownRange}-${activeMetric}`}
                     data={barData}
                     barWidth={barWidth}
                     spacing={BAR_GAP}
@@ -551,6 +577,13 @@ export default function ProgressOverview({ navigation }: Props) {
                       zIndex: 2,
                     }}
                   />
+                </View>
+                {progressLoading && (
+                  <View style={styles.chartLoadingOverlay} pointerEvents="none">
+                    <ActivityIndicator color={colors.accent} accessibilityLabel="Loading chart" />
+                  </View>
+                )}
+                </View>
                 ) : progressLoading ? (
                   <View style={styles.chartEmpty}>
                     <ActivityIndicator color={colors.accent} accessibilityLabel="Loading chart" />
@@ -647,6 +680,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   headlineCompare: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary, marginTop: 2 },
   rangeControl: { marginTop: spacing.md },
   chartEmpty: { height: 150, justifyContent: 'center', alignItems: 'center' },
+  chartStale: { opacity: 0.35 },
+  chartLoadingOverlay: { ...StyleSheet.absoluteFill,justifyContent: 'center', alignItems: 'center' },
   axisLabel: { fontSize: 9, color: colors.textSecondary },
 
   emptyText: { textAlign: 'center', color: colors.textSecondary, marginVertical: spacing.sm, fontSize: typography.fontSize.sm },
