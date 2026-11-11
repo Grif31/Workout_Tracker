@@ -49,9 +49,9 @@ class ParsedFile:
     weight_unit: str | None   # 'kg' | 'lbs', or None when the file doesn't say
 
 
-def read_rows(text: str) -> tuple[list[str], list[dict]]:
-    """Header (lowercased, trimmed) and rows of a CSV whose delimiter may be ','
-    or ';' (Strong exports with semicolons in some versions and locales)."""
+def read_rows(text: str) -> tuple[list[str], list[dict], str]:
+    """Header (lowercased, trimmed), rows and delimiter of a CSV whose delimiter
+    may be ',' or ';' (Strong exports with semicolons in some versions and locales)."""
     text = text.lstrip('﻿')
     first_line = text.split('\n', 1)[0]
     delimiter = ';' if first_line.count(';') > first_line.count(',') else ','
@@ -66,7 +66,7 @@ def read_rows(text: str) -> tuple[list[str], list[dict]]:
         if not any(cell.strip() for cell in raw):
             continue
         rows.append({h: (raw[i].strip() if i < len(raw) else '') for i, h in enumerate(header)})
-    return header, rows
+    return header, rows, delimiter
 
 
 _DATETIME_FORMATS = (
@@ -98,10 +98,16 @@ def parse_datetime(value: str) -> tuple[datetime, bool] | None:
     return None
 
 
-def to_float(value: str) -> float | None:
+_THOUSANDS = re.compile(r'^-?\d{1,3}(,\d{3})+(\.\d+)?$')
+
+
+def to_float(value: str, delimiter: str = ',') -> float | None:
     value = (value or '').strip()
-    # Semicolon-delimited exports from European locales write "62,5"
-    if value.count(',') == 1 and '.' not in value:
+    if delimiter != ';' and _THOUSANDS.match(value):
+        # A comma file quotes "1,000": a thousands separator, not 1.0. In a
+        # semicolon file (a decimal-comma locale) the same text is 1.0
+        value = value.replace(',', '')
+    elif value.count(',') == 1 and '.' not in value:
         value = value.replace(',', '.')
     if not value:
         return None
@@ -112,13 +118,13 @@ def to_float(value: str) -> float | None:
     return f if f == f and abs(f) != float('inf') else None
 
 
-def to_reps(value: str) -> int | None:
-    f = to_float(value)
+def to_reps(value: str, delimiter: str = ',') -> int | None:
+    f = to_float(value, delimiter)
     return int(round(f)) if f is not None and f >= 0 else None
 
 
-def to_rpe(value: str) -> int | None:
-    f = to_float(value)
+def to_rpe(value: str, delimiter: str = ',') -> int | None:
+    f = to_float(value, delimiter)
     if f is None:
         return None
     r = int(round(f))
@@ -129,7 +135,7 @@ _HMS = re.compile(r'^(?:(\d+):)?(\d+):(\d+)$')
 _UNITS = re.compile(r'(\d+(?:\.\d+)?)\s*(h|m|s)', re.I)
 
 
-def parse_duration_seconds(value: str, bare_number_unit: str = 'min') -> int | None:
+def parse_duration_seconds(value: str, bare_number_unit: str = 'min', delimiter: str = ',') -> int | None:
     """'1h 5m', '45m', '01:02:00', '62:00', or a bare number in bare_number_unit."""
     value = (value or '').strip()
     if not value:
@@ -142,7 +148,7 @@ def parse_duration_seconds(value: str, bare_number_unit: str = 'min') -> int | N
     if parts:
         mult = {'h': 3600, 'm': 60, 's': 1}
         return int(sum(float(n) * mult[u.lower()] for n, u in parts))
-    f = to_float(value)
+    f = to_float(value, delimiter)
     if f is None or f < 0:
         return None
     return int(f if bare_number_unit == 'sec' else f * 60)

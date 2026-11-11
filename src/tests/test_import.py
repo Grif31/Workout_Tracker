@@ -2,7 +2,7 @@
 unit conversion, idempotent re-imports, PRs rebuilt in date order, and undo."""
 from models import db, ExerciseTemplate, PersonalRecord, PREvent, Set, UserAchievement, Workout
 from routes.user_routes import convert_weight_value
-from utils.importers import ImportFormatError, parse
+from utils.importers import ImportFormatError, parse, to_float
 from utils.importers.matching import key, split_title
 
 
@@ -165,6 +165,22 @@ def test_matching_keys_ignore_spelling_noise():
     assert split_title('Bench Press (Barbell)') == ('Bench Press', 'Barbell', 'Barbell')
     assert split_title('Fly (Band)') == ('Fly', None, 'Band')
     assert split_title('Plank') == ('Plank', None, None)
+
+
+def test_a_comma_is_a_thousands_separator_only_in_a_comma_file():
+    assert to_float('1,000') == 1000
+    assert to_float('1,000', ';') == 1.0
+    assert to_float('62,5') == to_float('62,5', ';') == 62.5
+
+
+def test_time_only_sets_are_cardio_when_the_title_or_length_says_so():
+    from routes.import_routes import _infer_type
+    from utils.importers import ParsedSet
+    held = [ParsedSet(seconds=60)]
+    assert _infer_type('Wall Sit', held) == 'duration'
+    assert _infer_type('Jump Rope', held) == 'cardio'
+    assert _infer_type('Mystery Machine', [ParsedSet(seconds=1200)]) == 'cardio'
+    assert _infer_type('Farmer Carry', [ParsedSet(seconds=60, weight=50)]) == 'strength'
 
 
 # ── Preview ──────────────────────────────────────────────────
@@ -385,6 +401,34 @@ def test_imports_never_match_another_users_custom_exercise(app, client, auth_tok
     with app.app_context():
         fly = next(ex for w in Workout.query.all() for ex in w.exercises if ex.name == 'Cable Fly Crossovers')
         assert fly.exercise_template_id != other_id
+
+
+def test_a_custom_made_from_an_aliased_title_is_matched_on_the_next_import(app, client, auth_token):
+    _library(app, *LIBRARY)
+    first = _HEVY_HEADER + '\n' + (
+        '"Day 1","1 Mar 2026, 10:00","1 Mar 2026, 11:00","","Triceps Dip (Assisted)",,"",0,"normal",40,8,,,\n'
+        '"Day 1","1 Mar 2026, 10:00","1 Mar 2026, 11:00","","Chest Dip (Ring)",,"",0,"normal",,8,,,\n')
+    second = first + (
+        '"Day 1","8 Mar 2026, 10:00","8 Mar 2026, 11:00","","Triceps Dip (Assisted)",,"",0,"normal",30,8,,,\n'
+        '"Day 1","8 Mar 2026, 10:00","8 Mar 2026, 11:00","","Chest Dip (Ring)",,"",0,"normal",,9,,,\n')
+    assert _import(client, auth_token, 'hevy', first).get_json()['exercises_created'] == 2
+    res = _import(client, auth_token, 'hevy', second)
+    assert res.status_code == 201
+    assert (res.get_json()['imported'], res.get_json()['exercises_created']) == (1, 0)
+    with app.app_context():
+        assert ExerciseTemplate.query.filter(ExerciseTemplate.user_id.isnot(None)).count() == 2
+
+
+def test_trap_bar_deadlift_matches_the_library_row(app, client, auth_token):
+    ids = _library(app, ('Trap Bar Deadlift', 'Other', 'strength'))
+    text = _HEVY_HEADER + '\n' + (
+        '"Legs","1 Mar 2026, 10:00","1 Mar 2026, 11:00","","Deadlift (Trap bar)",,"",0,"normal",315,5,,,\n')
+    preview = client.post('/api/import/preview', json={'source': 'hevy', 'csv': text},
+                          headers=hdrs(auth_token)).get_json()
+    assert preview['new_exercises'] == []
+    _import(client, auth_token, 'hevy', text)
+    with app.app_context():
+        assert Workout.query.one().exercises[0].exercise_template_id == ids[('Trap Bar Deadlift', 'Other')]
 
 
 # ── Status and undo ──────────────────────────────────────────

@@ -35,7 +35,7 @@ _TITLE_ALIASES = {
     'Elliptical Trainer': ('Elliptical', 'Machine'),
     'Stair Machine': ('Stair Climber', 'Machine'),
     'Stairmaster': ('Stair Climber', 'Machine'),
-    'Deadlift (Trap bar)': ('Trap Bar Deadlift', None),
+    'Deadlift (Trap bar)': ('Trap Bar Deadlift', 'Other'),
     'Cycling (Indoor)': ('Cycling', 'Stationary Bike'),
     'Spinning': ('Cycling', 'Stationary Bike'),
 }
@@ -109,7 +109,16 @@ class ExerciseMatcher:
                 return hit
         name, equipment, raw = split_title(title)
         name_key = key(name)
-        name_key = _NAME_ALIAS_KEYS.get(name_key, name_key)
+        aliased = _NAME_ALIAS_KEYS.get(name_key)
+        # The aliased name finds the library row; the title's own name finds a
+        # custom an earlier import made, since custom_identity names it that way
+        for k in ((aliased, name_key) if aliased else (name_key,)):
+            hit = self._lookup(k, equipment, raw, weighted)
+            if hit:
+                return hit
+        return None
+
+    def _lookup(self, name_key, equipment, raw, weighted):
         if raw and not equipment:
             # "(Band)", "(Assisted)": no library row is the same lift, only a
             # custom one an earlier import made under that label

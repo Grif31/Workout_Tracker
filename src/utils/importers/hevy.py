@@ -14,7 +14,7 @@ _REQUIRED = ('title', 'start_time', 'exercise_title')
 
 
 def parse(text: str) -> ParsedFile:
-    header, rows = read_rows(text)
+    header, rows, delim = read_rows(text)
     if not all(col in header for col in _REQUIRED):
         raise ImportFormatError(
             "This doesn't look like a Hevy export: it needs title, start_time and "
@@ -50,14 +50,14 @@ def parse(text: str) -> ParsedFile:
         # Notes may sit on any of the exercise's rows, not only its first
         if not w.exercises[-1].notes and row.get('exercise_notes'):
             w.exercises[-1].notes = row.get('exercise_notes')
-        distance = to_float(row.get(dist_col)) if dist_col else None
+        distance = to_float(row.get(dist_col), delim) if dist_col else None
         w.exercises[-1].sets.append(ParsedSet(
             set_type=_SET_TYPES.get((row.get('set_type') or '').lower(), 'N'),
-            reps=to_reps(row.get('reps')),
-            weight=to_float(row.get(weight_col)) if weight_col else None,
-            seconds=to_float(row.get('duration_seconds')),
+            reps=to_reps(row.get('reps'), delim),
+            weight=to_float(row.get(weight_col), delim) if weight_col else None,
+            seconds=to_float(row.get('duration_seconds'), delim),
             distance=distance,
             distance_unit=dist_unit if distance else None,
-            rpe=to_rpe(row.get('rpe')),
+            rpe=to_rpe(row.get('rpe'), delim),
         ))
     return ParsedFile(workouts=list(workouts.values()), weight_unit=weight_unit)

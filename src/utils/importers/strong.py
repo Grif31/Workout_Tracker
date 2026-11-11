@@ -29,7 +29,7 @@ def _paren_unit(col):
 
 
 def parse(text: str) -> ParsedFile:
-    header, rows = read_rows(text)
+    header, rows, delim = read_rows(text)
     date_col = _column(header, 'date')
     name_col = _column(header, 'workout name')
     exercise_col = _column(header, 'exercise name')
@@ -67,7 +67,7 @@ def parse(text: str) -> ParsedFile:
         if w is None:
             w = workouts[key] = ParsedWorkout(
                 title=title, start=start, has_time=has_time,
-                duration_seconds=parse_duration_seconds(row.get(duration_col), duration_unit) if duration_col else None,
+                duration_seconds=parse_duration_seconds(row.get(duration_col), duration_unit, delim) if duration_col else None,
                 notes=row.get('workout notes') or None,
             )
         if not w.exercises or w.exercises[-1].title != exercise_title:
@@ -75,16 +75,16 @@ def parse(text: str) -> ParsedFile:
         # Strong writes the note on one set's row, not necessarily the first
         if not w.exercises[-1].notes and row.get('notes'):
             w.exercises[-1].notes = row.get('notes')
-        distance = to_float(row.get(distance_col)) if distance_col else None
+        distance = to_float(row.get(distance_col), delim) if distance_col else None
         if distance is not None:
             distance = round(distance * dist_factor, 3)
         w.exercises[-1].sets.append(ParsedSet(
             set_type=_SET_TYPES.get(order.lower(), 'N'),
-            reps=to_reps(row.get('reps')),
-            weight=to_float(row.get(weight_col)) if weight_col else None,
-            seconds=to_float(row.get(seconds_col)) if seconds_col else None,
+            reps=to_reps(row.get('reps'), delim),
+            weight=to_float(row.get(weight_col), delim) if weight_col else None,
+            seconds=to_float(row.get(seconds_col), delim) if seconds_col else None,
             distance=distance,
             distance_unit=dist_unit if distance else None,
-            rpe=to_rpe(row.get('rpe')),
+            rpe=to_rpe(row.get('rpe'), delim),
         ))
     return ParsedFile(workouts=list(workouts.values()), weight_unit=weight_unit)

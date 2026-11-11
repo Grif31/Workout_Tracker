@@ -6,11 +6,13 @@ import would do, writing nothing; POST /api/import parses it again (never
 trusting the preview) and writes every workout in one transaction.
 """
 import hashlib
+import re
 from bisect import bisect_right
 
 from flask import Blueprint, current_app, g, jsonify
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 
 from limiter import limiter
 from models import db, BodyweightLog, Exercise, ExerciseTemplate, PREvent, Set, User, UserAchievement, Workout
@@ -45,10 +47,20 @@ def _existing_client_ids(user_id, ids):
     return found
 
 
-def _infer_type(sets):
+# Time-only sets are a hold (plank, wall sit) unless the title or the length
+# says cardio: nobody holds a plank for 10 minutes a set
+_CARDIO_TITLE = re.compile(
+    r'\b(run|jog|walk|row|bik|cycl|spin|swim|elliptical|stair|step|jump rope|skip|hik|'
+    r'treadmill|ski|erg|sprint|cardio|cross trainer|assault|air bike)', re.I)
+_LONGEST_HOLD_SECONDS = 600
+
+
+def _infer_type(title, sets):
     if any(s.distance for s in sets):
         return 'cardio'
     if any(s.seconds for s in sets) and not any(s.reps or s.weight for s in sets):
+        if _CARDIO_TITLE.search(title) or any(s.seconds and s.seconds >= _LONGEST_HOLD_SECONDS for s in sets):
+            return 'cardio'
         return 'duration'
     return 'strength'
 
@@ -87,7 +99,7 @@ class _Plan:
             title: matcher.match(title, weighted=any(s.weight and s.weight > 0 for s in sets))
             for title, sets in sets_by_title.items()
         }
-        self.new_types = {t: _infer_type(sets_by_title[t]) for t, m in self.matches.items() if m is None}
+        self.new_types = {t: _infer_type(t, sets_by_title[t]) for t, m in self.matches.items() if m is None}
         self.set_count = sum(len(ex.sets) for _, w in self.workouts for ex in w.exercises)
 
     def weight(self, value):
@@ -224,10 +236,13 @@ def run_import():
         pr_count = (PREvent.query.filter(PREvent.user_id == user_id, PREvent.workout_id.in_(workout_ids)).count()
                     if workout_ids else 0)
         db.session.commit()
-    except IntegrityError:
-        # The same file sent twice at once: the first import holds the client ids
+    except IntegrityError as e:
         db.session.rollback()
-        return jsonify({'message': 'This file is already being imported.'}), 409
+        if 'client_id' in str(e.orig):
+            # The same file sent twice at once: the first import holds the client ids
+            return jsonify({'message': 'This file is already being imported.'}), 409
+        current_app.logger.exception('POST /api/import failed')
+        return jsonify({'message': 'Internal server error'}), 500
     except Exception:
         db.session.rollback()
         current_app.logger.exception('POST /api/import failed')
@@ -274,17 +289,33 @@ def undo_import(source):
     if source not in IMPORT_SOURCES:
         return jsonify({'message': 'Unknown import source'}), 404
     user_id = int(get_jwt_identity())
-    workouts = Workout.query.filter(Workout.user_id == user_id, Workout.client_id.like(f'{source}:%')).all()
-    if not workouts:
+    ids = [wid for (wid,) in db.session.query(Workout.id).filter(
+        Workout.user_id == user_id, Workout.client_id.like(f'{source}:%'))]
+    if not ids:
         return jsonify({'message': 'ok', 'removed': 0}), 200
-    template_ids = list({ex.exercise_template_id for w in workouts for ex in w.exercises})
-    ids = [w.id for w in workouts]
-    # Badges stay; only the link to the workout goes (as delete_workout does)
-    UserAchievement.query.filter(UserAchievement.user_id == user_id, UserAchievement.workout_id.in_(ids)).update(
-        {'workout_id': None}, synchronize_session=False)
-    for w in workouts:
-        db.session.delete(w)
-    db.session.commit()
-    _recompute_prs_for_templates(user_id, template_ids)
-    db.session.commit()
+    try:
+        template_ids = [tid for (tid,) in db.session.query(Exercise.exercise_template_id).filter(
+            Exercise.workout_id.in_(ids)).distinct()]
+        # Badges stay; only the link to the workout goes (as delete_workout does)
+        UserAchievement.query.filter(UserAchievement.user_id == user_id, UserAchievement.workout_id.in_(ids)).update(
+            {'workout_id': None}, synchronize_session=False)
+        # Loaded with their exercises and sets in a few queries, so the ORM
+        # cascade (sets, best efforts, PR rows pointing at them) doesn't
+        # lazy-load per workout
+        for i in range(0, len(ids), 500):
+            batch = (Workout.query.filter(Workout.id.in_(ids[i:i + 500]))
+                     .options(selectinload(Workout.exercises).selectinload(Exercise.sets),
+                              selectinload(Workout.exercises).selectinload(Exercise.best_efforts))
+                     .all())
+            for w in batch:
+                db.session.delete(w)
+        db.session.flush()
+        # One transaction with the delete: a failed replay must not leave the
+        # workouts gone and the PRs still counting them
+        _recompute_prs_for_templates(user_id, template_ids)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('DELETE /api/import/%s failed', source)
+        return jsonify({'message': 'Internal server error'}), 500
     return jsonify({'message': 'ok', 'removed': len(ids)}), 200
