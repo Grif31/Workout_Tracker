@@ -14,6 +14,8 @@ from models import db, AiCallLog
 # an estimate: these are list prices, and a model missing here costs nothing.
 PRICES = {
     'claude-haiku-4-5': (1.00, 5.00),
+    # Up to a 100K-token prompt; longer ones bill at $0.50 / $2.50, which no Coach prompt reaches
+    'claude-haiku-5-5': (0.10, 0.50),
 }
 # Cache reads bill at a tenth of input, cache writes (5-minute) at 1.25x
 CACHE_READ_MULTIPLIER = 0.1

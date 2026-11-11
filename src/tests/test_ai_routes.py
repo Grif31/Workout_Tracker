@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 
 def _make_anthropic_mock(response_json: dict) -> MagicMock:
     """Build a fake `anthropic` module whose Anthropic client returns a fixed JSON string."""
-    mock_content = MagicMock()
+    mock_content = MagicMock(type="text")
     mock_content.text = json.dumps(response_json)
 
     mock_message = MagicMock()
@@ -469,7 +469,7 @@ class TestGenerateErrors:
 
     def test_malformed_json_from_ai_returns_500(self, client, auth_token):
         mock_ant = MagicMock()
-        mock_content = MagicMock()
+        mock_content = MagicMock(type="text")
         mock_content.text = 'this is not json at all'
         mock_ant.Anthropic.return_value.messages.create.return_value.content = [mock_content]
 
@@ -513,7 +513,7 @@ class TestGenerateErrors:
     def test_json_with_markdown_fences_still_parsed(self, client, auth_token):
         wrapped = f'```json\n{json.dumps(TEMPLATE_JSON)}\n```'
         mock_ant = MagicMock()
-        mock_content = MagicMock()
+        mock_content = MagicMock(type="text")
         mock_content.text = wrapped
         mock_ant.Anthropic.return_value.messages.create.return_value.content = [mock_content]
 
@@ -599,6 +599,29 @@ class TestAiInsights:
         call_kwargs = mock_ant.Anthropic.return_value.messages.create.call_args[1]
         assert 'haiku' in call_kwargs['model']
 
+    def _post_blocks(self, client, token, blocks, stop_reason='end_turn'):
+        mock_ant = MagicMock()
+        message = mock_ant.Anthropic.return_value.messages.create.return_value
+        message.content = blocks
+        message.stop_reason = stop_reason
+        with patch.dict(sys.modules, {'anthropic': mock_ant}):
+            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+                return client.post('/api/ai/insights', json={}, headers=auth_headers(token))
+
+    def test_reads_the_answer_after_a_thinking_block(self, client, auth_token):
+        """Haiku 5.5 thinks by default, so the answer is not content[0]."""
+        res = self._post_blocks(client, auth_token, [
+            MagicMock(type='thinking', thinking='', text=None),
+            MagicMock(type='text', text=json.dumps(INSIGHTS_JSON)),
+        ])
+        assert res.status_code == 200
+        assert res.get_json()['insights'] == INSIGHTS_JSON['insights']
+
+    def test_a_refusal_is_a_failed_call_not_parsed(self, client, auth_token):
+        res = self._post_blocks(client, auth_token, [MagicMock(type='text', text=json.dumps(INSIGHTS_JSON))],
+                                stop_reason='refusal')
+        assert res.status_code == 500
+
     def test_works_with_no_workout_history(self, client, auth_token):
         """A brand-new user with zero workouts should still get a 200, not a 500
         from the context builder."""
@@ -613,7 +636,7 @@ class TestAiInsights:
 
     def test_malformed_json_from_ai_returns_500(self, client, auth_token):
         mock_ant = MagicMock()
-        mock_content = MagicMock()
+        mock_content = MagicMock(type="text")
         mock_content.text = 'not json'
         mock_ant.Anthropic.return_value.messages.create.return_value.content = [mock_content]
         with patch.dict(sys.modules, {'anthropic': mock_ant}):
@@ -870,7 +893,7 @@ class TestInsightFacts:
             with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
                 client.post('/api/ai/insights', json={}, headers=auth_headers(auth_token))
         call_kwargs = mock_ant.Anthropic.return_value.messages.create.call_args[1]
-        assert call_kwargs['output_config'] == {'format': {'type': 'json_schema', 'schema': INSIGHT_SCHEMA}}
+        assert call_kwargs['output_config']['format'] == {'type': 'json_schema', 'schema': INSIGHT_SCHEMA}
 
     def test_verify_insights_drops_unknown_exercises_and_wrong_numbers(self):
         from routes.ai_routes import _verify_insights
@@ -912,6 +935,28 @@ class TestInsightFacts:
 
         assert [i['title'] for i in _verify_insights([insight('back volume', 'Back')], ctx)] == ['back volume']
         assert _verify_insights([insight('invented muscle', 'Gastrocnemius')], ctx) == []
+
+    def test_cardio_evidence_named_with_its_milestone_is_checked_not_dropped(self):
+        """The prompt lists cardio bests as "Running 5K", so Haiku 5.5 writes
+        evidence.exercise = "Running 5K" for a Running PR (prompt check, 2026-11-10)."""
+        from types import SimpleNamespace
+        from routes.ai_routes import _is_grounded, _known_subjects
+        ctx = {
+            'cardio_prs': [SimpleNamespace(name='Running')],
+            'recent_pr_facts': [{'exercise': 'Running', 'metric': '5K Best Time', 'pr_type': 'best_time',
+                                 'before': 29.4, 'after': 28.05, 'days_ago': 2, 'text': ''}],
+        }
+
+        def insight(exercise, before, after):
+            return {'type': 'achievement', 'title': 't', 'body': 'b', 'priority': 'medium',
+                    'evidence': {'exercise': exercise, 'metric': '5K Best Time', 'before': before,
+                                 'after': after, 'window_days': 28}}
+
+        known = _known_subjects(ctx)
+        assert _is_grounded(insight('Running 5K', 29.4, 28.1), ctx, known)
+        assert not _is_grounded(insight('Running 5K', 35.0, 25.0), ctx, known)  # numbers still checked
+        assert not _is_grounded(insight('Runningback Drill', 29.4, 28.1), ctx, known)
+        assert not _is_grounded(insight('Rowing 5K', 29.4, 28.1), ctx, known)
 
     def test_verify_insights_dedupes_types_sorts_by_priority_and_caps_at_five(self):
         from routes.ai_routes import _verify_insights
