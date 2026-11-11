@@ -1735,3 +1735,29 @@ Leave out anything that rewards skipping rest or training through illness (no "w
 
 ### Done when
 - [ ] A new and an existing account see correct badges and dates after the backfill, an unlock appears on the workout summary, and a kg user never sees a pound threshold
+
+---
+
+## 🎞️ 28. Design & Motion Follow-ups (from the 2026-11-10 design pass)
+> Left over from the design tooling pass: impeccable's native audit of WorkoutLog (`.impeccable/audits/2026-11-10-workoutlog-native.md`) and the Emil Kowalski animation audit. Done so far: worklets verified on SDK 57, DESIGN.md, PRODUCT.md, WorkoutLog's VoiceOver labels and 44 pt targets (guarded by "gives every icon-only button a VoiceOver label" in `codeGuardrails.test.ts`), tab and Coach segment fades removed, shared ease-out curves in `utils/motion.ts`, the calmer set check mark and the Reanimated rest bubble.
+
+### Motion
+- [ ] Workout summary cascades (audit #5): the summary's staggered entrances run long; tighten or cut them so the result shows at once
+- [ ] Rest timer: the overlay fades in rather than appearing, and minimizing morphs it into the bubble (and back on expand) instead of swapping
+
+### Accessibility (feeds §26)
+- [ ] Label the 40 icon-only buttons still in `ICON_ONLY_ALLOWED` (17 files) in `codeGuardrails.test.ts`, shrinking the baseline as each file is fixed
+- [ ] Check WorkoutLog at the largest accessibility Dynamic Type sizes (AX1 to AX5) and fix what clips or overlaps
+- [ ] Isolate WorkoutLog's per-second clock so its tick doesn't re-render the whole log (audit finding)
+
+### Housekeeping
+- [ ] Commit Emil's 11 animation skills in `.claude/skills/` (MIT): emil-design-eng, animate-expo, review-animations, improve-animations, find-animation-opportunities, remove-animations, choreograph, animation-performance, animation-vocabulary, break-ui, apple-design
+- [ ] Add `.expo/` to `.gitignore`
+- [ ] Replace the old app name with "Aretē: Strength & Cardio Log" in `privacy.html`, `terms.html`, the password reset email in `auth_routes.py` and `MAIL_DEFAULT_SENDER` in `.env.example`; check `RESEND_FROM` on Railway. Show the legal wording to the owner before changing it
+- [ ] Share card footer text #636366 to #8E8E93 for contrast
+
+### Website (step 5 of the design pass)
+- [x] Hallmark audit of the marketing site, then a redesign against DESIGN.md (Archivo, the marketing tokens) with a few GSAP touches that follow `prefers-reduced-motion` (2026-11-10: `homepage.html` only; audit was manual because Hallmark's linter wasn't allowed to run)
+- [ ] Recapture the 8 site screenshots (`src/brand/shots/`) in the Green accent: they show Blue, and DESIGN.md says Green is the only accent outside the app
+- [ ] Decide whether DESIGN.md keeps uppercase tracked eyebrows on the site (Hallmark bans them; the redesign kept them only on feature names)
+- [ ] Keep improving the site past the 2026-11-10 redesign (owner: "looks good for now but definitely want to improve it"). Live now: bigger type, 60px header logo, desktop-only parallax on the phone shots (hero phone -35%, section phones ±20%, Plans ±30%). Open: how strong the parallax should be, and anything richer (pinned scrolling sections, a mobile treatment)
