@@ -1,8 +1,8 @@
 # Changelog
 
-## Server (not yet deployed)
+## Server (2026-11-10)
 
-Backend only, no app release. Date this heading with the Railway deploy.
+Backend only, no app release.
 
 ### Improved: Coach
 - The Coach runs on Claude Haiku 5.5, up from Haiku 4.5. Insights repeat themselves less, so a refresh shows about 4 cards instead of 3.
