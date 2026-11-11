@@ -1751,8 +1751,8 @@ Leave out anything that rewards skipping rest or training through illness (no "w
 - [ ] Isolate WorkoutLog's per-second clock so its tick doesn't re-render the whole log (audit finding)
 
 ### Housekeeping
-- [ ] Commit Emil's 11 animation skills in `.claude/skills/` (MIT): emil-design-eng, animate-expo, review-animations, improve-animations, find-animation-opportunities, remove-animations, choreograph, animation-performance, animation-vocabulary, break-ui, apple-design
-- [ ] Add `.expo/` to `.gitignore`
+- [x] Commit Emil's 11 animation skills in `.claude/skills/` (MIT): emil-design-eng, animate-expo, review-animations, improve-animations, find-animation-opportunities, remove-animations, choreograph, animation-performance, animation-vocabulary, break-ui, apple-design
+- [x] Add `.expo/` to `.gitignore`
 - [ ] Replace the old app name with "Aretē: Strength & Cardio Log" in `privacy.html`, `terms.html`, the password reset email in `auth_routes.py` and `MAIL_DEFAULT_SENDER` in `.env.example`; check `RESEND_FROM` on Railway. Show the legal wording to the owner before changing it
 - [ ] Share card footer text #636366 to #8E8E93 for contrast
 

@@ -215,3 +215,6 @@ src/brand/store/preview/
 # Raw iPhone photos for the App Store header (personal; only the finished header is kept)
 src/brand/store/header/*.heic
 src/brand/store/header/converted/
+
+# Expo CLI state from running expo at the repo root
+.expo/
