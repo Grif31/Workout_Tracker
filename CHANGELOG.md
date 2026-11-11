@@ -1,5 +1,49 @@
 # Changelog
 
+## 1.2.3 (unreleased)
+
+### New: Achievements
+- Earn badges for milestones, feats and a few hidden surprises. Find them all in the Trophy Hall, from Your Journey.
+- Milestones climb step by step, like the plates you lift on each main lift. Tap any badge to turn it over and see when you earned it, then open that workout.
+- When a workout earns a badge, it's revealed on your workout summary. Swipe through every badge it earned and share any of them as a card.
+- Editing a workout that earns a badge shows it too.
+- Pin up to 3 badges under your name on your profile.
+
+### New: Import from Hevy or Strong
+- Bring your history over from a Hevy or Strong CSV export, in Account Settings. You see what will come in before anything is saved.
+- Exercises are matched to the library, weights follow your unit, and your PRs and badges are worked out from your whole history.
+- Importing the same file again skips what's already there, and an import can be undone.
+
+### Redesigned: Your Journey and rank frames
+- Your Journey leads with how far you are from your next rank, and shows what builds your Greek Rank with a tip for where to gain the most.
+- Every rank has its own frame for your profile photo, adding an ornament to the one before it. From Olympian up, a glint sweeps around the rim.
+- Tap your photo to wear any frame you've unlocked.
+
+### Improved: Workout history
+- See your workout history on Profile as a list, a month, a year or all years.
+- Swiping across the all-years view scrolls it instead of opening a year.
+
+### Improved: Accessibility
+- Animations follow Reduce Motion.
+- Rank names, set markers and dark mode accents are easier to read.
+- VoiceOver names every button on the workout screen, and small buttons there are easier to tap.
+
+### Improved: Feel
+- Switching tabs is instant.
+- The minimized rest timer drags smoothly and snaps to the side of the screen.
+- The progress chart stays on screen while a new range loads.
+
+### Also New
+- Export everything stored about your account from Account Settings.
+- Seated Row (Machine) is in the exercise library.
+- A new header image on the Premium screen.
+
+### Bug Fixes
+- Repeating the same lift or hold no longer logs a new PR every time.
+- The rest timer notification arrives when your rest ends.
+- A workout left open when you sign out is kept for you, and never shown to another account that signs in on the phone.
+- The Strength Score screen no longer crashes before you have a score.
+
 ## Server (2026-11-10)
 
 Backend only, no app release.

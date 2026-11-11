@@ -21,7 +21,7 @@ module.exports = {
     name: IS_DEV ? 'Aretē (Dev)' : 'Aretē',
     slug: 'workout-tracker-native',
     scheme: 'aretefitness',
-    version: '1.2.2',
+    version: '1.2.3',
     // Over-the-air updates only reach builds whose native code hashes the same,
     // so an update that needs a native change can't land on an older binary.
     // Publish with `npm run update:<channel>`, never bare `eas update`.
