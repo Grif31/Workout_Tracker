@@ -46,6 +46,8 @@ EXERCISE_DESCRIPTIONS: dict[str, str] = {
         'Row the weight to your lower ribs, squeezing your shoulder blades together at the top.',
     'Seated Cable Row':
         'Sit with knees slightly bent, back upright. Pull the handle to your torso by driving your elbows straight back and squeezing your shoulder blades together, then let your arms extend fully before the next rep.',
+    'Seated Row':
+        'Set the seat so the handles line up with your mid-chest and keep your chest against the pad. Pull the handles toward your torso by driving your elbows back and squeezing your shoulder blades together, then let your arms extend fully under control.',
     'Deadlift':
         'Stand with the bar over your mid-foot, grip just outside your legs, and set a flat back with your hips down. '
         'Drive through your heels to stand tall, keeping the bar close to your body throughout.',

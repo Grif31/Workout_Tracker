@@ -1,5 +1,15 @@
 # Changelog
 
+## Server (2026-11-10)
+
+Backend only, no app release.
+
+### Improved: Coach
+- The Coach runs on Claude Haiku 5.5, up from Haiku 4.5. Insights repeat themselves less, so a refresh shows about 4 cards instead of 3.
+- Insights and the weekly review come back in about 5 seconds, down from about 8.
+- Run insights that quote a best time or distance are no longer thrown out by mistake.
+- Each Coach call costs about a seventh of what it did.
+
 ## 1.2.2 (2026-10-29)
 
 ### Improved: Workout summary

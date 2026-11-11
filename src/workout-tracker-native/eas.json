@@ -28,6 +28,7 @@
       "distribution": "internal",
       "autoIncrement": true,
       "node": "22.14.0",
+      "channel": "preview",
       "env": {
         "EXPO_PUBLIC_USE_RN_FETCH": "1",
         "EXPO_PUBLIC_API_URL": "https://workouttracker-production-601f.up.railway.app",
@@ -39,6 +40,7 @@
     "production": {
       "autoIncrement": true,
       "node": "22.14.0",
+      "channel": "production",
       "env": {
         "EXPO_PUBLIC_USE_RN_FETCH": "1",
         "EXPO_PUBLIC_API_URL": "https://workouttracker-production-601f.up.railway.app",

@@ -104,9 +104,20 @@ git revert <bad-sha> && git push
 6. Builds are queued on Expo's servers — poll with `eas build:list --limit 1`
 7. `eas submit --platform ios --what-to-test "<blurb from step 4>"` once the build finishes
 
+### Ship an over-the-air update (JS-only fixes, no review)
+Only for JavaScript, copy, styles and logic. New permissions, native modules, config plugins, `app.config.js` native fields or an SDK bump need a full build: the `fingerprint` runtime version would keep such an update off older binaries anyway.
+1. Tests and tsc pass, tree committed (same as step 1 above)
+2. `npm run update:preview -- "What changed"`, then cold start a preview build twice and check the change
+3. `npm run update:production -- "What changed"`. The script refuses to publish unless the EAS environment's `EXPO_PUBLIC_*` values equal `eas.json`'s for that profile, then uploads Sentry source maps
+4. Add a CHANGELOG entry under the current version noting it shipped over the air
+Never run bare `eas update`: it bundles whatever the EAS environment holds, with no check.
+
+### Roll back a bad update
+`eas update:list --branch production --limit 5` to find the group ID, then `eas update:rollback <group-id> -m "Roll back <reason>"`. It republishes the previous update, or the build's embedded bundle if there is none. Users get it on their next cold start, not instantly.
+
 ## Safety rules
 
-- **Read-only by default.** Never run UPDATE/DELETE/DROP, `--apply` flags, redeploys, or `eas submit` without explicit user confirmation in this session.
+- **Read-only by default.** Never run UPDATE/DELETE/DROP, `--apply` flags, redeploys, `eas submit`, `npm run update:production` or `eas update:rollback` without explicit user confirmation in this session.
 - Dry-run first wherever a command supports it (most custom Flask CLI commands here take `--apply`).
 - Never print full secrets into the final report — refer to env vars by name.
 - Backend deploys are cheap (git push); app-store builds are slow and rate-limited — don't trigger EAS builds speculatively.

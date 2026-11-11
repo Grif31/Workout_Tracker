@@ -13,7 +13,8 @@ Calls the Anthropic API, so it is not part of the pytest suite and costs a
 few cents a run. Needs ANTHROPIC_API_KEY, except with --dry-run.
 
     ./venv/Scripts/python.exe scripts/coach_prompt_check.py
-    ./venv/Scripts/python.exe scripts/coach_prompt_check.py --model claude-sonnet-4-5 --runs 3
+    ./venv/Scripts/python.exe scripts/coach_prompt_check.py --model claude-sonnet-5-5 --effort medium --runs 3
+    ./venv/Scripts/python.exe scripts/coach_prompt_check.py --model claude-haiku-4-5-20251001 --effort none
     ./venv/Scripts/python.exe scripts/coach_prompt_check.py --dry-run --show-prompt plateaued
     ./venv/Scripts/python.exe scripts/coach_prompt_check.py --json results.json
 """
@@ -187,6 +188,7 @@ def score(raw_insights, ctx):
         'returned': len(raw_insights),
         'ungrounded': len(ungrounded),
         'ungrounded_titles': [i.get('title') for i in ungrounded],
+        'ungrounded_evidence': [i.get('evidence') for i in ungrounded],
         'other_dropped': len(branded) - len(ungrounded) - len(kept),
         'kept': len(kept),
         'types': [i.get('type') for i in kept],
@@ -226,8 +228,8 @@ def run(args):
             for run_no in range(args.runs):
                 start = time.monotonic()
                 try:
-                    msg, _ = ai_routes._request_insights(ctx, None, api_key, model=args.model)
-                    raw = ai_routes._parse_ai_json(msg.content[0].text).get('insights', [])
+                    msg, _ = ai_routes._request_insights(ctx, None, api_key, model=args.model, effort=args.effort)
+                    raw = ai_routes._parse_ai_json(ai_routes._response_text(msg)).get('insights', [])
                 except Exception as exc:  # a failed call is a result, not a crash
                     results.append({'fixture': name, 'run': run_no, 'error': f'{type(exc).__name__}: {exc}'[:200]})
                     print(f'{name:<13} run {run_no + 1}: FAILED {type(exc).__name__}')
@@ -254,8 +256,8 @@ def _print_result(r, show):
     print(f"{r['fixture']:<13} run {r['run'] + 1}: {r['kept']}/{r['returned']} kept "
           f"({r['ungrounded']} ungrounded, {r['other_dropped']} duplicate type or over {ai_routes.MAX_INSIGHTS}), "
           f"banned copy: {banned}, {r['seconds']}s, ${r['cost']:.4f}")
-    for title in r['ungrounded_titles']:
-        print(f'    dropped: {title}')
+    for title, evidence in zip(r['ungrounded_titles'], r['ungrounded_evidence']):
+        print(f'    dropped: {title} | {evidence}')
     if show:
         for i in r['insights']:
             print(f"    [{i.get('type')}/{i.get('priority')}] {i.get('title')}\n        {i.get('body')}")
@@ -281,14 +283,20 @@ def _print_summary(results, model):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    parser.add_argument('--model', default=ai_routes.INSIGHTS_MODEL, help='Model id (default: what production uses)')
+    parser.add_argument('--model', default=ai_routes.COACH_MODEL, help='Model id (default: what production uses)')
+    parser.add_argument('--effort', default=ai_routes.INSIGHTS_EFFORT,
+                        help='output_config.effort (default: what production uses). Pass "none" for a model '
+                             'without effort levels, such as claude-haiku-4-5')
     parser.add_argument('--runs', type=int, default=1, help='Answers per fixture; the model varies, so 3+ to compare')
     parser.add_argument('--only', nargs='+', help='Fixture names to run (default: all)')
     parser.add_argument('--show', action='store_true', help='Print the insights that were kept')
     parser.add_argument('--show-prompt', nargs='+', metavar='FIXTURE', help='Print the prompt for these fixtures')
     parser.add_argument('--dry-run', action='store_true', help='Build fixtures and prompts only; no API call')
     parser.add_argument('--json', help='Also write every result to this file, to diff two models or prompts')
-    return run(parser.parse_args(argv))
+    args = parser.parse_args(argv)
+    if args.effort == 'none':
+        args.effort = None
+    return run(args)
 
 
 if __name__ == '__main__':
