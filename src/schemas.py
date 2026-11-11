@@ -452,3 +452,14 @@ class AchievementsSeenSchema(_Base):
     # Omitted: every unseen badge is marked seen
     keys = fields.List(fields.Str(validate=validate.Length(min=1, max=48)),
                        load_default=None, allow_none=True, validate=validate.Length(max=200))
+
+
+# ── Import ────────────────────────────────────────────────────
+IMPORT_SOURCES = ('hevy', 'strong')
+
+class ImportSchema(_Base):
+    source = fields.Str(required=True, validate=validate.OneOf(IMPORT_SOURCES))
+    # The CSV itself, read as text on the phone (MAX_CONTENT_LENGTH caps it)
+    csv = fields.Str(required=True, validate=validate.Length(min=1))
+    # Only for a file that doesn't say (older Strong exports)
+    weight_unit = fields.Str(load_default=None, allow_none=True, validate=validate.OneOf(('kg', 'lbs')))

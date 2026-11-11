@@ -1,0 +1,290 @@
+"""Import workout history from Hevy and Strong CSV exports. Free for everyone:
+it's how someone switching apps brings their history along.
+
+The phone sends the file as text. /preview parses it and reports what an
+import would do, writing nothing; POST /api/import parses it again (never
+trusting the preview) and writes every workout in one transaction.
+"""
+import hashlib
+from bisect import bisect_right
+
+from flask import Blueprint, current_app, g, jsonify
+from flask_jwt_extended import get_jwt_identity, jwt_required
+from sqlalchemy.exc import IntegrityError
+
+from limiter import limiter
+from models import db, BodyweightLog, Exercise, ExerciseTemplate, PREvent, Set, User, UserAchievement, Workout
+from routes.user_routes import convert_weight_value
+from routes.workout_routes import _recompute_prs_for_templates
+from schemas import IMPORT_SOURCES, ImportSchema
+from utils.achievements import distance_unit_for, evaluate_achievements
+from utils.importers import ImportFormatError, parse
+from utils.importers.matching import ExerciseMatcher
+from utils.validation import validate_body
+from utils.volume import derive_bodyweight_load_factor
+
+import_bp = Blueprint('import_bp', __name__)
+_import_schema = ImportSchema()
+
+_MAX_DURATION_SECONDS = 24 * 3600
+
+
+def _client_id(source, workout):
+    """Stable per workout, so the unique (user_id, client_id) constraint turns a
+    second import of the same file into a no-op and undo finds an app's
+    imports by prefix. The app's own client ids are UUIDs: no ':' to collide."""
+    digest = hashlib.sha1(f'{workout.start.isoformat()}|{workout.title}'.encode()).hexdigest()
+    return f'{source}:{digest}'
+
+
+def _existing_client_ids(user_id, ids):
+    ids, found = list(ids), set()
+    for i in range(0, len(ids), 500):
+        found.update(cid for (cid,) in db.session.query(Workout.client_id).filter(
+            Workout.user_id == user_id, Workout.client_id.in_(ids[i:i + 500])))
+    return found
+
+
+def _infer_type(sets):
+    if any(s.distance for s in sets):
+        return 'cardio'
+    if any(s.seconds for s in sets) and not any(s.reps or s.weight for s in sets):
+        return 'duration'
+    return 'strength'
+
+
+class _Plan:
+    """Everything an import would write, resolved without writing."""
+
+    def __init__(self, user, data):
+        self.source = data['source']
+        parsed = parse(self.source, data['csv'])
+        self.unit_in_file = parsed.weight_unit is not None
+        self.from_unit = parsed.weight_unit or data.get('weight_unit') or user.weight_unit or 'lbs'
+        self.to_unit = user.weight_unit or 'lbs'
+        self.distance_unit = distance_unit_for(user)
+
+        ids = [_client_id(self.source, w) for w in parsed.workouts]
+        existing = _existing_client_ids(user.id, ids)
+        seen = set()
+        self.workouts = []
+        for cid, w in zip(ids, parsed.workouts):
+            if cid in existing or cid in seen:
+                continue
+            seen.add(cid)
+            self.workouts.append((cid, w))
+        self.already_imported = len(existing)
+        self.first_date = parsed.workouts[0].start
+        self.last_date = parsed.workouts[-1].start
+
+        matcher = ExerciseMatcher(user.id)
+        self.matcher = matcher
+        sets_by_title: dict[str, list] = {}
+        for _, w in self.workouts:
+            for ex in w.exercises:
+                sets_by_title.setdefault(ex.title, []).extend(ex.sets)
+        self.matches: dict[str, ExerciseTemplate | None] = {
+            title: matcher.match(title, weighted=any(s.weight and s.weight > 0 for s in sets))
+            for title, sets in sets_by_title.items()
+        }
+        self.new_types = {t: _infer_type(sets_by_title[t]) for t, m in self.matches.items() if m is None}
+        self.set_count = sum(len(ex.sets) for _, w in self.workouts for ex in w.exercises)
+
+    def weight(self, value):
+        if value is None or self.from_unit == self.to_unit:
+            return value
+        return convert_weight_value(value, self.to_unit)
+
+    def preview(self):
+        matched = sorted(
+            ({'title': t, 'name': m.name, 'equipment': m.equipment} for t, m in self.matches.items() if m),
+            key=lambda r: r['title'].lower())
+        return {
+            'message': 'ok',
+            'source': self.source,
+            'workouts': len(self.workouts),
+            'sets': self.set_count,
+            'already_imported': self.already_imported,
+            'first_date': self.first_date.strftime('%Y-%m-%d'),
+            'last_date': self.last_date.strftime('%Y-%m-%d'),
+            'matched_exercises': matched,
+            'new_exercises': sorted(self.new_types, key=str.lower),
+            'weight_unit': self.from_unit,
+            'unit_in_file': self.unit_in_file,
+        }
+
+
+def _build_sets(plan, parsed_sets, exercise_type):
+    sets = []
+    for s in parsed_sets:
+        if exercise_type == 'cardio':
+            minutes = round(s.seconds / 60, 2) if s.seconds else None
+            if not (minutes or s.distance):
+                continue
+            sets.append(Set(
+                set_type='N', cardio_duration=minutes, distance=s.distance,
+                distance_unit=(s.distance_unit or plan.distance_unit) if s.distance else None, rpe=s.rpe,
+            ))
+        elif exercise_type == 'duration':
+            if not s.seconds:
+                continue
+            sets.append(Set(set_type=s.set_type, cardio_duration=round(s.seconds / 60, 2), rpe=s.rpe))
+        else:
+            if not (s.reps or s.weight):
+                continue
+            sets.append(Set(set_type=s.set_type, reps=s.reps, weight=plan.weight(s.weight), rpe=s.rpe))
+    for i, s in enumerate(sets):
+        s.order = i
+    return sets
+
+
+def _write(user, plan):
+    """Add the plan's workouts to the session and return them. The caller commits."""
+    templates = dict(plan.matches)
+    customs = {}
+    for title, etype in plan.new_types.items():
+        name, equipment = plan.matcher.custom_identity(title)
+        identity = (name.lower(), (equipment or '').lower())
+        if identity not in customs:
+            customs[identity] = ExerciseTemplate(
+                name=name, equipment=equipment, exercise_type=etype, user_id=user.id,
+                bodyweight_load_factor=derive_bodyweight_load_factor(name, equipment),
+            )
+            db.session.add(customs[identity])
+        templates[title] = customs[identity]
+    db.session.flush()
+
+    # get_bodyweight_at's answer for each date, from one read: a query per
+    # workout would also flush every workout added so far
+    logs = (db.session.query(BodyweightLog.date, BodyweightLog.weight)
+            .filter(BodyweightLog.user_id == user.id).order_by(BodyweightLog.date).all())
+    log_dates = [d for d, _ in logs]
+
+    def bodyweight_at(when):
+        i = bisect_right(log_dates, when)
+        return logs[i - 1][1] if i else (logs[0][1] if logs else None)
+
+    workouts = []
+    for client_id, w in plan.workouts:
+        workout = Workout(
+            user_id=user.id, client_id=client_id, name=w.title[:250], notes=w.notes, date=w.start,
+            duration=w.duration_seconds if w.duration_seconds and w.duration_seconds < _MAX_DURATION_SECONDS else None,
+            local_start_hour=w.start.hour if w.has_time else None,
+        )
+        for order, ex in enumerate(w.exercises):
+            tmpl = templates[ex.title]
+            etype = (tmpl.exercise_type or 'strength').lower()
+            sets = _build_sets(plan, ex.sets, etype)
+            if sets:
+                workout.exercises.append(Exercise(
+                    name=tmpl.name, exercise_template_id=tmpl.id, order=order,
+                    exercise_type=etype, notes=ex.notes, sets=sets,
+                ))
+        if not workout.exercises:
+            continue
+        workout.calculate_volume(weight_unit=plan.to_unit, bodyweight=bodyweight_at(w.start))
+        db.session.add(workout)
+        workouts.append(workout)
+    db.session.flush()
+    return workouts, len(customs)
+
+
+@import_bp.post('/api/import/preview')
+@jwt_required()
+@limiter.limit('30 per hour', key_func=lambda: f"import_preview:{get_jwt_identity()}")
+@validate_body(_import_schema)
+def preview_import():
+    user = db.session.get(User, int(get_jwt_identity()))
+    try:
+        plan = _Plan(user, g.validated)
+    except ImportFormatError as e:
+        return jsonify({'message': str(e)}), 400
+    return jsonify(plan.preview()), 200
+
+
+@import_bp.post('/api/import')
+@jwt_required()
+@limiter.limit('10 per hour', key_func=lambda: f"import:{get_jwt_identity()}")
+@validate_body(_import_schema)
+def run_import():
+    user_id = int(get_jwt_identity())
+    user = db.session.get(User, user_id)
+    try:
+        plan = _Plan(user, g.validated)
+    except ImportFormatError as e:
+        return jsonify({'message': str(e)}), 400
+    try:
+        workouts, exercises_created = _write(user, plan)
+        workout_ids = [w.id for w in workouts]
+        template_ids = list({ex.exercise_template_id for w in workouts for ex in w.exercises})
+        # One chronological replay, not the live save path per workout: the
+        # history may sit before workouts already logged here, and the replay
+        # links every PREvent's previous_value in date order either way
+        _recompute_prs_for_templates(user_id, template_ids)
+        pr_count = (PREvent.query.filter(PREvent.user_id == user_id, PREvent.workout_id.in_(workout_ids)).count()
+                    if workout_ids else 0)
+        db.session.commit()
+    except IntegrityError:
+        # The same file sent twice at once: the first import holds the client ids
+        db.session.rollback()
+        return jsonify({'message': 'This file is already being imported.'}), 409
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('POST /api/import failed')
+        return jsonify({'message': 'Internal server error'}), 500
+
+    # Badges the history earned arrive already seen: the app shows one count,
+    # not an unlock sheet for each
+    try:
+        badges = len(evaluate_achievements(user, seen=True))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('evaluate_achievements failed after import for user %s', user_id)
+        badges = 0
+
+    return jsonify({
+        'message': 'ok',
+        'imported': len(workouts),
+        'already_imported': plan.already_imported,
+        'prs': pr_count,
+        'badges': badges,
+        'exercises_created': exercises_created,
+    }), 201
+
+
+@import_bp.get('/api/import')
+@jwt_required()
+def import_status():
+    """How many workouts each app's import brought in, for the undo rows."""
+    user_id = int(get_jwt_identity())
+    counts = {
+        source: Workout.query.filter(Workout.user_id == user_id, Workout.client_id.like(f'{source}:%')).count()
+        for source in IMPORT_SOURCES
+    }
+    return jsonify({'message': 'ok', 'imported': counts}), 200
+
+
+@import_bp.delete('/api/import/<source>')
+@jwt_required()
+@limiter.limit('10 per hour', key_func=lambda: f"import_undo:{get_jwt_identity()}")
+def undo_import(source):
+    """Remove every workout an app's import brought in. Custom exercises it made
+    stay: templates and routines may use them by now."""
+    if source not in IMPORT_SOURCES:
+        return jsonify({'message': 'Unknown import source'}), 404
+    user_id = int(get_jwt_identity())
+    workouts = Workout.query.filter(Workout.user_id == user_id, Workout.client_id.like(f'{source}:%')).all()
+    if not workouts:
+        return jsonify({'message': 'ok', 'removed': 0}), 200
+    template_ids = list({ex.exercise_template_id for w in workouts for ex in w.exercises})
+    ids = [w.id for w in workouts]
+    # Badges stay; only the link to the workout goes (as delete_workout does)
+    UserAchievement.query.filter(UserAchievement.user_id == user_id, UserAchievement.workout_id.in_(ids)).update(
+        {'workout_id': None}, synchronize_session=False)
+    for w in workouts:
+        db.session.delete(w)
+    db.session.commit()
+    _recompute_prs_for_templates(user_id, template_ids)
+    db.session.commit()
+    return jsonify({'message': 'ok', 'removed': len(ids)}), 200

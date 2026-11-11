@@ -1,5 +1,6 @@
 import csv
 import math
+from contextvars import ContextVar
 from datetime import datetime
 from io import StringIO
 from flask import Blueprint, request, jsonify, current_app, g, make_response
@@ -35,6 +36,29 @@ def _award_achievements(user):
 
 _workout_schema        = WorkoutSchema()
 _update_workout_schema = UpdateWorkoutSchema()
+
+
+# Set while _recompute_prs_for_templates replays: the replay starts from no
+# records for its templates, so the records it has written so far are all
+# there are, and a dict answers what was a query per exercise per PR type
+# (38k queries, most of a minute, for an imported 1,000-workout history).
+_replay_records: ContextVar[dict | None] = ContextVar('_replay_records', default=None)
+
+
+def _find_pr(user_id, template_id, pr_type, weight_context):
+    records = _replay_records.get()
+    if records is not None:
+        return records.get((template_id, pr_type, weight_context))
+    return PersonalRecord.query.filter_by(
+        user_id=user_id, exercise_template_id=template_id, pr_type=pr_type, weight_context=weight_context,
+    ).first()
+
+
+def _add_pr(record):
+    db.session.add(record)
+    records = _replay_records.get()
+    if records is not None:
+        records[(record.exercise_template_id, record.pr_type, record.weight_context)] = record
 
 
 def _record_pr_event(user_id, exercise, pr_type, value, previous_value, weight_context, achieved_at):
@@ -100,12 +124,7 @@ def _build_best_efforts(ex_data):
 def _upsert_ride_record(user_id, exercise, pr_type, value, workout_date):
     """A one-per-exercise, higher-is-better ride PR (weight_context = -1, like
     max_duration). Returns the new-PR dict, or None when it isn't one."""
-    existing = PersonalRecord.query.filter_by(
-        user_id=user_id,
-        exercise_template_id=exercise.exercise_template_id,
-        pr_type=pr_type,
-        weight_context=-1.0,
-    ).first()
+    existing = _find_pr(user_id, exercise.exercise_template_id, pr_type, -1.0)
     if existing and value <= existing.value:
         return None
     previous = existing.value if existing else None
@@ -113,7 +132,7 @@ def _upsert_ride_record(user_id, exercise, pr_type, value, workout_date):
         existing.value = value
         existing.achieved_at = workout_date
     else:
-        db.session.add(PersonalRecord(
+        _add_pr(PersonalRecord(
             user_id=user_id,
             exercise_template_id=exercise.exercise_template_id,
             pr_type=pr_type,
@@ -190,12 +209,7 @@ def _compute_and_upsert_cardio_prs(user_id, exercise_set_pairs, workout_date):
         for target_km, label in distance_milestones:
             if target_km in best_times:
                 est_time = best_times[target_km]
-                existing = PersonalRecord.query.filter_by(
-                    user_id=user_id,
-                    exercise_template_id=exercise.exercise_template_id,
-                    pr_type='best_time',
-                    weight_context=target_km,
-                ).first()
+                existing = _find_pr(user_id, exercise.exercise_template_id, 'best_time', target_km)
                 if existing and est_time >= existing.value:
                     continue
                 previous = existing.value if existing else None
@@ -203,7 +217,7 @@ def _compute_and_upsert_cardio_prs(user_id, exercise_set_pairs, workout_date):
                     existing.value = est_time
                     existing.achieved_at = workout_date
                 else:
-                    db.session.add(PersonalRecord(
+                    _add_pr(PersonalRecord(
                         user_id=user_id,
                         exercise_template_id=exercise.exercise_template_id,
                         pr_type='best_time',
@@ -218,12 +232,7 @@ def _compute_and_upsert_cardio_prs(user_id, exercise_set_pairs, workout_date):
         for target_min, label in duration_milestones:
             if target_min in best_dists:
                 est_dist = best_dists[target_min]
-                existing = PersonalRecord.query.filter_by(
-                    user_id=user_id,
-                    exercise_template_id=exercise.exercise_template_id,
-                    pr_type='best_distance',
-                    weight_context=target_min,
-                ).first()
+                existing = _find_pr(user_id, exercise.exercise_template_id, 'best_distance', target_min)
                 if existing and est_dist <= existing.value:
                     continue
                 previous = existing.value if existing else None
@@ -231,7 +240,7 @@ def _compute_and_upsert_cardio_prs(user_id, exercise_set_pairs, workout_date):
                     existing.value = est_dist
                     existing.achieved_at = workout_date
                 else:
-                    db.session.add(PersonalRecord(
+                    _add_pr(PersonalRecord(
                         user_id=user_id,
                         exercise_template_id=exercise.exercise_template_id,
                         pr_type='best_distance',
@@ -292,12 +301,7 @@ def _compute_and_upsert_prs(user_id, exercise_set_pairs, workout_date):
             pr_candidates.append(('estimated_1rm', workout_max_1rm, None))
 
         for pr_type, workout_value, pr_set_id in pr_candidates:
-            existing = PersonalRecord.query.filter_by(
-                user_id=user_id,
-                exercise_template_id=exercise.exercise_template_id,
-                pr_type=pr_type,
-                weight_context=-1.0,
-            ).first()
+            existing = _find_pr(user_id, exercise.exercise_template_id, pr_type, -1.0)
 
             # Compare what would be stored: an estimated 1RM like 233.33 against
             # the stored 233.3 read as a new PR every time the lift was repeated
@@ -311,7 +315,7 @@ def _compute_and_upsert_prs(user_id, exercise_set_pairs, workout_date):
                 existing.achieved_at = workout_date
                 existing.set_id      = pr_set_id
             else:
-                db.session.add(PersonalRecord(
+                _add_pr(PersonalRecord(
                     user_id=user_id,
                     exercise_template_id=exercise.exercise_template_id,
                     pr_type=pr_type,
@@ -343,12 +347,7 @@ def _compute_and_upsert_prs(user_id, exercise_set_pairs, workout_date):
             # Defaulting to None mirrors the max_weight branch above.
             pr_set_id = next((sid for r, sid in sets_at_weight if r == best_raw), None)
 
-            existing = PersonalRecord.query.filter_by(
-                user_id=user_id,
-                exercise_template_id=exercise.exercise_template_id,
-                pr_type='max_reps',
-                weight_context=weight,
-            ).first()
+            existing = _find_pr(user_id, exercise.exercise_template_id, 'max_reps', weight)
 
             if existing and best_reps <= existing.value:
                 continue
@@ -359,7 +358,7 @@ def _compute_and_upsert_prs(user_id, exercise_set_pairs, workout_date):
                 existing.achieved_at = workout_date
                 existing.set_id      = pr_set_id
             else:
-                db.session.add(PersonalRecord(
+                _add_pr(PersonalRecord(
                     user_id=user_id,
                     exercise_template_id=exercise.exercise_template_id,
                     pr_type='max_reps',
@@ -400,12 +399,7 @@ def _compute_and_upsert_duration_prs(user_id, exercise_set_pairs, workout_date):
         best = max(d for d, _ in valid)
         pr_set_id = next(sid for d, sid in valid if d == best)
 
-        existing = PersonalRecord.query.filter_by(
-            user_id=user_id,
-            exercise_template_id=exercise.exercise_template_id,
-            pr_type='max_duration',
-            weight_context=-1.0,
-        ).first()
+        existing = _find_pr(user_id, exercise.exercise_template_id, 'max_duration', -1.0)
 
         # Compared as stored, so repeating a hold isn't a new PR
         if existing and round(best, 4) <= existing.value:
@@ -417,7 +411,7 @@ def _compute_and_upsert_duration_prs(user_id, exercise_set_pairs, workout_date):
             existing.achieved_at = workout_date
             existing.set_id      = pr_set_id
         else:
-            db.session.add(PersonalRecord(
+            _add_pr(PersonalRecord(
                 user_id=user_id,
                 exercise_template_id=exercise.exercise_template_id,
                 pr_type='max_duration',
@@ -470,15 +464,19 @@ def _recompute_prs_for_templates(user_id, template_ids):
         .order_by(Workout.date, Workout.id, Exercise.id)
         .all()
     )
-    for exercise, wdate in rows:
-        pairs = [(exercise, exercise.sets)]
-        etype = (exercise.exercise_type or 'strength').lower()
-        if etype == 'cardio':
-            _compute_and_upsert_cardio_prs(user_id, pairs, wdate)
-        elif etype == 'duration':
-            _compute_and_upsert_duration_prs(user_id, pairs, wdate)
-        else:
-            _compute_and_upsert_prs(user_id, pairs, wdate)
+    token = _replay_records.set({})
+    try:
+        for exercise, wdate in rows:
+            pairs = [(exercise, exercise.sets)]
+            etype = (exercise.exercise_type or 'strength').lower()
+            if etype == 'cardio':
+                _compute_and_upsert_cardio_prs(user_id, pairs, wdate)
+            elif etype == 'duration':
+                _compute_and_upsert_duration_prs(user_id, pairs, wdate)
+            else:
+                _compute_and_upsert_prs(user_id, pairs, wdate)
+    finally:
+        _replay_records.reset(token)
 
 
 # Get all workouts for current user

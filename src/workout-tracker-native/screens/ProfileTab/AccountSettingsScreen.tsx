@@ -213,6 +213,14 @@ export default function AccountSettingsScreen({ navigation }: Props) {
 
       <Text style={styles.sectionLabel}>Data</Text>
       <View style={styles.group}>
+        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('Import')}>
+          <View style={styles.rowLeft}>
+            <Ionicons name="cloud-upload-outline" size={20} color={colors.textSecondary} />
+            <Text style={styles.rowLabel}>Import from Hevy or Strong</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+        </TouchableOpacity>
+        <View style={styles.divider} />
         {(Object.keys(EXPORTS) as ExportKind[]).map((kind, i) => (
           <React.Fragment key={kind}>
             {i > 0 && <View style={styles.divider} />}
