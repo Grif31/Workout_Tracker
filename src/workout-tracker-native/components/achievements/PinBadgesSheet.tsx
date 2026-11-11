@@ -49,7 +49,7 @@ export default function PinBadgesSheet({ visible, onClose, earned, current, weig
             {earned.map(item => {
               const at = picked.indexOf(item.key);
               const on = at >= 0;
-              const disabled = !on && full;
+              const disabled = saving || (!on && full);
               return (
                 <TouchableOpacity
                   key={item.key} style={[styles.cell, disabled && styles.dim]} onPress={() => toggle(item.key)}

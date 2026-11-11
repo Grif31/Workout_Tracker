@@ -56,7 +56,7 @@ describe('GreekRankIntroScreen', () => {
 
   it('describes the score without leaning on the reader being new', () => {
     const { getByText, queryByText } = renderScreen();
-    expect(getByText(/a single score, from 0 to 100/)).toBeTruthy();
+    expect(getByText(/your score, 0 to 100/)).toBeTruthy();
     expect(queryByText('Your first rank in the ancient order')).toBeNull();
   });
 });

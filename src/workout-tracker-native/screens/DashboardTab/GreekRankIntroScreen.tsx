@@ -57,15 +57,13 @@ export default function GreekRankIntroScreen({ navigation }: Props) {
         <Animated.View entering={FadeInDown.delay(100).duration(400)} style={s.card}>
           <Text style={s.sectionTitle}>What is Greek Rank?</Text>
           <Text style={s.bodyText}>
-            Greek Rank is a single score, from 0 to 100, for the work you put in. It rises with how
-            often you train, how long you have kept at it, and how much you get through in a week.
-            It is not a measure of how strong or how fast you are, so every athlete has a rank from
-            their first session onward.
+            Greek Rank is your score, 0 to 100, for the work you put in. It's determined by how
+            often you train, how long you've kept at it, and how much you get through in a week.
+            Each user gets a rank starting from their first session.
           </Text>
           <Text style={s.bodyText}>
-            That score places you on a path of seven ranks, from Neophyte to Aretē, the Greek ideal
-            of excellence. The top two ranks ask for one more thing: a Strength or Endurance Score
-            high enough to clear their gate.
+            Train from Neophyte to Aretē, which means excellence in Greek. You must have a high
+            enough Strength or Endurance Score to reach Titan and Aretē.
           </Text>
         </Animated.View>
 
@@ -113,9 +111,13 @@ export default function GreekRankIntroScreen({ navigation }: Props) {
         <Animated.View entering={FadeInDown.delay(840).duration(400)} style={s.card}>
           <Text style={s.sectionTitle}>Rank Rewards</Text>
           <Text style={s.bodyText}>
-            Each rank unlocks a unique profile frame you can equip on your avatar. Reach{' '}
+            Each rank unlocks a new frame for your profile photo, adding an ornament to the one
+            before it. From{' '}
             <Text style={{ color: rankTextColor('Olympian', GREEK_RANK_COLORS.Olympian, mode), fontWeight: '700' }}>Olympian</Text>
-            {' '}and above to unlock animated frames that pulse with your rank colour.
+            {' '}up, a glint sweeps around the rim.
+          </Text>
+          <Text style={s.bodyText}>
+            Tap your photo on the Greek Rank page to wear any frame you've unlocked.
           </Text>
         </Animated.View>
 

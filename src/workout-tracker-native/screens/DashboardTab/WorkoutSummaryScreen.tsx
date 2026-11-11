@@ -516,11 +516,11 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
                   onPress={() => (navigation as any).navigate('ProgressTab', { screen: 'StrengthScore', initial: false })}
                   accessibilityRole="button"
                 >
-                  <Ionicons name={isPremium ? 'trophy-outline' : 'lock-closed'} size={14} color={colors.accent} />
+                  <Ionicons name={isPremium ? 'podium-outline' : 'lock-closed'} size={16} color={colors.prGold} />
                   <Text style={s.rankLinkText} numberOfLines={1}>
                     See where your {rankedPr.exercise_name} ranks
                   </Text>
-                  <Ionicons name="chevron-forward" size={14} color={colors.accent} />
+                  <Ionicons name="chevron-forward" size={16} color={colors.prGold} />
                 </TouchableOpacity>
               )}
             </View>
@@ -741,10 +741,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border,
   },
   rankLink: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
-    paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    marginTop: spacing.xs, paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.md,
+    borderRadius: radius.full, borderWidth: 1, borderColor: colors.prGoldBorder,
   },
-  rankLinkText: { flex: 1, fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.accent },
+  rankLinkText: { flexShrink: 1, fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.prGold },
   prRowIcon: { marginTop: 2 },
   prRowText: { flex: 1 },
   prRowTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
