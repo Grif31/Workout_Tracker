@@ -49,6 +49,15 @@ class ParsedFile:
     weight_unit: str | None   # 'kg' | 'lbs', or None when the file doesn't say
 
 
+# Real exports stay far under these (a decade of daily training is ~4,000
+# workouts and ~100,000 set rows). The whole import runs in one request on one
+# worker, so an unbounded file is an outage for everyone, not a slow import.
+MAX_ROWS = 150_000
+MAX_WORKOUTS = 5_000
+MAX_CELL_CHARS = 5_000
+_TOO_LARGE = 'This file is too large to import. Split it into smaller files, or contact support.'
+
+
 def read_rows(text: str) -> tuple[list[str], list[dict], str]:
     """Header (lowercased, trimmed), rows and delimiter of a CSV whose delimiter
     may be ',' or ';' (Strong exports with semicolons in some versions and locales)."""
@@ -56,16 +65,24 @@ def read_rows(text: str) -> tuple[list[str], list[dict], str]:
     first_line = text.split('\n', 1)[0]
     delimiter = ';' if first_line.count(';') > first_line.count(',') else ','
     reader = csv.reader(io.StringIO(text), delimiter=delimiter)
-    try:
-        header = next(reader)
-    except StopIteration:
-        raise ImportFormatError('The file is empty.')
-    header = [h.strip().lower() for h in header]
     rows = []
-    for raw in reader:
-        if not any(cell.strip() for cell in raw):
-            continue
-        rows.append({h: (raw[i].strip() if i < len(raw) else '') for i, h in enumerate(header)})
+    try:
+        try:
+            header = next(reader)
+        except StopIteration:
+            raise ImportFormatError('The file is empty.')
+        header = [h.strip().lower() for h in header]
+        for raw in reader:
+            if not any(cell.strip() for cell in raw):
+                continue
+            if any(len(cell) > MAX_CELL_CHARS for cell in raw):
+                raise ImportFormatError("This file has a value that is too long to be a workout export.")
+            if len(rows) >= MAX_ROWS:
+                raise ImportFormatError(_TOO_LARGE)
+            rows.append({h: (raw[i].strip() if i < len(raw) else '') for i, h in enumerate(header)})
+    except csv.Error:
+        # The csv module's own field limit, or a NUL byte
+        raise ImportFormatError("This file couldn't be read as a CSV export.")
     return header, rows, delimiter
 
 
@@ -80,22 +97,30 @@ _DATETIME_FORMATS = (
 )
 
 
+# Neither app existed before this, and date maths near year 1 overflows
+# (the streak count in utils/achievements.py subtracts weeks)
+_EARLIEST_YEAR = 1990
+
+
 def parse_datetime(value: str) -> tuple[datetime, bool] | None:
-    """(local wall-clock datetime, whether the value carried a time of day)."""
+    """(local wall-clock datetime, whether the value carried a time of day).
+    None for a value that isn't a believable date, which skips the row."""
     value = (value or '').strip()
     if not value:
         return None
+    parsed = None
     try:
-        dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
-        return dt.replace(tzinfo=None), len(value) > 10
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00')).replace(tzinfo=None), len(value) > 10
     except ValueError:
-        pass
-    for fmt in _DATETIME_FORMATS:
-        try:
-            return datetime.strptime(value, fmt), True
-        except ValueError:
-            continue
-    return None
+        for fmt in _DATETIME_FORMATS:
+            try:
+                parsed = datetime.strptime(value, fmt), True
+                break
+            except ValueError:
+                continue
+    if parsed is None or parsed[0].year < _EARLIEST_YEAR:
+        return None
+    return parsed
 
 
 _THOUSANDS = re.compile(r'^-?\d{1,3}(,\d{3})+(\.\d+)?$')
@@ -140,18 +165,22 @@ def parse_duration_seconds(value: str, bare_number_unit: str = 'min', delimiter:
     value = (value or '').strip()
     if not value:
         return None
-    m = _HMS.match(value)
-    if m:
-        h, mi, s = int(m.group(1) or 0), int(m.group(2)), int(m.group(3))
-        return h * 3600 + mi * 60 + s
-    parts = _UNITS.findall(value)
-    if parts:
-        mult = {'h': 3600, 'm': 60, 's': 1}
-        return int(sum(float(n) * mult[u.lower()] for n, u in parts))
-    f = to_float(value, delimiter)
-    if f is None or f < 0:
+    try:
+        m = _HMS.match(value)
+        if m:
+            h, mi, s = int(m.group(1) or 0), int(m.group(2)), int(m.group(3))
+            return h * 3600 + mi * 60 + s
+        parts = _UNITS.findall(value)
+        if parts:
+            mult = {'h': 3600, 'm': 60, 's': 1}
+            return int(sum(float(n) * mult[u.lower()] for n, u in parts))
+        f = to_float(value, delimiter)
+        if f is None or f < 0:
+            return None
+        return int(f if bare_number_unit == 'sec' else f * 60)
+    except (ValueError, OverflowError):
+        # Thousands of digits: int() refuses the string, or the float is inf
         return None
-    return int(f if bare_number_unit == 'sec' else f * 60)
 
 
 def set_is_empty(s: ParsedSet) -> bool:
@@ -162,6 +191,8 @@ def parse(source: str, text: str) -> ParsedFile:
     from utils.importers import hevy, strong
     parser = {'hevy': hevy.parse, 'strong': strong.parse}[source]
     parsed = parser(text)
+    if len(parsed.workouts) > MAX_WORKOUTS:
+        raise ImportFormatError(_TOO_LARGE)
     for w in parsed.workouts:
         for ex in w.exercises:
             ex.sets = [s for s in ex.sets if not set_is_empty(s)]

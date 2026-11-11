@@ -53,7 +53,6 @@ _NAME_ALIASES = {
 # With no equipment in the title, the library row it most likely means
 _NO_EQUIPMENT_PREFERENCE = (None, 'Bodyweight', 'Barbell', 'Dumbbell', 'Machine', 'Cable')
 
-_PAREN = re.compile(r'^(.*?)\s*\(([^)]*)\)\s*$')
 
 
 def key(text: str) -> str:
@@ -69,11 +68,17 @@ def key(text: str) -> str:
 def split_title(title: str) -> tuple[str, str | None, str | None]:
     """(name, our equipment label or None, the title's raw equipment text or None)."""
     title = (title or '').strip()
-    m = _PAREN.match(title)
-    if not m:
+    # A trailing "(...)" with no ")" inside it. Plain string searches, not a
+    # regex: the pattern this replaced backtracked quadratically on a title of
+    # unclosed parentheses, and one such request held the only worker for 30s
+    if not title.endswith(')'):
         return title, None, None
-    raw = m.group(2).strip()
-    return m.group(1).strip() or title, _EQUIPMENT.get(raw.lower()), raw or None
+    inner = title[:-1]
+    start = inner.find('(', inner.rfind(')') + 1)
+    if start == -1:
+        return title, None, None
+    raw = inner[start + 1:].strip()
+    return inner[:start].strip() or title, _EQUIPMENT.get(raw.lower()), raw or None
 
 
 _TITLE_ALIAS_KEYS = {key(k): v for k, v in _TITLE_ALIASES.items()}

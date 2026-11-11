@@ -59,7 +59,9 @@ def webhook_secret_ok(header_value) -> bool:
     secret = os.environ.get('REVENUECAT_WEBHOOK_SECRET')
     if not secret or not header_value:
         return False
-    return hmac.compare_digest(header_value, secret) or hmac.compare_digest(header_value, f'Bearer {secret}')
+    # Bytes: compare_digest raises TypeError on a non-ASCII str, a 500 anyone could cause
+    given = header_value.encode()
+    return hmac.compare_digest(given, secret.encode()) or hmac.compare_digest(given, f'Bearer {secret}'.encode())
 
 
 def _user_for(app_user_id):

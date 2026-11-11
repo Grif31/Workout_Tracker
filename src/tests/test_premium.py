@@ -161,6 +161,10 @@ class TestWebhookRoute:
         assert self._post(client, {}).status_code == 401
         assert self._post(client, {}, header='nope').status_code == 401
 
+    def test_a_non_ascii_header_is_refused_not_a_500(self, client):
+        res = client.post('/api/webhooks/revenuecat', json={}, headers={'Authorization': 'café'})
+        assert res.status_code == 401
+
     def test_refuses_everything_while_no_secret_is_configured(self, client, monkeypatch):
         monkeypatch.delenv('REVENUECAT_WEBHOOK_SECRET')
         assert self._post(client, {}, header=SECRET).status_code == 401

@@ -2,7 +2,12 @@
 unit conversion, idempotent re-imports, PRs rebuilt in date order, and undo."""
 from models import db, ExerciseTemplate, PersonalRecord, PREvent, Set, UserAchievement, Workout
 from routes.user_routes import convert_weight_value
-from utils.importers import ImportFormatError, parse, to_float
+import time
+
+import pytest
+
+import utils.importers as importers
+from utils.importers import ImportFormatError, parse, parse_duration_seconds, to_float
 from utils.importers.matching import key, split_title
 
 
@@ -454,3 +459,76 @@ def test_undo_removes_only_that_apps_imports_and_rebuilds_prs(app, client, auth_
 
 def test_undo_unknown_source_is_404(client, auth_token):
     assert client.delete('/api/import/fitbod', headers=hdrs(auth_token)).status_code == 404
+
+
+# ── Hostile files ────────────────────────────────────────────
+# The import runs in one request on the only worker: a file that takes 30s to
+# parse takes the API down for everyone and resets the in-memory rate limits
+
+_HEVY_COLS = 'title,start_time,exercise_title,weight_lbs,reps\n'
+
+
+def test_split_title_matches_what_the_regex_did():
+    assert split_title('Bench Press (Barbell)') == ('Bench Press', 'Barbell', 'Barbell')
+    assert split_title('  Row  ( Cable )  ') == ('Row', 'Cable', 'Cable')
+    assert split_title('Squat') == ('Squat', None, None)
+    assert split_title('Curl (EZ) (Cable)') == ('Curl (EZ)', 'Cable', 'Cable')
+    assert split_title('Lunge (Barbell') == ('Lunge (Barbell', None, None)
+    assert split_title('Odd) name)') == ('Odd) name)', None, None)
+    assert split_title('(Dumbbell)') == ('(Dumbbell)', 'Dumbbell', 'Dumbbell')
+    assert split_title('Press ()') == ('Press', None, None)
+    assert split_title(None) == ('', None, None)
+
+
+def test_a_title_of_unclosed_parentheses_is_split_in_linear_time():
+    started = time.perf_counter()
+    assert split_title('(' * 200_000) == ('(' * 200_000, None, None)
+    assert split_title('(' * 200_000 + ')')[2] == '(' * 199_999
+    assert time.perf_counter() - started < 1
+
+
+def test_an_overlong_cell_is_refused(client, auth_token):
+    text = _HEVY_COLS + f'w,2024-01-01 10:00:00,{"(" * (importers.MAX_CELL_CHARS + 1)},100,5\n'
+    for path in ('/api/import/preview', '/api/import'):
+        res = client.post(path, json={'source': 'hevy', 'csv': text}, headers=hdrs(auth_token))
+        assert res.status_code == 400, path
+        assert 'too long' in res.get_json()['message']
+
+
+def test_a_cell_past_the_csv_modules_limit_is_a_400_not_a_500(client, auth_token):
+    text = _HEVY_COLS + f'w,2024-01-01 10:00:00,{"a" * 140_000},100,5\n'
+    res = client.post('/api/import/preview', json={'source': 'hevy', 'csv': text}, headers=hdrs(auth_token))
+    assert res.status_code == 400
+
+
+def test_too_many_rows_or_workouts_are_refused(app, client, auth_token, monkeypatch):
+    rows = ''.join(f'w,2024-01-0{d} 10:00:00,Bench Press (Barbell),100,5\n' for d in (1, 2, 3))
+    monkeypatch.setattr(importers, 'MAX_ROWS', 2)
+    res = _import(client, auth_token, 'hevy', _HEVY_COLS + rows)
+    assert res.status_code == 400 and 'too large' in res.get_json()['message']
+    monkeypatch.setattr(importers, 'MAX_ROWS', 3)
+    monkeypatch.setattr(importers, 'MAX_WORKOUTS', 2)
+    res = _import(client, auth_token, 'hevy', _HEVY_COLS + rows)
+    assert res.status_code == 400 and 'too large' in res.get_json()['message']
+    with app.app_context():
+        assert Workout.query.count() == 0
+    monkeypatch.setattr(importers, 'MAX_WORKOUTS', 3)
+    assert _import(client, auth_token, 'hevy', _HEVY_COLS + rows).get_json()['imported'] == 3
+
+
+def test_a_duration_of_thousands_of_digits_is_no_duration():
+    assert parse_duration_seconds('9' * 5000 + ':00:00') is None
+    assert parse_duration_seconds('9' * 400 + 'h') is None
+    assert parse_duration_seconds('1e308') is None
+    assert parse_duration_seconds('1h 5m') == 3900
+
+
+def test_a_workout_dated_before_the_apps_existed_is_skipped(app, client, auth_token):
+    """Year 1 overflowed the streak maths and broke the user's achievements page."""
+    text = _HEVY_COLS + (
+        'old,0001-01-01 10:00:00,Bench Press (Barbell),100,5\n'
+        'real,2024-01-01 10:00:00,Bench Press (Barbell),100,5\n')
+    assert _import(client, auth_token, 'hevy', text).get_json()['imported'] == 1
+    assert client.get('/api/achievements', headers=hdrs(auth_token)).status_code == 200
+    with pytest.raises(ImportFormatError):
+        parse('hevy', _HEVY_COLS + 'old,0001-01-01 10:00:00,Bench Press (Barbell),100,5\n')
