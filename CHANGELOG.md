@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.3 (unreleased)
+## 1.2.3 (2026-11-11)
 
 ### New: Achievements
 - Earn badges for milestones, feats and a few hidden surprises. Find them all in the Trophy Hall, from Your Journey.
