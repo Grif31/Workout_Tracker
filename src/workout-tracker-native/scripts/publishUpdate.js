@@ -59,9 +59,20 @@ function main() {
   }
 
   run(`npx eas-cli env:exec ${channel} "node scripts/publishUpdate.js --check ${channel}" --non-interactive`);
-  run(`npx eas-cli update --channel ${channel} --environment ${channel} --message "${message}" --non-interactive`);
-  // Crashes inside an update only symbolicate against that update's own maps
-  run(`npx eas-cli env:exec ${channel} "npx sentry-expo-upload-sourcemaps dist" --non-interactive`);
+  // iOS only: the default `all` also bundles web, which this app has no build
+  // for and which fails to bundle. Add an android run once a Play build ships.
+  run(`npx eas-cli update --channel ${channel} --environment ${channel} --platform ios --message "${message}" --non-interactive`);
+  // Crashes inside an update only symbolicate against that update's own maps.
+  // SENTRY_AUTH_TOKEN is a secret EAS variable, which env:exec doesn't hand out
+  // locally: the uploader reads it from .env.local, which only the main checkout has.
+  try {
+    run(`npx eas-cli env:exec ${channel} "npx sentry-expo-upload-sourcemaps dist" --non-interactive`);
+  } catch {
+    console.error('\nThe update IS published, but its source maps did not reach Sentry, so crashes in it');
+    console.error('will show minified traces. Put SENTRY_AUTH_TOKEN in .env.local and rerun from this folder:');
+    console.error(`  npx eas-cli env:exec ${channel} "npx sentry-expo-upload-sourcemaps dist"`);
+    process.exit(1);
+  }
 }
 
 if (require.main === module) main();
