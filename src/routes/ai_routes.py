@@ -149,7 +149,21 @@ REVIEW_SCHEMA = {
 }
 
 # Compare a new model with scripts/coach_prompt_check.py before changing this
-INSIGHTS_MODEL = 'claude-haiku-4-5-20251001'
+COACH_MODEL = 'claude-haiku-5-5'
+# Haiku 5.5 thinks by default and the thinking counts toward max_tokens.
+# Insights and the review are short, schema-bound reads of a prepared context:
+# on the prompt check (2026-11-10) low matched medium at about half the
+# latency. A routine has to balance volume across days, so it keeps medium.
+INSIGHTS_EFFORT = 'low'
+GENERATE_EFFORT = 'medium'
+
+
+def _response_text(msg) -> str:
+    """The answer's text. With thinking on, thinking blocks come first, so
+    content[0] is not the answer."""
+    if msg.stop_reason == 'refusal':
+        raise RuntimeError('Model declined the request')
+    return ''.join(b.text for b in msg.content if b.type == 'text')
 
 PRIORITY_ORDER = {'high': 0, 'medium': 1, 'low': 2}
 MAX_INSIGHTS = 5
@@ -190,13 +204,19 @@ def _is_grounded(insight, ctx, known):
     if not insight.get('title') or not insight.get('body'):
         return False
     evidence = insight.get('evidence') or {}
-    exercise = (evidence.get('exercise') or '').strip()
+    exercise = (evidence.get('exercise') or '').strip().lower()
     if not exercise:
         return True
-    if exercise.lower() not in known:
-        return False
+    if exercise not in known:
+        # The prompt lists cardio bests as "Running 5K" / "Running 30 min", so
+        # the model copies the milestone into the name; the numbers check below
+        # still has to pass against that exercise's facts.
+        cardio = {row.name.lower() for row in ctx.get('cardio_prs', [])}
+        exercise = next((c for c in cardio if exercise.startswith(c + ' ')), None)
+        if exercise is None:
+            return False
     facts = ctx.get('recent_pr_facts', [])
-    exercise_facts = [f for f in facts if f['exercise'].lower() == exercise.lower()]
+    exercise_facts = [f for f in facts if f['exercise'].lower() == exercise]
     claims_numbers = evidence.get('before') is not None or evidence.get('after') is not None
     return not (exercise_facts and claims_numbers and not any(_fact_matches(f, evidence) for f in exercise_facts))
 
@@ -1234,13 +1254,14 @@ def generate_workout():
         prompt = _build_prompt(data, generate_type, user_context)
 
         msg = create_message('generate', user_id, api_key,
-            model="claude-haiku-4-5-20251001",
-            max_tokens=4096,
+            model=COACH_MODEL,
+            max_tokens=12000,
             system=COACH_VOICE,
+            output_config={'effort': GENERATE_EFFORT},
             messages=[{"role": "user", "content": prompt}],
         )
 
-        result = _parse_ai_json(msg.content[0].text)
+        result = _parse_ai_json(_response_text(msg))
 
         if generate_type == 'routine':
             days_preview = []
@@ -1309,19 +1330,23 @@ def get_ai_insights():
         return jsonify({'message': 'Failed to generate insights'}), 500
 
 
-def _request_insights(ctx: dict, user_id: int | None, api_key: str, model: str = INSIGHTS_MODEL):
+def _request_insights(ctx: dict, user_id: int | None, api_key: str, model: str = COACH_MODEL,
+                      effort: str = INSIGHTS_EFFORT):
     """One insights call: the prompt from ctx, the model's answer parsed and
     put through the brand voice, before _verify_insights. Returns the message
     (for usage) and the insights. scripts/coach_prompt_check.py runs this same
     path against fixture users."""
+    output_config = {'format': {'type': 'json_schema', 'schema': INSIGHT_SCHEMA}}
+    if effort:  # None for the prompt check's baseline on a model without effort levels
+        output_config['effort'] = effort
     msg = create_message('insights', user_id, api_key,
         model=model,
-        max_tokens=2048,
+        max_tokens=6000,
         system=COACH_VOICE,
-        output_config={'format': {'type': 'json_schema', 'schema': INSIGHT_SCHEMA}},
+        output_config=output_config,
         messages=[{'role': 'user', 'content': _build_insights_prompt(ctx)}],
     )
-    result = _parse_ai_json(msg.content[0].text)
+    result = _parse_ai_json(_response_text(msg))
     return msg, [
         {**i, 'title': _brand_copy(i.get('title'), heading=True), 'body': _brand_copy(i.get('body'))}
         for i in result.get('insights', [])
@@ -1417,13 +1442,13 @@ def get_weekly_review():
             user_id, experience=data.get('experience'), goal=data.get('goal'), avoid=data.get('avoid'), as_of=as_of,
         )
         msg = create_message('weekly-review', user_id, api_key,
-            model='claude-haiku-4-5-20251001',
-            max_tokens=1024,
+            model=COACH_MODEL,
+            max_tokens=4000,
             system=COACH_VOICE,
-            output_config={'format': {'type': 'json_schema', 'schema': REVIEW_SCHEMA}},
+            output_config={'effort': INSIGHTS_EFFORT, 'format': {'type': 'json_schema', 'schema': REVIEW_SCHEMA}},
             messages=[{'role': 'user', 'content': _build_insights_prompt(ctx, review=True)}],
         )
-        result = _parse_ai_json(msg.content[0].text)
+        result = _parse_ai_json(_response_text(msg))
         known = _known_subjects(ctx)
         review = {}
         for key in REVIEW_SECTIONS:

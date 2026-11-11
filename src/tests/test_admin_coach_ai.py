@@ -26,7 +26,7 @@ def _usage(input_tokens=1200, output_tokens=300, cache_read=0, cache_write=0):
 
 def _anthropic(text='{}', usage=None, error=None):
     message = MagicMock()
-    message.content = [MagicMock(text=text)]
+    message.content = [MagicMock(type='text', text=text)]
     message.usage = usage if usage is not None else _usage()
     module = MagicMock()
     if error:
@@ -81,6 +81,11 @@ class TestCostEstimate:
     def test_haiku_list_price(self):
         assert estimate_cost('claude-haiku-4-5-20251001', 1_000_000, 0) == pytest.approx(1.0)
         assert estimate_cost('claude-haiku-4-5-20251001', 0, 1_000_000) == pytest.approx(5.0)
+
+    def test_the_production_model_has_a_price(self):
+        """A model missing from PRICES shows as $0 and never trips the daily budget."""
+        from routes.ai_routes import COACH_MODEL
+        assert estimate_cost(COACH_MODEL, 1_000_000, 1_000_000) == pytest.approx(0.60)
 
     def test_cache_reads_and_writes(self):
         assert estimate_cost('claude-haiku-4-5', 0, 0, cache_read_tokens=1_000_000) == pytest.approx(0.1)

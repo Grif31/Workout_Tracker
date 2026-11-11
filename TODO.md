@@ -1375,7 +1375,8 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [ ] **Votes in the weekly review prompt** (`_build_insights_prompt(review=True)` skips them today)
 - [ ] **CoachProfile on the server.** Goal, experience, injuries and notes live only in AsyncStorage (`coach_profile_${uid}`), so a reinstall loses them and nothing server-side (scheduled insights, notifications) can read them
 - [ ] **Implicit signals.** Opening a suggested exercise or starting the routine an insight pointed at counts as a strong helpful. Needs insights to carry an action first
-- [ ] **Re-evaluate the model.** Insights and the review run on `claude-haiku-4-5-20251001`; compare newer models through the prompt check above before switching
+- [x] **Re-evaluate the model** (2026-11-10). All three Coach calls moved from `claude-haiku-4-5-20251001` to `claude-haiku-5-5` (`COACH_MODEL`): insights and the review at effort `low`, generate at `medium`. Prompt check, 18 answers each: 4.5 kept 54 of 86 (32 repeats of a type), 5.5 low kept 69 of 82, about 4.8s vs 7.7s a call and about a seventh of the cost. Also: answers read by block type (thinking comes first), refusals fail the call, and `_is_grounded` accepts cardio evidence named with its milestone ("Running 5K")
+- [ ] **Try the routine generator and weekly review on prod** after the Haiku 5.5 deploy: the prompt check only covers insights
 
 ---
 
