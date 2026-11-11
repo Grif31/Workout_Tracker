@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Aretē Workout Tracker: Pursue Excellence</title>
+  <title>Aretē: Strength &amp; Cardio Log</title>
   <meta name="description" content="Aretē is a workout tracking app for iOS. Log strength and cardio, track personal records, measure your Strength Score, and rise through the Greek Ranks.">
   <link rel="canonical" href="https://aretefitnessapp.com/">
   <meta name="theme-color" content="#0D0D0D">
@@ -14,7 +14,7 @@
   {
     "@context": "https://schema.org",
     "@type": "MobileApplication",
-    "name": "Aretē Workout Tracker",
+    "name": "Aretē: Strength & Cardio Log",
     "operatingSystem": "iOS",
     "applicationCategory": "HealthApplication",
     "url": "https://aretefitnessapp.com/",
@@ -24,8 +24,8 @@
   </script>
 
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="Aretē Workout Tracker">
-  <meta property="og:title" content="Aretē Workout Tracker: Pursue Excellence">
+  <meta property="og:site_name" content="Aretē: Strength &amp; Cardio Log">
+  <meta property="og:title" content="Aretē: Strength &amp; Cardio Log">
   <meta property="og:description" content="Aretē is a workout tracking app for iOS. Log strength and cardio, track personal records, measure your Strength Score, and rise through the Greek Ranks.">
   <meta property="og:url" content="https://aretefitnessapp.com/">
   <meta property="og:image" content="https://aretefitnessapp.com/brand/og-image.png">
@@ -35,7 +35,7 @@
   <meta property="og:image:alt" content="Aretē. Pursue Excellence.">
 
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Aretē Workout Tracker: Pursue Excellence">
+  <meta name="twitter:title" content="Aretē: Strength &amp; Cardio Log">
   <meta name="twitter:description" content="Aretē is a workout tracking app for iOS. Log strength and cardio, track personal records, measure your Strength Score, and rise through the Greek Ranks.">
   <meta name="twitter:image" content="https://aretefitnessapp.com/brand/og-image.png">
   <meta name="twitter:image:alt" content="Aretē. Pursue Excellence.">
@@ -44,194 +44,322 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wdth,wght@62..125,600..800&display=swap">
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
-      background: #0D0D0D;
-      color: #F2F2F7;
-      line-height: 1.6;
+    /* Values come from DESIGN.md (marketing tokens: ink, primary, Archivo). Change them there first. */
+    :root {
+      --ink: #0D0D0D;
+      --ink-surface: #1C1C1E;
+      --ink-divider: #2C2C2E;
+      --ink-text: #FFFFFF;
+      --ink-text-muted: #8E8E93;
+      --primary: #30D158;
+      --on-primary: #000000;
+
+      --rank-neophyte: #888888;
+      --rank-athlete: #4A9EFF;
+      --rank-hero: #4CAF50;
+      --rank-demigod: #FF9800;
+      --rank-olympian: #9C27B0;
+      --rank-titan: #E53935;
+      --rank-gold: #FFD700;
+
+      --font-display: 'Archivo Black', 'Arial Black', sans-serif;
+      --font-sub: Archivo, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
+      --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
+
+      --space-xs: 4px;
+      --space-sm: 8px;
+      --space-md: 16px;
+      --space-lg: 24px;
+      --space-xl: 32px;
+      --space-2xl: 48px;
+      --space-3xl: 72px;
+      --space-section: clamp(88px, 11vw, 144px);
+      --gutter: clamp(16px, 5vw, 64px);
+      --container: 1200px;
+
+      --radius-md: 12px;
+      --radius-card: 16px;
+      --radius-phone: 28px;
+      --radius-full: 9999px;
+
+      --text-hero: clamp(46px, 5.8vw, 84px);
+      --text-section: clamp(38px, 4.6vw, 64px);
+      --text-title: clamp(30px, 3vw, 40px);
+      --text-item: clamp(26px, 2.4vw, 32px);
+      --text-lede: clamp(22px, 1.9vw, 26px);
+      --text-body: 21px;
+      --text-small: 19px;
+      --text-label: 15px;
     }
 
-    /* ── Header ── */
-    header {
-      text-align: center;
-      padding: 80px 24px 64px;
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { overflow-x: clip; }
+    body {
+      font-family: var(--font-body);
+      font-size: var(--text-body);
+      line-height: 1.55;
+      background: var(--ink);
+      color: var(--ink-text);
+      -webkit-font-smoothing: antialiased;
     }
-    .logo img {
-      height: clamp(56px, 12vw, 90px);
-      width: auto;
-      display: block;
+    ::selection { background: var(--primary); color: var(--on-primary); }
+    img { display: block; max-width: 100%; height: auto; }
+    a { color: inherit; }
+    a:focus-visible, summary:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 3px;
+      border-radius: var(--radius-md);
+    }
+
+    .container {
+      width: 100%;
+      max-width: calc(var(--container) + 2 * var(--gutter));
       margin: 0 auto;
+      padding: 0 var(--gutter);
     }
-    .tagline {
-      /* an h1: font-size and weight are set here, not left to the UA stylesheet */
-      margin-top: 14px;
-      font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
+
+    /* Type roles, per DESIGN.md: Archivo Black heads, Archivo Bold subheads,
+       Archivo SemiBold labels at 112% width, system body. */
+    .display, .section-head, .feature-title {
+      font-family: var(--font-display);
+      font-weight: 400;
+      letter-spacing: -0.01em;
+      overflow-wrap: break-word;
+      min-width: 0;
+    }
+    .display { font-size: var(--text-hero); line-height: 1.02; }
+    .section-head { font-size: var(--text-section); line-height: 1.08; }
+    .feature-title { font-size: var(--text-title); line-height: 1.15; margin-bottom: var(--space-md); }
+    .feature-label {
+      font-family: var(--font-sub);
+      font-stretch: 112%;
+      font-size: var(--text-label);
       font-weight: 600;
-      font-size: 1.1rem;
-      color: #8E8E93;
-      letter-spacing: 0.3px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--primary);
+      margin-bottom: var(--space-sm);
     }
-    .cta-row {
-      display: flex;
-      gap: 14px;
+    .copy { color: var(--ink-text-muted); max-width: 60ch; }
+
+    .phone {
+      border-radius: var(--radius-phone);
+      border: 1px solid var(--ink-divider);
+      background: var(--ink-surface);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
       justify-content: center;
+      min-height: 52px;
+      padding: 0 var(--space-xl);
+      border-radius: var(--radius-full);
+      font-family: var(--font-body);
+      font-size: var(--text-body);
+      font-weight: 600;
+      text-decoration: none;
+      white-space: nowrap;
+      background: var(--primary);
+      color: var(--on-primary);
+      transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+    }
+    .btn:hover { opacity: 0.88; }
+    .btn:active { transform: scale(0.97); }
+    .btn:focus-visible { outline: 2px solid var(--ink-text); outline-offset: 3px; }
+
+    /* Apple's badge artwork must not be recolored or cropped, so it is sized only by height */
+    .store-badge { display: inline-block; border-radius: var(--radius-md); transition: opacity 0.15s ease-out; }
+    .store-badge:hover { opacity: 0.85; }
+    .store-badge img { height: 52px; width: auto; }
+
+    .text-link {
+      color: var(--primary);
+      font-weight: 600;
+      text-decoration: none;
+      text-underline-offset: 0.2em;
+    }
+    .text-link:hover { text-decoration: underline; }
+
+    /* ── Nav ── */
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-lg);
+      padding-top: var(--space-lg);
+      padding-bottom: var(--space-lg);
+    }
+    .nav-mark img { height: 60px; width: auto; }
+    .nav-links { display: flex; gap: var(--space-lg); }
+    .nav-links a {
+      color: var(--ink-text-muted);
+      text-decoration: none;
+      font-size: var(--text-body);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .nav-links a:hover { color: var(--ink-text); }
+
+    /* ── Hero: the copy on the left, the live log on the right ── */
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 8fr) minmax(0, 4fr);
+      align-items: center;
+      gap: var(--space-2xl);
+      padding-top: var(--space-xl);
+      padding-bottom: var(--space-section);
+    }
+    .hero .lede {
+      font-size: var(--text-lede);
+      color: var(--ink-text-muted);
+      max-width: 42ch;
+      margin-top: var(--space-lg);
+    }
+    .hero-actions {
+      display: flex;
       align-items: center;
       flex-wrap: wrap;
-      margin-top: 40px;
+      gap: var(--space-lg);
+      margin-top: var(--space-xl);
     }
-    .btn {
-      display: inline-block;
-      padding: 14px 30px;
-      border-radius: 14px;
-      font-size: 0.97rem;
-      font-weight: 700;
-      text-decoration: none;
-      transition: opacity 0.15s;
-    }
-    .btn:hover { opacity: 0.82; }
-    .btn-green  { background: #30D158; color: #000; }
-    .btn-ghost  { background: transparent; color: #F2F2F7; border: 1.5px solid #3A3A3C; }
-    .btn-ghost:hover { border-color: #636366; opacity: 1; }
-    /* Apple's badge artwork must not be recolored or cropped, so it is sized only by height */
-    .store-badge { display: inline-block; transition: opacity 0.15s; }
-    .store-badge:hover { opacity: 0.82; }
-    .store-badge img { display: block; height: 52px; width: auto; }
+    .hero-shot { justify-self: center; width: clamp(240px, 22vw, 320px); }
 
-    /* -- Features -- */
-    .feature-row {
+    /* ── Feature sections ── */
+    .chapter { padding-bottom: var(--space-section); }
+    .chapter-band {
+      background: var(--ink-surface);
+      padding-top: var(--space-section);
+    }
+    .chapter-band .phone { background: var(--ink); }
+    .chapter-open { padding-top: var(--space-section); }
+
+    .log-grid {
       display: grid;
-      grid-template-columns: 1fr 268px;
+      grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+      gap: var(--space-3xl);
+      margin-top: var(--space-2xl);
+    }
+    .log-lead { padding-top: var(--space-xl); }
+    .log-lead .feature-title { font-size: var(--text-section); line-height: 1.08; }
+    .pair {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: var(--space-xl);
+    }
+    .pair .phone { width: min(100%, 280px); margin-bottom: var(--space-lg); }
+    .pair .feature-title { font-size: var(--text-item); }
+    .pair .copy { font-size: var(--text-small); }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
       align-items: center;
-      gap: 60px;
-      padding: 44px 0;
-      border-top: 1px solid #1C1C1E;
+      gap: var(--space-3xl);
     }
-    .feature-row:first-of-type { border-top: none; padding-top: 24px; }
-    /* mirrored rows: the template flips too, or the shot lands in the wide column */
-    .feature-row:nth-child(even) { grid-template-columns: 268px 1fr; }
-    .feature-row:nth-child(even) .feature-copy { order: 2; }
-    .feature-eyebrow {
-      font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
-      font-size: 0.7rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1.4px;
-      color: #30D158;
-      margin-bottom: 8px;
-    }
-    .feature-copy h3 {
-      font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
-      font-size: 1.4rem;
-      font-weight: 700;
-      color: #F2F2F7;
-      margin-bottom: 10px;
-      letter-spacing: -0.01em;
-    }
-    .feature-copy p { color: #8E8E93; font-size: 0.97rem; }
-    .feature-shot img {
-      width: 100%;
-      height: auto;
-      border-radius: 26px;
-      border: 1px solid #2C2C2E;
-      display: block;
-    }
+    .split + .split { margin-top: var(--space-section); }
+    .split .phone { width: min(100%, 320px); justify-self: center; }
+    .split-flip { grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); }
+    .split-flip .split-shot { order: 2; }
 
-    @media (max-width: 760px) {
-      .feature-row {
-        grid-template-columns: 1fr;
-        gap: 28px;
-        padding: 44px 0;
-        justify-items: center;
-        text-align: center;
-      }
-      /* let every screenshot sit below its copy once stacked. the even-row rule
-         above is more specific than .feature-row, so it must be undone by name */
-      .feature-row:nth-child(even) { grid-template-columns: 1fr; }
-      .feature-row:nth-child(even) .feature-copy { order: 0; }
-      .feature-shot { max-width: 260px; }
+    .duo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-section);
+      margin-top: var(--space-section);
+      padding-top: var(--space-section);
+      border-top: 1px solid var(--ink-divider);
     }
+    .duo-item {
+      display: grid;
+      grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
+      align-items: center;
+      gap: var(--space-3xl);
+    }
+    .duo-item .phone { width: min(100%, 320px); justify-self: center; }
+    .duo-item .feature-title { font-size: var(--text-item); }
+    .duo-item .copy { font-size: var(--text-body); }
 
-    /* ── Divider ── */
-    .divider {
-      height: 1px;
-      background: #1C1C1E;
-      max-width: 680px;
-      margin: 0 auto;
-    }
-
-    /* ── Sections ── */
-    .section {
-      max-width: 680px;
-      margin: 0 auto;
-      padding: 64px 24px;
-    }
-    /* must follow .section: same specificity, so source order decides */
-    .section-wide { max-width: 1040px; }
-    .section-label {
-      font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
-      font-stretch: 112%;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1.4px;
-      color: #30D158;
-      margin-bottom: 10px;
-    }
-    .section-title {
-      font-family: 'Archivo Black', 'Arial Black', sans-serif;
-      font-size: 1.75rem;
-      font-weight: 400;
-      color: #F2F2F7;
-      margin-bottom: 24px;
-      letter-spacing: -0.01em;
-    }
-
-    /* ── Support card ── */
-    .support-card {
-      background: #1C1C1E;
-      border: 1px solid #2C2C2E;
-      border-radius: 18px;
-      padding: 36px 32px;
-      text-align: center;
-    }
-    .support-card p {
-      color: #8E8E93;
-      font-size: 0.97rem;
-      margin-bottom: 24px;
-      max-width: 400px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-
-    /* ── FAQ ── */
-    .faq-list { display: flex; flex-direction: column; gap: 10px; }
-    details {
-      background: #1C1C1E;
-      border: 1px solid #2C2C2E;
-      border-radius: 14px;
+    /* ── Greek Rank ladder: segment widths are each rank's real score range ── */
+    .ladder { margin-top: var(--space-xl); }
+    .ladder-bar {
+      display: flex;
+      height: 12px;
+      border-radius: var(--radius-full);
       overflow: hidden;
+      gap: 2px;
     }
-    details[open] { border-color: #3A3A3C; }
+    .ladder-bar span { display: block; height: 100%; transform-origin: left center; }
+    .ladder-list {
+      list-style: none;
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: var(--space-xs);
+      margin-top: var(--space-md);
+      font-size: var(--text-label);
+      color: var(--ink-text-muted);
+    }
+    .ladder-list b {
+      display: block;
+      font-family: var(--font-sub);
+      font-size: var(--text-small);
+      font-stretch: 90%;
+      font-weight: 700;
+      color: var(--ink-text);
+    }
+    .r-neophyte { background: var(--rank-neophyte); }
+    .r-athlete  { background: var(--rank-athlete); }
+    .r-hero     { background: var(--rank-hero); }
+    .r-demigod  { background: var(--rank-demigod); }
+    .r-olympian { background: var(--rank-olympian); }
+    .r-titan    { background: var(--rank-titan); }
+    .r-arete    { background: var(--rank-gold); }
+
+    /* ── Download band ── */
+    .download { background: var(--ink-surface); }
+    .download-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: var(--space-lg);
+      padding-top: var(--space-section);
+      padding-bottom: var(--space-section);
+    }
+    .download .copy { font-size: var(--text-lede); max-width: 40ch; }
+
+    /* ── Support and FAQ ── */
+    .help {
+      display: grid;
+      grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
+      gap: var(--space-3xl);
+      padding-top: var(--space-section);
+      padding-bottom: var(--space-section);
+    }
+    .help-contact .copy { margin-top: var(--space-md); margin-bottom: var(--space-xl); max-width: 36ch; }
+    .help-faq .section-head { margin-bottom: var(--space-xl); }
+    .faq-list { border-top: 1px solid var(--ink-divider); }
+    details { border-bottom: 1px solid var(--ink-divider); }
     summary {
-      padding: 18px 20px;
-      font-size: 0.97rem;
-      font-weight: 600;
-      color: #F2F2F7;
+      padding: var(--space-lg) 0;
+      font-family: var(--font-sub);
+      font-size: 23px;
+      font-weight: 700;
       cursor: pointer;
       list-style: none;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 16px;
+      gap: var(--space-md);
     }
     summary::-webkit-details-marker { display: none; }
+    summary:hover { color: var(--primary); }
     .faq-icon {
       flex-shrink: 0;
-      width: 22px;
-      height: 22px;
+      width: 24px;
+      height: 24px;
       border-radius: 50%;
-      background: #2C2C2E;
+      background: var(--ink-surface);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -246,7 +374,7 @@
     .faq-icon-plus::before, .faq-icon-plus::after, .faq-icon-minus::before {
       content: '';
       position: absolute;
-      background: #30D158;
+      background: var(--primary);
       border-radius: 1px;
     }
     .faq-icon-plus::before, .faq-icon-minus::before { left: 0; right: 0; top: 4px; height: 2px; }
@@ -254,287 +382,377 @@
     details[open] .faq-icon-plus  { display: none; }
     details:not([open]) .faq-icon-minus { display: none; }
     .faq-body {
-      padding: 0 20px 18px;
-      color: #8E8E93;
-      font-size: 0.93rem;
-      line-height: 1.7;
+      padding: 0 0 var(--space-lg);
+      color: var(--ink-text-muted);
+      max-width: 62ch;
     }
-    .faq-body a { color: #30D158; text-decoration: none; }
+    .faq-body a { color: var(--primary); text-decoration: none; }
     .faq-body a:hover { text-decoration: underline; }
 
     /* ── Footer ── */
-    footer {
-      border-top: 1px solid #1C1C1E;
-      text-align: center;
-      padding: 36px 24px 48px;
+    footer { border-top: 1px solid var(--ink-divider); }
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-lg);
+      padding-top: var(--space-2xl);
+      padding-bottom: var(--space-2xl);
     }
-    .footer-links { display: flex; gap: 28px; justify-content: center; flex-wrap: wrap; }
+    .footer-mark img { height: 28px; width: auto; }
+    .footer-links { display: flex; gap: var(--space-lg); flex-wrap: wrap; }
     .footer-links a {
-      color: #636366;
+      color: var(--ink-text-muted);
       text-decoration: none;
-      font-size: 0.88rem;
-      transition: color 0.15s;
+      font-size: var(--text-small);
+      white-space: nowrap;
     }
-    .footer-links a:hover { color: #8E8E93; }
-    .footer-copy {
-      margin-top: 20px;
-      font-size: 0.82rem;
-      color: #3A3A3C;
+    .footer-links a:hover { color: var(--ink-text); }
+    .footer-copy { width: 100%; font-size: var(--text-label); color: var(--ink-text-muted); }
+
+    @media (max-width: 900px) {
+      .hero, .log-grid, .split, .split-flip, .help { grid-template-columns: minmax(0, 1fr); }
+      .split-flip .split-shot { order: 0; }
+      .hero { gap: var(--space-2xl); padding-bottom: var(--space-3xl); }
+      .hero-shot { width: min(72%, 280px); }
+      .split, .duo-item { gap: var(--space-xl); }
+      .split .phone, .duo-item .phone { width: min(72%, 280px); }
+      .log-grid { gap: var(--space-2xl); }
+      .log-lead { padding-top: 0; }
+      .duo, .duo-item { grid-template-columns: minmax(0, 1fr); }
+      .help { gap: var(--space-2xl); }
+    }
+    @media (max-width: 600px) {
+      .pair, .duo-item { grid-template-columns: minmax(0, 1fr); }
+      .pair .phone, .duo-item .phone { width: min(72%, 260px); }
+      .nav-links { gap: var(--space-md); }
+      .nav-mark img { height: 48px; }
+      .ladder-list { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: var(--space-md); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .btn { transition: none; }
+      .btn:active { transform: none; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Header -->
-  <header>
-    <div class="logo"><img src="/brand/Arete_name.png" alt="Aretē Workout Tracker"></div>
-    <h1 class="tagline">Pursue excellence. Track every rep.</h1>
-    <div class="cta-row">
-      <a href="https://apps.apple.com/app/id6771064342" class="store-badge">
-        <img src="/brand/app-store-badge.svg" width="156" height="52" alt="Download on the App Store">
-      </a>
-      <a href="mailto:support@aretefitnessapp.com" class="btn btn-ghost">Contact Support</a>
-    </div>
+  <header class="container nav">
+    <a class="nav-mark" href="/"><img src="/brand/Arete_name.png" width="368" height="143" alt="Aretē"></a>
+    <nav class="nav-links" aria-label="Site">
+      <a href="#features">Features</a>
+      <a href="#support">Support</a>
+    </nav>
   </header>
 
-  <div class="divider"></div>
+  <main>
+    <section class="container hero">
+      <div class="hero-copy">
+        <h1 class="display">Pursue excellence.<br> Track every rep.</h1>
+        <p class="lede">Log strength and cardio, track personal records, and rise through the Greek Ranks.</p>
+        <div class="hero-actions">
+          <a href="https://apps.apple.com/app/id6771064342" class="store-badge">
+            <img src="/brand/app-store-badge.svg" width="156" height="52" alt="Download on the App Store">
+          </a>
+          <a href="mailto:support@aretefitnessapp.com" class="text-link">Contact Support</a>
+        </div>
+      </div>
+      <img class="phone hero-shot" src="/brand/shots/slide-workout.webp" width="620" height="1342" fetchpriority="high" decoding="async"
+           alt="Live workout logging screen with previous set values, reps, weight and RPE">
+    </section>
 
-  <!-- Features -->
-  <div class="section section-wide">
-    <p class="section-label">Features</p>
-    <h2 class="section-title">Train with purpose</h2>
-    <div class="feature-list">
-      <div class="feature-row">
-        <div class="feature-copy">
-          <p class="feature-eyebrow">Home</p>
-          <h3>Your week, the moment you open it</h3>
-          <p>A running workout streak, this week at a glance, and your active routine ready to log. Recent sessions list their exercises, reps and volume, with every personal record you hit that day.</p>
+    <!-- Logging, Home, Plans -->
+    <section class="container chapter" id="features">
+      <h2 class="section-head">Train with purpose</h2>
+      <div class="log-grid">
+        <div class="log-lead">
+          <p class="feature-label">Logging</p>
+          <h3 class="feature-title">Log every set as you lift</h3>
+          <p class="copy">Each exercise shows what you did last time, so you always know what to beat. Track reps, weight and RPE, tick sets off as you go, and watch duration, set count and total volume build as you train.</p>
         </div>
-        <div class="feature-shot">
-          <img src="/brand/shots/slide-dashboard.webp" width="620" height="1342" loading="lazy" decoding="async"
-               alt="Aretē home dashboard showing workout streak, weekly calendar and recent workouts">
+        <div class="pair">
+          <div class="reveal">
+            <img class="phone" src="/brand/shots/slide-dashboard.webp" width="620" height="1342" loading="lazy" decoding="async"
+                 alt="Aretē home dashboard showing workout streak, weekly calendar and recent workouts">
+            <p class="feature-label">Home</p>
+            <h3 class="feature-title">Your week, the moment you open it</h3>
+            <p class="copy">A running workout streak, this week at a glance, and your active routine ready to log. Recent sessions list their exercises, reps and volume, with every personal record you hit that day.</p>
+          </div>
+          <div class="reveal">
+            <img class="phone" src="/brand/shots/slide-plans.webp" width="620" height="1342" loading="lazy" decoding="async"
+                 alt="Plans tab with the active routine's next day, its exercises and a Start button, above saved templates">
+            <p class="feature-label">Plans</p>
+            <h3 class="feature-title">Your next workout, ready to start</h3>
+            <p class="copy">Follow a routine and Aretē knows which day is up next, even when life moves your schedule around. See where you are in the rotation and what's on the day, then start it in one tap. Your templates sit right below, ready to log.</p>
+          </div>
         </div>
       </div>
-      <div class="feature-row">
-        <div class="feature-copy">
-          <p class="feature-eyebrow">Logging</p>
-          <h3>Log every set as you lift</h3>
-          <p>Each exercise shows what you did last time, so you always know what to beat. Track reps, weight and RPE, tick sets off as you go, and watch duration, set count and total volume build as you train.</p>
-        </div>
-        <div class="feature-shot">
-          <img src="/brand/shots/slide-workout.webp" width="620" height="1342" loading="lazy" decoding="async"
-               alt="Live workout logging screen with previous set values, reps, weight and RPE">
-        </div>
-      </div>
-      <div class="feature-row">
-        <div class="feature-copy">
-          <p class="feature-eyebrow">Strength Score</p>
-          <h3>See exactly where you stand</h3>
-          <p>Your lifts are scored against real strength standards for your bodyweight, so you get a percentile instead of a guess. A full-body map ranks every muscle group, showing what is carrying you and what is lagging.</p>
-        </div>
-        <div class="feature-shot">
-          <img src="/brand/shots/slide-strength.webp" width="620" height="1342" loading="lazy" decoding="async"
+    </section>
+
+    <!-- Strength Score, Progress, Weekly Summary -->
+    <section class="chapter chapter-band">
+      <div class="container">
+        <div class="split">
+          <img class="phone split-shot reveal" src="/brand/shots/slide-strength.webp" width="620" height="1342" loading="lazy" decoding="async"
                alt="Strength Score screen with percentile rank and colour-coded muscle group body map">
+          <div>
+            <p class="feature-label">Strength Score</p>
+            <h2 class="section-head feature-title">See exactly where you stand</h2>
+            <p class="copy">Your lifts are scored against real strength standards for your bodyweight, so you get a percentile instead of a guess. A full-body map ranks every muscle group, showing what is carrying you and what is lagging.</p>
+          </div>
+        </div>
+        <div class="duo">
+          <div class="duo-item reveal">
+            <img class="phone" src="/brand/shots/slide-progress.webp" width="620" height="1342" loading="lazy" decoding="async"
+                 alt="Progress overview with this week's training days, Strength and Endurance Score rings and a volume chart">
+            <div>
+              <p class="feature-label">Progress</p>
+              <h3 class="feature-title">Your progress, at a glance</h3>
+              <p class="copy">See which days you trained against a weekly goal you set yourself, your Strength and Endurance Scores side by side, and volume, sets, workouts or distance compared with the four weeks before. Below, each muscle group is measured against MEV, MAV and MRV landmarks so you know what is below target and what is on track.</p>
+            </div>
+          </div>
+          <div class="duo-item reveal">
+            <img class="phone" src="/brand/shots/slide-weekly.webp" width="620" height="1342" loading="lazy" decoding="async"
+                 alt="Weekly Summary with workouts, volume, reps, training time, training days and a muscle group breakdown">
+            <div>
+              <p class="feature-label">Weekly Summary</p>
+              <h3 class="feature-title">Every week, wrapped up</h3>
+              <p class="copy">Workouts against your goal, total volume and reps, training time and your streak, with how each compares to your average. See which days you trained, which muscles got the work, and your most improved lift.</p>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="feature-row">
-        <div class="feature-copy">
-          <p class="feature-eyebrow">Progress</p>
-          <h3>Your progress, at a glance</h3>
-          <p>See which days you trained against a weekly goal you set yourself, your Strength and Endurance Scores side by side, and volume, sets, workouts or distance compared with the four weeks before. Below, each muscle group is measured against MEV, MAV and MRV landmarks so you know what is below target and what is on track.</p>
-        </div>
-        <div class="feature-shot">
-          <img src="/brand/shots/slide-progress.webp" width="620" height="1342" loading="lazy" decoding="async"
-               alt="Progress overview with this week's training days, Strength and Endurance Score rings and a volume chart">
+    </section>
+
+    <!-- AI Coach, Greek Rank -->
+    <section class="container chapter chapter-open">
+      <div class="split split-flip">
+        <img class="phone split-shot reveal" src="/brand/shots/slide-ai.webp" width="620" height="1342" loading="lazy" decoding="async"
+             alt="AI Coach tab with a plateaued lift, routine and template generation, and training insights">
+        <div>
+          <p class="feature-label">AI Coach</p>
+          <h2 class="section-head feature-title">A coach that analyzes your training</h2>
+          <p class="copy">Generate templates and full weekly routines around your goal, equipment and schedule. The Coach also reviews your recent training and flags what the numbers show, like a split falling out of balance or muscles dropping below threshold.</p>
         </div>
       </div>
-      <div class="feature-row">
-        <div class="feature-copy">
-          <p class="feature-eyebrow">Weekly Summary</p>
-          <h3>Every week, wrapped up</h3>
-          <p>Workouts against your goal, total volume and reps, training time and your streak, with how each compares to your average. See which days you trained, which muscles got the work, and your most improved lift.</p>
-        </div>
-        <div class="feature-shot">
-          <img src="/brand/shots/slide-weekly.webp" width="620" height="1342" loading="lazy" decoding="async"
-               alt="Weekly Summary with workouts, volume, reps, training time, training days and a muscle group breakdown">
-        </div>
-      </div>
-      <div class="feature-row">
-        <div class="feature-copy">
-          <p class="feature-eyebrow">AI Coach</p>
-          <h3>A coach that analyzes your training</h3>
-          <p>Generate templates and full weekly routines around your goal, equipment and schedule. The Coach also reviews your recent training and flags what the numbers show, like a split falling out of balance or muscles dropping below threshold.</p>
-        </div>
-        <div class="feature-shot">
-          <img src="/brand/shots/slide-ai.webp" width="620" height="1342" loading="lazy" decoding="async"
-               alt="AI Coach tab with a plateaued lift, routine and template generation, and training insights">
-        </div>
-      </div>
-      <div class="feature-row">
-        <div class="feature-copy">
-          <p class="feature-eyebrow">Plans</p>
-          <h3>Your next workout, ready to start</h3>
-          <p>Follow a routine and Aretē knows which day is up next, even when life moves your schedule around. See where you are in the rotation and what's on the day, then start it in one tap. Your templates sit right below, ready to log.</p>
-        </div>
-        <div class="feature-shot">
-          <img src="/brand/shots/slide-plans.webp" width="620" height="1342" loading="lazy" decoding="async"
-               alt="Plans tab with the active routine's next day, its exercises and a Start button, above saved templates">
+      <div class="split">
+        <img class="phone split-shot reveal" src="/brand/shots/slide-profile.webp" width="620" height="1342" loading="lazy" decoding="async"
+             alt="Profile screen showing Titan Greek Rank, lifetime stats and personal records">
+        <div>
+          <p class="feature-label">Greek Rank</p>
+          <h2 class="section-head feature-title">Rise through the ranks</h2>
+          <p class="copy">Consistency, dedication and training load combine into a single rank, from Neophyte to Aretē. Your profile keeps your lifetime totals, every personal record and your full workout history in one place.</p>
+          <figure class="ladder" aria-label="The seven Greek Ranks and the score range each covers, from 0 to 100">
+            <div class="ladder-bar" aria-hidden="true">
+              <span class="r-neophyte" style="flex-grow: 12"></span>
+              <span class="r-athlete" style="flex-grow: 16"></span>
+              <span class="r-hero" style="flex-grow: 20"></span>
+              <span class="r-demigod" style="flex-grow: 17"></span>
+              <span class="r-olympian" style="flex-grow: 15"></span>
+              <span class="r-titan" style="flex-grow: 12"></span>
+              <span class="r-arete" style="flex-grow: 8"></span>
+            </div>
+            <ol class="ladder-list">
+              <li><b>Neophyte</b>0</li>
+              <li><b>Athlete</b>12</li>
+              <li><b>Hero</b>28</li>
+              <li><b>Demigod</b>48</li>
+              <li><b>Olympian</b>65</li>
+              <li><b>Titan</b>80</li>
+              <li><b>Aretē</b>92</li>
+            </ol>
+          </figure>
         </div>
       </div>
-      <div class="feature-row">
-        <div class="feature-copy">
-          <p class="feature-eyebrow">Greek Rank</p>
-          <h3>Rise through the ranks</h3>
-          <p>Consistency, dedication and training load combine into a single rank, from Neophyte to Aretē. Your profile keeps your lifetime totals, every personal record and your full workout history in one place.</p>
-        </div>
-        <div class="feature-shot">
-          <img src="/brand/shots/slide-profile.webp" width="620" height="1342" loading="lazy" decoding="async"
-               alt="Profile screen showing Titan Greek Rank, lifetime stats and personal records">
+    </section>
+
+    <!-- Download -->
+    <section class="download" id="download">
+      <div class="container download-inner">
+        <h2 class="section-head">Start training today</h2>
+        <p class="copy">Aretē is free on the App Store for iPhone. Log your first workout in under a minute.</p>
+        <a href="https://apps.apple.com/app/id6771064342" class="store-badge">
+          <img src="/brand/app-store-badge.svg" width="156" height="52" alt="Download on the App Store">
+        </a>
+      </div>
+    </section>
+
+    <!-- Support and FAQ -->
+    <section class="container help">
+      <div class="help-contact" id="support">
+        <h2 class="section-head">We're here to help</h2>
+        <p class="copy">Have a question, found a bug, or want to request a feature? Send us an email and we'll get back to you as soon as possible.</p>
+        <a href="mailto:support@aretefitnessapp.com" class="btn">support@aretefitnessapp.com</a>
+      </div>
+
+      <div class="help-faq">
+        <h2 class="section-head">Frequently Asked Questions</h2>
+        <div class="faq-list">
+
+          <details>
+            <summary>
+              What is Aretē?
+              <span class="faq-icon">
+                <span class="faq-icon-plus">+</span>
+                <span class="faq-icon-minus">−</span>
+              </span>
+            </summary>
+            <div class="faq-body">
+              Aretē is a workout tracking app for iOS focused on helping you measure and pursue excellence in your training. Log strength and cardio workouts, track personal records, monitor your progress over time, and get AI-generated programs tailored to your goals.
+            </div>
+          </details>
+
+          <details>
+            <summary>
+              Is Aretē free?
+              <span class="faq-icon">
+                <span class="faq-icon-plus">+</span>
+                <span class="faq-icon-minus">−</span>
+              </span>
+            </summary>
+            <div class="faq-body">
+              The core workout logging features are free. Aretē Premium unlocks the AI Coach, AI-generated workout templates and routines, and additional customisation options. Premium is available as a monthly subscription, annual subscription, or one-time lifetime purchase.
+            </div>
+          </details>
+
+          <details>
+            <summary>
+              What is the Greek Rank system?
+              <span class="faq-icon">
+                <span class="faq-icon-plus">+</span>
+                <span class="faq-icon-minus">−</span>
+              </span>
+            </summary>
+            <div class="faq-body">
+              Your Greek Rank is a score from 0 to 100 that reflects your overall training excellence across consistency, strength, volume, and dedication. Ranks progress from Neophyte through Athlete, Hero, Demigod, Olympian, Titan, and finally Aretē, the pinnacle of training achievement.
+            </div>
+          </details>
+
+          <details>
+            <summary>
+              How does the AI Coach work?
+              <span class="faq-icon">
+                <span class="faq-icon-plus">+</span>
+                <span class="faq-icon-minus">−</span>
+              </span>
+            </summary>
+            <div class="faq-body">
+              The AI Coach (Premium) analyses your recent training history, personal records, and goals to generate personalised workout templates and full weekly routines. You can configure your goal, experience level, available equipment, and session length to get programs that fit your life.
+            </div>
+          </details>
+
+          <details>
+            <summary>
+              Is my workout data secure?
+              <span class="faq-icon">
+                <span class="faq-icon-plus">+</span>
+                <span class="faq-icon-minus">−</span>
+              </span>
+            </summary>
+            <div class="faq-body">
+              Yes. All data is transmitted over HTTPS and stored securely. Passwords are never stored in plain text. We do not sell your data or share it with third parties beyond what is necessary to operate the app (see our <a href="/privacy">Privacy Policy</a> for full details).
+            </div>
+          </details>
+
+          <details>
+            <summary>
+              How do I cancel my subscription?
+              <span class="faq-icon">
+                <span class="faq-icon-plus">+</span>
+                <span class="faq-icon-minus">−</span>
+              </span>
+            </summary>
+            <div class="faq-body">
+              Subscriptions are managed through the Apple App Store. Go to Settings → Apple ID → Subscriptions on your iPhone to cancel at any time. Your Premium access continues until the end of the current billing period.
+            </div>
+          </details>
+
+          <details>
+            <summary>
+              How do I delete my account?
+              <span class="faq-icon">
+                <span class="faq-icon-plus">+</span>
+                <span class="faq-icon-minus">−</span>
+              </span>
+            </summary>
+            <div class="faq-body">
+              You can delete your account from within the app (Settings → Account → Delete Account) or by emailing <a href="mailto:support@aretefitnessapp.com">support@aretefitnessapp.com</a>. All your data is permanently deleted within 30 days.
+            </div>
+          </details>
+
         </div>
       </div>
-    </div>
-  </div>
+    </section>
+  </main>
 
-  <div class="divider"></div>
-
-  <!-- Download -->
-  <div class="section" id="download">
-    <p class="section-label">Download</p>
-    <h2 class="section-title">Start training today</h2>
-    <div class="support-card">
-      <p>Aretē is free on the App Store for iPhone. Log your first workout in under a minute.</p>
-      <a href="https://apps.apple.com/app/id6771064342" class="store-badge">
-        <img src="/brand/app-store-badge.svg" width="156" height="52" alt="Download on the App Store">
-      </a>
-    </div>
-  </div>
-
-  <div class="divider"></div>
-
-  <!-- Support -->
-  <div class="section" id="support">
-    <p class="section-label">Support</p>
-    <h2 class="section-title">We're here to help</h2>
-    <div class="support-card">
-      <p>Have a question, found a bug, or want to request a feature? Send us an email and we'll get back to you as soon as possible.</p>
-      <a href="mailto:support@aretefitnessapp.com" class="btn btn-green">support@aretefitnessapp.com</a>
-    </div>
-  </div>
-
-  <div class="divider"></div>
-
-  <!-- FAQ -->
-  <div class="section">
-    <p class="section-label">FAQ</p>
-    <h2 class="section-title">Frequently Asked Questions</h2>
-    <div class="faq-list">
-
-      <details>
-        <summary>
-          What is Aretē Workout Tracker?
-          <span class="faq-icon">
-            <span class="faq-icon-plus">+</span>
-            <span class="faq-icon-minus">−</span>
-          </span>
-        </summary>
-        <div class="faq-body">
-          Aretē is a workout tracking app for iOS focused on helping you measure and pursue excellence in your training. Log strength and cardio workouts, track personal records, monitor your progress over time, and get AI-generated programs tailored to your goals.
-        </div>
-      </details>
-
-      <details>
-        <summary>
-          Is Aretē free?
-          <span class="faq-icon">
-            <span class="faq-icon-plus">+</span>
-            <span class="faq-icon-minus">−</span>
-          </span>
-        </summary>
-        <div class="faq-body">
-          The core workout logging features are free. Aretē Premium unlocks the AI Coach, AI-generated workout templates and routines, and additional customisation options. Premium is available as a monthly subscription, annual subscription, or one-time lifetime purchase.
-        </div>
-      </details>
-
-      <details>
-        <summary>
-          What is the Greek Rank system?
-          <span class="faq-icon">
-            <span class="faq-icon-plus">+</span>
-            <span class="faq-icon-minus">−</span>
-          </span>
-        </summary>
-        <div class="faq-body">
-          Your Greek Rank is a score from 0–100 that reflects your overall training excellence across consistency, strength, volume, and dedication. Ranks progress from Neophyte through Athlete, Hero, Demigod, Olympian, Titan, and finally Aretē, the pinnacle of training achievement.
-        </div>
-      </details>
-
-      <details>
-        <summary>
-          How does the AI Coach work?
-          <span class="faq-icon">
-            <span class="faq-icon-plus">+</span>
-            <span class="faq-icon-minus">−</span>
-          </span>
-        </summary>
-        <div class="faq-body">
-          The AI Coach (Premium) analyses your recent training history, personal records, and goals to generate personalised workout templates and full weekly routines. You can configure your goal, experience level, available equipment, and session length to get programs that fit your life.
-        </div>
-      </details>
-
-      <details>
-        <summary>
-          Is my workout data secure?
-          <span class="faq-icon">
-            <span class="faq-icon-plus">+</span>
-            <span class="faq-icon-minus">−</span>
-          </span>
-        </summary>
-        <div class="faq-body">
-          Yes. All data is transmitted over HTTPS and stored securely. Passwords are never stored in plain text. We do not sell your data or share it with third parties beyond what is necessary to operate the app (see our <a href="/privacy">Privacy Policy</a> for full details).
-        </div>
-      </details>
-
-      <details>
-        <summary>
-          How do I cancel my subscription?
-          <span class="faq-icon">
-            <span class="faq-icon-plus">+</span>
-            <span class="faq-icon-minus">−</span>
-          </span>
-        </summary>
-        <div class="faq-body">
-          Subscriptions are managed through the Apple App Store. Go to Settings → Apple ID → Subscriptions on your iPhone to cancel at any time. Your Premium access continues until the end of the current billing period.
-        </div>
-      </details>
-
-      <details>
-        <summary>
-          How do I delete my account?
-          <span class="faq-icon">
-            <span class="faq-icon-plus">+</span>
-            <span class="faq-icon-minus">−</span>
-          </span>
-        </summary>
-        <div class="faq-body">
-          You can delete your account from within the app (Settings → Account → Delete Account) or by emailing <a href="mailto:support@aretefitnessapp.com">support@aretefitnessapp.com</a>. All your data is permanently deleted within 30 days.
-        </div>
-      </details>
-
-    </div>
-  </div>
-
-  <div class="divider"></div>
-
-  <!-- Footer -->
   <footer>
-    <div class="footer-links">
-      <a href="https://apps.apple.com/app/id6771064342">App Store</a>
-      <a href="/privacy">Privacy Policy</a>
-      <a href="/terms">Terms of Service</a>
-      <a href="mailto:support@aretefitnessapp.com">Contact Support</a>
+    <div class="container footer-inner">
+      <a class="footer-mark" href="/"><img src="/brand/Arete_name.png" width="368" height="143" alt="Aretē"></a>
+      <div class="footer-links">
+        <a href="/privacy">Privacy Policy</a>
+        <a href="/terms">Terms of Service</a>
+        <a href="mailto:support@aretefitnessapp.com">Contact Support</a>
+        <a href="https://apps.apple.com/app/id6771064342">App Store</a>
+      </div>
+      <p class="footer-copy">© 2026 Aretē: Strength &amp; Cardio Log</p>
     </div>
-    <p class="footer-copy">© 2026 Aretē Workout Tracker. All rights reserved.</p>
   </footer>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+  <script>
+    // Everything starts visible: GSAP only animates *from* a hidden state once it has
+    // loaded, so a blocked CDN or Reduce Motion leaves a complete, static page.
+    window.addEventListener('DOMContentLoaded', function () {
+      if (!window.gsap || !window.ScrollTrigger) return;
+      gsap.registerPlugin(ScrollTrigger);
+      gsap.matchMedia().add('(prefers-reduced-motion: no-preference)', function () {
+        gsap.from('.hero-copy > *', { y: 16, opacity: 0, duration: 0.6, ease: 'power3.out', stagger: 0.08 });
+        gsap.from('.hero-shot', { y: 40, opacity: 0, duration: 0.8, ease: 'power3.out', delay: 0.15 });
+
+        gsap.set('.reveal', { y: 32, opacity: 0 });
+        ScrollTrigger.batch('.reveal', {
+          start: 'top 88%',
+          once: true,
+          onEnter: function (els) {
+            gsap.to(els, { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out', stagger: 0.1 });
+          }
+        });
+
+        gsap.from('.ladder-bar span', {
+          scaleX: 0,
+          duration: 0.5,
+          ease: 'power2.out',
+          stagger: 0.07,
+          scrollTrigger: { trigger: '.ladder', start: 'top 85%', once: true }
+        });
+      });
+
+      // Parallax uses yPercent so it composes with the reveal's y instead of fighting it.
+      // Desktop only: once the layout stacks, the phone is its own row and there is nothing to drift against.
+      gsap.matchMedia().add('(prefers-reduced-motion: no-preference) and (min-width: 901px)', function () {
+        gsap.to('.hero-shot', {
+          yPercent: -35,
+          ease: 'none',
+          scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true }
+        });
+        gsap.to('.hero-copy', {
+          yPercent: 18,
+          ease: 'none',
+          scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true }
+        });
+
+        gsap.utils.toArray('.split-shot, .duo-item .phone, .pair .phone').forEach(function (el, i) {
+          var depth = el.closest('.pair') && i % 2 ? 30 : 20;
+          gsap.fromTo(el, { yPercent: depth }, {
+            yPercent: -depth,
+            ease: 'none',
+            scrollTrigger: { trigger: el, start: 'top bottom', end: 'bottom top', scrub: true }
+          });
+        });
+      });
+    });
+  </script>
 </body>
 </html>
