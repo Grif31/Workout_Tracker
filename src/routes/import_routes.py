@@ -7,7 +7,6 @@ trusting the preview) and writes every workout in one transaction.
 """
 import hashlib
 import re
-from bisect import bisect_right
 
 from flask import Blueprint, current_app, g, jsonify
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -19,16 +18,30 @@ from models import db, BodyweightLog, Exercise, ExerciseTemplate, PREvent, Set, 
 from routes.user_routes import convert_weight_value
 from routes.workout_routes import _recompute_prs_for_templates
 from schemas import IMPORT_SOURCES, ImportSchema
-from utils.achievements import distance_unit_for, evaluate_achievements
+from utils.achievements import _COUNTED_PR_TYPES_EXCLUDE, distance_unit_for, evaluate_achievements
 from utils.importers import ImportFormatError, parse
 from utils.importers.matching import ExerciseMatcher
 from utils.validation import validate_body
-from utils.volume import derive_bodyweight_load_factor
+from utils.volume import bodyweight_lookup, derive_bodyweight_load_factor
 
 import_bp = Blueprint('import_bp', __name__)
 _import_schema = ImportSchema()
 
 _MAX_DURATION_SECONDS = 24 * 3600
+
+
+def _cardio_minutes(s):
+    return round(s.seconds / 60, 2) if s.seconds else None
+
+
+def _fits(s, exercise_type):
+    """Whether a parsed set can be stored under an exercise of this type: a
+    plank matched to the library's timed hold but logged with reps has nowhere to go."""
+    if exercise_type == 'cardio':
+        return bool(_cardio_minutes(s) or s.distance)
+    if exercise_type == 'duration':
+        return bool(s.seconds)
+    return bool(s.reps or s.weight)
 
 
 def _client_id(source, workout):
@@ -100,7 +113,27 @@ class _Plan:
             for title, sets in sets_by_title.items()
         }
         self.new_types = {t: _infer_type(t, sets_by_title[t]) for t, m in self.matches.items() if m is None}
+
+        # Drop what can't be stored here, not in _write: the preview then
+        # counts what the import will really add, and says what it leaves out
+        kept, self.skipped_sets = [], 0
+        for cid, w in self.workouts:
+            for ex in w.exercises:
+                fits = [s for s in ex.sets if _fits(s, self.exercise_type(ex.title))]
+                self.skipped_sets += len(ex.sets) - len(fits)
+                ex.sets = fits
+            w.exercises = [ex for ex in w.exercises if ex.sets]
+            if w.exercises:
+                kept.append((cid, w))
+        self.workouts = kept
+        used = {ex.title for _, w in kept for ex in w.exercises}
+        self.matches = {t: m for t, m in self.matches.items() if t in used}
+        self.new_types = {t: e for t, e in self.new_types.items() if t in used}
         self.set_count = sum(len(ex.sets) for _, w in self.workouts for ex in w.exercises)
+
+    def exercise_type(self, title):
+        match = self.matches[title]
+        return ((match.exercise_type if match else self.new_types[title]) or 'strength').lower()
 
     def weight(self, value):
         if value is None or self.from_unit == self.to_unit:
@@ -116,6 +149,7 @@ class _Plan:
             'source': self.source,
             'workouts': len(self.workouts),
             'sets': self.set_count,
+            'skipped_sets': self.skipped_sets,
             'already_imported': self.already_imported,
             'first_date': self.first_date.strftime('%Y-%m-%d'),
             'last_date': self.last_date.strftime('%Y-%m-%d'),
@@ -129,21 +163,16 @@ class _Plan:
 def _build_sets(plan, parsed_sets, exercise_type):
     sets = []
     for s in parsed_sets:
+        if not _fits(s, exercise_type):
+            continue
         if exercise_type == 'cardio':
-            minutes = round(s.seconds / 60, 2) if s.seconds else None
-            if not (minutes or s.distance):
-                continue
             sets.append(Set(
-                set_type='N', cardio_duration=minutes, distance=s.distance,
+                set_type='N', cardio_duration=_cardio_minutes(s), distance=s.distance,
                 distance_unit=(s.distance_unit or plan.distance_unit) if s.distance else None, rpe=s.rpe,
             ))
         elif exercise_type == 'duration':
-            if not s.seconds:
-                continue
             sets.append(Set(set_type=s.set_type, cardio_duration=round(s.seconds / 60, 2), rpe=s.rpe))
         else:
-            if not (s.reps or s.weight):
-                continue
             sets.append(Set(set_type=s.set_type, reps=s.reps, weight=plan.weight(s.weight), rpe=s.rpe))
     for i, s in enumerate(sets):
         s.order = i
@@ -170,17 +199,14 @@ def _write(user, plan):
     # workout would also flush every workout added so far
     logs = (db.session.query(BodyweightLog.date, BodyweightLog.weight)
             .filter(BodyweightLog.user_id == user.id).order_by(BodyweightLog.date).all())
-    log_dates = [d for d, _ in logs]
-
-    def bodyweight_at(when):
-        i = bisect_right(log_dates, when)
-        return logs[i - 1][1] if i else (logs[0][1] if logs else None)
+    bodyweight_at = bodyweight_lookup(logs)
 
     workouts = []
     for client_id, w in plan.workouts:
         workout = Workout(
             user_id=user.id, client_id=client_id, name=w.title[:250], notes=w.notes, date=w.start,
-            duration=w.duration_seconds if w.duration_seconds and w.duration_seconds < _MAX_DURATION_SECONDS else None,
+            # Workout.duration is minutes, floored as the logging screen's timer is
+            duration=(w.duration_seconds // 60 or None) if w.duration_seconds and w.duration_seconds < _MAX_DURATION_SECONDS else None,
             local_start_hour=w.start.hour if w.has_time else None,
         )
         for order, ex in enumerate(w.exercises):
@@ -233,7 +259,8 @@ def run_import():
         # history may sit before workouts already logged here, and the replay
         # links every PREvent's previous_value in date order either way
         _recompute_prs_for_templates(user_id, template_ids)
-        pr_count = (PREvent.query.filter(PREvent.user_id == user_id, PREvent.workout_id.in_(workout_ids)).count()
+        pr_count = (PREvent.query.filter(PREvent.user_id == user_id, PREvent.workout_id.in_(workout_ids),
+                                         PREvent.pr_type.notin_(_COUNTED_PR_TYPES_EXCLUDE)).count()
                     if workout_ids else 0)
         db.session.commit()
     except IntegrityError as e:

@@ -7,7 +7,7 @@ import time
 import pytest
 
 import utils.importers as importers
-from utils.importers import ImportFormatError, parse, parse_duration_seconds, to_float
+from utils.importers import ImportFormatError, parse, parse_duration_seconds, to_float, to_reps, to_rpe
 from utils.importers.matching import key, split_title
 
 
@@ -225,7 +225,7 @@ def test_import_writes_workouts_with_matched_and_custom_exercises(app, client, a
         workouts = Workout.query.order_by(Workout.date).all()
         assert [w.name for w in workouts] == ['Push Day', 'Cardio', 'Push Day']
         push = workouts[0]
-        assert push.duration == 65 * 60
+        assert push.duration == 65   # minutes, like a logged workout
         assert push.local_start_hour == 18
         assert push.volume > 0
         bench, plank, fly = push.exercises
@@ -289,8 +289,8 @@ def test_real_strong_export_imports(app, client, auth_token):
     assert _import(client, auth_token, 'strong', STRONG_REAL, weight_unit='lbs').get_json()['imported'] == 2
     with app.app_context():
         morning, evening = Workout.query.order_by(Workout.date).all()
-        assert (morning.duration, morning.local_start_hour) == (13, 11)
-        assert (evening.duration, evening.local_start_hour) == (60, 21)
+        assert (morning.duration, morning.local_start_hour) == (None, 11)   # 13 seconds
+        assert (evening.duration, evening.local_start_hour) == (1, 21)
         bench, dip = evening.exercises
         assert [(s.reps, s.weight) for s in bench.sets] == [(10, 135), (10, 225)]
         assert dip.exercise_template_id == ids[('Dips', 'Weighted')]
@@ -311,7 +311,7 @@ def test_real_hevy_export_imports(app, client, auth_token):
         nov, apr, may = Workout.query.order_by(Workout.date).all()
         assert [w.name for w in (nov, apr, may)] == ['Day 1', 'Day 1', 'Chest']
         assert nov.duration is None  # started and ended the same minute
-        assert (apr.duration, may.duration) == (22 * 60, 7 * 60)
+        assert (apr.duration, may.duration) == (22, 7)
         assert [ex.exercise_template_id for ex in nov.exercises] == [
             ids[('Bench Press', 'Barbell')], ids[('Bench Press', 'Dumbbell')], ids[('Bent Over Row', 'Barbell')]]
         assert [(s.weight, s.reps) for s in nov.exercises[0].sets] == [(10, 100), (10, 100)]
@@ -323,7 +323,7 @@ def test_real_hevy_export_with_set_types_cardio_and_holds(app, client, auth_toke
     assert body['imported'] == 4
     with app.app_context():
         latest = Workout.query.order_by(Workout.date.desc()).first()
-        assert (latest.duration, latest.local_start_hour) == (25 * 60, 21)
+        assert (latest.duration, latest.local_start_hour) == (25, 21)
         barbell, dumbbell, row, run, plank = latest.exercises
         assert [(s.set_type, s.reps, s.weight) for s in barbell.sets] == [
             ('W', 10, 135), ('N', 12, 135), ('F', 12, 150)]
@@ -532,3 +532,81 @@ def test_a_workout_dated_before_the_apps_existed_is_skipped(app, client, auth_to
     assert client.get('/api/achievements', headers=hdrs(auth_token)).status_code == 200
     with pytest.raises(ImportFormatError):
         parse('hevy', _HEVY_COLS + 'old,0001-01-01 10:00:00,Bench Press (Barbell),100,5\n')
+
+
+# ── Found in review of the shipped import ────────────────────
+
+def test_an_imported_duration_counts_as_minutes_toward_hours(app, client, auth_token):
+    """Stored as seconds, every imported workout hit the 4-hour timer cap and
+    250 of them awarded the 1,000-hour badge."""
+    _library(app, *LIBRARY)
+    _import(client, auth_token, 'hevy', HEVY)
+    tracks = client.get('/api/achievements', headers=hdrs(auth_token)).get_json()['tracks']
+    hours = next(t for t in tracks if t['track'] == 'hours')
+    # 65 + 60 minutes of lifting and a 30-minute run
+    assert hours['value'] == 2.6
+
+
+def test_non_latin_titles_stay_different_exercises(app, client, auth_token):
+    assert key('Жим лёжа') != key('Приседания') and key('Жим лёжа') and key('深蹲')
+    assert key('🔥') == '🔥' and key('🔥') != key('💪')
+    assert key('Pull-Ups') == key('pull ups') == 'pullup'
+    text = _HEVY_COLS + (
+        'a,2024-01-01 10:00:00,Жим лёжа,100,5\n'
+        'a,2024-01-01 10:00:00,Приседания,140,5\n')
+    assert _import(client, auth_token, 'hevy', text).get_json()['exercises_created'] == 2
+    # The next export: each title finds its own custom, not the first one made
+    later = _HEVY_COLS + (
+        'b,2024-01-08 10:00:00,Жим лёжа,105,5\n'
+        'b,2024-01-08 10:00:00,Приседания,145,5\n')
+    assert _import(client, auth_token, 'hevy', later).get_json()['exercises_created'] == 0
+    with app.app_context():
+        latest = Workout.query.order_by(Workout.date.desc()).first()
+        assert [ex.name for ex in latest.exercises] == ['Жим лёжа', 'Приседания']
+        assert len({ex.exercise_template_id for ex in latest.exercises}) == 2
+
+
+def test_the_pr_count_leaves_out_estimated_1rm(app, client, auth_token):
+    _library(app, *LIBRARY)
+    body = _import(client, auth_token, 'hevy', HEVY).get_json()
+    with app.app_context():
+        events = PREvent.query.all()
+        shown = [e for e in events if e.pr_type != 'estimated_1rm']
+        assert len(shown) < len(events)
+        assert body['prs'] == len(shown)
+
+
+def test_sets_that_do_not_fit_their_exercise_are_counted_out_of_the_preview(app, client, auth_token):
+    """A library timed hold logged with reps has nowhere to go. The preview has
+    to say so, and not offer a workout made only of such sets as new forever."""
+    _library(app, *LIBRARY)
+    text = _HEVY_COLS + (
+        'only planks,2024-01-01 10:00:00,Plank,,20\n'
+        'mixed,2024-01-02 10:00:00,Plank,,20\n'
+        'mixed,2024-01-02 10:00:00,Bench Press (Barbell),100,5\n')
+    payload = {'source': 'hevy', 'csv': text}
+    preview = client.post('/api/import/preview', json=payload, headers=hdrs(auth_token)).get_json()
+    assert (preview['workouts'], preview['sets'], preview['skipped_sets']) == (1, 1, 2)
+    assert [m['title'] for m in preview['matched_exercises']] == ['Bench Press (Barbell)']
+    assert _import(client, auth_token, 'hevy', text).get_json()['imported'] == 1
+    with app.app_context():
+        assert [ex.name for ex in Workout.query.one().exercises] == ['Bench Press']
+
+
+def test_rpe_half_steps_round_up():
+    assert [to_rpe(v) for v in ('6.5', '7.5', '8.5', '9.5', '8.4', '10.5', '0.4')] == [7, 8, 9, 10, 8, None, None]
+
+
+def test_absurd_numbers_are_dropped_not_stored(client, auth_token):
+    assert to_reps('99999999999') is None and to_reps('1e15') is None
+    assert to_float('1e300') is None and to_float('225.5') == 225.5
+    text = _HEVY_COLS + 'w,2024-01-01 10:00:00,Bench Press (Barbell),100,99999999999\n'
+    res = _import(client, auth_token, 'hevy', text)
+    assert res.status_code == 201, res.get_json()
+
+
+def test_a_nul_byte_is_a_400(client, auth_token):
+    text = _HEVY_COLS + 'w\x00,2024-01-01 10:00:00,Bench Press (Barbell),100,5\n'
+    for path in ('/api/import/preview', '/api/import'):
+        res = client.post(path, json={'source': 'hevy', 'csv': text}, headers=hdrs(auth_token))
+        assert res.status_code == 400, path

@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 from models import (db, BodyweightLog, Exercise, ExerciseTemplate, PREvent, Set,
                     UserAchievement, Workout)
 from utils.endurance_standards import is_cycling
-from utils.volume import volume_in_user_unit
+from utils.volume import bodyweight_lookup, volume_in_user_unit
 
 KM_PER_MI = 1.609344
 LBS_PER_KG = 2.20462262
@@ -240,15 +240,6 @@ class _Replay:
         )
         return workouts, sets_by_workout, prs_by_workout, bodyweights
 
-    def _bodyweight_at(self, bodyweights, when):
-        """Mirrors utils.volume.get_bodyweight_at without a query per workout."""
-        prior = [w for d, w in bodyweights if d <= when]
-        if prior:
-            return prior[-1]
-        if bodyweights:
-            return bodyweights[0][1]
-        return self.user.bodyweight
-
     def _run(self):
         workouts, sets_by_workout, prs_by_workout, bodyweights = self._load()
         wu, du = self.weight_unit, self.distance_unit
@@ -263,6 +254,7 @@ class _Replay:
         streak_monday = None
         streak_run = streak_longest = 0
         triad_weeks = defaultdict(set)
+        bodyweight_at = bodyweight_lookup(bodyweights)
 
         for workout_id, when, duration, volume, start_hour in workouts:
             rows = [r for r in sets_by_workout.get(workout_id, ()) if _qualifies(r[7], r[10], r[11])]
@@ -345,7 +337,7 @@ class _Replay:
                         cross(key)
 
             # ── Feats ──
-            bw = self._bodyweight_at(bodyweights, when)
+            bw = bodyweight_at(when) if bodyweights else self.user.bodyweight
             if bw and bw > 0:
                 if w_best['Bench Press'] >= bw:
                     cross('feat_bw_bench')
@@ -393,6 +385,17 @@ class _Replay:
 
             prev_day = day
 
+        self._streak_run, self._streak_monday = streak_run, streak_monday
+
+    def current_streak(self, today):
+        """The run still alive on `today`: it ends in this week or the last one
+        (this week's workout may not have happened yet). `values['streak']` is
+        the longest ever, which is what awards the badges."""
+        if self._streak_monday is None:
+            return 0
+        this_monday = today - timedelta(days=today.weekday())
+        return self._streak_run if self._streak_monday >= this_monday - timedelta(weeks=1) else 0
+
 
 def evaluate_achievements(user, seen=False):
     """Insert every badge the user's history has crossed but they don't hold
@@ -436,9 +439,9 @@ def _round_value(measure, value):
     return round(value)
 
 
-def achievements_payload(user):
+def achievements_payload(user, today):
     """GET /api/achievements. Read-only: badges are only awarded on a workout
-    save or by the backfill."""
+    save or by the backfill. `today` is the user's date (user_today())."""
     replay = _Replay(user)
     wu, du = replay.weight_unit, replay.distance_unit
     rows = {r.key: r for r in UserAchievement.query.filter_by(user_id=user.id)}
@@ -474,6 +477,10 @@ def achievements_payload(user):
                 zip(ladder.keys(), ladder.titles[unit], ladder.thresholds[unit]))
         ]
         upcoming = next((b for b in badges if not b['earned']), None)
+        # A streak's value is the best ever ("Best 7 weeks"), but the next rung
+        # is reached from the run going now: a broken streak starts over
+        current = replay.current_streak(today) if ladder.track == 'streak' else None
+        toward = value if current is None else current
         tracks.append({
             'track': ladder.track,
             'label': ladder.label,
@@ -486,8 +493,9 @@ def achievements_payload(user):
             'badges': badges,
             'next': None if upcoming is None else {
                 'key': upcoming['key'], 'title': upcoming['title'], 'threshold': upcoming['threshold'],
-                'remaining': _round_value(ladder.measure, max(0.0, upcoming['threshold'] - value)),
+                'remaining': _round_value(ladder.measure, max(0.0, upcoming['threshold'] - toward)),
             },
+            **({} if current is None else {'current': current}),
         })
 
     feats = []

@@ -4,6 +4,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from models import db, User
 from schemas import AchievementPinsSchema, AchievementsSeenSchema
 from utils.achievements import achievements_payload, mark_seen, set_pins
+from utils.local_date import user_today
 from utils.validation import validate_body
 
 achievement_bp = Blueprint('achievement_bp', __name__)
@@ -18,7 +19,7 @@ _pins_schema = AchievementPinsSchema()
 @jwt_required()
 def get_achievements():
     user = db.session.get(User, int(get_jwt_identity()))
-    return jsonify({'message': 'ok', **achievements_payload(user)}), 200
+    return jsonify({'message': 'ok', **achievements_payload(user, user_today())}), 200
 
 
 @achievement_bp.post('/api/achievements/seen')

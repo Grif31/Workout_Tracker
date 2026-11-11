@@ -93,6 +93,16 @@ describe('achievement helpers', () => {
     expect(rungProgress(prs)).toBeCloseTo((439 - 250) / 250);
   });
 
+  it('measures a streak from the run going now, not the best ever', () => {
+    const prs = fixture().tracks[1];
+    // Best 439 with the run at 300: 50 into the 250 to 500 rung
+    expect(rungProgress({ ...prs, current: 300 })).toBeCloseTo(50 / 250);
+    // A broken streak is at the start of its rung and isn't "almost there"
+    const broken = { ...prs, current: 0 };
+    expect(rungProgress(broken)).toBe(0);
+    expect(almostThere({ ...fixture(), tracks: [broken] })).toEqual([]);
+  });
+
   it('puts the closest badges first, and only what the user trains', () => {
     const close = almostThere(fixture());
     // PRs 76% through 250 to 500, Workouts 25% through 100 to 250, Bench 22% through 225 to 315

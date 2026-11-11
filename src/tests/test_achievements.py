@@ -282,6 +282,32 @@ class TestFeats:
         assert 'streak_1' in _keys(_lift(client, auth_token, tid, 100, date='2026-03-09')['new_achievements'])
         assert _track(_get(client, auth_token), 'streak')['value'] == 2
 
+    def test_a_broken_streak_starts_the_next_badge_over(self, app, client, auth_token):
+        """Best stays the longest run; what's left to the next badge counts from the run going now."""
+        tid = _template(app, 'Bench Press', 'Bench Press')
+        for date in ('2026-03-02', '2026-03-09', '2026-03-16'):
+            _lift(client, auth_token, tid, 100, date=date)
+
+        def streak(today):
+            res = client.get('/api/achievements', headers={**hdrs(auth_token), 'X-Local-Date': today})
+            return _track(res.get_json(), 'streak')
+
+        # Asked from the server's own today, months later: X-Local-Date is only
+        # trusted within a day of UTC, so this one is the fallback
+        broken = streak('2026-03-18')
+        assert (broken['value'], broken['current'], broken['next']['threshold'], broken['next']['remaining']) == (3, 0, 4, 4)
+
+    def test_a_live_streak_counts_toward_the_next_badge(self, app):
+        from datetime import date
+        from utils.achievements import _Replay
+        replay = _Replay.__new__(_Replay)
+        replay._streak_run, replay._streak_monday = 3, date(2026, 3, 16)
+        assert replay.current_streak(date(2026, 3, 18)) == 3   # this week
+        assert replay.current_streak(date(2026, 3, 29)) == 3   # last week: this one isn't over
+        assert replay.current_streak(date(2026, 3, 30)) == 0   # a whole week missed
+        replay._streak_monday = None
+        assert replay.current_streak(date(2026, 3, 18)) == 0
+
 
 class TestHidden:
 

@@ -6,6 +6,7 @@ happens in routes/import_routes.py, which knows the user.
 """
 import csv
 import io
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -49,19 +50,28 @@ class ParsedFile:
     weight_unit: str | None   # 'kg' | 'lbs', or None when the file doesn't say
 
 
-# Real exports stay far under these (a decade of daily training is ~4,000
-# workouts and ~100,000 set rows). The whole import runs in one request on one
-# worker, so an unbounded file is an outage for everyone, not a slow import.
-MAX_ROWS = 150_000
-MAX_WORKOUTS = 5_000
+# The whole import runs in one request on the only gunicorn worker, which is
+# killed at 30s: an oversized file fails every time and blocks everyone while
+# it does. Timed locally on SQLite (2026-11-11, 24 sets a workout): 2,000
+# workouts took 14s and 5,000 took 36s, so the caps sit near 10s. Raise them
+# only with a timed import against production to back it.
+MAX_ROWS = 40_000
+MAX_WORKOUTS = 1_500
 MAX_CELL_CHARS = 5_000
-_TOO_LARGE = 'This file is too large to import. Split it into smaller files, or contact support.'
+# No real weight, distance or duration comes near this, and anything larger
+# overflows an integer column (reps) or turns a volume total into inf
+MAX_NUMBER = 10_000_000
+_TOO_LARGE = ('This file is too large to import in one go (the limit is 1,500 workouts). '
+              'Split it into smaller files, or contact support.')
 
 
 def read_rows(text: str) -> tuple[list[str], list[dict], str]:
     """Header (lowercased, trimmed), rows and delimiter of a CSV whose delimiter
     may be ',' or ';' (Strong exports with semicolons in some versions and locales)."""
     text = text.lstrip('﻿')
+    if '\x00' in text:
+        # csv passes a NUL through and Postgres refuses one in a string
+        raise ImportFormatError("This file couldn't be read as a CSV export.")
     first_line = text.split('\n', 1)[0]
     delimiter = ';' if first_line.count(';') > first_line.count(',') else ','
     reader = csv.reader(io.StringIO(text), delimiter=delimiter)
@@ -81,7 +91,7 @@ def read_rows(text: str) -> tuple[list[str], list[dict], str]:
                 raise ImportFormatError(_TOO_LARGE)
             rows.append({h: (raw[i].strip() if i < len(raw) else '') for i, h in enumerate(header)})
     except csv.Error:
-        # The csv module's own field limit, or a NUL byte
+        # The csv module's own field limit
         raise ImportFormatError("This file couldn't be read as a CSV export.")
     return header, rows, delimiter
 
@@ -140,7 +150,7 @@ def to_float(value: str, delimiter: str = ',') -> float | None:
         f = float(value)
     except ValueError:
         return None
-    return f if f == f and abs(f) != float('inf') else None
+    return f if f == f and abs(f) <= MAX_NUMBER else None
 
 
 def to_reps(value: str, delimiter: str = ',') -> int | None:
@@ -152,7 +162,9 @@ def to_rpe(value: str, delimiter: str = ',') -> int | None:
     f = to_float(value, delimiter)
     if f is None:
         return None
-    r = int(round(f))
+    # Half up, not round(): Hevy logs half steps, and banker's rounding sends
+    # 8.5 down to 8 while 7.5 goes up to 8
+    r = math.floor(f + 0.5)
     return r if 1 <= r <= 10 else None
 
 

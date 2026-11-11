@@ -61,7 +61,12 @@ def key(text: str) -> str:
     t = (text or '').lower().replace('&', 'and')
     t = re.sub(r'\btriceps\b', 'tricep', t)
     t = re.sub(r'\bbiceps\b', 'bicep', t)
-    t = re.sub(r'[^a-z0-9]', '', t)
+    # Letters and digits of any script: an a-z filter keyed every Cyrillic or
+    # CJK title to '', so they all matched one exercise
+    t = ''.join(ch for ch in t if ch.isalnum())
+    if not t:
+        # Emoji or punctuation only: the text itself is the only identity it has
+        return (text or '').strip().lower()
     return t[:-1] if t.endswith('s') else t
 
 

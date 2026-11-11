@@ -21,6 +21,8 @@ export interface Track {
   /** 'any' for counts, hours and metres; else the user's weight or distance unit */
   unit: string;
   value: number;
+  /** Streak only: the run going now. `value` is the best ever, which a broken streak keeps */
+  current?: number;
   visible: boolean;
   earned_count: number;
   total: number;
@@ -155,19 +157,22 @@ export function badgeDate(earnedAt: string, withYear = true): string {
   return date.toLocaleDateString('en-US', withYear ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' });
 }
 
+/** What counts toward the next badge: the live run for a streak, the lifetime total otherwise */
+export const towardNext = (track: Track): number => track.current ?? track.value;
+
 /** Progress through the current rung, 0 to 1 */
 export function rungProgress(track: Track): number {
   if (!track.next) return 1;
   const i = track.badges.findIndex(b => b.key === track.next!.key);
   const floor = i > 0 ? track.badges[i - 1].threshold : 0;
   const span = track.next.threshold - floor;
-  return span > 0 ? Math.max(0, Math.min(1, (track.value - floor) / span)) : 0;
+  return span > 0 ? Math.max(0, Math.min(1, (towardNext(track) - floor) / span)) : 0;
 }
 
 /** The badges closest to earned, by progress through their rung */
 export function almostThere(data: AchievementsData, count = 3): Track[] {
   return data.tracks
-    .filter(t => t.visible && t.next && t.value > 0)
+    .filter(t => t.visible && t.next && towardNext(t) > 0)
     .sort((a, b) => rungProgress(b) - rungProgress(a))
     .slice(0, count);
 }

@@ -1,3 +1,4 @@
+from bisect import bisect_right
 from models import db, BodyweightLog
 
 # Equipment variants whose stored Set.weight is only PART of the true load
@@ -66,6 +67,18 @@ def get_bodyweight_at(user_id, target_date):
         .first()
     )
     return earliest[0] if earliest else None
+
+
+def bodyweight_lookup(logs):
+    """get_bodyweight_at's answer for many dates from one read: `logs` is the
+    user's (date, weight) rows oldest first. Returns a function of a date:
+    the latest log on or before it, else the earliest, else None."""
+    dates = [d for d, _ in logs]
+
+    def at(when):
+        i = bisect_right(dates, when)
+        return logs[i - 1][1] if i else (logs[0][1] if logs else None)
+    return at
 
 
 LBS_TO_KG = 0.45359237

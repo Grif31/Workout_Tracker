@@ -9,7 +9,7 @@ import { typography } from '../../theme/typography';
 import { ProfileStackParamsList } from '../../navigation/types';
 import { appCache } from '../../utils/appCache';
 import {
-  ACHIEVEMENTS_CACHE_KEY, amountText, badgeDate, fetchAchievements, goalText, rungProgress,
+  ACHIEVEMENTS_CACHE_KEY, amountText, badgeDate, fetchAchievements, goalText, rungProgress, towardNext,
   type AchievementsData, type LadderBadge, type Track,
 } from '../../utils/achievements';
 import { badgeAccessibilityLabel } from '../../constants/achievements';
@@ -133,7 +133,7 @@ function Ladder({ track, wu, du, styles, colors, onOpen }: {
       <TouchableOpacity
         style={styles.nextCard} onPress={() => onOpen(next ?? topBadge)} accessibilityRole="button"
         accessibilityLabel={next
-          ? `Next: ${next.title}, ${goalText(track.track, next.threshold, track.unit, du)}, ${amountText(track.track, track.value, track.unit, du)} so far`
+          ? `Next: ${next.title}, ${goalText(track.track, next.threshold, track.unit, du)}, ${amountText(track.track, towardNext(track), track.unit, du)} so far`
           : `${topBadge.title}, all ${track.total} earned`}
       >
         {next ? (
@@ -148,7 +148,7 @@ function Ladder({ track, wu, du, styles, colors, onOpen }: {
             <>
               <Text style={styles.muted}>{goalText(track.track, next.threshold, track.unit, du)}</Text>
               <Text style={[styles.nextProgress, { color: colors.accent }]}>
-                {amountText(track.track, track.value, track.unit, du)} so far · {amountText(track.track, track.next!.remaining, track.unit, du)} to go
+                {amountText(track.track, towardNext(track), track.unit, du)} so far · {amountText(track.track, track.next!.remaining, track.unit, du)} to go
               </Text>
             </>
           ) : (
