@@ -87,7 +87,7 @@ describe('WorkoutLog regressions', () => {
       );
 
       fireEvent.press(getByText('Update'));
-      await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(55, undefined));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(55, undefined, []));
       expect(mockClearSession).not.toHaveBeenCalled();
     });
 

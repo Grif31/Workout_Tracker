@@ -6,12 +6,12 @@ import WorkoutLogScreen from '../screens/DashboardTab/WorkoutLogScreen';
 
 jest.mock('../components/WorkoutLog', () => {
   const { View, Text } = require('react-native');
-  return ({ onSubmit, onCancel }: any) => (
-    <View>
-      <Text>WorkoutLog</Text>
-    </View>
-  );
+  return ({ onSubmit }: any) => {
+    mockSubmit = onSubmit;
+    return <View><Text>WorkoutLog</Text></View>;
+  };
 });
+let mockSubmit: (...args: any[]) => void = () => {};
 
 let mockTrackingState = 'idle';
 jest.mock('../context/GpsRunContext', () => ({ useGpsRunStatus: () => ({ trackingState: mockTrackingState }) }));
@@ -40,6 +40,22 @@ describe('WorkoutLogScreen', () => {
     const route = createMockRoute('WorkoutLog', { editMode: false });
     const { getByText } = render(<WorkoutLogScreen navigation={nav as any} route={route as any} />);
     expect(getByText('WorkoutLog')).toBeTruthy();
+  });
+
+  it('takes an edit that earned badges back to the details with them', () => {
+    const editNav = createMockNavigation();
+    render(<WorkoutLogScreen navigation={editNav as any} route={createMockRoute('WorkoutLog', { editMode: true, workoutId: 42 }) as any} />);
+    const badge = { key: 'workouts_10' };
+    mockSubmit(42, undefined, [badge]);
+    expect(editNav.popTo).toHaveBeenCalledWith('WorkoutDetails', { workoutId: 42, newAchievements: [badge] });
+  });
+
+  it('just goes back after an edit that earned nothing', () => {
+    const editNav = createMockNavigation();
+    render(<WorkoutLogScreen navigation={editNav as any} route={createMockRoute('WorkoutLog', { editMode: true, workoutId: 42 }) as any} />);
+    mockSubmit(42, undefined, []);
+    expect(editNav.goBack).toHaveBeenCalled();
+    expect(editNav.popTo).not.toHaveBeenCalled();
   });
 
   describe('with a GPS run in progress', () => {

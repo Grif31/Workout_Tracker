@@ -11,7 +11,13 @@ export default function EditWorkoutScreen({ route, navigation }: Props) {
       prefill={route.params?.prefill}
       editMode={route.params?.editMode}
       workoutId={route.params?.workoutId}
-      onSubmit={() => navigation.goBack()}
+      onSubmit={(workoutId, _summary, newAchievements) => {
+        if (route.params?.editMode && workoutId && newAchievements?.length) {
+          navigation.popTo('WorkoutDetails', { workoutId, newAchievements });
+        } else {
+          navigation.goBack();
+        }
+      }}
       onCancel={() => navigation.goBack()}
     />
   );

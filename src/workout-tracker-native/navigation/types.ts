@@ -64,7 +64,7 @@ export type WeeklySummaryData = {
 export type WeeklySummaryParams = { data?: WeeklySummaryData } | undefined;
 export type DashboardStackParamsList = {
     DashboardHome: undefined;
-    WorkoutDetails: { workoutId: number };
+    WorkoutDetails: { workoutId: number; newAchievements?: NewAchievement[] };
     CardioDetails: { workoutId: number };
     WorkoutSummary: WorkoutSummaryParams;
     WorkoutLog: {prefill?: PrefillWorkoutData, workoutId?:number, editMode?: boolean};
@@ -124,7 +124,7 @@ export type ProfileStackParamsList = {
     Import: undefined
     WorkoutSettings: undefined
     ChangePassword: undefined
-    WorkoutDetails: { workoutId: number };
+    WorkoutDetails: { workoutId: number; newAchievements?: NewAchievement[] };
     CardioDetails: { workoutId: number };
     EditWorkout: {prefill?: PrefillWorkoutData, workoutId?:number, editMode?: boolean}
     Measurements: undefined;

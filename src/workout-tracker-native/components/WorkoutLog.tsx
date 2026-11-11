@@ -128,7 +128,8 @@ type Props = {
   prefill?: PrefillWorkoutData;
   editMode?: boolean;
   workoutId?: number;
-  onSubmit?: (workoutId?: number, summary?: { workoutName: string; prs: any[]; totalVolume: number; totalReps: number; totalSets: number; muscles: string[]; isFirstWorkout: boolean; isBestVolume: boolean; isBestReps: boolean; newAchievements: NewAchievement[] }) => void;
+  /** `summary` is for a new workout only; `newAchievements` is what either save earned */
+  onSubmit?: (workoutId?: number, summary?: { workoutName: string; prs: any[]; totalVolume: number; totalReps: number; totalSets: number; muscles: string[]; isFirstWorkout: boolean; isBestVolume: boolean; isBestReps: boolean; newAchievements: NewAchievement[] }, newAchievements?: NewAchievement[]) => void;
   onCancel?: () => void;
   onViewExerciseHistory?: (
     exerciseName: string,
@@ -1580,7 +1581,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           isBestVolume: data.is_best_volume ?? false,
           isBestReps: data.is_best_reps ?? false,
           newAchievements: data.new_achievements ?? [],
-        }
+        },
+        data.new_achievements ?? [],
       );
     } catch (err) {
       // A dropped or timed-out connection while NetInfo still said online: a new

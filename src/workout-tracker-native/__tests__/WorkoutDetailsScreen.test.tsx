@@ -12,6 +12,8 @@ jest.mock('../components/WorkoutDetails', () => {
   );
 });
 
+jest.mock('../components/achievements/EditUnlockSheet', () => () => null);
+
 const nav = createMockNavigation();
 
 describe('WorkoutDetailsScreen', () => {

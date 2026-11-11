@@ -81,6 +81,7 @@ export function createMockNavigation(overrides = {}) {
     removeListener: jest.fn(),
     isFocused: jest.fn(() => true),
     canGoBack: jest.fn(() => false),
+    popTo: jest.fn(),
     ...overrides,
   };
 }

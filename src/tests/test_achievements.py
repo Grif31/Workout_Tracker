@@ -77,6 +77,36 @@ class TestAwardOnSave:
         # Announced once: the next save doesn't repeat it
         assert 'workouts_1' not in _keys(_lift(client, auth_token, tid, 100)['new_achievements'])
 
+    def test_duplicate_save_retries_a_failed_achievement_award(self, app, client, auth_token, monkeypatch):
+        import routes.workout_routes as workout_routes
+
+        tid = _template(app, 'Bench Press', 'Bench Press')
+        payload = {
+            'client_id': 'retry-achievement-award',
+            'workoutName': 'Push Day',
+            'exercises': [{'name': 'Bench Press', 'exercise_template_id': tid,
+                           'sets': [{'reps': 5, 'weight': 100}]}],
+        }
+        evaluate = workout_routes.evaluate_achievements
+        calls = 0
+
+        def fail_once(user):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise RuntimeError('temporary award failure')
+            return evaluate(user)
+
+        monkeypatch.setattr(workout_routes, 'evaluate_achievements', fail_once)
+        first = client.post('/api/workouts', json=payload, headers=hdrs(auth_token))
+        assert first.status_code == 201
+        assert first.get_json()['new_achievements'] == []
+
+        retry = client.post('/api/workouts', json=payload, headers=hdrs(auth_token))
+        assert retry.status_code == 200
+        assert retry.get_json()['already_saved'] is True
+        assert 'workouts_1' in _keys(retry.get_json()['new_achievements'])
+
     def test_workout_with_no_completed_set_counts_for_nothing(self, client, auth_token):
         res = client.post('/api/workouts', json={
             'workoutName': 'Empty', 'exercises': [{'name': 'Bench Press', 'sets': [{'reps': 0, 'weight': 0}]}],
@@ -94,6 +124,26 @@ class TestAwardOnSave:
         }]}, headers=hdrs(auth_token))
         assert res.status_code == 200
         assert 'plates_bench_1' in _keys(res.get_json()['new_achievements'])
+
+    def test_heart_rate_and_rename_patches_award_nothing(self, app, client, auth_token, monkeypatch):
+        import routes.workout_routes as workout_routes
+
+        tid = _template(app, 'Bench Press', 'Bench Press')
+        real = workout_routes.evaluate_achievements
+        monkeypatch.setattr(workout_routes, 'evaluate_achievements', lambda user: [])
+        wid = _lift(client, auth_token, tid, 100)['id']
+        monkeypatch.setattr(workout_routes, 'evaluate_achievements', real)
+
+        # Their callers drop the response, so an award here would never be shown
+        for body in ({'avg_heart_rate': 120, 'max_heart_rate': 160}, {'workoutName': 'Renamed'}):
+            res = client.patch(f'/api/workouts/{wid}', json=body, headers=hdrs(auth_token))
+            assert res.status_code == 200
+            assert res.get_json()['new_achievements'] == []
+        with app.app_context():
+            assert UserAchievement.query.count() == 0
+
+        res = client.patch(f'/api/workouts/{wid}', json={'duration': 61}, headers=hdrs(auth_token))
+        assert 'workouts_1' in _keys(res.get_json()['new_achievements'])
 
     def test_warm_up_never_earns_plates(self, app, client, auth_token):
         tid = _template(app, 'Bench Press', 'Bench Press')

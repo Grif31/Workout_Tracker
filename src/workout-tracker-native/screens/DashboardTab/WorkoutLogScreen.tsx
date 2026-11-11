@@ -27,7 +27,7 @@ export default function WorkoutLogScreen({ route, navigation }: Props) {
       prefill={route.params?.prefill}
       editMode={route.params?.editMode}
       workoutId={route.params?.workoutId}
-      onSubmit={(newId, summary) => {
+      onSubmit={(newId, summary, newAchievements) => {
         if (!route.params?.editMode && newId && summary) {
           navigation.replace('WorkoutSummary', {
             workoutId: newId,
@@ -42,6 +42,8 @@ export default function WorkoutLogScreen({ route, navigation }: Props) {
             isBestReps: summary.isBestReps,
             newAchievements: summary.newAchievements,
           });
+        } else if (route.params?.editMode && newId && newAchievements?.length) {
+          navigation.popTo('WorkoutDetails', { workoutId: newId, newAchievements });
         } else {
           navigation.goBack();
         }

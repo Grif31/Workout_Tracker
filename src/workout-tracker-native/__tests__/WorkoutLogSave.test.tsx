@@ -140,7 +140,7 @@ describe('WorkoutLog save', () => {
     expect(mockClearSession).toHaveBeenCalled();
     expect(onSubmit).toHaveBeenCalledWith(42, expect.objectContaining({
       workoutName: 'Push Day', prs: [{ pr_type: 'max_weight' }], totalVolume: 3000, totalSets: 5,
-    }));
+    }), []);
   });
 
   it('rounds decimal reps before saving', async () => {
@@ -295,7 +295,8 @@ describe('WorkoutLog save', () => {
 
   it('PATCHes an edited workout even while offline, without a duration', async () => {
     mockNetInfoFetch.mockResolvedValue({ isConnected: false, isInternetReachable: false });
-    mockServer({ status: 200, body: {} });
+    const badge = { key: 'plates_bench_1', title: '1 Plate Bench' };
+    mockServer({ status: 200, body: { new_achievements: [badge] } });
     const onSubmit = jest.fn();
     const { getByText } = render(
       <WorkoutLog prefill={prefill as any} editMode workoutId={55} onSubmit={onSubmit} onCancel={jest.fn()} />,
@@ -312,7 +313,8 @@ describe('WorkoutLog save', () => {
     expect('duration' in body).toBe(false);
     expect(mockNetInfoFetch).not.toHaveBeenCalled();
     expect(mockEnqueueWorkout).not.toHaveBeenCalled();
-    expect(onSubmit).toHaveBeenCalledWith(55, undefined);
+    // No summary for an edit, but what it earned goes up for the unlock sheet
+    expect(onSubmit).toHaveBeenCalledWith(55, undefined, [badge]);
   });
 
   it('saves once when Save is triggered again mid-save', async () => {

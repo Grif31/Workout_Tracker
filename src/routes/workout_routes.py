@@ -723,7 +723,9 @@ def add_workout():
         if client_id:
             existing = Workout.query.filter_by(user_id=current_user_id, client_id=client_id).first()
             if existing:
-                return jsonify(_already_saved(existing)), 200
+                result = _already_saved(existing)
+                result['new_achievements'] = _award_achievements(existing.user)
+                return jsonify(result), 200
 
         workout_date = datetime.now()
         if date_str:
@@ -1060,7 +1062,10 @@ def update_workout(workout_id):
     _recompute_prs_for_templates(current_user_id, template_ids)
     db.session.commit()
 
-    new_achievements = _award_achievements(user)
+    # A rename or the heart-rate PATCH can't change what the replay reads, and
+    # their callers ignore the response: awarding there would bury the unlock
+    new_achievements = (_award_achievements(user)
+                        if any(f in data for f in ('exercises', 'date', 'duration')) else [])
     return jsonify({**workout.to_dict(include_exercises=True), 'new_achievements': new_achievements}), 200
 
 
