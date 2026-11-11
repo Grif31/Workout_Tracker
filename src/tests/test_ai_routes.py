@@ -622,6 +622,11 @@ class TestAiInsights:
                                 stop_reason='refusal')
         assert res.status_code == 500
 
+    def test_a_truncated_answer_is_a_failed_call_not_parsed(self, client, auth_token):
+        res = self._post_blocks(client, auth_token, [MagicMock(type='text', text=json.dumps(INSIGHTS_JSON))],
+                                stop_reason='max_tokens')
+        assert res.status_code == 500
+
     def test_works_with_no_workout_history(self, client, auth_token):
         """A brand-new user with zero workouts should still get a 200, not a 500
         from the context builder."""
@@ -957,6 +962,22 @@ class TestInsightFacts:
         assert not _is_grounded(insight('Running 5K', 35.0, 25.0), ctx, known)  # numbers still checked
         assert not _is_grounded(insight('Runningback Drill', 29.4, 28.1), ctx, known)
         assert not _is_grounded(insight('Rowing 5K', 29.4, 28.1), ctx, known)
+
+    def test_cardio_milestone_evidence_resolves_to_the_longest_matching_name(self):
+        from types import SimpleNamespace
+        from routes.ai_routes import _is_grounded, _known_subjects
+        ctx = {
+            'cardio_prs': [SimpleNamespace(name='Running'), SimpleNamespace(name='Running Treadmill')],
+            'recent_pr_facts': [
+                {'exercise': 'Running', 'metric': '5K Best Time', 'pr_type': 'best_time',
+                 'before': 29.4, 'after': 28.05, 'days_ago': 2, 'text': ''},
+                {'exercise': 'Running Treadmill', 'metric': '5K Best Time', 'pr_type': 'best_time',
+                 'before': 31.0, 'after': 30.0, 'days_ago': 2, 'text': ''},
+            ],
+        }
+        evidence = {'exercise': 'Running Treadmill 5K', 'metric': '5K Best Time', 'before': 31.0, 'after': 30.0}
+        insight = {'type': 'achievement', 'title': 't', 'body': 'b', 'evidence': evidence}
+        assert _is_grounded(insight, ctx, _known_subjects(ctx))
 
     def test_verify_insights_dedupes_types_sorts_by_priority_and_caps_at_five(self):
         from routes.ai_routes import _verify_insights

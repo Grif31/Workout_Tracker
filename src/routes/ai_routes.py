@@ -163,6 +163,10 @@ def _response_text(msg) -> str:
     content[0] is not the answer."""
     if msg.stop_reason == 'refusal':
         raise RuntimeError('Model declined the request')
+    if msg.stop_reason == 'max_tokens':
+        # Thinking counts against max_tokens, so the JSON may be cut off or
+        # missing entirely; say so instead of failing later as a parse error
+        raise RuntimeError(f'Response truncated at max_tokens ({msg.usage.output_tokens} output tokens)')
     return ''.join(b.text for b in msg.content if b.type == 'text')
 
 PRIORITY_ORDER = {'high': 0, 'medium': 1, 'low': 2}
@@ -212,7 +216,8 @@ def _is_grounded(insight, ctx, known):
         # the model copies the milestone into the name; the numbers check below
         # still has to pass against that exercise's facts.
         cardio = {row.name.lower() for row in ctx.get('cardio_prs', [])}
-        exercise = next((c for c in cardio if exercise.startswith(c + ' ')), None)
+        # Longest first: "running treadmill 5k" is Running Treadmill, not Running
+        exercise = max((c for c in cardio if exercise.startswith(c + ' ')), key=len, default=None)
         if exercise is None:
             return False
     facts = ctx.get('recent_pr_facts', [])
