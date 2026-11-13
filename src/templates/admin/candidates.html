@@ -1,10 +1,12 @@
 {% extends "admin/base.html" %}
+{% from "admin/_icons.html" import icon %}
 {% block title %}Library candidates{% endblock %}
 {% block content %}
   <div class="page">
     <p class="crumb"><a href="{{ url_for('admin.admin_exercises') }}">‹ Exercises</a></p>
     <div class="page-head">
       <div>
+        <div class="mono-label">Content</div>
         <h1>Library candidates</h1>
         <p class="sub">Users' custom exercises grouped by name and equipment, the most users first. One many people made is worth adding to the library; one that matches a library exercise means they didn't find it.</p>
       </div>

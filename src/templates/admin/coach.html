@@ -1,10 +1,12 @@
 {% extends "admin/base.html" %}
 {% import "admin/_charts.html" as charts %}
+{% from "admin/_icons.html" import icon %}
 {% block title %}Coach{% endblock %}
 {% block content %}
   <div class="page">
     <div class="page-head">
       <div>
+        <div class="mono-label">Product</div>
         <h1>Coach insights</h1>
         <p class="sub">How insights land, from users' helpful / not helpful votes.</p>
       </div>
@@ -17,23 +19,23 @@
 
     {% set not_helpful = total.votes - total.helpful %}
     <div class="tiles">
-      <div class="tile">
-        <div class="tile-label">Helpful rate</div>
+      <div class="tile" style="--tint: var(--s3)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('thumbs-up') }}</span><span class="tile-label">Helpful rate</span></div>
         <div class="tile-value">{{ total.rate if total.rate is not none else '–' }}{% if total.rate is not none %}<span class="unit">%</span>{% endif %}</div>
         <div class="tile-note">{{ total.helpful }} of {{ total.votes }} votes</div>
       </div>
-      <div class="tile">
-        <div class="tile-label">Not helpful</div>
+      <div class="tile" style="--tint: var(--s2)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('thumbs-down') }}</span><span class="tile-label">Not helpful</span></div>
         <div class="tile-value">{{ not_helpful }}</div>
         <div class="tile-note">{% if top_reason_label %}Most often: {{ top_reason_label }}{% else %}No thumbs-down yet{% endif %}</div>
       </div>
-      <div class="tile">
-        <div class="tile-label">Looks wrong, all time</div>
+      <div class="tile" style="--tint: var(--critical)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('flag') }}</span><span class="tile-label">Looks wrong, all time</span></div>
         <div class="tile-value">{{ wrong_total }}</div>
         <div class="tile-note">{% if wrong_total %}<a href="#looks-wrong">Review them</a>{% else %}Nothing to check{% endif %}</div>
       </div>
-      <div class="tile">
-        <div class="tile-label">Insight types voted on</div>
+      <div class="tile" style="--tint: var(--s1)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('layers') }}</span><span class="tile-label">Insight types voted on</span></div>
         <div class="tile-value">{{ by_type|length }}</div>
         <div class="tile-note">{% if by_type %}Most votes: {{ by_type[0].type }}{% else %}–{% endif %}</div>
       </div>
@@ -42,10 +44,10 @@
     <div class="stack">
       <section class="card">
         <div class="card-head">
-          <div>
+          <div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s1)">{{ icon('trend') }}</span><div>
             <h2>Helpful rate by week</h2>
             <p class="sub">Last 12 weeks, whatever the range above. Lines mark prompt changes on the week they shipped.</p>
-          </div>
+          </div></div>
         </div>
         <div class="card-body">
           {% if weekly|map(attribute='votes')|sum %}
@@ -76,10 +78,10 @@
 
       <section class="card">
         <div class="card-head">
-          <div>
+          <div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s3)">{{ icon('bars') }}</span><div>
             <h2>By insight type</h2>
             <p class="sub">Helpful rate, and why the rest were voted down.</p>
-          </div>
+          </div></div>
           {{ charts.legend([(reason_labels['known'], 'key-0'), (reason_labels['irrelevant'], 'key-1'),
                             (reason_labels['wrong'], 'key-2'), (reason_labels['vague'], 'key-3'),
                             (reason_labels[None], 'key-other')]) }}
@@ -149,10 +151,10 @@
 
       <section class="card">
         <div class="card-head">
-          <div>
+          <div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s2)">{{ icon('thumbs-down') }}</span><div>
             <h2>Most voted down</h2>
             <p class="sub">Titles with 2 or more not-helpful votes in this range.</p>
-          </div>
+          </div></div>
         </div>
         {% if voted_down %}
           <div class="table-wrap">
@@ -178,10 +180,10 @@
 
       <section class="card" id="looks-wrong">
         <div class="card-head">
-          <div>
+          <div class="head-icon"><span class="icon-chip sm" style="--tint: var(--critical)">{{ icon('flag') }}</span><div>
             <h2>Voted "Looks wrong"</h2>
             <p class="sub">Each may be a misread in <code>_build_insights_context</code> or a gap in <code>_is_grounded</code>. All time, newest first.</p>
-          </div>
+          </div></div>
         </div>
         {% if wrong %}
           <div class="wrong-list">

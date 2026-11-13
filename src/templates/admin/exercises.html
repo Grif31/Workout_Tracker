@@ -1,21 +1,16 @@
 {% extends "admin/base.html" %}
+{% from "admin/_icons.html" import icon %}
 {% block title %}Exercise Images{% endblock %}
 {% block head %}
   <style>
-    .topbar {
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 14px 20px;
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      flex-wrap: wrap;
+    .toolbar {
+      position: sticky; top: 60px; z-index: 10;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      padding: 10px; margin-bottom: 16px;
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow);
     }
-    h1 { font-size: 17px; font-weight: 700; flex-shrink: 0; }
-    .stats { font-size: 13px; color: var(--ink-2); flex-shrink: 0; }
     .search {
       flex: 1;
       min-width: 180px;
@@ -29,29 +24,23 @@
     }
     .search::placeholder { color: var(--muted); }
     .search:focus { border-color: var(--accent); }
-    .filters { display: flex; gap: 6px; flex-shrink: 0; }
+    .filters { flex-shrink: 0; }
     .fbtn {
-      padding: 7px 13px;
-      border-radius: 8px;
-      border: 1px solid var(--border-strong);
-      background: transparent;
-      color: var(--ink-2);
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.12s;
+      padding: 6px 12px; border-radius: 7px; border: none;
+      background: transparent; color: var(--ink-2);
+      font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
     }
-    .fbtn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    .fbtn:hover { color: var(--ink); }
+    .fbtn.active { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgba(0,0,0,0.06); }
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
-      gap: 14px;
-      padding: 20px;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
     }
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 14px;
       overflow: hidden;
       display: flex;
       flex-direction: column;
@@ -60,6 +49,7 @@
     .card.saved { border-color: var(--good); }
     .img-wrap {
       height: 170px;
+      border-bottom: 1px solid var(--border);
       background: var(--surface-2);
       display: flex;
       align-items: center;
@@ -215,18 +205,42 @@
   </style>
 {% endblock %}
 {% block content %}
-  <div class="topbar">
-    <h1>Exercise Images</h1>
-    <span class="stats" id="stats">Loading…</span>
-    <input class="search" type="text" placeholder="Search by name or equipment…" oninput="onSearch(this.value)">
-    <a class="cand-link" href="{{ url_for('admin.admin_exercise_candidates') }}">Library candidates</a>
-    <div class="filters">
-      <button class="fbtn active" onclick="setFilter('all',this)">All</button>
-      <button class="fbtn" onclick="setFilter('no_image',this)">No Image</button>
-      <button class="fbtn" onclick="setFilter('has_image',this)">Has Image</button>
+  <div class="page">
+    <div class="page-head">
+      <div>
+        <div class="mono-label">Content</div>
+        <h1>Exercise images</h1>
+        <p class="sub">The library's exercises. Paste an image URL or search the GIF catalog for each one.</p>
+      </div>
+      <a class="go" href="{{ url_for('admin.admin_exercise_candidates') }}">Library candidates {{ icon('arrow') }}</a>
     </div>
+
+    <div class="tiles">
+      <div class="tile" style="--tint: var(--s1)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('dumbbell') }}</span><span class="tile-label">Library exercises</span></div>
+        <div class="tile-value" id="stat-total">–</div>
+      </div>
+      <div class="tile" style="--tint: var(--s2)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('image') }}</span><span class="tile-label">Without an image</span></div>
+        <div class="tile-value" id="stat-missing">–</div>
+      </div>
+      <div class="tile" style="--tint: var(--s3)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('check') }}</span><span class="tile-label">With an image</span></div>
+        <div class="tile-value" id="stat-done">–</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <input class="search" type="text" placeholder="Search by name or equipment…" oninput="onSearch(this.value)" aria-label="Search exercises">
+      <div class="filters segmented" role="group" aria-label="Filter">
+        <button class="fbtn active" onclick="setFilter('all',this)">All</button>
+        <button class="fbtn" onclick="setFilter('no_image',this)">No image</button>
+        <button class="fbtn" onclick="setFilter('has_image',this)">Has image</button>
+      </div>
+      <span class="sub" id="stats">Loading…</span>
+    </div>
+    <div class="grid" id="grid"></div>
   </div>
-  <div class="grid" id="grid"></div>
 
   <div class="backdrop" id="gif-backdrop" onclick="if (event.target === this) closePanel()">
     <div class="panel" role="dialog" aria-modal="true" aria-labelledby="panel-title">
@@ -286,8 +300,10 @@
     function render() {
       const list = exercises.filter(visible);
       const noImg = exercises.filter(e => !e.image_url).length;
-      document.getElementById('stats').textContent =
-        exercises.length + ' exercises · ' + noImg + ' without image · showing ' + list.length;
+      document.getElementById('stats').textContent = 'Showing ' + list.length;
+      document.getElementById('stat-total').textContent = exercises.length;
+      document.getElementById('stat-missing').textContent = noImg;
+      document.getElementById('stat-done').textContent = exercises.length - noImg;
 
       document.getElementById('grid').innerHTML = list.length
         ? list.map(cardHtml).join('')

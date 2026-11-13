@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+{% from "admin/_icons.html" import icon %}
 {% block title %}Dashboard{% endblock %}
 {% macro money(v) %}${{ '%.2f' % v }}{% endmacro %}
 {% macro delta(c, suffix='', period='last week') %}
@@ -18,6 +19,7 @@
   <div class="page">
     <div class="page-head">
       <div>
+        <div class="mono-label">Overview</div>
         <h1>Dashboard</h1>
         <p class="sub">What needs attention, then the week at a glance. Each figure links to the page it comes from.</p>
       </div>
@@ -25,7 +27,7 @@
 
     <section class="card attention {{ 'clear' if not alerts }}">
       {% if alerts %}
-        <div class="card-head"><div><h2>Needs attention</h2></div></div>
+        <div class="card-head"><div class="head-icon"><span class="icon-chip" style="--tint: var(--critical)">{{ icon('alert') }}</span><h2>Needs attention</h2></div></div>
         <ul class="alerts">
           {% for a in alerts %}
             <li><span class="status {{ a.level }}">{{ 'Problem' if a.level == 'bad' else 'Check' }}</span>
@@ -33,36 +35,44 @@
           {% endfor %}
         </ul>
       {% else %}
-        <div class="all-clear"><span class="status good">All clear</span><span class="muted">No AI failures, new "Looks wrong" votes or quota warnings.</span></div>
+        <div class="all-clear">
+          <span class="icon-chip" style="--tint: var(--good)">{{ icon('check') }}</span>
+          <span class="status good">All clear</span><span class="muted">No AI failures, new "Looks wrong" votes or quota warnings.</span>
+        </div>
       {% endif %}
     </section>
 
-    <h2 class="section-title">This week</h2>
-    <div class="tiles">
-      <div class="tile">
-        <div class="tile-label">Workouts logged, 7 days</div>
+    <h2 class="section-title mono-label">This week</h2>
+    <div class="tiles kpis">
+      <div class="tile" style="--tint: var(--s1)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('activity') }}</span><span class="tile-label">Workouts logged, 7 days</span></div>
         <div class="tile-row">
           <div class="tile-value">{{ workouts.week }}</div>{{ spark(workouts.spark) }}
         </div>
-        <div class="tile-note">{{ delta(workouts.change) }} · {{ workouts.today }} today</div>
+        <div class="tile-foot">{{ delta(workouts.change) }}<span class="muted">{{ workouts.today }} today</span></div>
       </div>
-      <div class="tile">
-        <div class="tile-label">Users who logged a workout, 7 days</div>
+      <div class="tile" style="--tint: var(--s5)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('users') }}</span><span class="tile-label">Users who logged a workout, 7 days</span></div>
         <div class="tile-row">
           <div class="tile-value">{{ active_users.week }}</div>{{ spark(active_users.spark) }}
         </div>
-        <div class="tile-note">{{ delta(active_users.change) }}</div>
+        <div class="tile-foot">{{ delta(active_users.change) }}</div>
       </div>
-      <div class="tile">
-        <div class="tile-label">Premium in our database</div>
-        <div class="tile-value">{{ premium.count }}</div>
-        <div class="tile-note">of {{ premium.users }} accounts · <a href="{{ url_for('admin.admin_system') }}">sync from RevenueCat</a></div>
+      <div class="tile" style="--tint: var(--s4)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('star') }}</span><span class="tile-label">Premium in our database</span></div>
+        <div class="tile-row">
+          <div class="tile-value">{{ premium.count }}</div>
+        </div>
+        <div class="tile-foot"><span class="muted">of {{ premium.users }} accounts</span><a href="{{ url_for('admin.admin_system') }}">Sync from RevenueCat</a></div>
       </div>
     </div>
 
     <div class="cols three">
-      <a class="card link-card" href="{{ url_for('admin.admin_coach') }}">
-        <div class="card-head"><div><h2>Coach</h2><p class="sub">Last 30 days</p></div><span class="go">Open ›</span></div>
+      <a class="card link-card" href="{{ url_for('admin.admin_coach') }}" style="--tint: var(--s3)">
+        <div class="card-head">
+          <div class="head-icon"><span class="icon-chip">{{ icon('coach') }}</span><div><h2>Coach</h2><p class="sub">Last 30 days</p></div></div>
+          <span class="go">Open {{ icon('arrow') }}</span>
+        </div>
         <div class="card-body">
           <div class="big">{{ coach.rate if coach.rate is not none else '–' }}{% if coach.rate is not none %}<span class="unit">% helpful</span>{% endif %}</div>
           <div class="tile-note">{{ delta(coach.change, ' pts', 'the 30 days before') if coach.rate is not none else '' }}</div>
@@ -72,8 +82,11 @@
           </dl>
         </div>
       </a>
-      <a class="card link-card" href="{{ url_for('admin.admin_ai') }}">
-        <div class="card-head"><div><h2>AI usage</h2><p class="sub">{{ ai.month_label }} so far</p></div><span class="go">Open ›</span></div>
+      <a class="card link-card" href="{{ url_for('admin.admin_ai') }}" style="--tint: var(--s1)">
+        <div class="card-head">
+          <div class="head-icon"><span class="icon-chip">{{ icon('cpu') }}</span><div><h2>AI usage</h2><p class="sub">{{ ai.month_label }} so far</p></div></div>
+          <span class="go">Open {{ icon('arrow') }}</span>
+        </div>
         <div class="card-body">
           <div class="big">{{ money(ai.month.cost) }}<span class="unit">estimated</span></div>
           <div class="tile-note">{{ ai.month.calls }} calls</div>
@@ -84,8 +97,11 @@
           </dl>
         </div>
       </a>
-      <a class="card link-card" href="{{ url_for('admin.admin_exercises') }}">
-        <div class="card-head"><div><h2>Exercise library</h2><p class="sub">Images and the GIF catalog</p></div><span class="go">Open ›</span></div>
+      <a class="card link-card" href="{{ url_for('admin.admin_exercises') }}" style="--tint: var(--s2)">
+        <div class="card-head">
+          <div class="head-icon"><span class="icon-chip">{{ icon('image') }}</span><div><h2>Exercise library</h2><p class="sub">Images and the GIF catalog</p></div></div>
+          <span class="go">Open {{ icon('arrow') }}</span>
+        </div>
         <div class="card-body">
           <div class="big">{{ content.missing_images }}<span class="unit">without an image</span></div>
           <div class="tile-note">Library exercises only, not users' custom ones</div>
@@ -99,8 +115,8 @@
 
     <section class="card recent">
       <div class="card-head">
-        <div><h2>Recent admin activity</h2></div>
-        <a class="go" href="{{ url_for('admin.admin_audit') }}">Full log ›</a>
+        <div class="head-icon"><span class="icon-chip" style="--tint: var(--ink-2)">{{ icon('list') }}</span><h2>Recent admin activity</h2></div>
+        <a class="go" href="{{ url_for('admin.admin_audit') }}">Full log {{ icon('arrow') }}</a>
       </div>
       {% if audit_rows %}
         <div class="table-wrap">
@@ -108,7 +124,7 @@
             <tbody>
               {% for row in audit_rows %}
                 <tr>
-                  <td class="nowrap muted">{{ row.created_at.strftime('%m/%d %H:%M') }}</td>
+                  <td class="nowrap mono">{{ row.created_at.strftime('%m/%d %H:%M') }}</td>
                   <td class="nowrap"><b>{{ row.action }}</b></td>
                   <td class="nowrap">{{ row.target_type }}{% if row.target_id is not none %} <span class="muted">#{{ row.target_id }}</span>{% endif %}</td>
                 </tr>
@@ -124,31 +140,47 @@
 {% endblock %}
 {% block head %}
   <style>
-    .recent td:nth-child(2) { width: 100%; }
-    .section-title { font-size: 15px; font-weight: 700; margin: 22px 0 10px; }
-    .attention .alerts { list-style: none; padding: 8px 0 6px; }
-    .attention .alerts li { display: flex; gap: 12px; align-items: baseline; padding: 8px 18px; border-top: 1px solid var(--grid); }
-    .attention .alerts li:first-child { border-top: none; }
+    .page-head .mono-label { margin-bottom: 6px; }
+    .section-title { margin: 26px 0 12px; }
+
+    .attention { border-color: color-mix(in srgb, var(--critical) 30%, var(--border)); }
+    .attention.clear { border-color: var(--border); }
+    .attention .card-head { padding-bottom: 6px; }
+    .attention .alerts { list-style: none; padding: 4px 0 6px; }
+    .attention .alerts li { display: flex; gap: 12px; align-items: baseline; padding: 10px 20px; border-top: 1px solid var(--grid); }
     .attention .alerts a { color: var(--ink); text-decoration: none; }
     .attention .alerts a:hover { text-decoration: underline; }
-    .all-clear { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; padding: 14px 18px; font-size: 13px; }
-    .tile-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
-    .spark { width: 120px; height: 32px; flex-shrink: 0; }
-    .spark path { fill: none; stroke: var(--s1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-    .spark circle { fill: var(--s1); stroke: var(--surface); stroke-width: 2; }
-    .delta { font-weight: 600; }
-    .delta.up { color: var(--good-ink); }
-    .delta.down { color: var(--critical-ink); }
-    .delta.flat { color: var(--ink-2); }
+    .all-clear { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 14px 20px; font-size: 13px; }
+
+    .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .kpis .tile { padding: 18px 20px 16px; }
+    .kpis .tile-value { font-size: 40px; font-weight: 750; letter-spacing: -0.03em; line-height: 1; margin-top: 0; }
+    .tile-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin-top: 18px; }
+    .kpis .tile-foot { margin-top: 16px; padding-top: 12px; }
+    .spark { width: 120px; height: 36px; flex-shrink: 0; }
+    .spark path { fill: none; stroke: var(--tint, var(--s1)); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .spark circle { fill: var(--tint, var(--s1)); stroke: var(--surface); stroke-width: 2; }
+
     .cols.three { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 16px; }
-    @media (max-width: 900px) { .cols.three { grid-template-columns: 1fr; } }
-    .link-card { color: inherit; text-decoration: none; display: block; transition: border-color 0.12s; }
-    .link-card:hover { border-color: var(--accent); }
-    .go { font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: none; white-space: nowrap; }
-    .big { font-size: 28px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.15; }
-    .big .unit { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-left: 6px; }
-    .facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--grid); font-size: 13px; }
+    @media (max-width: 1100px) { .kpis, .cols.three { grid-template-columns: 1fr; } }
+    @media (min-width: 601px) and (max-width: 1100px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .link-card { color: inherit; text-decoration: none; display: block; transition: border-color 0.15s, transform 0.15s; }
+    .link-card:hover { border-color: color-mix(in srgb, var(--tint, var(--accent)) 45%, var(--border)); transform: translateY(-1px); }
+    .link-card:hover .go svg { transform: translateX(2px); }
+    @media (prefers-reduced-motion: reduce) { .link-card:hover, .link-card:hover .go svg { transform: none; } }
+    .big { font-size: 30px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.15; margin-top: 4px; }
+    .big .unit { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-left: 6px; letter-spacing: 0; }
+    .tile-note { margin-top: 6px; }
+    .facts { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--grid); font-size: 13px; }
     .facts dt { color: var(--ink-2); }
     .facts dd { text-align: right; font-weight: 600; overflow-wrap: anywhere; }
+
+    .recent .card-head { padding-bottom: 10px; }
+    .recent td:nth-child(2) { width: 100%; }
+
+    @media (max-width: 600px) {
+      .kpis .tile { padding: 14px 16px; }
+      .kpis .tile-value { font-size: 32px; }
+    }
   </style>
 {% endblock %}

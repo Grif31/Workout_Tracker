@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+{% from "admin/_icons.html" import icon %}
 {% block title %}{{ user.username if user else 'User not found' }}{% endblock %}
 {% block content %}
   <div class="page narrow">
@@ -8,23 +9,24 @@
     {% else %}
       <div class="page-head">
         <div>
+          <div class="mono-label">User</div>
           <h1>{{ user.username }} <span class="muted id">#{{ user.id }}</span></h1>
           <p class="sub">{{ user.email }}{% if user.name %} · {{ user.name }}{% endif %}</p>
         </div>
       </div>
 
       <div class="tiles">
-        <div class="tile"><div class="tile-label">Workouts</div><div class="tile-value">{{ s.workouts }}</div>
+        <div class="tile" style="--tint: var(--s1)"><div class="tile-head"><span class="icon-chip">{{ icon('activity') }}</span><span class="tile-label">Workouts</span></div><div class="tile-value">{{ s.workouts }}</div>
           <div class="tile-note">{{ 'Last ' ~ s.last_workout.strftime('%m/%d/%Y') if s.last_workout else 'None logged' }}</div></div>
-        <div class="tile"><div class="tile-label">Routines / templates</div><div class="tile-value">{{ s.routines }} / {{ s.templates }}</div>
+        <div class="tile" style="--tint: var(--s3)"><div class="tile-head"><span class="icon-chip">{{ icon('layers') }}</span><span class="tile-label">Routines / templates</span></div><div class="tile-value">{{ s.routines }} / {{ s.templates }}</div>
           <div class="tile-note">{{ s.prs }} personal records</div></div>
-        <div class="tile"><div class="tile-label">Coach</div><div class="tile-value">{{ s.ai_calls_month }}</div>
+        <div class="tile" style="--tint: var(--s5)"><div class="tile-head"><span class="icon-chip">{{ icon('coach') }}</span><span class="tile-label">Coach</span></div><div class="tile-value">{{ s.ai_calls_month }}</div>
           <div class="tile-note">AI calls this month · {{ s.insight_votes }} insight votes</div></div>
       </div>
 
       <div class="cols">
         <section class="card">
-          <div class="card-head"><div><h2>Account</h2></div></div>
+          <div class="card-head"><div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s1)">{{ icon('user') }}</span><div><h2>Account</h2></div></div></div>
           <dl class="facts">
             <dt>Sign-in</dt><dd>{{ s.sign_in }}</dd>
             <dt>Email verified</dt><dd>{% if user.email_verified %}<span class="status good">Yes</span>{% else %}<span class="muted">No</span>{% endif %}</dd>
@@ -36,7 +38,7 @@
         </section>
 
         <section class="card">
-          <div class="card-head"><div><h2>Premium</h2><p class="sub">Enforcement is {{ 'on' if enforced else 'off' }}.</p></div></div>
+          <div class="card-head"><div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s4)">{{ icon('star') }}</span><div><h2>Premium</h2><p class="sub">Enforcement is {{ 'on' if enforced else 'off' }}.</p></div></div></div>
           <dl class="facts">
             <dt>Stored here</dt><dd>{% if user.is_premium %}<span class="status good">Premium</span>{% else %}Free{% endif %}</dd>
             <dt>Onboarding program</dt><dd>{{ 'Used' if user.starter_granted else 'Not used' }}</dd>
@@ -49,7 +51,7 @@
       </div>
 
       <section class="card danger">
-        <div class="card-head"><div><h2>Sign out everywhere</h2><p class="sub">Every device signed in to this account is signed out on its next request. Nothing else changes; they sign in again as usual.</p></div></div>
+        <div class="card-head"><div class="head-icon"><span class="icon-chip sm" style="--tint: var(--critical)">{{ icon('logout') }}</span><div><h2>Sign out everywhere</h2><p class="sub">Every device signed in to this account is signed out on its next request. Nothing else changes; they sign in again as usual.</p></div></div></div>
         <div class="action">
           <button type="button" class="btn ghost" data-action="sign-out">Sign out everywhere</button>
           <span class="sub" id="sign-out-result" role="status"></span>
@@ -57,7 +59,7 @@
       </section>
 
       <section class="card">
-        <div class="card-head"><div><h2>Admin history</h2><p class="sub">Admin actions on this account, newest first.</p></div></div>
+        <div class="card-head"><div class="head-icon"><span class="icon-chip sm" style="--tint: var(--ink-2)">{{ icon('list') }}</span><div><h2>Admin history</h2><p class="sub">Admin actions on this account, newest first.</p></div></div></div>
         {% if history %}
           <div class="table-wrap">
             <table>
