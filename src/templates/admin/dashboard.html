@@ -19,15 +19,12 @@
   <div class="page">
     <div class="page-head">
       <div>
-        <div class="mono-label">Overview</div>
         <h1>Dashboard</h1>
-        <p class="sub">What needs attention, then the week at a glance. Each figure links to the page it comes from.</p>
       </div>
     </div>
 
     <section class="card attention {{ 'clear' if not alerts }}">
       {% if alerts %}
-        <div class="card-head"><div class="head-icon"><span class="icon-chip" style="--tint: var(--critical)">{{ icon('alert') }}</span><h2>Needs attention</h2></div></div>
         <ul class="alerts">
           {% for a in alerts %}
             <li><span class="status {{ a.level }}">{{ 'Problem' if a.level == 'bad' else 'Check' }}</span>
@@ -140,24 +137,23 @@
 {% endblock %}
 {% block head %}
   <style>
-    .page-head .mono-label { margin-bottom: 6px; }
     .section-title { margin: 26px 0 12px; }
 
     .attention { border-color: color-mix(in srgb, var(--critical) 30%, var(--border)); }
     .attention.clear { border-color: var(--border); }
-    .attention .card-head { padding-bottom: 6px; }
-    .attention .alerts { list-style: none; padding: 4px 0 6px; }
-    .attention .alerts li { display: flex; gap: 12px; align-items: baseline; padding: 10px 20px; border-top: 1px solid var(--grid); }
+    .attention .alerts { list-style: none; padding: 4px 0; }
+    .attention .alerts li:first-child { border-top: none; }
+    .attention .alerts li { display: flex; gap: 12px; align-items: baseline; padding: 14px 28px; border-top: 1px solid var(--grid); }
     .attention .alerts a { color: var(--ink); text-decoration: none; }
     .attention .alerts a:hover { text-decoration: underline; }
-    .all-clear { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 14px 20px; font-size: 13px; }
+    .all-clear { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 18px 28px; font-size: 17px; }
 
     .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-    .kpis .tile { padding: 18px 20px 16px; }
-    .kpis .tile-value { font-size: 40px; font-weight: 750; letter-spacing: -0.03em; line-height: 1; margin-top: 0; }
+    .kpis .tile { padding: 26px 28px 22px; }
+    .kpis .tile-value { font-size: 51.5px; font-weight: 750; letter-spacing: -0.03em; line-height: 1; margin-top: 0; }
     .tile-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin-top: 18px; }
     .kpis .tile-foot { margin-top: 16px; padding-top: 12px; }
-    .spark { width: 120px; height: 36px; flex-shrink: 0; }
+    .spark { width: 160px; height: 48px; flex-shrink: 0; }
     .spark path { fill: none; stroke: var(--tint, var(--s1)); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
     .spark circle { fill: var(--tint, var(--s1)); stroke: var(--surface); stroke-width: 2; }
 
@@ -168,10 +164,10 @@
     .link-card:hover { border-color: color-mix(in srgb, var(--tint, var(--accent)) 45%, var(--border)); transform: translateY(-1px); }
     .link-card:hover .go svg { transform: translateX(2px); }
     @media (prefers-reduced-motion: reduce) { .link-card:hover, .link-card:hover .go svg { transform: none; } }
-    .big { font-size: 30px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.15; margin-top: 4px; }
-    .big .unit { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-left: 6px; letter-spacing: 0; }
+    .big { font-size: 38.5px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.15; margin-top: 4px; }
+    .big .unit { font-size: 17px; font-weight: 600; color: var(--ink-2); margin-left: 6px; letter-spacing: 0; }
     .tile-note { margin-top: 6px; }
-    .facts { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--grid); font-size: 13px; }
+    .facts { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--grid); font-size: 17px; }
     .facts dt { color: var(--ink-2); }
     .facts dd { text-align: right; font-weight: 600; overflow-wrap: anywhere; }
 
@@ -180,7 +176,7 @@
 
     @media (max-width: 600px) {
       .kpis .tile { padding: 14px 16px; }
-      .kpis .tile-value { font-size: 32px; }
+      .kpis .tile-value { font-size: 41.5px; }
     }
   </style>
 {% endblock %}

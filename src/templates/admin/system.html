@@ -128,30 +128,30 @@
 {% endblock %}
 {% block head %}
   <style>
-    .mono-value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 20px; overflow-wrap: anywhere; }
+    .mono-value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 26px; overflow-wrap: anywhere; }
     .cols { margin-bottom: 16px; }
     .checklist { list-style: none; padding: 6px 0; }
-    .checklist li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 18px; font-size: 13px; }
+    .checklist li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 18px; font-size: 17px; }
     .checklist .check {
       width: 18px; height: 18px; flex-shrink: 0; border-radius: 50%; border: 1.5px solid var(--border-strong);
-      display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
+      display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700;
     }
     .checklist li.done .check { background: var(--good); border-color: var(--good); color: #fff; }
     .checklist li:not(.done) { color: var(--ink-2); }
     .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
     .sync { border-top: 1px solid var(--grid); padding: 12px 18px 16px; }
-    .sync-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    .sync-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 17px; }
     .sync-row input {
       width: 90px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 7px;
       color: var(--ink); padding: 6px 8px; font: inherit;
     }
     .btn {
       background: var(--accent); color: var(--accent-ink); border: none; border-radius: 7px;
-      padding: 7px 14px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+      padding: 7px 14px; font: inherit; font-size: 15.5px; font-weight: 700; cursor: pointer;
     }
     .btn:disabled { opacity: 0.6; cursor: default; }
     #sync-result { margin-top: 8px; }
-    .env tr.group-row th { font-size: 11px; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; padding-top: 16px; background: transparent; }
+    .env tr.group-row th { font-size: 14px; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; padding-top: 16px; background: transparent; }
     .env tbody tr.group-row:hover th { background: transparent; }
     .env td:last-child { width: 100%; }
   </style>
