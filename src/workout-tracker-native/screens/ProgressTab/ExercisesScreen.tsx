@@ -168,6 +168,7 @@ export default function ExercisesScreen({ navigation }: Props) {
           muscleGroup: isCardio ? 'Cardio' : item.muscle_group,
           imageUrl: item.image_url,
           isCustom: !!item.is_custom,
+          exerciseType: item.exercise_type === 'cardio' || item.exercise_type === 'duration' ? item.exercise_type : 'strength',
         })}
       >
         {item.image_url ? (

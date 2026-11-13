@@ -65,9 +65,33 @@ describe('NewExerciseForm', () => {
     fireEvent.changeText(getByPlaceholderText('Exercise name'), 'Trail Running');
     fireEvent.press(getByText('Distance & Time'));
     fireEvent.press(getByText('Barbell'));
+    fireEvent.press(getByText('Save'));
+    expect(onSave).toHaveBeenCalledWith('Trail Running', 'Cardio', 'Barbell', 'distance');
+  });
+
+  it('hides the muscle list for Distance & Time and clears Cardio when switching back', () => {
+    const { getByText, queryByText, getByPlaceholderText } = render(
+      <NewExerciseForm visible={true} onClose={onClose} onSave={onSave} muscleGroups={muscleGroups} />
+    );
+    fireEvent.changeText(getByPlaceholderText('Exercise name'), 'Sled Push');
+    fireEvent.press(getByText('Barbell'));
+    fireEvent.press(getByText('Distance & Time'));
+    expect(queryByText('Chest')).toBeNull();
+    fireEvent.press(getByText('Reps & Weight'));
+    fireEvent.press(getByText('Save'));
+    expect(onSave).not.toHaveBeenCalled();
     fireEvent.press(getByText('Chest'));
     fireEvent.press(getByText('Save'));
-    expect(onSave).toHaveBeenCalledWith('Trail Running', expect.any(String), expect.any(String), 'distance');
+    expect(onSave).toHaveBeenCalledWith('Sled Push', 'Chest', 'Barbell', 'strength');
+  });
+
+  it('opens a distance exercise for editing with Cardio already chosen', () => {
+    const { getByText } = render(
+      <NewExerciseForm visible={true} onClose={onClose} onSave={onSave} muscleGroups={muscleGroups}
+        initial={{ name: 'Rower Sprint', muscleGroup: '', equipment: 'Barbell', exerciseType: 'cardio' }} />
+    );
+    fireEvent.press(getByText('Save'));
+    expect(onSave).toHaveBeenCalledWith('Rower Sprint', 'Cardio', 'Barbell', 'distance');
   });
 
   it('shows all muscle groups', () => {

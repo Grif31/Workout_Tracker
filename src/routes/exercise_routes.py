@@ -1,4 +1,4 @@
-from models import db, ExerciseTemplate, ExerciseMuscleMapping, Exercise, Workout
+from models import db, ExerciseTemplate, ExerciseMuscleMapping, Exercise, Workout, CoachProfile
 from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm import subqueryload
@@ -59,15 +59,19 @@ ALTERNATIVES_LIMIT = 12
 def get_alternatives(template_id):
     """Swap candidates for an exercise: the same primary muscle on different
     equipment, minus anything that loads an area in ?avoid= (comma-separated
-    coach-profile keys). The same movement on other equipment comes first, then
-    the lifts the user has logged most."""
+    coach-profile keys; left out, the stored coach profile's). The same movement
+    on other equipment comes first, then the lifts the user has logged most."""
     user_id = int(get_jwt_identity())
     visible = db.or_(ExerciseTemplate.user_id.is_(None), ExerciseTemplate.user_id == user_id)
     source = ExerciseTemplate.query.filter(ExerciseTemplate.id == template_id, visible).first()
     if source is None:
         return jsonify({'message': 'Exercise not found'}), 404
 
-    avoid = [a for a in request.args.get('avoid', '').split(',') if a][:10]
+    if 'avoid' in request.args:
+        avoid = [a for a in request.args['avoid'].split(',') if a][:10]
+    else:
+        stored = CoachProfile.query.filter_by(user_id=user_id).first()
+        avoid = [a for a in (stored.avoid or []) if isinstance(a, str)] if stored else []
     source_type = (source.exercise_type or 'strength').lower()
     primary = next((m.muscle_group for m in source.muscle_mappings if m.is_primary), None)
     if source_type == 'cardio' or primary is None:
@@ -101,9 +105,10 @@ def get_alternatives(template_id):
     )
     same_name = {c.id for c in candidates if c.name.lower() == source.name.lower()}
     candidates.sort(key=lambda c: (c.id not in same_name, -logged.get(c.id, 0), c.name.lower()))
+    # avoid: what was left out, so the app can say so when it sent no profile of its own
     return jsonify({'alternatives': [
         {**exercise_to_dict(c), 'same_movement': c.id in same_name} for c in candidates[:ALTERNATIVES_LIMIT]
-    ]}), 200
+    ], 'avoid': avoid}), 200
 
 
 @exercise_bp.post('/api/exercises')
@@ -146,6 +151,57 @@ def add_exercise():
 
     db.session.commit()
     return jsonify({'message': 'New Exercise added', 'id': new_exercise.id}), 201
+
+
+@exercise_bp.put('/api/exercises/<int:exercise_id>')
+@jwt_required()
+@validate_body(_exercise_schema)
+def update_exercise(exercise_id):
+    user_id = int(get_jwt_identity())
+    exercise = db.session.get(ExerciseTemplate, exercise_id)
+    if not exercise:
+        return jsonify({'message': 'Exercise not found'}), 404
+    if exercise.user_id != user_id:
+        return jsonify({'message': 'You can only edit your own exercises'}), 403
+
+    data = g.validated
+    name = data.get('name', '').strip()
+    equipment = data.get('equipment')
+    exercise_type = data.get('exercise_type', 'strength')
+    if not name:
+        return jsonify({'message': 'Name Required'}), 400
+
+    duplicate = ExerciseTemplate.query.filter(
+        ExerciseTemplate.id != exercise_id,
+        ExerciseTemplate.name == name,
+        ExerciseTemplate.equipment == equipment,
+        db.or_(ExerciseTemplate.user_id.is_(None), ExerciseTemplate.user_id == user_id),
+    ).first()
+    if duplicate:
+        return jsonify({'message': 'Exercise Already Exists'}), 400
+
+    logged = Exercise.query.filter_by(exercise_template_id=exercise_id)
+    # Logged sets were recorded for the old type (reps vs a hold vs a distance);
+    # switching would leave them unreadable to the stats and PR code
+    if exercise_type != (exercise.exercise_type or 'strength').lower() and logged.first() is not None:
+        return jsonify({'message': "This exercise has been logged, so its logging type can't change."}), 400
+
+    exercise.name = name
+    exercise.equipment = equipment
+    exercise.exercise_type = exercise_type
+    exercise.bodyweight_load_factor = derive_bodyweight_load_factor(name, equipment)
+    # Logged rows keep their own copy of the name, which the coach, recents and
+    # name-keyed lookups read
+    logged.update({Exercise.name: name}, synchronize_session=False)
+
+    ExerciseMuscleMapping.query.filter_by(exercise_template_id=exercise_id).delete()
+    parts = [p.strip() for p in str(data.get('muscle_group') or '').split(',') if p.strip()]
+    for i, mg in enumerate(dict.fromkeys(parts)):
+        db.session.add(ExerciseMuscleMapping(exercise_template_id=exercise_id, muscle_group=mg, is_primary=(i == 0)))
+
+    db.session.commit()
+    db.session.refresh(exercise)
+    return jsonify({'message': 'Exercise updated', 'exercise': exercise_to_dict(exercise)}), 200
 
 
 @exercise_bp.delete('/api/exercises/<int:exercise_id>')

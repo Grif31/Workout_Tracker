@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, Modal, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../context/ThemeContext';
@@ -13,7 +13,17 @@ type Props = {
   onClose: () => void;
   onSave: (name: string, muscle: string, equipment: string, exerciseType: NewExerciseType) => void;
   muscleGroups: string[];
+  /** Edit mode: the exercise's current values, loaded each time the form opens */
+  initial?: { name: string; muscleGroup?: string; equipment?: string; exerciseType?: string };
+  /** A logged exercise keeps its logging type: its sets were recorded for it */
+  lockType?: boolean;
 };
+
+// Library cardio is mapped to this muscle, which the picker doesn't list
+const CARDIO_MUSCLE = 'Cardio';
+
+// The form says 'distance' for what the backend calls 'cardio'
+const toFormType = (t?: string): NewExerciseType => (t === 'cardio' ? 'distance' : t === 'duration' ? 'duration' : 'strength');
 
 const LOGGING_TYPES: { value: NewExerciseType; label: string; hint: string }[] = [
   { value: 'strength', label: 'Reps & Weight', hint: 'e.g. Bench Press' },
@@ -21,13 +31,30 @@ const LOGGING_TYPES: { value: NewExerciseType; label: string; hint: string }[] =
   { value: 'distance', label: 'Distance & Time', hint: 'e.g. Running' },
 ];
 
-export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups }: Props) {
+export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups, initial, lockType }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [name, setName] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [equipment, setEquipment] = useState('');
   const [exerciseType, setExerciseType] = useState<NewExerciseType>('strength');
+
+  useEffect(() => {
+    if (!visible || !initial) return;
+    setName(initial.name);
+    const type = toFormType(initial.exerciseType);
+    setSelected(type === 'distance' ? [CARDIO_MUSCLE] : (initial.muscleGroup ?? '').split(',').map(m => m.trim()).filter(m => m && m !== CARDIO_MUSCLE));
+    setEquipment(initial.equipment ?? '');
+    setExerciseType(type);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  const chooseType = (type: NewExerciseType) => {
+    if (type === exerciseType) return;
+    if (type === 'distance') setSelected([CARDIO_MUSCLE]);
+    else if (exerciseType === 'distance') setSelected([]);
+    setExerciseType(type);
+  };
 
   const toggle = (group: string) => {
     setSelected(prev =>
@@ -63,7 +90,7 @@ export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups
             <TouchableOpacity onPress={handleClose}>
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
-            <Text style={styles.title}>New Exercise</Text>
+            <Text style={styles.title}>{initial ? 'Edit Exercise' : 'New Exercise'}</Text>
             <TouchableOpacity onPress={handleSave} disabled={!canSave}>
               <Text style={[styles.saveText, !canSave && styles.saveTextDisabled]}>Save</Text>
             </TouchableOpacity>
@@ -75,18 +102,19 @@ export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups
             placeholderTextColor={colors.placeholder}
             value={name}
             onChangeText={setName}
-            autoFocus
+            autoFocus={!initial}
           />
 
           <Text style={styles.sectionTitle}>Logging</Text>
           <View style={styles.equipmentGrid}>
-            {LOGGING_TYPES.map(t => {
+            {LOGGING_TYPES.filter(t => !lockType || t.value === exerciseType).map(t => {
               const active = exerciseType === t.value;
               return (
                 <TouchableOpacity
                   key={t.value}
                   style={[styles.equipmentChip, active && { backgroundColor: colors.accent + '20', borderColor: colors.accent }]}
-                  onPress={() => setExerciseType(t.value)}
+                  onPress={() => chooseType(t.value)}
+                  disabled={lockType}
                 >
                   <Text style={[styles.equipmentChipText, active && { color: colors.accent, fontWeight: '700' }]}>
                     {t.label}
@@ -114,6 +142,9 @@ export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups
             })}
           </View>
 
+          {exerciseType === 'distance' ? (
+            <Text style={styles.cardioNote}>Logged as cardio, so it has no muscle groups.</Text>
+          ) : (<>
           <Text style={styles.sectionTitle}>
             Muscle Groups
             {selected.length > 0 && (
@@ -138,6 +169,7 @@ export default function NewExerciseForm({ visible, onClose, onSave, muscleGroups
               );
             })}
           </ScrollView>
+          </>)}
         </View>
       </View>
     </Modal>
@@ -225,6 +257,10 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   equipmentChipText: {
     fontSize: typography.fontSize.sm,
     color: colors.textPrimary,
+  },
+  cardioNote: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
   },
   list: {
     flexGrow: 0,
