@@ -1376,7 +1376,7 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [x] (2026-11-12) **Checkable targets.** Suggestions name a `muscle_sets` / `workouts` / `top_weight` target; the server records the start, measures it 5 to 21 days later and hands the Coach the verdict
 - [x] (2026-11-12) **Follow-through record.** Outcomes per insight type over 90 days go into the prompt, so the Coach adapts to what this client actually does
   - [x] (2026-11-13) Admin: a Follow-through card on `/admin/coach`: targets reached, follow-ups written per refresh that had something to check, follow-up helpful rate beside the rest, per type (target coverage, outcomes, reached rate) and reached rate by week. Screenshotted light, dark and 390px with sample data
-  - [ ] On deploy: add `PROMPT_CHANGES` lines (`utils/admin_stats.py`) dated the deploy day for the follow-through prompt, targets and the follow-through record, and Notes to Coach in insights, so both weekly charts mark them
+  - [x] (2026-11-13) On deploy: add `PROMPT_CHANGES` lines (`utils/admin_stats.py`) dated the deploy day for the follow-through prompt, targets and the follow-through record, and Notes to Coach in insights, so both weekly charts mark them
   - [ ] Not measured: how often the server drops a target the model named (only kept targets are stored)
 - [ ] **A hard rule under the soft nudge.** 3+ not-helpful votes on a type with no helpful ones → `_verify_insights` ranks that type last. Warnings (deload, MRV, fatigue) exempt
 - [ ] **Votes in the weekly review prompt** (`_build_insights_prompt(review=True)` skips them today)

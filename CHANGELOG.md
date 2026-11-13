@@ -10,7 +10,11 @@
 - The Coach learns which changes you tend to make and which you skip, and adjusts how it asks.
 - Insights and your weekly review now read your Notes to Coach, so an injury, an event or a time limit you mention shapes the advice.
 
-### Server
+## Server (2026-11-13)
+
+Backend only; the app side ships with the next app release.
+
+### New: The Coach remembers
 - New tables `coach_profiles` and `insights`, and `insight_feedback.insight_id` (migrations `f2a4b8c5d0e7`, `a3b5c9d6e1f8`).
 - `GET` / `PUT /api/me/coach-profile`. The insights, weekly review and alternatives routes fall back to the stored profile when a request leaves it out.
 - Insights are stored per refresh and returned with an `id`; votes can name it. The insights prompt shows the Coach its suggestions from 5 to 21 days ago and accepts one `follow_up`.
@@ -19,6 +23,9 @@
 - The privacy policy says insights are kept.
 - Insights and weekly review parts with blank text are dropped.
 - `/admin/coach` has a Follow-through card: targets reached by type and by week, the follow-up rate, and follow-ups' helpful rate beside other insights.
+
+### New: Edit custom exercises
+- `PUT /api/exercises/<id>` (owner only) changes a custom exercise's name, equipment, muscles and logging type; a rename carries to its logged rows.
 
 ## 1.2.3 (2026-11-11)
 

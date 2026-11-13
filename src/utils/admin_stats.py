@@ -15,6 +15,9 @@ from utils.ai_client import estimate_cost
 PROMPT_CHANGES = [
     (date(2026, 10, 15), 'Votes in prompt', 'Votes quoted into the insights prompt'),
     (date(2026, 10, 16), 'Reasons', 'Thumbs-down reasons, each with its own instruction'),
+    (date(2026, 11, 13), 'Follow-through', 'Insights stored; the Coach follows up its suggestions from 5 to 21 days before'),
+    (date(2026, 11, 13), 'Targets', "Measured targets on suggestions, and the client's follow-through record in the prompt"),
+    (date(2026, 11, 13), 'Notes', 'Notes to Coach and the stored coach profile in the insights and review prompts'),
 ]
 
 # Fixed order, so an endpoint keeps its chart color whatever else is present
