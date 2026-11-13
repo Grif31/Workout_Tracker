@@ -436,6 +436,63 @@ def test_trap_bar_deadlift_matches_the_library_row(app, client, auth_token):
         assert Workout.query.one().exercises[0].exercise_template_id == ids[('Trap Bar Deadlift', 'Other')]
 
 
+def test_strong_library_titles_match_the_library_under_our_names(app):
+    from utils.importers.matching import ExerciseMatcher
+    rows = (
+        ('Tricep Pushdown', 'Cable'), ('Rear Delt Fly', 'Machine'), ('Rear Delt Fly', 'Dumbbell'),
+        ('Overhead Tricep Extension', 'Cable'), ('Abductor Machine', 'Machine'), ('Adductor Machine', 'Machine'),
+        ('Seated Row', 'Machine'), ('Chest Press', 'Machine'), ('Seated Calf Raise', 'Machine'),
+        ('Leg Press', 'Machine'), ('Seated Cable Row', 'Cable'), ('Overhead Press', 'Barbell'),
+        ('Single Arm Row', 'Dumbbell'), ('Close Grip Bench Press', 'Barbell'), ('Lat Pulldown', 'Cable'),
+        ('Single Arm Lat Pulldown', 'Cable'), ('Bent Over Row', 'Barbell'), ('Bicep Curl', 'EZ Bar'),
+        ('Ab Wheel Rollout', 'Bodyweight'),
+    )
+    ids = _library(app, *((n, e, 'strength') for n, e in rows))
+    # Titles from a real Strong export (2026-11)
+    expected = {
+        'Triceps Pushdown (Cable - Straight Bar)': ('Tricep Pushdown', 'Cable'),
+        'Triceps Pushdown (Cable - Rope)': ('Tricep Pushdown', 'Cable'),
+        'Reverse Fly (Machine)': ('Rear Delt Fly', 'Machine'),
+        'Reverse Fly (Dumbbell)': ('Rear Delt Fly', 'Dumbbell'),
+        'Triceps Extension (Cable)': ('Overhead Tricep Extension', 'Cable'),
+        'Hip Abductor (Machine)': ('Abductor Machine', 'Machine'),
+        'Hip Adductor (Machine)': ('Adductor Machine', 'Machine'),
+        'Iso-Lateral Row (Machine)': ('Seated Row', 'Machine'),
+        'Iso-Lateral Chest Press (Machine)': ('Chest Press', 'Machine'),
+        'Seated Calf Raise (Plate Loaded)': ('Seated Calf Raise', 'Machine'),
+        'Seated Leg Press (Machine)': ('Leg Press', 'Machine'),
+        'Seated Row (Cable)': ('Seated Cable Row', 'Cable'),
+        'Seated Overhead Press (Barbell)': ('Overhead Press', 'Barbell'),
+        'Bent Over One Arm Row (Dumbbell)': ('Single Arm Row', 'Dumbbell'),
+        'Bench Press - Close Grip (Barbell)': ('Close Grip Bench Press', 'Barbell'),
+        'Lat Pulldown (Single Arm)': ('Single Arm Lat Pulldown', 'Cable'),
+        'EZ Bar Curl': ('Bicep Curl', 'EZ Bar'),
+        'Ab Wheel': ('Ab Wheel Rollout', 'Bodyweight'),
+    }
+    with app.app_context():
+        matcher = ExerciseMatcher(user_id=1)
+        for title, row in expected.items():
+            hit = matcher.match(title)
+            assert hit is not None and hit.id == ids[row], title
+        # A grip variant is its own lift in Strong, so it never takes the base lift's PRs
+        for title in ('Lat Pulldown - Wide Grip (Cable)', 'Lat Pulldown - Underhand (Cable)',
+                      'Bent Over Row - Underhand (Barbell)', 'Tricep Extension (Single Arm)',
+                      "Knee Raise (Captain's Chair)"):
+            assert matcher.match(title) is None, title
+
+
+def test_a_reimport_finds_the_custom_made_from_a_dashed_equipment_label(app, client, auth_token):
+    from models import User
+    text = _HEVY_HEADER + '\n' + (
+        '"Day 1","1 Mar 2026, 10:00","1 Mar 2026, 11:00","","Kneeling Press (Cable - Rope)",,"",0,"normal",40,8,,,\n')
+    with app.app_context():
+        # Imports before "(Cable - Rope)" read as Cable labelled the custom with the raw text
+        db.session.add(ExerciseTemplate(name='Kneeling Press', equipment='Cable - Rope',
+                                        exercise_type='strength', user_id=User.query.one().id))
+        db.session.commit()
+    assert _import(client, auth_token, 'hevy', text).get_json()['exercises_created'] == 0
+
+
 # ── Status and undo ──────────────────────────────────────────
 
 def test_undo_removes_only_that_apps_imports_and_rebuilds_prs(app, client, auth_token):

@@ -38,6 +38,10 @@ _TITLE_ALIASES = {
     'Deadlift (Trap bar)': ('Trap Bar Deadlift', 'Other'),
     'Cycling (Indoor)': ('Cycling', 'Stationary Bike'),
     'Spinning': ('Cycling', 'Stationary Bike'),
+    'Seated Row (Cable)': ('Seated Cable Row', 'Cable'),
+    'Seated Calf Raise (Plate Loaded)': ('Seated Calf Raise', 'Machine'),
+    'EZ Bar Curl': ('Bicep Curl', 'EZ Bar'),
+    'Ab Wheel': ('Ab Wheel Rollout', 'Bodyweight'),
 }
 
 # Names alone (normalised), equipment kept from the title
@@ -48,6 +52,16 @@ _NAME_ALIASES = {
     'Triceps Dip': 'Dips',
     'Standing Calf Raise': 'Calf Raise',
     'Seated Cable Row - V Grip': 'Seated Cable Row',
+    'Reverse Fly': 'Rear Delt Fly',
+    # Strong's lying "Skullcrusher" is its own exercise, so this one is overhead
+    'Triceps Extension': 'Overhead Tricep Extension',
+    'Hip Abductor': 'Abductor Machine',
+    'Hip Adductor': 'Adductor Machine',
+    'Seated Overhead Press': 'Overhead Press',
+    'Iso-Lateral Chest Press': 'Chest Press',
+    'Iso-Lateral Row': 'Seated Row',
+    'Seated Leg Press': 'Leg Press',
+    'Bent Over One Arm Row': 'Single Arm Row',
 }
 
 # With no equipment in the title, the library row it most likely means
@@ -83,7 +97,9 @@ def split_title(title: str) -> tuple[str, str | None, str | None]:
     if start == -1:
         return title, None, None
     raw = inner[start + 1:].strip()
-    return inner[:start].strip() or title, _EQUIPMENT.get(raw.lower()), raw or None
+    # Strong names the attachment after a dash: "(Cable - Straight Bar)"
+    equipment = _EQUIPMENT.get(raw.lower()) or _EQUIPMENT.get(raw.lower().split(' - ', 1)[0].strip())
+    return inner[:start].strip() or title, equipment, raw or None
 
 
 _TITLE_ALIAS_KEYS = {key(k): v for k, v in _TITLE_ALIASES.items()}
@@ -119,11 +135,24 @@ class ExerciseMatcher:
                 return hit
         name, equipment, raw = split_title(title)
         name_key = key(name)
+        tries = []
         aliased = _NAME_ALIAS_KEYS.get(name_key)
-        # The aliased name finds the library row; the title's own name finds a
-        # custom an earlier import made, since custom_identity names it that way
-        for k in ((aliased, name_key) if aliased else (name_key,)):
-            hit = self._lookup(k, equipment, raw, weighted)
+        if aliased:
+            tries.append((aliased, equipment, raw))
+        base, sep, variant = name.rpartition(' - ')
+        if sep and base.strip():
+            # "Bench Press - Close Grip" is the library's "Close Grip Bench
+            # Press". With no such row ("Lat Pulldown - Wide Grip") it stays its
+            # own lift, never the base one: Strong logs them apart
+            tries.append((key(f'{variant} {base}'), equipment, raw))
+        if raw and not equipment:
+            # "Lat Pulldown (Single Arm)" is the library's "Single Arm Lat Pulldown"
+            tries.append((key(f'{raw} {name}'), None, None))
+        # The library spellings above go first; the title's own name last finds
+        # a custom an earlier import made, since custom_identity names it that way
+        tries.append((name_key, equipment, raw))
+        for k, e, r in tries:
+            hit = self._lookup(k, e, r, weighted)
             if hit:
                 return hit
         return None
@@ -134,7 +163,9 @@ class ExerciseMatcher:
             # custom one an earlier import made under that label
             return self._exact.get((name_key, raw[:100]))
         if equipment:
-            return self._exact.get((name_key, equipment))
+            # raw: a custom an earlier import made before "(Cable - Rope)" read as Cable
+            hit = self._exact.get((name_key, equipment))
+            return hit or (self._exact.get((name_key, raw[:100])) if raw else None)
         candidates = self._by_name.get(name_key, [])
         order = (('Weighted',) + _NO_EQUIPMENT_PREFERENCE) if weighted else _NO_EQUIPMENT_PREFERENCE
         for preferred in order:
