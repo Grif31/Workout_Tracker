@@ -678,14 +678,88 @@ class StrengthScoreSnapshot(db.Model):
         }
 
 
+# ── CoachProfile ──────────────────────────────────────────────
+# What the user told the Coach about themselves. The app keeps its own copy in
+# AsyncStorage and uploads it; this one survives a reinstall and is what the
+# AI routes read when a request doesn't carry the fields.
+class CoachProfile(db.Model):
+    __tablename__ = 'coach_profiles'
+    id                 = db.Column(db.Integer, primary_key=True)
+    user_id            = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, unique=True)
+    goal               = db.Column(db.String(100), nullable=False)
+    experience         = db.Column(db.String(100), nullable=False)
+    equipment          = db.Column(db.String(100), nullable=False)
+    days_per_week      = db.Column(db.Integer, nullable=False)
+    session_length_min = db.Column(db.Integer, nullable=False)
+    # Option keys ('knees', 'lower_back'); an empty list is "no injuries"
+    avoid              = db.Column(db.JSON, nullable=False, default=list)
+    notes              = db.Column(db.String(1000), nullable=False, default='')
+    updated_at         = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self):
+        return {
+            'goal': self.goal,
+            'experience': self.experience,
+            'equipment': self.equipment,
+            'days_per_week': self.days_per_week,
+            'session_length_min': self.session_length_min,
+            'avoid': list(self.avoid or []),
+            'notes': self.notes or '',
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+# ── Insight ───────────────────────────────────────────────────
+# One Coach insight as the user was shown it. A refresh writes one batch
+# (rows sharing batch_id), so the Coach can be told what it said before and
+# votes can point at a row instead of matching on text.
+class Insight(db.Model):
+    __tablename__ = 'insights'
+    id           = db.Column(db.Integer, primary_key=True)
+    user_id      = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    batch_id     = db.Column(db.String(32), nullable=False, index=True)
+    position     = db.Column(db.Integer, nullable=False)
+    insight_type = db.Column(db.String(32), nullable=True)
+    title        = db.Column(db.String(200), nullable=False)
+    body         = db.Column(db.String(1000), nullable=False)
+    priority     = db.Column(db.String(16), nullable=True)
+    evidence     = db.Column(db.JSON, nullable=True)
+    # For a follow_up: the earlier insight whose suggestion it checks
+    follows_id   = db.Column(db.Integer, db.ForeignKey('insights.id', ondelete='SET NULL'), nullable=True)
+    # A measurable ask: {metric, subject, from, to} with from measured by the
+    # server when the insight was written. A top_weight target also carries the
+    # unit it was set in and is converted when checked, so it never needs
+    # _convert_stored_weights.
+    target       = db.Column(db.JSON, nullable=True)
+    # 'met' | 'partial' | 'not_met' | 'no_data', from the latest check against
+    # the data; what the Coach's record of this user's follow-through is built from
+    outcome      = db.Column(db.String(16), nullable=True)
+    checked_at   = db.Column(db.DateTime, nullable=True)
+    created_at   = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'type': self.insight_type,
+            'title': self.title,
+            'body': self.body,
+            'priority': self.priority,
+            'evidence': self.evidence,
+        }
+
+
 # ── InsightFeedback ───────────────────────────────────────────
-# A user's helpful / not helpful vote on one Coach insight. Insights aren't
-# stored, so the vote keeps the insight's own text: the next insights prompt
-# quotes recent votes back to the Coach.
+# A user's helpful / not helpful vote on one Coach insight. The vote keeps the
+# insight's own text as well as its id: votes cast before insights were stored
+# have no id, and the next insights prompt and the admin pages quote the text.
 class InsightFeedback(db.Model):
     __tablename__ = 'insight_feedback'
     id           = db.Column(db.Integer, primary_key=True)
     user_id      = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    # NULL for votes from before insights were stored, or from a build that sends only the text
+    insight_id   = db.Column(db.Integer, db.ForeignKey('insights.id', ondelete='SET NULL',
+                                                       name='fk_insight_feedback_insight_id'),
+                             nullable=True, index=True)
     insight_type = db.Column(db.String(32), nullable=True)
     title        = db.Column(db.String(200), nullable=False)
     body         = db.Column(db.String(1000), nullable=False)

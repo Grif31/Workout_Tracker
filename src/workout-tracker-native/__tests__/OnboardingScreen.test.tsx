@@ -98,6 +98,8 @@ describe('OnboardingScreen', () => {
       await completeChat(r, { routine: false });
       await act(async () => { fireEvent.press(r.getByText('Continue')); });
 
+      // And uploaded, so a reinstall gets it back
+      await waitFor(() => expect(bodyOf('/api/me/coach-profile')).toMatchObject({ goal: 'hypertrophy' }));
       const profile = JSON.parse((await AsyncStorage.getItem(COACH_PROFILE))!);
       expect(profile).toMatchObject({
         goal: 'hypertrophy',
@@ -110,7 +112,8 @@ describe('OnboardingScreen', () => {
       expect(await AsyncStorage.getItem(`${WEEKLY_GOAL_KEY}_${mockUser.id}`)).toBe('4');
       expect(await AsyncStorage.getItem(`${ONBOARDING_COMPLETE_KEY}_${mockUser.id}`)).toBe('true');
       expect(r.onComplete).toHaveBeenCalled();
-      expect((global.fetch as jest.Mock)).not.toHaveBeenCalled();
+      // Nothing generated; the only request is the profile upload
+      expect((global.fetch as jest.Mock).mock.calls.map(([u]) => String(u)).filter(u => !u.endsWith('/api/me/coach-profile'))).toEqual([]);
     });
   });
 

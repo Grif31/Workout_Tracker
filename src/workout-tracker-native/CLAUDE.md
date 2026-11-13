@@ -14,7 +14,7 @@ Decorative `Animated` motion (slides, scales, springs, count-ups, entrances) goe
 ```typescript
 const MY_KEY = 'my_feature_key';
 ```
-Shared keys that cross file boundaries live in `constants/` or are exported from the file that owns them (e.g. `COACH_PROFILE_KEY` exported from `components/coach/CoachProfileModal.tsx`, `REST_TIMER_KEY` exported from `components/workout/types.ts`). Never use the same key string as a bare literal in two different files.
+Shared keys that cross file boundaries live in `constants/` or are exported from the file that owns them (e.g. `COACH_PROFILE_KEY` exported from `utils/coachProfile.ts`, `REST_TIMER_KEY` exported from `components/workout/types.ts`). Never use the same key string as a bare literal in two different files.
 
 ### Charts (`react-native-gifted-charts` `LineChart`)
 Don't derive `maxValue`/`yAxisOffset` from raw `min`/`max` + a percentage pad — on a narrow-range series (e.g. a Rep Record spanning 1-2 reps) each tick's *label* rounds independently and adjacent ticks can round to the same displayed number, and the labels can drift out of sync with where points actually plot. Use `computeChartYAxisRange(values, sections)` from `utils/prFormat.ts` (also mirrored inline in `StrengthScoreScreen.tsx`), which snaps the whole range to whole-number, evenly-divisible steps up front.

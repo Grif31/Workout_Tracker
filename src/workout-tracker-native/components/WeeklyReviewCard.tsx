@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiFetch, isNetworkError } from '../utils/api';
 import GenerateAction from './GenerateAction';
 import { syncServerPremium } from '../utils/premiumSync';
-import { COACH_PROFILE_KEY, DEFAULT_PROFILE, type CoachProfile } from './coach/CoachProfileModal';
+import { loadCoachProfile } from '../utils/coachProfile';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -70,16 +70,14 @@ export default function WeeklyReviewCard({ weekStart, isPremium, onUnlock }: Pro
     setLoading(true);
     setFailed(false);
     try {
-      // The coach profile lives on the device only, so it is sent with the request
-      let profile: CoachProfile = DEFAULT_PROFILE;
-      try {
-        const raw = await AsyncStorage.getItem(`${COACH_PROFILE_KEY}_${user?.id}`);
-        if (raw) profile = { ...DEFAULT_PROFILE, ...JSON.parse(raw) };
-      } catch { }
+      // The device's copy is the newest; without one the server reads its stored profile
+      const profile = await loadCoachProfile(user?.id);
       const res = await apiFetch('/api/ai/weekly-review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ experience: profile.experience, goal: profile.goal, avoid: profile.avoid, week_start: weekStart }),
+        body: JSON.stringify(profile
+          ? { experience: profile.experience, goal: profile.goal, avoid: profile.avoid, notes: profile.notes, week_start: weekStart }
+          : { week_start: weekStart }),
       });
       const data = await res.json();
       if (!res.ok) { Alert.alert("Couldn't Load Review", data.message || 'Try again in a moment.'); return; }

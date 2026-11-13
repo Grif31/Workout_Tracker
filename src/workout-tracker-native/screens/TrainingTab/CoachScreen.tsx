@@ -23,7 +23,8 @@ import { toLocalDateStr } from '../../utils/date';
 import { mondayOf } from '../../utils/widgetSnapshot';
 import { TrainingStackParamsList } from '../../navigation/types';
 import { muscleGroups } from '../../constants/muscleGroups';
-import CoachProfileModal, { CoachProfile, COACH_PROFILE_KEY, DEFAULT_PROFILE } from '../../components/coach/CoachProfileModal';
+import CoachProfileModal from '../../components/coach/CoachProfileModal';
+import { DEFAULT_PROFILE, loadCoachProfile, syncCoachProfile, type CoachProfile } from '../../utils/coachProfile';
 import SectionRule from '../../components/SectionRule';
 import Collapsible, { useCollapseAnim } from '../../components/Collapsible';
 import PressableScale from '../../components/PressableScale';
@@ -53,6 +54,8 @@ type Routine = { id: number; name: string; description?: string; day_count: numb
 type ActiveRoutine = { id: number; name: string; days: RoutineDay[] };
 type InsightReason = 'known' | 'irrelevant' | 'wrong' | 'vague';
 type Insight = {
+  // Absent on a batch cached by a build from before insights were stored
+  id?: number;
   type: string; title: string; body: string; priority: 'high' | 'medium' | 'low';
   helpful?: boolean | null; reason?: InsightReason | null;
 };
@@ -73,6 +76,7 @@ const INSIGHT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   frequency:   'repeat-outline',
   routine:     'calendar-outline',
   achievement: 'trophy-outline',
+  follow_up:   'checkmark-done-outline',
   suggestion:  'bulb-outline',
 };
 
@@ -188,7 +192,9 @@ export default function CoachScreen({ navigation }: Props) {
 
   // ── Coach tab state ─────────────────────────────────────────────────────────
   const [greekRank, setGreekRank] = useState<string>('Neophyte');
-  const [coachProfile, setCoachProfile] = useState<CoachProfile>(DEFAULT_PROFILE);
+  // null until this account has a profile; the defaults stand in on screen and for generation
+  const [savedProfile, setSavedProfile] = useState<CoachProfile | null>(null);
+  const coachProfile = savedProfile ?? DEFAULT_PROFILE;
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [insights, setInsights] = useState<Insight[]>([]);
   const [insightsFetchedAt, setInsightsFetchedAt] = useState<string | null>(null);
@@ -204,13 +210,13 @@ export default function CoachScreen({ navigation }: Props) {
   // ── Initialization ──────────────────────────────────────────────────────────
   // Keyed on user.id: it can be undefined on first mount while auth hydrates,
   // and a `_undefined` key would just read back the defaults.
+  // The device copy first, then the server's, which is how a reinstall gets it back
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.getItem(`${COACH_PROFILE_KEY}_${user.id}`).then(profileRaw => {
-      if (profileRaw) {
-        try { setCoachProfile({ ...DEFAULT_PROFILE, ...JSON.parse(profileRaw) }); } catch { }
-      }
-    });
+    let cancelled = false;
+    loadCoachProfile(user.id).then(local => { if (!cancelled && local) setSavedProfile(local); });
+    syncCoachProfile(user.id).then(synced => { if (!cancelled && synced) setSavedProfile(synced); });
+    return () => { cancelled = true; };
   }, [user?.id]);
 
   useEffect(() => {
@@ -342,11 +348,10 @@ export default function CoachScreen({ navigation }: Props) {
       const res = await apiFetch('/api/ai/insights', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          experience: coachProfile.experience,
-          goal: coachProfile.goal,
-          avoid: coachProfile.avoid,
-        }),
+        // Without a profile on the device the server reads its stored one
+        body: JSON.stringify(savedProfile
+          ? { experience: savedProfile.experience, goal: savedProfile.goal, avoid: savedProfile.avoid, notes: savedProfile.notes }
+          : {}),
       });
       const data = await res.json();
       if (handlePremiumRequired(res, isPremium)) return;
@@ -383,7 +388,7 @@ export default function CoachScreen({ navigation }: Props) {
       const res = await apiFetch('/api/ai/insights/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: ins.type, title: ins.title, body: ins.body, helpful, reason }),
+        body: JSON.stringify({ insight_id: ins.id ?? null, type: ins.type, title: ins.title, body: ins.body, helpful, reason }),
       });
       if (!res.ok) withVote(previous);
     } catch {
@@ -1042,7 +1047,7 @@ export default function CoachScreen({ navigation }: Props) {
       <CoachProfileModal
         visible={profileModalVisible}
         onClose={() => setProfileModalVisible(false)}
-        onSave={profile => setCoachProfile(profile)}
+        onSave={profile => setSavedProfile(profile)}
       />
     </View>
   );

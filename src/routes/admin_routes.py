@@ -6,8 +6,9 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import Blueprint, Response, current_app, jsonify, render_template, request, url_for
 from limiter import limiter
+from routes.ai_routes import FOLLOW_UP_MAX_DAYS
 from models import (db, AdminAuditLog, AdminState, AiCallLog, ExerciseDBEntry, ExerciseDBThumbnail,
-                    ExerciseTemplate, InsightFeedback, PaywallEvent, User, Workout)
+                    ExerciseTemplate, Insight, InsightFeedback, PaywallEvent, User, Workout)
 from utils import (admin_charts, admin_dashboard, admin_stats, admin_users, exercisedb, library_edits, premium,
                    system_status)
 from utils.admin_audit import audit
@@ -160,8 +161,8 @@ def _usernames(user_ids):
 @admin_bp.get('/coach')
 @_require_admin
 def admin_coach():
-    """How the Coach's insights land, from users' thumbs. Votes key on the
-    insight's title and body, since insights themselves aren't stored."""
+    """How the Coach's insights land, from users' thumbs, and whether users
+    make the changes it suggests, from the targets judged on stored insights."""
     range_key = request.args.get('range', '90')
     if range_key not in _COACH_RANGES:
         range_key = '90'
@@ -176,6 +177,19 @@ def admin_coach():
              .order_by(InsightFeedback.created_at.desc(), InsightFeedback.id.desc()).limit(100).all())
     helpful = sum(1 for r in rows if r.helpful)
     weekly = admin_stats.weekly_helpful_rate(weekly_rows, now.date())
+    since = now - timedelta(days=_COACH_RANGES[range_key]) if _COACH_RANGES[range_key] else None
+    insight_query = Insight.query
+    if since:
+        # Back far enough that the first refreshes in range see their earlier suggestions
+        insight_query = insight_query.filter(Insight.created_at >= since - timedelta(days=FOLLOW_UP_MAX_DAYS))
+    insight_rows = insight_query.all()
+    in_range = [r for r in insight_rows if not since or r.created_at >= since]
+    follow_through, follow_through_total = admin_stats.follow_through_by_type(in_range)
+    reached_weekly = admin_stats.weekly_reached_rate(
+        Insight.query.filter(
+            Insight.outcome.isnot(None),
+            Insight.created_at >= datetime.combine(now.date() - timedelta(weeks=12), datetime.min.time())).all(),
+        now.date())
     reasons = admin_stats.reason_totals(rows)
     # The dashboard counts "Looks wrong" votes newer than this visit
     state = db.session.get(AdminState, _COACH_LAST_OPENED) or AdminState(key=_COACH_LAST_OPENED)
@@ -198,6 +212,13 @@ def admin_coach():
         wrong=wrong, usernames=_usernames(r.user_id for r in wrong),
         reason_labels=admin_stats.REASON_LABELS,
         reason_keys=[k for k in admin_stats.REASON_LABELS if k],
+        follow_through=follow_through, follow_through_total=follow_through_total,
+        follow_up_rate=admin_stats.follow_up_rate(insight_rows, since),
+        follow_up_votes=admin_stats.follow_up_votes(rows),
+        reached_weekly=reached_weekly,
+        reached_chart=admin_stats.reached_weekly_chart(reached_weekly),
+        outcome_labels=admin_stats.OUTCOME_LABELS,
+        outcome_keys=admin_stats.TARGET_OUTCOMES,
     )
 
 

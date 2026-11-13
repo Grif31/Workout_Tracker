@@ -29,7 +29,7 @@ from statistics import mean
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from app import create_app  # noqa: E402
-from models import db, ExerciseTemplate, ExerciseMuscleMapping, User  # noqa: E402
+from models import db, ExerciseTemplate, ExerciseMuscleMapping, Insight, User  # noqa: E402
 import seed  # noqa: E402
 from routes import ai_routes  # noqa: E402
 from utils.ai_client import estimate_cost  # noqa: E402
@@ -105,7 +105,10 @@ def fixtures(today):
             _ppl_weeks(today, 8, (185, 5), (255, 10), (155, 5), 8),
         ),
         'plateaued': (
-            {'bodyweight': 190, 'gender': 'male'}, {'experience': 'intermediate', 'goal': 'strength'},
+            {'bodyweight': 190, 'gender': 'male'},
+            # Notes the Coach should act on (Overhead Press is in this fixture) without citing their numbers
+            {'experience': 'intermediate', 'goal': 'strength',
+             'notes': 'My left shoulder aches after overhead pressing. I can only train 45 minutes on weekdays.'},
             _ppl_weeks(today, 8, (185, 5), (265, 10), (155, 5), 3, rpe=9),
         ),
         'overreaching': (
@@ -123,6 +126,45 @@ def fixtures(today):
             _ppl_weeks(today, 6, (80, 2.5), (110, 5), (70, 2.5), 6),
         ),
     }
+
+
+# An earlier batch, stored a week back, so the prompt carries the follow-through
+# section: one fixture whose data shows the suggestion was ignored (and the
+# server measures it), one where the data can't speak to it
+PREVIOUS_BATCHES = {
+    'overreaching': [
+        ('deload', 'Cut Chest Volume Next Week', 'You logged 28 chest sets, past your MRV of 20. Drop to 14 sets next week.',
+         {'metric': 'muscle_sets', 'subject': 'Chest', 'from': 28.0, 'to': 14.0}),
+        ('frequency', 'Add A Pull Day Set', 'Add 1 set of Lat Pulldown to your pull day.', None),
+    ],
+    'progressing': [
+        ('suggestion', 'Add 5 lbs To Squat', 'Your Squat moved every week. Add 5 lbs next Leg Day and keep 4 sets of 5.',
+         {'metric': 'top_weight', 'subject': 'Squat', 'from': 315.0, 'to': 320.0, 'unit': 'lbs'}),
+        ('rest', 'Sleep Before Leg Day', 'Get 8 hours of sleep before Leg Day.', None),
+    ],
+}
+PREVIOUS_BATCH_DAYS = 7
+# Older measured suggestions, so the prompt carries the follow-through record:
+# this client keeps skipping deloads and makes volume changes
+FOLLOW_THROUGH_HISTORY = {
+    'overreaching': [('deload', 'not_met'), ('deload', 'not_met'), ('frequency', 'met'), ('frequency', 'met')],
+}
+
+
+def _seed_previous_batch(user_id, name, now):
+    batch = PREVIOUS_BATCHES.get(name)
+    if batch:
+        created = now - timedelta(days=PREVIOUS_BATCH_DAYS)
+        db.session.add_all(
+            Insight(user_id=user_id, batch_id=f'fixture-{name}', position=n, insight_type=t, title=title, body=body,
+                    priority='medium', target=target, created_at=created)
+            for n, (t, title, body, target) in enumerate(batch)
+        )
+    for n, (t, outcome) in enumerate(FOLLOW_THROUGH_HISTORY.get(name, [])):
+        db.session.add(Insight(user_id=user_id, batch_id=f'history-{name}-{n}', position=0, insight_type=t,
+                               title=f'Earlier {t}', body='Earlier suggestion.', outcome=outcome,
+                               created_at=now - timedelta(days=30 + n)))
+    db.session.commit()
 
 
 def _seed_library():
@@ -196,6 +238,9 @@ def score(raw_insights, ctx):
         'body_len': [len(i.get('body') or '') for i in kept],
         'too_long': sum(1 for i in kept if len(i.get('title') or '') > TITLE_MAX or len(i.get('body') or '') > BODY_MAX),
         'banned': banned,
+        'follow_ups': sum(1 for i in kept if i.get('type') == 'follow_up'),
+        # Targets the model named, before _attach_targets drops any it can't check
+        'targets_named': sum(1 for i in raw_insights if (i.get('target') or {}).get('metric') not in (None, 'none')),
         'insights': kept,
     }
 
@@ -219,11 +264,16 @@ def run(args):
                 continue
             ctx = ai_routes._build_insights_context(user_id, **coach)
             ctx['insight_feedback'] = []
+            _seed_previous_batch(user_id, name, ctx['now'])
+            measured = ai_routes._check_targets(user_id, ctx)
+            ctx['previous_insights'] = ai_routes._previous_suggestions(user_id, ctx['now'], measured)
+            ctx['adherence'] = ai_routes._adherence(user_id, ctx['now'])
             prompt = ai_routes._build_insights_prompt(ctx)
             if name in (args.show_prompt or []):
                 print(f'\n===== prompt: {name} =====\n{prompt}\n')
             if args.dry_run:
-                print(f'{name:<13} prompt {len(prompt):>6} chars, {len(ai_routes._known_subjects(ctx))} known subjects')
+                print(f'{name:<13} prompt {len(prompt):>6} chars, {len(ai_routes._known_subjects(ctx))} known subjects, '
+                      f"{len(ctx['previous_insights'])} earlier suggestions")
                 continue
             for run_no in range(args.runs):
                 start = time.monotonic()
@@ -278,6 +328,10 @@ def _print_summary(results, model):
               f"{sum(r['too_long'] for r in ok)} over {TITLE_MAX}/{BODY_MAX} chars")
     for label in BANNED:
         print(f"{label.capitalize()}s in raw output: {sum(r['banned'][label] for r in ok)}")
+    followed = [r for r in ok if r['fixture'] in PREVIOUS_BATCHES]
+    if followed:
+        print(f"Follow-ups kept: {sum(r['follow_ups'] for r in followed)} in {len(followed)} answers given earlier suggestions")
+    print(f"Targets named: {sum(r['targets_named'] for r in ok)} across {sum(r['returned'] for r in ok)} insights")
     print(f"Time: avg {mean(r['seconds'] for r in ok):.1f}s; cost: ${sum(r['cost'] for r in ok):.4f} total")
 
 

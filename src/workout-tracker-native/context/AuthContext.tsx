@@ -10,6 +10,7 @@ import { loadTokens, saveTokenPair, clearStoredTokens } from '../utils/tokenStor
 import { clearWidgetSnapshot } from '../utils/widgetData';
 import { endLiveActivity } from '../utils/liveActivity';
 import { syncDistanceUnit } from '../utils/distanceUnitSync';
+import { syncCoachProfile } from '../utils/coachProfile';
 
 type AuthContextType = {
     user: any;
@@ -87,6 +88,8 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
                         setUser(data);
                         await AsyncStorage.setItem(USER_KEY, JSON.stringify(data));
                         syncDistanceUnit(data.id, data.distance_unit);
+                        // Uploads a profile set on this phone before the server kept one
+                        syncCoachProfile(data.id);
                         // Read whatever token is current (may have been refreshed)
                         const currentAccess = (await loadTokens()).access;
                         setToken(currentAccess);
@@ -129,6 +132,7 @@ export const AuthProvider = ({children} : {children: React.ReactNode}) => {
         setToken(accessToken);
         registerPushToken();
         restoreWorkoutReminder(userData.id).catch(() => {});
+        syncCoachProfile(userData.id);
     };
 
     const updateUser = async (userData: any) => {

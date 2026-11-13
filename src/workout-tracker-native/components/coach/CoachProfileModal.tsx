@@ -10,33 +10,10 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { radius } from '../../theme/spacing';
+import { DEFAULT_PROFILE, loadCoachProfile, saveCoachProfile, type CoachProfile } from '../../utils/coachProfile';
 
-export type CoachProfile = {
-  goal: string;
-  experience: string;
-  equipment: string;
-  days_per_week: number;
-  session_length_min: number;
-  avoid: string[];
-  notes: string;
-};
-
-export const COACH_PROFILE_KEY = 'coach_profile';
+// Device-wide settings from the first onboarding builds, shown until a profile is saved
 const LEGACY_KEY = 'coach_settings';
-
-// The profile a user who has never opened this modal is treated as having.
-// CoachScreen seeds its own state from the same object and sends it to the AI
-// endpoints, so a second copy would mean generation defaults that depend on
-// which screen started the request.
-export const DEFAULT_PROFILE: CoachProfile = {
-  goal: 'general',
-  experience: 'beginner',
-  equipment: 'full_gym',
-  days_per_week: 3,
-  session_length_min: 60,
-  avoid: [],
-  notes: '',
-};
 
 type Props = {
   visible: boolean;
@@ -78,18 +55,15 @@ export default function CoachProfileModal({ visible, onClose, onSave }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [profile, setProfile] = useState<CoachProfile>(DEFAULT_PROFILE);
-  const coachProfileKey = `${COACH_PROFILE_KEY}_${user?.id}`;
 
   useEffect(() => {
     if (!visible) return;
-    AsyncStorage.multiGet([coachProfileKey, LEGACY_KEY]).then(([newRaw, legacyRaw]) => {
-      if (newRaw[1]) {
-        try { setProfile({ ...DEFAULT_PROFILE, ...JSON.parse(newRaw[1]) }); return; } catch { }
-      }
+    Promise.all([loadCoachProfile(user?.id), AsyncStorage.getItem(LEGACY_KEY)]).then(([own, legacyRaw]) => {
+      if (own) { setProfile(own); return; }
       // Migrate from old coach_settings key
-      if (legacyRaw[1]) {
+      if (legacyRaw) {
         try {
-          const s = JSON.parse(legacyRaw[1]);
+          const s = JSON.parse(legacyRaw);
           return setProfile({
             ...DEFAULT_PROFILE,
             goal: s.goal ?? DEFAULT_PROFILE.goal,
@@ -118,7 +92,7 @@ export default function CoachProfileModal({ visible, onClose, onSave }: Props) {
     }));
 
   const handleSave = async () => {
-    await AsyncStorage.setItem(coachProfileKey, JSON.stringify(profile));
+    await saveCoachProfile(user?.id, profile);
     onSave(profile);
     onClose();
   };
