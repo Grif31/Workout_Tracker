@@ -1,5 +1,20 @@
 # Changelog
 
+## Server (2026-11-13)
+
+Backend only, no app release.
+
+### Fixed: Importing from Hevy and Strong
+- Strong's own exercise names match the library: Reverse Fly, Triceps Extension, Triceps Pushdown (Cable - Straight Bar), Hip Abductor and Adductor, the Iso-Lateral machines, Seated Leg Press, Seated Row (Cable) and more. One import had filed about 380 logged exercises under new custom exercises instead.
+- "Bench Press - Close Grip" matches Close Grip Bench Press and "Lat Pulldown (Single Arm)" matches Single Arm Lat Pulldown. Wide grip and underhand variants stay their own exercises.
+- Imported workouts show their real length. They were stored in seconds and read as minutes, so a 65-minute session showed as 65 hours and counted toward the hours badges (migration `e1f3a7b4c9d6` converts the ones already imported).
+- Exercise names in Cyrillic, Chinese and other scripts no longer all match one exercise.
+- Estimated 1RM is left out of the import's PR count, and the preview's set count matches what's saved.
+- Very large files are refused instead of tying up the server: up to 1,500 workouts and 40,000 rows.
+
+### Fixed: Achievements
+- The streak track counts from the streak you're on now; your best streak still earns badges.
+
 ## 1.2.3 (2026-11-11)
 
 ### New: Achievements
