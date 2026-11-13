@@ -407,6 +407,14 @@ def get_pr_dashboard():
         streak += 1
         cursor -= timedelta(weeks=1)
 
+    # Spans first PR's week through this week inclusive, so quiet weeks pull
+    # the average down instead of only counting weeks that had a PR.
+    if pr_weeks:
+        weeks_spanned = (this_week - min(pr_weeks)).days // 7 + 1
+        avg_prs_per_week = round(len(event_dates) / weeks_spanned, 1)
+    else:
+        avg_prs_per_week = 0
+
     # Total weight increased + reps added from PRs in the last
     # RECENT_FEED_WINDOW_DAYS — independent of the feed's own `type_filter`
     # (a stable "momentum" stat, not something that changes as the user taps
@@ -448,6 +456,7 @@ def get_pr_dashboard():
             'prs_this_month': prs_this_month,
             'pr_streak_weeks': streak,
             'total_prs': len(event_dates),
+            'avg_prs_per_week': avg_prs_per_week,
             'weekly_weight_increased': weekly_weight_increased,
             'weekly_reps_added': weekly_reps_added,
             'days_since_last_pr': days_since_last_pr,

@@ -339,6 +339,20 @@ class TestDashboardEndpoint:
         data = client.get('/api/personal-records/dashboard', headers=auth_headers(auth_token)).get_json()
         assert data['stats']['pr_streak_weeks'] == 1
 
+    def test_avg_prs_per_week_counts_quiet_weeks(self, client, auth_token):
+        tid = create_template(client, auth_token)
+        monday = date.today() - timedelta(days=date.today().weekday())
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 205}], date_str=iso(monday - timedelta(weeks=3)))
+        post_strength_workout(client, auth_token, tid, [{'reps': 5, 'weight': 245}], date_str=iso(monday))
+        stats = client.get('/api/personal-records/dashboard', headers=auth_headers(auth_token)).get_json()['stats']
+        assert stats['total_prs'] > 0
+        # Four weeks spanned (two of them empty), not two
+        assert stats['avg_prs_per_week'] == round(stats['total_prs'] / 4, 1)
+
+    def test_avg_prs_per_week_zero_without_prs(self, client, auth_token):
+        stats = client.get('/api/personal-records/dashboard', headers=auth_headers(auth_token)).get_json()['stats']
+        assert stats['avg_prs_per_week'] == 0
+
     def test_prless_current_week_does_not_break_streak(self, client, auth_token):
         tid = create_template(client, auth_token)
         monday = date.today() - timedelta(days=date.today().weekday())
