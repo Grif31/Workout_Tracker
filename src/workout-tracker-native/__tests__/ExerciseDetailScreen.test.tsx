@@ -105,3 +105,83 @@ describe('ExerciseDetailScreen tab underline', () => {
     expect(sliderX(r)).toBeGreaterThan(0);
   });
 });
+
+describe('ExerciseDetailScreen editing a custom exercise', () => {
+  const customRoute = (params = {}) => createMockRoute('ExerciseDetail', {
+    exerciseId: 7, exerciseName: 'My Raise', equipment: 'Dumbbell', muscleGroup: 'Shoulders', isCustom: true, ...params,
+  });
+  let puts: any[];
+
+  const mockApi = (stats: any, putResponse: { ok: boolean; data: any }) => {
+    puts = [];
+    (global.fetch as jest.Mock) = jest.fn((url: string, init: any = {}) => {
+      if (init.method === 'PUT') {
+        puts.push({ url, body: JSON.parse(init.body) });
+        return Promise.resolve({ ok: putResponse.ok, status: putResponse.ok ? 200 : 400, json: () => Promise.resolve(putResponse.data) });
+      }
+      const data = String(url).includes('/api/stats/exercise?') ? stats : {};
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(data) });
+    });
+  };
+
+  it('hides Edit for a library exercise', async () => {
+    mockApi(mockApiStats, { ok: true, data: {} });
+    const { getByText, queryByText } = render(<ExerciseDetailScreen navigation={nav as any} route={route as any} />);
+    await waitFor(() => expect(getByText('Overview')).toBeTruthy());
+    expect(queryByText('Edit Exercise')).toBeNull();
+  });
+
+  it('saves the edit and updates the screen params', async () => {
+    const editNav = createMockNavigation();
+    mockApi({ history: [] }, {
+      ok: true,
+      data: { exercise: { id: 7, name: 'Cable Raise', equipment: 'Cable', muscle_group: 'Shoulders', exercise_type: 'strength' } },
+    });
+    const { getByText, getByDisplayValue } = render(<ExerciseDetailScreen navigation={editNav as any} route={customRoute() as any} />);
+    await waitFor(() => expect(getByText('Edit Exercise')).toBeTruthy());
+    fireEvent.press(getByText('Edit Exercise'));
+
+    fireEvent.changeText(getByDisplayValue('My Raise'), 'Cable Raise');
+    fireEvent.press(getByText('Cable'));
+    fireEvent.press(getByText('Save'));
+
+    await waitFor(() => expect(editNav.setParams).toHaveBeenCalledWith(expect.objectContaining({ exerciseName: 'Cable Raise', equipment: 'Cable' })));
+    expect(puts).toHaveLength(1);
+    expect(puts[0].url).toContain('/api/exercises/7');
+    expect(puts[0].body).toEqual({ name: 'Cable Raise', muscle_group: 'Shoulders', equipment: 'Cable', exercise_type: 'strength' });
+  });
+
+  it('offers only the current logging type once the exercise has history', async () => {
+    mockApi(mockApiStats, { ok: true, data: {} });
+    const { getByText, queryByText } = render(<ExerciseDetailScreen navigation={nav as any} route={customRoute() as any} />);
+    await waitFor(() => expect(getByText(/280/)).toBeTruthy());
+    fireEvent.press(getByText('Edit Exercise'));
+    expect(getByText('Reps & Weight')).toBeTruthy();
+    expect(queryByText('Timed Hold')).toBeNull();
+    expect(queryByText('Distance & Time')).toBeNull();
+  });
+
+  it('starts an unlogged exercise on the type it was opened with', async () => {
+    mockApi({ history: [] }, { ok: true, data: {} });
+    const { getByText } = render(<ExerciseDetailScreen navigation={nav as any} route={customRoute({ exerciseType: 'duration' }) as any} />);
+    await waitFor(() => expect(getByText('Edit Exercise')).toBeTruthy());
+    fireEvent.press(getByText('Edit Exercise'));
+    fireEvent.press(getByText('Save'));
+    await waitFor(() => expect(puts).toHaveLength(1));
+    expect(puts[0].body.exercise_type).toBe('duration');
+  });
+
+  it('says why when the server refuses the edit', async () => {
+    const { Alert } = require('react-native');
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const editNav = createMockNavigation();
+    mockApi({ history: [] }, { ok: false, data: { message: 'Exercise Already Exists' } });
+    const { getByText } = render(<ExerciseDetailScreen navigation={editNav as any} route={customRoute() as any} />);
+    await waitFor(() => expect(getByText('Edit Exercise')).toBeTruthy());
+    fireEvent.press(getByText('Edit Exercise'));
+    fireEvent.press(getByText('Save'));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("Couldn't Save Exercise", 'Exercise Already Exists'));
+    expect(editNav.setParams).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+  });
+});

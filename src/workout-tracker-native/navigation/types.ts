@@ -10,6 +10,8 @@ export type ExerciseDetailParams = {
   description?: string;
   imageUrl?: string;
   isCustom?: boolean;
+  /** The template's logging type, for an exercise with no history to read it from */
+  exerciseType?: 'strength' | 'cardio' | 'duration';
   initialTab?: 'overview' | 'charts' | 'history';
 };
 

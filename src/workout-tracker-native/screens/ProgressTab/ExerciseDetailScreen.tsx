@@ -34,6 +34,8 @@ import LiftDetailModal, { type LiftEntry } from '../../components/LiftDetailModa
 import SegmentedControl from '../../components/SegmentedControl';
 import { usePurchase } from '../../context/PurchaseContext';
 import { EASE_IN_OUT, motionTiming, reduceMotion } from '../../utils/motion';
+import NewExerciseForm, { type NewExerciseType } from '../../components/NewExerciseForm';
+import { muscleGroups as MUSCLE_GROUPS } from '../../constants/muscleGroups';
 
 const RANGE_SEGMENTS = (['1M', '3M', '6M', 'All'] as const).map(r => ({ key: r, label: r }));
 
@@ -51,7 +53,7 @@ const BAR_EDGE_SPACING = 10;
 
 type Props = {
   route: { params: ExerciseDetailParams };
-  navigation: { goBack: () => void; navigate: (...args: any[]) => void };
+  navigation: { goBack: () => void; navigate: (...args: any[]) => void; setParams: (params: Partial<ExerciseDetailParams>) => void };
 };
 
 // Contrast-safe text color for a solid rank-color background — most rank colors
@@ -167,7 +169,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   // fade-to-black-then-back-in.
   const [prevTab, setPrevTab] = useState<TabKey | null>(null);
   const [loading, setLoading] = useState(true);
-  const [exerciseType, setExerciseType] = useState<'strength' | 'cardio' | 'duration'>('strength');
+  const [exerciseType, setExerciseType] = useState<'strength' | 'cardio' | 'duration'>(route.params.exerciseType ?? 'strength');
   const [holdStats, setHoldStats] = useState<HoldStats | null>(null);
   const [holdHistory, setHoldHistory] = useState<HoldSession[]>([]);
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('mi');
@@ -193,6 +195,7 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
   const [chartRange, setChartRange] = useState<'1M' | '3M' | '6M' | 'All'>('3M');
   const [templateDescription, setTemplateDescription] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [editVisible, setEditVisible] = useState(false);
   const [scoreEntry, setScoreEntry] = useState<LiftEntry | null>(null);
   const [liftModalVisible, setLiftModalVisible] = useState(false);
 
@@ -224,6 +227,33 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         },
       ],
     );
+  };
+
+  const handleEdit = async (name: string, muscle: string, equip: string, formType: NewExerciseType) => {
+    setEditVisible(false);
+    try {
+      const res = await apiFetch(`/api/exercises/${exerciseId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, muscle_group: muscle, equipment: equip, exercise_type: formType === 'distance' ? 'cardio' : formType }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        Alert.alert("Couldn't Save Exercise", data.message || 'Try again in a moment.');
+        return;
+      }
+      const ex = data.exercise;
+      if (ex.exercise_type !== exerciseType) setExerciseType(ex.exercise_type);
+      // New params re-render the title and muscles, and a new name refetches the stats
+      navigation.setParams({
+        exerciseName: ex.name,
+        equipment: ex.equipment ?? undefined,
+        muscleGroup: ex.exercise_type === 'cardio' ? 'Cardio' : ex.muscle_group,
+        exerciseType: ex.exercise_type,
+      });
+    } catch (err) {
+      if (!isNetworkError(err)) Alert.alert("Couldn't Save Exercise", 'Try again in a moment.');
+    }
   };
 
   const tabAnimRef = useRef(new Animated.Value(0)).current;
@@ -326,7 +356,8 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         return;
       }
 
-      setExerciseType('strength');
+      // An unlogged exercise's response has no type: keep the one it opened with
+      if (data.exercise_type) setExerciseType('strength');
       const sessions: HistorySession[] = (data.history ?? []).map((item: any) => ({
         date: item.date,
         workoutName: item.workout_name || 'Workout',
@@ -952,6 +983,13 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
       </View>
 
       {isCustom && (
+        <TouchableOpacity style={styles.editBtn} onPress={() => setEditVisible(true)} activeOpacity={0.7}>
+          <Ionicons name="create-outline" size={16} color={colors.accent} />
+          <Text style={[styles.deleteBtnText, { color: colors.accent }]}>Edit Exercise</Text>
+        </TouchableOpacity>
+      )}
+
+      {isCustom && (
         <TouchableOpacity
           style={styles.deleteBtn}
           onPress={handleDelete}
@@ -1087,6 +1125,17 @@ export default function ExerciseDetailScreen({ route, navigation }: Props) {
         </View>
         </View>
       </ScrollView>
+
+      {isCustom && (
+        <NewExerciseForm
+          visible={editVisible}
+          onClose={() => setEditVisible(false)}
+          onSave={handleEdit}
+          muscleGroups={MUSCLE_GROUPS}
+          initial={{ name: exerciseName, muscleGroup: isCardio ? '' : muscleGroup, equipment, exerciseType }}
+          lockType={historySessions.length + cardioHistory.length + holdHistory.length > 0}
+        />
+      )}
 
       <LiftDetailModal
         visible={liftModalVisible}
@@ -1448,6 +1497,18 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   axisLabel: { fontSize: 9, color: colors.textSecondary },
   xAxisDate: { width: CHART_X_LABEL_WIDTH, textAlign: 'center' },
+  editBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    marginTop: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
   deleteBtn: {
     alignItems: 'center',
     paddingVertical: spacing.md,
