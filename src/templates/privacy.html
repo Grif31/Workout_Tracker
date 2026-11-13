@@ -42,9 +42,11 @@
   <p><strong>AI Coach information:</strong> If you use the AI Coach, we store the preferences you give
   it (goal, experience, equipment, schedule, any injuries to work around, and notes you type), and
   your helpful / not helpful votes on its insights, so later insights can be tailored to you. We keep
-  the insights the Coach writes for you, so it can check later whether its suggestions worked and
-  your votes stay attached to them. They are deleted with your account and included in your data
-  export. We also log when each AI feature is used and how large the request was, to apply daily
+  the insights the Coach writes for you, so your votes stay attached to them and the Coach can follow
+  up. When an insight suggests a change, such as more sets for a muscle or a heavier lift, we record
+  where you started, then check your logged workouts for the week after and record whether you made
+  the change, so the Coach can tell you and adjust how it suggests things. All of this is deleted
+  with your account and included in your data export. We also log when each AI feature is used and how large the request was, to apply daily
   limits and control cost. We do not store the requests sent to the AI, or the routines and weekly
   reviews it writes, on our servers.</p>
 
@@ -97,7 +99,9 @@
         Claude API to write your routine, insights or weekly review. It can include your name or
         username, your AI Coach preferences (goal, experience, equipment, schedule, injuries and
         any notes you type), your bodyweight and gender, and your training history: the exercises
-        you do, recent personal records, weekly sets per muscle, effort (RPE) and your rank. It never
+        you do, recent personal records, weekly sets per muscle, effort (RPE) and your rank. For
+        insights it can also include the Coach's earlier suggestions to you and whether you made
+        them. It never
         includes your email, password, account ID, GPS routes, photos, or any health data.
         See <a href="https://www.anthropic.com/privacy">anthropic.com/privacy</a>.</li>
     <li><strong>RevenueCat:</strong> manages in-app subscriptions and purchase verification.
