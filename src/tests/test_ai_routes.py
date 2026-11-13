@@ -55,6 +55,11 @@ INSIGHTS_JSON = {
 }
 
 
+def _texts(insights):
+    """Insights as the model wrote them: the route adds an id and the stored fields."""
+    return [{'title': i['title'], 'body': i['body']} for i in insights]
+
+
 def auth_headers(token):
     return {'Authorization': f'Bearer {token}'}
 
@@ -580,11 +585,12 @@ class TestAiInsights:
         res, _ = self._post(client, auth_token)
         assert res.status_code == 200
         data = res.get_json()
-        assert data['insights'] == INSIGHTS_JSON['insights']
+        assert _texts(data['insights']) == INSIGHTS_JSON['insights']
+        assert all(isinstance(i['id'], int) for i in data['insights'])
         assert 'generated_at' in data
 
     def test_body_fields_are_optional(self, client, auth_token):
-        """CoachProfile is client-side only; the endpoint must work with an empty body."""
+        """A build with no coach profile on the device sends nothing; the endpoint must work."""
         res, _ = self._post(client, auth_token, body={})
         assert res.status_code == 200
 
@@ -615,7 +621,7 @@ class TestAiInsights:
             MagicMock(type='text', text=json.dumps(INSIGHTS_JSON)),
         ])
         assert res.status_code == 200
-        assert res.get_json()['insights'] == INSIGHTS_JSON['insights']
+        assert _texts(res.get_json()['insights']) == INSIGHTS_JSON['insights']
 
     def test_a_refusal_is_a_failed_call_not_parsed(self, client, auth_token):
         res = self._post_blocks(client, auth_token, [MagicMock(type='text', text=json.dumps(INSIGHTS_JSON))],

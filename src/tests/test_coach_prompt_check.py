@@ -14,6 +14,16 @@ def test_every_fixture_builds_and_reaches_a_prompt(capsys):
     out = capsys.readouterr().out
     for name in ('new', 'progressing', 'plateaued', 'overreaching', 'cardio_only', 'kg'):
         assert f'{name} ' in out
+    # The fixtures with an earlier batch reach the follow-through section
+    for name, batch in check.PREVIOUS_BATCHES.items():
+        line = next(l for l in out.splitlines() if l.startswith(f'{name} '))
+        assert line.endswith(f'{len(batch)} earlier suggestions')
+
+
+def test_score_counts_follow_ups():
+    ctx = {**_ctx(), 'previous_insights': [{'id': 7, 'type': 'rest', 'title': 'Rest', 'body': '.', 'days_ago': 7}]}
+    r = check.score([{**_insight('Rested'), 'type': 'follow_up', 'follows': 1}], ctx)
+    assert r['follow_ups'] == 1 and r['insights'][0]['follows_id'] == 7
 
 
 def _ctx():

@@ -6,13 +6,14 @@ from datetime import datetime
 from models import (
     db, User, Workout, Exercise, Set, DeviceToken, PersonalRecord, PREvent,
     StrengthScoreSnapshot, BodyweightLog, BodyMeasurement, ProgressPhoto, InsightFeedback,
+    CoachProfile, Insight,
     Routine, RoutineDay, WorkoutTemplate, WorkoutTemplateExercise,
     ExerciseTemplate, ExerciseMuscleMapping, UserAchievement, ProfilePRPin,
 )
 from flask_jwt_extended import  jwt_required, get_jwt_identity
 from sqlalchemy.orm import selectinload
 from limiter import limiter
-from schemas import UpdateProfileSchema, DeviceTokenSchema
+from schemas import UpdateProfileSchema, DeviceTokenSchema, CoachProfileSchema
 from utils.validation import validate_body
 
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
@@ -20,6 +21,7 @@ MAX_AVATAR_BYTES = 5 * 1024 * 1024  # 5 MB
 
 _update_profile_schema = UpdateProfileSchema()
 _device_token_schema   = DeviceTokenSchema()
+_coach_profile_schema  = CoachProfileSchema()
 
 def _allowed(filename: str) -> bool:
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -255,6 +257,32 @@ def deregister_device_token():
     return jsonify({'message': 'ok'}), 200
 
 
+@user_bp.get('/api/me/coach-profile')
+@jwt_required()
+def get_coach_profile():
+    """profile is null until the app has uploaded one: the app then keeps
+    whatever it holds on the device."""
+    profile = CoachProfile.query.filter_by(user_id=int(get_jwt_identity())).first()
+    return jsonify({'message': 'ok', 'profile': profile.to_dict() if profile else None}), 200
+
+
+@user_bp.put('/api/me/coach-profile')
+@jwt_required()
+@limiter.limit('60 per hour', key_func=lambda: f"coach_profile:{get_jwt_identity()}")
+@validate_body(_coach_profile_schema)
+def put_coach_profile():
+    """Replaces the whole profile: the app always sends every field."""
+    user_id = int(get_jwt_identity())
+    profile = CoachProfile.query.filter_by(user_id=user_id).first()
+    if profile is None:
+        profile = CoachProfile(user_id=user_id)
+        db.session.add(profile)
+    for key, value in g.validated.items():
+        setattr(profile, key, value)
+    db.session.commit()
+    return jsonify({'message': 'ok', 'profile': profile.to_dict()}), 200
+
+
 @user_bp.get('/api/me/export')
 @jwt_required()
 @limiter.limit('10 per hour', key_func=lambda: f"me_export:{get_jwt_identity()}")
@@ -296,6 +324,12 @@ def export_all_data():
         'personal_records': [p.to_dict() for p in rows(PersonalRecord, PersonalRecord.id)],
         'pr_history': [e.to_dict() for e in rows(PREvent, PREvent.id)],
         'score_history': [s.to_dict() for s in rows(StrengthScoreSnapshot, StrengthScoreSnapshot.id)],
+        'coach_profile': next((p.to_dict() for p in rows(CoachProfile, CoachProfile.id)), None),
+        'insights': [
+            {**i.to_dict(), 'target': i.target, 'outcome': i.outcome,
+             'created_at': i.created_at.isoformat() if i.created_at else None}
+            for i in rows(Insight, Insight.id)
+        ],
         'insight_feedback': [
             {'insight_type': f.insight_type, 'title': f.title, 'body': f.body,
              'helpful': f.helpful, 'reason': f.reason,
@@ -319,8 +353,8 @@ def _delete_all_user_data(user_id: int) -> None:
     # PREvent also cascades from workouts in Postgres, but deleting it here
     # doesn't rely on DB-level cascades (SQLite, which tests use, skips them).
     for model in (PersonalRecord, PREvent, StrengthScoreSnapshot, DeviceToken,
-                  BodyweightLog, BodyMeasurement, ProgressPhoto, InsightFeedback, UserAchievement,
-                  ProfilePRPin):
+                  BodyweightLog, BodyMeasurement, ProgressPhoto, InsightFeedback, Insight,
+                  CoachProfile, UserAchievement, ProfilePRPin):
         model.query.filter_by(user_id=user_id).delete(synchronize_session=False)
 
     # Sets → Exercises → Workouts

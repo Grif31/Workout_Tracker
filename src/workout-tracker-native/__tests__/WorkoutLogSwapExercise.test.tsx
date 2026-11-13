@@ -8,7 +8,7 @@ import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { mockUser } from './testUtils';
 import WorkoutLog from '../components/WorkoutLog';
-import { COACH_PROFILE_KEY } from '../components/coach/CoachProfileModal';
+import { COACH_PROFILE_KEY } from '../utils/coachProfile';
 
 let mockPremium = true;
 jest.mock('../context/PurchaseContext', () => ({ usePurchase: () => ({ isPremium: mockPremium }) }));
@@ -73,7 +73,8 @@ describe('WorkoutLog, swap for alternatives', () => {
     settleMenuDismiss();
 
     expect(await r.findByText('Swap Bench Press')).toBeTruthy();
-    expect(altCalls()[0][0]).toContain('/api/exercises/11/alternatives?avoid=');
+    // No profile on the device: the server applies its stored one
+    expect(altCalls()[0][0]).toMatch(/\/api\/exercises\/11\/alternatives$/);
     expect(r.getByText('Dumbbell · Same movement')).toBeTruthy();
 
     await act(async () => { fireEvent.press(r.getByLabelText('Swap to Cable Fly, Cable')); });
@@ -91,6 +92,26 @@ describe('WorkoutLog, swap for alternatives', () => {
     await r.findByText('Swap Bench Press');
     expect(altCalls()[0][0]).toContain('avoid=knees%2Clower_back');
     expect(await r.findByText(/skipping what loads your flagged injuries/)).toBeTruthy();
+  });
+
+  it('names the injuries the server skipped when the device has no profile', async () => {
+    (global.fetch as jest.Mock) = jest.fn(async (url: string) =>
+      String(url).includes('/alternatives') ? json({ alternatives: ALTERNATIVES, avoid: ['knees'] }) : json([]));
+    const r = renderLog();
+    pressMenu(r.getByTestId);
+    fireEvent.press(r.getByText('Alternatives'));
+    settleMenuDismiss();
+    expect(await r.findByText(/skipping what loads your flagged injuries/)).toBeTruthy();
+  });
+
+  it('sends an empty avoid list when the profile flags no injuries', async () => {
+    await AsyncStorage.setItem(`${COACH_PROFILE_KEY}_${mockUser.id}`, JSON.stringify({ avoid: [] }));
+    const r = renderLog();
+    pressMenu(r.getByTestId);
+    fireEvent.press(r.getByText('Alternatives'));
+    settleMenuDismiss();
+    await r.findByText('Swap Bench Press');
+    expect(altCalls()[0][0]).toMatch(/alternatives\?avoid=$/);
   });
 
   it('says so when nothing fits', async () => {

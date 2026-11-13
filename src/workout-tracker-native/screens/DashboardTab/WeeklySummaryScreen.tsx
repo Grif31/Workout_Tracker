@@ -33,7 +33,7 @@ import { motionTiming, motionSpring } from '../../utils/motion';
 type Props = NativeStackScreenProps<DashboardStackParamsList, 'WeeklySummary'>;
 
 // Per-user suffix applied by every consumer, matching the established
-// convention (see COACH_PROFILE_KEY in CoachProfileModal.tsx).
+// convention (see COACH_PROFILE_KEY in utils/coachProfile.ts).
 export const WEEKLY_SUMMARY_LAST_SHOWN_KEY = 'weekly_summary_last_shown';
 
 const MAX_PRS_SHOWN = 5;

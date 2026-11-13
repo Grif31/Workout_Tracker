@@ -1,8 +1,10 @@
 """Numbers for the admin's Coach and AI usage pages. Plain functions over
 rows the route already fetched, so each can be tested without a page."""
+from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 
+from routes.ai_routes import FOLLOW_UP_MAX_DAYS, FOLLOW_UP_MIN_DAYS, FOLLOW_UP_SOURCE_TYPES
 from schemas import INSIGHT_FEEDBACK_REASONS
 from utils import admin_charts
 from utils.ai_client import estimate_cost
@@ -28,6 +30,11 @@ REASON_LABELS = {
     'vague': 'Too vague',
     None: 'No reason given',
 }
+
+
+# A suggestion's target, judged on the week after it (_check_targets)
+TARGET_OUTCOMES = ['met', 'partial', 'not_met', 'no_data']
+OUTCOME_LABELS = {'met': 'Reached', 'partial': 'Partly reached', 'not_met': 'Not reached', 'no_data': 'Not logged'}
 
 
 def _rate(helpful, votes):
@@ -165,13 +172,13 @@ def month_start(now: datetime):
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
-def coach_weekly_chart(weekly):
+def _weekly_rate_chart(weekly, rate_word, count_key):
     points, markers = [], []
     for i, w in enumerate(weekly):
         rows = []
         if w['rate'] is not None:
-            rows.append([f"{w['rate']}%", 'helpful', 'key-0'])
-        rows.append([str(w['votes']), 'votes', None])
+            rows.append([f"{w['rate']}%", rate_word, 'key-0'])
+        rows.append([str(w[count_key]), count_key, None])
         rows += [['', label, None] for _, label in w['changes']]
         points.append({'label': w['week'].strftime('%m/%d'), 'value': w['rate'],
                        'tip': {'head': 'Week of ' + w['week'].strftime('%m/%d/%Y'), 'rows': rows}})
@@ -179,6 +186,99 @@ def coach_weekly_chart(weekly):
             short = w['changes'][0][0] if len(w['changes']) == 1 else f"{len(w['changes'])} changes"
             markers.append({'index': i, 'label': short})
     return admin_charts.line_chart(points, y_max=100, fmt='pct', markers=markers, label_every=2)
+
+
+def coach_weekly_chart(weekly):
+    return _weekly_rate_chart(weekly, 'helpful', 'votes')
+
+
+def reached_weekly_chart(weekly):
+    return _weekly_rate_chart(weekly, 'reached', 'judged')
+
+
+def _outcome_summary(rows):
+    """Verdicts on the rows' judged targets. The reached rate leaves out
+    'no_data' (the lift wasn't logged that week), which can't say whether the
+    client acted, the same way the Coach's own record does."""
+    targeted = [r for r in rows if r.target]
+    judged = [r for r in targeted if r.outcome]
+    counts = Counter(r.outcome for r in judged)
+    outcomes = {o: counts.get(o, 0) for o in TARGET_OUTCOMES}
+    return {
+        'insights': len(rows), 'targeted': len(targeted), 'target_rate': _rate(len(targeted), len(rows)),
+        'judged': len(judged), 'outcomes': outcomes,
+        'reached_rate': _rate(outcomes['met'], len(judged) - outcomes['no_data']),
+    }
+
+
+def follow_through_by_type(rows):
+    """For each kind of suggestion: how many were written, how many named a
+    target the server could check, and what the judged ones came to. Most
+    written first, with the totals across them."""
+    groups = defaultdict(list)
+    for r in rows:
+        if r.insight_type in FOLLOW_UP_SOURCE_TYPES:
+            groups[r.insight_type].append(r)
+    by_type = [{'type': t, **_outcome_summary(items)} for t, items in groups.items()]
+    by_type.sort(key=lambda g: (-g['insights'], g['type']))
+    return by_type, _outcome_summary([r for items in groups.values() for r in items])
+
+
+def follow_up_rate(rows, since=None):
+    """Refreshes from `since` on that had a suggestion 5 to 21 days old to
+    check, and how many of them wrote a follow-up. rows must reach back
+    FOLLOW_UP_MAX_DAYS before `since`, so the first refreshes in range see
+    their earlier suggestions. Approximate on the generous side: it can't tell
+    which earlier suggestions were voted down or already followed up, so some
+    refreshes counted had nothing left to check."""
+    suggestions = defaultdict(list)
+    batches = {}
+    for r in rows:
+        if r.insight_type in FOLLOW_UP_SOURCE_TYPES:
+            suggestions[r.user_id].append(r.created_at)
+        batch = batches.setdefault((r.user_id, r.batch_id), [r.created_at, False])
+        batch[0] = min(batch[0], r.created_at)
+        batch[1] = batch[1] or r.insight_type == 'follow_up'
+    for times in suggestions.values():
+        times.sort()
+    eligible = followed = 0
+    for (user_id, _), (created, has_follow_up) in batches.items():
+        if since and created < since:
+            continue
+        times = suggestions.get(user_id, [])
+        earliest = bisect_left(times, created - timedelta(days=FOLLOW_UP_MAX_DAYS))
+        latest = bisect_right(times, created - timedelta(days=FOLLOW_UP_MIN_DAYS))
+        if latest > earliest:
+            eligible += 1
+            followed += 1 if has_follow_up else 0
+    return {'eligible': eligible, 'followed': followed, 'rate': _rate(followed, eligible)}
+
+
+def follow_up_votes(votes):
+    """Helpful rate of follow-ups beside every other insight type."""
+    def summary(vs):
+        helpful = sum(1 for v in vs if v.helpful)
+        return {'votes': len(vs), 'helpful': helpful, 'rate': _rate(helpful, len(vs))}
+    return {'follow_up': summary([v for v in votes if v.insight_type == 'follow_up']),
+            'others': summary([v for v in votes if v.insight_type != 'follow_up'])}
+
+
+def weekly_reached_rate(rows, today, weeks=12):
+    """Reached rate of judged targets by the week the suggestion was written,
+    oldest first, with prompt changes marked. A week fills in as its targets
+    are judged, the week after."""
+    first = _monday(today) - timedelta(weeks=weeks - 1)
+    buckets = {first + timedelta(weeks=i): [0, 0] for i in range(weeks)}
+    for r in rows:
+        week = _monday(r.created_at.date())
+        if week in buckets and r.outcome in ('met', 'partial', 'not_met'):
+            buckets[week][0] += 1
+            buckets[week][1] += 1 if r.outcome == 'met' else 0
+    out = []
+    for week, (judged, met) in buckets.items():
+        changes = [(short, label) for d, short, label in PROMPT_CHANGES if week <= d < week + timedelta(days=7)]
+        out.append({'week': week, 'judged': judged, 'met': met, 'rate': _rate(met, judged), 'changes': changes})
+    return out
 
 
 def ai_daily_charts(by_day):

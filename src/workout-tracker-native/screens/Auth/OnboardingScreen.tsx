@@ -24,7 +24,7 @@ import { apiFetch } from '../../utils/api';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { navigationRef } from '../../navigation/navigationRef';
-import { COACH_PROFILE_KEY, DEFAULT_PROFILE, CoachProfile } from '../../components/coach/CoachProfileModal';
+import { DEFAULT_PROFILE, saveCoachProfile, type CoachProfile } from '../../utils/coachProfile';
 import PressableScale from '../../components/PressableScale';
 import { motionSpring } from '../../utils/motion';
 
@@ -307,9 +307,9 @@ export default function OnboardingScreen({ onComplete }: Props) {
       avoid: a.avoid,
       notes: '',
     };
-    await AsyncStorage.multiSet([
-      [`${COACH_PROFILE_KEY}_${user?.id}`, JSON.stringify(profile)],
-      [`${WEEKLY_GOAL_KEY}_${user?.id}`, String(a.days)],
+    await Promise.all([
+      saveCoachProfile(user?.id, profile),
+      AsyncStorage.setItem(`${WEEKLY_GOAL_KEY}_${user?.id}`, String(a.days)),
     ]);
     if (user?.id) await markOnboardingComplete(user.id);
   };

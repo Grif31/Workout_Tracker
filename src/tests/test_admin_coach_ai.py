@@ -292,3 +292,120 @@ class TestUserDeletion:
         # The suite's SQLite runs without foreign keys, so check the declaration Postgres enforces
         fk = next(iter(AiCallLog.__table__.c.user_id.foreign_keys))
         assert (fk.column.table.name, fk.ondelete) == ('user', 'SET NULL')
+
+
+# ---------------------------------------------------------------------------
+# Follow-through: targets judged on stored insights
+# ---------------------------------------------------------------------------
+
+def _insight(user_id, insight_type, outcome=None, target=True, days_ago=10, batch='b', title=None):
+    from models import Insight
+    row = Insight(user_id=user_id, batch_id=batch, position=0, insight_type=insight_type,
+                  title=title or f'{insight_type} {outcome}', body='Body.', outcome=outcome,
+                  target={'metric': 'workouts', 'subject': None, 'from': 2.0, 'to': 3.0} if target else None,
+                  created_at=datetime.now() - timedelta(days=days_ago))
+    db.session.add(row)
+    db.session.commit()
+    return row
+
+
+class TestFollowThroughStats:
+
+    def test_by_type_counts_targets_and_verdicts(self, registered_user):
+        from models import Insight
+        uid = registered_user['user']['id']
+        for outcome in ('met', 'met', 'partial', 'not_met', 'no_data', None):
+            _insight(uid, 'frequency', outcome)
+        _insight(uid, 'frequency', target=False)
+        _insight(uid, 'deload', 'not_met')
+        _insight(uid, 'achievement', target=False)      # suggests nothing, left out
+        _insight(uid, 'follow_up', target=False)
+
+        by_type, total = admin_stats.follow_through_by_type(Insight.query.all())
+        assert [g['type'] for g in by_type] == ['frequency', 'deload']
+        freq = by_type[0]
+        assert (freq['insights'], freq['targeted'], freq['target_rate'], freq['judged']) == (7, 6, 86, 5)
+        assert freq['outcomes'] == {'met': 2, 'partial': 1, 'not_met': 1, 'no_data': 1}
+        assert freq['reached_rate'] == 50          # 2 of the 4 that had data
+        assert (total['insights'], total['judged'], total['reached_rate']) == (8, 6, 40)
+
+    def test_the_suggestion_types_are_the_coachs_own(self):
+        from routes.ai_routes import FOLLOW_UP_SOURCE_TYPES
+        assert admin_stats.FOLLOW_UP_SOURCE_TYPES is FOLLOW_UP_SOURCE_TYPES
+
+    def test_follow_up_rate_counts_refreshes_that_had_something_to_check(self, registered_user, auth_token2):
+        from models import Insight, User
+        uid = registered_user['user']['id']
+        uid2 = User.query.filter_by(username='testuser2').one().id
+        _insight(uid, 'frequency', days_ago=20, batch='old')                    # the earlier suggestion
+        _insight(uid, 'follow_up', target=False, days_ago=10, batch='a')        # 10 days after it: counted, followed
+        _insight(uid, 'achievement', target=False, days_ago=17, batch='b')      # 3 days after it: too soon
+        _insight(uid, 'rest', days_ago=2, batch='c')                            # 18 days after it: counted, not followed
+        _insight(uid2, 'deload', days_ago=1, batch='other')                     # nothing of theirs to check
+        rate = admin_stats.follow_up_rate(Insight.query.all())
+        assert rate == {'eligible': 2, 'followed': 1, 'rate': 50}
+
+    def test_follow_up_rate_only_counts_refreshes_in_range(self, registered_user):
+        from models import Insight
+        uid = registered_user['user']['id']
+        _insight(uid, 'frequency', days_ago=40, batch='old')
+        _insight(uid, 'follow_up', target=False, days_ago=33, batch='before-range')
+        _insight(uid, 'frequency', days_ago=10, batch='earlier')
+        _insight(uid, 'follow_up', target=False, days_ago=3, batch='in-range')
+        since = datetime.now() - timedelta(days=30)
+        assert admin_stats.follow_up_rate(Insight.query.all(), since) == {'eligible': 1, 'followed': 1, 'rate': 100}
+
+    def test_follow_up_votes_beside_the_rest(self):
+        votes = [_vote(True, 'follow_up'), _vote(True, 'follow_up'), _vote(False, 'follow_up'),
+                 _vote(True, 'frequency'), _vote(False, 'deload')]
+        assert admin_stats.follow_up_votes(votes) == {
+            'follow_up': {'votes': 3, 'helpful': 2, 'rate': 67},
+            'others': {'votes': 2, 'helpful': 1, 'rate': 50},
+        }
+
+    def test_weekly_reached_rate_leaves_out_not_logged(self, registered_user):
+        from models import Insight
+        uid = registered_user['user']['id']
+        for outcome in ('met', 'not_met', 'no_data'):
+            _insight(uid, 'frequency', outcome, days_ago=0)
+        weekly = admin_stats.weekly_reached_rate(Insight.query.all(), date.today())
+        assert len(weekly) == 12 and weekly[-1]['judged'] == 2 and weekly[-1]['rate'] == 50
+        assert all(w['judged'] == 0 for w in weekly[:-1])
+
+
+class TestCoachPageFollowThrough:
+
+    def test_empty(self, client, admin_pw):
+        html = client.get('/admin/coach', headers=_basic_auth()).get_data(as_text=True)
+        assert 'Follow-through' in html
+        assert 'No suggestions stored in this range' in html
+        assert 'No targets judged in the last 12 weeks' in html
+
+    def test_shows_types_rates_and_the_weekly_chart(self, client, admin_pw, registered_user):
+        uid = registered_user['user']['id']
+        _insight(uid, 'frequency', 'met', days_ago=10, batch='x')
+        _insight(uid, 'frequency', 'not_met', days_ago=10, batch='x', title='second')
+        _insight(uid, 'deload', 'met', days_ago=10, batch='x', title='third')
+        _add_vote(uid, True, 'Checked', insight_type='follow_up')
+        html = client.get('/admin/coach', headers=_basic_auth()).get_data(as_text=True)
+        assert '<b>frequency</b>' in html and '<b>deload</b>' in html
+        assert '2 of 3 judged, 0 not logged' in html
+        assert 'aria-label="Targets reached by week"' in html
+        assert '1 votes; other insights' in html
+
+    def test_range_filters_suggestions(self, client, admin_pw, registered_user):
+        # Inside the 21 days loaded before a 30-day range for the follow-up rate, but not in the range
+        _insight(registered_user['user']['id'], 'frequency', 'met', days_ago=40)
+        assert 'No suggestions stored in this range' in client.get(
+            '/admin/coach?range=30', headers=_basic_auth()).get_data(as_text=True)
+        assert 'No suggestions stored in this range' not in client.get(
+            '/admin/coach?range=90', headers=_basic_auth()).get_data(as_text=True)
+
+    def test_a_type_in_a_tooltip_cannot_break_out(self, client, admin_pw, registered_user):
+        _insight(registered_user['user']['id'], "frequency", 'met', title="x")
+        from models import Insight
+        row = Insight.query.one()
+        row.insight_type = "deload' onmouseover='alert(1)"
+        db.session.commit()
+        html = client.get('/admin/coach', headers=_basic_auth()).get_data(as_text=True)
+        assert "' onmouseover='" not in html

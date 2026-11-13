@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, FlatList, ActivityIndicator, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
-import { COACH_PROFILE_KEY } from '../coach/CoachProfileModal';
+import { loadCoachProfile } from '../../utils/coachProfile';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 
@@ -45,18 +44,15 @@ export default function SwapExerciseModal({ exercise, onPick, onClose }: Props) 
     setFailed(false);
     (async () => {
       try {
-        // The coach profile lives on the device only, so the injuries ride along on the request
-        let flagged: string[] = [];
-        try {
-          const raw = await AsyncStorage.getItem(`${COACH_PROFILE_KEY}_${user?.id}`);
-          const parsed = raw ? JSON.parse(raw) : null;
-          if (Array.isArray(parsed?.avoid)) flagged = parsed.avoid.filter((a: unknown) => typeof a === 'string' && a !== 'none');
-        } catch { }
-        const res = await apiFetch(`/api/exercises/${templateId}/alternatives?avoid=${encodeURIComponent(flagged.join(','))}`);
+        // The device's injuries ride along; without a profile here the server uses its stored one
+        const profile = await loadCoachProfile(user?.id);
+        const flagged = (profile?.avoid ?? []).filter(a => typeof a === 'string' && a !== 'none');
+        const query = profile ? `?avoid=${encodeURIComponent(flagged.join(','))}` : '';
+        const res = await apiFetch(`/api/exercises/${templateId}/alternatives${query}`);
         if (!res.ok) throw new Error('bad status');
         const data = await res.json();
         if (cancelled) return;
-        setAvoid(flagged);
+        setAvoid(Array.isArray(data.avoid) ? data.avoid : flagged);
         setAlternatives(data.alternatives ?? []);
       } catch {
         if (!cancelled) setFailed(true);

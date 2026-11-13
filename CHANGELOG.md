@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Improved: The Coach remembers
+- The Coach follows up on its own suggestions. A week or so later it checks the data and tells you whether the change happened, then the next step.
+- Your Coach profile is saved to your account, so reinstalling the app or signing in on a new phone keeps your goal, schedule and injuries.
+- Exercise swaps skip what loads your flagged injuries on every phone you sign in on.
+- The Coach measures its own suggestions. When it asks for more back sets or a heavier squat, it checks your logged workouts afterwards and says whether you got there.
+- The Coach learns which changes you tend to make and which you skip, and adjusts how it asks.
+- Insights and your weekly review now read your Notes to Coach, so an injury, an event or a time limit you mention shapes the advice.
+
+### Server
+- New tables `coach_profiles` and `insights`, and `insight_feedback.insight_id` (migrations `f2a4b8c5d0e7`, `a3b5c9d6e1f8`).
+- `GET` / `PUT /api/me/coach-profile`. The insights, weekly review and alternatives routes fall back to the stored profile when a request leaves it out.
+- Insights are stored per refresh and returned with an `id`; votes can name it. The insights prompt shows the Coach its suggestions from 5 to 21 days ago and accepts one `follow_up`.
+- Insights carry a checkable `target`; `insights.target`, `outcome`, `checked_at` (migration `b4c6d0e7f2a9`). A target is judged once, on the week after it was written; judged targets 5 to 21 days old are shown to the Coach with the client's 90-day follow-through record.
+- Insights and the weekly review take `notes`, falling back to the stored profile's.
+- The privacy policy says insights are kept.
+- Insights and weekly review parts with blank text are dropped.
+- `/admin/coach` has a Follow-through card: targets reached by type and by week, the follow-up rate, and follow-ups' helpful rate beside other insights.
+
 ## 1.2.3 (2026-11-11)
 
 ### New: Achievements

@@ -147,6 +147,99 @@
         {% endif %}
       </section>
 
+      {% set ft = follow_through_total %}
+      <section class="card" id="follow-through">
+        <div class="card-head">
+          <div>
+            <h2>Follow-through</h2>
+            <p class="sub">Whether users make the changes the Coach suggests. A suggestion can name a target (sets for a muscle, workouts, a lift's heaviest set), judged on the 7 days after it was written.</p>
+          </div>
+          {{ charts.legend([(outcome_labels['met'], 'out-met'), (outcome_labels['partial'], 'out-partial'),
+                            (outcome_labels['not_met'], 'out-not_met'), (outcome_labels['no_data'], 'out-no_data')]) }}
+        </div>
+        <div class="card-body">
+          <div class="tiles">
+            <div class="tile">
+              <div class="tile-label">Targets reached</div>
+              <div class="tile-value">{{ ft.reached_rate if ft.reached_rate is not none else '–' }}{% if ft.reached_rate is not none %}<span class="unit">%</span>{% endif %}</div>
+              <div class="tile-note">{{ ft.outcomes.met }} of {{ ft.judged - ft.outcomes.no_data }} judged, {{ ft.outcomes.no_data }} not logged</div>
+            </div>
+            <div class="tile">
+              <div class="tile-label">Follow-ups written</div>
+              <div class="tile-value">{{ follow_up_rate.rate if follow_up_rate.rate is not none else '–' }}{% if follow_up_rate.rate is not none %}<span class="unit">%</span>{% endif %}</div>
+              <div class="tile-note">{{ follow_up_rate.followed }} of {{ follow_up_rate.eligible }} refreshes with a suggestion 5 to 21 days old</div>
+            </div>
+            <div class="tile">
+              <div class="tile-label">Follow-ups helpful</div>
+              {% set fv = follow_up_votes %}
+              <div class="tile-value">{{ fv.follow_up.rate if fv.follow_up.rate is not none else '–' }}{% if fv.follow_up.rate is not none %}<span class="unit">%</span>{% endif %}</div>
+              <div class="tile-note">{{ fv.follow_up.votes }} votes; other insights {{ '%d%%' % fv.others.rate if fv.others.rate is not none else '–' }}</div>
+            </div>
+          </div>
+        </div>
+        {% if follow_through %}
+          <div class="table-wrap">
+            <table class="types">
+              <thead><tr><th>Type</th><th class="num">Suggestions</th><th class="num">With a target</th><th>Judged targets</th><th class="num">Reached</th></tr></thead>
+              <tbody>
+                {% for g in follow_through %}
+                  <tr>
+                    <td class="nowrap"><b>{{ g.type }}</b></td>
+                    <td class="num">{{ g.insights }}</td>
+                    <td class="num">{{ g.targeted }} ({{ g.target_rate }}%)</td>
+                    <td class="meter-cell">
+                      {% if g.judged %}
+                        {% set ns = namespace(rows=[]) %}
+                        {% for key in outcome_keys %}{% if g.outcomes[key] %}{% set ns.rows = ns.rows + [[g.outcomes[key]|string, outcome_labels[key], 'out-' ~ key]] %}{% endif %}{% endfor %}
+                        <div class="meter-row">
+                          <div class="meter" data-tip='{{ {"head": g.type ~ ": " ~ g.judged ~ " judged", "rows": ns.rows}|tojson }}'>
+                            {% for key in outcome_keys %}{% if g.outcomes[key] %}<b class="out-{{ key }}" style="width: {{ (100 * g.outcomes[key] / g.judged)|round(1) }}%"></b>{% endif %}{% endfor %}
+                          </div>
+                          <span class="meter-value">{{ g.judged }}</span>
+                        </div>
+                      {% else %}
+                        <span class="muted">None judged yet</span>
+                      {% endif %}
+                    </td>
+                    <td class="num">{{ '%d%%' % g.reached_rate if g.reached_rate is not none else '–' }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <details class="table-toggle">
+            <summary>Show counts</summary>
+            <div class="table-wrap">
+              <table>
+                <thead><tr>
+                  <th>Type</th><th class="num">Suggestions</th><th class="num">With a target</th>
+                  {% for key in outcome_keys %}<th class="num">{{ outcome_labels[key] }}</th>{% endfor %}
+                </tr></thead>
+                <tbody>
+                  {% for g in follow_through %}
+                    <tr>
+                      <td>{{ g.type }}</td><td class="num">{{ g.insights }}</td><td class="num">{{ g.targeted }}</td>
+                      {% for key in outcome_keys %}<td class="num">{{ g.outcomes[key] }}</td>{% endfor %}
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        {% else %}
+          <div class="empty">No suggestions stored in this range.</div>
+        {% endif %}
+        <div class="card-body">
+          <h3 class="chart-title">Targets reached by week written</h3>
+          <p class="sub">Last 12 weeks, whatever the range above. A week fills in once its targets are judged, the week after. Lines mark prompt changes.</p>
+          {% if reached_weekly|map(attribute='judged')|sum %}
+            {{ charts.line(reached_chart, 'Targets reached by week') }}
+          {% else %}
+            <div class="empty">No targets judged in the last 12 weeks.</div>
+          {% endif %}
+        </div>
+      </section>
+
       <section class="card">
         <div class="card-head">
           <div>
@@ -219,6 +312,11 @@
     .wrong-title { font-size: 14px; font-weight: 700; }
     .wrong-body { font-size: 13px; color: var(--ink-2); line-height: 1.55; margin-top: 4px; max-width: 820px; }
     .wrong-meta { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--muted); margin-top: 8px; }
+    .chart-title { font-size: 14px; font-weight: 700; margin: 0; }
+    /* Outcomes are a judgement, so they take the status colors, not the categorical series */
+    .out-met { background: var(--good); } .out-partial { background: var(--warning); }
+    .out-not_met { background: var(--critical); } .out-no_data { background: var(--s-other); }
+    #follow-through .tiles { margin-bottom: 0; }
     .chip { background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-2); border-radius: 999px; padding: 1px 8px; font-weight: 600; }
   </style>
 {% endblock %}

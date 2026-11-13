@@ -16,7 +16,7 @@ import CoachScreen from '../screens/TrainingTab/CoachScreen';
 import { appCache } from '../utils/appCache';
 import Collapsible from '../components/Collapsible';
 import { COACH_INSIGHTS_KEY } from '../constants/storageKeys';
-import { COACH_PROFILE_KEY } from '../components/coach/CoachProfileModal';
+import { COACH_PROFILE_KEY } from '../utils/coachProfile';
 
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22, xxl: 28 } } }));
 jest.mock('theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
@@ -255,6 +255,50 @@ describe('CoachScreen', () => {
       expect(JSON.parse(init.body).avoid).toEqual(['knees', 'lower_back']);
     });
 
+    it('sends the notes to the Coach with the insights request', async () => {
+      await AsyncStorage.setItem(`${COACH_PROFILE_KEY}_${mockUser.id}`, JSON.stringify({ notes: 'Left wrist is sore.' }));
+      installServer({ '/api/ai/insights': { insights: [{ type: 'suggestion', title: 'T', body: 'B', priority: 'low' }] } });
+      const r = await renderScreen();
+      fireEvent.press(r.getByText('Coach'));
+      const button = await r.findByText('Generate Insights');
+      await act(async () => { fireEvent.press(button); });
+      const [, init] = (global.fetch as jest.Mock).mock.calls.find(([u]) => String(u).includes('/api/ai/insights'));
+      expect(JSON.parse(init.body).notes).toBe('Left wrist is sore.');
+    });
+
+    it('sends no profile fields when the device has none, so the server reads its stored one', async () => {
+      installServer({ '/api/ai/insights': { insights: [{ id: 5, type: 'suggestion', title: 'T', body: 'B', priority: 'low' }] } });
+      const r = await renderScreen();
+      fireEvent.press(r.getByText('Coach'));
+      const button = await r.findByText('Generate Insights');
+      await act(async () => { fireEvent.press(button); });
+      const [, init] = (global.fetch as jest.Mock).mock.calls.find(([u]) => String(u).includes('/api/ai/insights'));
+      expect(JSON.parse(init.body)).toEqual({});
+    });
+
+    it('votes on a stored insight by its id', async () => {
+      installServer({ '/api/ai/insights/feedback': { message: 'ok' } });
+      await AsyncStorage.setItem(COACH_INSIGHTS_KEY, JSON.stringify({
+        ...cached, insights: [{ ...cached.insights[0], id: 31 }],
+      }));
+      const r = await renderScreen();
+      fireEvent.press(r.getByText('Coach'));
+      const notHelpful = await r.findByLabelText('Not helpful');
+      await act(async () => { fireEvent.press(notHelpful); });
+      expect(feedbackBodies()[0]).toMatchObject({ insight_id: 31, helpful: false });
+    });
+
+    it('a fresh install shows the profile the server kept', async () => {
+      installServer({ '/api/me/coach-profile': { profile: {
+        goal: 'strength', experience: 'advanced', equipment: 'dumbbells', days_per_week: 5,
+        session_length_min: 45, avoid: ['knees'], notes: '',
+      } } });
+      const r = await renderScreen();
+      fireEvent.press(r.getByText('Coach'));
+      await waitFor(() => expect(r.getByText(/5 days\/wk/)).toBeTruthy());
+      expect(JSON.parse((await AsyncStorage.getItem(`${COACH_PROFILE_KEY}_${mockUser.id}`))!).synced).toBe(true);
+    });
+
     const feedbackBodies = () => (global.fetch as jest.Mock).mock.calls
       .filter(([u]) => String(u).includes('/api/ai/insights/feedback'))
       .map(([, init]) => JSON.parse(init.body));
@@ -268,7 +312,7 @@ describe('CoachScreen', () => {
 
       await act(async () => { fireEvent.press(helpful); });
       expect(feedbackBodies()).toEqual([
-        { type: 'achievement', title: 'Bench is climbing', body: 'Up 15 lbs in 3 weeks.', helpful: true, reason: null },
+        { insight_id: null, type: 'achievement', title: 'Bench is climbing', body: 'Up 15 lbs in 3 weeks.', helpful: true, reason: null },
       ]);
       expect(r.getByText('Thanks. The Coach will use this.')).toBeTruthy();
       expect(r.getByLabelText('Helpful').props.accessibilityState.selected).toBe(true);

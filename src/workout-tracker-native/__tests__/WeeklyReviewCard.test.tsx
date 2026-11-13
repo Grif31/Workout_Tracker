@@ -8,7 +8,7 @@ import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { mockUser } from './testUtils';
 import WeeklyReviewCard, { WEEKLY_REVIEW_KEY } from '../components/WeeklyReviewCard';
-import { COACH_PROFILE_KEY } from '../components/coach/CoachProfileModal';
+import { COACH_PROFILE_KEY } from '../utils/coachProfile';
 import { syncServerPremium } from '../utils/premiumSync';
 
 jest.mock('../utils/premiumSync', () => ({ syncServerPremium: jest.fn() }));
@@ -129,7 +129,14 @@ describe('WeeklyReviewCard', () => {
     const r = await renderCard(true);
     await act(async () => { fireEvent.press(r.getByText("Get Coach's Read")); });
     await waitFor(() => expect(reviewCalls()).toHaveLength(1));
-    expect(JSON.parse(reviewCalls()[0][1].body)).toEqual({ experience: 'advanced', goal: 'strength', avoid: ['knees'], week_start: WEEK });
+    expect(JSON.parse(reviewCalls()[0][1].body)).toEqual({ experience: 'advanced', goal: 'strength', avoid: ['knees'], notes: '', week_start: WEEK });
+  });
+
+  it('sends only the week when the device has no profile, so the server reads its own', async () => {
+    const r = await renderCard(true);
+    await act(async () => { fireEvent.press(r.getByText("Get Coach's Read")); });
+    await waitFor(() => expect(reviewCalls()).toHaveLength(1));
+    expect(JSON.parse(reviewCalls()[0][1].body)).toEqual({ week_start: WEEK });
   });
 
   it('turns the button into a pulsing star while writing, and ignores a second tap', async () => {

@@ -377,9 +377,23 @@ class AiSaveSchema(_Base):
     starter      = fields.Bool(load_default=False)
 
 class AiInsightsSchema(_Base):
+    # Left out, each falls back to the stored coach profile; an empty avoid
+    # list is an answer ("no injuries"), which is why its default is None
     experience = fields.Str(load_default=None, validate=_ai_option)
     goal       = fields.Str(load_default=None, validate=_ai_option)
-    avoid      = _AvoidField(load_default=list)
+    avoid      = _AvoidField(load_default=None)
+    # The profile's "Notes to Coach"; an empty string is an answer (no notes)
+    notes      = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=AI_NOTES_MAX_LEN))
+
+
+class CoachProfileSchema(_Base):
+    goal               = fields.Str(required=True, validate=validate.Length(min=1, max=AI_OPTION_MAX_LEN))
+    experience         = fields.Str(required=True, validate=validate.Length(min=1, max=AI_OPTION_MAX_LEN))
+    equipment          = fields.Str(required=True, validate=validate.Length(min=1, max=AI_OPTION_MAX_LEN))
+    days_per_week      = fields.Int(required=True, strict=True, validate=validate.Range(min=1, max=7))
+    session_length_min = fields.Int(required=True, strict=True, validate=validate.Range(min=1, max=600))
+    avoid              = _AvoidField(load_default=list)
+    notes              = fields.Str(load_default='', validate=validate.Length(max=AI_NOTES_MAX_LEN))
 
 
 INSIGHT_FEEDBACK_REASONS = ['known', 'irrelevant', 'wrong', 'vague']
@@ -429,6 +443,9 @@ class PaywallEventSchema(_Base):
 
 
 class AiInsightFeedbackSchema(_Base):
+    # The stored insight being voted on. Builds from before insights were
+    # stored send only the text, and so does a batch cached before the update
+    insight_id = fields.Int(load_default=None, allow_none=True, strict=True)
     type    = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=32))
     title   = fields.Str(required=True, validate=validate.Length(min=1, max=200))
     body    = fields.Str(required=True, validate=validate.Length(min=1, max=1000))
