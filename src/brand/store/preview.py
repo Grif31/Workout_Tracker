@@ -26,18 +26,19 @@ PREVIEWS = {
         ('03-progress.MOV', ['Your progress,', 'week by week']),
     ],
     'arete-preview-2.mp4': [
-        ('04-rank.MOV', ['Earn your rank,', 'reach Aretē']),
+        ('04-rank.MP4', ['Earn your rank,', 'reach Aretē']),
         ('05-coach.MOV', ['A Coach built', 'for your goals']),
         # CapCut appended its logo card from 3.8 s; the third value ends the clip early
         ('06-run.MOV', ['Runs, rides,', 'walks and hikes'], 3.75),
     ],
 }
 
-# Recordings are 888 wide with the status bar (and its red recording
+# Recordings are scaled to 888 x 1920 first (a native 1170 x 2532 capture lands
+# within a pixel of that), with the status bar (and its red recording
 # indicator) in the top 100 px and the empty home-indicator strip in the
 # bottom 50; all three are cut before scaling
 CROP_W, CROP_H = 886, 1770
-CROP = f'crop={CROP_W}:{CROP_H}:1:100'
+CROP = f'scale=888:1920,crop={CROP_W}:{CROP_H}:1:100'
 SHOT_W = 776
 SHOT_H = round(SHOT_W * CROP_H / CROP_W / 2) * 2
 SHOT_X, SHOT_Y = (W - SHOT_W) // 2, 288
