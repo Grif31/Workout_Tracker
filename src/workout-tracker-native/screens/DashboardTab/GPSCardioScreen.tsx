@@ -314,7 +314,7 @@ export default function GPSCardioScreen({ navigation }: Props) {
       clearRun();
       setConfirmVisible(false);
       showToast(
-        "It's stored on this phone and will upload automatically when you're back online. It won't show in your history until then.",
+        "It's stored on this phone and will upload automatically when you're back online.",
         { title: 'Activity saved offline', icon: 'cloud-offline-outline', tone: 'warning', durationMs: 6500 },
       );
       navigation.goBack();

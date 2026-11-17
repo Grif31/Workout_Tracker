@@ -275,7 +275,7 @@ describe('WorkoutLog save', () => {
     expect(mockClearSession).toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();
     expect(showToast).toHaveBeenCalledWith(
-      expect.stringContaining("won't show in your history"),
+      expect.stringContaining("will upload automatically when you're back online"),
       expect.objectContaining({ title: 'Workout saved offline', durationMs: expect.any(Number) }),
     );
     expect((showToast as jest.Mock).mock.calls[0][1].durationMs).toBeGreaterThan(3000);

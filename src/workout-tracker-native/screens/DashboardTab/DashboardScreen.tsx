@@ -864,8 +864,8 @@ export default function DashboardScreen({ navigation }: Props) {
                 </Text>
                 <Text style={styles.pendingSyncBody}>
                   {waitingCount === 1
-                    ? "Saved on this phone while you were offline. It will upload automatically when you're back online, then show up in your history."
-                    : "Saved on this phone while you were offline. They will upload automatically when you're back online, then show up in your history."}
+                    ? "Saved on this phone while you were offline. It will upload automatically when you're back online."
+                    : "Saved on this phone while you were offline. They will upload automatically when you're back online."}
                 </Text>
                 <TouchableOpacity
                   style={styles.pendingSyncButton}
@@ -1122,7 +1122,7 @@ export default function DashboardScreen({ navigation }: Props) {
                         logging screen's timer, ~0 for a run entered afterwards */}
                     {(item.cardio_duration ?? item.duration) != null && (
                       <View style={styles.pill}>
-                        <Text style={styles.pillText}>{Math.round(item.cardio_duration ?? item.duration ?? 0)} min</Text>
+                        <Text style={styles.pillText}>{fmtDuration(item.cardio_duration ?? item.duration ?? 0)}</Text>
                       </View>
                     )}
                     {item.distance != null && item.distance > 0 && (

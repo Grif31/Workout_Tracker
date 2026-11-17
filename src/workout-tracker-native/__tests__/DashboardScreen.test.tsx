@@ -272,7 +272,7 @@ describe('DashboardScreen', () => {
 
       const { getByText, queryByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
       await waitFor(() => expect(getByText('1 workout waiting to upload')).toBeTruthy());
-      expect(getByText(/upload automatically when you're back online, then show up in your history/)).toBeTruthy();
+      expect(getByText(/upload automatically when you're back online./)).toBeTruthy();
 
       await act(async () => { await enqueueWorkout({ workoutName: 'Offline Arms' }); });
       expect(getByText('2 workouts waiting to upload')).toBeTruthy();

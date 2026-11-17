@@ -23,6 +23,11 @@ describe('fmtDuration', () => {
     // 2m + 0.5083.. -> ~30s
     expect(fmtDuration(2.508333)).toBe('2m 30s');
   });
+
+  it('carries seconds that round up to 60 into the minute', () => {
+    expect(fmtDuration(4.9999)).toBe('5m 0s');
+    expect(fmtDuration(59.9999)).toBe('1h 0m');
+  });
 });
 
 describe('fmtPace', () => {

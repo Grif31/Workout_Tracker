@@ -1525,7 +1525,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       AsyncStorage.removeItem(TIMER_CHECKPOINT_KEY);
       AsyncStorage.removeItem(WORKOUT_BACKUP_KEY);
       showToast(
-        "It's stored on this phone and will upload automatically when you're back online. It won't show in your history until then.",
+        "It's stored on this phone and will upload automatically when you're back online.",
         { title: 'Workout saved offline', icon: 'cloud-offline-outline', tone: 'warning', durationMs: 6500 },
       );
       onCancel?.();

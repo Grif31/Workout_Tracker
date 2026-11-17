@@ -1292,7 +1292,7 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 **Device checklist** (the part tests can't cover)
 - [x] Start a run, minimize, walk 100 m, resume: distance and route continued, no gap counted (device 2026-11-17: 5 min walk, minimized, resumed, saved)
 - [ ] Minimize, lock the phone for 5 minutes, unlock: the run kept recording (background mode), and again with only "While Using" permission
-- [ ] Pause, minimize, resume; stop from the screen after minimizing; save online and offline from a minimized run
+- [ ] Pause, minimize, resume; stop from the screen after minimizing; save online and offline from a minimized run. Device 2026-11-17: pause and resume, and an offline save, both worked
 - [ ] Discard from the mini bar: double confirm, tracking stops, the Live Activity goes
 - [ ] Kill the app mid-run: relaunch offers "Review & Save" as today, and no Live Activity is left behind. Device 2026-11-17: force-quit mid-walk came back and resumed; still to check no Live Activity is left behind
 - [ ] A lifting workout minimized, then a run started: the prompt appears; and the reverse
@@ -1505,7 +1505,7 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 
 ### Done when
 - [ ] On a device: walk with the phone locked on the map screen and minimized, force-quit mid-walk and Keep Recording, pause and resume, and switch to airplane mode before Stop. The full route is recoverable in every case, with no straight line across a gap, pause or resume
-  - Done 2026-11-17: minimized, force-quit and Keep Recording, saved, no straight lines. Still to do: phone locked on the map screen, pause and resume, airplane mode before Stop
+  - Done 2026-11-17: minimized, force-quit and Keep Recording, pause and resume, saved offline and uploaded on reconnect, no straight lines. Still to do: phone locked on the map screen
 - [x] (audited 2026-11-09) No path deletes a tracked activity without a second confirmation
   - GPS: the save sheet's Discard, a recovered run's Discard and the mini bar's Discard all ask "Discard this activity?" first (tests in `GPSCardioScreen` and `MiniRunBar`); every other `clearRun` follows a save to the server or the offline queue. A checkpoint is dropped unasked only when it holds under 2 fixes, which is no route. A sign-out checkpoints a run in progress under its owner
   - Saved activities: Delete on Cardio Details and Workout Details asks first. A queued workout the server refused is deleted only from its Home card, behind "Delete this workout?"
