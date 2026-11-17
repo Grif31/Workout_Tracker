@@ -35,6 +35,9 @@ Backend only, no app release.
 ### Fixed: Achievements
 - The streak track counts from the streak you're on now; your best streak still earns badges.
 
+### New: Average PRs per week
+- The PR Dashboard's stats include `avg_prs_per_week`: every PR divided by the weeks from your first PR's week through this week, so quiet weeks count. The app shows it from its next release.
+
 ## 1.2.3 (2026-11-11)
 
 ### New: Achievements

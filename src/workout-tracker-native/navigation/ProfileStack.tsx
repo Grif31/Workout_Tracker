@@ -9,6 +9,9 @@ import SettingsScreen from '../screens/ProfileTab/SettingsScreen';
 import AccountSettingsScreen from '../screens/ProfileTab/AccountSettingsScreen';
 import ImportScreen from '../screens/ProfileTab/ImportScreen';
 import WorkoutSettingsScreen from '../screens/ProfileTab/WorkoutSettingsScreen';
+import GpsSettingsScreen from '../screens/ProfileTab/GpsSettingsScreen';
+import NotificationSettingsScreen from '../screens/ProfileTab/NotificationSettingsScreen';
+import HelpFaqScreen from '../screens/ProfileTab/HelpFaqScreen';
 import WorkoutDetails from '../screens/ProfileTab/WorkoutDetails';
 import CardioDetailsScreen from '../screens/DashboardTab/CardioDetailsScreen';
 import MeasurementsScreen from '../screens/ProfileTab/MeasurementsScreen';
@@ -36,6 +39,9 @@ export function ProfileStack() {
       <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
       <Stack.Screen name="Import" component={ImportScreen} />
       <Stack.Screen name="WorkoutSettings" component={WorkoutSettingsScreen} />
+      <Stack.Screen name="GpsSettings" component={GpsSettingsScreen} />
+      <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
+      <Stack.Screen name="HelpFaq" component={HelpFaqScreen} />
       <Stack.Screen name="WorkoutDetails" component={WorkoutDetails} />
       <Stack.Screen name="CardioDetails" component={CardioDetailsScreen} options={{ contentStyle: { paddingTop: 0 } }} />
       <Stack.Screen name="EditWorkout" component={EditWorkoutScreen} />

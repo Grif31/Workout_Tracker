@@ -47,6 +47,8 @@ type DashboardData = {
     prs_this_month: number;
     pr_streak_weeks: number;
     total_prs: number;
+    // Optional: absent on an older, not-yet-deployed API response.
+    avg_prs_per_week?: number;
     // Total weight increased / reps added across all PRs in the last 7
     // days — independent of the feed's own type filter (a stable momentum
     // stat, optional: absent on an older, not-yet-deployed API response).
@@ -523,6 +525,16 @@ export default function PRDashboardScreen({ navigation }: Props) {
               <Text style={[styles.heroStatValue, { color: colors.textPrimary }]}>{stats.total_prs}</Text>
               <Text style={styles.heroStatLabel}>total PRs</Text>
             </View>
+            {stats.avg_prs_per_week != null && (
+              <>
+                <View style={[styles.heroStatDivider, { backgroundColor: colors.border }]} />
+                <View style={styles.heroStatCol}>
+                  <Ionicons name="stats-chart-outline" size={16} color={colors.textSecondary} />
+                  <Text style={[styles.heroStatValue, { color: colors.textPrimary }]}>{stats.avg_prs_per_week}</Text>
+                  <Text style={styles.heroStatLabel}>avg per week</Text>
+                </View>
+              </>
+            )}
           </View>
         </View>
     ) : null;

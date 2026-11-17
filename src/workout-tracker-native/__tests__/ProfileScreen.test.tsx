@@ -356,6 +356,27 @@ describe('ProfileScreen', () => {
       await waitFor(() => expect(puts[puts.length - 1]).toEqual([serverPin(1), serverPin(2), serverPin(3)]));
     });
 
+    it('groups rep records by weight in the type picker, heaviest first', async () => {
+      const reps = (id: number, value: number, at: number) =>
+        pr(id, 'Bent Over Row', value, { exercise_template_id: 9, pr_type: 'max_reps', weight_context: at, pr_label: 'Max Reps' });
+      routeFetch(
+        [pr(10, 'Bent Over Row', 195, { exercise_template_id: 9 }), reps(11, 10, 135), reps(12, 9, 195), reps(13, 10, 185)],
+        { saved: true, pins: [] },
+      );
+      const { findByText, getByText, getByLabelText, getAllByText, queryByText } = renderScreen();
+      fireEvent.press(await findByText('Choose up to 3 PRs to show here'));
+      fireEvent.press(getByText('Add a PR'));
+      fireEvent.press(getByText('Bent Over Row'));
+
+      expect(getByText('Most reps at a weight')).toBeTruthy();
+      expect(queryByText('Max Reps')).toBeNull();
+      // The picker's rows are last on screen: Max Weight's value, then the rep records' weights
+      const weights = getAllByText(/^\d+ lbs$/).map(n => n.props.children).slice(-4);
+      expect(weights).toEqual(['195 lbs', '195 lbs', '185 lbs', '135 lbs']);
+      fireEvent.press(getByLabelText('Most reps at a weight, 185 lbs: 10 reps'));
+      await waitFor(() => expect(puts[puts.length - 1]).toEqual([{ exercise_template_id: 9, pr_type: 'max_reps', weight_context: 185 }]));
+    });
+
     it('puts the choice back when the server refuses it', async () => {
       const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
       routeFetch(threePrs, { saved: true, pins: [serverPin(1), serverPin(2)] }, false);

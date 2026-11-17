@@ -383,6 +383,44 @@ export default function ProfileScreen({ navigation }: Props) {
       : pr.pr_type === 'max_elevation' ? `${Math.round(toDisplayElevation(pr.value, distanceUnit))} ${elevationLabel(distanceUnit)}`
       : `${toDisplayDistance(pr.value, distanceUnit).toFixed(1)} ${distanceUnit}`;
 
+  // The PR picker's rows, grouped so an exercise's many rep records read as
+  // one table (weight on the left, reps on the right) instead of a stack of
+  // identical "Max Reps" rows. One-off records come first, without a heading.
+  const prPickerSections = (exerciseId: number) => {
+    type Option = { title: string; value: string; prType: PR['pr_type']; context: number | null; sort: number };
+    const groups: Record<'top' | 'reps' | 'times' | 'distances', Option[]> = { top: [], reps: [], times: [], distances: [] };
+    const seen = new Set<string>();
+    for (const p of prs) {
+      // Estimated 1RM is a trend metric, never shown as a PR.
+      if (p.exercise_template_id !== exerciseId || p.pr_type === 'estimated_1rm') continue;
+      const key = `${p.pr_type}:${p.weight_context ?? ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const context = p.weight_context ?? null;
+      const base = { prType: p.pr_type, context, value: prValueText(p), sort: context ?? 0 };
+      switch (p.pr_type) {
+        case 'max_reps':
+          groups.reps.push({ ...base, title: context ? `${context} ${unit}` : 'Bodyweight', sort: -(context ?? 0) });
+          break;
+        case 'best_time':
+          groups.times.push({ ...base, title: p.pr_label.replace(/ Best Time$/, '') });
+          break;
+        case 'best_distance':
+          groups.distances.push({ ...base, title: p.pr_label.replace(/ Best Distance$/, '') });
+          break;
+        default:
+          groups.top.push({ ...base, title: p.pr_type === 'max_weight' ? 'Max Weight' : p.pr_label });
+      }
+    }
+    const bySort = (a: Option, b: Option) => a.sort - b.sort;
+    return [
+      { key: 'top', title: null, options: groups.top },
+      { key: 'reps', title: 'Most reps at a weight', options: groups.reps.sort(bySort) },
+      { key: 'times', title: 'Fastest time', options: groups.times.sort(bySort) },
+      { key: 'distances', title: 'Farthest distance', options: groups.distances.sort(bySort) },
+    ].filter(s => s.options.length > 0);
+  };
+
   const prTypeText = (pr: PR) =>
     pr.pr_type === 'max_weight' ? 'Max Weight'
       : pr.pr_type === 'max_reps' ? (pr.weight_context != null ? `@ ${pr.weight_context} ${unit}` : 'Max Reps')
@@ -793,56 +831,52 @@ export default function ProfileScreen({ navigation }: Props) {
                   <Ionicons name="close" size={24} color={colors.textPrimary} />
                 </TouchableOpacity>
               </View>
-              <FlatList
-                data={(() => {
-                  const exercisePRs = prs.filter(p => p.exercise_template_id === pendingExercise.id);
-                  const opts: { label: string; value: string; prType: PR['pr_type']; context: number | null }[] = [];
-                  const seen = new Set<string>();
-                  for (const p of exercisePRs) {
-                    // Estimated 1RM is a trend metric, never shown as a PR.
-                    if (p.pr_type === 'estimated_1rm') continue;
-                    const key = `${p.pr_type}:${p.weight_context ?? ''}`;
-                    if (seen.has(key)) continue;
-                    seen.add(key);
-                    let label = p.pr_label;
-                    let valueStr = '';
-                    if (p.pr_type === 'max_weight') { label = 'Max Weight'; valueStr = `${p.value} ${unit}`; }
-                    else if (p.pr_type === 'max_reps') { label = 'Max Reps'; valueStr = `${p.value} reps${p.weight_context != null ? ` @ ${p.weight_context} ${unit}` : ''}`; }
-                    else if (p.pr_type === 'best_time') { valueStr = fmtTime(p.value); }
-                    else if (p.pr_type === 'best_distance' || p.pr_type === 'longest_distance') { valueStr = `${toDisplayDistance(p.value, distanceUnit).toFixed(1)} ${distanceUnit}`; }
-                    else if (p.pr_type === 'max_elevation') { valueStr = `${Math.round(toDisplayElevation(p.value, distanceUnit))} ${elevationLabel(distanceUnit)}`; }
-                    else if (p.pr_type === 'max_duration') { label = 'Longest Hold'; valueStr = fmtHold(p.value); }
-                    opts.push({ label, value: valueStr, prType: p.pr_type, context: p.weight_context ?? null });
-                  }
-                  return opts;
-                })()}
-                keyExtractor={item => `${item.prType}:${item.context}`}
-                contentContainerStyle={{ padding: spacing.md, gap: spacing.sm }}
-                ListEmptyComponent={
-                  <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: spacing.lg }}>No PR data for this exercise</Text>
+              {(() => {
+                const sections = prPickerSections(pendingExercise.id);
+                if (sections.length === 0) {
+                  return <Text style={styles.pickEmpty}>No PR data for this exercise</Text>;
                 }
-                renderItem={({ item }) => {
-                  const pin: Pin = { exerciseId: pendingExercise.id, prType: item.prType, context: item.context };
-                  // Already on the card: shown checked, and can't be added twice
-                  const selected = pins.some(p => samePin(p, pin));
-                  return (
-                    <Pressable
-                      style={[styles.optionRow, {
-                        backgroundColor: selected ? colors.accent + '22' : colors.surface,
-                        borderColor: selected ? colors.accent : 'transparent',
-                      }]}
-                      disabled={selected}
-                      onPress={() => handleAddPin(pin)}
-                    >
-                      <View>
-                        <Text style={[styles.optionName, { color: colors.textPrimary }]}>{item.label}</Text>
-                        <Text style={[styles.optionEquipment, { color: colors.textSecondary }]}>{item.value}</Text>
+                return (
+                  <ScrollView contentContainerStyle={styles.pickContent}>
+                    <Text style={styles.editHint}>Choose a record to show on your profile.</Text>
+                    {sections.map(section => (
+                      <View key={section.key}>
+                        {section.title && <Text style={styles.pickSectionTitle}>{section.title}</Text>}
+                        <View style={styles.pickCard}>
+                          {section.options.map((item, i) => {
+                            const pin: Pin = { exerciseId: pendingExercise.id, prType: item.prType, context: item.context };
+                            // Already on the card: shown checked, and can't be added twice
+                            const selected = pins.some(p => samePin(p, pin));
+                            return (
+                              <Pressable
+                                key={`${item.prType}:${item.context}`}
+                                style={({ pressed }) => [
+                                  styles.pickRow,
+                                  i > 0 && styles.pickRowDivider,
+                                  (pressed || selected) && { backgroundColor: colors.accent + '1A' },
+                                ]}
+                                disabled={selected}
+                                onPress={() => handleAddPin(pin)}
+                                accessibilityRole="button"
+                                accessibilityLabel={`${section.title ? `${section.title}, ` : ''}${item.title}: ${item.value}`}
+                                accessibilityState={{ selected, disabled: selected }}
+                              >
+                                <Text style={styles.pickTitle} numberOfLines={1}>{item.title}</Text>
+                                <Text style={styles.pickValue}>{item.value}</Text>
+                                <Ionicons
+                                  name={selected ? 'checkmark-circle' : 'add-circle-outline'}
+                                  size={22}
+                                  color={selected ? colors.accent : colors.textSecondary}
+                                />
+                              </Pressable>
+                            );
+                          })}
+                        </View>
                       </View>
-                      {selected && <Ionicons name="checkmark-circle" size={20} color={colors.accent} />}
-                    </Pressable>
-                  );
-                }}
-              />
+                    ))}
+                  </ScrollView>
+                );
+              })()}
             </>
           ) : (
             /* ── Pick exercise ── */
@@ -1156,6 +1190,30 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   modalDone: { fontSize: typography.fontSize.md, fontWeight: '600' },
   editHint: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginBottom: spacing.xs },
   addRow: { justifyContent: 'center', gap: spacing.xs, borderStyle: 'dashed' },
+
+  // PR picker: grouped cards, record value right-aligned
+  pickContent: { padding: spacing.md, gap: spacing.md },
+  pickEmpty: { color: colors.textSecondary, textAlign: 'center', marginTop: spacing.lg },
+  pickSectionTitle: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: spacing.xs,
+    marginLeft: spacing.xs,
+  },
+  pickCard: { backgroundColor: colors.surface, borderRadius: 10, overflow: 'hidden' },
+  pickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    minHeight: 52,
+  },
+  pickRowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  pickTitle: { flex: 1, fontSize: 15, fontWeight: '500', color: colors.textPrimary },
+  pickValue: { fontSize: 15, fontWeight: '700', color: colors.textPrimary, fontVariant: ['tabular-nums'] },
 
   // Modal
   modalContainer: { flex: 1 },

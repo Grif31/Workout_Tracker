@@ -145,8 +145,8 @@ Check off items as you complete them.
 
 - [ ] **Social login — complete Google setup** (Facebook dropped 2026-11-02: removed from the app, and the backend already refuses it)
   > Apple Sign-In works end-to-end. Google and Facebook buttons exist in `SocialAuthButtons.tsx` and the backend endpoint (`POST /api/auth/social`) is built, but Google/Facebook buttons currently show a "Coming Soon" alert because `EXPO_PUBLIC_GOOGLE_CLIENT_ID` and `EXPO_PUBLIC_FACEBOOK_APP_ID` are not configured.
-  - [ ] Set up a Google OAuth client ID (Google Cloud Console) and add `EXPO_PUBLIC_GOOGLE_CLIENT_ID` to `.env`
-  - [ ] Wire `@react-native-google-signin/google-signin` in the frontend to get the ID token and pass it to `/api/auth/social`
+  - [x] Set up a Google OAuth client ID (Google Cloud Console) and add `EXPO_PUBLIC_GOOGLE_CLIENT_ID` to `.env`
+  - [x] Wire `@react-native-google-signin/google-signin` in the frontend to get the ID token and pass it to `/api/auth/social`
   - [ ] Test full sign-in flow for each provider on a real iOS and Android device
 
 - [ ] **Save preferences to the account, not only the phone** (found 2026-10-28, after launch)
@@ -498,7 +498,7 @@ Check off items as you complete them.
   - [ ] Update `POST /api/workouts` and `PUT/PATCH /api/workouts/<id>` to persist `superset_group`
   - [ ] Update WorkoutLog to let users pair exercises into a superset (e.g. long-press → "Pair as superset")
   - [ ] Render superset pairs as alternating A/B rows in WorkoutLog and WorkoutDetails
-- [ ] **Workout streaks and achievement badges**
+- [x] **Workout streaks and achievement badges**
   - [x] Weekly workout streak (consecutive weeks meeting weekly goal)
   - [x] Current weekly streak displayed on dashboard (🔥 badge)
   - [x] Longest weekly streak on Profile screen
@@ -506,8 +506,17 @@ Check off items as you complete them.
   - [x] Longest daily streak tracked in backend and shown in streak modal
   - [x] Monthly workout streak (consecutive months meeting monthly goal, goal = weekly goal × 4)
   - [x] Streak type selector modal on dashboard (weekly / monthly / daily)
-  - [ ] Achievement badges (e.g. "First workout", "10-week streak", "100 workouts"): planned in §27
-  - [ ] Badge showcase on Profile screen: §27 Phase 4
+  - [x] Achievement badges (e.g. "First workout", "10-week streak", "100 workouts"): planned in §27
+  - [x] Badge showcase on Profile screen: §27 Phase 4
+- [ ] **Home screen quick actions** (added 2026-11-11): long-press the app icon for Start Workout and Track Activity
+  > One step from the home screen into a session, for people who don't use the widgets. Needs a native build (the fingerprint changes), so it can't go out over the air.
+  - [ ] Install `expo-quick-actions` with `npx expo install` and add its config plugin in `app.config.js` with the two static actions (title, SF Symbol / Android icon). Confirm it is a New Architecture module before adding it (RN is bridgeless-only)
+  - [ ] Route a tapped action through the same path the widgets use (`navigation/useWidgetLinks.ts` and `widgetRouteFor`), for both a cold launch and a warm one, so there is one place that turns an outside tap into a screen
+  - [ ] Respect the one-session rule: with a workout or run already open or minimized, the action opens that session instead of starting another (`utils/sessionConflict.ts`)
+  - [ ] Signed out or mid-onboarding: the action is ignored until the app reaches the tabs
+  - [ ] Optional third action "Up Next" when there is an active routine, set at runtime from the same data as the Up Next widget
+  - [ ] Tests: routing for each action, the session-conflict case, signed out; add the native import to the lazy-import guardrail if it needs one
+  - [ ] Device check on iOS and Android; CHANGELOG entry
 
 ---
 
@@ -530,21 +539,21 @@ Check off items as you complete them.
 
 - [x] **Muscle training frequency** (premium) (built 2026-10-08, see §21 Phase 3)
   > 2×/week per muscle group is optimal for hypertrophy — 1× produces roughly half the gains.
-  - [ ] Add `session_count` per muscle group to `GET /api/stats/muscle-volume` (`db.func.count(db.distinct(Workout.id))`)
-  - [ ] Show sessions column alongside set count in muscle volume card
-  - [ ] Highlight orange if frequency = 1 session this week, green if ≥ 2
+  - [x] Add `session_count` per muscle group to `GET /api/stats/muscle-volume` (`db.func.count(db.distinct(Workout.id))`)
+  - [x] Show sessions column alongside set count in muscle volume card
+  - [x] Highlight orange if frequency = 1 session this week, green if ≥ 2
 
 - [x] **4-week muscle volume trend** (premium) (built 2026-10-08)
   > Consistent volume progression over weeks is the primary hypertrophy driver.
-  - [ ] Extend `GET /api/stats/muscle-volume` with `?history=4w` param — return 4-element array of weekly set counts per muscle
-  - [ ] Show trend arrow next to each muscle row: ↑ trending up / → stable / ↓ trending down
-  - [ ] Arrow color: green for up, textSecondary for stable, orange for down
+  - [x] Extend `GET /api/stats/muscle-volume` with `?history=4w` param — return 4-element array of weekly set counts per muscle
+  - [x] Show trend arrow next to each muscle row: ↑ trending up / → stable / ↓ trending down
+  - [x] Arrow color: green for up, textSecondary for stable, orange for down
 
 - [x] **Weekly volume vs last week — fatigue monitor** (premium) (built 2026-10-08)
   > Volume spikes >15–20% week-over-week are a leading cause of overuse injury.
-  - [ ] `GET /api/stats/muscle-volume` already returns `last_week_total` — use it
-  - [ ] Show a banner below the muscle card: green "On track ↑8%", yellow "High jump ↑24% — consider recovery", red "⚠️ Potential detraining — 40% of last week"
-  - [ ] Thresholds: >20% increase = yellow, >35% increase = red, <40% of last week = red
+  - [x] `GET /api/stats/muscle-volume` already returns `last_week_total` — use it
+  - [x] Show a banner below the muscle card: green "On track ↑8%", yellow "High jump ↑24% — consider recovery", red "⚠️ Potential detraining — 40% of last week"
+  - [x] Thresholds: >20% increase = yellow, >35% increase = red, <40% of last week = red
 
 ---
 
@@ -552,13 +561,13 @@ Check off items as you complete them.
 
 - [x] **Push / Pull / Legs split balance** (premium) (built 2026-10-08)
   > Pull:Push ratio should be ≥ 1:1, ideally 1.5:1 to prevent shoulder imbalances.
-  - [ ] Pure frontend calculation — group `muscle_sets` from existing endpoint into:
+  - [x] Pure frontend calculation — group `muscle_sets` from existing endpoint into:
     - Push: Chest + Shoulders + Triceps
     - Pull: Back + Biceps + Forearms
     - Legs: Quads + Hamstrings + Glutes + Calves
     - Core: Core
-  - [ ] Horizontal stacked bar showing set distribution across groups
-  - [ ] Pull:Push ratio badge — color green if ≥ 1:1, yellow if 0.7–1:1, red if < 0.7:1
+  - [x] Horizontal stacked bar showing set distribution across groups
+  - [x] Pull:Push ratio badge — color green if ≥ 1:1, yellow if 0.7–1:1, red if < 0.7:1
 
 ---
 
@@ -566,154 +575,303 @@ Check off items as you complete them.
 
 - [x] **PR velocity — strength gain rate** (premium) (built 2026-10-08)
   > Beginners gain 5–10%/month, intermediate 2–5%, advanced <2%. A plateau (<1% over 8 weeks) signals need for program change or deload.
-  - [ ] Backend: add `GET /api/stats/pr-velocity` — for each exercise with ≥ 2 PR snapshots over 12 weeks, compute slope of estimated_1rm over time (lbs/month) using linear regression on `PersonalRecord` or existing `exercise_stats` history
-  - [ ] Frontend: show "Progress Rate" stat on `ExerciseDetailScreen` stats tab (+X lbs/month)
-  - [ ] Color: green if gaining, yellow if plateau (<1%/month for 8 weeks), gray if insufficient data
+  - [x] Backend: add `GET /api/stats/pr-velocity` — for each exercise with ≥ 2 PR snapshots over 12 weeks, compute slope of estimated_1rm over time (lbs/month) using linear regression on `PersonalRecord` or existing `exercise_stats` history
+  - [x] Frontend: show "Progress Rate" stat on `ExerciseDetailScreen` stats tab (+X lbs/month)
+  - [x] Color: green if gaining, yellow if plateau (<1%/month for 8 weeks), gray if insufficient data
 
 - [x] **Workout density — volume per minute** (premium) (built 2026-10-08)
   > Increasing density (same volume, shorter time) is a form of progressive overload and a proxy for training efficiency.
-  - [ ] Backend: extend `GET /api/stats/progress` buckets to include `density` field (total volume ÷ total duration in minutes; skip workouts with no duration)
+  - [x] Backend: extend `GET /api/stats/progress` buckets to include `density` field (total volume ÷ total duration in minutes; skip workouts with no duration)
   - [ ] Frontend: add "Density" as a 4th metric option in the chart metric selector (alongside Volume / Sets / Workouts)
-  - [ ] Y-axis label: "lbs/min" or "kg/min" per user preference
+  - [x] Y-axis label: "lbs/min" or "kg/min" per user preference
 
 ---
 
-## 👥 11. Social & Followers
-> Follower system, leaderboards, and activity feed. Build in this order — each subsection depends on the one above.
->
-> **Design choice: followers (asymmetric), not friends (mutual).** You follow someone with one tap — no request/accept flow. Privacy is handled by `profile_visibility` per user. Feed and leaderboard show people you follow.
+## 👥 11. Social & Followers (plan rewritten 2026-11-11, not started)
+> Follow people, compare on several leaderboards, see a feed of highlights that writes itself (PRs, badges, rank-ups) with reactions that match each one, and train in small groups. Nothing is built: no models, routes or screens exist. Phases are in build order and each one ships on its own. Phase 0 is not optional: it is what lets the rest pass App Review and keeps the privacy policy true.
 
-### 10a. Follow System — Backend
-> The data layer everything else depends on. A `Follow` row is directional: `follower_id` follows `following_id`. No status field needed — following is immediate.
+### What the first plan got wrong (fixed below)
+- "Followers Only" visibility with one-tap following protected nothing: anyone could follow and then see everything. Replaced by public or private profiles with follow requests, private by default (Decision 1)
+- Every existing account would have become searchable overnight, while `privacy.html` says data stays on our servers and is never shared. Every account still becomes findable (Decision 1, owner 2026-11-12), so the policy changes first, everyone starts private, and Phase 0's username check blocks release
+- No report, block or moderation. Apple's guideline 1.2 requires all three for user content (usernames, bios, avatars, group names), plus acting on reports
+- A shared workout was sent as the full workout. `Workout.to_dict()` carries notes, heart rate and a GPS run's `route_polyline`, which shows where someone lives. v1 now shares no workouts at all, only highlights built from a whitelist (Phase 4)
+- One leaderboard on raw volume is won by the biggest lifter every week. There are now a dozen boards, several of them effort-based (Phase 3)
+- Streak on other people's rows: the profile streak uses a weekly goal that lives only on the phone (`/api/stats/profile?weekly_goal=`), so the server can't compute it for someone else. Social uses "weeks in a row with a workout" (`_compute_streak_weeks` in `utils/strength_standards.py`), the same rule as the streak badges
+- Tab order "Dashboard · Training · Social · Exercises · Profile" is from an old layout. Tabs today are Home · Progress · Coach · Profile
+- Follow and unfollow returned 400/404 on a repeat, which breaks optimistic buttons on a retry. They are idempotent now
+- `PATCH /api/me` does not accept `profile_visibility` (the old plan said it did)
 
-- [ ] **`Follow` model** (`models.py`)
-  - [ ] Add `Follow` table: `id`, `follower_id` (FK → user, `ondelete='CASCADE'`), `following_id` (FK → user, `ondelete='CASCADE'`), `created_at`
-  - [ ] Unique constraint on `(follower_id, following_id)` to prevent duplicate follows
-  - [ ] Indexes on `follower_id` and `following_id` for fast lookups
+### Decisions needed first (owner)
+Each has a recommendation, and the plan below is written to it. Changing one changes only the items that name it.
+- [x] **1. Who is visible** (owner, 2026-11-11: follow requests, with public or private profiles; 2026-11-12: Social is part of every account, like Hevy, with no on/off switch and no joining or leaving). Every account has a social profile. The privacy control is Private vs Public, and everyone starts **private**, existing accounts included:
+  - **New accounts:** an onboarding step says what others see and offers Private (preselected) or Public
+  - **Accounts from before Social:** a one-time notice on Home ("Aretē has Social now. Your profile is private.") with what others see and a link to Social settings. It informs; it doesn't ask
+  - The only ways out of being findable are blocking someone or deleting the account. Going private and not accepting requests is the way to keep social to a minimum
+  - **Public:** anyone can follow with one tap, and can see the full profile and highlights without following
+  - **Private:** a follow starts as a request the owner accepts or declines. Until accepted, others see only the photo, username, name, bio, follower counts and "This account is private". Badges, Greek Rank, workouts, streak and highlights are for accepted followers (and, inside a group, for its members: Phase 6)
+  - Feed and leaderboard only ever use accepted follows, for both kinds
+  - Private → public accepts every pending request at once (the confirm says so). Public → private keeps existing followers; they can be removed one by one
+  - A declined request is deleted silently (no push, the button goes back to Follow) and can be sent again; the rate limit and Block cover abuse
+- [x] **2. Where it lives** (owner, 2026-11-11: build the tab first, then put content in it). A fifth tab, Social, between Coach and Profile, is the first app work (Phase 2) and every social screen lives in `screens/SocialTab/` from the start, so nothing is built under Profile and moved later. It fills up phase by phase: People in Phase 2, Leaderboards in Phase 3, Feed in Phase 4, Groups in Phase 6. The tab is hidden until `social_available` is on, so users never see it empty: it is released when Phase 2's content is in it. Check five labels fit the custom tab bar on an iPhone SE width first
+- [x] **3. Free or Premium** (owner, 2026-11-11): free for everyone, like achievements. No `has_premium()` check on any social route and no lock on any social screen
+- [x] **4. What the feed is** (owner, 2026-11-11: highlights the server creates from real events, no route maps; 2026-11-12: plus workouts you choose to share). Two kinds of card: a shared workout, which you pick yourself (the toggle on the summary starts off), and automatic highlights for a PR, a badge or a rank-up. A shared workout carries its own PRs, so it never also makes a separate PR card. Never shown: notes, RPE, heart rate, bodyweight, a route map or location. A shared workout can carry a caption (owner, 2026-11-12), and takes reactions like every card. Automatic highlights have one switch per type and all start **off** (owner, 2026-11-12), with Undo on the summary and nothing from before Social ships
+- [x] **5. Reactions** (owner, 2026-11-11: one reaction per person per highlight, no comments; 2026-11-12: plus basic reactions). A tap gives the themed reaction matched to what happened (a laurel for a PR, an olive sprig for a badge, a torch for a rank-up); a long-press opens 🔥 💪 👏 🎉 as well. Only positive ones, since with no comments a mocking reaction would be the only way to be unkind. Picking another swaps yours. Details in Phase 5
+- [x] **6. Leaderboards** (owner, 2026-11-11: several different boards; 2026-11-12: drop Momentum). Workouts, Volume, Hours, Run distance, Ride distance, PRs set, Streak, Effort (Greek Rank score), Strength Score, Endurance Score and Badges, plus per-exercise lift boards (2026-11-12, like Hevy's: heaviest weight on a fixed list of big lifts). Table and sources in Phase 3
+- [x] **7. What other people see** (owner, 2026-11-11: no PR pins, and the profile other users see is its own screen, not the Profile tab). The public profile is `UserProfileScreen`, a separate, smaller design fed only by `GET /api/users/<id>/profile`. It never reuses `ProfileScreen` or the routes behind it (`/api/me`, `/api/stats/profile`, `/api/personal-records/pins`), so nothing added to the Profile tab can leak onto it. To everyone it shows the photo, username, name, bio and follower counts; to followers (or everyone, on a public profile) also Greek Rank, pinned badges, total workouts, streak and highlights (a PR highlight shows the lift and the weight). Never on it: PR pins, records, workout history, bodyweight, measurements, progress photos, scores. `WhatOthersSee` (Phase 2) lists exactly this, and a "View my public profile" row opens your own `UserProfileScreen` so you can see what others get
+- [x] **8. Leaving Social** (owner, 2026-11-12: dropped). Social is always on (Decision 1), so there is nothing to leave. Account deletion removes every social trace
+- [x] **9. Groups** (owner, 2026-11-11: yes, without a shared streak; 2026-11-12: invite-only and unlisted, up to 25 members and 10 groups per person, any member can invite, a group photo like a profile picture, called "Groups"). Leaderboards are scoped to the people you follow and your groups, never app-wide (owner, 2026-11-12). Members see each other's rows and highlights inside the group without following, private profile or not; the invite says so before Accept (owner, 2026-11-12). Details in Phase 6
 
-- [ ] **Migration** — create `follows` table
+### Rules that apply to every phase
+- Every social read goes through two checks in `utils/social.py`. `can_see(viewer, other)` / `visible_user_ids`: the other user is not suspended, has a confirmed username (Phase 0), and neither has blocked the other (decides whether they exist for you at all). `can_see_content(viewer, other)`: that, plus the profile is public, or the viewer is an accepted follower, or it is their own (decides stats, badges and highlights). A route that queries `User`, `Follow`, `FeedEvent` or `GroupMember` directly for someone else's data is a bug
+- A follow counts only when `status = 'accepted'`: follower counts, lists, the feed, the leaderboards and pushes all ignore pending rows
+- A user who can't be seen answers 404, the same as one who doesn't exist, so ids can't be probed
+- Other people's activity leaves the server only through `feed_card` (Phase 4) and the leaderboard rows (Phase 3), both whitelists built from named fields. No route ever returns another user's `Workout.to_dict()`, so a field added to `Workout` later stays private
+- `Workout.volume` is lbs: totals shown to a viewer go through `volume_in_user_unit` with the viewer's unit. A PR's weight stays in its owner's unit and is labelled with it
+- "This week" is Monday-start from `user_today()` for the viewer, never `date.today()`
+- App: `apiFetch` only, theme tokens, `StyleSheet.create`, an `accessibilityLabel` on every icon-only button (the guardrail test fails otherwise), no em dashes in copy, cross-tab navigates pass `initial: false`
+- A flag gates all of it: env `SOCIAL_ENABLED` (unset = every social route 404s) and `social_available` in `GET /api/me`, so the app hides every entry point until the server is ready
 
-- [ ] **Follow routes** (`routes/social_routes.py`) — all `@jwt_required()`
-  - [ ] `POST /api/follow/<int:user_id>` — follow a user; 400 if already following, 400 if following self, 404 if user not found
-  - [ ] `DELETE /api/follow/<int:user_id>` — unfollow; 404 if not following
-  - [ ] `GET /api/following` — list users the current user follows (avatar, username, streak)
-  - [ ] `GET /api/followers` — list users who follow the current user
-  - [ ] `GET /api/users/search?q=` — search users by username prefix (exclude self); return `id`, `username`, `avatar_url`, `is_following` bool
+### Design first: what every screen looks like (owner, 2026-11-12; before any code)
+Mockups of every social screen and card, signed off by the owner before Phase 1 starts, so the build follows a picture instead of a list. Built on the app's own theme (colors, `spacing`, `typography`, the Greek rank and badge art), each one in light and dark, with real-looking data plus its empty, loading and error states and a worst-case pass (long names, no photo, a 40-character group name, a caption at 280, an exercise with 12 sets).
+- [ ] **Tab bar** with five tabs (Home · Progress · Coach · Social · Profile) at iPhone SE width, with the request dot on Social and the mini workout and run bars showing
+- [ ] **Social tab home**: the segment bar (Feed · People · Leaderboards · Groups) and how it looks in Phase 2 with People alone
+- [ ] **Feed cards**: a shared lifting workout (collapsed and expanded, with a caption, with PR sets in gold), a shared cardio workout (no map), PR, badge (including a hidden badge) and rank-up highlights, the "and 2 more" fold, the three empty states
+- [ ] **Reactions**: the button in given and not-given states, the long-press picker (themed mark then 🔥 💪 👏 🎉), the "🔥 💪 5" summary, the reaction list sheet grouped by kind, and the three themed marks (laurel, olive sprig, torch) drawn at small size
+- [ ] **Leaderboards**: the board picker chips, the Lifts chip and its list of lifts, range segments, a list with the viewer's row pinned, an unranked viewer, following nobody
+- [ ] **People**: the People segment, Find People (results, private lock, no results), Follow Requests, the followers and following lists, and the three `FollowButton` states
+- [ ] **Public profile** (`UserProfileScreen`) in four states: public, private to a stranger, request pending, and your own ("This is what others see"), plus the Accept / Decline bar and the 404 screen. It must look clearly different from the Profile tab (Decision 7)
+- [ ] **Groups**: the Groups segment with invites on top, a group (header with photo or initials, its boards and feed, members sheet), Create Group (name, photo, colour), Invite (with full and already-invited states)
+- [ ] **Sharing a workout**: the workout summary with the share toggle off and on, the caption field, the "Shared with your followers" line with Undo, and how all of it sits with the PR, rank-up and unlock moments already there; Share / Remove in a saved workout's menu
+- [ ] **Onboarding step, Home notice and `WhatOthersSee`**, the username confirm, **Social settings** (every switch), Blocked users, and the **Report sheet** and Block confirm
+- [ ] Owner review: go through them together, change what's wrong, and record anything that changes a decision above before Phase 1
 
-- [ ] **Register blueprint** in `app.py`
+### Phase 0: Policy and safety groundwork (ships with Phase 1, not after)
+- [ ] `privacy.html`: a "Social features" part saying that every account has a social profile, what other users see on a private and on a public one, that profiles start private, that blocking and account deletion are the ways out, and that reports are reviewed. It must be live before the release that turns Social on, since existing accounts become findable then. Reword the "never shared" sentence near line 70 so it stays true. Show the wording to the owner before changing it
+- [ ] `terms.html` §4 Acceptable Use and §9 User Content: no harassment, impersonation or objectionable names, photos, group names or captions; we may hide content or suspend social access; how to report
+- [ ] App Store Connect privacy answers: user content now visible to other users, plus the follow graph. Do this before the build is submitted (CLAUDE.md: tracking anything new needs the policy and the answers changed first)
+- [ ] App Review notes for the build: where Report and Block are, that reports reach support@aretefitnessapp.com and are handled within 24 hours, and a second seeded account the demo account (prod user 3) follows, with highlights and a shared group, so the reviewer sees a feed
+- [ ] Check what social sign-in usernames look like: `_unique_username(base)` in `auth_routes.py` builds them, and if `base` is the email's local part, Social would expose it for every such account at once. Blocks release. If so: `User.username_confirmed` (Boolean; the migration sets it true for password accounts, whose users picked their username, and false for email-derived ones), unconfirmed accounts are left out of search and 404 to others (`can_see`), and the Home notice and onboarding step ask them to confirm or change it (needs a username field on `PATCH /api/me`, unique, 2 to 30 chars, letters, digits, `_` and `.`)
+- [ ] Usernames are unique ignoring case (owner, 2026-11-12): `Griffin` and `griffin` can't both exist. Signup, social sign-in's `_unique_username` and rename all compare on `lower(username)`. Before the migration, count existing case-only duplicates in prod (ops agent); if any, the later-created account gets a digit appended and is sent through the username confirm (Phase 0's flag) so its owner sees the change
 
-### 10b. Follow System — Frontend
-> Three screens wired into the Profile tab stack.
+### Phase 1: Backend for following (no feed yet)
+**Schema** (one migration; current head is `d9e2f6a3b8c5`, check again before generating)
+- [ ] `User.profile_private` (Boolean, default true, `server_default=db.true()`) and `User.social_suspended` (Boolean, default false, `server_default=db.false()`)
+- [ ] `User.notify_follows`, `notify_reactions`, `notify_highlights`, `notify_groups` (Boolean, default true). If §4's `User.preferences` JSON column exists by then, put them there instead
+- [ ] **Unique** index on `lower(username)` (`ix_user_username_lower`), serving both the case-insensitive uniqueness and prefix search. It fails to build if a duplicate is left, so the Phase 0 cleanup runs first
+- [ ] `follows`: `id`, `follower_id` and `following_id` (FK → `user.id`, `ondelete='CASCADE'`), `status` (String(10): `'pending'` | `'accepted'`), `created_at`, `accepted_at` (nullable). Unique on (`follower_id`, `following_id`), index on (`following_id`, `status`), check constraint `follower_id != following_id`. A declined or cancelled request is a deleted row, not a third status
+- [ ] `user_blocks`: `id`, `blocker_id`, `blocked_id` (both CASCADE), `created_at`; unique on the pair, index on `blocked_id`
+- [ ] `content_reports`: `id`, `reporter_id` (SET NULL), `target_type` (`'user'` now; `'highlight'` and `'group'` join in Phases 4 and 6), `target_id`, `target_user_id`, `reason` (`spam` | `harassment` | `inappropriate` | `impersonation` | `other`), `note` (String(500)), `status` (`open` | `actioned` | `dismissed`), `created_at`, `resolved_at`; unique on (`reporter_id`, `target_type`, `target_id`)
+- [ ] None of these store a weight, so `_convert_stored_weights` and `tests/test_unit_conversion_registry.py` need nothing. Confirm the registry test still passes (it name-scans every model)
 
-- [ ] **`FollowingScreen`** (`screens/ProfileTab/FollowingScreen.tsx`)
-  - [ ] `GET /api/following` on focus; show avatar + username + streak badge per user
-  - [ ] Tap a row → `UserProfileScreen`
-  - [ ] "Unfollow" swipe action or long-press context menu
-  - [ ] "Find People" button → `UserSearchScreen`
+**`utils/social.py`**
+- [ ] `social_on()` (the env flag), `require_social(user)` (403 when suspended), `blocked_ids(user_id)` (both directions), `can_see(viewer_id, other)`, `visible_user_ids(viewer_id, ids)`, `can_see_content(viewer_id, other)`, `follow_status(viewer_id, other_id)` (`'none'` | `'pending'` | `'accepted'`)
+- [ ] `social_streak_weeks(user_ids)`: one query of (`user_id`, `date`) for all of them, then `_compute_streak_weeks` per user. Never one query per row
+- [ ] `public_user_dict(user, viewer_id, follow_map)`: `id`, `username`, `name`, `avatar_url` (`profile_pic_url`), `is_private`, `follow_status` (the viewer's follow of them), `follows_you` (accepted only). Never email, bodyweight, height, gender, birth date. `follow_map` is fetched once per response, never per row
 
-- [ ] **`UserSearchScreen`** (`screens/ProfileTab/UserSearchScreen.tsx`)
-  - [ ] Debounced search input → `GET /api/users/search?q=`
-  - [ ] Results list: avatar, username, `is_following` state drives "Follow" / "Following" button
-  - [ ] `POST /api/follow/<id>` on tap; button flips to "Following" immediately (optimistic update)
+**Routes** (`routes/social_routes.py`, blueprint `social_bp`, registered in `app.py`; every route `@jwt_required()`, validated by schemas in `schemas.py`, limited per user with `limiter.limit(..., key_func=lambda: f"social_x:{get_jwt_identity()}")` like the AI routes)
+- [ ] `GET /api/me` gains `social_available`, `profile_private`, `follower_count`, `following_count`, `follow_request_count`
+- [ ] `PATCH /api/me` accepts `profile_private` (add it to `UpdateProfileSchema`). Turning it off accepts every pending request to that user in the same transaction and stamps `accepted_at`; no pushes for that bulk accept
+- [ ] `GET /api/users/search?q=&limit=` (60 per minute): case-insensitive prefix on username, then on name; under 2 characters returns an empty list; `%` and `_` in `q` are escaped; excludes self and anyone `can_see` rejects; at most 20 rows of `public_user_dict`
+- [ ] `GET /api/users/<int:user_id>/profile`: always `public_user_dict` plus `bio`, `follower_count`, `following_count` and `content_visible`. When `can_see_content` passes, also `greek_rank` (from `_greek_rank_data`, the function behind `/api/stats/greek-rank`, never from strength-score), pinned badges (the `pinned` list `GET /api/achievements` builds), `total_workouts`, `streak_weeks`, and from Phase 4 `recent_highlights`. When it fails those keys are absent, not null or zero, so a client can't mistake hidden for empty. If `_greek_rank_data` is slow for this, cache per user for an hour
+- [ ] `PUT /api/users/<int:user_id>/follow` (120 per hour): creates an `accepted` row for a public profile and a `pending` one for a private profile; a repeat changes nothing. `DELETE` unfollows or cancels a request. Both idempotent, both return `{ follow_status, follower_count }`. 400 on self, 404 when `can_see` fails, 400 past 1,000 following plus pending
+- [ ] `GET /api/social/requests` (`?before=&limit=30`): pending requests to you, newest first, each `public_user_dict` plus `requested_at`. `PUT /api/social/requests/<int:follower_id>` accepts (sets `accepted`, `accepted_at`), `DELETE` declines (deletes the row). Both idempotent; 404 when there is no such request. A request from someone who has since deleted their account, been suspended or been blocked is filtered out of the list
+- [ ] `DELETE /api/social/followers/<int:user_id>`: remove someone who follows you
+- [ ] `GET /api/social/following` and `GET /api/social/followers`: your own lists only: other people's lists show counts, never names (owner, 2026-11-12), `?before=<follow id>&limit=30`, each row `public_user_dict` plus `streak_weeks` from the batched helper
+- [ ] `PUT /api/users/<int:user_id>/block` and `DELETE`, `GET /api/social/blocks`. Blocking deletes follows and pending requests in both directions in the same transaction
+- [ ] `POST /api/reports` (10 per day): `{ target_type, target_id, reason, note? }`; a repeat report of the same target answers 200 without a second row; emails support@ through the helper the reset email uses, in a try/except so a mail failure never fails the report
+- [ ] Account deletion: `_delete_all_user_data` in `user_routes.py` deletes `Follow` and `UserBlock` rows in both columns and the user's reports as reporter. It uses bulk deletes, so don't rely on the FK cascade alone (SQLite in tests doesn't enforce it)
+- [ ] `GET /api/me/export` gains a `social` block: who you follow, who follows you, blocks, and later highlights, reactions and groups
 
-- [ ] **`UserProfileScreen`** (`screens/ProfileTab/UserProfileScreen.tsx`)
-  - [ ] Read-only view: avatar, username, follower count, current streak, total workouts, total volume
-  - [ ] Stats visible only if user's `profile_visibility` is not `private` (see §9d)
-  - [ ] Follow / Unfollow button in header
-  - [ ] Recent shared workouts list (taps into feed post detail)
+**Admin** (`routes/admin_routes.py`, HTTP Basic Auth like the rest)
+- [ ] `/admin/reports`: open reports, newest first, each showing the reported username, bio, photo, highlight, or group name and photo; actions Dismiss, Hide (highlights and groups, Phases 4 and 6), Suspend from Social (sets `social_suspended`, which hides the user everywhere and 403s their social writes). Every action writes `AdminAuditLog`
+- [ ] Dashboard attention list: "N open reports" with a link; `/admin/users/<id>` shows private or public, suspended, follower counts, and a Restore button
 
-- [ ] **Add entry point** to `ProfileScreen` — "Following" count row that navigates to `FollowingScreen`
+**Tests** (`tests/test_social.py`, two-user fixtures)
+- [ ] Existing users after the migration are private; unconfirmed usernames (if Phase 0 adds the flag) are invisible in search and profile (404). Flag off: every route 404
+- [ ] Follow and unfollow are idempotent; self-follow 400; counts right; remove follower works
+- [ ] Private profiles: a follow is `pending`, counts don't move, the profile response has no rank, badges, workouts or streak keys (assert the exact key set for a stranger, a pending requester and an accepted follower); accept, decline, cancel, and re-request after a decline; someone else can't accept a request that isn't to them
+- [ ] Switching: private → public accepts all pending; public → private keeps followers and makes the next follow pending; a public profile's content is visible to a non-follower
+- [ ] Block: hides each from the other in search, profile and lists; removes both follows; a blocked user gets the same 404 as for a missing one
+- [ ] Search: prefix, case, wildcard characters, short query, never returns email or body data (assert the exact key set)
+- [ ] Suspended user disappears everywhere; report dedupe; account deletion leaves no follow, block or report rows; export carries the block
+- [ ] `tests/test_route_guardrails.py` picks the routes up by itself: confirm auth, 404-not-500 on unknown ids, malformed bodies and junk query params all pass, and no route went into `PUBLIC`
 
-- [ ] **Navigation types** — add all three screens to `ProfileStackParamsList` in `navigation/types.ts`
+### Phase 2: The Social tab and following
+The tab comes first (Decision 2). Build it empty behind the flag, then fill it.
+- [ ] `navigation/SocialStack.tsx` and a fifth entry in `TAB_CONFIG` in `AppTabs.tsx` (`SocialTab`, icon `people`, label "Social", between Coach and Profile), rendered only when `social_available`; `SocialStackParamsList` in `navigation/types.ts`. The mini workout and run bars, the tab bar's hide rules and the widget and notification deep links must behave as on the other tabs, and the tab bar must still fit on an iPhone SE width
+- [ ] `screens/SocialTab/SocialScreen.tsx`, the tab's home, built like `ProgressScreen` with segments that mount on first visit. Phase 2 has one segment, People; Leaderboards, Feed and Groups are added by their phases (a single segment shows no segment bar)
+- [ ] People segment: a search bar that opens `FindPeople`, a Follow requests row with its count, your follower and following counts opening `FollowList`, then the people you follow with their streaks. Following nobody: an empty state with a Find people button
+- [ ] The Profile tab gets no social screens. `ProfileScreen` shows the two counts under the name when `social_available` (a tap goes to the Social tab with `navigation.navigate('SocialTab', { screen: 'FollowList', params, initial: false })`); Settings gets a Social row
+- [ ] `utils/social.ts`: types (`PublicUser`, `UserProfile`) and the calls; `hooks/useFollow.ts`: optimistic follow and unfollow that puts the button back and shows a toast on failure. No new context
+- [ ] `components/social/WhatOthersSee.tsx`, the one place this list lives: what others see on a private and on a public profile (Decision 7's list), what they never see (workouts you didn't share, any weight that isn't in a shared workout or a PR highlight, notes, body data, progress photos, location). Used by the onboarding step, the Home notice and Social settings
+- [ ] Onboarding Social step in `screens/Auth/OnboardingScreen.tsx`, shown only when `social_available`: `WhatOthersSee`, a Private / Public choice (Private preselected) with one line each on what it means, and the username confirm if Phase 0 needs it. Public → `PATCH /api/me` `profile_private: false` on finish; a failure leaves it private and doesn't block onboarding
+- [ ] Home notice for accounts from before Social: shown once when `social_available`, "Aretē has Social now. Your profile is private." with `WhatOthersSee` behind a "What others see" link, a Social settings button, and the username confirm if Phase 0 needs it (an unconfirmed user stays hidden until they confirm, so the notice keeps coming back until then). Seen is stored under a key constant in `constants/`; accounts that went through the onboarding step never get it
+- [ ] `components/social/FollowButton.tsx`, used everywhere a person is listed: Follow, Requested (tap to cancel, after a confirm) or Following (tap to unfollow, after a confirm), driven by `follow_status`. Following a private profile goes to Requested, never straight to Following
+- [ ] Tab badge: a dot on the Social tab icon while `follow_request_count` is above zero (the tab bar already takes a `pendingCount` for another tab; follow that pattern)
+- [ ] `screens/SocialTab/FollowRequestsScreen.tsx`: paged list from `GET /api/social/requests`, each row with photo, username, name, Accept and Decline (optimistic, put back with a toast on failure); tapping the row opens their profile; empty state "No requests"
+- [ ] `screens/SocialTab/FindPeopleScreen.tsx`: search field debounced 300 ms, results with photo, username, name, a lock beside private profiles (labelled for VoiceOver) and the `FollowButton`; empty and no-results states; a "Share your profile" row that opens the share sheet with the username (deep links are Phase 6)
+- [ ] `screens/SocialTab/FollowListScreen.tsx` (param `mode: 'followers' | 'following'`): paged `FlatList`, streak beside each row, Unfollow or Remove behind a confirm, Find People in the header
+- [ ] `screens/SocialTab/UserProfileScreen.tsx` (param `userId`), the public profile. Its own layout and its own components (Decision 7): it imports nothing from `ProfileScreen`, and a guardrail test asserts it only calls `/api/users/<id>/profile` and the follow, block and report routes. Opened with your own id from "View my public profile", it shows a banner "This is what others see" and no Follow button. Contents: photo in its rank frame when known (the frame choice lives only in AsyncStorage until §4's preferences ship, so show the plain rank frame for other people), name, username, bio, Greek Rank, pinned badges (`AchievementBadge`), workouts, streak, counts, the `FollowButton`, and a "..." menu with Report and Block. When `content_visible` is false it shows only photo, name, username, bio and counts, then a lock and "This account is private. Follow to see their highlights." (or "Request sent" while pending). If that person has a pending request to the viewer, an Accept / Decline bar sits at the top. A 404 shows "This profile isn't available"
+- [ ] `components/social/ReportSheet.tsx`: reason list plus an optional note, then "Thanks. We review reports within 24 hours."; Block asks first and says what it does
+- [ ] `screens/SocialTab/SocialSettingsScreen.tsx`, opened from the Social tab's header and from a Social row in Settings (cross-tab, `initial: false`): View my public profile, a Private profile switch (turning it off confirms "Your 3 pending requests will be accepted and anyone can follow you"), the sharing switches (PRs, badges, rank-ups, scores on leaderboards, lifts on leaderboards) and the notification switches (`ThemedSwitch`, saved with `PATCH /api/me`), Blocked users (list with Unblock), and "What others see" (`WhatOthersSee`). No leave option (Decision 8)
+- [ ] Register `FindPeople`, `FollowList`, `FollowRequests`, `UserProfile`, `SocialSettings`, `BlockedUsers` in `navigation/SocialStack.tsx` and `SocialStackParamsList`. Nothing is added to `ProfileStack`
+- [ ] Tests: one `__tests__` file per screen (search debounce, optimistic follow and its rollback, the three `FollowButton` states, a private profile for a stranger and for a requester, accept and decline, the go-public confirm, 404 profile, report flow, the onboarding step saving Public and staying private on a failure, the Home notice shown once (and again while the username is unconfirmed) and never after onboarding, every entry point hidden when `social_available` is false), and `codeGuardrails.test.ts` still green
+- [ ] Device pass in light and dark, with VoiceOver on the follow buttons and the menu
 
-### 10c. Leaderboards — Backend
-> Aggregate stats across users the current user follows. Runs weekly queries — keep them efficient.
+### Phase 3: Leaderboards (several boards, one engine)
+Boards are entries in a registry, so adding one later is one entry plus one test, with no new route or screen.
 
-- [ ] **Leaderboard route** (`routes/social_routes.py`)
-  - [ ] `GET /api/leaderboard?metric=<metric>&range=<range>`
-    - `metric`: `volume` (total lbs/kg lifted) | `workouts` (count) | `streak` (current streak)
-    - `range`: `week` (default) | `month` | `alltime`
-  - [ ] Response: ordered array of `{ user_id, username, avatar_url, value }` including the current user
-  - [ ] Only include followed users whose `profile_visibility` is not `private` (see §9d)
-  - [ ] Cap at 50 results to avoid query timeouts
+**Boards** (confirmed in Decision 6, 2026-11-12)
+| Key | Ranks by | Ranges | Source |
+|---|---|---|---|
+| `workouts` | Workouts logged | week, month, all | `count(*)` on `workouts` |
+| `volume` | Volume lifted, in the viewer's unit | week, month, all | `sum(Workout.volume)` through `volume_in_user_unit` |
+| `time` | Hours trained | week, month, all | the achievements rule: per workout the larger of the timer and logged cardio minutes, timer capped at `TIMER_CAP_MIN` |
+| `run_distance` | Run and walk distance, in the viewer's distance unit | week, month, all | cardio sets on on-foot exercises (`_ON_FOOT` in `utils/achievements.py`) |
+| `ride_distance` | Ride distance | week, month, all | cardio sets on cycling exercises (`is_cycling`) |
+| `prs` | PRs set | week, month, all | `PREvent` rows minus `estimated_1rm` |
+| `streak` | Weeks in a row with a workout | current only | `social_streak_weeks` |
+| `effort` | Greek Rank score | current only | `_greek_rank_data` (effort only, so a beginner can lead it) |
+| `strength` | Strength Score percentile | current only | latest `strength_score_snapshots` row with `score_type='strength'` |
+| `endurance` | Endurance Score percentile | current only | latest snapshot with `score_type='endurance'` |
+| `badges` | Badges earned | all | `count(*)` on `user_achievements` |
+| `lift:<exercise>` | Heaviest weight on one lift, in the viewer's unit | current only | `PersonalRecord` `max_weight` for that global exercise template |
 
-### 10d. Privacy Controls — Backend + Frontend
-> Required before any social data is visible. Default to followers-only, never fully public.
+- [ ] Per-exercise lift boards (owner, 2026-11-12): one board per lift on a fixed list in `utils/leaderboards.py` (`LIFT_BOARDS`: global library templates only, `user_id` NULL, so custom exercises never appear). Start with the barbell and dumbbell staples: Bench Press, Squat, Deadlift, Overhead Press, Barbell Row, Incline Bench Press, Romanian Deadlift, Front Squat, Dumbbell Bench Press, Dumbbell Shoulder Press; add more as one entry each. Bodyweight and machine lifts are left out (a weight on a machine isn't comparable between gyms). Ranks by `max_weight` only, never `estimated_1rm` (CLAUDE.md: never surface it). Each row shows the weight and the reps it was lifted for (reps from the PR's `set_id`, joined in the same query; omitted when the set is gone), and tapping it opens nothing in v1 (workouts are never shared). PR values are stored in each owner's current `weight_unit`, so convert each to the viewer's unit before sorting. Their own switch (owner, 2026-11-12): `User.share_lifts` (Boolean, default true, `server_default=db.true()`), "Show my lifts on leaderboards" in Social settings; off removes the user from every lift board for everyone else. Separate from `share_prs`, which starts off and only governs feed highlights. In the app the picker shows a "Lifts" chip that opens a list of the lifts, rather than ten more chips
+- [ ] `utils/leaderboards.py`: a `BOARDS` registry, each entry with `key`, `label`, `ranges`, `unit` (`count` | `weight` | `distance` | `hours` | `weeks` | `score` | `percent`) and a function `(user_ids, start, end, viewer) -> {user_id: value}` that makes a fixed number of queries whatever the list size. Never one query per person
+- [ ] `GET /api/social/leaderboards` lists the boards (key, label, ranges, unit) so the app renders the picker from the server and a new board needs no app release
+- [ ] `GET /api/social/leaderboard?board=&range=&scope=`: `scope` is `following` (the viewer plus accepted follows, first 200 by follow date) or `group:<id>` (Phase 6). No app-wide scope (owner, 2026-11-12: logged numbers aren't verified and everyone starts private). Members go through `visible_user_ids`. Sorted by value then username; top 50 plus the viewer's own row when outside it; each row `{ rank, user, value }`, plus `unit`, `range_start` and `board`. A zero or missing value doesn't place (the viewer still gets their own row, unranked). 60 per minute
+- [ ] `effort` for up to 200 people: `_greek_rank_data` is per user and may be too slow in a loop. Measure it; if it is, store the score on a `User.greek_score_cached` + `greek_score_cached_at` pair refreshed on workout save and read that. `strength` and `endurance` already read stored snapshots (every read filters on `score_type`)
+- [ ] Score boards reveal a percentile: `User.share_scores` (Boolean, default true) and a "Show my scores on leaderboards" switch in Social settings. Off removes the user from `effort`, `strength` and `endurance` for everyone else
+- [ ] Index check: the grouped queries need `workouts (user_id, date)` and `pr_events (user_id, achieved_at)`; add what is missing in this phase's migration
+- [ ] Tests (`tests/test_leaderboards.py`): every board in the registry returns the right order for a seeded trio (a loop over `BOARDS`, so a new board is covered or fails); ties; a pending follow, a blocked, suspended or unconfirmed user never appears; week boundary honours `X-Local-Date`; kg and km viewers; a lift board mixing a kg and a lbs owner sorts by the converted weight; `share_scores` off and `share_lifts` off (with `share_prs` off not affecting lift boards); unknown board, range or scope answers 400 or falls back, never 500
+- [ ] App: `components/social/LeaderboardList.tsx` and `BoardPicker.tsx` (a horizontally scrolling chip row from `GET /api/social/leaderboards`, remembered per user in AsyncStorage under a key constant in `constants/`), range segments shown only for boards that have ranges, value formatted by `unit`. Rows: rank, photo, username, value; the viewer's row highlighted and pinned at the bottom when off screen. Following nobody: "Follow people to see how you stack up" with a Find People button
+- [ ] Add the Leaderboards segment to `SocialScreen`
 
-- [ ] **`profile_visibility` column** on `User` model: `'followers'` (default) | `'public'` | `'private'`
-- [ ] **Migration** — add `profile_visibility` column
-- [ ] **Enforce in `GET /api/leaderboard`** — skip users whose visibility is `private`
-- [ ] **Enforce in `GET /api/users/search`** — omit users with `private` visibility from results; still show them if the current user already follows them
-- [ ] **Enforce in `UserProfileScreen`** — hide stats sections if user is `private` and you don't follow them
-- [ ] **Privacy setting in `SettingsScreen`**
-  - [ ] Add "Profile Visibility" row with three options: Public / Followers Only / Private
-  - [ ] `PATCH /api/me` with `{ profile_visibility }` on change (already accepted by the me endpoint)
-  - [ ] Explain each option inline (e.g. "Private — only you can see your stats")
+### Phase 4: The feed: shared workouts and highlights
+Two kinds of card (Decision 4). A **shared workout** is one you choose to post, from the summary or later from the workout itself. A **highlight** is created by the server when something real happens in a saved workout (a PR, a badge, a rank-up). A shared workout may carry a caption (owner, 2026-11-12), the only free text in the feed besides workout and custom exercise names, so it gets the same report, hide and length rules as bios.
 
-### 10e. Leaderboard Screen — Frontend
-> The main social surface. Lives in a new Social tab or as a tab within the Profile screen.
+**What makes a highlight**
+- `pr`: a workout that set at least one user-facing PR. One highlight per workout, listing up to 3 PRs (lift, value, PR type; never `estimated_1rm`)
+- `badge`: a badge earned (`new_achievements`). Several from one save become one highlight led by the finest, the order the unlock sheet uses. A hidden badge shows as "found a hidden badge" with the unfound shard art and no name, so the feed never spoils one
+- `rank_up`: a new highest Greek Rank. The app detects rank-ups on the phone today (`previousRank` in `WorkoutSummaryScreen`), so the server needs its own memory: `User.highest_rank_shared`, compared after each save. A rank regained after dropping doesn't post twice
+- `workout`: a workout you shared (below). Its PRs are marked inside it, so a shared workout never also produces a `pr` highlight; sharing one that already has a `pr` highlight replaces it, and unsharing brings the `pr` highlight back if `share_prs` is on
+- Not highlights: an unshared ordinary workout, streak counts and workout counts on their own (their badges already cover the milestones)
 
-- [ ] **`LeaderboardScreen`** (`screens/SocialTab/LeaderboardScreen.tsx`) — top tab inside the Social tab, alongside `FeedScreen`
-  - [ ] Metric selector: Volume / Workouts / Streak (segmented control)
-  - [ ] Range selector: This Week / This Month / All Time
-  - [ ] Ranked list: position number, avatar, username, value, delta vs. last period (optional)
-  - [ ] Current user's row is highlighted and always visible (pin to bottom if off-screen)
-  - [ ] Empty state if not following anyone — "Follow people to see how you stack up" → `UserSearchScreen`
+**Shared workouts** (owner, 2026-11-12: you choose which)
+- [ ] `WorkoutSummaryScreen`: a "Share to feed" toggle, off every time (no remembered default), saved with the workout's share call after the save succeeds. A failed share leaves the workout saved and shows a toast with Retry
+- [ ] `WorkoutDetailScreen` (or wherever a saved workout opens): Share to feed / Remove from feed in its menu, for any workout dated on or after the release that turned Social on. Imports can't be shared
+- [ ] What the card shows, built only by `shared_workout_dict(workout, viewer)` in `utils/social.py`, a whitelist like `feed_card`: name, date, duration, total volume (through `volume_in_user_unit`, viewer's unit), and per exercise its name and working sets as reps × weight (warm-ups folded into a count, drop and failure sets marked), weights labelled with the author's unit, PRs marked; a cardio exercise shows distance, time and pace only. Never notes, RPE, heart rate, bodyweight, `route_polyline`, elevation or any GPS field, and never `Workout.to_dict()`. A test asserts the exact key set, including a GPS run and a workout with notes and heart rate
+- [ ] The card reads the workout at request time, so an edit shows up and a deleted workout's card disappears with it
+- [ ] Caption: optional, up to 280 characters, entered under the summary's share toggle (shown only when it is on) and editable or removable later from your own card's menu. Stored on the share (`feed_events.caption`), not the workout, so unsharing drops it. Trimmed; empty means none; line breaks capped at 3. Checked against a small word blocklist in `utils/moderation.py` (reused for usernames, bios and group names), which rejects with a 400 rather than editing the text
 
-- [ ] **Push notification** (optional, post-launch): "You've been overtaken on the leaderboard!" via Expo push (reuse existing `push_service.py`)
+**Highlight consent, since highlights post themselves**
+- [ ] `User.share_prs`, `share_badges`, `share_rank_ups` (Boolean, default **false**, `server_default=db.false()` (owner, 2026-11-12: nothing posts on its own until you turn it on); or keys in §4's preferences). `WhatOthersSee` and the onboarding step list them with what each shows, PRs marked "shows the lift and the weight", and Social settings has the same three switches
+- [ ] The workout summary shows a quiet line when a save produced a highlight ("Shared with your followers: Bench Press PR") with Undo, which deletes it. Every highlight of your own has Remove in its menu
+- [ ] No backfill: highlights start with the first save after the release that turns Social on. Nothing from before it is ever published
 
----
+**Schema**
+- [ ] `feed_events`: `id`, `user_id` (CASCADE), `type` (`workout` | `pr` | `badge` | `rank_up`), `workout_id` (FK → `workouts.id`, CASCADE, nullable), `payload` (JSON: ids and keys only, such as PR event ids, badge keys, the rank; never display text or weights), `caption` (String(280), nullable; `workout` only), `hidden_at` (moderation), `created_at`. Unique on (`user_id`, `type`, `workout_id`); index on (`user_id`, `id`). No weight is stored, so nothing joins `_convert_stored_weights`
+- [ ] `delete_workout` and `_delete_all_user_data` delete events explicitly (bulk deletes skip ORM cascades)
 
-### 10f. Workout Posts & Activity Feed — Backend
-> Users can choose to share a completed workout with their followers. Sharing is always opt-in — workouts are private by default.
+**Server**
+- [ ] `utils/feed_events.py` `emit_feed_events(user, workout, new_prs, new_achievements)`: called after the workout commits, beside `_award_achievements` in the POST and PUT/PATCH paths of `workout_routes.py`, inside a try/except so a failure loses the highlight and never the workout. Does nothing unless the user isn't suspended and has that type's switch on
+- [ ] Skips: imports (`import_routes.py` replays PRs once and must stay silent), a workout dated more than 7 days back (a backfilled log isn't news), and an edit to a workout that already has that highlight (the unique key makes the second insert a no-op)
+- [ ] Rendering reads the truth at request time: a `pr` highlight is built from the `PREvent` rows its payload names, in the viewer's units where a conversion applies and labelled with the author's unit otherwise. If `_recompute_prs_for_templates` removed those rows (an edit or delete made the PR untrue), the highlight is deleted there, not shown stale
+- [ ] `feed_card(event, viewer)` in `utils/social.py` is the only way a card leaves the server: `id`, `type`, `user` (`public_user_dict`), `created_at`, and a typed `detail` (`workout: shared_workout_dict(...)`, or `prs: [{ exercise_name, pr_type, value, unit }]`, or `badges: [{ key, hidden }]`, or `rank`). A test asserts the exact key set per type
+- [ ] `GET /api/social/feed?scope=&before=<event id>&limit=20`: `scope` is `following` (accepted follows plus your own) or `group:<id>` (Phase 6). Not hidden, authors through `can_see_content`, newest first by id, `next_before`. At most 3 highlights per author per day are returned; the rest fold into "and 2 more" on the last card. Built without N+1: one query for the page, one for the PR rows, one for the shared workouts with their exercises and sets, one for reaction counts (Phase 5)
+- [ ] `PUT /api/workouts/<int:workout_id>/share` (`{ caption? }`) and `DELETE` (owner only, idempotent, 60 per hour): create or remove the `workout` event, a repeat PUT updating the caption, and swap the `pr` highlight as above. 400 for an import or a workout from before Social. `Workout.to_dict()` gains `shared` for the owner's own screens
+- [ ] `DELETE /api/social/feed/<int:event_id>`: owner only, 404 otherwise. `GET /api/users/<id>/profile` gains `recent_highlights` (5 cards) when `can_see_content` passes
+- [ ] Reports: `content_reports.target_type` gains `'highlight'` (covers shared workouts and their captions); admin can hide one (sets `hidden_at`) or clear just its caption. The report sheet shows the caption, workout name and custom exercise names so the admin sees what was reported
+- [ ] Tests (`tests/test_feed_events.py`): share and unshare are idempotent and owner-only; caption length, line-break cap, blocklist 400 and edit; unsharing drops the caption; sharing replaces the `pr` highlight and unsharing restores it; a shared GPS run and a workout with notes and heart rate leak none of it (exact key set); an edit shows on the card; an import or pre-Social workout can't be shared; each highlight type is emitted once and only with its switch on; nothing for an import, an old-dated workout or a suspended user; an edit that removes the PR removes the highlight; deleting the workout removes it; hidden badges never leak a name or key; a pending requester and a stranger see nothing from a private author; the per-author cap; paging; kg and lbs viewers; the save still succeeds when emission throws
 
-- [ ] **`WorkoutPost` model** (`models.py`)
-  - [ ] Fields: `id`, `user_id` (FK → user), `workout_id` (FK → workout, `ondelete='CASCADE'`), `caption` (Text, nullable), `created_at`
-  - [ ] Unique constraint on `(user_id, workout_id)` — a workout can only be posted once
-  - [ ] Index on `user_id` and `created_at` for efficient feed queries
+**App**
+- [ ] Add the Feed segment to `SocialScreen` and make it the one the tab opens on; People and Leaderboards follow it
+- [ ] `components/social/WorkoutCard.tsx`: header (photo, username, relative time), workout name, a stats row (duration, volume, PR count), the caption under the header when there is one, then the exercises collapsed to their best set with "Show all" expanding the sets; PR sets marked with `colors.prGold`. Cardio shows distance, time and pace, no map. Same menu as highlight cards
+- [ ] `components/social/HighlightCard.tsx`, one layout per type, reusing what exists instead of redrawing it: `pr` with the lifts and values and the PR laurel (`LaurelBranch`, `colors.prGold` on a themed surface); `badge` with `AchievementBadge` at a large size, its name and what it took; `rank_up` with the new rank's frame (`ProfileAvatarFrame`) and name. Header: photo, username, relative time ("2 h ago", a small helper in `utils/date.ts`). Menu: Remove on your own; Report and Block on others'. Tapping the header opens the profile; a card doesn't open a workout
+- [ ] Feed: `FlatList` with `onEndReached` paging, pull to refresh, a skeleton on first load, and three empty states (following nobody → Find People; following people but nothing yet, "Workouts appear here when someone you follow shares one, sets a PR, earns a badge or ranks up"; network error with Retry). Any header goes in as a built element, never a bare function
+- [ ] `WorkoutSummaryScreen`: the "Shared with your followers" line with Undo, shown after the PR, rank-up and unlock moments it already sequences, never on top of them
+- [ ] Tests: each card type (including a shared workout, a hidden badge and "and 2 more"), the summary's share toggle starting off, the caption field appearing only with it on, and a failed share keeping the workout, share and remove from a saved workout, paging, each empty state, Undo on the summary, Remove, the Feed segment opening first
 
-- [ ] **Migration** — create `workout_posts` table
+### Phase 5: Reactions that match the highlight, and notifications
+One reaction per person per highlight (owner, 2026-11-11). A tap gives the themed reaction for the highlight's type; a long-press opens a picker with the themed one first, then 🔥 💪 👏 🎉 (owner, 2026-11-12). Choosing a different one replaces yours. The server stores `kind`: `themed` (drawn from the highlight's type, so it can't mismatch) or one of `fire`, `strong`, `clap`, `party`; anything else is a 400.
+| Highlight | Reaction | Drawn with |
+|---|---|---|
+| `pr` | Laurel | the PR laurel in PR gold, the mark PRs already own |
+| `badge` | Olive sprig | the sage olive leaves from the top badges' crown, never the pointed laurel |
+| `rank_up` | Torch | a torch in the new rank's colour from `GREEK_RANK_COLORS` |
+| `workout` | Laurel | the same PR laurel, in the theme's accent colour rather than gold when the workout set no PR |
 
-- [ ] **Post routes** (`routes/social_routes.py` or new `routes/feed_routes.py`) — all `@jwt_required()`
-  - [ ] `POST /api/workouts/<int:workout_id>/share` — create a `WorkoutPost`; accept optional `{ caption }`; 400 if already shared, 403 if not owner
-  - [ ] `DELETE /api/posts/<int:post_id>` — delete own post (unshare); 403 if not owner
-  - [ ] `GET /api/feed?page=<n>&per_page=<n>` — paginated posts from users you follow, ordered by `created_at DESC`; join `Workout` for summary fields (`name`, `date`, `duration`, `volume`); skip posts from users with `private` visibility
-  - [ ] `GET /api/feed/<int:post_id>` — single post with full workout exercises + sets (for detail view)
+- [ ] `feed_reactions`: `id`, `event_id` (FK → `feed_events.id`, CASCADE), `user_id` (CASCADE), `kind` (String(10)), `created_at`; unique on (`event_id`, `user_id`). `PUT /api/social/feed/<int:event_id>/reaction` (`{ kind }`, default `themed`; 240 per hour) creates or swaps; `DELETE` removes. Both idempotent (a toggle endpoint double-fires on a double tap); 404 unless the viewer can see the highlight. `GET /api/social/feed/<id>/reactions` lists who and with what, through `visible_user_ids`. Feed cards gain `reaction_count`, `top_kinds` (up to 3, most used first) and `viewer_reaction` (the kind, or null)
+- [ ] `components/social/ReactionButton.tsx`: tap gives the themed reaction (or removes yours, whichever kind it is); long-press opens `ReactionPicker` (themed mark first, then the four emoji, a light haptic on open). Optimistic, put back with a toast on failure. Shows your reaction filled when given, and beside it `top_kinds` with the total ("🔥 💪 5"); tapping the total opens the list grouped by kind. Any motion follows Reduce Motion (`utils/motion.ts`). VoiceOver: the button is "Give a laurel" / "Laurel given, 5 reactions", and an accessibility action "More reactions" opens the picker, since long-press isn't discoverable with VoiceOver
+- [ ] The three reaction marks are new art at a small size: draw them once in `components/social/reactionArt.tsx` from the existing laurel and olive geometry (`utils/frameArt.ts`, `constants/badgeArt.ts`) so they stay in step with the originals. Gold for PRs comes from `colors.prGold`, never a hex
+- [ ] `utils/social_push.py`, called after the commit and wrapped so a push failure never fails the request. `DeviceToken` holds one token per user. Types and copy: new follower of a public profile ("alex started following you"), a follow request to a private one ("alex wants to follow you"), a request accepted ("alex accepted your follow request"; a decline never pushes), the first reaction on a highlight ("alex gave you a laurel for your Bench Press PR", or "alex reacted 🔥 to your Bench Press PR"; more within an hour don't push), a group invite (Phase 6), and a followed user's rank-up ("alex reached Demigod"). PRs and badges from people you follow don't push: they would be daily noise
+- [ ] Switches: `User.notify_follows`, `notify_reactions`, `notify_highlights`, `notify_groups` (added in Phase 1). Each push honours the recipient's switch and the visibility filter
+- [ ] Throttle: at most 5 social pushes per recipient per day (`DeviceToken.social_push_day` and `social_push_count`). Check `send_push` chunks large token lists; Expo takes 100 per request
+- [ ] `App.tsx`: the notification response handler today only knows `live_workout`. Add `social_follow` and `social_accepted` (→ `UserProfile`), `social_request` (→ `FollowRequests`), `social_reaction` and `social_highlight` (→ the Social tab's feed), `social_group_invite` (→ `Groups`), for both the warm listener and the cold-launch path, navigating cross-tab with `initial: false`
+- [ ] Tests: reacting twice is one row; a second kind swaps it; an unknown kind is 400; `top_kinds` order; un-reacting; can't react to what you can't see; each push type's recipients, switches and throttle; a blocked or suspended user never notified; routing for each `data.type`
 
-- [ ] **Reactions** (likes) — optional, add after feed is working
-  - [ ] `PostReaction` model: `id`, `post_id` (FK), `user_id` (FK), `created_at`; unique on `(post_id, user_id)`
-  - [ ] `POST /api/posts/<id>/react` — toggle like (create if absent, delete if present)
-  - [ ] Include `reaction_count` and `user_has_reacted` in feed response
+### Phase 6: Groups
+Small invite-only groups with their own leaderboards and feed (owner, 2026-11-11: groups yes, a shared streak no). Nothing in a group depends on every member training: no group streak, no shared goal that one person can break.
 
-### 10g. Workout Posts & Activity Feed — Frontend
+**Decisions inside this phase** (confirmed in Decision 9, 2026-11-12)
+- Invite-only and unlisted: a group can't be searched or joined by link in v1, which keeps moderation to the name
+- Up to 25 members, up to 10 groups per person (owner, 2026-11-12)
+- Any active member can invite; only the owner edits the name and photo or removes someone (owner, 2026-11-12)
+- Being in a group is consent to be seen by its members: they see your leaderboard rows and highlights in that group even without following you, private profile or not. The invite says so before Accept. It does not make them followers and opens nothing outside the group
+- A group photo, uploaded like a profile picture (owner, 2026-11-12). It is user content, so it is reportable and the admin Hide action covers it. With no photo, the group shows its initials on an accent colour
+- Called "Groups" in the app (owner, 2026-11-12)
 
-- [ ] **Share prompt on `WorkoutSummaryScreen`**
-  - [ ] Add "Share with Followers" button below "View Full Details"
-  - [ ] Tapping opens a small sheet: optional caption `TextInput` + Share / Cancel buttons
-  - [ ] On share: `POST /api/workouts/<id>/share`; show a brief confirmation toast; button changes to "Shared ✓" and becomes disabled
-  - [ ] If user follows nobody yet, show "Follow someone first" instead of the share button
+**Schema**
+- [ ] `groups`: `id`, `name` (String(40)), `photo_url` (String, nullable), `color` (String(20), the fallback behind the initials), `owner_id` (FK → `user.id`), `created_at`, `hidden_at` (moderation)
+- [ ] `group_members`: `id`, `group_id` (CASCADE), `user_id` (CASCADE), `status` (`invited` | `active`), `invited_by` (SET NULL), `created_at`, `joined_at`; unique on (`group_id`, `user_id`), index on (`user_id`, `status`)
+- [ ] `_delete_all_user_data`: remove the user's memberships; a group they own passes to its longest-standing active member, or is deleted when none is left
 
-- [ ] **`FeedScreen`** (`screens/SocialTab/FeedScreen.tsx`)
-  - [ ] Paginated list of posts from followed users, newest first; infinite scroll with `onEndReached`
-  - [ ] Each **post card** shows:
-    - User's avatar + username + relative time (e.g. "2 h ago")
-    - Caption (if set)
-    - Workout summary: name, duration, volume, exercise count
-    - Top 3 exercises as chips (e.g. "Bench Press · Squat · Deadlift")
-    - PR badge if any PRs were set (`prs` field on post)
-    - Like button with count
-  - [ ] Tap card → read-only `WorkoutDetails` view for that workout (`GET /api/feed/<post_id>`)
-  - [ ] Pull-to-refresh
-  - [ ] Empty state: "No posts yet — follow people or share your own workout"
+**Server** (`routes/group_routes.py`, blueprint `group_bp`, same auth, schemas, limits and `require_social` as the rest)
+- [ ] `utils/social.py` gains `shares_group(viewer_id, other_id)` and `group_member_ids(group_id, viewer_id)` (active members minus anyone blocked either way). `can_see_content` is not widened: group visibility applies only to `scope=group:<id>` reads
+- [ ] `POST /api/groups` (`{ name, color }`, 10 per day): the creator becomes owner and an active member. `GET /api/groups`: your active groups (with member count and your rank on the default board this week) and your pending invites
+- [ ] `GET /api/groups/<int:group_id>`: name, `photo_url`, colour, owner, members (`public_user_dict` each, invited ones marked for the owner). 404 unless you are an active or invited member
+- [ ] `PATCH /api/groups/<id>` (owner: name, colour) and `DELETE` (owner). `POST /api/groups/<id>/photo` (owner) and `DELETE` to remove it: the same checks as `POST /api/me/avatar` (jpg, png or webp, 5 MB, an unguessable filename in the `static/avatars` pattern, the old file removed). Group deletion and admin Hide remove the file too
+- [ ] `POST /api/groups/<id>/invites` (`{ user_id }`, 60 per day): any active member can invite someone they can see; 400 when full or the invitee is at 10 groups; a repeat is a no-op. `PUT /api/groups/<id>/membership` accepts your invite; `DELETE` declines it or leaves; `DELETE /api/groups/<id>/members/<int:user_id>` is the owner removing someone
+- [ ] An owner who leaves hands the group to the longest-standing active member; the last member leaving deletes it
+- [ ] Blocks: you can't invite someone you've blocked or who blocked you, and two members with a block between them don't see each other's rows or highlights in the group. The group itself stays visible to both
+- [ ] Leaderboards and feed: `scope=group:<id>` on the Phase 3 and Phase 4 routes swaps the member list for `group_member_ids` and nothing else, so every board works for a group the day it exists. 404 unless the caller is an active member
+- [ ] Group totals for the header, display only: workouts, hours and volume this week summed over members, and how many of them trained ("7 of 9 trained this week"). No target, no streak, no penalty
+- [ ] Reports: `target_type` gains `'group'`; admin can hide a group (name replaced by "Group" and the photo removed for members, creation of new invites stopped), remove just its photo, or delete it. Group names go through the same length and character checks as usernames
+- [ ] Tests (`tests/test_groups.py`): create, invite, accept, decline, leave, remove; caps; a non-member gets 404 on the group, its board and its feed; an invited-but-not-accepted member sees the name and members only; a member's rows and highlights are visible in the group to a member who doesn't follow them and nowhere else; blocks inside a group; owner handover and last-member delete; account deletion; the boards loop from Phase 3 run again with a group scope
 
-- [ ] **Unshare** — long-press own post card → "Remove post" confirmation; calls `DELETE /api/posts/<id>`
+**App**
+- [ ] `screens/SocialTab/GroupsScreen.tsx` (the Groups segment): your groups as cards (photo, name, members, your rank this week), invites at the top with Accept and Decline, a Create button, and an empty state that explains groups in one line
+- [ ] `screens/SocialTab/GroupScreen.tsx`: header with photo, name and the week's totals, then Leaderboards (the same `BoardPicker` and `LeaderboardList`) and Feed (the same `HighlightCard` list) segments, and a members sheet. Menu: Invite, Edit (owner), Leave, Report
+- [ ] `components/social/CreateGroupSheet.tsx` (name with a 40 counter, an optional photo through the same picker as the profile photo, and a colour picker for the initials fallback) and `InviteToGroupSheet.tsx` (search among people you follow and who follow you first, then anyone; already-invited and full states)
+- [ ] The invite Accept screen states what members will see before the button
+- [ ] Add the Groups segment to `SocialScreen`; register `Groups` and `Group` in `SocialStack` and `types.ts`
+- [ ] Tests: the groups list and invites, create validation, invite flow, leave and owner-leave confirms, a group you were removed from (404 → back to the list with a toast), the scope switch on boards and feed
 
-- [ ] **Push notification** — when a user shares a workout, send a push to their followers via `push_service.py`: "Griffin just finished 'Push Day A' 💪"
-  - [ ] Fire from the `POST /api/workouts/<id>/share` handler after committing
-  - [ ] Batch-fetch follower device tokens; reuse `send_push()`
-  - [ ] Tapping notification deep-links to the post in `FeedScreen`
+### Later, not planned in detail
+- Profile links: `aretefitness://user/<username>` plus a public `aretefitnessapp.com/u/<username>` page (a new entry in the guardrail test's `PUBLIC` set), and group invite links
+- Comments, behind the same report and block tools, with a profanity filter
+- A badge track for reactions received (laurels, sprigs, torches). Keys name the rung, and it adds no Greek Rank points: the rank stays effort-only
+- More highlight types: a Strength or Endurance Score milestone, a comeback (Nostos), a routine finished
+- The chosen rank frame on public profiles (needs §4's server-side preferences). PR pins are not coming to the public profile (owner, 2026-11-11)
+- "Overtaken on a leaderboard" push; week-long duels between two people; the Coach's weekly review mentioning friends (their data would go into an AI prompt, so the privacy policy changes first)
 
-- [ ] **Navigation** — add `FeedScreen` and `LeaderboardScreen` as top tabs inside a dedicated **Social tab** (5th bottom tab, positioned to the right of Dashboard); add `SocialStack` / `SocialTab` to `AppTabs.tsx` and all screen types to `navigation/types.ts`; tab order: Dashboard · Training · Social · Exercises · Profile
+### Rollout
+- [ ] Backend first: merge with `SOCIAL_ENABLED` unset, deploy, run the migration, turn it on for a test account, then set it
+- [ ] No new native module is needed, so the fingerprint shouldn't change, but ship Phases 1 to 5 in a store build anyway: App Review has to see other users' content with Report and Block in place. Groups can follow in a later release. Later copy fixes can go over the air
+- [ ] Seed the App Review demo account from `origin/main` (prod user 3): public, following a second seeded account that has highlights of each type, and in one group with it
+- [ ] Docs: CLAUDE.md (the tab list, the `utils/social.py` checks, `feed_card` as the only way out, the boards registry, the flag), `API_ROUTES.md`, `docs/feature-reference.md` (env var, moderation runbook), CHANGELOG, and What's New as "• " bullets
+
+### Done when
+- [ ] A new account and an existing one both start private: a stranger sees only photo, username, name, bio and counts, and nothing from it on a leaderboard, feed or group until a follow is accepted. An unconfirmed username (if Phase 0 adds the flag) is unreachable everywhere
+- [ ] A private profile shows a stranger and a pending requester nothing beyond photo, name, username, bio and counts, checked against the raw response; accepting the request opens the rest, and going public accepts everyone waiting
+- [ ] Two accounts can find each other, follow, and compare on every board in the registry
+- [ ] A PR, a badge and a rank-up each appear in a follower's feed without anyone posting, can be undone from the summary, and stop appearing when their switch is off; an import or an old-dated workout produces nothing
+- [ ] Each highlight takes its own reaction, the author gets one push for it, and the count is right after reacting and un-reacting
+- [ ] A group's members see each other on its boards and feed without following each other, a non-member sees nothing of it, and nothing in the app punishes a group for one member's missed week
+- [ ] Block and report work from every place a person, highlight or group is shown; a report shows up in `/admin/reports`, and hiding a highlight or group or suspending a user takes effect at once
+- [ ] Deleting an account removes every trace other users could see
+- [ ] Privacy policy, terms and App Store privacy answers are live before the build that turns it on
 
 ---
 
@@ -810,12 +968,12 @@ Check off items as you complete them.
   - [ ] One-tap "Add warm-ups" action, editable/removable like any other set afterward
 
 - [x] **Exercise substitution for flagged injuries** (built 2026-10-08) (`CoachProfileModal.tsx` injuries field + `ai_routes.py`)
-  - [ ] `GET /api/exercises/<id>/alternatives` — same primary `muscle_group`, different equipment, excluding exercises that hit the user's flagged injury area (reuse the injury list already collected in the coach profile)
-  - [ ] Surface a "Swap exercise" option in `ExerciseBlock`'s 3-dot menu that opens a small picker of alternatives instead of the full exercise library
-  - [ ] AI coach already asks about injuries — use the same data here instead of collecting it twice
+  - [x] `GET /api/exercises/<id>/alternatives` — same primary `muscle_group`, different equipment, excluding exercises that hit the user's flagged injury area (reuse the injury list already collected in the coach profile)
+  - [x] Surface a "Swap exercise" option in `ExerciseBlock`'s 3-dot menu that opens a small picker of alternatives instead of the full exercise library
+  - [x] AI coach already asks about injuries — use the same data here instead of collecting it twice
 
 - [x] **Plateau / deload nudge** (built 2026-10-08, advice only) (depends on §10 "PR velocity" being built first)
-  - [ ] When `GET /api/stats/pr-velocity` reports a plateau (<1%/month over 8 weeks) for a lift the user trains regularly, show a one-time dismissible card on `CoachScreen`: "Bench Press has plateaued — consider a deload week"
+  - [x] When `GET /api/stats/pr-velocity` reports a plateau (<1%/month over 8 weeks) for a lift the user trains regularly, show a one-time dismissible card on `CoachScreen`: "Bench Press has plateaued — consider a deload week"
   - [ ] Tapping it could pre-fill an AI-generated deload routine via the existing `POST /api/ai/generate` flow (lower volume/intensity for a week)
 
 ---
@@ -1093,10 +1251,10 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 
 **Decisions (the first two confirmed 2026-10-08)**
 - [x] **One active session at a time.** A lifting workout or a GPS run, not both. Starting one while the other is open or minimized asks to finish or discard the other first. Reason: the mini bar, the Live Activity controller (`getInstances()[0]`) and the "one thing in progress" mental model all assume one; two would need a stacked bar and two activities for a rare case
-- [ ] **Back = minimize while a run is running or paused.** No confirm, the run keeps going. From idle, back just leaves. The mini bar's discard keeps the existing double confirm (`confirmDiscard`), since a route can't be re-walked
+- [x] **Back = minimize while a run is running or paused.** No confirm, the run keeps going. From idle, back just leaves. The mini bar's discard keeps the existing double confirm (`confirmDiscard`), since a route can't be re-walked
 - [x] **The mini bar gets Resume (back to the map) and Discard only**, like a lifting workout. Pause/Stop stay on the screen. Revisit if testers want a Pause on the bar
-- [ ] **Separate Live Activity layout for runs** (`createLiveActivity('GpsLiveActivity', ...)`, its own props), sharing the controller. Distance and pace can't tick natively, so JS updates them (see below)
-- [ ] Android: minimize works the same; no Live Activity (its foreground service notification already shows the run)
+- [x] **Separate Live Activity layout for runs** (`createLiveActivity('GpsLiveActivity', ...)`, its own props), sharing the controller. Distance and pace can't tick natively, so JS updates them (see below)
+- [x] Android: minimize works the same; no Live Activity (its foreground service notification already shows the run)
 
 **A. Pull the per-fix logic out (no behavior change; do first)**
 - [x] (built 2026-10-08) `utils/gpsRun.ts` (pure): a state shape `{ coords, distanceKm, elevationGainM, climb, skipNext }` and `applyFix(state, loc)` doing the accuracy filter (`MAX_ACCURACY_M`), `resumed`, `addAltitude` and `haversineKm`. No setState inside another setState's updater. Also the elapsed math (`runElapsedSeconds`) and `buildGpsRunBody` (the POST body from `handleSave`)
@@ -1366,9 +1524,9 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [ ] On a device: vote, pick a reason, refresh, and check nothing flashes or shifts
 
 ### Next, in order
-- [ ] **Measure before tuning.** An `/admin` page with the helpful rate per insight type and per reason, and the most voted-down titles. Without it no prompt change can be judged (planned in §24, part 1)
+- [x] **Measure before tuning.** An `/admin` page with the helpful rate per insight type and per reason, and the most voted-down titles. Without it no prompt change can be judged (planned in §24, part 1)
 - [x] (2026-11-02: `src/scripts/coach_prompt_check.py`, six fixture users logged through the real workout POST; `--model`, `--runs`, `--json` to compare; `--dry-run` for prompts only. The route's model call is `_request_insights` and its model `INSIGHTS_MODEL`, which the script uses too. Its first dry run found repeated lifts logging fake estimated-1RM and hold PRs, fixed the same day) **A prompt check to run before any prompt or model change.** A handful of fixture users (new, plateaued, overreaching, cardio-only, kg) through `_build_insights_context` → the model → `_verify_insights`, reporting how many insights `_is_grounded` drops, length, and banned copy (em dashes, exclamation marks). Not in the pytest suite, since it calls the API
-- [ ] **Treat "Looks wrong" votes as bugs.** List them on the admin page with the insight text, so a misread of the data becomes a fix to the context or `_is_grounded` rather than only a nudge to one user's prompt
+- [x] **Treat "Looks wrong" votes as bugs.** List them on the admin page with the insight text, so a misread of the data becomes a fix to the context or `_is_grounded` rather than only a nudge to one user's prompt
 - [x] (2026-11-11: `insights` table, one batch per refresh; votes send `insight_id`, text-only votes from older builds still work) **Store generated insights** (an `insights` table, one row per insight per batch). Votes then key on an id instead of the title and body text, and the Coach can see what it said before
 - [x] (2026-11-11: newest batch 5 to 21 days old, numbered in the prompt; one `follow_up` insight pointing at it by number, checked in `_verify_insights`. Prompt check: a follow-up in 3 of 3 answers where the data showed the deload was ignored, 1 of 3 where it barely could, none dropped as ungrounded) **Follow-through.** With stored insights, tell the Coach last batch's suggestions and let it check them against the data ("Last week: add 2 sets of rows. You added 3."). The biggest step from a report toward a coach
   - [ ] On a device: refresh, wait 5 days (or backdate the batch on a dev DB), refresh, see a follow-up with the check icon

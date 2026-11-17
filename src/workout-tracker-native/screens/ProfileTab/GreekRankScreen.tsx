@@ -278,10 +278,6 @@ export default function GreekRankScreen({ navigation }: Props) {
   const components = rankData?.components;
   const performance = rankData?.performance;
   const bestLeg = performance ? bestPerformanceLeg(performance) : null;
-  // The first top rank still locked, and what unlocks it, unless the hero line
-  // already says it
-  const lockedGate = rankData ? Object.keys(rankData.gates).find(r => gateRequirementText(rankData, r)) : undefined;
-  const lockedGateText = rankData && lockedGate ? gateRequirementText(rankData, lockedGate) : null;
   // The score earned a higher rank than the user holds, so a gate is the only
   // thing in the way, and that's what the hero says instead of points
   const heldBackText = rankData?.held_by_gate
@@ -499,7 +495,6 @@ export default function GreekRankScreen({ navigation }: Props) {
                         {pct ?? '–'}
                         {pct && <Text style={styles.legUnit}> percentile</Text>}
                       </Text>
-                      <Text style={[styles.legCounts, { color: heldTextColor, opacity: counts ? 1 : 0 }]}>Counts</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -514,7 +509,6 @@ export default function GreekRankScreen({ navigation }: Props) {
                     <Text style={styles.gateRequirement}>
                       {fmtOrdinal(required)} percentile
                       {met ? ', reached' : ' needed'}
-                      {performance.best != null && !met && ` · you're at ${fmtOrdinal(performance.best)}`}
                     </Text>
                   </View>
                 );
@@ -547,8 +541,6 @@ export default function GreekRankScreen({ navigation }: Props) {
                     )}
                   </View>
                 </View>
-              ) : lockedGateText && lockedGateText !== heroLine ? (
-                <Text style={styles.gateHint}>{lockedGateText}</Text>
               ) : null}
             </View>
           )}
@@ -639,7 +631,6 @@ const createStyles = (colors: Colors) =>
     legLabel: { flexShrink: 1, fontSize: typography.fontSize.xs, color: colors.textSecondary },
     legValue: { fontSize: typography.fontSize.lg, fontWeight: '800', color: colors.textPrimary },
     legUnit: { fontSize: typography.fontSize.xs, fontWeight: '500', color: colors.textSecondary },
-    legCounts: { fontSize: typography.fontSize.xs, fontWeight: '700' },
     gateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
     gateRank: { fontSize: typography.fontSize.sm, fontWeight: '700', width: 72 },
     gateRequirement: { fontSize: typography.fontSize.sm, color: colors.textSecondary },

@@ -247,7 +247,6 @@ describe('GreekRankScreen', () => {
       const { getAllByText, queryByText } = await renderWith(payload(41, null, {
         greek_rank: 'Olympian', greek_score: 82, score_rank: 'Titan', held_by_gate: true,
       }));
-      // The Top ranks hint would repeat it, so it drops out
       expect(getAllByText(/Reach the 50th percentile in Strength or Endurance to unlock Titan/))
         .toHaveLength(1);
       expect(queryByText(/points? to Titan/)).toBeNull();
@@ -366,17 +365,13 @@ describe('GreekRankScreen', () => {
   });
 
   describe('gate rows', () => {
-    it('shows where the user currently stands on a locked gate', async () => {
-      const { getByText } = await renderNearTopRanks(payload(34, null));
-      expect(getByText(/50th percentile needed · you're at 34th/)).toBeTruthy();
-    });
-
-    it('drops the standing from a gate already met', async () => {
-      // 64th clears Titan (50) but not Aretē (80), so only the locked row
-      // needs to say where the user stands
+    it('marks each gate needed or reached, without repeating the percentile shown above', async () => {
+      // 64th clears Titan (50) but not Aretē (80)
       const { getByText, queryByText } = await renderNearTopRanks(payload(64, null));
       expect(getByText('50th percentile, reached')).toBeTruthy();
-      expect(getByText(/80th percentile needed · you're at 64th/)).toBeTruthy();
+      expect(getByText('80th percentile needed')).toBeTruthy();
+      expect(queryByText(/you're at/)).toBeNull();
+      expect(queryByText(/to unlock/)).toBeNull();
     });
 
     it('lists gates in rank order whatever order they arrive in', async () => {
@@ -390,7 +385,7 @@ describe('GreekRankScreen', () => {
     it('writes percentiles as real ordinals', async () => {
       // 72 used to read "72th"
       const { getByText } = await renderNearTopRanks(payload(72, null));
-      expect(getByText(/you're at 72nd/)).toBeTruthy();
+      expect(getByText(/^72nd/)).toBeTruthy();
     });
   });
 
@@ -473,8 +468,9 @@ describe('GreekRankScreen', () => {
       expect(queryByText('Endurance Score')).toBeNull();
     });
 
-    it('show each percentile, and Counts on the higher', async () => {
-      const { getByTestId } = await renderNearTopRanks(payload(41, 67));
+    it('show each percentile, the higher marked as the one that counts, with no Counts label', async () => {
+      const { getByTestId, queryByText } = await renderNearTopRanks(payload(41, 67));
+      expect(queryByText('Counts')).toBeNull();
       expect(getByTestId('greek-leg-endurance-counts').props.accessibilityLabel)
         .toBe('Endurance Score, 67th percentile, counts toward the top ranks');
       expect(getByTestId('greek-leg-strength').props.accessibilityLabel).toBe('Strength Score, 41st percentile');
