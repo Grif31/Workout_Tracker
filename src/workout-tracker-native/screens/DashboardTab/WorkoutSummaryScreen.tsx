@@ -439,7 +439,9 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
             // replace, not navigate: the intro's back arrow should reach the
             // dashboard, not the summary the user just closed
             ? navigation.replace('GreekRankIntro')
-            : navigation.navigate('DashboardHome')}
+            // popTo, not navigate: in React Navigation 7 navigate pushes a second
+            // DashboardHome, leaving the summary one back-swipe away
+            : navigation.popTo('DashboardHome')}
         >
           <Ionicons name="close" size={26} color={colors.textSecondary} />
         </TouchableOpacity>

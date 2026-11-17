@@ -76,6 +76,15 @@ describe('WorkoutSummaryScreen', () => {
     expect(getByText('Total Volume (kg)')).toBeTruthy();
   });
 
+  it('closes by popping back to Home, so a back swipe cannot return to the summary', async () => {
+    mockServer({ workout: strengthWorkout });
+    const navigation = createMockNavigation();
+    const r = render(<WorkoutSummaryScreen navigation={navigation as any} route={{ key: 'k', name: 'WorkoutSummary', params: params() } as any} />);
+    fireEvent.press(await r.findByLabelText('Close summary'));
+    expect(navigation.popTo).toHaveBeenCalledWith('DashboardHome');
+    expect(navigation.navigate).not.toHaveBeenCalled();
+  });
+
   it('counts PRs one by one and lists every value, grouped by lift and type', async () => {
     mockServer({ workout: strengthWorkout });
     const { findByText, getByText } = renderSummary({ prs: [
