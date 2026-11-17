@@ -1,11 +1,21 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  discardStuckWorkout, enqueueWorkout, flushQueue, getPendingCount, getStuckCount, getStuckWorkouts,
-  initPendingCount, onPendingCountChange, retryStuckWorkout,
+  announceFlushResult, discardStuckWorkout, earnedLine, enqueueWorkout, flushQueue, getPendingCount, getStuckCount,
+  getStuckWorkouts, initPendingCount, isUploading, onPendingCountChange, onUploadingChange, onWorkoutsUploaded,
+  retryStuckWorkout,
 } from '../utils/offlineQueue';
 import { apiFetch } from '../utils/api';
+import { showToast } from '../utils/toast';
 
 jest.mock('../utils/api', () => ({ apiFetch: jest.fn() }));
+jest.mock('../utils/toast', () => ({ showToast: jest.fn() }));
+let mockCurrentRoute = 'DashboardHome';
+const mockRefNavigate = jest.fn();
+jest.mock('../navigation/navigationRef', () => ({ navigationRef: {
+  isReady: () => true,
+  getCurrentRoute: () => ({ name: mockCurrentRoute }),
+  navigate: (...a: any[]) => mockRefNavigate(...a),
+} }));
 const mockSyncFinishedWorkout = jest.fn();
 jest.mock('../utils/healthSync', () => ({ syncFinishedWorkout: (w: any) => mockSyncFinishedWorkout(w) }));
 
@@ -115,7 +125,7 @@ describe('offlineQueue', () => {
       mockApiFetch.mockClear();
       const result = await flushQueue();
       expect(mockApiFetch).not.toHaveBeenCalled();
-      expect(result).toEqual({ synced: 0, stuck: 0 });
+      expect(result).toEqual({ synced: 0, stuck: 0, uploaded: [] });
       expect(await readKey('offline_workout_queue_7')).toHaveLength(1);
     });
 
@@ -333,5 +343,97 @@ describe('offlineQueue', () => {
     expect(mockApiFetch.mock.calls[0][0]).toBe('/api/workouts');
     expect(mockApiFetch.mock.calls[0][1].method).toBe('POST');
     expect((await readKey('offline_workout_queue_7')).map((i: any) => i.id)).toEqual(['a']);
+  });
+
+  describe('after an upload', () => {
+    const saved = {
+      id: 42, new_prs: [{ exercise_name: 'Walk', pr_type: 'best_distance', value: 3 }],
+      new_achievements: [{ key: 'workouts_10' }], is_first_workout: false, total_volume: 0, muscles: [],
+    };
+    const summaryOf = (body: any) => ({ workoutId: body.id, prs: body.new_prs, newAchievements: body.new_achievements });
+
+    beforeEach(async () => {
+      mockCurrentRoute = 'DashboardHome';
+      mockRefNavigate.mockReset();
+      (showToast as jest.Mock).mockReset();
+      await loginAs(7);
+      await enqueueWorkout({ workoutName: 'Evening Walk' });
+    });
+
+    it('keeps the summary the save would have opened', async () => {
+      mockApiFetch.mockResolvedValue({ ok: true, status: 201, json: () => Promise.resolve(saved) });
+      const { uploaded } = await flushQueue();
+      expect(uploaded).toHaveLength(1);
+      expect(uploaded![0].name).toBe('Evening Walk');
+      expect(uploaded![0].summary).toMatchObject({ workoutName: 'Evening Walk', ...summaryOf(saved) });
+    });
+
+    it('reports the upload while it runs and what landed, before the count drops', async () => {
+      const states: boolean[] = [];
+      const events: string[] = [];
+      const offA = onUploadingChange(v => states.push(v));
+      const offB = onWorkoutsUploaded(list => events.push(`uploaded ${list[0].name}, count ${getPendingCount()}`));
+      mockApiFetch.mockResolvedValue({ ok: true, status: 201, json: () => Promise.resolve(saved) });
+      await initPendingCount();
+      await flushQueue();
+      offA(); offB();
+      expect(states).toEqual([true, false]);
+      expect(isUploading()).toBe(false);
+      expect(events).toEqual(['uploaded Evening Walk, count 1']);
+      expect(getPendingCount()).toBe(0);
+    });
+
+    it('says nothing was uploaded when the server is down', async () => {
+      const events: unknown[] = [];
+      const off = onWorkoutsUploaded(list => events.push(list));
+      mockApiFetch.mockResolvedValue({ ok: false, status: 503, json: () => Promise.resolve({}) });
+      expect((await flushQueue()).uploaded).toEqual([]);
+      off();
+      expect(events).toEqual([]);
+    });
+
+    it("names one upload, what it earned, and opens its summary on tap", async () => {
+      mockApiFetch.mockResolvedValue({ ok: true, status: 201, json: () => Promise.resolve(saved) });
+      announceFlushResult(await flushQueue());
+      const [message, options] = (showToast as jest.Mock).mock.calls[0];
+      expect(options.title).toBe('Evening Walk uploaded');
+      expect(message).toBe('A new PR and a new badge. Tap to see your summary.');
+      options.onPress();
+      expect(mockRefNavigate).toHaveBeenCalledWith('DashboardTab', expect.objectContaining({
+        screen: 'WorkoutSummary', initial: false, params: expect.objectContaining({ workoutId: 42 }),
+      }));
+    });
+
+    it('offers no tap while a workout or run is open', async () => {
+      mockCurrentRoute = 'GPSCardio';
+      mockApiFetch.mockResolvedValue({ ok: true, status: 201, json: () => Promise.resolve(saved) });
+      announceFlushResult(await flushQueue());
+      const [message, options] = (showToast as jest.Mock).mock.calls[0];
+      expect(message).toBe('A new PR and a new badge.');
+      expect(options.onPress).toBeUndefined();
+    });
+
+    it('counts PRs across several uploads', async () => {
+      await enqueueWorkout({ workoutName: 'Morning Walk' });
+      mockApiFetch.mockResolvedValue({ ok: true, status: 201, json: () => Promise.resolve(saved) });
+      announceFlushResult(await flushQueue());
+      const [message, options] = (showToast as jest.Mock).mock.calls[0];
+      expect(options.title).toBe('2 workouts uploaded');
+      expect(message).toBe('2 new PRs between them.');
+    });
+  });
+
+  describe('earnedLine', () => {
+    const line = (prs: number, badges: number) => earnedLine({
+      prs: Array(prs).fill({}), newAchievements: Array(badges).fill({}),
+    } as any);
+    it('reads naturally for each mix', () => {
+      expect(line(0, 0)).toBe('');
+      expect(line(1, 0)).toBe('A new PR.');
+      expect(line(3, 0)).toBe('3 new PRs.');
+      expect(line(0, 1)).toBe('A new badge.');
+      expect(line(0, 2)).toBe('2 new badges.');
+      expect(line(2, 1)).toBe('2 new PRs and a new badge.');
+    });
   });
 });

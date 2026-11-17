@@ -117,10 +117,10 @@ describe('Home review fixes', () => {
     }] });
     const { findByText, getByText, queryByText } = render(<DashboardScreen navigation={createMockNavigation() as any} route={route as any} />);
 
-    expect(await findByText('45 min')).toBeTruthy();
+    expect(await findByText('45m 0s')).toBeTruthy();
     // 5 km in the default mi preference
     expect(getByText('3.11 mi')).toBeTruthy();
-    expect(queryByText('1 min')).toBeNull();
+    expect(queryByText('1m 0s')).toBeNull();
   });
 
   it('greets a new user with a first-workout prompt', async () => {

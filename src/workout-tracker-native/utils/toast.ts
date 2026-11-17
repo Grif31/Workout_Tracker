@@ -8,6 +8,9 @@ export type ToastOptions = {
   icon?: ComponentProps<typeof Ionicons>['name'];
   tone?: 'default' | 'warning';
   durationMs?: number;
+  /** Titled toasts only: a tap runs this, then dismisses the toast */
+  onPress?: () => void;
+  accessibilityHint?: string;
 };
 
 type ToastCallback = (message: string, options?: ToastOptions) => void;

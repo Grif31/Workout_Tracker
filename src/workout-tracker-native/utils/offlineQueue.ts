@@ -3,6 +3,8 @@ import { USER_KEY } from '../constants/storageKeys';
 import { SAVE_TIMEOUT_MS, apiFetch } from './api';
 import { syncFinishedWorkout, type HealthWorkout } from './healthSync';
 import { showToast } from './toast';
+import { navigationRef } from '../navigation/navigationRef';
+import type { WorkoutSummaryParams } from '../navigation/types';
 
 // Per-user queue: workouts queued offline by user A must never be posted with
 // user B's token. Each user's queue is parked under their own key and only
@@ -33,11 +35,84 @@ type QueueItem = {
 /** A workout the server keeps refusing, kept on the phone for the user to retry or delete */
 export type StuckWorkout = { id: string; name: string; date: string | null; reason: string; status: number };
 
-export type FlushResult = { synced: number; stuck: number };
+/** A queued workout the server just took, with the summary its save would have opened */
+export type UploadedWorkout = { name: string; summary: WorkoutSummaryParams };
+
+export type FlushResult = { synced: number; stuck: number; uploaded?: UploadedWorkout[] };
+
+// A workout saved offline never got its summary screen, so the PRs and badges
+// the server awards on upload would otherwise go unseen
+function _summaryFrom(item: QueueItem, body: any): UploadedWorkout | null {
+  if (body?.id == null) return null;
+  const name = (item.payload as { workoutName?: string }).workoutName?.trim() || 'Workout';
+  return {
+    name,
+    summary: {
+      workoutId: body.id,
+      workoutName: name,
+      prs: body.new_prs ?? [],
+      totalVolume: body.total_volume ?? 0,
+      totalReps: body.total_reps ?? 0,
+      totalSets: body.total_sets ?? 0,
+      muscles: body.muscles ?? [],
+      isFirstWorkout: body.is_first_workout ?? false,
+      isBestVolume: body.is_best_volume ?? false,
+      isBestReps: body.is_best_reps ?? false,
+      newAchievements: body.new_achievements ?? [],
+    },
+  };
+}
+
+// Opening the summary over a live workout or run would pull the user out of it
+// (the summary's Done returns to Home, popping the session screen)
+const SESSION_ROUTES = ['WorkoutLog', 'GPSCardio'];
+function _canOpenSummary(): boolean {
+  if (!navigationRef.isReady()) return false;
+  const current = navigationRef.getCurrentRoute()?.name;
+  return !current || !SESSION_ROUTES.includes(current);
+}
+
+function _openSummary(summary: WorkoutSummaryParams) {
+  if (!_canOpenSummary()) return;
+  navigationRef.navigate('DashboardTab', { screen: 'WorkoutSummary', params: summary, initial: false });
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** "2 new PRs and a new badge." for one upload, or '' when it earned nothing */
+export function earnedLine(summary: WorkoutSummaryParams): string {
+  const prs = summary.prs.length;
+  const badges = summary.newAchievements?.length ?? 0;
+  const prPart = prs === 1 ? 'A new PR' : prs > 1 ? `${prs} new PRs` : '';
+  const badgePart = badges === 1 ? 'a new badge' : badges > 1 ? `${badges} new badges` : '';
+  if (prPart && badgePart) return `${prPart} and ${badgePart}.`;
+  if (prPart) return `${prPart}.`;
+  if (badgePart) return `${badgePart[0].toUpperCase()}${badgePart.slice(1)}.`;
+  return '';
+}
 
 // Shared by every flush trigger (reconnect, login, the Home card's Try Now) so the wording matches.
-export function announceFlushResult({ synced, stuck }: FlushResult) {
-  if (synced > 0) showToast(`${synced} workout${synced > 1 ? 's' : ''} synced`);
+export function announceFlushResult({ synced, stuck, uploaded = [] }: FlushResult) {
+  if (synced === 1 && uploaded.length === 1) {
+    const { name, summary } = uploaded[0];
+    const canOpen = _canOpenSummary();
+    const message = [earnedLine(summary), canOpen ? 'Tap to see your summary.' : ''].filter(Boolean).join(' ');
+    showToast(message || 'Saved to your account.', {
+      title: `${name} uploaded`,
+      icon: 'cloud-done-outline',
+      durationMs: 6000,
+      ...(canOpen ? { onPress: () => _openSummary(summary), accessibilityHint: 'Opens its summary' } : {}),
+    });
+  } else if (synced > 0) {
+    const prs = uploaded.reduce((n, u) => n + u.summary.prs.length, 0);
+    if (prs > 0) {
+      showToast(`${plural(prs, 'new PR')} between them.`, {
+        title: `${plural(synced, 'workout')} uploaded`, icon: 'cloud-done-outline', durationMs: 5000,
+      });
+    } else {
+      showToast(`${plural(synced, 'workout')} uploaded`);
+    }
+  }
   if (stuck > 0) showToast(`${stuck} workout${stuck > 1 ? 's' : ''} couldn't sync. ${stuck > 1 ? "They're" : "It's"} kept on Home to retry.`);
 }
 
@@ -128,11 +203,10 @@ function _syncToHealth(item: QueueItem, userId: number | string, workoutId: numb
   } catch {}
 }
 
-// The new workout's id from a successful save, for attaching heart rate
-async function _savedId(res: Response): Promise<number | string | null> {
+// A successful save's body: its id (for attaching heart rate) and what it earned
+async function _savedBody(res: Response): Promise<any> {
   try {
-    const body = await res.json();
-    return body?.id ?? null;
+    return await res.json();
   } catch {
     return null;
   }
@@ -222,12 +296,43 @@ export async function enqueueWorkout(payload: object, health?: QueuedHealth): Pr
 // flushes would each POST the full queue and duplicate every workout.
 let _flushing = false;
 
+// Home's waiting card shows the upload as it happens, then what landed
+let _uploading = false;
+const _uploadingSubs: Array<(uploading: boolean) => void> = [];
+const _uploadedSubs: Array<(uploaded: UploadedWorkout[]) => void> = [];
+
+function _setUploading(v: boolean) {
+  if (_uploading === v) return;
+  _uploading = v;
+  _uploadingSubs.forEach(s => s(v));
+}
+
+export function isUploading(): boolean {
+  return _uploading;
+}
+
+export function onUploadingChange(cb: (uploading: boolean) => void): () => void {
+  _uploadingSubs.push(cb);
+  return () => {
+    const i = _uploadingSubs.indexOf(cb);
+    if (i >= 0) _uploadingSubs.splice(i, 1);
+  };
+}
+
+export function onWorkoutsUploaded(cb: (uploaded: UploadedWorkout[]) => void): () => void {
+  _uploadedSubs.push(cb);
+  return () => {
+    const i = _uploadedSubs.indexOf(cb);
+    if (i >= 0) _uploadedSubs.splice(i, 1);
+  };
+}
+
 // Attempts to POST each queued workout. Failed items stay in the queue for
 // the next flush; one the server keeps refusing is marked stuck after
 // MAX_REJECTED_ATTEMPTS and skipped from then on, but never removed. Only the
 // logged-in user's queue is touched — other users' queues wait for them.
 export async function flushQueue(): Promise<FlushResult> {
-  const none: FlushResult = { synced: 0, stuck: 0 };
+  const none: FlushResult = { synced: 0, stuck: 0, uploaded: [] };
   if (_flushing) return none;
   _flushing = true;
   try {
@@ -236,7 +341,9 @@ export async function flushQueue(): Promise<FlushResult> {
     const key = queueKey(userId);
     const q = await readQueue(key);
     if (!q.length) return none;
+    if (q.some(i => !i.rejected)) _setUploading(true);
     const remaining: QueueItem[] = [];
+    const uploaded: UploadedWorkout[] = [];
     let synced = 0;
     let stuck = 0;
     for (const item of q) {
@@ -255,7 +362,10 @@ export async function flushQueue(): Promise<FlushResult> {
         });
         if (res.ok) {
           synced++;
-          _syncToHealth(item, userId, await _savedId(res));
+          const body = await _savedBody(res);
+          _syncToHealth(item, userId, body?.id ?? null);
+          const done = _summaryFrom(item, body);
+          if (done) uploaded.push(done);
         } else if (isPermanentRejection(res.status)) {
           const attempts = (item.attempts ?? 0) + 1;
           if (attempts >= MAX_REJECTED_ATTEMPTS) {
@@ -280,10 +390,14 @@ export async function flushQueue(): Promise<FlushResult> {
     // they were in flight is already in storage and must not be overwritten.
     const latest = await readQueue(key);
     const addedDuringFlush = latest.filter(l => !q.some(i => i.id === l.id));
+    // Before the count drops, so Home swaps its waiting card for the uploaded
+    // one in the same render instead of removing it and adding it back
+    if (uploaded.length) _uploadedSubs.forEach(s => s(uploaded));
     await writeQueue(key, [...remaining, ...addedDuringFlush]);
-    return { synced, stuck };
+    return { synced, stuck, uploaded };
   } finally {
     _flushing = false;
+    _setUploading(false);
   }
 }
 
@@ -314,7 +428,7 @@ export async function retryStuckWorkout(id: string): Promise<'synced' | 'rejecte
     }
     const latest = await readQueue(key);
     if (res.ok) {
-      _syncToHealth(item, userId, await _savedId(res));
+      _syncToHealth(item, userId, (await _savedBody(res))?.id ?? null);
       await writeQueue(key, latest.filter(i => i.id !== id));
       return 'synced';
     }

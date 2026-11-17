@@ -24,7 +24,9 @@ jest.mock('../context/WorkoutSessionContext', () => ({
 let mockGpsTracking = 'idle';
 jest.mock('../context/GpsRunContext', () => ({ useGpsRunStatus: () => ({ trackingState: mockGpsTracking }) }));
 const mockRefNavigate = jest.fn();
-jest.mock('../navigation/navigationRef', () => ({ navigationRef: { navigate: (...a: any[]) => mockRefNavigate(...a) } }));
+jest.mock('../navigation/navigationRef', () => ({ navigationRef: {
+  navigate: (...a: any[]) => mockRefNavigate(...a), isReady: () => true, getCurrentRoute: () => ({ name: 'DashboardHome' }),
+} }));
 
 const nav = createMockNavigation();
 const route = createMockRoute('DashboardHome');
@@ -375,15 +377,22 @@ describe('DashboardScreen', () => {
             : Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) }));
       };
 
-      it('uploads queued workouts and removes the card', async () => {
+      it('shows the upload on the card, names what landed, then folds the card away', async () => {
         const { getByText, queryByText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
         await waitFor(() => expect(getByText('Try Now')).toBeTruthy());
 
-        queueResponse(() => Promise.resolve({ ok: true, status: 201, json: () => Promise.resolve({ id: 5 }) }));
-        await act(async () => { fireEvent.press(getByText('Try Now')); });
+        let finish: (v: any) => void = () => {};
+        queueResponse(() => new Promise(r => { finish = r; }));
+        act(() => { fireEvent.press(getByText('Try Now')); });
+        await waitFor(() => expect(getByText('Uploading 1 workout…')).toBeTruthy());
+        expect(queryByText('Try Now')).toBeNull();
 
-        await waitFor(() => expect(queryByText(/waiting to upload/)).toBeNull());
-        expect(toasts).toEqual(['1 workout synced']);
+        await act(async () => { finish({ ok: true, status: 201, json: () => Promise.resolve({ id: 5, new_prs: [] }) }); });
+        await waitFor(() => expect(getByText('Offline Legs uploaded')).toBeTruthy());
+        expect(queryByText(/waiting to upload/)).toBeNull();
+        expect(toasts).toEqual(['Tap to see your summary.']);
+
+        await waitFor(() => expect(queryByText('Offline Legs uploaded')).toBeNull(), { timeout: 4000 });
       });
 
       it('keeps the card and says so when the upload fails', async () => {
@@ -398,15 +407,15 @@ describe('DashboardScreen', () => {
         expect(getByText('Try Now')).toBeTruthy();
       });
 
-      it('shows a spinner and ignores taps while uploading', async () => {
-        const { getByText, queryByText, getByLabelText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
+      it('swaps the button for the upload in progress, so it can only be sent once', async () => {
+        const { getByText, queryByText, queryByLabelText } = render(<DashboardScreen navigation={nav as any} route={route as any} />);
         await waitFor(() => expect(getByText('Try Now')).toBeTruthy());
 
         let finish: () => void = () => {};
         queueResponse(() => new Promise(r => { finish = () => r({ ok: true, status: 201, json: () => Promise.resolve({}) }); }));
         await act(async () => { fireEvent.press(getByText('Try Now')); });
-        expect(queryByText('Try Now')).toBeNull();
-        expect(getByLabelText('Try uploading now')).toBeDisabled();
+        expect(getByText('Uploading 1 workout…')).toBeTruthy();
+        expect(queryByLabelText('Try uploading now')).toBeNull();
 
         await act(async () => { finish(); });
         await waitFor(() => expect(queryByText(/waiting to upload/)).toBeNull());

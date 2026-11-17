@@ -68,12 +68,18 @@ export function ToastBanner() {
     >
       {options.title ? (
         // Long-lived toasts can be tapped away so they never block the screen.
-        <Pressable style={styles.largeRow} onPress={hide} accessibilityHint="Dismisses this message">
+        <Pressable
+          style={styles.largeRow}
+          onPress={() => { options.onPress?.(); hide(); }}
+          accessibilityRole={options.onPress ? 'button' : undefined}
+          accessibilityHint={options.accessibilityHint ?? 'Dismisses this message'}
+        >
           {options.icon && <Ionicons name={options.icon} size={28} color={toneColor} />}
           <View style={styles.largeTextBlock}>
             <Text style={styles.title}>{options.title}</Text>
             <Text style={styles.largeText}>{message}</Text>
           </View>
+          {options.onPress && <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />}
         </Pressable>
       ) : (
         <Text style={styles.text}>{message}</Text>

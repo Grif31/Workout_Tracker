@@ -10,6 +10,11 @@
 - The Coach learns which changes you tend to make and which you skip, and adjusts how it asks.
 - Insights and your weekly review now read your Notes to Coach, so an injury, an event or a time limit you mention shapes the advice.
 
+### Improved: Workouts saved offline
+- When a workout saved offline uploads, Home shows it happening: "Uploading…", then the workout's name with a check mark.
+- The upload banner names the workout and what it earned ("A new PR and a new badge."). Tap it to see the summary you missed while offline.
+- Activities on Home show their full time (32m 47s) instead of rounding to the minute.
+
 ## Server (2026-11-13)
 
 Backend only; the app side ships with the next app release.
