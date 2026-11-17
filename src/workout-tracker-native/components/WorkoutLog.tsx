@@ -77,7 +77,7 @@ import PlateCalculatorModal from './PlateCalculatorModal';
 import UndoBar from './UndoBar';
 import { syncFinishedWorkout } from '../utils/healthSync';
 import type { NewAchievement } from '../utils/achievements';
-import { normalizeSupersets, pairExercises, removeFromSuperset, supersetPositions, completesRound, nextInRound, canJoinSuperset } from '../utils/supersets';
+import { normalizeSupersets, pairExercises, removeFromSuperset, supersetPositions, completesRound, nextInRound, canJoinSuperset, logOrder } from '../utils/supersets';
 
 type EditableSetField = 'reps' | 'weight';
 
@@ -832,29 +832,24 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   const weightDelta = weightUnit === 'kg' ? 2.5 : 5;
 
-  // Advance focus: reps → weight (same set) → reps of next set → … → next
-  // strength exercise. Skips done sets (their inputs are not editable).
+  // Advance focus: reps → weight (same set) → reps of the next set in logging
+  // order, which runs across a superset's members round by round. Skips done
+  // sets (their inputs are not editable), cardio and timed holds.
   const focusNextInput = () => {
     if (!focusedInput) return;
     const { exIdx, setIdx, field } = focusedInput;
     const candidates: [number, number, EditableSetField][] = [];
-    const pushSet = (e: number, s: number) => {
-      const ex = exercises[e];
-      if (!ex || ex.sets[s]?.done) return;
-      candidates.push([e, s, 'reps']);
-      if (!isBodyweight(ex)) candidates.push([e, s, 'weight']);
-    };
     // From reps, weight of the same set comes first
     if (field === 'reps' && !isBodyweight(exercises[exIdx] ?? {}) && !exercises[exIdx]?.sets[setIdx]?.done) {
       candidates.push([exIdx, setIdx, 'weight']);
     }
-    // Remaining sets of this exercise
-    for (let s = setIdx + 1; s < (exercises[exIdx]?.sets.length ?? 0); s++) pushSet(exIdx, s);
-    // Following strength exercises
-    for (let e = exIdx + 1; e < exercises.length; e++) {
+    const order = logOrder(exercises);
+    const here = order.findIndex(p => p.exIdx === exIdx && p.setIdx === setIdx);
+    for (const { exIdx: e, setIdx: s } of here < 0 ? [] : order.slice(here + 1)) {
       const ex = exercises[e];
-      if (ex.exercise_type === 'cardio' || isDuration(ex)) continue;
-      for (let s = 0; s < ex.sets.length; s++) pushSet(e, s);
+      if (ex.exercise_type === 'cardio' || isDuration(ex) || ex.sets[s]?.done) continue;
+      candidates.push([e, s, 'reps']);
+      if (!isBodyweight(ex)) candidates.push([e, s, 'weight']);
     }
     for (const [e, s, f] of candidates) {
       const ref = inputRefs.current.get(`${e}:${s}:${f}`);
@@ -906,7 +901,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   // Scrolls a set into view when it's off screen (or under the rest timer and
   // bars at the bottom), without focusing it: the keyboard would cover the list.
-  // Duration rows register no input, so a hold partner isn't scrolled to.
+  // A timed hold registers its seconds input under 'reps', so it's found too.
   const revealSet = useCallback((exIdx: number, setIdx: number) => {
     const ref: any = inputRefs.current.get(`${exIdx}:${setIdx}:reps`);
     if (!ref?.measureInWindow) return;

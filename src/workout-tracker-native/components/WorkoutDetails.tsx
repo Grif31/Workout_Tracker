@@ -190,15 +190,16 @@ export default function WorkoutDetailsScreen({
 
   const doSaveTemplate = async () => {
     const name = templateModal.name.trim() || workout!.name;
-    const ids = workout!.exercises
-      .map(e => e.exercise_template_id)
-      .filter((id): id is number => id != null);
+    // Groups ride alongside the ids, so filter the exercises, not the ids
+    const kept = workout!.exercises.filter(e => e.exercise_template_id != null);
+    const ids = kept.map(e => e.exercise_template_id);
+    const supersetGroups = kept.map(e => e.superset_group ?? null);
     setTemplateModal(m => ({ ...m, visible: false }));
     try {
       const res = await apiFetch('/api/workout-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, exercise_template_ids: ids }),
+        body: JSON.stringify({ name, exercise_template_ids: ids, superset_groups: supersetGroups }),
       });
       if (res.ok) {
         Alert.alert('Template Saved', `"${name}" saved as a template.`);

@@ -4,19 +4,28 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import type { ExerciseEntry } from './types';
 import { canJoinSuperset } from '../../utils/supersets';
+
+type PickerExercise = {
+  name: string;
+  exercise_type?: string;
+  superset_group?: number | null;
+  muscle_group?: string;
+  equipment?: string;
+};
 
 type Props = {
   /** Index of the exercise being paired; null keeps the sheet closed */
   anchorIdx: number | null;
-  exercises: ExerciseEntry[];
+  exercises: PickerExercise[];
   onPick: (partnerIdx: number) => void;
   onClose: () => void;
+  /** Shown as a button when the anchor is already in a superset. The log has its own menu item instead */
+  onRemove?: () => void;
 };
 
 /** The other exercises an exercise can be supersetted with. Cardio and the anchor's own superset are left out. */
-export default function SupersetPickerModal({ anchorIdx, exercises, onPick, onClose }: Props) {
+export default function SupersetPickerModal({ anchorIdx, exercises, onPick, onClose, onRemove }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const anchor = anchorIdx !== null ? exercises[anchorIdx] : undefined;
@@ -50,7 +59,7 @@ export default function SupersetPickerModal({ anchorIdx, exercises, onPick, onCl
           </View>
           <FlatList
             data={candidates}
-            keyExtractor={c => c.ex.uid}
+            keyExtractor={c => String(c.idx)}
             style={{ maxHeight: 360 }}
             renderItem={({ item }) => (
               <TouchableOpacity
@@ -69,6 +78,12 @@ export default function SupersetPickerModal({ anchorIdx, exercises, onPick, onCl
               </TouchableOpacity>
             )}
           />
+          {adding && onRemove && (
+            <TouchableOpacity style={styles.removeBtn} onPress={onRemove} accessibilityRole="button">
+              <Ionicons name="unlink" size={18} color={colors.danger} />
+              <Text style={styles.removeText}>Remove from superset</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </Modal>
@@ -90,4 +105,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   },
   name: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary },
   detail: { fontSize: typography.fontSize.sm, color: colors.textSecondary, marginTop: 1 },
+  removeBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
+    paddingVertical: spacing.md,
+  },
+  removeText: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.danger },
 });

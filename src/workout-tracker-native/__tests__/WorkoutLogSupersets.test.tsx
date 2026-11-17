@@ -167,6 +167,41 @@ describe('WorkoutLog supersets: rest once per round', () => {
   });
 });
 
+describe('WorkoutLog supersets: the keyboard', () => {
+  beforeEach(() => { jest.useFakeTimers(); mockServer(); });
+  afterEach(() => jest.useRealTimers());
+
+  it("Next goes from one member's set to the partner's", () => {
+    const { TextInput, Keyboard } = require('react-native');
+    const listeners: Record<string, (e: any) => void> = {};
+    const addListener = jest.spyOn(Keyboard, 'addListener').mockImplementation(((evt: string, fn: any) => {
+      listeners[evt] = fn;
+      return { remove: () => {} };
+    }) as any);
+    const focus = TextInput.prototype.focus as jest.Mock;
+    focus.mockClear();
+    const utils = render(
+      <WorkoutLog prefill={prefill(strength('Bench Press', 1, 1), strength('Barbell Row', 3, 1)) as any}
+        onSubmit={jest.fn()} onCancel={jest.fn()} />,
+    );
+    // Which input got focus, as "label #n" (n counts inputs with that label, top down)
+    const focused = () => {
+      const all = utils.UNSAFE_getAllByType(TextInput);
+      const node: any = all.find((n: any) => n.instance === focus.mock.contexts.at(-1));
+      if (!node) return null;
+      const same = all.filter((n: any) => n.props.accessibilityLabel === node.props.accessibilityLabel);
+      return `${node.props.accessibilityLabel} #${same.indexOf(node) + 1}`;
+    };
+
+    fireEvent(utils.getAllByLabelText('Set 1 weight')[0], 'focus');
+    act(() => { listeners.keyboardWillShow?.({ endCoordinates: { screenY: 500 } }); });
+    fireEvent.press(utils.getByLabelText('Next field'));
+    // Row's first set, not Bench's second
+    expect(focused()).toBe('Set 1 reps #2');
+    addListener.mockRestore();
+  });
+});
+
 describe('WorkoutLog supersets: saving', () => {
   let alertSpy: jest.SpyInstance;
   beforeEach(() => {

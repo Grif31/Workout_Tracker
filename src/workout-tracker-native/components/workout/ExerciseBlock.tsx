@@ -197,6 +197,7 @@ function ExerciseBlock({
                     onToggleDone={() => onToggleSetDone(exIndex, setIndex)}
                     onDelete={() => onDeleteSet(exIndex, setIndex)}
                     onCopyPrevious={() => onCopyPrevious(exIndex, setIndex)}
+                    registerInputRef={ref => onRegisterInput?.(exIndex, setIndex, 'reps', ref)}
                   />
                 ))}
 

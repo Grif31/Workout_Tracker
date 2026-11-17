@@ -290,11 +290,15 @@ class WorkoutTemplateSchema(_Base):
     # template on its first save, so programming entered beforehand has to
     # arrive with the POST rather than a later PATCH.
     programming           = fields.List(fields.Dict(), load_default=None, validate=validate.Length(max=MAX_LIST))
+    # One superset key (or None) per exercise_template_ids entry. Raw: a bad
+    # entry only loses its grouping (utils/exercise_access.add_template_exercises)
+    superset_groups       = fields.Raw(load_default=None)
 
 class UpdateWorkoutTemplateSchema(_Base):
     name                  = fields.Str()
     exercise_template_ids = fields.List(fields.Int())
     programming           = fields.List(fields.Dict(), allow_none=True, validate=validate.Length(max=MAX_LIST))
+    superset_groups       = fields.Raw()
 
 # ── Bodyweight ────────────────────────────────────────────────
 class BodyweightSchema(_Base):

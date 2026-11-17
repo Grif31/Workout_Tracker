@@ -7,7 +7,7 @@ from models import db, WorkoutTemplate, WorkoutTemplateExercise
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from schemas import WorkoutTemplateSchema, UpdateWorkoutTemplateSchema
 from utils.validation import validate_body
-from utils.exercise_access import add_template_exercises
+from utils.exercise_access import add_template_exercises, current_superset_groups
 
 workout_template_bp = Blueprint('workout_template_bp', __name__)
 
@@ -48,7 +48,7 @@ def create_workout_template():
         template.programming_json = json.dumps(prog)
     db.session.add(template)
     db.session.flush()
-    add_template_exercises(template.id, user_id, data.get('exercise_template_ids', []))
+    add_template_exercises(template.id, user_id, data.get('exercise_template_ids', []), data.get('superset_groups'))
     db.session.commit()
     return jsonify(template.to_dict(include_exercises=True)), 201
 
@@ -87,8 +87,11 @@ def update_workout_template(template_id):
             return _name_taken_response(name)
         template.name = name or template.name
     if 'exercise_template_ids' in data:
+        ids = data['exercise_template_ids']
+        # Older builds send exercises without groups: keep the stored ones
+        groups = data['superset_groups'] if 'superset_groups' in data else current_superset_groups(template.id, ids)
         WorkoutTemplateExercise.query.filter_by(workout_template_id=template.id).delete()
-        add_template_exercises(template.id, user_id, data['exercise_template_ids'])
+        add_template_exercises(template.id, user_id, ids, groups)
     if 'programming' in data:
         prog = data['programming']
         template.programming_json = json.dumps(prog) if prog else None

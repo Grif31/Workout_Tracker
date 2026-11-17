@@ -8,11 +8,12 @@
 // just drop a member out of later rounds.
 
 type SetLike = { set_type?: string; done?: boolean };
-export type SupersetMember = {
+/** What grouping needs; templates have no sets */
+export type SupersetItem = {
   exercise_type?: string;
   superset_group?: number | null;
-  sets: SetLike[];
 };
+export type SupersetMember = SupersetItem & { sets: SetLike[] };
 
 export type SupersetPosition = {
   /** "A1", "A2", "B1"... */
@@ -27,12 +28,12 @@ export type SupersetPosition = {
 const isCardio = (ex: { exercise_type?: string }) => ex.exercise_type === 'cardio';
 export const canJoinSuperset = (ex: { exercise_type?: string }) => !isCardio(ex);
 
-function withGroup<E extends SupersetMember>(ex: E, group: number | null): E {
+function withGroup<E extends SupersetItem>(ex: E, group: number | null): E {
   return (ex.superset_group ?? null) === group ? ex : { ...ex, superset_group: group };
 }
 
 /** Same rules as the server's normalize_superset_groups. Unchanged entries keep their identity. */
-export function normalizeSupersets<E extends SupersetMember>(exercises: E[]): E[] {
+export function normalizeSupersets<E extends SupersetItem>(exercises: E[]): E[] {
   const groups = exercises.map(ex => (isCardio(ex) ? null : ex.superset_group ?? null));
   const result = groups.slice();
   const seen = new Set<number>();
@@ -56,7 +57,7 @@ export function normalizeSupersets<E extends SupersetMember>(exercises: E[]): E[
   return out.every((ex, k) => ex === exercises[k]) ? exercises : out;
 }
 
-function groupBounds(exercises: SupersetMember[], idx: number): [number, number] {
+function groupBounds(exercises: SupersetItem[], idx: number): [number, number] {
   const key = exercises[idx]?.superset_group;
   if (key == null) return [idx, idx];
   let start = idx;
@@ -71,7 +72,7 @@ function groupBounds(exercises: SupersetMember[], idx: number): [number, number]
  * after the superset's last member. A partner already in another superset
  * leaves that one.
  */
-export function pairExercises<E extends SupersetMember>(exercises: E[], anchor: number, partner: number): E[] {
+export function pairExercises<E extends SupersetItem>(exercises: E[], anchor: number, partner: number): E[] {
   if (anchor === partner || !exercises[anchor] || !exercises[partner]) return exercises;
   if (!canJoinSuperset(exercises[anchor]) || !canJoinSuperset(exercises[partner])) return exercises;
   const used = exercises.map(e => e.superset_group ?? 0);
@@ -84,7 +85,7 @@ export function pairExercises<E extends SupersetMember>(exercises: E[], anchor: 
 }
 
 /** Takes one exercise out of its superset, moving it to just after the rest so a tri-set stays whole. */
-export function removeFromSuperset<E extends SupersetMember>(exercises: E[], idx: number): E[] {
+export function removeFromSuperset<E extends SupersetItem>(exercises: E[], idx: number): E[] {
   const ex = exercises[idx];
   if (!ex || ex.superset_group == null) return exercises;
   const [, end] = groupBounds(exercises, idx);
@@ -95,7 +96,7 @@ export function removeFromSuperset<E extends SupersetMember>(exercises: E[], idx
 }
 
 /** Per exercise, where it sits in its superset; null when it isn't in one. */
-export function supersetPositions(exercises: SupersetMember[]): (SupersetPosition | null)[] {
+export function supersetPositions(exercises: SupersetItem[]): (SupersetPosition | null)[] {
   const out: (SupersetPosition | null)[] = exercises.map(() => null);
   let groupCount = 0;
   let i = 0;
@@ -162,6 +163,32 @@ export function nextInRound(
     if (at != null && !exercises[k].sets[at].done) return { exIdx: k, setIdx: at };
   }
   return null;
+}
+
+/**
+ * Every set in the order it's logged: down the list, except that a superset
+ * goes warm-ups first, then round by round across its members.
+ */
+export function logOrder(exercises: SupersetMember[]): { exIdx: number; setIdx: number }[] {
+  const out: { exIdx: number; setIdx: number }[] = [];
+  let i = 0;
+  while (i < exercises.length) {
+    const [start, end] = groupBounds(exercises, i);
+    if (start === end) {
+      exercises[i].sets.forEach((_, s) => out.push({ exIdx: i, setIdx: s }));
+    } else {
+      for (let k = start; k <= end; k++) {
+        exercises[k].sets.forEach((s, j) => { if (s.set_type === 'W') out.push({ exIdx: k, setIdx: j }); });
+      }
+      const working = exercises.slice(start, end + 1).map(e => workingSetIndices(e.sets));
+      const rounds = Math.max(...working.map(w => w.length));
+      for (let r = 0; r < rounds; r++) {
+        working.forEach((w, m) => { if (w[r] != null) out.push({ exIdx: start + m, setIdx: w[r] }); });
+      }
+    }
+    i = end + 1;
+  }
+  return out;
 }
 
 /**

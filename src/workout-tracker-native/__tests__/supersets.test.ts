@@ -1,6 +1,6 @@
 import {
   normalizeSupersets, pairExercises, removeFromSuperset, supersetPositions,
-  completesRound, nextInRound, currentExerciseIndex, type SupersetMember,
+  completesRound, nextInRound, currentExerciseIndex, logOrder, type SupersetMember,
 } from '../utils/supersets';
 
 type Kind = 'strength' | 'cardio' | 'duration';
@@ -162,5 +162,23 @@ describe('currentExerciseIndex', () => {
 
   it('outside a superset it is the first exercise with a set left', () => {
     expect(currentExerciseIndex([ex('strength', null, [set(true)]), ex('strength', null, [set()])])).toBe(1);
+  });
+});
+
+describe('logOrder', () => {
+  const pairs = (list: SupersetMember[]) => logOrder(list).map(p => `${p.exIdx}:${p.setIdx}`);
+
+  it('runs down the list outside a superset', () => {
+    expect(pairs([ex('strength', null, [set(), set()]), ex('strength', null, [set()])])).toEqual(['0:0', '0:1', '1:0']);
+  });
+
+  it('alternates across a superset round by round, warm-ups first', () => {
+    const list = [
+      ex('strength', null, [set()]),
+      ex('strength', 1, [set(false, 'W'), set(), set()]),
+      ex('strength', 1, [set(), set(), set()]),
+      ex('strength', null, [set()]),
+    ];
+    expect(pairs(list)).toEqual(['0:0', '1:0', '1:1', '2:0', '1:2', '2:1', '2:2', '3:0']);
   });
 });

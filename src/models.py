@@ -244,10 +244,10 @@ class WorkoutTemplate(db.Model):
         data = {"id": self.id, "user_id": self.user_id, "name": self.name, "programming_json": self.programming_json, "starter": self.starter}
         if include_exercises:
             ordered = (
-                db.session.query(ExerciseTemplate)
+                db.session.query(ExerciseTemplate, WorkoutTemplateExercise.superset_group)
                 .join(WorkoutTemplateExercise, WorkoutTemplateExercise.exercise_template_id == ExerciseTemplate.id)
                 .filter(WorkoutTemplateExercise.workout_template_id == self.id)
-                .order_by(WorkoutTemplateExercise.order)
+                .order_by(WorkoutTemplateExercise.order, WorkoutTemplateExercise.id)
                 .all()
             )
             data["exercises"] = [
@@ -260,8 +260,9 @@ class WorkoutTemplate(db.Model):
                     "exercise_type": e.exercise_type,
                     "image_url": e.image_url,
                     "bodyweight_load_factor": e.bodyweight_load_factor,
+                    "superset_group": group,
                 }
-                for e in ordered
+                for e, group in ordered
             ]
         return data
 
@@ -272,6 +273,8 @@ class WorkoutTemplateExercise(db.Model):
     workout_template_id = db.Column(db.Integer, db.ForeignKey("workout_templates.id"), nullable=False)
     exercise_template_id = db.Column(db.Integer, db.ForeignKey("exerciseTemplates.id"), nullable=False)
     order = db.Column(db.Integer)
+    # Same rules as Exercise.superset_group (utils/supersets.py)
+    superset_group = db.Column(db.Integer, nullable=True)
 
 
 # ── Routine ─────────────────────────────────────────────────────────────────

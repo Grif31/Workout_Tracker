@@ -21,10 +21,12 @@ type Props = {
   onDelete: () => void;
   /** Copies the Prev column into this set; absent when there's nothing to copy */
   onCopyPrevious?: () => void;
+  /** Lets a superset partner's check-off scroll this set into view */
+  registerInputRef?: (ref: TextInput | null) => void;
 };
 
 function DurationSetRow({
-  set, setIndex, prevSet, onChangeSeconds, onFocus, onBlur, onToggleDone, onDelete, onCopyPrevious,
+  set, setIndex, prevSet, onChangeSeconds, onFocus, onBlur, onToggleDone, onDelete, onCopyPrevious, registerInputRef,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -80,6 +82,7 @@ function DurationSetRow({
 
         <View style={[styles.secondsWrap, colStyles.input]}>
           <TextInput
+            ref={registerInputRef}
             style={[styles.setInput, isDone && styles.setInputDone]}
             placeholder="—"
             placeholderTextColor={colors.placeholder}

@@ -23,12 +23,17 @@ type Props = {
   rowColor?: string;
   /** Disable swipe while a drag is active — the swipe handler otherwise steals the touch natively mid-drag. */
   swipeEnabled?: boolean;
+  /** Adds a Superset swipe action */
+  onSuperset?: () => void;
+  /** "A1" when the exercise is in a superset: shown as a chip with an accent rail */
+  supersetLabel?: string | null;
 };
 
 const ACTION_WIDTH = 64;
 
 export default function ExerciseEditRow({
   name, muscleGroup, equipment, programming, onDelete, onSwitch, onEdit, rowColor, swipeEnabled = true,
+  onSuperset, supersetLabel,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -50,10 +55,16 @@ export default function ExerciseEditRow({
       renderRightActions={(progress) => {
         const translateX = progress.interpolate({
           inputRange: [0, 1],
-          outputRange: [ACTION_WIDTH * 3, 0],
+          outputRange: [ACTION_WIDTH * (onSuperset ? 4 : 3), 0],
         });
         return (
           <Animated.View style={[styles.actionsRow, { transform: [{ translateX }] }]}>
+            {onSuperset && (
+              <TouchableOpacity style={[styles.action, { backgroundColor: colors.accent }]} onPress={closeThen(onSuperset)}>
+                <Ionicons name="link" size={18} color={colors.accentText} />
+                <Text style={[styles.actionText, { color: colors.accentText }]}>Superset</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={[styles.action, { backgroundColor: colors.accent }]} onPress={closeThen(onEdit)}>
               <Ionicons name="create-outline" size={18} color={colors.accentText} />
               <Text style={[styles.actionText, { color: colors.accentText }]}>Edit</Text>
@@ -70,11 +81,16 @@ export default function ExerciseEditRow({
         );
       }}
     >
-      <View style={[styles.row, { backgroundColor: rowColor ?? colors.surface }]}>
+      <View style={[styles.row, !!supersetLabel && styles.supersetRow, { backgroundColor: rowColor ?? colors.surface }]}>
         {/* Equipment rides beside the name and the prescription never shrinks: on one
             line with the muscle group, a long muscle list cut off the sets and RPE */}
         <View style={styles.info}>
           <View style={styles.line}>
+            {!!supersetLabel && (
+              <View style={styles.supersetChip} accessibilityLabel={`Superset ${supersetLabel}`}>
+                <Text style={styles.supersetChipText}>{supersetLabel}</Text>
+              </View>
+            )}
             <Text style={styles.name} numberOfLines={1}>{name}</Text>
             {!!equipment && <Text style={styles.equipment} numberOfLines={1}>{equipment}</Text>}
           </View>
@@ -102,6 +118,11 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     gap: spacing.sm,
   },
   info: { flex: 1 },
+  supersetRow: { borderLeftWidth: 3, borderLeftColor: colors.accent },
+  supersetChip: {
+    backgroundColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: 5, alignSelf: 'center',
+  },
+  supersetChipText: { fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.accentText },
   line: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs },
   subtitleLine: { marginTop: 2 },
   name: { fontSize: typography.fontSize.md, fontWeight: '600', color: colors.textPrimary, flexShrink: 1 },

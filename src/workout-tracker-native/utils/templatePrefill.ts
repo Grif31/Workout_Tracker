@@ -12,6 +12,8 @@ export type TemplateExercise = {
   exercise_type?: string;
   image_url?: string;
   bodyweight_load_factor?: number | null;
+  /** Shared by a superset's members; null when not in one (utils/supersets.ts) */
+  superset_group?: number | null;
 };
 
 export type ProgrammingEntry = {
@@ -76,6 +78,7 @@ export function buildTemplatePrefill(
         equipment: ex.equipment,
         image_url: ex.image_url,
         bodyweight_load_factor: ex.bodyweight_load_factor,
+        superset_group: ex.superset_group ?? null,
         sets: prog ? programmedSets(ex, prog) : [{ reps: '', weight: '' }],
       };
     }),

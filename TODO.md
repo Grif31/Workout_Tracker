@@ -1959,21 +1959,23 @@ Leave out anything that rewards skipping rest or training through illness (no "w
 - [x] Every way the exercise list changes runs `normalizeSupersets`: remove (`deleteEx`, an Alert with no undo; removing one of a pair dissolves the pair), menu move up/down (`moveExercise`), replace and swap keep the group unless the new exercise is cardio, add appends ungrouped, reorder mode (see below)
 - [x] Reorder mode: `ExerciseReorderRow` shows the letter; after a drop, `normalizeSupersets` keeps the run that holds the group's first member and ungroups strays. Moving a whole group as one row is a later improvement (ties into §20)
 - [x] Current exercise: `currentExercise` in `utils/liveActivityProps.ts` is "first exercise with a set left", which stays on A1 through a superset. It feeds the Live Activity (`currentExerciseName`, `nextSetLines`) and the minimized bar's label in `navigation/AppTabs.tsx`. Make it superset-aware (the member owning the lowest unfinished round's next set) and add cases to `__tests__/liveActivity.test.ts`
-- [ ] Minimized session, crash backup and offline queue store `ExerciseEntry` whole, so the field rides along. Add a restore test that a superset survives minimize/resume and a cold-start restore
+- [x] Minimized session, crash backup and offline queue store `ExerciseEntry` whole, so the field rides along. Add a restore test that a superset survives minimize/resume and a cold-start restore
 - [x] Read-only views: `components/WorkoutDetails.tsx` shows the rail + letters (the screens that wrap it get it for free). Summary screen and share cards: letters only, or skip for now
 - [x] Tests: `__tests__/supersets.test.ts` for the util (contiguity, uneven sets, three-member groups, dissolve on remove); WorkoutLog tests for pairing from the menu, rest gating, focus jump, save payload, and edit round-trip
 
 - [x] `Workout.exercises` comes back sorted by `order` (it was database order, so a reorder made in Edit didn't show and a superset could come back split)
-- [ ] `toggleSetDone` only scrolls to the partner's set: a timed-hold partner registers no input, so it isn't scrolled to
-- [ ] The keyboard's next-field order still runs down the list, not across the superset (`focusNextInput`)
+- [x] `toggleSetDone` scrolls to a timed-hold partner too (`DurationSetRow` registers its seconds input)
+- [x] The keyboard's next-field order runs across a superset round by round (`logOrder`, used by `focusNextInput`)
 - [ ] Device check on iOS and Android: rail and chip in light and dark, pairing, rest gating, scroll to partner, Live Activity name
 - [ ] CHANGELOG entry (the server part ships ahead of the app, so it needs its own "## Server" line)
 
 ### Phase 2: templates and routines
-- [ ] `WorkoutTemplateExercise.superset_group` + migration; `WorkoutTemplate.to_dict(include_exercises=True)` returns it per exercise; template create/update routes accept it (same validation and normalize)
-- [ ] `TemplateExercise` type and `buildTemplatePrefill` carry it, so a superset template logs as a superset from Home, Coach, routines and the template screen alike
-- [ ] Template editor: pair/unpair in the same style as WorkoutLog
-- [ ] "Save as template" from a workout keeps the groups
+- [x] `WorkoutTemplateExercise.superset_group` + migration; `WorkoutTemplate.to_dict(include_exercises=True)` returns it per exercise; template create/update routes accept it (same validation and normalize)
+- [x] `TemplateExercise` type and `buildTemplatePrefill` carry it, so a superset template logs as a superset from Home, Coach, routines and the template screen alike
+- [x] Template editor: pair/unpair in the same style as WorkoutLog (a Superset swipe action opens the same picker, which offers "Remove from superset" for a member)
+- [x] "Save as template" from a workout keeps the groups
+- [x] Requests send `superset_groups` alongside `exercise_template_ids` (template create/update, routine days). A template PATCH without it keeps each exercise's stored group, for older builds
+- [ ] Creating a routine with new days (`CreateRoutineScreen`) has no pairing UI: pair in the day's template afterwards. Add it there if people ask
 
 ### Phase 3: Coach and polish
 - [ ] AI-generated routines may emit supersets (prompt + schema in `ai_routes.py`, validated like any other programming field); the Coach's workout context mentions them so it doesn't read A1/A2 as separate unrelated work

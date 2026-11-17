@@ -161,3 +161,79 @@ def test_hevy_import_keeps_supersets(app, client, auth_token):
         workout = Workout.query.one()
         exercises = sorted(workout.exercises, key=lambda e: e.order)
         assert [e.superset_group for e in exercises] == [1, 1, None]
+
+
+# ── Templates and routines ───────────────────────────────────
+
+def _template_groups(client, token, template_id):
+    res = client.get(f'/api/workout-templates/{template_id}', headers=hdrs(token))
+    assert res.status_code == 200
+    return [(e['name'], e['superset_group']) for e in res.get_json()['exercises']]
+
+
+def _make_template(client, token, ids, groups=None):
+    _make_template.count = getattr(_make_template, 'count', 0) + 1
+    body = {'name': f'Push {_make_template.count}', 'exercise_template_ids': ids}
+    if groups is not None:
+        body['superset_groups'] = groups
+    res = client.post('/api/workout-templates', json=body, headers=hdrs(token))
+    assert res.status_code == 201, res.get_json()
+    return res.get_json()['id']
+
+
+@pytest.fixture
+def lib(app):
+    return _library(app, *LIBRARY)
+
+
+def test_template_saves_and_normalizes_groups(client, auth_token, lib):
+    ids = [lib[('Bench Press', 'Barbell')], lib[('Bent Over Row', 'Barbell')], lib[('Squat', 'Barbell')], lib[('Running', None)]]
+    tid = _make_template(client, auth_token, ids, [5, 5, 9, 9])
+    # Squat's partner is cardio, so that pair dissolves
+    assert _template_groups(client, auth_token, tid) == [
+        ('Bench Press', 1), ('Bent Over Row', 1), ('Squat', None), ('Running', None)]
+
+
+def test_template_without_groups_and_garbage_groups(client, auth_token, lib):
+    ids = [lib[('Bench Press', 'Barbell')], lib[('Squat', 'Barbell')]]
+    assert [g for _, g in _template_groups(client, auth_token, _make_template(client, auth_token, ids))] == [None, None]
+    for junk in ['x', {'a': 1}, [True, 'y'], [1]]:
+        tid = _make_template(client, auth_token, ids, junk)
+        assert [g for _, g in _template_groups(client, auth_token, tid)] == [None, None]
+
+
+def test_template_groups_stay_with_their_exercise_when_an_id_is_dropped(client, auth_token, lib):
+    hidden = 999_999
+    ids = [lib[('Squat', 'Barbell')], hidden, lib[('Bench Press', 'Barbell')], lib[('Bent Over Row', 'Barbell')]]
+    tid = _make_template(client, auth_token, ids, [None, 1, 2, 2])
+    assert _template_groups(client, auth_token, tid) == [
+        ('Squat', None), ('Bench Press', 1), ('Bent Over Row', 1)]
+
+
+def test_template_edit_pairs_and_older_build_keeps_groups(client, auth_token, lib):
+    bench, row, squat = lib[('Bench Press', 'Barbell')], lib[('Bent Over Row', 'Barbell')], lib[('Squat', 'Barbell')]
+    tid = _make_template(client, auth_token, [bench, row, squat])
+    res = client.patch(f'/api/workout-templates/{tid}', headers=hdrs(auth_token),
+                       json={'exercise_template_ids': [bench, row, squat], 'superset_groups': [1, 1, None]})
+    assert res.status_code == 200
+    assert [g for _, g in _template_groups(client, auth_token, tid)] == [1, 1, None]
+
+    # An older build reorders without sending groups: each exercise keeps its own
+    res = client.patch(f'/api/workout-templates/{tid}', headers=hdrs(auth_token),
+                       json={'exercise_template_ids': [squat, bench, row]})
+    assert res.status_code == 200
+    assert _template_groups(client, auth_token, tid) == [('Squat', None), ('Bench Press', 1), ('Bent Over Row', 1)]
+
+    # Renaming alone leaves the exercises and groups be
+    client.patch(f'/api/workout-templates/{tid}', headers=hdrs(auth_token), json={'name': 'Push Renamed'})
+    assert [g for _, g in _template_groups(client, auth_token, tid)] == [None, 1, 1]
+
+
+def test_routine_day_keeps_groups(client, auth_token, lib):
+    bench, row = lib[('Bench Press', 'Barbell')], lib[('Bent Over Row', 'Barbell')]
+    res = client.post('/api/routines', headers=hdrs(auth_token), json={
+        'name': 'Split', 'days': [{'label': 'Push', 'exercise_template_ids': [bench, row], 'superset_groups': [3, 3]}],
+    })
+    assert res.status_code == 201, res.get_json()
+    exercises = res.get_json()['days'][0]['workout_template']['exercises']
+    assert [e['superset_group'] for e in exercises] == [1, 1]

@@ -173,3 +173,42 @@ describe('WorkoutLog keeps its client_id across a minimize or a kill', () => {
     await waitFor(() => expect(postedClientIds()).toEqual([ID]));
   });
 });
+
+// The session and the crash backup store exercise entries whole, so a
+// superset rides along: these prove it survives each way back in
+describe('WorkoutLog keeps supersets across a minimize or a kill', () => {
+  const paired = [
+    { uid: 'e1', name: 'Bench Press', exercise_template_id: 1, exercise_type: 'strength', equipment: 'Barbell',
+      superset_group: 1, sets: [{ reps: '8', weight: '135', set_type: 'N' }] },
+    { uid: 'e2', name: 'Barbell Row', exercise_template_id: 2, exercise_type: 'strength', equipment: 'Barbell',
+      superset_group: 1, sets: [{ reps: '8', weight: '135', set_type: 'N' }] },
+  ];
+
+  beforeEach(async () => {
+    (global.fetch as jest.Mock) = jest.fn(() => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) }));
+    mockSaveSession.mockClear();
+    mockSession = null;
+    await AsyncStorage.clear();
+  });
+
+  it('puts the groups in the minimized session and shows them on resume', () => {
+    mockSession = {
+      workoutName: 'Push', notes: '', exercises: paired,
+      selectedDate: new Date(), startedAt: new Date(), baseElapsed: 0, timerPaused: false,
+    };
+    const r = render(<WorkoutLog onSubmit={jest.fn()} onCancel={jest.fn()} />);
+    expect(r.getByText('A1')).toBeTruthy();
+    expect(r.getByText('A2')).toBeTruthy();
+    minimize(r);
+    expect(mockSaveSession.mock.calls[0][0].exercises.map((e: any) => e.superset_group)).toEqual([1, 1]);
+  });
+
+  it('shows them after a restore from the crash backup', async () => {
+    await AsyncStorage.setItem(WORKOUT_BACKUP_KEY, JSON.stringify({
+      workoutName: 'Push', notes: '', exercises: paired, selectedDate: new Date().toISOString(),
+    }));
+    const r = render(<WorkoutLog onSubmit={jest.fn()} onCancel={jest.fn()} />);
+    await waitFor(() => expect(r.getByText('A2')).toBeTruthy());
+    expect(r.getByText('A1')).toBeTruthy();
+  });
+});
