@@ -1,22 +1,24 @@
 {% extends "admin/base.html" %}
+{% from "admin/_icons.html" import icon %}
 {% block title %}System{% endblock %}
 {% block content %}
   <div class="page">
     <div class="page-head">
       <div>
+        <div class="mono-label">Operations</div>
         <h1>System</h1>
         <p class="sub">The running server. Env vars show as set or not set; their values are never read here.</p>
       </div>
     </div>
 
     <div class="tiles">
-      <div class="tile">
-        <div class="tile-label">Database</div>
+      <div class="tile" style="--tint: var(--{{ 's3' if db_status.ok else 'critical' }})">
+        <div class="tile-head"><span class="icon-chip">{{ icon('database') }}</span><span class="tile-label">Database</span></div>
         <div class="tile-value">{% if db_status.ok %}{{ db_status.ms }}<span class="unit">ms</span>{% else %}Down{% endif %}</div>
         <div class="tile-note">{% if db_status.ok %}<span class="status good">Answering</span>{% else %}<span class="status bad">{{ db_status.error }}</span>{% endif %}</div>
       </div>
-      <div class="tile">
-        <div class="tile-label">Migrations</div>
+      <div class="tile" style="--tint: var(--{{ 's1' if migrations.state == 'ok' else 'critical' if migrations.state == 'behind' else 's-other' }})">
+        <div class="tile-head"><span class="icon-chip">{{ icon('layers') }}</span><span class="tile-label">Migrations</span></div>
         <div class="tile-value mono-value">{{ migrations.current|join(', ') or '–' }}</div>
         <div class="tile-note">
           {% if migrations.state == 'ok' %}<span class="status good">At head</span>
@@ -24,13 +26,13 @@
           {% else %}<span class="muted">No alembic_version table. Head is {{ migrations.heads|join(', ') }}</span>{% endif %}
         </div>
       </div>
-      <div class="tile">
-        <div class="tile-label">Deployed commit</div>
+      <div class="tile" style="--tint: var(--s5)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('git') }}</span><span class="tile-label">Deployed commit</span></div>
         <div class="tile-value mono-value">{{ deploy.sha or '–' }}</div>
         <div class="tile-note">{{ deploy.message or ('Not on Railway' if not deploy.sha else '') }}</div>
       </div>
-      <div class="tile">
-        <div class="tile-label">Premium enforcement</div>
+      <div class="tile" style="--tint: var(--s4)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('star') }}</span><span class="tile-label">Premium enforcement</span></div>
         <div class="tile-value">{{ 'On' if checklist.enforced else 'Off' }}</div>
         <div class="tile-note">{% if checklist.enforced %}Free accounts are refused premium AI{% else %}Every account counts as premium{% endif %}</div>
       </div>
@@ -39,10 +41,10 @@
     <div class="cols">
       <section class="card">
         <div class="card-head">
-          <div>
+          <div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s3)">{{ icon('check') }}</span><div>
             <h2>Premium turn-on checklist</h2>
             <p class="sub">From CLAUDE.md, Server-side premium. Turn enforcement on only once the first four are done.</p>
-          </div>
+          </div></div>
           {% if checklist.enforced %}<span class="status good">Enforced</span>
           {% elif checklist.ready %}<span class="status warn">Ready to turn on</span>
           {% else %}<span class="status warn">Not ready</span>{% endif %}
@@ -81,7 +83,7 @@
       </section>
 
       <section class="card">
-        <div class="card-head"><div><h2>Premium in our database</h2><p class="sub">The first 20 by id. Written by the RevenueCat webhook, the sync in the app, and "Sync everyone".</p></div></div>
+        <div class="card-head"><div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s4)">{{ icon('star') }}</span><div><h2>Premium in our database</h2><p class="sub">The first 20 by id. Written by the RevenueCat webhook, the sync in the app, and "Sync everyone".</p></div></div></div>
         {% if premium_users %}
           <div class="table-wrap">
             <table>
@@ -100,7 +102,7 @@
     </div>
 
     <section class="card env">
-      <div class="card-head"><div><h2>Env vars</h2><p class="sub">Set or not set on this server.</p></div></div>
+      <div class="card-head"><div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s1)">{{ icon('key') }}</span><div><h2>Env vars</h2><p class="sub">Set or not set on this server.</p></div></div></div>
       <div class="table-wrap">
         <table>
           {% for group, label in [('required', 'Required'), ('premium', 'Premium'), ('optional', 'Optional')] %}
@@ -126,30 +128,30 @@
 {% endblock %}
 {% block head %}
   <style>
-    .mono-value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 20px; overflow-wrap: anywhere; }
+    .mono-value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 26px; overflow-wrap: anywhere; }
     .cols { margin-bottom: 16px; }
     .checklist { list-style: none; padding: 6px 0; }
-    .checklist li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 18px; font-size: 13px; }
+    .checklist li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 18px; font-size: 17px; }
     .checklist .check {
       width: 18px; height: 18px; flex-shrink: 0; border-radius: 50%; border: 1.5px solid var(--border-strong);
-      display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
+      display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700;
     }
     .checklist li.done .check { background: var(--good); border-color: var(--good); color: #fff; }
     .checklist li:not(.done) { color: var(--ink-2); }
     .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
     .sync { border-top: 1px solid var(--grid); padding: 12px 18px 16px; }
-    .sync-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    .sync-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 17px; }
     .sync-row input {
       width: 90px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 7px;
       color: var(--ink); padding: 6px 8px; font: inherit;
     }
     .btn {
       background: var(--accent); color: var(--accent-ink); border: none; border-radius: 7px;
-      padding: 7px 14px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+      padding: 7px 14px; font: inherit; font-size: 15.5px; font-weight: 700; cursor: pointer;
     }
     .btn:disabled { opacity: 0.6; cursor: default; }
     #sync-result { margin-top: 8px; }
-    .env tr.group-row th { font-size: 11px; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; padding-top: 16px; background: transparent; }
+    .env tr.group-row th { font-size: 14px; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; padding-top: 16px; background: transparent; }
     .env tbody tr.group-row:hover th { background: transparent; }
     .env td:last-child { width: 100%; }
   </style>

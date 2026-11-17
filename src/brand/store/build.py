@@ -32,7 +32,7 @@ SLIDES = [
     ('07-ai-routine.png', 'Programs built for you'),
     ('08-pr-dashboard.png', 'Track your PRs'),
     ('09-personal-records.png', 'Every record in one place'),
-    ('10-exercise-library.png', 'Full exercise library with demos'),
+    ('10-trophy-hall.png', 'Earn Achievements for every milestone'),
 ]
 
 # Screen width inside the frame; height follows the capture's own aspect

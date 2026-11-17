@@ -39,6 +39,10 @@ import { requestHealthConnectPermission } from '../../utils/healthConnect';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
 import { reportDistanceUnit } from '../../utils/distanceUnitSync';
 import { openExternalLink } from '../../utils/links';
+import LinkRow from '../../components/settings/LinkRow';
+import {
+  APP_STORE_REVIEW_URL, PRIVACY_URL, TERMS_URL, appVersionLabel, bugReportUrl, openSupportEmail, supportEmailUrl,
+} from '../../utils/support';
 
 // Reads the live app.config.js version so this never drifts out of sync again.
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
@@ -78,6 +82,7 @@ export default function SettingsScreen({ navigation }: Props) {
   const [reminderMin, setReminderMin]   = useState('00');
 
   const [accentModalVisible, setAccentModalVisible] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
   const [reminderPickerVisible, setReminderPickerVisible] = useState(false);
   const [pendingReminderDate, setPendingReminderDate] = useState(() => {
     const d = new Date(); d.setHours(9, 0, 0, 0); return d;
@@ -277,7 +282,7 @@ export default function SettingsScreen({ navigation }: Props) {
       <View style={styles.group}>
         <View style={styles.row}>
           <View style={styles.rowLeft}>
-            <Ionicons name="barbell-outline" size={20} color={colors.textSecondary} />
+            <Ionicons name="scale-outline" size={20} color={colors.textSecondary} />
             <Text style={styles.rowLabel}>Weight Unit</Text>
           </View>
           <View style={styles.unitToggle}>
@@ -315,156 +320,18 @@ export default function SettingsScreen({ navigation }: Props) {
             <Text style={[styles.unitLabel, distanceIsKm && styles.unitActive]}>km</Text>
           </View>
         </View>
-      </View>
-
-      {/* ── GPS Activities ── */}
-      <Text style={styles.sectionLabel}>GPS Activities</Text>
-      <View style={styles.group}>
-        <View style={styles.row}>
-          <View style={styles.rowLeft}>
-            <Ionicons name="pause-circle-outline" size={20} color={colors.textSecondary} />
-            <View style={styles.rowText}>
-              <Text style={styles.rowLabel}>Auto-Pause</Text>
-              <Text style={styles.rowHint}>Stops the clock while you're stopped, like at a light</Text>
-            </View>
-          </View>
-          <ThemedSwitch
-            value={autoPauseOn}
-            accessibilityLabel="Auto-pause"
-            onValueChange={async (v) => {
-              setAutoPauseOn(v);
-              await AsyncStorage.setItem(perUserAutoPauseKey, String(v));
-            }}
-          />
-        </View>
 
         <View style={styles.divider} />
 
-        <View style={styles.row}>
-          <View style={styles.rowLeft}>
-            <Ionicons name="phone-portrait-outline" size={20} color={colors.textSecondary} />
-            <View style={styles.rowText}>
-              <Text style={styles.rowLabel}>Keep Screen On</Text>
-              <Text style={styles.rowHint}>While the map is open, for a phone on a mount</Text>
-            </View>
-          </View>
-          <ThemedSwitch
-            value={keepScreenOn}
-            accessibilityLabel="Keep screen on during GPS activities"
-            onValueChange={async (v) => {
-              setKeepScreenOn(v);
-              await AsyncStorage.setItem(perUserKeepScreenKey, String(v));
-            }}
-          />
-        </View>
-      </View>
-
-      {/* ── Workout ── */}
-      <Text style={styles.sectionLabel}>Workout</Text>
-      <View style={styles.group}>
-        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('WorkoutSettings')}>
-          <View style={styles.rowLeft}>
-            <Ionicons name="barbell-outline" size={20} color={colors.textSecondary} />
-            <Text style={styles.rowLabel}>Workout</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-        </TouchableOpacity>
-      </View>
-
-      {/* ── Notifications ── */}
-      <Text style={styles.sectionLabel}>Notifications</Text>
-      <View style={styles.group}>
-
-        {/* Workout Reminders */}
-        <View style={styles.row}>
-          <View style={styles.rowLeft}>
-            <Ionicons name="notifications-outline" size={20} color={colors.textSecondary} />
-            <Text style={styles.rowLabel}>Workout Reminders</Text>
-          </View>
-          <ThemedSwitch
-            value={remindersOn}
-            accessibilityLabel="Workout reminders"
-            onValueChange={async (v) => {
-              if (v) {
-                if (!(await ensurePermission())) return;
-                setRemindersOn(true);
-                await AsyncStorage.setItem(perUserRemindersKey, 'true');
-                const h = parseInt(reminderHour, 10) || 9;
-                const m = parseInt(reminderMin, 10) || 0;
-                scheduleWorkoutReminder(h, m);
-              } else {
-                setRemindersOn(false);
-                await AsyncStorage.setItem(perUserRemindersKey, 'false');
-                cancelWorkoutReminder();
-              }
-            }}
-          />
-        </View>
-        {remindersOn && (
-          <TouchableOpacity
-            style={[styles.row, { paddingTop: 0 }]}
-            onPress={() => {
-              setPendingReminderDate(getReminderDate());
-              setReminderPickerVisible(true);
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={styles.rowLeft}>
-              <Ionicons name="time-outline" size={20} color={colors.textSecondary} />
-              <Text style={styles.rowLabel}>Reminder Time</Text>
-            </View>
-            <View style={styles.accentRowRight}>
-              <Text style={styles.rowValue}>{formatReminderTime()}</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
-            </View>
-          </TouchableOpacity>
-        )}
+        <LinkRow icon="barbell-outline" label="Workout" onPress={() => navigation.navigate('WorkoutSettings')} />
 
         <View style={styles.divider} />
 
-        {/* Rest Timer Alerts */}
-        <View style={styles.row}>
-          <View style={styles.rowLeft}>
-            <Ionicons name="alarm-outline" size={20} color={colors.textSecondary} />
-            <Text style={styles.rowLabel}>Rest Timer Alerts</Text>
-          </View>
-          <ThemedSwitch
-            value={restAlertsOn}
-            accessibilityLabel="Rest timer alerts"
-            onValueChange={async (v) => {
-              if (v && !(await ensurePermission())) return;
-              setRestAlertsOn(v);
-              await AsyncStorage.setItem(REST_ALERTS_KEY, String(v));
-            }}
-          />
-        </View>
+        <LinkRow icon="map-outline" label="GPS Activities" onPress={() => navigation.navigate('GpsSettings')} />
 
-        <View style={styles.divider} />
-
-        {/* Live Workout Notification */}
-        <View style={styles.row}>
-          <View style={styles.rowLeft}>
-            <Ionicons name="fitness-outline" size={20} color={colors.textSecondary} />
-            <Text style={styles.rowLabel}>{Platform.OS === 'ios' ? 'Live Workout on Lock Screen' : 'Live Workout Notification'}</Text>
-          </View>
-          <ThemedSwitch
-            value={liveNotifOn}
-            accessibilityLabel={Platform.OS === 'ios' ? 'Live workout on lock screen' : 'Live workout notification'}
-            onValueChange={async (v) => {
-              if (v && !(await ensurePermission())) return;
-              setLiveNotifOn(v);
-              await AsyncStorage.setItem(LIVE_WORKOUT_NOTIF_KEY, String(v));
-            }}
-          />
-        </View>
-
-      </View>
-
-      {/* ── Health Sync ── */}
-      {HEALTH_SYNC_ENABLED && (
-        <>
-          <Text style={styles.sectionLabel}>Health</Text>
-          <View style={styles.group}>
+        {HEALTH_SYNC_ENABLED && (
+          <>
+            <View style={styles.divider} />
             <View style={styles.row}>
               <View style={styles.rowLeft}>
                 <Ionicons name="heart-outline" size={20} color={colors.textSecondary} />
@@ -493,60 +360,52 @@ export default function SettingsScreen({ navigation }: Props) {
                 }}
               />
             </View>
-          </View>
-        </>
-      )}
+          </>
+        )}
+      </View>
 
-      {/* ── App Info ── */}
-      <Text style={styles.sectionLabel}>App</Text>
+      {/* ── Notifications ── */}
+      <Text style={styles.sectionLabel}>Notifications</Text>
       <View style={styles.group}>
+        <LinkRow icon="notifications-outline" label="Notifications" onPress={() => navigation.navigate('NotificationSettings')} />
+      </View>
+
+      {/* ── Help ── */}
+      <Text style={styles.sectionLabel}>Help</Text>
+      <View style={styles.group}>
+        <LinkRow icon="help-circle-outline" label="FAQ" onPress={() => navigation.navigate('HelpFaq')} />
+
+        <View style={styles.divider} />
+
+        <LinkRow icon="chatbubble-ellipses-outline" label="Contact Us" onPress={() => setContactOpen(true)} />
+      </View>
+
+      {/* ── About ── */}
+      <Text style={styles.sectionLabel}>About</Text>
+      <View style={styles.group}>
+        <LinkRow icon="shield-checkmark-outline" label="Privacy Policy" external onPress={() => openExternalLink(PRIVACY_URL)} />
+
+        <View style={styles.divider} />
+
+        <LinkRow icon="document-text-outline" label="Terms of Service" external onPress={() => openExternalLink(TERMS_URL)} />
+
+        {/* Android isn't on the Play Store yet, so there is nowhere to send a rating */}
+        {Platform.OS === 'ios' && (
+          <>
+            <View style={styles.divider} />
+            <LinkRow icon="star-outline" label="Rate Aretē" external onPress={() => openExternalLink(APP_STORE_REVIEW_URL)} />
+          </>
+        )}
+
+        <View style={styles.divider} />
+
         <View style={styles.row}>
           <View style={styles.rowLeft}>
             <Ionicons name="information-circle-outline" size={20} color={colors.textSecondary} />
             <Text style={styles.rowLabel}>Version</Text>
           </View>
-          <Text style={styles.rowValue}>{APP_VERSION}</Text>
+          <Text style={styles.rowValue}>{appVersionLabel()}</Text>
         </View>
-
-        <View style={styles.divider} />
-
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => openExternalLink('https://aretefitnessapp.com/terms')}
-        >
-          <View style={styles.rowLeft}>
-            <Ionicons name="document-text-outline" size={20} color={colors.textSecondary} />
-            <Text style={styles.rowLabel}>Terms of Service</Text>
-          </View>
-          <Ionicons name="open-outline" size={18} color={colors.textSecondary} />
-        </TouchableOpacity>
-
-        <View style={styles.divider} />
-
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => openExternalLink('https://aretefitnessapp.com/privacy')}
-        >
-          <View style={styles.rowLeft}>
-            <Ionicons name="shield-checkmark-outline" size={20} color={colors.textSecondary} />
-            <Text style={styles.rowLabel}>Privacy Policy</Text>
-          </View>
-          <Ionicons name="open-outline" size={18} color={colors.textSecondary} />
-        </TouchableOpacity>
-
-        <View style={styles.divider} />
-
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => openExternalLink('mailto:support@aretefitnessapp.com')}
-        >
-          <View style={styles.rowLeft}>
-            <Ionicons name="mail-outline" size={20} color={colors.textSecondary} />
-            <Text style={styles.rowLabel}>Contact Support</Text>
-          </View>
-          <Ionicons name="open-outline" size={18} color={colors.textSecondary} />
-        </TouchableOpacity>
-
       </View>
     </ScrollView>
 
@@ -588,6 +447,32 @@ export default function SettingsScreen({ navigation }: Props) {
                 </TouchableOpacity>
               ))}
             </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={contactOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setContactOpen(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setContactOpen(false)}>
+          <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>Contact Us</Text>
+            <LinkRow
+              icon="mail-outline"
+              label="Email Us"
+              external
+              onPress={() => { setContactOpen(false); openSupportEmail(supportEmailUrl()); }}
+            />
+            <View style={styles.divider} />
+            <LinkRow
+              icon="bug-outline"
+              label="Report a Bug"
+              external
+              onPress={() => { setContactOpen(false); openSupportEmail(bugReportUrl(uid)); }}
+            />
           </View>
         </TouchableOpacity>
       </Modal>

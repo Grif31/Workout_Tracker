@@ -1,9 +1,11 @@
 {% extends "admin/base.html" %}
+{% from "admin/_icons.html" import icon %}
 {% block title %}Audit Log{% endblock %}
 {% block content %}
   <div class="page">
     <div class="page-head">
       <div>
+        <div class="mono-label">Operations</div>
         <h1>Audit log</h1>
         <p class="sub">Every write made from the admin, newest first. Showing the last {{ limit }}.</p>
       </div>

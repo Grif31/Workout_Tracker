@@ -1,14 +1,17 @@
 {% extends "admin/base.html" %}
+{% from "admin/_icons.html" import icon %}
 {% block title %}Users{% endblock %}
 {% block content %}
   <div class="page">
     <div class="page-head">
       <div>
+        <div class="mono-label">Content</div>
         <h1>Users</h1>
         <p class="sub">Search by email, username or id.</p>
       </div>
     </div>
     <form class="search-form" method="get" role="search">
+      <span class="search-icon">{{ icon('search') }}</span>
       <input type="search" name="q" value="{{ q }}" placeholder="name@example.com, username or #42" autofocus aria-label="Search users">
       <button type="submit" class="btn">Search</button>
     </form>
@@ -40,13 +43,20 @@
 {% endblock %}
 {% block head %}
   <style>
-    .search-form { display: flex; gap: 8px; margin-bottom: 16px; max-width: 560px; }
-    .search-form input {
-      flex: 1; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px;
-      color: var(--ink); padding: 9px 12px; font: inherit; font-size: 14px;
+    .search-form {
+      display: flex; gap: 8px; align-items: center; margin-bottom: 16px; max-width: 640px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      padding: 6px 6px 6px 14px; box-shadow: var(--shadow);
     }
-    .search-form input:focus { outline: none; border-color: var(--accent); }
-    .btn { background: var(--accent); color: var(--accent-ink); border: none; border-radius: 8px; padding: 9px 16px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .search-form:focus-within { border-color: var(--accent); }
+    .search-icon { display: inline-flex; color: var(--muted); }
+    .search-icon svg { width: 18px; height: 18px; }
+    .search-form input {
+      flex: 1; min-width: 0; background: transparent; border: none;
+      color: var(--ink); padding: 8px 4px; font: inherit; font-size: 18px;
+    }
+    .search-form input:focus { outline: none; }
+    .btn { background: var(--accent); color: var(--accent-ink); border: none; border-radius: 8px; padding: 9px 16px; font: inherit; font-size: 17px; font-weight: 700; cursor: pointer; }
     td a { color: var(--ink); text-decoration: none; }
     td a:hover { color: var(--accent); }
     .more { padding: 10px 18px; }

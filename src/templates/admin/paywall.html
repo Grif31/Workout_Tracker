@@ -1,11 +1,13 @@
 {% extends "admin/base.html" %}
 {% import "admin/_charts.html" as charts %}
+{% from "admin/_icons.html" import icon %}
 {% block title %}Paywall{% endblock %}
 {% macro pct(v) %}{{ '%d%%' % v if v is not none else '–' }}{% endmacro %}
 {% block content %}
   <div class="page">
     <div class="page-head">
       <div>
+        <div class="mono-label">Product</div>
         <h1>Paywall</h1>
         <p class="sub">
           What gets people to Premium. Counts people, not taps.
@@ -23,23 +25,23 @@
     {% set trials = by_plan|sum(attribute='trials') %}
     {% set problems = purchase_outcomes|rejectattr('outcome', 'in', ['purchased', 'cancelled'])|sum(attribute='count') %}
     <div class="tiles">
-      <div class="tile">
-        <div class="tile-label">Opened the paywall</div>
+      <div class="tile" style="--tint: var(--s1)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('eye') }}</span><span class="tile-label">Opened the paywall</span></div>
         <div class="tile-value">{{ funnel.viewed }}</div>
         <div class="tile-note">{{ funnel.shown }} saw a locked teaser</div>
       </div>
-      <div class="tile">
-        <div class="tile-label">Bought Premium</div>
+      <div class="tile" style="--tint: var(--s4)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('star') }}</span><span class="tile-label">Bought Premium</span></div>
         <div class="tile-value">{{ funnel.purchased }}</div>
         <div class="tile-note">{% if trials %}{{ trials }} started on a free trial{% else %}No trials started{% endif %}</div>
       </div>
-      <div class="tile">
-        <div class="tile-label">Conversion</div>
+      <div class="tile" style="--tint: var(--s3)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('percent') }}</span><span class="tile-label">Conversion</span></div>
         <div class="tile-value">{{ funnel.conversion if funnel.conversion is not none else '–' }}{% if funnel.conversion is not none %}<span class="unit">%</span>{% endif %}</div>
         <div class="tile-note">Of people who opened the paywall</div>
       </div>
-      <div class="tile">
-        <div class="tile-label">Purchases that went wrong</div>
+      <div class="tile" style="--tint: var(--critical)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('alert') }}</span><span class="tile-label">Purchases that went wrong</span></div>
         <div class="tile-value">{{ problems }}</div>
         <div class="tile-note">
           {% if problems %}<span class="status warn">Pending, offline or failed</span>
@@ -51,10 +53,10 @@
     <div class="stack">
       <section class="card">
         <div class="card-head">
-          <div>
+          <div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s1)">{{ icon('funnel') }}</span><div>
             <h2>Funnel</h2>
             <p class="sub">People who reached each step. A teaser is a free user's own numbers shown blurred; other entry points open the paywall straight away.</p>
-          </div>
+          </div></div>
         </div>
         {% set top = [funnel.shown, funnel.viewed, 1]|max %}
         <div class="table-wrap">
@@ -76,10 +78,10 @@
 
       <section class="card">
         <div class="card-head">
-          <div>
+          <div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s3)">{{ icon('bars') }}</span><div>
             <h2>Paywall opens per day</h2>
             <p class="sub">Last 30 days, whatever the range above.</p>
-          </div>
+          </div></div>
           {{ charts.legend([('Bought', 'key-0'), ("Opened, didn't buy", 'key-1')]) }}
         </div>
         <div class="card-body">
@@ -106,10 +108,10 @@
 
       <section class="card">
         <div class="card-head">
-          <div>
+          <div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s5)">{{ icon('tag') }}</span><div>
             <h2>By source</h2>
             <p class="sub">What opened the paywall. A purchase counts toward the source that opened it.</p>
-          </div>
+          </div></div>
         </div>
         {% if by_source %}
           <div class="table-wrap">
@@ -148,10 +150,10 @@
 
       <section class="card">
         <div class="card-head">
-          <div>
+          <div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s4)">{{ icon('card') }}</span><div>
             <h2>By plan</h2>
             <p class="sub">Times each plan was picked, purchases started, and purchases made. Annual is selected when the paywall opens, so picks count taps on another plan or back.</p>
-          </div>
+          </div></div>
         </div>
         <div class="table-wrap">
           <table>
@@ -173,7 +175,7 @@
 
       <div class="cols">
         <section class="card">
-          <div class="card-head"><div><h2>How purchases ended</h2><p class="sub">Every attempt, not people.</p></div></div>
+          <div class="card-head"><div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s2)">{{ icon('cart') }}</span><div><h2>How purchases ended</h2><p class="sub">Every attempt, not people.</p></div></div></div>
           <div class="table-wrap">
             <table>
               <tbody>
@@ -186,7 +188,7 @@
         </section>
 
         <section class="card">
-          <div class="card-head"><div><h2>Restores</h2><p class="sub">Every tap on Restore Purchases.</p></div></div>
+          <div class="card-head"><div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s1)">{{ icon('refresh') }}</span><div><h2>Restores</h2><p class="sub">Every tap on Restore Purchases.</p></div></div></div>
           <div class="table-wrap">
             <table>
               <tbody>
@@ -206,6 +208,6 @@
     td.meter-cell, th.meter-cell { min-width: 160px; width: 30%; }
     .meter-row { display: flex; align-items: center; gap: 10px; }
     .meter-row .meter { flex: 1; cursor: default; }
-    .meter-value { font-size: 12px; font-weight: 600; min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+    .meter-value { font-size: 15.5px; font-weight: 600; min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
   </style>
 {% endblock %}

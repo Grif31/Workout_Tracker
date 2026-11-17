@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+{% from "admin/_icons.html" import icon %}
 {% block title %}{{ ex.name if ex else 'Exercise not found' }}{% endblock %}
 {% block content %}
   <div class="page narrow">
@@ -8,6 +9,7 @@
     {% else %}
       <div class="page-head">
         <div>
+          <div class="mono-label">Exercise</div>
           <h1>{{ ex.name }}</h1>
           <p class="sub">{{ ex.equipment or 'No equipment' }} · {{ ex.exercise_type }}{% if ex.standards_key %} · standards key <code>{{ ex.standards_key }}</code>{% endif %} · #{{ ex.id }}</p>
         </div>
@@ -26,7 +28,7 @@
       <form class="stack" id="edit-form" {% if owner %}inert{% endif %}>
         <section class="card">
           <div class="card-head">
-            <div><h2>Muscles</h2><p class="sub">Primary movers count as a full set in the volume chart, secondary as half.</p></div>
+            <div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s2)">{{ icon('activity') }}</span><div><h2>Muscles</h2><p class="sub">Primary movers count as a full set in the volume chart, secondary as half.</p></div></div>
             {% if 'muscles' in edited %}<span class="chip">Edited in admin</span>{% endif %}
           </div>
           <div class="card-body">
@@ -48,7 +50,7 @@
 
         <section class="card">
           <div class="card-head">
-            <div><h2>Description</h2><p class="sub">Shown on the exercise's detail screen in the app.</p></div>
+            <div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s1)">{{ icon('text') }}</span><div><h2>Description</h2><p class="sub">Shown on the exercise's detail screen in the app.</p></div></div>
             {% if 'description' in edited %}<span class="chip">Edited in admin</span>{% endif %}
           </div>
           <div class="card-body">
@@ -59,7 +61,7 @@
         {% if load_factor_applies %}
           <section class="card">
             <div class="card-head">
-              <div><h2>Bodyweight load factor</h2><p class="sub">The share of bodyweight the movement moves, added to volume (push-up about 0.6, pull-up 1.0). Empty means 1.0.</p></div>
+              <div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s4)">{{ icon('dumbbell') }}</span><div><h2>Bodyweight load factor</h2><p class="sub">The share of bodyweight the movement moves, added to volume (push-up about 0.6, pull-up 1.0). Empty means 1.0.</p></div></div>
               {% if 'load_factor' in edited %}<span class="chip">Edited in admin</span>{% endif %}
             </div>
             <div class="card-body">
@@ -81,7 +83,7 @@
       </form>
 
       <section class="card">
-        <div class="card-head"><div><h2>Admin history</h2><p class="sub">Every admin change to this exercise, newest first.</p></div></div>
+        <div class="card-head"><div class="head-icon"><span class="icon-chip sm" style="--tint: var(--ink-2)">{{ icon('list') }}</span><div><h2>Admin history</h2><p class="sub">Every admin change to this exercise, newest first.</p></div></div></div>
         {% if history %}
           <div class="table-wrap">
             <table>
@@ -106,31 +108,31 @@
 {% block head %}
   <style>
     .page.narrow { max-width: 860px; }
-    .crumb { font-size: 13px; margin-bottom: 10px; }
+    .crumb { font-size: 17px; margin-bottom: 10px; }
     .crumb a { text-decoration: none; }
     .thumb { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; background: #fff; border: 1px solid var(--border); }
     .stack { margin: 16px 0; }
-    .chip { background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-2); border-radius: 999px; padding: 1px 9px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .chip { background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-2); border-radius: 999px; padding: 1px 9px; font-size: 14px; font-weight: 600; white-space: nowrap; }
     .muscle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 6px 18px; }
     .muscle { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; }
-    .m-name { font-size: 13px; font-weight: 600; }
+    .m-name { font-size: 17px; font-weight: 600; }
     .seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
     .seg label { cursor: pointer; }
     .seg input { position: absolute; opacity: 0; pointer-events: none; }
-    .seg span { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); padding: 4px 10px; border-radius: 6px; }
+    .seg span { display: block; font-size: 15.5px; font-weight: 600; color: var(--ink-2); padding: 4px 10px; border-radius: 6px; }
     .seg input:checked + span { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--border); }
     .seg input[value="primary"]:checked + span { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
     .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
     textarea, input[type="number"] {
       width: 100%; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 8px;
-      color: var(--ink); padding: 9px 11px; font: inherit; font-size: 14px; line-height: 1.5;
+      color: var(--ink); padding: 9px 11px; font: inherit; font-size: 18px; line-height: 1.5;
     }
     input[type="number"] { width: 140px; }
     textarea:focus, input:focus { outline: none; border-color: var(--accent); }
     .actions { display: flex; gap: 12px; align-items: center; }
-    .btn { background: var(--accent); color: var(--accent-ink); border: none; border-radius: 8px; padding: 9px 18px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .btn { background: var(--accent); color: var(--accent-ink); border: none; border-radius: 8px; padding: 9px 18px; font: inherit; font-size: 17px; font-weight: 700; cursor: pointer; }
     .btn:disabled { opacity: 0.6; }
-    .notice .card-body { font-size: 13px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+    .notice .card-body { font-size: 17px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
     form[inert] { opacity: 0.6; }
   </style>
 {% endblock %}

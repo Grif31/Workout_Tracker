@@ -125,6 +125,9 @@ export type ProfileStackParamsList = {
     AccountSettings: undefined
     Import: { mode: 'import' | 'export' } | undefined
     WorkoutSettings: undefined
+    GpsSettings: undefined
+    NotificationSettings: undefined
+    HelpFaq: undefined
     ChangePassword: undefined
     WorkoutDetails: { workoutId: number; newAchievements?: NewAchievement[] };
     CardioDetails: { workoutId: number };

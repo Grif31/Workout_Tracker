@@ -174,11 +174,6 @@ function WorkoutCalendar({ view: calView, refreshKey, onSelectWorkout, onChangeV
                 </View>
               ))}
 
-              <View style={styles.calLegend}>
-                <View style={[styles.calLegendDot, { backgroundColor: colors.accent }]} />
-                <Text style={[styles.calLegendText, { color: colors.textSecondary }]}>Workout logged</Text>
-              </View>
-
               {selectedCalDate && (
                 <View style={[styles.calDayHeader, { borderTopColor: colors.border }]}>
                   <Text style={[styles.calDayHeaderText, { color: colors.textPrimary }]}>
@@ -275,11 +270,6 @@ function WorkoutCalendar({ view: calView, refreshKey, onSelectWorkout, onChangeV
                   );
                 })}
               </View>
-
-              <View style={[styles.calLegend, { marginTop: spacing.lg }]}>
-                <View style={[styles.calLegendDot, { backgroundColor: colors.accent }]} />
-                <Text style={[styles.calLegendText, { color: colors.textSecondary }]}>Workout logged</Text>
-              </View>
             </>
           );
         })()}
@@ -340,11 +330,6 @@ function WorkoutCalendar({ view: calView, refreshKey, onSelectWorkout, onChangeV
                   </View>
                 );
               })}
-
-              <View style={styles.calLegend}>
-                <View style={[styles.calLegendDot, { backgroundColor: colors.accent }]} />
-                <Text style={[styles.calLegendText, { color: colors.textSecondary }]}>Workout logged</Text>
-              </View>
             </>
           );
         })()}
@@ -402,18 +387,6 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontWeight: '500',
   },
-  calLegend: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    marginTop: spacing.lg,
-  },
-  calLegendDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  calLegendText: { fontSize: 13 },
 
   calDayHeader: {
     flexDirection: 'row',

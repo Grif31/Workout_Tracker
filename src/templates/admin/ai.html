@@ -1,5 +1,6 @@
 {% extends "admin/base.html" %}
 {% import "admin/_charts.html" as charts %}
+{% from "admin/_icons.html" import icon %}
 {% block title %}AI Usage{% endblock %}
 {% macro money(v) %}${{ '%.2f' % v if v >= 0.01 or v == 0 else '%.4f' % v }}{% endmacro %}
 {% macro secs(ms) %}{{ '%.1fs' % (ms / 1000) if ms is not none else '–' }}{% endmacro %}
@@ -7,6 +8,7 @@
   <div class="page">
     <div class="page-head">
       <div>
+        <div class="mono-label">Product</div>
         <h1>AI usage</h1>
         <p class="sub">
           Every Anthropic call.
@@ -19,18 +21,18 @@
     {% set rate = (100 * window_totals.failures / window_totals.calls)|round|int if window_totals.calls else none %}
     {% set insights = by_endpoint|selectattr('endpoint', 'equalto', 'insights')|first %}
     <div class="tiles">
-      <div class="tile">
-        <div class="tile-label">{{ month_label }} est. cost</div>
+      <div class="tile" style="--tint: var(--s4)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('dollar') }}</span><span class="tile-label">{{ month_label }} est. cost</span></div>
         <div class="tile-value">{{ money(month_totals.cost) }}</div>
         <div class="tile-note">{{ month_totals.calls }} calls this month</div>
       </div>
-      <div class="tile">
-        <div class="tile-label">Calls, last 30 days</div>
+      <div class="tile" style="--tint: var(--s1)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('activity') }}</span><span class="tile-label">Calls, last 30 days</span></div>
         <div class="tile-value">{{ window_totals.calls }}</div>
         <div class="tile-note">{{ money(window_totals.cost) }} estimated</div>
       </div>
-      <div class="tile">
-        <div class="tile-label">Failure rate, last 30 days</div>
+      <div class="tile" style="--tint: var(--critical)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('alert') }}</span><span class="tile-label">Failure rate, last 30 days</span></div>
         <div class="tile-value">{{ rate if rate is not none else '–' }}{% if rate is not none %}<span class="unit">%</span>{% endif %}</div>
         <div class="tile-note">
           {% if rate is none %}No calls yet
@@ -39,8 +41,8 @@
           {% else %}<span class="status good">None failed</span>{% endif %}
         </div>
       </div>
-      <div class="tile">
-        <div class="tile-label">Insights p95 response</div>
+      <div class="tile" style="--tint: var(--s5)">
+        <div class="tile-head"><span class="icon-chip">{{ icon('clock') }}</span><span class="tile-label">Insights p95 response</span></div>
         <div class="tile-value">{{ secs(insights.p95) if insights else '–' }}</div>
         <div class="tile-note">{% if insights %}Typical {{ secs(insights.p50) }}{% else %}No insights calls yet{% endif %}</div>
       </div>
@@ -49,10 +51,10 @@
     <div class="stack">
       <section class="card">
         <div class="card-head">
-          <div>
+          <div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s1)">{{ icon('bars') }}</span><div>
             <h2>Calls per day</h2>
             <p class="sub">Last 30 days, by endpoint.</p>
-          </div>
+          </div></div>
           <div class="legend">{% for ep in endpoints %}<span><i class="key-{{ loop.index0 }}"></i>{{ ep }}</span>{% endfor %}</div>
         </div>
         <div class="card-body">
@@ -85,10 +87,10 @@
 
       <section class="card">
         <div class="card-head">
-          <div>
+          <div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s4)">{{ icon('dollar') }}</span><div>
             <h2>Estimated cost per day</h2>
             <p class="sub">Last 30 days, all endpoints.</p>
-          </div>
+          </div></div>
         </div>
         <div class="card-body">
           {% if window_totals.calls %}
@@ -101,10 +103,10 @@
 
       <section class="card">
         <div class="card-head">
-          <div>
+          <div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s5)">{{ icon('cpu') }}</span><div>
             <h2>By endpoint</h2>
             <p class="sub">Last 30 days. Response times count successful calls only.</p>
-          </div>
+          </div></div>
         </div>
         {% if by_endpoint %}
           <div class="table-wrap">
@@ -139,7 +141,7 @@
 
       <div class="cols">
         <section class="card">
-          <div class="card-head"><div><h2>Top users, {{ month_label }}</h2><p class="sub">By number of calls.</p></div></div>
+          <div class="card-head"><div class="head-icon"><span class="icon-chip sm" style="--tint: var(--s3)">{{ icon('users') }}</span><div><h2>Top users, {{ month_label }}</h2><p class="sub">By number of calls.</p></div></div></div>
           {% if top_users %}
             <div class="table-wrap">
               <table>
@@ -161,7 +163,7 @@
         </section>
 
         <section class="card">
-          <div class="card-head"><div><h2>Recent failures</h2><p class="sub">The last 50, newest first. Times are server time.</p></div></div>
+          <div class="card-head"><div class="head-icon"><span class="icon-chip sm" style="--tint: var(--critical)">{{ icon('alert') }}</span><div><h2>Recent failures</h2><p class="sub">The last 50, newest first. Times are server time.</p></div></div></div>
           {% if failures %}
             <div class="fail-list">
               {% for f in failures %}
@@ -186,7 +188,7 @@
   <style>
     .fail { padding: 12px 18px; border-top: 1px solid var(--grid); }
     .fail:first-child { border-top: none; }
-    .fail-head { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 12px; }
+    .fail-head { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 15.5px; }
     .fail-error { display: block; margin-top: 6px; word-break: break-word; }
   </style>
 {% endblock %}
