@@ -1290,11 +1290,11 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [x] CHANGELOG entry
 
 **Device checklist** (the part tests can't cover)
-- [ ] Start a run, minimize, walk 100 m, resume: distance and route continued, no gap counted
+- [x] Start a run, minimize, walk 100 m, resume: distance and route continued, no gap counted (device 2026-11-17: 5 min walk, minimized, resumed, saved)
 - [ ] Minimize, lock the phone for 5 minutes, unlock: the run kept recording (background mode), and again with only "While Using" permission
 - [ ] Pause, minimize, resume; stop from the screen after minimizing; save online and offline from a minimized run
 - [ ] Discard from the mini bar: double confirm, tracking stops, the Live Activity goes
-- [ ] Kill the app mid-run: relaunch offers "Review & Save" as today, and no Live Activity is left behind
+- [ ] Kill the app mid-run: relaunch offers "Review & Save" as today, and no Live Activity is left behind. Device 2026-11-17: force-quit mid-walk came back and resumed; still to check no Live Activity is left behind
 - [ ] A lifting workout minimized, then a run started: the prompt appears; and the reverse
 - [ ] Log out mid-run
 - [ ] Battery and a long run (1 h+): update rate holds, memory stays flat (the thinned polyline in `displayCoords` already guards the map)
@@ -1480,7 +1480,7 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 ### Phase 2: No map work while the app is in the background
 - [x] (built 2026-10-14, not yet on a device) `GPSCardioScreen` makes no map calls (`animateToRegion`, polyline updates) while `AppState` isn't `active`, and catches up when the app comes back. Also stops its 1 s clock re-render and turns off the map's own location dot and follow while backgrounded; the run bar stops ticking too. New `hooks/useAppActive.ts`; 4 tests in `GpsRunMinimize.test.tsx`. Cheap, and worth doing whatever Phase 1 finds: the screen stays mounted when the phone is locked on the map
 
-### Phase 3: No straight lines across gaps (built 2026-10-16, not yet on a device)
+### Phase 3: No straight lines across gaps (built 2026-10-16; device 2026-11-17: none on a 5 min walk with a minimize and a force-quit, not yet tested across a real signal loss)
 - [x] A time-gap rule in `applyFix` (built 2026-10-16): a fix more than **60 s and 100 m** after the previous one starts a new segment, adds no distance, counts no climb, and is marked `resumed` (`GAP_SECONDS`, `GAP_MIN_METRES`). Raised from the planned 15 s: under trees the accuracy filter drops fixes for tens of seconds, and splitting there would have cut a wooded hike into pieces and lost real distance
 - [x] **Decided: a new `Exercise.route_segments` column** (JSON list of encoded polylines, one per segment; migration `u9v0w1x2y3z4`, applied locally, production gets it on deploy). Keep writing `route_polyline` as the full joined line so builds from before this still draw a route. Validated in `_validate_exercises` (a list of strings, at most 500, each at most 500 KB); kept on an edit that doesn't send it. `tests/test_route_segments.py`
 - [x] The live map, Cardio Details, Workout Details and the share card's trace draw one line per segment, all through `utils/routeSegments.ts` (falls back to `route_polyline` as one line for older routes)
@@ -1499,12 +1499,13 @@ Resolves the GPS question in Phase 6's open questions. Two features that depend 
 - [x] **Decided: declare the Health Connect permissions.** (2026-10-18) A prebuild confirmed no `android.permission.health.*` anywhere: the library's plugin only adds the rationale intent filter and its manifest only a `<queries>` entry, so Android Health sync could never be granted. `app.config.js` now declares `health.WRITE_EXERCISE` and `health.WRITE_DISTANCE`. Two more gaps the library's plugin leaves, now filled by `plugins/withHealthConnect.js`: `setPermissionDelegate` in MainActivity.onCreate (without it the permission launcher is an uninitialised lateinit and requestPermission throws) and the Android 14+ `VIEW_PERMISSION_USAGE`/`HEALTH_PERMISSIONS` activity alias (without it Health Connect won't show the dialog); a prebuild confirmed all three land. Still to do: a new Android build, check on the emulator that the Settings Health switch grants and a run lands in Health Connect with its distance, then complete Google's Health Connect declaration in the Play Console before the release goes out
 - [ ] Also from this: someone who granted Health Connect access before distance was asked for won't have it; their sessions still go in without distance until they grant it in Health Connect
 
-### Phase 6: Pick a run back up after a kill (built 2026-10-17, not yet on a device)
-- [x] **Decided: Keep Recording.** (built 2026-10-17, not yet on a device) A recovered run's save sheet has Keep Recording above Save and Discard: it restarts GPS through `resume`, keeps the distance, time and client_id from before the kill, and starts a new segment, so nothing is drawn or counted across the gap. Afterwards it is a normal run (the bar says the activity, the Live Activity comes back). Not offered after Stop: a run ended on purpose stays ended. Both `resume` and the recovered run mark the gap, so either alone is enough; a test covers a short pause (under a minute and 100 m), where `resume`'s marker is the only protection
+### Phase 6: Pick a run back up after a kill (built 2026-10-17, checked on a device 2026-11-17)
+- [x] **Decided: Keep Recording.** (built 2026-10-17; device 2026-11-17: force-quit mid-walk, reopened and kept recording) A recovered run's save sheet has Keep Recording above Save and Discard: it restarts GPS through `resume`, keeps the distance, time and client_id from before the kill, and starts a new segment, so nothing is drawn or counted across the gap. Afterwards it is a normal run (the bar says the activity, the Live Activity comes back). Not offered after Stop: a run ended on purpose stays ended. Both `resume` and the recovered run mark the gap, so either alone is enough; a test covers a short pause (under a minute and 100 m), where `resume`'s marker is the only protection
 - [x] Checkpoint at most every 5 s while fixes arrive (`CHECKPOINT_EVERY_MS`, driven by fixes because they keep coming with the phone locked where a timer may not fire), from the first fix rather than the tenth, and the moment the app goes to the background. A kill loses about 5 s at most instead of up to a minute, and the Mohonk hike's 37 s run would have been on disk from its first fix
 
 ### Done when
 - [ ] On a device: walk with the phone locked on the map screen and minimized, force-quit mid-walk and Keep Recording, pause and resume, and switch to airplane mode before Stop. The full route is recoverable in every case, with no straight line across a gap, pause or resume
+  - Done 2026-11-17: minimized, force-quit and Keep Recording, saved, no straight lines. Still to do: phone locked on the map screen, pause and resume, airplane mode before Stop
 - [x] (audited 2026-11-09) No path deletes a tracked activity without a second confirmation
   - GPS: the save sheet's Discard, a recovered run's Discard and the mini bar's Discard all ask "Discard this activity?" first (tests in `GPSCardioScreen` and `MiniRunBar`); every other `clearRun` follows a save to the server or the offline queue. A checkpoint is dropped unasked only when it holds under 2 fixes, which is no route. A sign-out checkpoints a run in progress under its owner
   - Saved activities: Delete on Cardio Details and Workout Details asks first. A queued workout the server refused is deleted only from its Home card, behind "Delete this workout?"
