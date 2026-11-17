@@ -21,6 +21,7 @@ from schemas import IMPORT_SOURCES, ImportSchema
 from utils.achievements import _COUNTED_PR_TYPES_EXCLUDE, distance_unit_for, evaluate_achievements
 from utils.importers import ImportFormatError, parse
 from utils.importers.matching import ExerciseMatcher
+from utils.supersets import normalize_superset_groups
 from utils.validation import validate_body
 from utils.volume import bodyweight_lookup, derive_bodyweight_load_factor
 
@@ -209,6 +210,7 @@ def _write(user, plan):
             duration=(w.duration_seconds // 60 or None) if w.duration_seconds and w.duration_seconds < _MAX_DURATION_SECONDS else None,
             local_start_hour=w.start.hour if w.has_time else None,
         )
+        superset_keys = {}
         for order, ex in enumerate(w.exercises):
             tmpl = templates[ex.title]
             etype = (tmpl.exercise_type or 'strength').lower()
@@ -217,9 +219,12 @@ def _write(user, plan):
                 workout.exercises.append(Exercise(
                     name=tmpl.name, exercise_template_id=tmpl.id, order=order,
                     exercise_type=etype, notes=ex.notes, sets=sets,
+                    superset_group=(superset_keys.setdefault(ex.superset, len(superset_keys) + 1)
+                                    if ex.superset else None),
                 ))
         if not workout.exercises:
             continue
+        normalize_superset_groups(workout.exercises)
         workout.calculate_volume(weight_unit=plan.to_unit, bodyweight=bodyweight_at(w.start))
         db.session.add(workout)
         workouts.append(workout)

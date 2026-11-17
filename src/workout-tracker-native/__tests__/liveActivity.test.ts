@@ -16,6 +16,13 @@ describe('currentExerciseName', () => {
   it('is undefined with no exercises', () => {
     expect(currentExerciseName([])).toBeUndefined();
   });
+  it('follows a superset to the partner, then back for the next round', () => {
+    const a = (done: boolean[]) => ({ name: 'Bench Press', superset_group: 1, sets: done.map(d => ({ done: d, reps: '8', weight: '185' })) });
+    const b = (done: boolean[]) => ({ name: 'Barbell Row', superset_group: 1, sets: done.map(d => ({ done: d, reps: '10', weight: '135' })) });
+    expect(currentExerciseName([a([true, false]), b([false, false])])).toBe('Barbell Row');
+    expect(nextSetLines([a([true, false]), b([false, false])], 'lbs')).toEqual({ setLine: 'Next set', next: '10 × 135 lbs' });
+    expect(currentExerciseName([a([true, false]), b([true, false])])).toBe('Bench Press');
+  });
 });
 
 describe('nextSetLines', () => {

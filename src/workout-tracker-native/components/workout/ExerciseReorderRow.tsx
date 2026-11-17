@@ -14,9 +14,11 @@ type Props = {
   muscleGroup?: string;
   setCount: number;
   exerciseType?: 'strength' | 'cardio' | 'duration';
+  /** "A1" when in a superset */
+  supersetLabel?: string;
 };
 
-export default function ExerciseReorderRow({ name, muscleGroup, setCount, exerciseType }: Props) {
+export default function ExerciseReorderRow({ name, muscleGroup, setCount, exerciseType, supersetLabel }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -27,7 +29,10 @@ export default function ExerciseReorderRow({ name, muscleGroup, setCount, exerci
   return (
     <View style={styles.row}>
       <View style={styles.info}>
-        <Text style={styles.name} numberOfLines={1}>{name}</Text>
+        <Text style={styles.name} numberOfLines={1}>
+          {!!supersetLabel && <Text style={{ color: colors.accent }}>{supersetLabel}  </Text>}
+          {name}
+        </Text>
         <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
       </View>
       <Ionicons name="reorder-three-outline" size={20} color={colors.textSecondary} />

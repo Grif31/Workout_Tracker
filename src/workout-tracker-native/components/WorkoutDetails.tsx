@@ -19,7 +19,7 @@ import { Workout } from '../types/models';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, isNetworkError } from '../utils/api';
 import { useTheme, type Colors } from '../context/ThemeContext';
-import { spacing } from '../theme/spacing';
+import { spacing, radius } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { estimateCalories } from '../utils/cardioCalories';
 import { GPS_DISTANCE_UNIT_KEY, toDisplayDistance, toDisplayPace, toExactVolume, toKm } from '../utils/units';
@@ -34,6 +34,7 @@ import WorkoutShareCard, { bestWorkingSet, type ShareExercise } from './share/Wo
 import CardioShareCard from './share/CardioShareCard';
 import { LaurelBranch } from './LaurelWreath';
 import StreakFlame from './StreakFlame';
+import { supersetPositions } from '../utils/supersets';
 
 
 export type PrefillWorkoutData = {
@@ -56,6 +57,7 @@ export type PrefillWorkoutData = {
     image_url?: string;
     bodyweight_load_factor?: number | null;
     notes?: string;
+    superset_group?: number | null;
     sets: {
       id?: number;
       reps: string;
@@ -145,6 +147,7 @@ export default function WorkoutDetailsScreen({
         image_url: e.image_url,
         bodyweight_load_factor: e.bodyweight_load_factor,
         notes: mode === 'edit' ? (e.notes ?? '') : undefined,
+        superset_group: e.superset_group ?? null,
         sets: e.sets.map(s => ({
           id: mode === 'edit' ? s.id : undefined,
           reps: mode === 'edit' ? (s.reps ?? '') : '',
@@ -392,6 +395,7 @@ export default function WorkoutDetailsScreen({
     );
   }
 
+  const supersetPos = supersetPositions(workout.exercises);
   const totalSets = workout.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
   const totalReps = workout.exercises.reduce((sum, ex) =>
     sum + ex.sets.reduce((s, set) => s + (parseFloat(set.reps ?? '0') || 0), 0), 0);
@@ -572,8 +576,24 @@ export default function WorkoutDetailsScreen({
           <Text style={styles.exercisesLabel}>Exercises</Text>
         </View>
       }
-      renderItem={({ item: exercise }) => {
+      renderItem={({ item: exercise, index }) => {
         const isCardio = exercise.exercise_type === 'cardio';
+        const superset = supersetPos[index];
+        const joined = !!superset && superset.position < superset.size;
+        const cardStyle = [styles.exerciseCard, superset && styles.supersetCard, joined && styles.supersetJoined];
+        const nameRow = (
+          <View style={styles.exNameRow}>
+            {superset && (
+              <Text
+                style={[styles.supersetChip, { backgroundColor: colors.accent, color: colors.accentText }]}
+                accessibilityLabel={`Superset ${superset.letter}, exercise ${superset.position} of ${superset.size}`}
+              >
+                {superset.label}
+              </Text>
+            )}
+            <Text style={[styles.exerciseName, { flexShrink: 1 }]}>{exercise.name}</Text>
+          </View>
+        );
 
         if (isCardio) {
           const bodyKg = user?.bodyweight
@@ -669,8 +689,8 @@ export default function WorkoutDetailsScreen({
 
         if ((exercise.exercise_type ?? 'strength') === 'duration') {
           return (
-            <View style={styles.exerciseCard}>
-              <Text style={styles.exerciseName}>{exercise.name}</Text>
+            <View style={cardStyle}>
+              {nameRow}
               {exercise.equipment ? (
                 <Text style={styles.equipmentText}>{exercise.equipment}</Text>
               ) : null}
@@ -695,8 +715,8 @@ export default function WorkoutDetailsScreen({
         }
 
         return (
-          <View style={styles.exerciseCard}>
-            <Text style={styles.exerciseName}>{exercise.name}</Text>
+          <View style={cardStyle}>
+            {nameRow}
             {exercise.equipment ? (
               <Text style={styles.equipmentText}>{exercise.equipment}</Text>
             ) : null}
@@ -897,6 +917,14 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderRadius: spacing.sm,
     padding: spacing.md,
     marginBottom: spacing.sm,
+  },
+  // A superset's cards share an accent rail and sit close together
+  supersetCard: { borderLeftWidth: 4, borderLeftColor: colors.accent },
+  supersetJoined: { marginBottom: 2 },
+  exNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  supersetChip: {
+    fontSize: typography.fontSize.xs, fontWeight: '700', borderRadius: radius.sm,
+    paddingHorizontal: 6, paddingVertical: 1, overflow: 'hidden', marginBottom: 2,
   },
   exerciseName: {
     fontSize: typography.fontSize.md,

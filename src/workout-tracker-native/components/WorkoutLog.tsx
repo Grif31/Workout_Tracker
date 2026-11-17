@@ -67,6 +67,7 @@ import {
 import WorkoutHeader from './workout/WorkoutHeader';
 import ExerciseBlock from './workout/ExerciseBlock';
 import SwapExerciseModal from './workout/SwapExerciseModal';
+import SupersetPickerModal from './workout/SupersetPickerModal';
 import NextTargetModal, { targetFor } from './workout/NextTargetModal';
 import DraggableList from './DraggableList';
 import { animateNextLayout, animateNextRowChange } from '../utils/layoutAnimation';
@@ -76,6 +77,7 @@ import PlateCalculatorModal from './PlateCalculatorModal';
 import UndoBar from './UndoBar';
 import { syncFinishedWorkout } from '../utils/healthSync';
 import type { NewAchievement } from '../utils/achievements';
+import { normalizeSupersets, pairExercises, removeFromSuperset, supersetPositions, completesRound, nextInRound, canJoinSuperset } from '../utils/supersets';
 
 type EditableSetField = 'reps' | 'weight';
 
@@ -86,6 +88,9 @@ const HEADER_HIT_SLOP = { top: 10, bottom: 10 };
 
 // A prefill (template, routine day, or a logged workout for Edit / Perform
 // Again) as editable entries
+const supersetEdge = (pos: { position: number; size: number } | null | undefined) =>
+  !pos ? undefined : pos.position === 1 ? 'first' as const : pos.position === pos.size ? 'last' as const : 'middle' as const;
+
 const prefillToEntries = (prefill: PrefillWorkoutData): ExerciseEntry[] =>
   prefill.exercises.map((ex: any) => ({
     uid: makeUid(),
@@ -99,6 +104,7 @@ const prefillToEntries = (prefill: PrefillWorkoutData): ExerciseEntry[] =>
     image_url: ex.image_url,
     bodyweight_load_factor: ex.bodyweight_load_factor,
     notes: ex.notes ?? undefined,
+    superset_group: ex.superset_group ?? null,
     sets: ex.sets.map((s: any) => ({
       uid: makeUid(),
       id: s.id,
@@ -315,6 +321,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const [replacingExIndex, setReplacingExIndex] = useState<number | null>(null);
   // The exercise whose alternatives are showing (Premium's swap list)
   const [swapExIndex, setSwapExIndex] = useState<number | null>(null);
+  // The exercise whose "Superset With..." sheet is open
+  const [supersetAnchorIdx, setSupersetAnchorIdx] = useState<number | null>(null);
   // The exercise whose next-session target is showing (Premium)
   const [targetExIndex, setTargetExIndex] = useState<number | null>(null);
 
@@ -896,6 +904,22 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     });
   }, []);
 
+  // Scrolls a set into view when it's off screen (or under the rest timer and
+  // bars at the bottom), without focusing it: the keyboard would cover the list.
+  // Duration rows register no input, so a hold partner isn't scrolled to.
+  const revealSet = useCallback((exIdx: number, setIdx: number) => {
+    const ref: any = inputRefs.current.get(`${exIdx}:${setIdx}:reps`);
+    if (!ref?.measureInWindow) return;
+    requestAnimationFrame(() => ref.measureInWindow((_x: number, y: number, _w: number, h: number) => {
+      const windowHeight = Dimensions.get('window').height;
+      if (y >= insets.top + 120 && y + h <= windowHeight - insets.bottom - 160) return;
+      listRef.current?.scrollToOffset({
+        offset: Math.max(0, scrollOffsetRef.current + y - windowHeight / 3),
+        animated: true,
+      });
+    }));
+  }, [insets.top, insets.bottom]);
+
   const toggleSetDone = useCallback((exIndex: number, setIndex: number) => {
     // Read via the ref (not `exercises` directly) so this callback doesn't
     // need `exercises` in its dependency array — depending on it would
@@ -917,7 +941,15 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       next[exIndex] = { ...target, sets: target.sets.map((s, j) => j === setIndex ? { ...s, done: nowDone } : s) };
       return next;
     });
-    if (nowDone && autoStartRest && set.set_type !== 'W') startRest();
+    if (nowDone && set.set_type !== 'W') {
+      // In a superset, rest comes once per round; until then, go to the partner
+      if (completesRound(exercisesRef.current, exIndex, setIndex)) {
+        if (autoStartRest) startRest();
+      } else {
+        const next = nextInRound(exercisesRef.current, exIndex, setIndex);
+        if (next) revealSet(next.exIdx, next.setIdx);
+      }
+    }
     const loggedReps = parseFloat(set.reps);
     if (nowDone && ex.currentPR && ex.exercise_type !== 'cardio' && !isDuration(ex) && loggedReps >= 1) {
       const w = parseFloat(set.weight);
@@ -984,7 +1016,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         ));
       }
     }
-  }, [autoStartRest, startRest, showPRBanner]);
+  }, [autoStartRest, startRest, showPRBanner, revealSet]);
 
   const addSetToExercise = useCallback((exIndex: number) => {
     animateNextRowChange();
@@ -1074,7 +1106,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           onPress: () => {
             // Same row fade and sibling slide as removing a set.
             animateNextRowChange();
-            setExercises(prev => prev.filter((_, i) => i !== exIndex));
+            setExercises(prev => normalizeSupersets(prev.filter((_, i) => i !== exIndex)));
           },
         },
       ]
@@ -1089,10 +1121,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       if (swapIdx < 0 || swapIdx >= prev.length) return prev;
       const next = [...prev];
       [next[exIndex], next[swapIdx]] = [next[swapIdx], next[exIndex]];
-      return next;
+      return normalizeSupersets(next);
     });
     setOpenMenuIdx(null);
   };
+
+  const supersetPos = useMemo(() => supersetPositions(exercises), [exercises]);
 
   // Stable references for DraggableList (React.memo'd) — an inline function
   // here would give it a "new" prop on every WorkoutLog render, including the
@@ -1104,17 +1138,18 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       const next = [...prev];
       const [moved] = next.splice(from, 1);
       next.splice(to, 0, moved);
-      return next;
+      return normalizeSupersets(next);
     });
   }, []);
-  const renderReorderRow = useCallback((item: ExerciseEntry) => (
+  const renderReorderRow = useCallback((item: ExerciseEntry, index: number) => (
     <ExerciseReorderRow
       name={item.name}
       muscleGroup={item.muscle_group}
       setCount={item.sets.length}
       exerciseType={item.exercise_type}
+      supersetLabel={supersetPos[index]?.label}
     />
-  ), []);
+  ), [supersetPos]);
 
   const toggleExMenu = useCallback((exIndex: number) => {
     setOpenMenuIdx(prev => (prev === exIndex ? null : exIndex));
@@ -1238,8 +1273,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       onOpenMenu={onOpenExerciseMenu}
       onUpdateCardioField={updateCardioField}
       prHint={prHint && prHint.exIdx === exIndex ? prHint : null}
+      supersetLabel={supersetPos[exIndex]?.label}
+      supersetSize={supersetPos[exIndex]?.size}
+      supersetEdge={supersetEdge(supersetPos[exIndex])}
     />
   ), [
+    supersetPos,
     showRpe, weightUnit, SET_TYPE_COLORS, updateExerciseNotes, autoFocusNoteIdx,
     onOpenSetTypePicker, updateSetField, onFocusSetInput, onBlurSetInput, toggleSetDone,
     onOpenRpePicker, deleteSet, copyPreviousToSet, addSetToExercise, onRegisterSetInput, startRest,
@@ -1287,6 +1326,32 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     // The picker can only be presented once the menu Modal is truly dismissed
     // — see queueAfterMenuDismiss.
     queueAfterMenuDismiss(() => setExerciseModalVisible(true));
+  };
+
+  // Hidden when there's nothing to pair with, so the sheet never opens empty
+  const hasSupersetPartner = (exIndex: number) => {
+    const ex = exercises[exIndex];
+    if (!ex || !canJoinSuperset(ex)) return false;
+    return exercises.some((other, i) => i !== exIndex && canJoinSuperset(other)
+      && (ex.superset_group == null || other.superset_group !== ex.superset_group));
+  };
+
+  const startSuperset = (exIndex: number) => {
+    queueAfterMenuDismiss(() => setSupersetAnchorIdx(exIndex));
+  };
+
+  const pickSupersetPartner = (partnerIdx: number) => {
+    const anchor = supersetAnchorIdx;
+    setSupersetAnchorIdx(null);
+    if (anchor === null) return;
+    animateNextLayout();
+    setExercises(prev => pairExercises(prev, anchor, partnerIdx));
+  };
+
+  const leaveSuperset = (exIndex: number) => {
+    setOpenMenuIdx(null);
+    animateNextLayout();
+    setExercises(prev => removeFromSuperset(prev, exIndex));
   };
 
   const startSwapExercise = (exIndex: number) => {
@@ -1356,8 +1421,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       setReplacingExIndex(null);
       setExerciseModalVisible(false);
       if (!target) return;
-      const replacement = fresh(target.uid);
-      setExercises(prev => prev.map(ex => ex.uid === target.uid ? replacement : ex));
+      // Keeps its place in a superset, unless it's now cardio
+      const replacement = { ...fresh(target.uid), superset_group: target.superset_group ?? null };
+      setExercises(prev => normalizeSupersets(prev.map(ex => ex.uid === target.uid ? replacement : ex)));
       enrichWithHistory([replacement]);
       return;
     }
@@ -1441,12 +1507,13 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     ...(!editMode && toLocalDateStr(selectedDate) === toLocalDateStr(new Date())
       ? { local_start_hour: new Date(Date.now() - elapsed * 1000).getHours() }
       : {}),
-    exercises: exercisesToSave.map((ex, exIndex) => ({
+    exercises: normalizeSupersets(exercisesToSave).map((ex, exIndex) => ({
       id: ex.id,
       name: ex.name,
       exercise_template_id: ex.exercise_template_id,
       exercise_type: ex.exercise_type || 'strength',
       notes: ex.notes ?? null,
+      superset_group: ex.superset_group ?? null,
       order: exIndex,
       sets: ex.sets.map((s, setIndex) => {
         if (ex.exercise_type === 'cardio') {
@@ -1774,6 +1841,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
           if (at !== null) addExToWorkout(candidate, at);
         }}
       />
+      <SupersetPickerModal
+        anchorIdx={supersetAnchorIdx}
+        exercises={exercises}
+        onPick={pickSupersetPartner}
+        onClose={() => setSupersetAnchorIdx(null)}
+      />
       <NewExerciseForm
         visible={newExerciseFormVisible}
         onClose={() => setNewExerciseFormVisible(false)}
@@ -1999,6 +2072,26 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
               <Ionicons name="swap-horizontal-outline" size={15} color={colors.textPrimary} />
               <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>Replace Exercise</Text>
             </TouchableOpacity>
+            {hasSupersetPartner(renderedMenuIdx) && (
+              <>
+                <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
+                <TouchableOpacity style={styles.exMenuItem} onPress={() => startSuperset(renderedMenuIdx!)}>
+                  <Ionicons name="link-outline" size={15} color={colors.textPrimary} />
+                  <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>
+                    {exercises[renderedMenuIdx]?.superset_group != null ? 'Add to Superset' : 'Superset With...'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {exercises[renderedMenuIdx]?.superset_group != null && (
+              <>
+                <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
+                <TouchableOpacity style={styles.exMenuItem} onPress={() => leaveSuperset(renderedMenuIdx!)}>
+                  <Ionicons name="unlink-outline" size={15} color={colors.textPrimary} />
+                  <Text style={[styles.exMenuText, { color: colors.textPrimary }]}>Remove from Superset</Text>
+                </TouchableOpacity>
+              </>
+            )}
             {isPremium && exercises[renderedMenuIdx]?.exercise_type !== 'cardio' && !isDuration(exercises[renderedMenuIdx])
               && targetFor(exercises[renderedMenuIdx]?.previousSets, weightUnit) && (
               <>

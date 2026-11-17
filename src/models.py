@@ -91,7 +91,10 @@ class Workout(db.Model):
     # new save for the Eos badge. Workout.date is the server's clock or a bare
     # date, so it can't tell. NULL for edits, past-dated logs and older builds.
     local_start_hour = db.Column(db.Integer, nullable=True)
-    exercises = db.relationship('Exercise', backref='workouts', cascade="all, delete-orphan", lazy=True)
+    # Ordered so the app gets exercises as logged: an edit's reorder lives only
+    # in `order`, and a superset's members must come out next to each other
+    exercises = db.relationship('Exercise', backref='workouts', cascade="all, delete-orphan", lazy=True,
+                                order_by=lambda: (Exercise.order, Exercise.id))
 
     __table_args__ = (
         db.Index('ix_workouts_user_date', 'user_id', 'date'),
@@ -188,6 +191,8 @@ class Exercise(db.Model):
     # out on the phone from per-point timing, which the polyline doesn't keep,
     # so it's stored: the achievements replay rebuilds badges from history.
     negative_split = db.Column(db.Boolean, nullable=True)
+    # Exercises in a workout sharing this key are a superset; rules in utils/supersets.py
+    superset_group = db.Column(db.Integer, nullable=True)
     sets = db.relationship('Set', backref='exercises', cascade="all, delete-orphan", lazy=True, order_by='Set.order')
     best_efforts = db.relationship('CardioBestEffort', backref='exercise', cascade="all, delete-orphan", lazy=True)
 
@@ -202,6 +207,7 @@ class Exercise(db.Model):
             "exercise_type": (self.exercise_type or 'strength').lower(),
             "route_polyline": self.route_polyline,
             "notes": self.notes,
+            "superset_group": self.superset_group,
             "equipment": tmpl.equipment if tmpl else None,
             "muscle_group": tmpl.muscle_group if tmpl else None,
             "primary_muscles": tmpl.primary_muscles if tmpl else [],

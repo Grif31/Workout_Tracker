@@ -18,6 +18,7 @@ from utils.volume import get_bodyweight_at
 # Score's pace tables share the exact float keys PR rows are written with.
 from utils.endurance_standards import cardio_milestones, is_cycling
 from utils.achievements import evaluate_achievements
+from utils.supersets import superset_group_value, normalize_superset_groups
 
 workout_bp = Blueprint('workout_bp', __name__)
 
@@ -759,6 +760,7 @@ def add_workout():
                 route_segments=ex.get('route_segments'),
                 negative_split=ex.get('negative_split'),
                 notes=ex.get('notes'),
+                superset_group=superset_group_value(ex.get('superset_group')),
             )
             new_ex.best_efforts = _build_best_efforts(ex)
             db.session.add(new_ex)
@@ -785,6 +787,7 @@ def add_workout():
             db.session.flush()
             exercise_set_pairs.append((new_ex, new_sets))
 
+        normalize_superset_groups([ex for ex, _ in exercise_set_pairs])
         user = db.session.get(User, int(current_user_id))
         bodyweight_at_workout = get_bodyweight_at(current_user_id, workout_date)
         new_workout.calculate_volume(weight_unit=user.weight_unit or 'lbs', bodyweight=bodyweight_at_workout)
@@ -952,6 +955,9 @@ def update_workout(workout_id):
                     ex.route_segments = exData["route_segments"]
                 if "notes" in exData:
                     ex.notes = exData.get("notes")
+                # Absent on builds from before supersets: keep what's stored
+                if "superset_group" in exData:
+                    ex.superset_group = superset_group_value(exData["superset_group"])
                 ex.order = exData.get('order', ex_index)
 
                 setIds = {s.id for s in ex.sets}
@@ -1033,6 +1039,7 @@ def update_workout(workout_id):
                     route_segments=exData.get('route_segments'),
                     negative_split=exData.get('negative_split'),
                     notes=exData.get('notes'),
+                    superset_group=superset_group_value(exData.get('superset_group')),
                 )
                 new_ex.best_efforts = _build_best_efforts(exData)
                 for set_index, s in enumerate(exData.get("sets", [])):
@@ -1053,6 +1060,7 @@ def update_workout(workout_id):
                         
     db.session.flush()
     db.session.expire(workout)
+    normalize_superset_groups(workout.exercises)
     user = db.session.get(User, int(current_user_id))
     bodyweight_at_workout = get_bodyweight_at(current_user_id, workout.date)
     workout.calculate_volume(weight_unit=user.weight_unit or 'lbs', bodyweight=bodyweight_at_workout)
@@ -1086,7 +1094,7 @@ def export_workouts():
     writer.writerow([
         'date', 'workout_name', 'duration_min',
         'exercise_name', 'set_number', 'set_type',
-        'reps', 'weight', 'volume',
+        'reps', 'weight', 'volume', 'superset_group',
     ])
 
     from utils.volume import compute_effective_weight
@@ -1125,6 +1133,7 @@ def export_workouts():
                     reps,
                     weight,
                     volume,
+                    exercise.superset_group or '',
                 ])
 
     csv_data = output.getvalue()

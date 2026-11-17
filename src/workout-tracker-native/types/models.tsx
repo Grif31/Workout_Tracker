@@ -38,6 +38,8 @@ export type Exercise = {
   image_url?: string
   bodyweight_load_factor?: number | null
   notes?: string
+  /** Shared by a superset's members; null when not in one (utils/supersets.ts) */
+  superset_group?: number | null
   sets: Set[]
 };
 export type Set = {

@@ -63,6 +63,8 @@ export type ExerciseEntry = {
     max_duration?: number | null; // longest hold, in minutes
   };
   notes?: string;
+  /** Shared with the other members of its superset; rules in utils/supersets.ts */
+  superset_group?: number | null;
 };
 
 export const makeUid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);

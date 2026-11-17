@@ -1,23 +1,24 @@
 import type { WorkoutLiveActivityProps } from '../widgets/WorkoutLiveActivity';
 import { fmtHold, fmtPrevSet, isBodyweight, isDuration } from '../components/workout/types';
+import { currentExerciseIndex } from './supersets';
 
 // Pure, like widgetProps.ts: the Live Activity layout draws what this decides,
 // so the wording and the timer math are tested in Jest. Type-only import of the
 // layout, since that file builds a native object when it is loaded.
 
-type SetLike = { done?: boolean; reps?: string; weight?: string; cardio_duration?: string };
-type ExerciseLike = { name: string; exercise_type?: string; equipment?: string; sets: SetLike[] };
+type SetLike = { done?: boolean; reps?: string; weight?: string; cardio_duration?: string; set_type?: string };
+type ExerciseLike = { name: string; exercise_type?: string; equipment?: string; superset_group?: number | null; sets: SetLike[] };
 
 /** Rest timer as the activity needs it: a finish time while running, the time left while paused. */
 export type LiveRest = { endsAt: number } | { pausedLeft: number } | null;
 
-/** The exercise the lifter is on: the first with a set left, else the last one. */
+/** The exercise the lifter is on: the first with a set left (in a superset, whichever member is up), else the last one. */
 export function currentExerciseName(exercises: ExerciseLike[]): string | undefined {
   return currentExercise(exercises)?.name;
 }
 
 function currentExercise<E extends ExerciseLike>(exercises: E[]): E | undefined {
-  return exercises.find(e => e.sets.some(s => !s.done)) ?? exercises[exercises.length - 1];
+  return exercises[currentExerciseIndex(exercises)];
 }
 
 /**
