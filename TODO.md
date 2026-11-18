@@ -578,7 +578,7 @@ Check off items as you complete them.
 - [x] **Workout density — volume per minute** (premium) (built 2026-10-08)
   > Increasing density (same volume, shorter time) is a form of progressive overload and a proxy for training efficiency.
   - [x] Backend: extend `GET /api/stats/progress` buckets to include `density` field (total volume ÷ total duration in minutes; skip workouts with no duration)
-  - [ ] Frontend: add "Density" as a 4th metric option in the chart metric selector (alongside Volume / Sets / Workouts)
+  - [x] Frontend: add "Density" as a chart 
   - [x] Y-axis label: "lbs/min" or "kg/min" per user preference
 
 ---
@@ -1918,6 +1918,7 @@ Leave out anything that rewards skipping rest or training through illness (no "w
 - [x] Add `.expo/` to `.gitignore`
 - [ ] Replace the old app name with "Aretē: Strength & Cardio Log" in `privacy.html`, `terms.html`, the password reset email in `auth_routes.py` and `MAIL_DEFAULT_SENDER` in `.env.example`; check `RESEND_FROM` on Railway. Show the legal wording to the owner before changing it
 - [ ] Share card footer text #636366 to #8E8E93 for contrast
+- [ ] Speed up the full Jest run (~11 min: 155 suites at `--maxWorkers=2`, 665 s on 2026-11-17). Profile which suites are slowest first (`--verbose` timings); screen files pay a one-time render and module init each, so the heaviest few likely dominate
 
 ### Website (step 5 of the design pass)
 - [x] Hallmark audit of the marketing site, then a redesign against DESIGN.md (Archivo, the marketing tokens) with a few GSAP touches that follow `prefers-reduced-motion` (2026-11-10: `homepage.html` only; audit was manual because Hallmark's linter wasn't allowed to run)
