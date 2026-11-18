@@ -15,6 +15,23 @@
 - The upload banner names the workout and what it earned ("A new PR and a new badge."). Tap it to see the summary you missed while offline.
 - Activities on Home show their full time (32m 47s) instead of rounding to the minute.
 
+## Server (2026-11-18)
+
+Backend only; the app side ships with the next app release.
+
+### New: Supersets
+- Workouts and templates can group exercises into supersets (`superset_group`, migrations `c7e2a4f19d3b` and `d3f8b1a6c2e4`). Groups are renumbered on save, need two or more exercises, and never include cardio.
+- Saves from app builds without supersets keep the groups already stored instead of clearing them.
+- AI-generated plans can pair exercises into supersets.
+- Hevy imports keep their supersets, and the CSV export has a superset column.
+
+### Improved: Cardio
+- The previous-session data for a cardio exercise includes each bout's distance and pace, so the app can show and prefill the whole bout.
+
+### Fixed: Custom exercises
+- Creating and editing custom exercises is limited to 60 per hour, and names, equipment and muscle lists have length caps, so one request can't fill the database.
+- Another user's custom exercise reads as not found, so exercise ids can't be probed.
+
 ## Server (2026-11-13)
 
 Backend only; the app side ships with the next app release.
