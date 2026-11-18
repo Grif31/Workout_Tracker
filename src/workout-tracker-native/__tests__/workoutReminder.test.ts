@@ -29,6 +29,20 @@ describe('restoreWorkoutReminder', () => {
     );
   });
 
+  it('restores a midnight reminder at midnight, not 9 AM', async () => {
+    await AsyncStorage.multiSet([
+      ['workout_reminders_enabled_4', 'true'],
+      ['workout_reminder_hour_4', '0'],
+      ['workout_reminder_minute_4', '15'],
+    ]);
+
+    await restoreWorkoutReminder(4);
+
+    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ trigger: expect.objectContaining({ hour: 0, minute: 15 }) }),
+    );
+  });
+
   it("cancels a previous account's reminder when this user has none", async () => {
     await AsyncStorage.setItem('workout_reminder_notif_id', 'old-notif');
 

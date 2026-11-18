@@ -193,6 +193,14 @@ export async function scheduleWorkoutReminder(hour: number, minute: number): Pro
   } catch {}
 }
 
+// Stored reminder time, 9:00 when unset. Not `parseInt(...) || 9`: hour 0 is
+// midnight, not missing
+export function reminderHourMinute(hour: string | null, minute: string | null): [number, number] {
+  const h = parseInt(hour ?? '', 10);
+  const m = parseInt(minute ?? '', 10);
+  return [Number.isNaN(h) ? 9 : h, Number.isNaN(m) ? 0 : m];
+}
+
 // The reminder belongs to whoever turned it on, but it's scheduled on the
 // device: put back this user's (or none) when they sign in.
 export async function restoreWorkoutReminder(userId: number | string): Promise<void> {
@@ -200,7 +208,7 @@ export async function restoreWorkoutReminder(userId: number | string): Promise<v
     `${REMINDERS_KEY}_${userId}`, `${REMINDER_HOUR_KEY}_${userId}`, `${REMINDER_MIN_KEY}_${userId}`,
   ]);
   if (on === 'true') {
-    await scheduleWorkoutReminder(parseInt(hour ?? '', 10) || 9, parseInt(minute ?? '', 10) || 0);
+    await scheduleWorkoutReminder(...reminderHourMinute(hour, minute));
   } else {
     await cancelWorkoutReminder();
   }
