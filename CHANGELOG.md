@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### New: Supersets
+- Pair exercises into a superset from the exercise menu. Partners are marked A1, A2 and sit together in your log.
+- Rest starts once you've finished a round, not after every set. The keyboard's Next key moves through the superset round by round.
+- Want a breather between partners? Turn on Rest Between Superset Exercises in Workout Settings.
+- Templates and routines can hold supersets, and Save as Template keeps them.
+- AI-generated workouts and routines can pair exercises when your schedule suits it, with a line on why.
+- Hevy imports keep their supersets.
+
+### Redesigned: The Coach tab
+- Coach comes first, with your goal, schedule and rank at the top and one button to generate a workout.
+- Your weekly review now lives on the Coach tab.
+- Insights are tagged by type, and voting on them is one tap.
+
 ### Improved: The Coach remembers
 - The Coach follows up on its own suggestions. A week or so later it checks the data and tells you whether the change happened, then the next step.
 - Your Coach profile is saved to your account, so reinstalling the app or signing in on a new phone keeps your goal, schedule and injuries.
@@ -10,10 +23,35 @@
 - The Coach learns which changes you tend to make and which you skip, and adjusts how it asks.
 - Insights and your weekly review now read your Notes to Coach, so an injury, an event or a time limit you mention shapes the advice.
 
+### Improved: Cardio and timed holds
+- Cardio bouts check off like sets, and swipe to delete cleanly.
+- Each cardio bout shows last session's time and distance. Tap it to copy it in, and prefilling previous sets fills cardio too.
+- Timed holds get a target for today: stretch your shortest hold up to your longest, then add 5 seconds to all.
+
 ### Improved: Workouts saved offline
 - When a workout saved offline uploads, Home shows it happening: "Uploading…", then the workout's name with a check mark.
 - The upload banner names the workout and what it earned ("A new PR and a new badge."). Tap it to see the summary you missed while offline.
 - Activities on Home show their full time (32m 47s) instead of rounding to the minute.
+
+### Improved: Settings and help
+- Notifications and GPS have their own screens in Settings.
+- A new Help & FAQ screen answers common questions and gets you to support.
+
+### Improved: Importing from Hevy and Strong
+- A redesigned import screen, with a summary of what's coming in before you save.
+- Your data exports moved here from Account Settings.
+
+### Also New
+- Edit your custom exercises: name, equipment, muscles, and how they're logged until you first log them. A rename carries to your past workouts.
+- The PR Dashboard shows how many PRs you set per week on average.
+
+### Bug Fixes
+- A workout reminder set between 12 and 1 AM no longer fires at 9 AM.
+- Creating a Distance & Time exercise from a template, a routine or an AI plan works again.
+- Rank and score bars are visible in light mode, and pop-up sheets stand out in dark mode.
+- Swiping back from Home no longer returns you to a finished workout's summary.
+- Typing in a workout stays smooth on long workouts.
+- Regenerating an AI template keeps the muscles it was built around.
 
 ## Server (2026-11-18)
 
