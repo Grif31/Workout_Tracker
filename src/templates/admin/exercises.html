@@ -237,6 +237,11 @@
         <button class="fbtn" onclick="setFilter('no_image',this)">No image</button>
         <button class="fbtn" onclick="setFilter('has_image',this)">Has image</button>
       </div>
+      <div class="filters segmented" role="group" aria-label="Source">
+        <button class="fbtn active" onclick="setSource('all',this)">All</button>
+        <button class="fbtn" onclick="setSource('library',this)">Library</button>
+        <button class="fbtn" onclick="setSource('custom',this)">Custom</button>
+      </div>
       <span class="sub" id="stats">Loading…</span>
     </div>
     <div class="grid" id="grid"></div>
@@ -269,6 +274,7 @@
     const EQUIPMENT_MAP = {{ equipment_map | tojson }};
     let exercises = [];
     let filter = 'all';
+    let source = 'all';
     let search = '';
 
     function esc(s) {
@@ -281,16 +287,20 @@
       render();
     }
 
-    function setFilter(f, btn) {
-      filter = f;
-      document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
+    function activate(btn) {
+      btn.parentElement.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      render();
     }
+
+    function setFilter(f, btn) { filter = f; activate(btn); render(); }
+
+    function setSource(s, btn) { source = s; activate(btn); render(); }
 
     function onSearch(val) { search = val.toLowerCase(); render(); }
 
     function visible(ex) {
+      if (source === 'library' && ex.is_custom) return false;
+      if (source === 'custom' && !ex.is_custom) return false;
       const match = ex.name.toLowerCase().includes(search) || ex.equipment.toLowerCase().includes(search);
       if (filter === 'no_image')  return match && !ex.image_url;
       if (filter === 'has_image') return match && !!ex.image_url;
