@@ -23,8 +23,10 @@ import { HOME_STREAK_TYPE_KEY, PROFILE_FRAME_RANK_KEY, WEEKLY_GOAL_KEY } from '.
 import { apiFetch, isNetworkError, resolveMediaUrl } from '../../utils/api';
 import {
   announceFlushResult, discardStuckWorkout, flushQueue, getPendingCount, getStuckCount, getStuckWorkouts,
-  onPendingCountChange, onStuckCountChange, retryStuckWorkout, type StuckWorkout,
+  isUploading, onPendingCountChange, onStuckCountChange, onUploadingChange, onWorkoutsUploaded,
+  retryStuckWorkout, type StuckWorkout,
 } from '../../utils/offlineQueue';
+import { animateNextLayout } from '../../utils/layoutAnimation';
 import { showToast } from '../../utils/toast';
 import { answered, appCache, useRefetchGate } from '../../utils/appCache';
 import { LaurelBranch } from '../../components/LaurelWreath';
@@ -279,6 +281,8 @@ const createSkeletonStyles = (colors: Colors) => StyleSheet.create({
 });
 
 // Home's framed avatar: sized to the two-line greeting beside it.
+// Long enough to read "<name> uploaded" before the card folds away
+const UPLOADED_CARD_MS = 2500;
 const AVATAR_FRAME_SIZE = 44;
 const AVATAR_SIZE = 38;
 
@@ -315,6 +319,28 @@ export default function DashboardScreen({ navigation }: Props) {
   const [pendingSyncCount, setPendingSyncCount] = useState(getPendingCount);
   useEffect(() => onPendingCountChange(setPendingSyncCount), []);
   const [retryingSync, setRetryingSync] = useState(false);
+  const [uploading, setUploading] = useState(isUploading);
+  useEffect(() => onUploadingChange(setUploading), []);
+  // The waiting card turns into "<name> uploaded" for a moment instead of vanishing
+  const [justUploaded, setJustUploaded] = useState<string | null>(null);
+  const refreshHomeRef = useRef<(force: boolean) => Promise<unknown>>(async () => {});
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsub = onWorkoutsUploaded(list => {
+      setJustUploaded(list.length === 1 ? `${list[0].name} uploaded` : `${list.length} workouts uploaded`);
+      // The upload's write marked the data stale; Home is often on screen when it lands
+      refreshHomeRef.current(false);
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        animateNextLayout();
+        setJustUploaded(null);
+      }, UPLOADED_CARD_MS);
+    });
+    return () => {
+      unsub();
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
   // Workouts the server keeps refusing: never deleted for the user, kept here
   // to retry or delete (TODO.md section 22)
   const [stuckCount, setStuckCount] = useState(getStuckCount);
@@ -532,6 +558,7 @@ export default function DashboardScreen({ navigation }: Props) {
     ...(selectedCalDateRef.current ? [fetchDateWorkouts(selectedCalDateRef.current)] : []),
     ...(HOME_CUSTOMIZATION_ENABLED ? [refetchIfStale('greek', fetchGreekRank, force)] : []),
   ]);
+  refreshHomeRef.current = refreshHome;
 
   useFocusEffect(useCallback(() => {
     const firstLoad = !hasLoaded.current;
@@ -855,7 +882,21 @@ export default function DashboardScreen({ navigation }: Props) {
             </View>
           )}
 
-          {waitingCount > 0 && (
+          {waitingCount === 0 && justUploaded && (
+            <View style={[styles.pendingSyncCard, styles.uploadedCard]} accessibilityRole="summary" accessibilityLiveRegion="polite">
+              <Ionicons name="cloud-done-outline" size={24} color={colors.accent} />
+              <Text style={[styles.pendingSyncTitle, styles.pendingSyncTextBlock]}>{justUploaded}</Text>
+            </View>
+          )}
+
+          {waitingCount > 0 && (uploading ? (
+            <View style={styles.pendingSyncCard} accessibilityRole="summary" accessibilityLiveRegion="polite">
+              <ActivityIndicator size="small" color={colors.warmup} />
+              <Text style={[styles.pendingSyncTitle, styles.pendingSyncTextBlock]}>
+                {waitingCount === 1 ? 'Uploading 1 workout…' : `Uploading ${waitingCount} workouts…`}
+              </Text>
+            </View>
+          ) : (
             <View style={styles.pendingSyncCard} accessibilityRole="summary">
               <Ionicons name="cloud-upload-outline" size={24} color={colors.warmup} />
               <View style={styles.pendingSyncTextBlock}>
@@ -864,8 +905,8 @@ export default function DashboardScreen({ navigation }: Props) {
                 </Text>
                 <Text style={styles.pendingSyncBody}>
                   {waitingCount === 1
-                    ? "Saved on this phone while you were offline. It will upload automatically when you're back online, then show up in your history."
-                    : "Saved on this phone while you were offline. They will upload automatically when you're back online, then show up in your history."}
+                    ? "Saved on this phone while you were offline. It will upload automatically when you're back online."
+                    : "Saved on this phone while you were offline. They will upload automatically when you're back online."}
                 </Text>
                 <TouchableOpacity
                   style={styles.pendingSyncButton}
@@ -880,7 +921,7 @@ export default function DashboardScreen({ navigation }: Props) {
                 </TouchableOpacity>
               </View>
             </View>
-          )}
+          ))}
 
           {/* Cards render in the user's saved order, hidden ones dropped
               (Customize Home). Everything above stays put. */}
@@ -1122,7 +1163,7 @@ export default function DashboardScreen({ navigation }: Props) {
                         logging screen's timer, ~0 for a run entered afterwards */}
                     {(item.cardio_duration ?? item.duration) != null && (
                       <View style={styles.pill}>
-                        <Text style={styles.pillText}>{Math.round(item.cardio_duration ?? item.duration ?? 0)} min</Text>
+                        <Text style={styles.pillText}>{fmtDuration(item.cardio_duration ?? item.duration ?? 0)}</Text>
                       </View>
                     )}
                     {item.distance != null && item.distance > 0 && (
@@ -1410,6 +1451,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     marginBottom: spacing.md,
   },
   pendingSyncTextBlock: { flex: 1 },
+  uploadedCard: { backgroundColor: colors.accent + '1A', borderColor: colors.accent + '66' },
   pendingSyncTitle: { color: colors.textPrimary, fontSize: typography.fontSize.md, fontWeight: '700' },
   pendingSyncBody: { color: colors.textSecondary, fontSize: typography.fontSize.sm, lineHeight: 19, marginTop: 2 },
   pendingSyncButton: {

@@ -37,4 +37,16 @@ describe('ToastBanner', () => {
     act(() => { jest.advanceTimersByTime(300); });
     expect(queryByText('Workout saved offline')).toBeNull();
   });
+
+  it("runs a titled toast's action when tapped, then dismisses it", () => {
+    const onPress = jest.fn();
+    const { getByText, getByRole, queryByText } = render(<ToastBanner />);
+    act(() => showToast('Tap to see your summary.', { title: 'Walk uploaded', onPress, accessibilityHint: 'Opens its summary' }));
+    expect(getByRole('button').props.accessibilityHint).toBe('Opens its summary');
+
+    fireEvent.press(getByText('Walk uploaded'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+    act(() => { jest.advanceTimersByTime(300); });
+    expect(queryByText('Walk uploaded')).toBeNull();
+  });
 });

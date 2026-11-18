@@ -1,10 +1,12 @@
 // Shared cardio stat formatters — used by detail screens and share cards.
 import { toDisplayPace, type DistanceUnit } from './units';
 
+// Rounds once, to whole seconds, so 4.999 min carries to "5m 0s" instead of "4m 60s"
 export function fmtDuration(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = Math.floor(minutes % 60);
-  const s = Math.round((minutes % 1) * 60);
+  const totalSec = Math.round(minutes * 60);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
   if (h > 0) return `${h}h ${m}m`;
   if (m > 0) return `${m}m ${s}s`;
   return `${s}s`;
