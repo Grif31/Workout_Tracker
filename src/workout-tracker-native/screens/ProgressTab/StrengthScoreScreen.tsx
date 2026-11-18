@@ -550,7 +550,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                       >
                         <View style={styles.mgLeft}>
                           <Text style={styles.mgName}>{mg.name}</Text>
-                          <PercentileBar percent={mg.score} color={mgColor} trackColor={colors.border} delay={i * 40} />
+                          <PercentileBar percent={mg.score} color={mgText} trackColor={colors.border} delay={i * 40} />
                         </View>
                         <View style={{ alignItems: 'flex-end', gap: 2 }}>
                           <View style={[styles.miniRankBadge, { backgroundColor: mgColor + '22', borderColor: mgColor }]}>
@@ -594,7 +594,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                             )}
                           </View>
                           {ex.has_data ? (
-                            <PercentileBar percent={Math.max(ex.percentile ?? 0, 8)} color={exColor} trackColor={colors.border} delay={i * 40} />
+                            <PercentileBar percent={Math.max(ex.percentile ?? 0, 8)} color={exText} trackColor={colors.border} delay={i * 40} />
                           ) : (
                             <Text style={styles.noDataText}>No data logged</Text>
                           )}
@@ -651,7 +651,7 @@ export default function StrengthScoreScreen({ navigation }: Props) {
                             )}
                           </View>
                           {ex.has_data ? (
-                            <PercentileBar percent={Math.max(ex.percentile ?? 0, 8)} color={exColor} trackColor={colors.border} delay={i * 40} />
+                            <PercentileBar percent={Math.max(ex.percentile ?? 0, 8)} color={exText} trackColor={colors.border} delay={i * 40} />
                           ) : (
                             <Text style={styles.noDataText}>No data logged</Text>
                           )}

@@ -25,7 +25,8 @@ export type SupersetPosition = {
   size: number;
 };
 
-const isCardio = (ex: { exercise_type?: string }) => ex.exercise_type === 'cardio';
+// Case-insensitive like utils/supersets.py, which lowercases before comparing
+const isCardio = (ex: { exercise_type?: string }) => ex.exercise_type?.toLowerCase() === 'cardio';
 export const canJoinSuperset = (ex: { exercise_type?: string }) => !isCardio(ex);
 
 function withGroup<E extends SupersetItem>(ex: E, group: number | null): E {

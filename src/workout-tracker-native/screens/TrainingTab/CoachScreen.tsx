@@ -444,6 +444,7 @@ export default function CoachScreen({ navigation }: Props) {
         coachSessionLength: String(coachProfile.session_length_min),
         coachAvoid: coachProfile.avoid,
         coachNotes: coachProfile.notes,
+        coachMuscles: muscles,
       });
     } catch (err) {
       if (!isNetworkError(err)) Alert.alert("Couldn't Generate Workout", 'Try again in a moment.');

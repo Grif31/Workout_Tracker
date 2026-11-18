@@ -15,7 +15,8 @@ def hdrs(token):
 
 # ── Rules ────────────────────────────────────────────────────
 # Each case: exercises in order as (exercise_type, superset_group), then the
-# groups normalize leaves. Keep in step with NORMALIZE_CASES in supersets.test.ts.
+# groups normalize leaves. supersets.test.ts reads this list and fails if its
+# own NORMALIZE_CASES differs, so a case added here is added there too.
 NORMALIZE_CASES = [
     ('a pair is kept', [('strength', 1), ('strength', 1)], [1, 1]),
     ('keys are renumbered by first appearance', [('strength', 7), ('strength', 7), ('strength', 3), ('strength', 3)], [1, 1, 2, 2]),
@@ -26,6 +27,7 @@ NORMALIZE_CASES = [
     ('a stray away from its group is dropped', [('strength', 1), ('strength', 1), ('strength', None), ('strength', 1)], [1, 1, None, None]),
     ('neighbouring groups stay apart', [('strength', 1), ('strength', 1), ('strength', 2), ('strength', 2), ('strength', None)], [1, 1, 2, 2, None]),
     ('nothing grouped stays ungrouped', [('strength', None), ('cardio', None)], [None, None]),
+    ('cardio is cardio in any case', [('strength', 1), ('Cardio', 1)], [None, None]),
 ]
 
 

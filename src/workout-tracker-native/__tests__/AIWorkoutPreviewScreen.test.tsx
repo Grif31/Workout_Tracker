@@ -310,13 +310,22 @@ describe('AIWorkoutPreviewScreen', () => {
       const [, init] = (global.fetch as jest.Mock).mock.calls.find(([u]) => String(u).endsWith('/api/ai/generate'));
       expect(JSON.parse(init.body)).toEqual({
         days_per_week: 3, goal: 'strength', experience: 'intermediate', equipment: 'full gym',
-        session_length_min: 60, avoid: ['knees', 'lower_back'], generate_type: 'template', notes: '',
+        session_length_min: 60, avoid: ['knees', 'lower_back'], generate_type: 'template', muscles: [], notes: '',
       });
       await waitFor(() => expect(r.getByDisplayValue('Fresh Legs')).toBeTruthy());
       expect(r.queryByText('Bench Press')).toBeNull();
 
       await act(async () => { fireEvent.press(r.getByText('Save Template')); });
       expect(saved()).toMatchObject({ name: 'Fresh Legs', exercise_ids: [4, 1] });
+    });
+
+    it('builds around the same muscles the template was generated for', async () => {
+      replies['POST /api/ai/generate'] = { status: 200, body: { name: 'Fresh Legs', exercises: [ex(4)] } };
+      const r = renderWith({ ...templateParams(), coachMuscles: ['Quads', 'Glutes'] });
+      await act(async () => { fireEvent.press(r.getByText('Regenerate')); });
+
+      const [, init] = (global.fetch as jest.Mock).mock.calls.find(([u]) => String(u).endsWith('/api/ai/generate'));
+      expect(JSON.parse(init.body).muscles).toEqual(['Quads', 'Glutes']);
     });
 
     it('replaces routine days and description', async () => {

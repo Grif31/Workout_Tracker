@@ -6,10 +6,29 @@ from schemas import ExerciseSchema
 from utils.validation import validate_body
 from utils.volume import derive_bodyweight_load_factor
 from utils.exercise_alternatives import is_excluded
+from limiter import limiter
 
 exercise_bp = Blueprint('exercise_bp', __name__)
 
 _exercise_schema = ExerciseSchema()
+
+# Each part becomes an ExerciseMuscleMapping row, so an unbounded list was a
+# million inserts from one request
+MAX_MUSCLE_PARTS = 10
+MUSCLE_GROUP_MAX_LEN = 50  # ExerciseMuscleMapping.muscle_group
+
+# Create and edit draw on one budget per user
+_exercise_write_limit = limiter.shared_limit(
+    '60 per hour', scope='exercise_write', key_func=lambda: f"exercise_write:{get_jwt_identity()}",
+)
+
+
+def muscle_parts(raw):
+    """The comma list as distinct names, primary first; None when a name is too long."""
+    parts = list(dict.fromkeys(p.strip() for p in str(raw or '').split(',') if p.strip()))
+    if any(len(p) > MUSCLE_GROUP_MAX_LEN for p in parts):
+        return None
+    return parts[:MAX_MUSCLE_PARTS]
 
 
 def exercise_to_dict(exercise):
@@ -113,17 +132,20 @@ def get_alternatives(template_id):
 
 @exercise_bp.post('/api/exercises')
 @jwt_required()
+@_exercise_write_limit
 @validate_body(_exercise_schema)
 def add_exercise():
     user_id = int(get_jwt_identity())
     data = g.validated
     name = data.get('name', '').strip()
-    muscle = data.get('muscle_group')
     equipment = data.get('equipment')
     exercise_type = data.get('exercise_type', 'strength')
 
     if not name:
         return jsonify({'message': 'Name Required'}), 400
+    parts = muscle_parts(data.get('muscle_group'))
+    if parts is None:
+        return jsonify({'message': 'Muscle group name is too long'}), 400
     # Duplicate check: same name+equipment in global library or this user's customs
     duplicate = ExerciseTemplate.query.filter(
         ExerciseTemplate.name == name,
@@ -140,14 +162,12 @@ def add_exercise():
     db.session.add(new_exercise)
     db.session.flush()  # populate new_exercise.id before adding mappings
 
-    if muscle:
-        parts = [p.strip() for p in str(muscle).split(',') if p.strip()]
-        for i, mg in enumerate(parts):
-            db.session.add(ExerciseMuscleMapping(
-                exercise_template_id=new_exercise.id,
-                muscle_group=mg,
-                is_primary=(i == 0),
-            ))
+    for i, mg in enumerate(parts):
+        db.session.add(ExerciseMuscleMapping(
+            exercise_template_id=new_exercise.id,
+            muscle_group=mg,
+            is_primary=(i == 0),
+        ))
 
     db.session.commit()
     return jsonify({'message': 'New Exercise added', 'id': new_exercise.id}), 201
@@ -155,13 +175,16 @@ def add_exercise():
 
 @exercise_bp.put('/api/exercises/<int:exercise_id>')
 @jwt_required()
+@_exercise_write_limit
 @validate_body(_exercise_schema)
 def update_exercise(exercise_id):
     user_id = int(get_jwt_identity())
     exercise = db.session.get(ExerciseTemplate, exercise_id)
-    if not exercise:
+    # Another user's custom exercise is "not found", so ids can't be probed;
+    # a library exercise is visible to everyone, so it gets the real reason
+    if not exercise or (exercise.user_id is not None and exercise.user_id != user_id):
         return jsonify({'message': 'Exercise not found'}), 404
-    if exercise.user_id != user_id:
+    if exercise.user_id is None:
         return jsonify({'message': 'You can only edit your own exercises'}), 403
 
     data = g.validated
@@ -170,6 +193,9 @@ def update_exercise(exercise_id):
     exercise_type = data.get('exercise_type', 'strength')
     if not name:
         return jsonify({'message': 'Name Required'}), 400
+    parts = muscle_parts(data.get('muscle_group'))
+    if parts is None:
+        return jsonify({'message': 'Muscle group name is too long'}), 400
 
     duplicate = ExerciseTemplate.query.filter(
         ExerciseTemplate.id != exercise_id,
@@ -195,8 +221,7 @@ def update_exercise(exercise_id):
     logged.update({Exercise.name: name}, synchronize_session=False)
 
     ExerciseMuscleMapping.query.filter_by(exercise_template_id=exercise_id).delete()
-    parts = [p.strip() for p in str(data.get('muscle_group') or '').split(',') if p.strip()]
-    for i, mg in enumerate(dict.fromkeys(parts)):
+    for i, mg in enumerate(parts):
         db.session.add(ExerciseMuscleMapping(exercise_template_id=exercise_id, muscle_group=mg, is_primary=(i == 0)))
 
     db.session.commit()

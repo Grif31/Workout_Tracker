@@ -1,13 +1,15 @@
+import fs from 'fs';
+import path from 'path';
 import {
   normalizeSupersets, pairExercises, removeFromSuperset, supersetPositions,
   completesRound, nextInRound, currentExerciseIndex, logOrder, type SupersetMember,
 } from '../utils/supersets';
 
-type Kind = 'strength' | 'cardio' | 'duration';
+type Kind = 'strength' | 'cardio' | 'duration' | 'Cardio';
 const ex = (exercise_type: Kind, superset_group: number | null, sets: SupersetMember['sets'] = []) =>
   ({ exercise_type, superset_group, sets });
 
-// Keep in step with NORMALIZE_CASES in src/tests/test_supersets.py
+// Same cases as NORMALIZE_CASES in src/tests/test_supersets.py (enforced below)
 const NORMALIZE_CASES: [string, [Kind, number | null][], (number | null)[]][] = [
   ['a pair is kept', [['strength', 1], ['strength', 1]], [1, 1]],
   ['keys are renumbered by first appearance', [['strength', 7], ['strength', 7], ['strength', 3], ['strength', 3]], [1, 1, 2, 2]],
@@ -18,7 +20,29 @@ const NORMALIZE_CASES: [string, [Kind, number | null][], (number | null)[]][] = 
   ['a stray away from its group is dropped', [['strength', 1], ['strength', 1], ['strength', null], ['strength', 1]], [1, 1, null, null]],
   ['neighbouring groups stay apart', [['strength', 1], ['strength', 1], ['strength', 2], ['strength', 2], ['strength', null]], [1, 1, 2, 2, null]],
   ['nothing grouped stays ungrouped', [['strength', null], ['cardio', null]], [null, null]],
+  ['cardio is cardio in any case', [['strength', 1], ['Cardio', 1]], [null, null]],
 ];
+
+// The rules are implemented twice (utils/supersets.py on the server); the same
+// cases on both sides is what keeps them identical, so drift fails here
+const PY_TESTS = path.join(__dirname, '..', '..', 'tests', 'test_supersets.py');
+
+function parsePythonCases(source: string): unknown {
+  const block = /^NORMALIZE_CASES = (\[[\s\S]*?^\])/m.exec(source);
+  if (!block) throw new Error('NORMALIZE_CASES not found in test_supersets.py');
+  const json = block[1]
+    .replace(/\(/g, '[').replace(/\)/g, ']')
+    .replace(/\bNone\b/g, 'null')
+    .replace(/'/g, '"')
+    .replace(/,(\s*\])/g, '$1');
+  return JSON.parse(json);
+}
+
+describe('supersets match the backend', () => {
+  it('runs the same NORMALIZE_CASES as test_supersets.py', () => {
+    expect(NORMALIZE_CASES).toEqual(parsePythonCases(fs.readFileSync(PY_TESTS, 'utf8')));
+  });
+});
 
 describe('normalizeSupersets', () => {
   it.each(NORMALIZE_CASES)('%s', (_name, input, expected) => {

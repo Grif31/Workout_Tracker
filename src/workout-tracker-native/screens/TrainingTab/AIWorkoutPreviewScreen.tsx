@@ -38,7 +38,7 @@ type SupersetState = { scope: Scope; idx: number } | null;
 const BOTTOM_BAR_HEIGHT = 76;
 
 export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
-  const { generateType, description: initDesc, coachDays, coachGoal, coachExp, coachEquipment, coachSessionLength, coachAvoid, coachNotes } = route.params;
+  const { generateType, description: initDesc, coachDays, coachGoal, coachExp, coachEquipment, coachSessionLength, coachAvoid, coachNotes, coachMuscles } = route.params;
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
@@ -89,6 +89,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
           session_length_min: parseInt(coachSessionLength, 10),
           avoid: coachAvoid,
           generate_type: generateType,
+          muscles: coachMuscles ?? [],
           notes: coachNotes,
         }),
       });

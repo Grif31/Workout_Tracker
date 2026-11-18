@@ -95,6 +95,9 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   sheet: {
     backgroundColor: colors.background, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg,
     padding: spacing.md, paddingBottom: spacing.xl, gap: spacing.sm,
+    // In dark mode the sheet and the dimmed backdrop are 1.09:1 apart, so
+    // without an edge it has no visible top
+    borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border,
   },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   title: { fontSize: typography.fontSize.lg, fontWeight: '700', color: colors.textPrimary },

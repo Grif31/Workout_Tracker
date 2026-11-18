@@ -110,6 +110,38 @@ class TestAddExercise:
         res = client.post('/api/exercises', json={'name': 'Squat', 'muscle_group': 'Quads'})
         assert res.status_code == 401
 
+    def test_muscle_list_is_deduped_and_capped(self, client, auth_token):
+        from models import ExerciseMuscleMapping
+        many = ','.join(['Chest', 'Chest'] + [f'm{i}' for i in range(50)])
+        res = client.post('/api/exercises', json={'name': 'Fly', 'muscle_group': many}, headers=auth_headers(auth_token))
+        assert res.status_code == 201
+        rows = ExerciseMuscleMapping.query.filter_by(exercise_template_id=res.get_json()['id']).all()
+        assert len(rows) == 10
+        assert [r.muscle_group for r in rows if r.is_primary] == ['Chest']
+
+    def test_oversized_fields_are_400_not_500(self, client, auth_token):
+        h = auth_headers(auth_token)
+        assert client.post('/api/exercises', json={'name': 'x' * 251}, headers=h).status_code == 400
+        assert client.post('/api/exercises', json={'name': 'Row', 'equipment': 'e' * 101}, headers=h).status_code == 400
+        assert client.post('/api/exercises', json={'name': 'Row', 'muscle_group': 'm' * 51}, headers=h).status_code == 400
+        assert client.post('/api/exercises', json={'name': 'Row', 'muscle_group': 'a,' * 300}, headers=h).status_code == 400
+
+    def test_create_and_edit_share_a_per_user_rate_limit(self, client, auth_token, auth_token2):
+        from limiter import limiter
+        limiter.reset()
+        limiter.enabled = True
+        try:
+            h = auth_headers(auth_token)
+            codes = [client.post('/api/exercises', json={'name': f'Lift {i}'}, headers=h).status_code for i in range(60)]
+            assert codes == [201] * 60
+            assert client.post('/api/exercises', json={'name': 'One more'}, headers=h).status_code == 429
+            assert client.put('/api/exercises/1', json={'name': 'Edit'}, headers=h).status_code == 429
+            other = client.post('/api/exercises', json={'name': 'Lift 0'}, headers=auth_headers(auth_token2))
+            assert other.status_code == 201
+        finally:
+            limiter.enabled = False
+            limiter.reset()
+
 
 class TestDeleteExercise:
 
@@ -266,7 +298,8 @@ class TestUpdateExercise:
     def test_cannot_edit_another_users_custom_exercise(self, client, auth_token, auth_token2):
         ex_id = self._create_custom(client, auth_token)
         res = client.put(f'/api/exercises/{ex_id}', json={'name': 'Hijacked'}, headers=auth_headers(auth_token2))
-        assert res.status_code == 403
+        # 404, not 403: another user's ids can't be told apart from missing ones
+        assert res.status_code == 404
         assert self._get(client, auth_headers(auth_token), ex_id)['name'] == 'My Custom Lift'
 
     def test_missing_exercise_returns_404(self, client, auth_token):

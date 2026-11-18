@@ -66,9 +66,11 @@ class DeviceTokenSchema(_Base):
 
 # ── Exercise ─────────────────────────────────────────────────
 class ExerciseSchema(_Base):
-    name          = fields.Str(required=True, validate=validate.Length(min=1))
-    muscle_group  = fields.Str(load_default=None)
-    equipment     = fields.Str(load_default=None)
+    # Column widths: ExerciseTemplate.name 250, equipment 100. muscle_group is a
+    # comma list split into rows (see exercise_routes.muscle_parts)
+    name          = fields.Str(required=True, validate=validate.Length(min=1, max=250))
+    muscle_group  = fields.Str(load_default=None, validate=validate.Length(max=500))
+    equipment     = fields.Str(load_default=None, validate=validate.Length(max=100))
     exercise_type = fields.Str(load_default='strength', validate=validate.OneOf(['strength', 'cardio', 'duration']))
 
 # ── Workout ───────────────────────────────────────────────────

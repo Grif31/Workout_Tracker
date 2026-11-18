@@ -1133,7 +1133,13 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     setOpenMenuIdx(null);
   };
 
-  const supersetPos = useMemo(() => supersetPositions(exercises), [exercises]);
+  // Keyed on the grouping alone: `exercises` changes on every keystroke, and a
+  // new supersetPos would rebuild renderExercise and re-render every cell
+  const supersetKey = exercises.map(e => e.superset_group ?? '-').join(',');
+  const supersetPos = useMemo(
+    () => supersetPositions(supersetKey === '' ? [] : supersetKey.split(',').map(k => ({ superset_group: k === '-' ? null : Number(k) }))),
+    [supersetKey],
+  );
 
   // Stable references for DraggableList (React.memo'd) — an inline function
   // here would give it a "new" prop on every WorkoutLog render, including the

@@ -121,6 +121,8 @@ export type TrainingStackParamsList = {
         // Every area flagged in the coach profile, sent as-is when regenerating
         coachAvoid: string[];
         coachNotes?: string;
+        /** Template only: the muscles picked to build around, so Regenerate keeps them */
+        coachMuscles?: string[];
     };
 };
 export type ProfileStackParamsList = {
