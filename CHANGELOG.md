@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.4 (unreleased)
 
 ### New: Supersets
 - Pair exercises into a superset from the exercise menu. Partners are marked A1, A2 and sit together in your log.
