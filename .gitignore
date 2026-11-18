@@ -218,3 +218,6 @@ src/brand/store/header/converted/
 
 # Expo CLI state from running expo at the repo root
 .expo/
+
+# Device screen recordings kept for reference, too large for git
+src/testvids/
