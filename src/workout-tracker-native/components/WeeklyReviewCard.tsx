@@ -13,10 +13,21 @@ import { typography } from '../theme/typography';
 
 // The parts come back in this order; the first one present is what a free account reads
 const PARTS = [
-  { key: 'went_well', label: 'Went well', icon: 'checkmark-circle-outline' },
-  { key: 'lagged', label: 'Lagged', icon: 'alert-circle-outline' },
-  { key: 'next_change', label: 'Change for next week', icon: 'arrow-forward-circle-outline' },
+  { key: 'went_well', label: 'Went well', icon: 'checkmark', tone: 'accent' },
+  { key: 'lagged', label: 'Lagged', icon: 'arrow-down', tone: 'warmup' },
+  { key: 'next_change', label: 'Next week', icon: 'arrow-forward', tone: 'info' },
 ] as const;
+
+const MONTH = (d: Date) => d.toLocaleDateString('en-US', { month: 'short' });
+
+// "Oct 12 to 18", or "Sep 28 to Oct 4" across a month
+function fmtWeek(weekStart: string): string {
+  const [y, m, d] = weekStart.split('-').map(Number);
+  const start = new Date(y, m - 1, d);
+  const end = new Date(y, m - 1, d + 6);
+  const endText = end.getMonth() === start.getMonth() ? `${end.getDate()}` : `${MONTH(end)} ${end.getDate()}`;
+  return `${MONTH(start)} ${start.getDate()} to ${endText}`;
+}
 
 type PartKey = typeof PARTS[number]['key'];
 export type ReviewPart = { title: string; body: string };
@@ -33,9 +44,11 @@ type Props = {
   weekStart: string;
   isPremium: boolean;
   onUnlock: () => void;
+  /** Changed by a screen that stays mounted (Coach) to re-read the saved review, which Weekly Summary may have written since. */
+  reloadToken?: number;
 };
 
-export default function WeeklyReviewCard({ weekStart, isPremium, onUnlock }: Props) {
+export default function WeeklyReviewCard({ weekStart, isPremium, onUnlock, reloadToken }: Props) {
   const { colors } = useTheme();
   const { user } = useAuth();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -46,25 +59,29 @@ export default function WeeklyReviewCard({ weekStart, isPremium, onUnlock }: Pro
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
 
+  // Another week (Weekly Summary's arrows) never shows the last week's review while the cache is read
   useEffect(() => {
     setReview(null);
     setHeldBack([]);
     setFailed(false);
+  }, [storageKey, weekStart]);
+
+  useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
     AsyncStorage.getItem(storageKey).then(raw => {
-      if (cancelled || !raw) return;
-      try {
-        const cache: Cache = JSON.parse(raw);
-        if (cache.weekStart !== weekStart || !Object.keys(cache.review ?? {}).length) return;
-        // A review the server trimmed for a free account is incomplete once they upgrade: ask again
-        if (isPremium && cache.locked?.length) return;
-        setReview(cache.review);
-        setHeldBack(cache.locked ?? []);
-      } catch { }
+      if (cancelled) return;
+      let cache: Cache | null = null;
+      try { cache = raw ? JSON.parse(raw) : null; } catch { }
+      // A review the server trimmed for a free account is incomplete once they upgrade: ask again
+      const usable = !!cache && cache.weekStart === weekStart && Object.keys(cache.review ?? {}).length > 0
+        && !(isPremium && cache.locked?.length);
+      setReview(usable ? cache!.review : null);
+      setHeldBack(usable ? cache!.locked ?? [] : []);
+      if (!usable) setFailed(false);
     });
     return () => { cancelled = true; };
-  }, [storageKey, weekStart, user?.id, isPremium]);
+  }, [storageKey, weekStart, user?.id, isPremium, reloadToken]);
 
   const generate = useCallback(async () => {
     setLoading(true);
@@ -102,83 +119,77 @@ export default function WeeklyReviewCard({ weekStart, isPremium, onUnlock }: Pro
   }, [storageKey, weekStart, user?.id, isPremium]);
 
   const present = review ? PARTS.filter(p => review[p.key]) : [];
-  // Free accounts read the first part in full; the others stay as locked rows. The server
-  // names the ones it held back; a response that still carries them is trimmed here.
+  // Free accounts read the first part; a response that still carries the others is trimmed here
   const visible = isPremium ? present : present.slice(0, 1);
-  const locked = isPremium ? [] : PARTS.filter(p => heldBack.includes(p.key) || present.slice(1).some(q => q.key === p.key));
+  const showUpsell = !isPremium && (heldBack.length > 0 || present.length > 1);
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.sectionTitle}>Coach's Read</Text>
+    <View style={styles.card}>
+      <View style={styles.header}>
+        <Text style={styles.headerLabel}>Weekly Review</Text>
+        <Text style={styles.headerDate}>{fmtWeek(weekStart)}</Text>
+      </View>
       {review ? (
-        <View style={styles.card}>
-          {visible.map((p, i) => (
-            <View key={p.key} style={[styles.part, i > 0 && styles.partDivider]}>
-              <View style={styles.partHeader}>
-                <Ionicons name={p.icon} size={16} color={colors.accent} />
-                <Text style={styles.partLabel}>{p.label}</Text>
+        <>
+          {visible.map(p => (
+            <View key={p.key} style={styles.part}>
+              <View style={[styles.partIcon, { backgroundColor: colors[p.tone] + '26' }]}>
+                <Ionicons name={p.icon} size={14} color={colors[p.tone]} />
               </View>
-              <Text style={styles.partTitle}>{review[p.key]!.title}</Text>
-              <Text style={styles.partBody}>{review[p.key]!.body}</Text>
+              <View style={styles.partText}>
+                <Text style={styles.partLabel}>{p.label}</Text>
+                <Text style={styles.partBody}>{review[p.key]!.body}</Text>
+              </View>
             </View>
           ))}
-          {locked.map(p => (
-            <TouchableOpacity
-              key={p.key}
-              style={[styles.part, styles.partDivider, styles.lockedRow]}
-              onPress={onUnlock}
-              accessibilityRole="button"
-              accessibilityLabel={`${p.label}, part of Premium`}
-            >
-              <Ionicons name="lock-closed" size={16} color={colors.textSecondary} />
-              <Text style={styles.lockedLabel}>{p.label}</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
-            </TouchableOpacity>
-          ))}
-          {locked.length > 0 && (
-            <Text style={styles.upsellNote}>Your free read shows one part a week. Premium shows all three.</Text>
+          {showUpsell && (
+            <View style={styles.upsell}>
+              <Text style={styles.upsellText}>Premium shows the full review, plus insights whenever you want them.</Text>
+              <TouchableOpacity style={styles.upgradeBtn} onPress={onUnlock} accessibilityRole="button">
+                <Text style={styles.upgradeBtnText}>Upgrade</Text>
+              </TouchableOpacity>
+            </View>
           )}
-        </View>
+        </>
       ) : (
-        <View style={styles.card}>
-          <GenerateAction
-            message={failed
-              ? "The Coach couldn't back a review with this week's data. Try again later."
-              : isPremium
-                ? 'What went well, what lagged, and one change for next week.'
-                : 'One part of your weekly review is free. Premium shows all three.'}
-            label={failed ? 'Try Again' : "Get Coach's Read"}
-            loading={loading}
-            onPress={generate}
-            accessibilityLabel={failed ? 'Try again' : "Get Coach's read"}
-            loadingAccessibilityLabel="Writing Coach's read"
-          />
-        </View>
+        <GenerateAction
+          message={failed
+            ? "The Coach couldn't back a review with this week's data. Try again later."
+            : isPremium
+              ? 'What went well, what lagged, and one change for next week.'
+              : 'Your free weekly read from the Coach.'}
+          label={failed ? 'Try Again' : 'Get Review'}
+          loading={loading}
+          onPress={generate}
+          accessibilityLabel={failed ? 'Try again' : 'Get weekly review'}
+          loadingAccessibilityLabel="Writing weekly review"
+        />
       )}
     </View>
   );
 }
 
 const createStyles = (colors: Colors) => StyleSheet.create({
-  wrap: { gap: spacing.sm },
-  sectionTitle: {
-    fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textSecondary,
+  card: { backgroundColor: colors.surface, borderRadius: 14, padding: spacing.md, gap: spacing.md },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  headerLabel: {
+    fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary,
     textTransform: 'uppercase', letterSpacing: 0.8,
   },
-  card: { backgroundColor: colors.surface, borderRadius: 14, overflow: 'hidden' },
-  part: { padding: spacing.md, gap: spacing.xs },
-  partDivider: { borderTopWidth: 1, borderTopColor: colors.border },
-  partHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  partLabel: {
-    fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.accent,
-    textTransform: 'uppercase', letterSpacing: 0.6,
+  headerDate: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
+  part: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm + 4 },
+  partIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  partText: { flex: 1, gap: 2 },
+  partLabel: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary },
+  partBody: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 19 },
+  upsell: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: spacing.md,
   },
-  partTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
-  partBody: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 18 },
-  lockedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  lockedLabel: { flex: 1, fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textPrimary },
-  upsellNote: {
-    fontSize: typography.fontSize.xs, color: colors.textSecondary,
-    paddingHorizontal: spacing.md, paddingBottom: spacing.md,
+  upsellText: { flex: 1, fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 19 },
+  upgradeBtn: {
+    backgroundColor: colors.accent, borderRadius: 999,
+    paddingHorizontal: spacing.md, minHeight: 36, justifyContent: 'center',
   },
+  upgradeBtnText: { color: colors.accentText, fontSize: typography.fontSize.sm, fontWeight: '700' },
 });

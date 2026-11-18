@@ -35,6 +35,7 @@ import RoutinePickerModal from '../../components/coach/RoutinePickerModal';
 import MusclePickerModal from '../../components/coach/MusclePickerModal';
 import PlateauNudge from '../../components/PlateauNudge';
 import GenerateAction from '../../components/GenerateAction';
+import WeeklyReviewCard from '../../components/WeeklyReviewCard';
 import { writeWidgetGreekRank } from '../../utils/widgetData';
 import { motionTiming } from '../../utils/motion';
 
@@ -70,38 +71,30 @@ const INSIGHT_REASONS: { key: InsightReason; label: string }[] = [
 
 
 
-const INSIGHT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  deload:      'battery-half-outline',
-  rest:        'moon-outline',
-  frequency:   'repeat-outline',
-  routine:     'calendar-outline',
-  achievement: 'trophy-outline',
-  follow_up:   'checkmark-done-outline',
-  suggestion:  'bulb-outline',
+// The tag over each insight card; colorFor picks its tint
+const INSIGHT_TAGS: Record<string, string> = {
+  deload:      'Deload',
+  rest:        'Recovery',
+  frequency:   'Volume',
+  routine:     'Routine',
+  achievement: 'Win',
+  follow_up:   'Follow-up',
+  suggestion:  'Tip',
 };
 
-// Human-readable labels for the coach-profile summary chips in the hero.
-// Values mirror the option lists in CoachProfileModal.
-const GOAL_LABELS: Record<string, string> = {
-  hypertrophy: 'Hypertrophy', strength: 'Strength', endurance: 'Endurance', general: 'General',
+// The profile card's summary. Values mirror the option lists in CoachProfileModal.
+const GOAL_PHRASES: Record<string, string> = {
+  hypertrophy: 'Build muscle', strength: 'Get stronger', endurance: 'Build endurance', general: 'Stay fit',
 };
 const EXPERIENCE_LABELS: Record<string, string> = {
   beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced',
 };
 const EQUIPMENT_LABELS: Record<string, string> = {
-  full_gym: 'Full Gym', home_barbell: 'Home Gym', dumbbells: 'Dumbbells', bodyweight: 'Bodyweight',
+  full_gym: 'Full gym', home_barbell: 'Home gym', dumbbells: 'Dumbbells', bodyweight: 'Bodyweight',
 };
 const AVOID_LABELS: Record<string, string> = {
-  lower_back: 'Lower Back', knees: 'Knees', shoulders: 'Shoulders',
+  lower_back: 'lower back', knees: 'knees', shoulders: 'shoulders',
 };
-
-// Black or white text for a solid hex fill — keeps the rank badge letter
-// readable on the light rank colors (Athlete blue, Aretē gold).
-function onColor(hex: string): string {
-  const c = hex.replace('#', '');
-  const r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16);
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#1a1a1a' : '#fff';
-}
 
 // When a routine day was last logged, matched by name as the rotation does
 function lastDoneText(label: string, history: RotationWorkout[], today: Date): string | null {
@@ -142,7 +135,7 @@ export default function CoachScreen({ navigation }: Props) {
   const [activeTab, setActiveTab] = useState<'plans' | 'coach'>(initialTab);
 
   // ── Tab animations ──────────────────────────────────────────────────────────
-  const TAB_NAMES = ['plans', 'coach'] as const;
+  const TAB_NAMES = ['coach', 'plans'] as const;
   const TABS = TAB_NAMES.map(key => ({ key, label: key.charAt(0).toUpperCase() + key.slice(1) }));
   const insightAnimsRef = useRef<Animated.Value[]>([]);
 
@@ -206,6 +199,14 @@ export default function CoachScreen({ navigation }: Props) {
   const [aiGenerating, setAiGenerating] = useState(false);
   // Routine generate loading
   const [routineGenerating, setRoutineGenerating] = useState(false);
+  // Bumped on focus so the review card picks up one Weekly Summary wrote while this tab stayed mounted
+  const [focusCount, setFocusCount] = useState(0);
+  // The review covers the last completed week, the one Weekly Summary opens on, so the two share it
+  const reviewWeek = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return mondayOf(d);
+  }, [focusCount]);
 
   // ── Initialization ──────────────────────────────────────────────────────────
   // Keyed on user.id: it can be undefined on first mount while auth hydrates,
@@ -333,6 +334,7 @@ export default function CoachScreen({ navigation }: Props) {
   }));
 
   useFocusEffect(useCallback(() => {
+    setFocusCount(n => n + 1);
     refetchIfStale('templates', fetchTemplates);
     refetchIfStale('routines', fetchRoutines);
     // Keyed on the id so switching routines is never answered from the old one
@@ -590,9 +592,14 @@ export default function CoachScreen({ navigation }: Props) {
     );
   };
 
+  const insightTint = (type: string) =>
+    type === 'achievement' || type === 'frequency' ? colors.accent
+      : type === 'deload' || type === 'rest' ? colors.warmup
+      : colors.info;
+
   const renderInsightCard = (ins: Insight, idx: number) => {
-    const icon = INSIGHT_ICONS[ins.type] ?? 'bulb-outline';
-    const priorityColor = ins.type === 'achievement' ? colors.save : ins.priority === 'high' ? colors.danger : ins.priority === 'medium' ? colors.warmup : colors.accent;
+    const tint = insightTint(ins.type);
+    const tag = INSIGHT_TAGS[ins.type] ?? 'Tip';
     const anim = insightAnimsRef.current[idx] ?? new Animated.Value(1);
     return (
       <Animated.View
@@ -602,67 +609,75 @@ export default function CoachScreen({ navigation }: Props) {
           transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
         }}
       >
-        <View style={[styles.insightCard, { borderLeftWidth: 3, borderLeftColor: priorityColor }]}>
-          <View style={styles.insightIconWrap}>
-            <Ionicons name={icon} size={20} color={priorityColor} />
+        <View style={styles.insightCard}>
+          <View style={[styles.insightTag, { backgroundColor: tint + '26' }]}>
+            <Text style={[styles.insightTagText, { color: tint }]}>{tag}</Text>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.insightTitle}>{ins.title}</Text>
-            <Text style={styles.insightBody}>{ins.body}</Text>
-            <View style={styles.insightFeedbackRow}>
-              <Text style={styles.insightFeedbackLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-                {ins.helpful == null ? 'Helpful?' : 'Thanks. The Coach will use this.'}
-              </Text>
-              <TouchableOpacity
-                onPress={() => voteOnInsight(idx, true)}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Helpful"
-                accessibilityState={{ selected: ins.helpful === true }}
-              >
-                <Ionicons
-                  name={ins.helpful === true ? 'thumbs-up' : 'thumbs-up-outline'}
-                  size={20}
-                  color={ins.helpful === true ? colors.accent : colors.textSecondary}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => voteOnInsight(idx, false)}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Not helpful"
-                accessibilityState={{ selected: ins.helpful === false }}
-              >
-                <Ionicons
-                  name={ins.helpful === false ? 'thumbs-down' : 'thumbs-down-outline'}
-                  size={20}
-                  color={ins.helpful === false ? colors.textPrimary : colors.textSecondary}
-                />
-              </TouchableOpacity>
+          <Text style={styles.insightTitle}>{ins.title}</Text>
+          <Text style={styles.insightBody}>{ins.body}</Text>
+          <View style={styles.insightFeedbackRow}>
+            <Text style={styles.insightFeedbackLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+              {ins.helpful == null ? '' : 'Thanks. The Coach will use this.'}
+            </Text>
+            <TouchableOpacity
+              onPress={() => voteOnInsight(idx, true)}
+              style={[styles.voteBtn, ins.helpful === true && styles.voteBtnHelpful]}
+              accessibilityRole="button"
+              accessibilityLabel="Helpful"
+              accessibilityState={{ selected: ins.helpful === true }}
+            >
+              <Ionicons
+                name={ins.helpful === true ? 'thumbs-up' : 'thumbs-up-outline'}
+                size={18}
+                color={ins.helpful === true ? colors.accentText : colors.textSecondary}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => voteOnInsight(idx, false)}
+              style={[styles.voteBtn, ins.helpful === false && styles.voteBtnNotHelpful]}
+              accessibilityRole="button"
+              accessibilityLabel="Not helpful"
+              accessibilityState={{ selected: ins.helpful === false }}
+            >
+              <Ionicons
+                name={ins.helpful === false ? 'thumbs-down' : 'thumbs-down-outline'}
+                size={18}
+                color={ins.helpful === false ? colors.textPrimary : colors.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
+          {ins.helpful === false && (
+            <View style={styles.insightReasonRow}>
+              {INSIGHT_REASONS.map(({ key, label }) => {
+                const selected = ins.reason === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    onPress={() => giveInsightReason(idx, key)}
+                    style={[styles.insightReasonChip, selected && styles.insightReasonChipSelected]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                  >
+                    <Text style={[styles.insightReasonText, selected && { color: colors.textPrimary }]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-            {ins.helpful === false && (
-              <View style={styles.insightReasonRow}>
-                {INSIGHT_REASONS.map(({ key, label }) => {
-                  const selected = ins.reason === key;
-                  return (
-                    <TouchableOpacity
-                      key={key}
-                      onPress={() => giveInsightReason(idx, key)}
-                      style={[styles.insightReasonChip, selected && styles.insightReasonChipSelected]}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                    >
-                      <Text style={[styles.insightReasonText, selected && { color: colors.textPrimary }]}>{label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
-          </View>
+          )}
         </View>
       </Animated.View>
     );
   };
+
+  const profileHeadline = `${GOAL_PHRASES[coachProfile.goal] ?? coachProfile.goal} · ${coachProfile.days_per_week} day${coachProfile.days_per_week !== 1 ? 's' : ''} a week`;
+  const profileDetails = [
+    EXPERIENCE_LABELS[coachProfile.experience] ?? coachProfile.experience,
+    `${coachProfile.session_length_min} min`,
+    EQUIPMENT_LABELS[coachProfile.equipment] ?? coachProfile.equipment,
+    ...(coachProfile.avoid.length ? [`Easy on ${coachProfile.avoid.map(a => AVOID_LABELS[a] ?? a).join(', ')}`] : []),
+  ].join(' · ');
+  const rankText = rankTextColor(greekRank, rankColor, mode);
+  const openPaywall = () => (navigation as any).navigate('Paywall', { source: 'ai_coach' });
 
   // ── JSX ─────────────────────────────────────────────────────────────────────
   return (
@@ -863,144 +878,101 @@ export default function CoachScreen({ navigation }: Props) {
             isPremium={isPremium}
             onOpenLift={lift => navigation.navigate('ExerciseDetail', { ...lift, initialTab: 'charts' })}
           />
-          {/* Coach-profile summary — the whole card opens the profile modal */}
-          <PressableScale
-            style={[styles.coachHero, { backgroundColor: rankColor + '18', borderColor: rankColor + '40' }]}
-            onPress={() => setProfileModalVisible(true)}
-          >
-            <View style={styles.coachHeroTopRow}>
-              <TouchableOpacity
-                style={[styles.rankPill, { borderColor: rankColor + '55' }]}
-                onPress={() => (navigation as any).navigate('ProgressTab', { screen: 'StrengthScore', initial: false })}
-              >
-                <View style={[styles.rankPillIcon, { backgroundColor: rankColor }]}>
-                  <Text style={[styles.rankPillIconText, { color: onColor(rankColor) }]}>{rankIcon}</Text>
-                </View>
-                <Text style={[styles.rankPillText, { color: rankTextColor(greekRank, rankColor, mode) }]}>{greekRank}</Text>
-              </TouchableOpacity>
-              <Ionicons name="create-outline" size={16} color={colors.accent} />
-            </View>
-
-            <View style={styles.coachSummaryRow}>
-              <Text style={styles.coachSummaryLabel}>Goal</Text>
-              <Text style={styles.coachSummaryValue} numberOfLines={1}>
-                {GOAL_LABELS[coachProfile.goal] ?? coachProfile.goal}
-                {'  ·  '}{EXPERIENCE_LABELS[coachProfile.experience] ?? coachProfile.experience}
-              </Text>
-            </View>
-            <View style={styles.coachSummaryRow}>
-              <Text style={styles.coachSummaryLabel}>Setup</Text>
-              <Text style={styles.coachSummaryValue} numberOfLines={1}>
-                {EQUIPMENT_LABELS[coachProfile.equipment] ?? coachProfile.equipment}
-                {'  ·  '}{coachProfile.days_per_week} days/wk
-                {'  ·  '}{coachProfile.session_length_min} min
-              </Text>
-            </View>
-            {coachProfile.avoid.length > 0 && (
-              <View style={styles.coachSummaryRow}>
-                <Ionicons name="alert-circle-outline" size={13} color={colors.danger} style={styles.coachAvoidIcon} />
-                <Text style={[styles.coachSummaryValue, { color: colors.danger }]} numberOfLines={1}>
-                  Avoid {coachProfile.avoid.map(a => AVOID_LABELS[a] ?? a).join(', ')}
+          {/* The rank badge opens the Strength Score; the rest of the card edits the profile */}
+          <View style={styles.profileCard}>
+            <TouchableOpacity
+              style={[styles.rankBadge, { backgroundColor: rankColor + '26' }]}
+              onPress={() => (navigation as any).navigate('ProgressTab', { screen: 'StrengthScore', initial: false })}
+              accessibilityRole="button"
+              accessibilityLabel={`${greekRank} rank. Open Strength Score`}
+            >
+              <Text style={[styles.rankBadgeText, { color: rankText }]}>{rankIcon}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.profileBody}
+              onPress={() => setProfileModalVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Edit coach profile"
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.profileHeadline} numberOfLines={1}>{profileHeadline}</Text>
+                <Text style={styles.profileDetails} numberOfLines={2}>
+                  <Text style={[styles.profileRank, { color: rankText }]}>{greekRank}</Text>
+                  {' · '}{profileDetails}
                 </Text>
               </View>
-            )}
-          </PressableScale>
+              <Text style={styles.profileEdit}>Edit</Text>
+            </TouchableOpacity>
+          </View>
 
-          {/* AI Coach card — Generate + Insights unified */}
-          <View style={styles.aiCoachCard}>
-            <SectionRule label="Generate" style={{ marginBottom: spacing.sm }} />
-            <View style={styles.generateBtnRow}>
-              <TouchableOpacity
-                style={[styles.generateBtn, aiGenerating && { opacity: 0.6 }]}
-                disabled={aiGenerating || routineGenerating}
-                onPress={isPremium
-                  ? () => { setAiSelectedMuscles([]); setAiMusclePickerVisible(true); }
-                  : () => (navigation as any).navigate('Paywall', { source: 'ai_coach' })
-                }
-              >
-                <Ionicons
-                  name={isPremium ? (aiGenerating ? 'hourglass-outline' : 'list-outline') : 'lock-closed-outline'}
-                  size={16} color={colors.accentText}
-                />
-                <Text style={styles.generateBtnText}>
-                  {aiGenerating ? 'Generating…' : 'Template'}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.generateBtnOutline, routineGenerating && { opacity: 0.6 }]}
-                disabled={aiGenerating || routineGenerating}
-                onPress={isPremium
-                  ? handleGenerateRoutine
-                  : () => (navigation as any).navigate('Paywall', { source: 'ai_coach' })
-                }
-              >
-                <Ionicons
-                  name={isPremium ? (routineGenerating ? 'hourglass-outline' : 'calendar-outline') : 'lock-closed-outline'}
-                  size={16} color={colors.save}
-                />
-                <Text style={styles.generateBtnOutlineText}>
-                  {routineGenerating ? 'Generating…' : 'Routine'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+          <TouchableOpacity
+            style={[styles.generateBtn, (aiGenerating || routineGenerating) && { opacity: 0.6 }]}
+            disabled={aiGenerating || routineGenerating}
+            onPress={isPremium ? () => { setAiSelectedMuscles([]); setAiMusclePickerVisible(true); } : openPaywall}
+            accessibilityRole="button"
+          >
+            {aiGenerating
+              ? <ActivityIndicator size="small" color={colors.accentText} />
+              : <Ionicons name={isPremium ? 'sparkles-outline' : 'lock-closed'} size={18} color={colors.accentText} />}
+            <Text style={styles.generateBtnText}>{aiGenerating ? 'Generating…' : 'Generate a workout'}</Text>
+          </TouchableOpacity>
+          {isPremium && (
+            <TouchableOpacity
+              style={styles.routineLink}
+              disabled={aiGenerating || routineGenerating}
+              onPress={handleGenerateRoutine}
+              accessibilityRole="button"
+            >
+              {routineGenerating && <ActivityIndicator size="small" color={colors.textSecondary} />}
+              <Text style={styles.routineLinkText}>{routineGenerating ? 'Building your routine…' : 'Or build a full routine'}</Text>
+            </TouchableOpacity>
+          )}
 
-            <View style={styles.insightsSectionHeader}>
-              <SectionRule label="Insights" style={{ flex: 1, marginBottom: 0 }} />
-              {isPremium && (
-                <TouchableOpacity onPress={fetchInsights} disabled={insightsLoading} style={styles.refreshBtn}>
-                  {insightsLoading
-                    ? <ActivityIndicator size="small" color={colors.accent} />
-                    : <Ionicons name="refresh-outline" size={18} color={colors.accent} />
-                  }
-                </TouchableOpacity>
-              )}
-            </View>
+          <View style={styles.reviewWrap}>
+            <WeeklyReviewCard weekStart={reviewWeek} isPremium={isPremium} onUnlock={openPaywall} reloadToken={focusCount} />
+          </View>
 
-            {isPremium && insights.length > 0 && insightsFetchedAt && (
-              <Text style={styles.insightsUpdated}>
-                {fmtUpdatedAgo(insightsFetchedAt)}{insightsShaped ? '  ·  Shaped by your feedback' : ''}
-              </Text>
-            )}
-            <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
-              {isPremium ? (
-                insights.length > 0
+          {/* A free account's one AI read a week is the review above, so it gets no insights section */}
+          {isPremium && (
+            <>
+              <View style={styles.insightsHeader}>
+                <Text style={styles.insightsHeading}>Insights</Text>
+                {insights.length > 0 && insightsFetchedAt && (
+                  <Text style={styles.insightsMeta} numberOfLines={1}>
+                    {insightsShaped ? 'Shaped by your feedback' : fmtUpdatedAgo(insightsFetchedAt)}
+                  </Text>
+                )}
+                {insights.length > 0 && (
+                  <TouchableOpacity
+                    onPress={fetchInsights}
+                    disabled={insightsLoading}
+                    style={styles.refreshBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Refresh insights"
+                  >
+                    {insightsLoading
+                      ? <ActivityIndicator size="small" color={colors.textSecondary} />
+                      : <Ionicons name="refresh-outline" size={18} color={colors.textSecondary} />}
+                  </TouchableOpacity>
+                )}
+              </View>
+              <View style={styles.insightList}>
+                {insights.length > 0
                   ? insights.map(renderInsightCard)
                   : (
-                    <GenerateAction
-                      message="Personalized coaching based on your recent training."
-                      label="Generate Insights"
-                      loading={insightsLoading}
-                      onPress={fetchInsights}
-                      loadingAccessibilityLabel="Writing insights"
-                    />
-                  )
-              ) : (
-                <>
-                  {/* A free account reads one insight a week, in the Weekly Summary's review */}
-                  <View style={styles.insightsEmpty}>
-                    <Ionicons name="lock-closed-outline" size={32} color={colors.textSecondary} />
-                    <Text style={styles.insightsEmptyText}>
-                      Insights are part of Premium. Your free weekly read is in the Weekly Summary.
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.upgradeBanner}
-                    onPress={() => (navigation as any).navigate('Paywall', { source: 'ai_coach' })}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.upgradeBannerTitle}>Unlock AI Coach</Text>
-                      <Text style={styles.upgradeBannerSub}>
-                        Insights whenever you want them, the full weekly review, plus programs built for you.
-                      </Text>
+                    <View style={styles.insightsEmpty}>
+                      <GenerateAction
+                        message="Personalized coaching based on your recent training."
+                        label="Generate Insights"
+                        loading={insightsLoading}
+                        onPress={fetchInsights}
+                        loadingAccessibilityLabel="Writing insights"
+                      />
                     </View>
-                    <View style={styles.upgradeBannerCTA}>
-                      <Text style={styles.upgradeBannerCTAText}>Upgrade</Text>
-                    </View>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          </View>
+                  )}
+              </View>
+            </>
+          )}
         </ScrollView>
       )}
 
@@ -1057,8 +1029,6 @@ export default function CoachScreen({ navigation }: Props) {
 
 const createStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-
-  insightsUpdated: { fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: spacing.xs },
 
   emptyText: { textAlign: 'center', color: colors.textSecondary, marginVertical: spacing.sm, fontSize: typography.fontSize.sm },
 
@@ -1128,57 +1098,52 @@ const createStyles = (colors: Colors) => StyleSheet.create({
 
   // ── Coach tab ───────────────────────────────────────────────────────────────
   coachContent: { padding: spacing.md, paddingBottom: spacing.xl * 2 },
-  coachHero: {
-    backgroundColor: colors.surface, borderRadius: spacing.md,
-    padding: spacing.md, marginBottom: spacing.md,
-    borderWidth: 1, borderColor: colors.border,
-    gap: spacing.xs,
+  profileCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: colors.surface, borderRadius: 14,
+    paddingVertical: 12, paddingLeft: spacing.md, marginBottom: spacing.md,
   },
-  coachHeroTopRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: spacing.xs,
+  rankBadge: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  rankBadgeText: { fontSize: typography.fontSize.md, fontWeight: '800' },
+  profileBody: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingRight: spacing.md, minHeight: 44 },
+  profileHeadline: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary },
+  profileDetails: { fontSize: 12, color: colors.textSecondary, marginTop: 2, lineHeight: 16 },
+  profileRank: { fontWeight: '700' },
+  profileEdit: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+  generateBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    backgroundColor: colors.accent, borderRadius: 14, minHeight: 54,
   },
-  rankPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    borderWidth: 1, borderRadius: 999,
-    paddingLeft: 3, paddingRight: spacing.sm, paddingVertical: 3,
+  generateBtnText: { color: colors.accentText, fontWeight: '700', fontSize: typography.fontSize.md },
+  routineLink: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
+    minHeight: 40, marginTop: spacing.xs,
   },
-  rankPillIcon: {
-    width: 22, height: 22, borderRadius: 11,
-    alignItems: 'center', justifyContent: 'center',
+  routineLinkText: { color: colors.textSecondary, fontSize: typography.fontSize.sm, fontWeight: '600' },
+  reviewWrap: { marginTop: spacing.md },
+  insightsHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    marginTop: spacing.lg, marginBottom: spacing.sm, paddingHorizontal: spacing.xs,
   },
-  rankPillIconText: { fontSize: typography.fontSize.xs, fontWeight: '800', color: '#fff' },
-  rankPillText: { fontSize: typography.fontSize.sm, fontWeight: '800', letterSpacing: 0.3 },
-  coachSummaryRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  coachSummaryLabel: {
-    width: 44, fontSize: 10, fontWeight: '700', letterSpacing: 0.6,
-    color: colors.textSecondary, textTransform: 'uppercase',
-  },
-  coachSummaryValue: {
-    flex: 1, fontSize: typography.fontSize.xs, fontWeight: '600', color: colors.textPrimary,
-  },
-  coachAvoidIcon: { width: 44, textAlign: 'center' },
-  aiCoachCard: { marginBottom: spacing.md, gap: spacing.sm },
-  generateBtnRow: { flexDirection: 'row', gap: spacing.sm },
-  generateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.save, borderRadius: spacing.sm, paddingVertical: 12 },
-  generateBtnText: { color: colors.accentText, fontWeight: '700', fontSize: typography.fontSize.sm },
-  generateBtnOutline: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.save, borderRadius: spacing.sm, paddingVertical: 12 },
-  generateBtnOutlineText: { color: colors.save, fontWeight: '700', fontSize: typography.fontSize.sm },
-  insightsSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm },
+  insightsHeading: { flex: 1, fontSize: typography.fontSize.lg, fontWeight: '800', color: colors.textPrimary },
+  insightsMeta: { fontSize: 12, color: colors.textSecondary, flexShrink: 1 },
   refreshBtn: { padding: spacing.xs },
-  insightCard: {
-    flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start',
-    backgroundColor: colors.surface, borderRadius: spacing.sm,
-    padding: spacing.md,
-    borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1,
-    borderTopColor: colors.border, borderRightColor: colors.border, borderBottomColor: colors.border,
+  insightList: { gap: spacing.md },
+  insightsEmpty: { backgroundColor: colors.surface, borderRadius: 14 },
+  insightCard: { backgroundColor: colors.surface, borderRadius: 14, padding: spacing.md },
+  insightTag: { alignSelf: 'flex-start', borderRadius: 6, paddingHorizontal: spacing.sm, paddingVertical: 3, marginBottom: 10 },
+  insightTagText: { fontSize: typography.fontSize.xs, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase' },
+  insightTitle: { fontSize: typography.fontSize.md, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.sm, lineHeight: 21 },
+  insightBody: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 19 },
+  insightFeedbackRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
+  // flex: 1 keeps the thumbs pinned right while the thanks comes and goes
+  insightFeedbackLabel: { flex: 1, fontSize: 12, color: colors.textSecondary },
+  voteBtn: {
+    width: 44, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: colors.border,
   },
-  insightIconWrap: { width: 32, alignItems: 'center', paddingTop: 2 },
-  insightTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs },
-  insightBody: { fontSize: typography.fontSize.sm, color: colors.textSecondary, lineHeight: 18 },
-  insightFeedbackRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm },
-  // flex: 1 keeps the thumbs pinned right while the label swaps to the longer thanks
-  insightFeedbackLabel: { flex: 1, fontSize: typography.fontSize.sm, color: colors.textSecondary },
+  voteBtnHelpful: { backgroundColor: colors.accent, borderColor: colors.accent },
+  voteBtnNotHelpful: { backgroundColor: colors.border },
   insightReasonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
   insightReasonChip: {
     borderWidth: 1, borderColor: colors.border, borderRadius: spacing.md,
@@ -1187,16 +1152,4 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   insightReasonChipSelected: { borderColor: colors.accent, backgroundColor: colors.accent + '15' },
   insightReasonText: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
   freeLimitText: { fontSize: typography.fontSize.xs, color: colors.textSecondary },
-  insightsEmpty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
-  insightsEmptyText: { fontSize: typography.fontSize.sm, color: colors.textSecondary, textAlign: 'center', maxWidth: 240 },
-  upgradeBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.accent + '15', borderRadius: spacing.sm,
-    borderWidth: 1, borderColor: colors.accent + '40',
-    padding: spacing.md, marginTop: spacing.xs,
-  },
-  upgradeBannerTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: 2 },
-  upgradeBannerSub: { fontSize: typography.fontSize.xs, color: colors.textSecondary, lineHeight: 16 },
-  upgradeBannerCTA: { backgroundColor: colors.accent, borderRadius: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  upgradeBannerCTAText: { color: colors.accentText, fontSize: typography.fontSize.sm, fontWeight: '700' },
 });

@@ -45,6 +45,7 @@ export type Colors = {
   dangerText: string; // text on a danger-colored background; accentText follows the accent, and some presets' fail on red
   warmup: string;     // warm-up set indicator
   dropset: string;    // drop set indicator
+  info: string;       // a neutral blue that doesn't follow the accent (Coach's "next week", insight tags)
   prGold: string;       // PR text and icons on themed surfaces
   prGoldBorder: string; // PR card borders, laurels and glows on themed surfaces
 };
@@ -66,6 +67,7 @@ export const LIGHT_BASE = {
   dangerText:    '#FFFFFF', // 5.4:1 on danger
   warmup:        '#B25000', // 5.2:1 on white; #FF9500 is 2.2:1, and warm-up tags are text
   dropset:       '#9A3FC7', // 5.4:1 on white; #AF52DE is 4.1:1
+  info:          '#006BE0', // 5.0:1 on white; #0A84FF is 3.6:1
 };
 
 export const DARK_BASE = {
@@ -83,6 +85,7 @@ export const DARK_BASE = {
   dangerText:    '#000000', // 6.2:1 on danger; white is 3.4:1
   warmup:        '#FF9500',
   dropset:       '#BF7FF0', // 6.1:1 on surface; #AF52DE is 4.1:1
+  info:          '#0A84FF',
 };
 
 function buildColors(mode: 'light' | 'dark', preset: AccentPreset): Colors {

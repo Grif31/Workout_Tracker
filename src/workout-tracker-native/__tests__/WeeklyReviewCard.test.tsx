@@ -1,7 +1,7 @@
 /**
- * Weekly Summary's "Coach's Read": a premium account reads all three parts, a
- * free account reads the first and sees the others locked, and a week is only
- * ever asked for once.
+ * The weekly review on Coach and in Weekly Summary: a premium account reads all
+ * three parts, a free account reads the first with one Upgrade button under it,
+ * and a week is only ever asked for once.
  */
 import React from 'react';
 import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
@@ -45,72 +45,95 @@ describe('WeeklyReviewCard', () => {
 
   it('shows all three parts to a premium account and saves them for the week', async () => {
     const r = await renderCard(true);
-    await act(async () => { fireEvent.press(r.getByText("Get Coach's Read")); });
-    expect(await r.findByText('Three Workouts Logged')).toBeTruthy();
-    expect(r.getByText('Back Volume Was Low')).toBeTruthy();
-    expect(r.getByText('Add Two Back Sets')).toBeTruthy();
+    await act(async () => { fireEvent.press(r.getByText("Get Review")); });
+    expect(await r.findByText('You hit your goal.')).toBeTruthy();
+    expect(r.getByText('Back had 4 sets.')).toBeTruthy();
+    expect(r.getByText('Add rows to pull day.')).toBeTruthy();
     expect(JSON.parse((await AsyncStorage.getItem(KEY))!)).toEqual({ weekStart: WEEK, review: REVIEW, locked: [] });
   });
 
-  it('shows a free account the first part in full and the rest locked', async () => {
+  it('shows a free account the first part and one Upgrade button for the rest', async () => {
     const r = await renderCard(false);
-    await act(async () => { fireEvent.press(r.getByText("Get Coach's Read")); });
-    expect(await r.findByText('Three Workouts Logged')).toBeTruthy();
-    expect(r.getByText('You hit your goal.')).toBeTruthy();
-    expect(r.queryByText('Back Volume Was Low')).toBeNull();
-    expect(r.queryByText('Add Two Back Sets')).toBeNull();
+    await act(async () => { fireEvent.press(r.getByText("Get Review")); });
+    expect(await r.findByText('You hit your goal.')).toBeTruthy();
+    expect(r.queryByText('Back had 4 sets.')).toBeNull();
+    expect(r.queryByText('Add rows to pull day.')).toBeNull();
+    expect(r.queryByText('Lagged')).toBeNull();
 
-    fireEvent.press(r.getByLabelText('Lagged, part of Premium'));
+    fireEvent.press(r.getByText('Upgrade'));
     expect(r.onUnlock).toHaveBeenCalled();
-    expect(r.getByLabelText('Change for next week, part of Premium')).toBeTruthy();
+  });
+
+  it('has no Upgrade button for a premium account', async () => {
+    const r = await renderCard(true);
+    await act(async () => { fireEvent.press(r.getByText("Get Review")); });
+    expect(await r.findByText('Add rows to pull day.')).toBeTruthy();
+    expect(r.queryByText('Upgrade')).toBeNull();
+  });
+
+  it('labels the week it covers', async () => {
+    const r = await renderCard(true, '2026-10-12');
+    expect(r.getByText('Oct 12 to 18')).toBeTruthy();
+    r.unmount();
+    expect((await renderCard(true, '2026-09-28')).getByText('Sep 28 to Oct 4')).toBeTruthy();
+  });
+
+  it('picks up a review saved elsewhere when told to reload', async () => {
+    const onUnlock = jest.fn();
+    const r = render(<WeeklyReviewCard weekStart={WEEK} isPremium onUnlock={onUnlock} reloadToken={1} />);
+    await act(async () => {});
+    expect(r.getByText('Get Review')).toBeTruthy();
+    await AsyncStorage.setItem(KEY, JSON.stringify({ weekStart: WEEK, review: REVIEW, locked: [] }));
+    r.rerender(<WeeklyReviewCard weekStart={WEEK} isPremium onUnlock={onUnlock} reloadToken={2} />);
+    expect(await r.findByText('You hit your goal.')).toBeTruthy();
+    expect(reviewCalls()).toHaveLength(0);
   });
 
   it("falls back to the first part that survived the Coach's fact check", async () => {
     installServer({ body: { review: { lagged: REVIEW.lagged, next_change: REVIEW.next_change } } });
     const r = await renderCard(false);
-    await act(async () => { fireEvent.press(r.getByText("Get Coach's Read")); });
-    expect(await r.findByText('Back Volume Was Low')).toBeTruthy();
-    expect(r.queryByText('Add Two Back Sets')).toBeNull();
-    expect(r.getByLabelText('Change for next week, part of Premium')).toBeTruthy();
+    await act(async () => { fireEvent.press(r.getByText("Get Review")); });
+    expect(await r.findByText('Back had 4 sets.')).toBeTruthy();
+    expect(r.queryByText('Add rows to pull day.')).toBeNull();
+    expect(r.getByText('Upgrade')).toBeTruthy();
   });
 
   it('brings the saved review back without asking again, and unlocks it on upgrade', async () => {
     await AsyncStorage.setItem(KEY, JSON.stringify({ weekStart: WEEK, review: REVIEW }));
     const free = await renderCard(false);
-    expect(await free.findByText('Three Workouts Logged')).toBeTruthy();
-    expect(free.queryByText('Add Two Back Sets')).toBeNull();
+    expect(await free.findByText('You hit your goal.')).toBeTruthy();
+    expect(free.queryByText('Add rows to pull day.')).toBeNull();
     free.unmount();
 
     const premium = await renderCard(true);
-    expect(await premium.findByText('Add Two Back Sets')).toBeTruthy();
+    expect(await premium.findByText('Add rows to pull day.')).toBeTruthy();
     expect(reviewCalls()).toHaveLength(0);
   });
 
-  it('shows the parts a server held back for a free account as locked rows', async () => {
+  it('offers the upgrade when the server held parts back for a free account', async () => {
     installServer({ body: { review: { went_well: REVIEW.went_well }, locked: ['lagged', 'next_change'] } });
     const r = await renderCard(false);
-    await act(async () => { fireEvent.press(r.getByText("Get Coach's Read")); });
-    expect(await r.findByText('Three Workouts Logged')).toBeTruthy();
-    expect(r.getByLabelText('Lagged, part of Premium')).toBeTruthy();
-    expect(r.getByLabelText('Change for next week, part of Premium')).toBeTruthy();
-    expect(r.queryByText('Back Volume Was Low')).toBeNull();
+    await act(async () => { fireEvent.press(r.getByText("Get Review")); });
+    expect(await r.findByText('You hit your goal.')).toBeTruthy();
+    expect(r.getByText('Upgrade')).toBeTruthy();
+    expect(r.queryByText('Back had 4 sets.')).toBeNull();
   });
 
   it('asks again after an upgrade, since the saved review was trimmed', async () => {
     await AsyncStorage.setItem(KEY, JSON.stringify({ weekStart: WEEK, review: { went_well: REVIEW.went_well }, locked: ['lagged', 'next_change'] }));
     const free = await renderCard(false);
-    expect(await free.findByLabelText('Lagged, part of Premium')).toBeTruthy();
+    expect(await free.findByText('You hit your goal.')).toBeTruthy();
     free.unmount();
     const premium = await renderCard(true);
-    expect(premium.getByText("Get Coach's Read")).toBeTruthy();
-    expect(premium.queryByText('Three Workouts Logged')).toBeNull();
+    expect(premium.getByText("Get Review")).toBeTruthy();
+    expect(premium.queryByText('You hit your goal.')).toBeNull();
   });
 
   it('tells the server and says to retry when Premium has not reached it yet', async () => {
     const alertSpy = jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => {});
     installServer({ body: { review: { went_well: REVIEW.went_well }, locked: ['lagged', 'next_change'] } });
     const r = await renderCard(true);
-    await act(async () => { fireEvent.press(r.getByText("Get Coach's Read")); });
+    await act(async () => { fireEvent.press(r.getByText("Get Review")); });
     expect(syncServerPremium).toHaveBeenCalled();
     expect(alertSpy).toHaveBeenCalledWith('Almost There', expect.stringContaining('Premium'));
     expect(await AsyncStorage.getItem(KEY)).toBeNull();
@@ -120,21 +143,21 @@ describe('WeeklyReviewCard', () => {
   it('ignores a review saved for another week', async () => {
     await AsyncStorage.setItem(KEY, JSON.stringify({ weekStart: '2026-09-21', review: REVIEW }));
     const r = await renderCard(true);
-    expect(r.getByText("Get Coach's Read")).toBeTruthy();
-    expect(r.queryByText('Three Workouts Logged')).toBeNull();
+    expect(r.getByText("Get Review")).toBeTruthy();
+    expect(r.queryByText('You hit your goal.')).toBeNull();
   });
 
   it('sends the coach profile and the week with the request', async () => {
     await AsyncStorage.setItem(`${COACH_PROFILE_KEY}_${mockUser.id}`, JSON.stringify({ goal: 'strength', experience: 'advanced', avoid: ['knees'] }));
     const r = await renderCard(true);
-    await act(async () => { fireEvent.press(r.getByText("Get Coach's Read")); });
+    await act(async () => { fireEvent.press(r.getByText("Get Review")); });
     await waitFor(() => expect(reviewCalls()).toHaveLength(1));
     expect(JSON.parse(reviewCalls()[0][1].body)).toEqual({ experience: 'advanced', goal: 'strength', avoid: ['knees'], notes: '', week_start: WEEK });
   });
 
   it('sends only the week when the device has no profile, so the server reads its own', async () => {
     const r = await renderCard(true);
-    await act(async () => { fireEvent.press(r.getByText("Get Coach's Read")); });
+    await act(async () => { fireEvent.press(r.getByText("Get Review")); });
     await waitFor(() => expect(reviewCalls()).toHaveLength(1));
     expect(JSON.parse(reviewCalls()[0][1].body)).toEqual({ week_start: WEEK });
   });
@@ -143,29 +166,29 @@ describe('WeeklyReviewCard', () => {
     let finish: (v: any) => void = () => {};
     (global.fetch as jest.Mock) = jest.fn(() => new Promise(res => { finish = res; }));
     const r = await renderCard(true);
-    await act(async () => { fireEvent.press(r.getByLabelText("Get Coach's read")); });
+    await act(async () => { fireEvent.press(r.getByLabelText("Get weekly review")); });
 
-    const writing = r.getByLabelText("Writing Coach's read");
+    const writing = r.getByLabelText("Writing weekly review");
     await act(async () => { fireEvent.press(writing); });
     expect(reviewCalls()).toHaveLength(1);
 
     await act(async () => { finish({ ok: true, status: 200, json: () => Promise.resolve({ review: REVIEW }) }); });
-    expect(await r.findByText('Three Workouts Logged')).toBeTruthy();
-    expect(r.queryByLabelText("Writing Coach's read")).toBeNull();
+    expect(await r.findByText('You hit your goal.')).toBeTruthy();
+    expect(r.queryByLabelText("Writing weekly review")).toBeNull();
   });
 
   it('returns the star to a button when the request fails', async () => {
     installServer({ ok: false, body: { message: 'nope' } });
     const r = await renderCard(true);
-    await act(async () => { fireEvent.press(r.getByLabelText("Get Coach's read")); });
-    expect(await r.findByLabelText("Get Coach's read")).toBeTruthy();
-    expect(r.queryByLabelText("Writing Coach's read")).toBeNull();
+    await act(async () => { fireEvent.press(r.getByLabelText("Get weekly review")); });
+    expect(await r.findByLabelText("Get weekly review")).toBeTruthy();
+    expect(r.queryByLabelText("Writing weekly review")).toBeNull();
   });
 
   it('offers a retry, and saves nothing, when no part could be backed by the data', async () => {
     installServer({ body: { review: {} } });
     const r = await renderCard(true);
-    await act(async () => { fireEvent.press(r.getByText("Get Coach's Read")); });
+    await act(async () => { fireEvent.press(r.getByText("Get Review")); });
     expect(await r.findByText('Try Again')).toBeTruthy();
     expect(await AsyncStorage.getItem(KEY)).toBeNull();
   });

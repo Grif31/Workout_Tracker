@@ -11,10 +11,12 @@ type Props<T extends string> = {
   onChange: (key: T) => void;
 };
 
-/** The row of section tabs at the top of the Progress and Coach tabs, with an underline that slides to the one picked. */
+const PAD = 3;
+
+/** The segmented control at the top of the Progress and Coach tabs, with a thumb that slides to the one picked. */
 export default function TopTabBar<T extends string>({ tabs, active, onChange }: Props<T>) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => createStyles(colors, mode), [colors, mode]);
   const [width, setWidth] = useState(0);
   const index = Math.max(0, tabs.findIndex(t => t.key === active));
   const x = useRef(new Animated.Value(index)).current;
@@ -23,11 +25,19 @@ export default function TopTabBar<T extends string>({ tabs, active, onChange }: 
     motionSpring(x, { toValue: index, useNativeDriver: true, damping: 18, stiffness: 220, mass: 0.6 }).start();
   }, [index, x]);
 
-  const tabW = width / tabs.length;
-  const sliderW = tabW * 0.5;
+  // The thumb sits inside the padding, so it spans the inner width
+  const tabW = Math.max(0, width - PAD * 2) / tabs.length;
 
   return (
     <View style={styles.row} onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}>
+      {width > 0 && (
+        <Animated.View
+          style={[styles.thumb, {
+            width: tabW,
+            transform: [{ translateX: Animated.multiply(x, tabW) }],
+          }]}
+        />
+      )}
       {tabs.map(t => (
         <TouchableOpacity
           key={t.key}
@@ -39,31 +49,25 @@ export default function TopTabBar<T extends string>({ tabs, active, onChange }: 
           <Text style={[styles.label, t.key === active && styles.labelActive]}>{t.label}</Text>
         </TouchableOpacity>
       ))}
-      {width > 0 && (
-        <Animated.View
-          style={[styles.slider, {
-            width: sliderW,
-            transform: [{ translateX: Animated.add(Animated.multiply(x, tabW), (tabW - sliderW) / 2) }],
-          }]}
-        />
-      )}
     </View>
   );
 }
 
-const createStyles = (colors: Colors) => StyleSheet.create({
+// Light mode follows iOS: a gray track with a white thumb. Dark inverts it, since white on near-black glares.
+const createStyles = (colors: Colors, mode: 'light' | 'dark') => StyleSheet.create({
   row: {
     flexDirection: 'row',
     marginHorizontal: spacing.md,
     marginTop: spacing.xl,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    padding: PAD,
+    borderRadius: 12,
+    backgroundColor: mode === 'light' ? colors.border : colors.surface,
   },
-  tab: { flex: 1, alignItems: 'center', paddingBottom: 10 },
-  label: {
-    fontSize: typography.fontSize.xs, fontWeight: '700', color: colors.textSecondary,
-    textTransform: 'uppercase', letterSpacing: 1.2, paddingTop: spacing.sm, marginBottom: 6,
+  thumb: {
+    position: 'absolute', top: PAD, bottom: PAD, left: PAD,
+    borderRadius: 9, backgroundColor: mode === 'light' ? colors.surface : colors.border,
   },
-  labelActive: { color: colors.accent },
-  slider: { position: 'absolute', bottom: 0, left: 0, height: 2, borderRadius: 1, backgroundColor: colors.accent },
+  tab: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 36 },
+  label: { fontSize: typography.fontSize.sm, fontWeight: '600', color: colors.textSecondary },
+  labelActive: { color: colors.textPrimary },
 });

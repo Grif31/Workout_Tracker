@@ -295,7 +295,8 @@ describe('CoachScreen', () => {
       } } });
       const r = await renderScreen();
       fireEvent.press(r.getByText('Coach'));
-      await waitFor(() => expect(r.getByText(/5 days\/wk/)).toBeTruthy());
+      await waitFor(() => expect(r.getByText('Get stronger · 5 days a week')).toBeTruthy());
+      expect(r.getByText(/Advanced · 45 min · Dumbbells · Easy on knees/)).toBeTruthy();
       expect(JSON.parse((await AsyncStorage.getItem(`${COACH_PROFILE_KEY}_${mockUser.id}`))!).synced).toBe(true);
     });
 
