@@ -122,6 +122,31 @@ describe('WorkoutLog set rows', () => {
     expect(getByDisplayValue('8')).toBeTruthy();
   });
 
+  it("shows last session's bout under a cardio row, prefills it, and copies it back on tap", async () => {
+    mockServer([{ reps: '', weight: '', set_type: 'N', cardio_duration: '25.0', distance: '3.1', distance_unit: 'km', intensity: '8.06' }]);
+    const { findByLabelText, getByLabelText } = render(
+      <WorkoutLog
+        prefill={{
+          name: 'Run', notes: '',
+          exercises: [{ name: 'Running', exercise_template_id: 9, exercise_type: 'cardio', sets: [{ distance_unit: 'mi' }] }],
+        } as any}
+        onSubmit={jest.fn()}
+        onCancel={jest.fn()}
+      />,
+    );
+
+    const prev = await findByLabelText('Use previous: 25 min · 3.1 km');
+    // The untouched bout takes the whole of last session's, unit included
+    await waitFor(() => expect(getByLabelText('Bout 1 duration, minutes').props.value).toBe('25'));
+    expect(getByLabelText('Bout 1 distance').props.value).toBe('3.1');
+    expect(getByLabelText('Bout 1 pace').props.value).toBe('8.06');
+    expect(getByLabelText('Kilometers').props.accessibilityState.selected).toBe(true);
+
+    fireEvent.changeText(getByLabelText('Bout 1 duration, minutes'), '10');
+    fireEvent.press(prev);
+    await waitFor(() => expect(getByLabelText('Bout 1 duration, minutes').props.value).toBe('25'));
+  });
+
   it("doesn't offer to copy into a set that's already checked off", async () => {
     mockServer([{ reps: '8', weight: '185', set_type: 'N' }]);
     const { findByLabelText, getByLabelText, queryByLabelText } = render(

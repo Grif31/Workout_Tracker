@@ -1,4 +1,4 @@
-export type LastSet = { reps: string; weight: string; set_type?: string; rpe?: string };
+export type LastSet = { reps: string; weight: string; set_type?: string; rpe?: string; cardio_duration?: string };
 
 export type OverloadTarget = {
   /** "8 x 185 @ 7": the heaviest working weight from last session */
@@ -70,5 +70,38 @@ export function nextTarget(last: LastSet[] | undefined, weightStep: number): Ove
   return {
     last: lastText, target: withLoad(nextReps, bar + weightStep), reason: 'add_weight',
     why: 'Every set matched, so add weight.',
+  };
+}
+
+// A hold's step: small enough to beat next time, big enough to notice
+const HOLD_STEP_SECS = 5;
+
+const fmtSecs = (secs: number) =>
+  secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+
+/**
+ * The same idea for timed holds (planks, wall sits), whose sets carry a
+ * duration in minutes and no reps: bring the shortest working hold up 5s
+ * until every hold matches the longest, then add 5s to all of them.
+ */
+export function nextHoldTarget(last: LastSet[] | undefined): OverloadTarget | null {
+  const secs = (last ?? [])
+    .filter(s => (s.set_type || 'N') === 'N')
+    .map(s => Math.round(num(s.cardio_duration) * 60))
+    .filter(n => n > 0);
+  if (secs.length === 0) return null;
+
+  const best = Math.max(...secs);
+  const shortest = Math.min(...secs);
+  const lastText = fmtSecs(best);
+  if (shortest < best) {
+    return {
+      last: lastText, target: fmtSecs(Math.min(shortest + HOLD_STEP_SECS, best)), reason: 'add_rep',
+      why: 'Stretch your shortest hold before going longer.',
+    };
+  }
+  return {
+    last: lastText, target: fmtSecs(best + HOLD_STEP_SECS), reason: 'add_weight',
+    why: `Every hold matched, so add ${HOLD_STEP_SECS} seconds.`,
   };
 }

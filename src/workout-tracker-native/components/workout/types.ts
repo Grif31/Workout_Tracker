@@ -41,7 +41,10 @@ export type WorkoutSet = {
   intensity?: string;
 };
 
-export type PreviousSet = { reps: string; weight: string; set_type: string; cardio_duration?: string; rpe?: string };
+export type PreviousSet = {
+  reps: string; weight: string; set_type: string; cardio_duration?: string; rpe?: string;
+  distance?: string; distance_unit?: string; intensity?: string;
+};
 
 export type ExerciseEntry = {
   uid: string;
@@ -101,6 +104,30 @@ export function fmtPrevSet(prev: PreviousSet, bodyweight: boolean): string {
   if (bodyweight) return `${prev.reps} reps`;
   const w = parseFloat(String(prev.weight));
   return `${prev.reps} × ${isNaN(w) ? prev.weight : w}`;
+}
+
+// "25 min · 3.1 mi": last session's bout for a cardio row, empty when it logged neither
+export function fmtPrevBout(prev: PreviousSet): string {
+  const mins = parseFloat(prev.cardio_duration ?? '');
+  const dist = parseFloat(prev.distance ?? '');
+  return [
+    mins > 0 ? `${Math.round(mins * 100) / 100} min` : '',
+    dist > 0 ? `${Math.round(dist * 100) / 100} ${prev.distance_unit || 'mi'}` : '',
+  ].filter(Boolean).join(' · ');
+}
+
+// A cardio row's fields from last session's bout. parseFloat drops the API's ".0".
+export function prevBoutFields(prev: PreviousSet): Partial<WorkoutSet> {
+  const clean = (v: string | undefined) => {
+    const n = parseFloat(v ?? '');
+    return n > 0 ? String(n) : '';
+  };
+  return {
+    cardio_duration: clean(prev.cardio_duration),
+    distance: clean(prev.distance),
+    distance_unit: prev.distance_unit || 'mi',
+    intensity: clean(prev.intensity),
+  };
 }
 
 // "45s" / "1:30" — hold-time display from a minutes value

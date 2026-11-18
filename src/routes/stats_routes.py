@@ -941,6 +941,10 @@ def exercise_last_session():
             'cardio_duration': str(s.cardio_duration) if s.cardio_duration is not None else '',
             # Next-session targets read it; empty when RPE was not logged
             'rpe': str(s.rpe) if s.rpe is not None else '',
+            # Cardio bouts: the Prev line and the prefill need the whole bout
+            'distance': str(s.distance) if s.distance is not None else '',
+            'distance_unit': s.distance_unit or '',
+            'intensity': str(s.intensity) if s.intensity is not None else '',
         }
         for s in sorted_sets
     ]

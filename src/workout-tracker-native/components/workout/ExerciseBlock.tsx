@@ -162,9 +162,11 @@ function ExerciseBlock({
                     key={set.uid}
                     set={set}
                     setIndex={setIndex}
+                    prevSet={exercise.previousSets?.[setIndex]}
                     onChangeField={(field, value) => onUpdateCardioField(exIndex, setIndex, field, value)}
                     onToggleDone={() => onToggleSetDone(exIndex, setIndex)}
                     onDelete={() => onDeleteSet(exIndex, setIndex)}
+                    onCopyPrevious={() => onCopyPrevious(exIndex, setIndex)}
                   />
                 ))}
                 {/* activeOpacity 1: adding a set fires a LayoutAnimation, which

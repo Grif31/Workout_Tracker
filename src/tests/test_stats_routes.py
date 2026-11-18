@@ -2325,6 +2325,19 @@ class TestExerciseLastSession:
         sets = self._get(client, auth_token, 'Bench Press', tid).get_json()['sets']
         assert [s['rpe'] for s in sets] == ['7', '']
 
+    def test_carries_cardio_bout_distance_unit_and_pace(self, client, auth_token):
+        client.post('/api/workouts', json={
+            'workoutName': 'Run', 'exercises': [{
+                'name': 'Running', 'exercise_type': 'cardio',
+                'sets': [{'cardio_duration': 25, 'distance': 3.1, 'distance_unit': 'mi', 'intensity': 8.06},
+                         {'cardio_duration': 5}],
+            }],
+        }, headers=auth_headers(auth_token))
+        sets = self._get(client, auth_token, 'Running').get_json()['sets']
+        assert [(s['cardio_duration'], s['distance'], s['distance_unit'], s['intensity']) for s in sets] == [
+            ('25.0', '3.1', 'mi', '8.06'), ('5.0', '', '', ''),
+        ]
+
     def test_excludes_warmup_sets(self, client, auth_token):
         tid = _create_template(client, auth_token, name='Bench Press')
         client.post('/api/workouts', json={

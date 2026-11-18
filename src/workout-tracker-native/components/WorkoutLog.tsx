@@ -61,6 +61,8 @@ import {
   isBodyweight,
   isDuration,
   makeInitialSet,
+  fmtPrevBout,
+  prevBoutFields,
   usesBodyweightForVolume,
   bodyweightLoadFactor,
   SET_TYPE_NAMES,
@@ -1082,7 +1084,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       const last = ex?.previousSets?.[setIndex];
       if (!ex || !target || !last || target.done) return prev;
       let filled: Partial<WorkoutSet>;
-      if (isDuration(ex)) {
+      if (ex.exercise_type === 'cardio') {
+        if (!fmtPrevBout(last)) return prev;
+        filled = prevBoutFields(last);
+      } else if (isDuration(ex)) {
         const mins = parseFloat(last.cardio_duration ?? '');
         if (!(mins > 0)) return prev;
         filled = { cardio_duration: String(Math.round(mins * 60)) };
@@ -1377,7 +1382,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
 
   // Turn last-session sets into editable set state for this exercise's logging mode
   const prevSetsToEditable = (ex: { exercise_type?: string; equipment?: string }, sets: any[]): WorkoutSet[] =>
-    sets.map((s: any) => isDuration(ex)
+    sets.map((s: any) => ex.exercise_type === 'cardio'
+      ? { ...makeInitialSet(ex), ...prevBoutFields(s) }
+      : isDuration(ex)
       ? {
           uid: makeUid(), reps: '', weight: '', set_type: s.set_type ?? 'N',
           cardio_duration: s.cardio_duration && parseFloat(s.cardio_duration) > 0
@@ -2105,8 +2112,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
                 </TouchableOpacity>
               </>
             )}
-            {isPremium && exercises[renderedMenuIdx]?.exercise_type !== 'cardio' && !isDuration(exercises[renderedMenuIdx])
-              && targetFor(exercises[renderedMenuIdx]?.previousSets, weightUnit) && (
+            {isPremium && targetFor(exercises[renderedMenuIdx], weightUnit) && (
               <>
                 <View style={[styles.exMenuDivider, { backgroundColor: colors.border }]} />
                 <TouchableOpacity style={styles.exMenuItem} onPress={() => showNextTarget(renderedMenuIdx!)}>

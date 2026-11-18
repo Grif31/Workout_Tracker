@@ -4,18 +4,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { type WorkoutSet, colStyles } from './types';
+import { type WorkoutSet, type PreviousSet, colStyles, fmtPrevBout } from './types';
 import SwipeToDelete from './SwipeToDelete';
 
 type Props = {
   set: WorkoutSet;
   setIndex: number;
+  /** Last session's bout in the same position */
+  prevSet?: PreviousSet;
   onChangeField: (field: string, value: string) => void;
   onToggleDone: () => void;
   onDelete: () => void;
+  /** Copies last session's bout into this one */
+  onCopyPrevious?: () => void;
 };
 
-function CardioSetRow({ set, setIndex, onChangeField, onToggleDone, onDelete }: Props) {
+function CardioSetRow({ set, setIndex, prevSet, onChangeField, onToggleDone, onDelete, onCopyPrevious }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const isDone = set.done ?? false;
@@ -49,6 +53,8 @@ function CardioSetRow({ set, setIndex, onChangeField, onToggleDone, onDelete }: 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
   const unit = set.distance_unit || 'mi';
+  const prevText = prevSet ? fmtPrevBout(prevSet) : '';
+  const canCopyPrevious = !!prevText && !isDone && !running && !!onCopyPrevious;
 
   return (
     <SwipeToDelete onDelete={onDelete} deleteLabel={`Delete bout ${setIndex + 1}`}>
@@ -124,6 +130,20 @@ function CardioSetRow({ set, setIndex, onChangeField, onToggleDone, onDelete }: 
               onChangeText={val => onChangeField('intensity', val)}
             />
           </View>
+          {!!prevText && (
+            <TouchableOpacity
+              style={styles.prevLine}
+              onPress={onCopyPrevious}
+              disabled={!canCopyPrevious}
+              accessibilityRole={canCopyPrevious ? 'button' : undefined}
+              accessibilityLabel={canCopyPrevious ? `Use previous: ${prevText}` : `Previous: ${prevText}`}
+              hitSlop={4}
+            >
+              <Text style={[styles.prevText, canCopyPrevious && styles.prevTextTappable]} numberOfLines={1}>
+                Prev: {prevText}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
         <TouchableOpacity
           style={[styles.checkBtn, colStyles.check]}
@@ -226,4 +246,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     backgroundColor: colors.background,
   },
   cardioUnitText: { fontSize: typography.fontSize.xs, fontWeight: '700' },
+  // Same look as the Prev column on strength and hold rows
+  prevLine: { alignSelf: 'flex-start' },
+  prevText: { fontSize: typography.fontSize.sm, color: colors.textSecondary },
+  prevTextTappable: { color: colors.textPrimary },
 });

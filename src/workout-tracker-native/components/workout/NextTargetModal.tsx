@@ -2,18 +2,23 @@ import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
-import { nextTarget, type LastSet, type OverloadTarget } from '../../utils/overloadTarget';
+import { nextTarget, nextHoldTarget, type LastSet, type OverloadTarget } from '../../utils/overloadTarget';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 
 /** The target for an exercise, or null when last session gives nothing to build on. */
-export function targetFor(previousSets: LastSet[] | undefined, weightUnit: string): OverloadTarget | null {
-  return nextTarget(previousSets, weightUnit === 'kg' ? 2.5 : 5);
+export function targetFor(
+  exercise: { exercise_type?: string; previousSets?: LastSet[] } | undefined,
+  weightUnit: string,
+): OverloadTarget | null {
+  if (!exercise || exercise.exercise_type === 'cardio') return null;
+  if (exercise.exercise_type === 'duration') return nextHoldTarget(exercise.previousSets);
+  return nextTarget(exercise.previousSets, weightUnit === 'kg' ? 2.5 : 5);
 }
 
 type Props = {
   /** The exercise asked about; null keeps the sheet closed */
-  exercise: { name: string; previousSets?: LastSet[] } | null;
+  exercise: { name: string; exercise_type?: string; previousSets?: LastSet[] } | null;
   weightUnit: string;
   onClose: () => void;
 };
@@ -22,7 +27,7 @@ type Props = {
 export default function NextTargetModal({ exercise, weightUnit, onClose }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const target = exercise ? targetFor(exercise.previousSets, weightUnit) : null;
+  const target = exercise ? targetFor(exercise, weightUnit) : null;
   // "8 x 185 @ 7" becomes "8 x 185 lbs @ 7"; whole-rep targets ("9 reps") carry no load to label
   const withUnit = (text: string) => text.replace(/^(\d+(?:\.\d+)? x \d+(?:\.\d+)?)/, `$1 ${weightUnit}`);
 
