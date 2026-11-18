@@ -95,6 +95,7 @@ A tracked run (`GPSCardioScreen`) lives in `context/GpsRunContext.tsx`, mounted 
 | `rest_timer_notif_id` | — | Id of the pending rest-timer alert, so it can be cancelled |
 | `trial_reminder_notif_id` | — | Id of the scheduled trial-ending reminder, so it can be cancelled |
 | `secure_token_store_ready` | — | Marks that this install set up its SecureStore tokens. Never cleared on logout: iOS keeps keychain items across an uninstall and AsyncStorage doesn't, so a missing marker is how `loadTokens` recognises a fresh install and drops a previous install's tokens. Its first absence on an updated install is also when the pre-SecureStore AsyncStorage tokens get migrated |
+| `review_prompt_state` | — | Store review prompt state (`utils/reviewPrompt.ts`): first seen, workouts saved (counted once per Workout Summary, so imports never count), last ask and its app version. Device-level because Apple caps the prompt per device. Asked after 3 saves and 7 days, at most every 90 days and once per version, on a PR, rank-up or achievement, or at 10/25/50/100 saves |
 | `widget_snapshot` | — | Everything the home screen widgets show, as one versioned JSON blob for whoever is logged in (`WIDGET_SNAPSHOT_KEY`, `utils/widgetSnapshot.ts`). Written only through `utils/widgetData.ts`; cleared on logout and login (see Home screen widgets) |
 
 **Per-user (key includes user ID suffix `_${userId}`):**

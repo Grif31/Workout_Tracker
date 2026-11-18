@@ -42,6 +42,7 @@ import { decodeRouteSegments, regionFor, thinSegments } from '../../utils/routeS
 import { isCycling, speedInUnit, speedLabel } from '../../utils/gpsMetrics';
 import { bestEffortLabel, type BestEffort } from '../../utils/bestEfforts';
 import { fmtRaceTime } from '../../utils/cardioFormat';
+import { maybeRequestReview, recordWorkoutSaved, type ReviewMoment } from '../../utils/reviewPrompt';
 
 // react-native-maps needs a development build; without it the route card has no map
 let _MapsModule: any = null;
@@ -266,6 +267,31 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
     if (!newAchievements.length || unlockShown.current || !rankSettled || reduceMotion === null) return;
     const after = previousRank ? 3000 : filteredPrs.length > 0 ? 1700 : 900;
     const t = setTimeout(() => { unlockShown.current = true; setUnlockOpen(true); }, Math.max(0, after - (Date.now() - mountedAt)));
+    return () => clearTimeout(t);
+  }, [rankSettled, reduceMotion]);
+
+  // Only new saves reach this screen (edits go back to the details), so this
+  // counts each logged workout once and never an imported one
+  const savedRecorded = useRef<Promise<void>>(Promise.resolve());
+  useEffect(() => { savedRecorded.current = recordWorkoutSaved(); }, []);
+
+  // The store review is asked for after the celebrations, never over them:
+  // when the unlock sheet closes, or once the PRs and promotion have played.
+  // Leaving the screen first means no ask this time
+  const reviewAsked = useRef(false);
+  const askForReview = () => {
+    if (reviewAsked.current) return;
+    reviewAsked.current = true;
+    const moment: ReviewMoment = previousRank ? 'rank_up'
+      : newAchievements.length ? 'achievement'
+      : filteredPrs.length > 0 ? 'pr'
+      : 'saved';
+    savedRecorded.current.then(() => maybeRequestReview(moment));
+  };
+  useEffect(() => {
+    if (newAchievements.length || !rankSettled || reduceMotion === null) return;
+    const after = (previousRank ? 3000 : filteredPrs.length > 0 ? 1700 : 900) + 1500;
+    const t = setTimeout(askForReview, Math.max(0, after - (Date.now() - mountedAt)));
     return () => clearTimeout(t);
   }, [rankSettled, reduceMotion]);
 
@@ -710,7 +736,7 @@ export default function WorkoutSummaryScreen({ route, navigation }: Props) {
           weightUnit={weightUnit}
           distanceUnit={distanceUnit}
           reduceMotion={reduceMotion}
-          onClose={() => setUnlockOpen(false)}
+          onClose={() => { setUnlockOpen(false); askForReview(); }}
           onOpenTrophyHall={() => (navigation as any).navigate('ProfileTab', { screen: 'Achievements', initial: false })}
         />
       )}

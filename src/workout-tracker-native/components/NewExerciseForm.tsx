@@ -8,6 +8,12 @@ import { equipmentTypes } from '../constants/equipmentTypes';
 
 export type NewExerciseType = 'strength' | 'duration' | 'distance';
 
+// 'distance' is the form's label for what the backend calls 'cardio'; sending
+// it as-is is a 400 (ExerciseSchema only accepts strength, cardio, duration)
+export function toBackendExerciseType(type?: string): 'strength' | 'cardio' | 'duration' {
+  return type === 'distance' || type === 'cardio' ? 'cardio' : type === 'duration' ? 'duration' : 'strength';
+}
+
 type Props = {
   visible: boolean;
   onClose: () => void;

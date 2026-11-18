@@ -1,6 +1,6 @@
 ﻿import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import NewExerciseForm from '../components/NewExerciseForm';
+import NewExerciseForm, { toBackendExerciseType } from '../components/NewExerciseForm';
 
 jest.mock('../theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 }, radius: { sm: 8, md: 12, lg: 16, full: 9999 } }));
 jest.mock('../theme/typography', () => ({ typography: { fontSize: { sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));
@@ -100,5 +100,15 @@ describe('NewExerciseForm', () => {
     );
     expect(getByText('Chest')).toBeTruthy();
     expect(getByText('Back')).toBeTruthy();
+  });
+});
+
+describe('toBackendExerciseType', () => {
+  it("sends the form's 'distance' as the backend's 'cardio', the only values ExerciseSchema accepts", () => {
+    expect(toBackendExerciseType('distance')).toBe('cardio');
+    expect(toBackendExerciseType('cardio')).toBe('cardio');
+    expect(toBackendExerciseType('duration')).toBe('duration');
+    expect(toBackendExerciseType('strength')).toBe('strength');
+    expect(toBackendExerciseType(undefined)).toBe('strength');
   });
 });

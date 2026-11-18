@@ -17,6 +17,7 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { apiFetch, isNetworkError } from '../../utils/api';
+import { toBackendExerciseType } from '../../components/NewExerciseForm';
 import { showToast } from '../../utils/toast';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
@@ -404,11 +405,11 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         // Single-select when swapping an exercise; multi-select when adding.
         multiSelect={switchExId == null}
         initialMuscle={targetMuscles?.[0]}
-        onAddExercise={async (name, muscle, _equipment, exerciseType) => {
+        onAddExercise={async (name, muscle, equipment, exerciseType) => {
           const res = await apiFetch('/api/exercises', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, muscle_group: muscle, exercise_type: exerciseType ?? 'strength' }),
+            body: JSON.stringify({ name, muscle_group: muscle, equipment, exercise_type: toBackendExerciseType(exerciseType) }),
           });
           if (res.ok) await loadExerciseList(user?.id, data => setAllExercises(data as Exercise[]));
         }}

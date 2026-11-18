@@ -9,6 +9,7 @@ import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch, isNetworkError } from '../../utils/api';
+import { toBackendExerciseType } from '../../components/NewExerciseForm';
 import { useDiscardGuard } from '../../utils/useDiscardGuard';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
@@ -403,7 +404,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
           const res = await apiFetch('/api/exercises', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: exName, muscle_group: muscle, equipment, exercise_type: exerciseType ?? 'strength' }),
+            body: JSON.stringify({ name: exName, muscle_group: muscle, equipment, exercise_type: toBackendExerciseType(exerciseType) }),
           });
           if (res.ok) {
             await loadExerciseList(user?.id, data => setAllExercises(data as AllExercise[]));

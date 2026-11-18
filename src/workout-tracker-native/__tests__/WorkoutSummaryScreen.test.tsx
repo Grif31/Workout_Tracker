@@ -26,6 +26,11 @@ jest.mock('react-native-maps', () => {
   return { __esModule: true, default: MapView, Polyline: (props: any) => <View {...props} /> };
 });
 jest.mock('theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20, xl: 22 } } }), { virtual: true });
+jest.mock('../utils/reviewPrompt', () => ({
+  recordWorkoutSaved: jest.fn(() => Promise.resolve()),
+  maybeRequestReview: jest.fn(() => Promise.resolve(false)),
+}));
+const { recordWorkoutSaved, maybeRequestReview } = jest.requireMock('../utils/reviewPrompt');
 
 type Server = { workout?: any; workoutStatus?: number; rank?: any };
 function mockServer({ workout = {}, workoutStatus = 200, rank = null }: Server) {
@@ -266,6 +271,47 @@ describe('WorkoutSummaryScreen', () => {
     await findByText('Volume (lbs)');
     await new Promise(r => setTimeout(r, 1000));
     expect(queryByText('ACHIEVEMENT UNLOCKED')).toBeNull();
+  });
+
+  describe('store review', () => {
+    beforeEach(() => { recordWorkoutSaved.mockClear(); maybeRequestReview.mockClear(); });
+
+    it('counts the save once and asks after a plain workout settles', async () => {
+      mockServer({ workout: strengthWorkout });
+      renderSummary();
+      expect(recordWorkoutSaved).toHaveBeenCalledTimes(1);
+      expect(maybeRequestReview).not.toHaveBeenCalled();
+      await waitFor(() => expect(maybeRequestReview).toHaveBeenCalledWith('saved'), { timeout: 4000 });
+      expect(recordWorkoutSaved).toHaveBeenCalledTimes(1);
+    });
+
+    it('asks as a PR moment when the workout set a record', async () => {
+      mockServer({ workout: strengthWorkout });
+      renderSummary({ prs: [{ exercise_name: 'Bench Press', pr_type: 'max_weight', value: 185 }] });
+      await waitFor(() => expect(maybeRequestReview).toHaveBeenCalledWith('pr'), { timeout: 5000 });
+    });
+
+    it('waits for the unlock sheet to close before asking', async () => {
+      mockServer({ workout: strengthWorkout });
+      const { findByText } = renderSummary({ newAchievements: [{
+        key: 'workouts_5', kind: 'ladder', title: 'Hekaton', earned_at: '2026-03-05T18:00:00', workout_id: 42,
+        track: 'workouts', rung: 5, of: 8, threshold: 100, unit: 'any', next: null,
+      }] });
+      const cont = await findByText('Continue', {}, { timeout: 3000 });
+      await new Promise(r => setTimeout(r, 2500));
+      expect(maybeRequestReview).not.toHaveBeenCalled();
+      fireEvent.press(cont);
+      await waitFor(() => expect(maybeRequestReview).toHaveBeenCalledWith('achievement'));
+    });
+
+    it('never asks once the screen is gone', async () => {
+      mockServer({ workout: strengthWorkout });
+      const r = renderSummary();
+      await r.findByText('Volume (lbs)');
+      r.unmount();
+      await new Promise(res => setTimeout(res, 2600));
+      expect(maybeRequestReview).not.toHaveBeenCalled();
+    });
   });
 
   it('says so and offers a retry when the sets fail to load', async () => {
