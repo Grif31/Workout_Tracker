@@ -20,13 +20,13 @@ import {
   hasNotificationPermission,
   scheduleWorkoutReminder,
   cancelWorkoutReminder,
+  reminderHourMinute,
 } from '../../utils/notifications';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'NotificationSettings'>;
 
 export function formatReminderTime(hour: string | null, minute: string | null) {
-  const h = parseInt(hour ?? '', 10) || 9;
-  const m = parseInt(minute ?? '', 10) || 0;
+  const [h, m] = reminderHourMinute(hour, minute);
   const period = h >= 12 ? 'PM' : 'AM';
   return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${period}`;
 }
@@ -82,7 +82,7 @@ export default function NotificationSettingsScreen({ navigation }: Props) {
 
   const getReminderDate = () => {
     const d = new Date();
-    d.setHours(parseInt(reminderHour, 10) || 9, parseInt(reminderMin, 10) || 0, 0, 0);
+    d.setHours(...reminderHourMinute(reminderHour, reminderMin), 0, 0);
     return d;
   };
 
@@ -115,9 +115,7 @@ export default function NotificationSettingsScreen({ navigation }: Props) {
                   if (!(await ensurePermission())) return;
                   setRemindersOn(true);
                   await AsyncStorage.setItem(perUserRemindersKey, 'true');
-                  const h = parseInt(reminderHour, 10) || 9;
-                  const m = parseInt(reminderMin, 10) || 0;
-                  scheduleWorkoutReminder(h, m);
+                  scheduleWorkoutReminder(...reminderHourMinute(reminderHour, reminderMin));
                 } else {
                   setRemindersOn(false);
                   await AsyncStorage.setItem(perUserRemindersKey, 'false');

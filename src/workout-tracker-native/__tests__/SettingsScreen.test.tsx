@@ -2,9 +2,7 @@ import React from 'react';
 import { Alert } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { mockFetch, createMockNavigation, createMockRoute } from './testUtils';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import SettingsScreen from '../screens/ProfileTab/SettingsScreen';
-import { hasNotificationPermission } from '../utils/notifications';
 
 // Alert stand-in that answers the unit switch's confirmation with "Convert"
 const confirmingAlert = (_t: string, _m?: string, buttons?: any[]) =>
@@ -50,9 +48,12 @@ describe('SettingsScreen', () => {
     expect(getByText('Terms of Service')).toBeTruthy();
   });
 
-  it('shows the Contact Support row', () => {
-    const { getByText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
-    expect(getByText('Contact Support')).toBeTruthy();
+  it('opens the Contact Us sheet with email and bug report options', () => {
+    const { getByLabelText, queryByText, getByText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
+    expect(queryByText('Report a Bug')).toBeNull();
+    fireEvent.press(getByLabelText('Contact Us'));
+    expect(getByText('Email Us')).toBeTruthy();
+    expect(getByText('Report a Bug')).toBeTruthy();
   });
 
   describe('weight unit toggle', () => {
@@ -125,55 +126,14 @@ describe('SettingsScreen', () => {
     spy.mockRestore();
   });
 
-  describe('reminders', () => {
-    beforeEach(() => AsyncStorage.clear());
-
-    it("shows reminders off and stores that when the phone blocks notifications", async () => {
-      await AsyncStorage.setItem('workout_reminders_enabled_1', 'true');
-      (hasNotificationPermission as jest.Mock).mockResolvedValueOnce(false);
-      const { getByLabelText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
-
-      await waitFor(async () => expect(await AsyncStorage.getItem('workout_reminders_enabled_1')).toBe('false'));
-      expect(getByLabelText('Workout reminders').props.value).toBe(false);
-    });
-
-    it('shows reminders on when they are on and allowed', async () => {
-      await AsyncStorage.setItem('workout_reminders_enabled_1', 'true');
-      const { getByLabelText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
-      await waitFor(() => expect(getByLabelText('Workout reminders').props.value).toBe(true));
-    });
-  });
-
-  describe('GPS activities', () => {
-    beforeEach(() => AsyncStorage.clear());
-
-    it('has auto-pause on and keep screen on off until changed', async () => {
-      const { getByLabelText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
-      await waitFor(() => expect(getByLabelText('Auto-pause').props.value).toBe(true));
-      expect(getByLabelText('Keep screen on during GPS activities').props.value).toBe(false);
-    });
-
-    it('stores each switch for this account', async () => {
-      const { getByLabelText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
-      await waitFor(() => expect(getByLabelText('Auto-pause').props.value).toBe(true));
-      fireEvent(getByLabelText('Auto-pause'), 'valueChange', false);
-      fireEvent(getByLabelText('Keep screen on during GPS activities'), 'valueChange', true);
-      await waitFor(async () => expect(await AsyncStorage.getItem('gps_auto_pause_1')).toBe('false'));
-      expect(await AsyncStorage.getItem('gps_keep_screen_on_1')).toBe('true');
-    });
-
-    it('shows what was stored', async () => {
-      await AsyncStorage.multiSet([['gps_auto_pause_1', 'false'], ['gps_keep_screen_on_1', 'true']]);
-      const { getByLabelText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
-      await waitFor(() => expect(getByLabelText('Auto-pause').props.value).toBe(false));
-      expect(getByLabelText('Keep screen on during GPS activities').props.value).toBe(true);
-    });
-  });
-
-  it('opens the Workout settings from its row', () => {
-    const { getAllByText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
-    // The section label reads the same; the row is the second
-    fireEvent.press(getAllByText('Workout')[1]);
-    expect(nav.navigate).toHaveBeenCalledWith('WorkoutSettings');
+  it.each([
+    ['Workout', 'WorkoutSettings'],
+    ['GPS Activities', 'GpsSettings'],
+    ['Notifications', 'NotificationSettings'],
+    ['FAQ', 'HelpFaq'],
+  ])('opens %s from its row', (label, screen) => {
+    const { getByLabelText } = render(<SettingsScreen navigation={nav as any} route={route as any} />);
+    fireEvent.press(getByLabelText(label));
+    expect(nav.navigate).toHaveBeenCalledWith(screen);
   });
 });
