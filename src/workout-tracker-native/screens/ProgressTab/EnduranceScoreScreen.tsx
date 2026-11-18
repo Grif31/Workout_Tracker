@@ -296,7 +296,7 @@ export default function EnduranceScoreScreen({ navigation }: Props) {
                 </Text>
               )}
             </View>
-            <PercentileBar minPercent={MIN_BAR_PERCENT} percent={row.percentile} color={rowColor} trackColor={colors.border} delay={i * 40} />
+            <PercentileBar minPercent={MIN_BAR_PERCENT} percent={row.percentile} color={rowText} trackColor={colors.border} delay={i * 40} />
             {next && (
               <Text style={styles.nextText}>
                 {next.rank} at {fmtRaceTime(next.pace_min_per_km * row.distance_km)}

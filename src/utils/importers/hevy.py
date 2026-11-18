@@ -46,7 +46,8 @@ def parse(text: str) -> ParsedFile:
         # A new exercise whenever the title changes: the same lift done twice
         # in one session stays two entries, as it was logged
         if not w.exercises or w.exercises[-1].title != exercise_title:
-            w.exercises.append(ParsedExercise(title=exercise_title))
+            w.exercises.append(ParsedExercise(title=exercise_title,
+                                              superset=(row.get('superset_id') or '').strip() or None))
         # Notes may sit on any of the exercise's rows, not only its first
         if not w.exercises[-1].notes and row.get('exercise_notes'):
             w.exercises[-1].notes = row.get('exercise_notes')

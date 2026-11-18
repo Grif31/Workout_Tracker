@@ -40,6 +40,11 @@ type Props = {
   onRegisterInput?: (exIndex: number, setIdx: number, field: 'reps' | 'weight', ref: any) => void;
   /** Near-PR hint for the currently focused set in this exercise, if any */
   prHint?: { setIdx: number; text: string } | null;
+  /** "A1", "A2"... when in a superset. Primitives, not an object, so memo still skips */
+  supersetLabel?: string;
+  supersetSize?: number;
+  /** Where in its superset this block sits: the rail joins first and middle blocks to the next */
+  supersetEdge?: 'first' | 'middle' | 'last';
 };
 
 function ExerciseBlock({
@@ -65,13 +70,26 @@ function ExerciseBlock({
   onUpdateCardioField,
   onRegisterInput,
   prHint,
+  supersetLabel,
+  supersetSize,
+  supersetEdge,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const bodyweight = isBodyweight(exercise);
 
   return (
-    <View style={styles.exerciseBlock}>
+    <View style={[
+      styles.exerciseBlock,
+      !!supersetLabel && styles.supersetBlock,
+      (supersetEdge === 'first' || supersetEdge === 'middle') && styles.supersetJoined,
+    ]}>
+        {supersetEdge === 'first' && !!supersetLabel && (
+          <View style={styles.supersetCaption}>
+            <Ionicons name="link" size={13} color={colors.accent} />
+            <Text style={[styles.supersetCaptionText, { color: colors.accent }]}>Superset {supersetLabel.charAt(0)}</Text>
+          </View>
+        )}
 
         {/* Exercise header */}
         <View style={styles.exHeaderRow}>
@@ -85,7 +103,17 @@ function ExerciseBlock({
             )}
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.exerciseName}>{exercise.name}</Text>
+            <View style={styles.exNameRow}>
+              {!!supersetLabel && (
+                <Text
+                  style={[styles.supersetChip, { backgroundColor: colors.accent, color: colors.accentText }]}
+                  accessibilityLabel={`Superset ${supersetLabel.charAt(0)}, exercise ${supersetLabel.slice(1)} of ${supersetSize}`}
+                >
+                  {supersetLabel}
+                </Text>
+              )}
+              <Text style={[styles.exerciseName, { flexShrink: 1 }]}>{exercise.name}</Text>
+            </View>
             {!!exercise.equipment && (
               <Text style={[styles.exerciseEquipment, { color: colors.textSecondary }]}>{exercise.equipment}</Text>
             )}
@@ -134,8 +162,11 @@ function ExerciseBlock({
                     key={set.uid}
                     set={set}
                     setIndex={setIndex}
+                    prevSet={exercise.previousSets?.[setIndex]}
                     onChangeField={(field, value) => onUpdateCardioField(exIndex, setIndex, field, value)}
+                    onToggleDone={() => onToggleSetDone(exIndex, setIndex)}
                     onDelete={() => onDeleteSet(exIndex, setIndex)}
+                    onCopyPrevious={() => onCopyPrevious(exIndex, setIndex)}
                   />
                 ))}
                 {/* activeOpacity 1: adding a set fires a LayoutAnimation, which
@@ -169,6 +200,7 @@ function ExerciseBlock({
                     onToggleDone={() => onToggleSetDone(exIndex, setIndex)}
                     onDelete={() => onDeleteSet(exIndex, setIndex)}
                     onCopyPrevious={() => onCopyPrevious(exIndex, setIndex)}
+                    registerInputRef={ref => onRegisterInput?.(exIndex, setIndex, 'reps', ref)}
                   />
                 ))}
 
@@ -247,6 +279,16 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: colors.border,
+  },
+  // The accent rail down the left joins a superset's blocks into one unit
+  supersetBlock: { borderLeftWidth: 4, borderLeftColor: colors.accent },
+  supersetJoined: { marginBottom: 0, borderBottomWidth: 0 },
+  supersetCaption: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
+  supersetCaptionText: { fontSize: typography.fontSize.xs, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  exNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  supersetChip: {
+    fontSize: typography.fontSize.xs, fontWeight: '700', borderRadius: radius.sm,
+    paddingHorizontal: 6, paddingVertical: 1, overflow: 'hidden',
   },
   exHeaderRow: {
     flexDirection: 'row',

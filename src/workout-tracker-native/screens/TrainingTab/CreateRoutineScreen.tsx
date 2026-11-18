@@ -15,6 +15,7 @@ import { makeUid } from '../../components/workout/types';
 import { animateNextRowChange } from '../../utils/layoutAnimation';
 
 import { apiFetch, isNetworkError } from '../../utils/api';
+import { toBackendExerciseType } from '../../components/NewExerciseForm';
 import { showToast } from '../../utils/toast';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
@@ -120,12 +121,12 @@ export default function CreateRoutineScreen({ route, navigation }: Props) {
     if (isEditing) fetchRoutine();
   }, []);
 
-  const addNewExerciseToLib = async (name: string, muscle: string) => {
+  const addNewExerciseToLib = async (name: string, muscle: string, equipment?: string, exerciseType?: string) => {
     try {
       const res = await apiFetch('/api/exercises', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, muscle_group: muscle }),
+        body: JSON.stringify({ name, muscle_group: muscle, equipment, exercise_type: toBackendExerciseType(exerciseType) }),
       });
       if (res.ok) fetchExercises();
     } catch {}

@@ -63,6 +63,53 @@ describe('WorkoutLog set rows', () => {
     expect(getAllByPlaceholderText('—').map(i => i.props.value)).toEqual(['5', '225', '3', '245']);
   });
 
+  it('deletes a cardio bout from the same swipe action as a strength set', async () => {
+    mockServer();
+    const { getByLabelText, queryByDisplayValue, findByText } = render(
+      <WorkoutLog
+        prefill={{
+          name: 'Warm-up', notes: '',
+          exercises: [{
+            name: 'Cycling', exercise_template_id: 9, exercise_type: 'cardio', equipment: 'Stationary Bike',
+            sets: [{ cardio_duration: 4, distance: 1.2, distance_unit: 'mi' }, { cardio_duration: 6, distance: 2, distance_unit: 'mi' }],
+          }],
+        } as any}
+        onSubmit={jest.fn()}
+        onCancel={jest.fn()}
+      />,
+    );
+
+    fireEvent.press(getByLabelText('Delete bout 1'));
+    expect(queryByDisplayValue('1.2')).toBeNull();
+    expect(queryByDisplayValue('2')).toBeTruthy();
+    expect(await findByText('Bout 1 removed from Cycling')).toBeTruthy();
+  });
+
+  it('checks off a cardio bout once it has a time or distance, so the workout can move past it', () => {
+    mockServer();
+    const { getByLabelText } = render(
+      <WorkoutLog
+        prefill={{
+          name: 'Warm-up', notes: '',
+          exercises: [{
+            name: 'Cycling', exercise_template_id: 9, exercise_type: 'cardio', equipment: 'Stationary Bike',
+            sets: [{ cardio_duration: 4, distance_unit: 'mi' }, { distance_unit: 'mi' }],
+          }],
+        } as any}
+        onSubmit={jest.fn()}
+        onCancel={jest.fn()}
+      />,
+    );
+
+    fireEvent.press(getByLabelText('Bout 1 done'));
+    expect(getByLabelText('Bout 1 done').props.accessibilityState.checked).toBe(true);
+    expect(getByLabelText('Bout 1 duration, minutes').props.editable).toBe(false);
+
+    // An empty bout has nothing to log
+    fireEvent.press(getByLabelText('Bout 2 done'));
+    expect(getByLabelText('Bout 2 done').props.accessibilityState.checked).toBe(false);
+  });
+
   it("fills a set from the Prev column", async () => {
     mockServer([{ reps: '8', weight: '185.0', set_type: 'N' }]);
     const { findByLabelText, getByDisplayValue } = render(
@@ -73,6 +120,31 @@ describe('WorkoutLog set rows', () => {
     fireEvent.press(await findByLabelText('Use previous: 8 × 185'));
     await waitFor(() => expect(getByDisplayValue('185')).toBeTruthy());
     expect(getByDisplayValue('8')).toBeTruthy();
+  });
+
+  it("shows last session's bout under a cardio row, prefills it, and copies it back on tap", async () => {
+    mockServer([{ reps: '', weight: '', set_type: 'N', cardio_duration: '25.0', distance: '3.1', distance_unit: 'km', intensity: '8.06' }]);
+    const { findByLabelText, getByLabelText } = render(
+      <WorkoutLog
+        prefill={{
+          name: 'Run', notes: '',
+          exercises: [{ name: 'Running', exercise_template_id: 9, exercise_type: 'cardio', sets: [{ distance_unit: 'mi' }] }],
+        } as any}
+        onSubmit={jest.fn()}
+        onCancel={jest.fn()}
+      />,
+    );
+
+    const prev = await findByLabelText('Use previous: 25 min · 3.1 km');
+    // The untouched bout takes the whole of last session's, unit included
+    await waitFor(() => expect(getByLabelText('Bout 1 duration, minutes').props.value).toBe('25'));
+    expect(getByLabelText('Bout 1 distance').props.value).toBe('3.1');
+    expect(getByLabelText('Bout 1 pace').props.value).toBe('8.06');
+    expect(getByLabelText('Kilometers').props.accessibilityState.selected).toBe(true);
+
+    fireEvent.changeText(getByLabelText('Bout 1 duration, minutes'), '10');
+    fireEvent.press(prev);
+    await waitFor(() => expect(getByLabelText('Bout 1 duration, minutes').props.value).toBe('25'));
   });
 
   it("doesn't offer to copy into a set that's already checked off", async () => {

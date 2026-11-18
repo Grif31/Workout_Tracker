@@ -66,9 +66,11 @@ class DeviceTokenSchema(_Base):
 
 # ── Exercise ─────────────────────────────────────────────────
 class ExerciseSchema(_Base):
-    name          = fields.Str(required=True, validate=validate.Length(min=1))
-    muscle_group  = fields.Str(load_default=None)
-    equipment     = fields.Str(load_default=None)
+    # Column widths: ExerciseTemplate.name 250, equipment 100. muscle_group is a
+    # comma list split into rows (see exercise_routes.muscle_parts)
+    name          = fields.Str(required=True, validate=validate.Length(min=1, max=250))
+    muscle_group  = fields.Str(load_default=None, validate=validate.Length(max=500))
+    equipment     = fields.Str(load_default=None, validate=validate.Length(max=100))
     exercise_type = fields.Str(load_default='strength', validate=validate.OneOf(['strength', 'cardio', 'duration']))
 
 # ── Workout ───────────────────────────────────────────────────
@@ -290,11 +292,15 @@ class WorkoutTemplateSchema(_Base):
     # template on its first save, so programming entered beforehand has to
     # arrive with the POST rather than a later PATCH.
     programming           = fields.List(fields.Dict(), load_default=None, validate=validate.Length(max=MAX_LIST))
+    # One superset key (or None) per exercise_template_ids entry. Raw: a bad
+    # entry only loses its grouping (utils/exercise_access.add_template_exercises)
+    superset_groups       = fields.Raw(load_default=None)
 
 class UpdateWorkoutTemplateSchema(_Base):
     name                  = fields.Str()
     exercise_template_ids = fields.List(fields.Int())
     programming           = fields.List(fields.Dict(), allow_none=True, validate=validate.Length(max=MAX_LIST))
+    superset_groups       = fields.Raw()
 
 # ── Bodyweight ────────────────────────────────────────────────
 class BodyweightSchema(_Base):
@@ -363,6 +369,8 @@ class _AiSaveDaySchema(_Base):
                                validate=validate.Length(max=AI_SAVE_MAX_EXERCISES))
     programming  = fields.List(fields.Dict(), load_default=None, allow_none=True,
                                validate=validate.Length(max=AI_SAVE_MAX_EXERCISES))
+    # One superset key or None per exercise_ids entry (see WorkoutTemplateSchema)
+    superset_groups = fields.Raw(load_default=None)
 
 class AiSaveSchema(_Base):
     type         = fields.Str(required=True, validate=validate.OneOf(['routine', 'template']))
@@ -375,6 +383,7 @@ class AiSaveSchema(_Base):
     programming  = fields.List(fields.Dict(), load_default=None, allow_none=True,
                                validate=validate.Length(max=AI_SAVE_MAX_EXERCISES))
     starter      = fields.Bool(load_default=False)
+    superset_groups = fields.Raw(load_default=None)
 
 class AiInsightsSchema(_Base):
     # Left out, each falls back to the stored coach profile; an empty avoid

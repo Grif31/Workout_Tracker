@@ -53,7 +53,7 @@ def create_routine():
             _apply_day_programming(template, day)
             db.session.add(template)
             db.session.flush()
-            add_template_exercises(template.id, user_id, day.get('exercise_template_ids', []))
+            add_template_exercises(template.id, user_id, day.get('exercise_template_ids', []), day.get('superset_groups'))
 
         routine_day = RoutineDay(
             routine_id=routine.id,
@@ -122,7 +122,7 @@ def update_routine(routine_id):
                 _apply_day_programming(template, day)
                 db.session.add(template)
                 db.session.flush()
-                add_template_exercises(template.id, user_id, day.get('exercise_template_ids', []))
+                add_template_exercises(template.id, user_id, day.get('exercise_template_ids', []), day.get('superset_groups'))
 
             db.session.add(RoutineDay(
                 routine_id=routine.id,

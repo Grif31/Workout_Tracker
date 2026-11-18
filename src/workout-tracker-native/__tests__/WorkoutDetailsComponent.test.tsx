@@ -52,3 +52,34 @@ describe('WorkoutDetails component', () => {
     await waitFor(() => expect(getAllByText(/1h/).length).toBeGreaterThan(0));
   });
 });
+
+describe('WorkoutDetails save as template', () => {
+  it('keeps each superset group with its exercise when a non-library one is left out', async () => {
+    const sheet = require('@expo/react-native-action-sheet');
+    let chooseOption: any = null;
+    let sheetOptions: string[] = [];
+    jest.spyOn(sheet, 'useActionSheet').mockReturnValue({
+      showActionSheetWithOptions: (opts: any, cb: any) => { sheetOptions = opts.options; chooseOption = cb; },
+    });
+    const workout = {
+      ...mockWorkout,
+      exercises: [
+        { id: 1, name: 'Custom Thing', exercise_template_id: null, superset_group: null, sets: [] },
+        { id: 2, name: 'Bench Press', exercise_template_id: 10, superset_group: 1, sets: [] },
+        { id: 3, name: 'Barbell Row', exercise_template_id: 11, superset_group: 1, sets: [] },
+      ],
+    };
+    (global.fetch as jest.Mock) = jest.fn(() => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(workout) }));
+    const { fireEvent } = require('@testing-library/react-native');
+    const utils = render(<WorkoutDetailsComponent workoutId={1} onSaveAsTemplate={jest.fn()} />);
+    await waitFor(() => expect(utils.getByLabelText('Workout options')).toBeTruthy());
+    fireEvent.press(utils.getByLabelText('Workout options'));
+    chooseOption(sheetOptions.indexOf('Save as Template'));
+    await waitFor(() => expect(utils.getByText('Save')).toBeTruthy());
+    fireEvent.press(utils.getByText('Save'));
+    await waitFor(() => {
+      const post = (global.fetch as jest.Mock).mock.calls.find(([, init]) => init?.method === 'POST');
+      expect(JSON.parse(post[1].body)).toMatchObject({ exercise_template_ids: [10, 11], superset_groups: [1, 1] });
+    });
+  });
+});

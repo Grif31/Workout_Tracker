@@ -32,6 +32,7 @@ class ParsedExercise:
     title: str
     notes: str | None = None
     sets: list[ParsedSet] = field(default_factory=list)
+    superset: str | None = None   # the file's own key; only equality matters
 
 
 @dataclass

@@ -1,4 +1,5 @@
-import { nextTarget } from '../utils/overloadTarget';
+import { nextTarget, nextHoldTarget } from '../utils/overloadTarget';
+import { targetFor } from '../components/workout/NextTargetModal';
 
 const set = (reps: number, weight: number, extra: object = {}) => ({ reps: String(reps), weight: String(weight), set_type: 'N', rpe: '', ...extra });
 
@@ -74,5 +75,37 @@ describe('nextTarget', () => {
       const t = nextTarget(sets, 5)!;
       expect(t.why + t.target + t.last).not.toMatch(/[—!]/);
     }
+  });
+});
+
+// Holds store minutes in cardio_duration, with no reps
+const hold = (secs: number, extra: object = {}) => ({ reps: '', weight: '', set_type: 'N', cardio_duration: String(secs / 60), ...extra });
+
+describe('nextHoldTarget', () => {
+  it('adds 5 seconds when every hold matched', () => {
+    expect(nextHoldTarget([hold(45), hold(45), hold(45)])).toMatchObject({ last: '45s', target: '50s', reason: 'add_weight' });
+  });
+
+  it('stretches the shortest hold first, never past the longest', () => {
+    expect(nextHoldTarget([hold(60), hold(50)])).toMatchObject({ last: '1:00', target: '55s', reason: 'add_rep' });
+    expect(nextHoldTarget([hold(60), hold(58)])!.target).toBe('1:00');
+  });
+
+  it('formats a minute and over as m:ss', () => {
+    expect(nextHoldTarget([hold(90)])!.target).toBe('1:35');
+  });
+
+  it('ignores warm-ups and empty holds, and is null with nothing to build on', () => {
+    expect(nextHoldTarget([hold(30, { set_type: 'W' }), hold(40)])!.last).toBe('40s');
+    expect(nextHoldTarget(undefined)).toBeNull();
+    expect(nextHoldTarget([hold(0)])).toBeNull();
+  });
+});
+
+describe('targetFor', () => {
+  it('routes holds to the hold rule and gives cardio no target', () => {
+    expect(targetFor({ exercise_type: 'duration', previousSets: [hold(30)] }, 'lbs')!.target).toBe('35s');
+    expect(targetFor({ exercise_type: 'cardio', previousSets: [hold(30)] }, 'lbs')).toBeNull();
+    expect(targetFor({ previousSets: [set(5, 100), set(5, 100)] }, 'kg')!.target).toBe('5 x 102.5');
   });
 });

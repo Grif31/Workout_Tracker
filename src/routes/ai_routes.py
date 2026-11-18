@@ -3,6 +3,7 @@ import re
 import json
 import uuid
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from flask import Blueprint, jsonify, current_app, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm import aliased
@@ -18,6 +19,7 @@ from utils.local_date import user_today
 from utils.premium import has_premium, free_onboarding_allowed, premium_required_response
 from utils.lift_progress import compute_most_improved_lift
 from utils.exercise_access import add_template_exercises
+from utils.supersets import normalize_superset_groups
 from utils.cardio_progress import compute_most_improved_cardio, _MILESTONE_LABELS
 from routes.personal_record_routes import compute_days_since_last_pr, _pr_label
 from routes.user_routes import convert_weight_value
@@ -521,9 +523,14 @@ def _match_exercises(exercise_items: list, user_id) -> list[dict]:
     result = []
     seen_ids: set[int] = set()
     for item in exercise_items:
+        letter = None
         if isinstance(item, str):
             ex_name, p_sets, p_reps, p_rpe = item, None, None, None
         else:
+            letter = item.get('superset')
+            # Asked for as a letter; a model may number the pairs instead
+            if isinstance(letter, int) and not isinstance(letter, bool):
+                letter = str(letter)
             ex_name  = item.get('exercise', '')
             p_sets   = item.get('sets')
             # Asked for as a string ("6-8"), but models often answer with a
@@ -551,8 +558,35 @@ def _match_exercises(exercise_items: list, user_id) -> list[dict]:
                 'prescribed_sets': p_sets,
                 'prescribed_reps': p_reps,
                 'prescribed_rpe':  p_rpe,
+                'superset_group': letter if isinstance(letter, str) and letter.strip() else None,
             })
+    _supersets_from_letters(result)
     return result
+
+
+def _supersets_from_letters(exercises: list[dict]) -> None:
+    """The model marks pairs with letters; turn them into superset groups and
+    hold them to the app's rules (adjacent, 2+, no cardio), so a pair whose
+    partner didn't match an exercise, or wasn't listed next to it, drops out."""
+    keys = {}
+    rows = []
+    for i, ex in enumerate(exercises):
+        letter = ex['superset_group']
+        group = keys.setdefault(letter.strip().upper(), len(keys) + 1) if letter else None
+        rows.append(SimpleNamespace(order=i, exercise_type=ex['exercise_type'], superset_group=group))
+    normalize_superset_groups(rows)
+    for ex, row in zip(exercises, rows):
+        ex['superset_group'] = row.superset_group
+
+
+def _superset_note(result: dict, exercises: list[dict]):
+    """The model's reason for a day's pairing, shown only when a pair survived."""
+    note = result.get('superset_note')
+    if not isinstance(note, str) or not note.strip():
+        return None
+    if not any(e['superset_group'] for e in exercises):
+        return None
+    return _brand_copy(note.strip()[:200])
 
 
 def _parse_ai_json(raw: str) -> dict:
@@ -681,6 +715,35 @@ def _build_user_context(user_id: int) -> dict:
         'most_improved_lift': most_improved_lift,
         'most_improved_cardio': most_improved_cardio,
     }
+
+
+def _superset_directive(goal: str, experience: str, session_length_min: int) -> str:
+    """How many supersets a generated day may use. Supersets are there to save
+    time, so they follow the session length; beginners and long sessions get
+    none, and heavy main lifts are never paired. Client notes asking for (or
+    against) supersets win over this."""
+    if experience == 'beginner':
+        allowance = 'Do NOT use supersets (beginner: learn each lift with full rest)'
+    elif session_length_min >= 75:
+        allowance = 'Do NOT use supersets (there is time for full rest)'
+    elif goal == 'strength':
+        allowance = (
+            'At most ONE superset pair per day, accessories only'
+            if session_length_min <= 45 else 'Do NOT use supersets (strength work needs full rest)'
+        )
+    elif session_length_min <= 45:
+        allowance = '1-2 superset pairs per day, to fit the session length'
+    else:
+        allowance = 'At most ONE superset pair per day, usually arm isolation or a finisher; none is fine'
+    return (
+        f'{allowance}. A pair is two exercises done back to back, then rest. Only pair opposing or '
+        'unrelated muscles (biceps + triceps, chest + back accessories, quads + hamstrings isolation); '
+        'never two heavy compound lifts, never the main lift of the day, never cardio. Give both '
+        'members the same "superset" letter ("A", then "B"), list them next to each other, and give '
+        'every other exercise "superset": null. If client notes ask for supersets, use them; if they '
+        'ask not to, use none. When the day has a pair, "superset_note" is one short plain sentence '
+        'saying why (e.g. "Curls and pushdowns are paired to keep this under 45 minutes."); otherwise null.'
+    )
 
 
 def _build_prompt(data: dict, generate_type: str, user_context: dict | None = None) -> str:
@@ -827,23 +890,24 @@ def _build_prompt(data: dict, generate_type: str, user_context: dict | None = No
 
         training_status_section = '\n'.join(lines) + '\n\n'
 
-    ex_obj = '{"exercise":"<name>","sets":<N>,"reps":"<range e.g. 6-8 or 12>","rpe":<6-9 or null>}'
+    ex_obj = '{"exercise":"<name>","sets":<N>,"reps":"<range e.g. 6-8 or 12>","rpe":<6-9 or null>,"superset":<"A" or null>}'
+    note = '"superset_note":<one short sentence or null>'
     if generate_type == 'routine':
         json_format = (
             '{"name":"<routine name>","description":"<2 sentences: split structure and primary goal>",'
-            f'"days":[{{"label":"<Day name e.g. Push Day / Upper A>","exercises":[{ex_obj},{ex_obj}]}}]}}'
+            f'"days":[{{"label":"<Day name e.g. Push Day / Upper A>",{note},"exercises":[{ex_obj},{ex_obj}]}}]}}'
         )
         structure_rule = (
             f'Create EXACTLY {days_per_week} day objects. '
             f'Use the {split} split. '
             f'Each day: {ex_count}. '
-            'Each exercise must be an object with "exercise", "sets", "reps", "rpe" keys.'
+            'Each exercise must be an object with "exercise", "sets", "reps", "rpe", "superset" keys.'
         )
     else:
-        json_format = f'{{"name":"<workout name>","exercises":[{ex_obj},{ex_obj},{ex_obj}]}}'
+        json_format = f'{{"name":"<workout name>",{note},"exercises":[{ex_obj},{ex_obj},{ex_obj}]}}'
         structure_rule = (
             f'Single session with {ex_count}. '
-            'Each exercise must be an object with "exercise", "sets", "reps", "rpe" keys.'
+            'Each exercise must be an object with "exercise", "sets", "reps", "rpe", "superset" keys.'
         )
 
     rules = [
@@ -852,6 +916,7 @@ def _build_prompt(data: dict, generate_type: str, user_context: dict | None = No
         f"Equipment constraint: ONLY use exercises achievable with the client's equipment.\n"
         f"   Valid exercise examples: {EQUIP_EXAMPLES.get(equipment, '')}",
         f"Injuries: {avoid_directive}",
+        f"Supersets: {_superset_directive(goal, experience, session_length_min)}",
     ]
     if notes:
         rules.append(f"Client notes: honor these preferences/requests: {notes}")
@@ -1397,7 +1462,11 @@ def generate_workout():
             days_preview = []
             for day in result.get('days', []):
                 exercises = _match_exercises(day.get('exercises', []), user_id)
-                days_preview.append({'label': _brand_copy(day['label'], heading=True), 'exercises': exercises})
+                days_preview.append({
+                    'label': _brand_copy(day['label'], heading=True),
+                    'exercises': exercises,
+                    'superset_note': _superset_note(day, exercises),
+                })
             return jsonify({
                 'type': 'routine',
                 'name': _brand_copy(result['name'], heading=True),
@@ -1410,6 +1479,7 @@ def generate_workout():
                 'type': 'template',
                 'name': _brand_copy(result['name'], heading=True),
                 'exercises': exercises,
+                'superset_note': _superset_note(result, exercises),
             }), 200
 
     except ImportError:
@@ -1892,7 +1962,7 @@ def save_generated_workout():
             )
             db.session.add(template)
             db.session.flush()
-            add_template_exercises(template.id, user_id, day.get('exercise_ids', []))
+            add_template_exercises(template.id, user_id, day.get('exercise_ids', []), day.get('superset_groups'))
             db.session.add(RoutineDay(
                 routine_id=routine.id,
                 workout_template_id=template.id,
@@ -1914,7 +1984,7 @@ def save_generated_workout():
         )
         db.session.add(template)
         db.session.flush()
-        add_template_exercises(template.id, user_id, data.get('exercise_ids', []))
+        add_template_exercises(template.id, user_id, data.get('exercise_ids', []), data.get('superset_groups'))
         db.session.commit()
         return jsonify({'type': 'template', 'id': template.id, 'name': template.name}), 201
 

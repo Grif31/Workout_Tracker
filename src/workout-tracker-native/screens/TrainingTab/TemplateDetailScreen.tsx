@@ -17,6 +17,7 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { apiFetch, isNetworkError } from '../../utils/api';
+import { toBackendExerciseType } from '../../components/NewExerciseForm';
 import { showToast } from '../../utils/toast';
 import { loadExerciseList } from '../../utils/exerciseCache';
 import { useAuth } from '../../context/AuthContext';
@@ -24,6 +25,8 @@ import { buildTemplatePrefill, parseProgramming, type ProgrammingEntry, type Tem
 import { useDiscardGuard } from '../../utils/useDiscardGuard';
 import { captureAndShare } from '../../utils/shareCapture';
 import TemplateShareCard from '../../components/share/TemplateShareCard';
+import SupersetPickerModal from '../../components/workout/SupersetPickerModal';
+import { normalizeSupersets, pairExercises, removeFromSuperset, supersetPositions, canJoinSuperset } from '../../utils/supersets';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'TemplateDetail'>;
 type Exercise = TemplateExercise;
@@ -32,7 +35,12 @@ type RemovedState = { index: number; exercise: Exercise } | null;
 
 // What the user can change, for spotting unsaved edits
 const snapshot = (name: string, exercises: Exercise[], prog: Record<number, ProgrammingEntry>) =>
-  JSON.stringify({ name: name.trim(), ids: exercises.map(e => e.id), prog: exercises.map(e => prog[e.id] ?? null) });
+  JSON.stringify({
+    name: name.trim(),
+    ids: exercises.map(e => e.id),
+    groups: exercises.map(e => e.superset_group ?? null),
+    prog: exercises.map(e => prog[e.id] ?? null),
+  });
 
 export default function TemplateDetailScreen({ route, navigation }: Props) {
   const { templateId, muscleGroups: targetMuscles } = route.params;
@@ -53,6 +61,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
   const [switchExId, setSwitchExId] = useState<number | null>(null);
   const [editExId, setEditExId] = useState<number | null>(null);
   const [removed, setRemoved] = useState<RemovedState>(null);
+  const [supersetAnchorIdx, setSupersetAnchorIdx] = useState<number | null>(null);
   const [listDragging, setListDragging] = useState(false);
   // Shows the "log it now?" bar right after a new template's first save
   const [justCreated, setJustCreated] = useState(false);
@@ -95,8 +104,10 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         Alert.alert('Already added', `${full.name} is already in this template`);
         return;
       }
-      // Replace in place; carry programming over to the new exercise
-      setExercises(prev => prev.map(e => e.id === switchExId ? full : e));
+      // Replace in place, keeping the superset (unless the new one is cardio);
+      // carry programming over to the new exercise
+      setExercises(prev => normalizeSupersets(prev.map(e =>
+        e.id === switchExId ? { ...full, superset_group: e.superset_group ?? null } : e)));
       setProgMap(prev => {
         const old = prev[switchExId];
         if (!old) return prev;
@@ -119,7 +130,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
     const index = exercises.findIndex(e => e.id === id);
     if (index < 0) return;
     const exercise = exercises[index];
-    setExercises(prev => prev.filter(e => e.id !== id));
+    setExercises(prev => normalizeSupersets(prev.filter(e => e.id !== id)));
     setRemoved({ index, exercise });
   };
 
@@ -130,7 +141,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
       if (prev.some(e => e.id === exercise.id)) return prev;
       const next = [...prev];
       next.splice(Math.min(index, next.length), 0, exercise);
-      return next;
+      return normalizeSupersets(next);
     });
     setRemoved(null);
   };
@@ -159,6 +170,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         body: JSON.stringify({
           name: name.trim(),
           exercise_template_ids: exercises.map(e => e.id),
+          superset_groups: normalizeSupersets(exercises).map(e => e.superset_group ?? null),
           programming: exercises.filter(e => progMap[e.id]).map(e => progMap[e.id]),
         }),
       });
@@ -236,6 +248,8 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
   };
 
   const editExercise = editExId != null ? exercises.find(e => e.id === editExId) : null;
+  const supersetPos = supersetPositions(exercises);
+  const pairable = exercises.filter(canJoinSuperset).length >= 2;
 
   if (loading) {
     return (
@@ -325,10 +339,10 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
                 const next = [...prev];
                 const [moved] = next.splice(from, 1);
                 next.splice(to, 0, moved);
-                return next;
+                return normalizeSupersets(next);
               });
             }}
-            renderItem={item => (
+            renderItem={(item, index) => (
               <ExerciseEditRow
                 name={item.name}
                 muscleGroup={item.muscle_group}
@@ -338,6 +352,8 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
                 onDelete={() => removeExercise(item.id)}
                 onSwitch={() => { setSwitchExId(item.id); setPickerVisible(true); }}
                 onEdit={() => setEditExId(item.id)}
+                onSuperset={pairable && canJoinSuperset(item) ? () => setSupersetAnchorIdx(index) : undefined}
+                supersetLabel={supersetPos[index]?.label}
               />
             )}
           />
@@ -349,7 +365,7 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         </TouchableOpacity>
         {exercises.length > 0 && (
           <Text style={styles.editHint}>
-            Swipe an exercise left for actions · hold & drag to reorder
+            Swipe an exercise left for actions, like Superset · hold & drag to reorder
           </Text>
         )}
 
@@ -389,15 +405,29 @@ export default function TemplateDetailScreen({ route, navigation }: Props) {
         // Single-select when swapping an exercise; multi-select when adding.
         multiSelect={switchExId == null}
         initialMuscle={targetMuscles?.[0]}
-        onAddExercise={async (name, muscle, _equipment, exerciseType) => {
+        onAddExercise={async (name, muscle, equipment, exerciseType) => {
           const res = await apiFetch('/api/exercises', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, muscle_group: muscle, exercise_type: exerciseType ?? 'strength' }),
+            body: JSON.stringify({ name, muscle_group: muscle, equipment, exercise_type: toBackendExerciseType(exerciseType) }),
           });
           if (res.ok) await loadExerciseList(user?.id, data => setAllExercises(data as Exercise[]));
         }}
         muscleGroups={muscleGroups}
+      />
+
+      <SupersetPickerModal
+        anchorIdx={supersetAnchorIdx}
+        exercises={exercises}
+        onPick={partnerIdx => {
+          if (supersetAnchorIdx != null) setExercises(prev => pairExercises(prev, supersetAnchorIdx, partnerIdx));
+          setSupersetAnchorIdx(null);
+        }}
+        onRemove={() => {
+          if (supersetAnchorIdx != null) setExercises(prev => removeFromSuperset(prev, supersetAnchorIdx));
+          setSupersetAnchorIdx(null);
+        }}
+        onClose={() => setSupersetAnchorIdx(null)}
       />
 
       <ExerciseProgrammingModal

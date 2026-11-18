@@ -212,6 +212,9 @@ export default function GreekRankScreen({ navigation }: Props) {
   // user had already passed.
   const heldIdx    = foundIdx >= 0 ? foundIdx : 0;
   const heldRank   = GREEK_RANKS[heldIdx];
+  // The badge colors vanish on the light track (Aretē gold 1.12:1), so bars
+  // use the per-mode text colors
+  const heldBarColor = rankTextColor(heldRank.name, heldRank.color, mode);
   const viewedRank = GREEK_RANKS[selectedIdx];
   const nextRank   = GREEK_RANKS[heldIdx + 1];
   const progress    = greekScore >= heldRank.low && greekScore < heldRank.high
@@ -400,7 +403,7 @@ export default function GreekRankScreen({ navigation }: Props) {
                     <Text style={styles.partValue}>{Math.round(part.value)}</Text>
                   </View>
                   <PercentileBar
-                    percent={part.value} color={heldRank.color} trackColor={colors.border}
+                    percent={part.value} color={heldBarColor} trackColor={colors.border}
                     delay={80 * i} style={styles.partBar}
                   />
                   <Text style={styles.partWhat}>{part.what}</Text>
@@ -452,7 +455,7 @@ export default function GreekRankScreen({ navigation }: Props) {
                 <Text style={styles.cardMeta}>{Math.round(progress * 100)}%</Text>
               </View>
               <PercentileBar
-                percent={Math.round(progress * 100)} color={heldRank.color} trackColor={colors.border}
+                percent={Math.round(progress * 100)} color={heldBarColor} trackColor={colors.border}
                 style={styles.progressTrack}
               />
               <View style={styles.bandEnds}>

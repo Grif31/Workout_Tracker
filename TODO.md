@@ -493,11 +493,7 @@ Check off items as you complete them.
 - [x] Push notifications (rest timer alerts, workout reminders)
 - [x] Workout notes
 - [x] Muscle group body diagram on Exercise Detail — highlight primary/secondary muscles
-- [ ] **Supersets** — group two exercises together in a workout so they alternate A/B sets and share a rest timer
-  - [ ] Add `superset_group` field (nullable int) to the `Exercise` model; exercises sharing the same value are paired
-  - [ ] Update `POST /api/workouts` and `PUT/PATCH /api/workouts/<id>` to persist `superset_group`
-  - [ ] Update WorkoutLog to let users pair exercises into a superset (e.g. long-press → "Pair as superset")
-  - [ ] Render superset pairs as alternating A/B rows in WorkoutLog and WorkoutDetails
+- [ ] **Supersets**: planned in §29
 - [x] **Workout streaks and achievement badges**
   - [x] Weekly workout streak (consecutive weeks meeting weekly goal)
   - [x] Current weekly streak displayed on dashboard (🔥 badge)
@@ -582,7 +578,7 @@ Check off items as you complete them.
 - [x] **Workout density — volume per minute** (premium) (built 2026-10-08)
   > Increasing density (same volume, shorter time) is a form of progressive overload and a proxy for training efficiency.
   - [x] Backend: extend `GET /api/stats/progress` buckets to include `density` field (total volume ÷ total duration in minutes; skip workouts with no duration)
-  - [ ] Frontend: add "Density" as a 4th metric option in the chart metric selector (alongside Volume / Sets / Workouts)
+  - [x] Frontend: add "Density" as a chart 
   - [x] Y-axis label: "lbs/min" or "kg/min" per user preference
 
 ---
@@ -1923,9 +1919,74 @@ Leave out anything that rewards skipping rest or training through illness (no "w
 - [x] Add `.expo/` to `.gitignore`
 - [ ] Replace the old app name with "Aretē: Strength & Cardio Log" in `privacy.html`, `terms.html`, the password reset email in `auth_routes.py` and `MAIL_DEFAULT_SENDER` in `.env.example`; check `RESEND_FROM` on Railway. Show the legal wording to the owner before changing it
 - [ ] Share card footer text #636366 to #8E8E93 for contrast
+- [ ] Speed up the full Jest run (~11 min: 155 suites at `--maxWorkers=2`, 665 s on 2026-11-17). Profile which suites are slowest first (`--verbose` timings); screen files pay a one-time render and module init each, so the heaviest few likely dominate
 
 ### Website (step 5 of the design pass)
 - [x] Hallmark audit of the marketing site, then a redesign against DESIGN.md (Archivo, the marketing tokens) with a few GSAP touches that follow `prefers-reduced-motion` (2026-11-10: `homepage.html` only; audit was manual because Hallmark's linter wasn't allowed to run)
 - [ ] Recapture the 8 site screenshots (`src/brand/shots/`) in the Green accent: they show Blue, and DESIGN.md says Green is the only accent outside the app
 - [ ] Decide whether DESIGN.md keeps uppercase tracked eyebrows on the site (Hallmark bans them; the redesign kept them only on feature names)
 - [ ] Keep improving the site past the 2026-11-10 redesign (owner: "looks good for now but definitely want to improve it"). Live now: bigger type, 60px header logo, desktop-only parallax on the phone shots (hero phone -35%, section phones ±20%, Plans ±30%). Open: how strong the parallax should be, and anything richer (pinned scrolling sections, a mobile treatment)
+
+---
+
+## 🔗 29. Supersets (planned 2026-11-17)
+> Group two or more exercises in a workout so the lifter alternates between them (A1, A2, A1, A2...) and rests once per round instead of after every set. Covers pairs, tri-sets and giant sets with the same code. Replaces the old stub in §9.
+>
+> **Design decision: keep the blocks, link them.** The §9 stub said "alternating A/B rows". Interleaving sets from different exercises into one list breaks `ExerciseBlock`'s per-exercise memoization, its column header and the set-row numbering, and isn't how mainstream apps do it. Instead each member keeps its own block, joined by a colored rail on the left with "A1" / "A2" labels, and the *behavior* alternates: checking a set moves focus to the partner's same set, and rest starts only when a round is finished.
+
+### Rules (decide once, enforce in one util)
+- A group is identified by `superset_group` (small int, unique within one workout). NULL = not in a superset
+- Members of a group are always **contiguous** in exercise order. A group with fewer than 2 members dissolves
+- Cardio exercises can't join a superset (GPS runs, distance sets); strength and duration (timed holds) can
+- Letters come from position, not the stored number: the first group in the workout is A, the next B. Stored ints are just keys, renumbered 1..n on save
+- A **round** is the *i*-th working set (anything but `'W'`) across every member that has one. Warm-ups sit outside rounds, so A with two warm-ups still pairs its first working set with B's first. Uneven set counts are fine: a member with fewer sets just drops out of later rounds
+- Checking a working set that doesn't finish its round moves focus to the next member's set in that round (always, whatever the auto-rest setting) and starts no timer. Checking the set that finishes a round starts rest if auto-rest is on. Warm-ups keep today's rule (never start rest, no jump)
+- Supersets change nothing about PRs, volume, muscle sets or scores: each member's sets are still that exercise's sets
+
+### Phase 1: logging (backend)
+- [x] `Exercise.superset_group` nullable Integer in `models.py`, in `to_dict`; migration (check the latest `down_revision`)
+- [x] `POST /api/workouts` and both branches of `PUT/PATCH /api/workouts/<id>` (existing exercise and new exercise) read `superset_group`. Validate: int in 1..50 or None (reject `bool`, which is an int in Python), anything else stored as None (the route guardrail test sends garbage bodies and must not 500). An existing exercise whose payload omits the key keeps its value, so old app builds editing a superset workout don't wipe it
+- [x] Server-side normalize after writing a workout's exercises: drop groups with one member and groups whose members aren't contiguous by `order`, ungroup cardio, then renumber 1..n by first appearance (same rule as the app's util, mirrored; tests share cases)
+- [x] `GET /api/workouts/export` CSV gains a `superset_group` column
+- [x] Hevy import: map the CSV's `superset_id` column (already in the `test_import.py` fixtures, currently ignored) onto `ParsedExercise` → `superset_group`. Strong has no superset column
+- [x] Tests in `src/tests/`: create/edit/round-trip, omitted key preserved on edit, garbage values, single-member and non-contiguous groups normalized, Hevy import keeps pairs, other user can't see or touch it (existing IDOR coverage)
+
+### Phase 1: logging (app)
+- [x] `utils/supersets.ts` (pure, fully unit-tested): `normalizeSupersets(exercises)`, `pairExercises(exercises, a, b)` (moves b next to a, joins a's group or makes a new one), `removeFromSuperset(exercises, idx)`, `supersetLabels(exercises)` (→ "A1", "A2", "B1"... or null), `nextInRound(exercises, exIdx, setIdx)`, `completesRound(exercises, exIdx, setIdx)`
+- [x] `ExerciseEntry.superset_group?: number | null` in `components/workout/types.ts`; the save payload in `WorkoutLog.tsx` (~line 1445) sends it, renumbered via `normalizeSupersets` first
+- [x] Prefill plumbing (see the app CLAUDE.md "WorkoutLog prefill"): add the field to `PrefillWorkoutData`, `prefillToEntries` in `WorkoutLog.tsx`, and `WorkoutDetails.buildPrefill` so Edit and Perform Again keep supersets. `buildTemplatePrefill` waits for Phase 2
+- [x] Exercise menu (the "..." menu around `WorkoutLog.tsx:1980`): "Superset with..." (right after Replace Exercise) opens a bottom sheet of the other exercises; tapping one pairs them at once, no confirm step. Cardio exercises are left out of the sheet entirely, and the menu item is hidden on a cardio exercise's own menu. If no other non-cardio exercise exists, the item is hidden too. For a member already in a superset the menu shows "Add to superset..." (same sheet, makes a tri-set) and "Remove from superset". Goes through `queueAfterMenuDismiss` like Replace/Swap. Mockup: https://claude.ai/artifact/V7udwJrXdsyDXRWTgRsx9U
+- [x] `ExerciseBlock`: a `supersetLabel?: string` + `supersetEdge?: 'first' | 'middle' | 'last'` prop (primitives, so `React.memo` still skips); renders the accent rail and the "A1" chip in the header. Rail color from theme tokens, not a new hex. The chip gets a VoiceOver label ("Superset A, exercise 1 of 2")
+- [x] `toggleSetDone`: use `completesRound` to gate `startRest`, and on a non-final set scroll/focus to `nextInRound`'s set (reuse `listRef` and `onRegisterSetInput`). Keep the PR banner logic untouched
+- [x] Every way the exercise list changes runs `normalizeSupersets`: remove (`deleteEx`, an Alert with no undo; removing one of a pair dissolves the pair), menu move up/down (`moveExercise`), replace and swap keep the group unless the new exercise is cardio, add appends ungrouped, reorder mode (see below)
+- [x] Reorder mode: `ExerciseReorderRow` shows the letter; after a drop, `normalizeSupersets` keeps the run that holds the group's first member and ungroups strays. Moving a whole group as one row is a later improvement (ties into §20)
+- [x] Current exercise: `currentExercise` in `utils/liveActivityProps.ts` is "first exercise with a set left", which stays on A1 through a superset. It feeds the Live Activity (`currentExerciseName`, `nextSetLines`) and the minimized bar's label in `navigation/AppTabs.tsx`. Make it superset-aware (the member owning the lowest unfinished round's next set) and add cases to `__tests__/liveActivity.test.ts`
+- [x] Minimized session, crash backup and offline queue store `ExerciseEntry` whole, so the field rides along. Add a restore test that a superset survives minimize/resume and a cold-start restore
+- [x] Read-only views: `components/WorkoutDetails.tsx` shows the rail + letters (the screens that wrap it get it for free). Summary screen and share cards: letters only, or skip for now
+- [x] Tests: `__tests__/supersets.test.ts` for the util (contiguity, uneven sets, three-member groups, dissolve on remove); WorkoutLog tests for pairing from the menu, rest gating, focus jump, save payload, and edit round-trip
+
+- [x] `Workout.exercises` comes back sorted by `order` (it was database order, so a reorder made in Edit didn't show and a superset could come back split)
+- [x] `toggleSetDone` scrolls to a timed-hold partner too (`DurationSetRow` registers its seconds input)
+- [x] The keyboard's next-field order runs across a superset round by round (`logOrder`, used by `focusNextInput`)
+- [ ] Device check on iOS and Android: rail and chip in light and dark, pairing, rest gating, scroll to partner, Live Activity name
+- [ ] CHANGELOG entry (the server part ships ahead of the app, so it needs its own "## Server" line)
+
+### Phase 2: templates and routines
+- [x] `WorkoutTemplateExercise.superset_group` + migration; `WorkoutTemplate.to_dict(include_exercises=True)` returns it per exercise; template create/update routes accept it (same validation and normalize)
+- [x] `TemplateExercise` type and `buildTemplatePrefill` carry it, so a superset template logs as a superset from Home, Coach, routines and the template screen alike
+- [x] Template editor: pair/unpair in the same style as WorkoutLog (a Superset swipe action opens the same picker, which offers "Remove from superset" for a member)
+- [x] "Save as template" from a workout keeps the groups
+- [x] Requests send `superset_groups` alongside `exercise_template_ids` (template create/update, routine days). A template PATCH without it keeps each exercise's stored group, for older builds
+- [ ] Creating a routine with new days (`CreateRoutineScreen`) has no pairing UI: pair in the day's template afterwards. Add it there if people ask
+
+### Phase 3: Coach and polish
+- [x] AI-generated routines and workouts may pair exercises: `_superset_directive` in `ai_routes.py` sets the allowance from goal, experience and session length (none for beginners, 75+ min, or strength unless 45 min or less; 1-2 pairs at 45 min or less; at most one at 60), the model marks pairs with a letter, `_supersets_from_letters` holds them to the normalize rules, and the day's `superset_note` is shown in the preview. Saved through `/api/ai/save` `superset_groups` (preview and onboarding)
+- [ ] Measure: how often generated plans keep their pairs vs unpair them before saving (needs a privacy-policy check before recording anything)
+- [ ] The Coach's workout context mentions supersets, so it doesn't read A1/A2 as separate unrelated work
+- [x] Rest between members: optional short rest (Off by default; 10-60s) in Profile > Workout Settings, `workout_superset_rest_${uid}`. Runs only with auto-start rest on; the full rest still follows the round. Not in the in-workout settings sheet yet
+- [ ] Drag a whole superset as one unit in reorder mode
+- [ ] CHANGELOG + What's New bullet; help/FAQ entry in the new Help & FAQ screen
+
+### Decided with the owner (2026-11-17)
+- Supersets are **free**: no premium gate anywhere (logging, templates, Coach)
+- Entry point is the **exercise menu only** ("Superset with..." / "Remove from superset"); no long-press on the block header

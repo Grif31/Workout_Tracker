@@ -1,6 +1,6 @@
 /**
- * A free account on the Coach and Progress tabs: insights locked (its one free
- * insight a week is in the Weekly Summary's review), the rank opening the
+ * A free account on the Coach and Progress tabs: no insights section (its one
+ * free read a week is the weekly review, shown on Coach with one Upgrade button), the rank opening the
  * Strength Score (which locks its own breakdown) rather than the paywall, one
  * lock over Progress's advanced stats, and the template and routine caps
  * skipping what onboarding generated.
@@ -62,12 +62,20 @@ describe('Coach tab for a free account', () => {
     installServer();
   });
 
-  it('locks insights and points to the weekly review, without asking the AI', async () => {
+  it('shows only the weekly review, not insights, without asking the AI', async () => {
     const r = await openCoachTab();
-    expect(await r.findByText(/Insights are part of Premium/)).toBeTruthy();
-    expect(r.queryByText("Get This Week's Insight")).toBeNull();
+    expect(await r.findByText('Weekly Review')).toBeTruthy();
+    expect(r.getByText('Your free weekly read from the Coach.')).toBeTruthy();
+    expect(r.queryByText('Insights')).toBeNull();
     expect(r.queryByText('Generate Insights')).toBeNull();
     expect(insightCalls()).toBe(0);
+  });
+
+  it('sends Generate a workout to the paywall', async () => {
+    const r = await openCoachTab();
+    fireEvent.press(await r.findByText('Generate a workout'));
+    expect(r.nav.navigate).toHaveBeenCalledWith('Paywall', { source: 'ai_coach' });
+    expect(r.queryByText('Or build a full routine')).toBeNull();
   });
 
   it('ignores a free insight saved by an earlier build', async () => {
@@ -76,13 +84,13 @@ describe('Coach tab for a free account', () => {
       fetchedAt: new Date().toISOString(),
     }));
     const r = await openCoachTab();
-    expect(await r.findByText(/Insights are part of Premium/)).toBeTruthy();
+    expect(await r.findByText('Weekly Review')).toBeTruthy();
     expect(r.queryByText('Old free insight')).toBeNull();
   });
 
   it('opens the Strength Score screen itself, not the paywall', async () => {
     const r = await openCoachTab();
-    fireEvent.press(await r.findByText('Hero'));
+    fireEvent.press(await r.findByLabelText('Hero rank. Open Strength Score'));
     expect(r.nav.navigate).toHaveBeenCalledWith('ProgressTab', { screen: 'StrengthScore', initial: false });
     expect(r.nav.navigate).not.toHaveBeenCalledWith('Paywall', expect.anything());
   });

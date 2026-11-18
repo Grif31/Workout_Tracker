@@ -25,7 +25,13 @@ module.exports = {
     // Over-the-air updates only reach builds whose native code hashes the same,
     // so an update that needs a native change can't land on an older binary.
     // Publish with `npm run update:<channel>`, never bare `eas update`.
-    runtimeVersion: { policy: 'fingerprint' },
+    // `npm run dev` swaps in a fixed string: Metro recomputes the fingerprint
+    // on every manifest request (~40s here), past the dev client's timeout, and
+    // a dev client loading from Metro never checks the runtime version.
+    runtimeVersion:
+      process.env.ARETE_DEV_SERVER === '1' && !process.env.EAS_BUILD
+        ? 'dev-server'
+        : { policy: 'fingerprint' },
     updates: {
       url: 'https://u.expo.dev/356b88e9-4302-43fc-b50a-6d83030b8fa6',
       // Downloaded in the background and applied on the next cold start, so an

@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import {
   View,
   Text,
@@ -13,10 +12,6 @@ import {
 import ThemedSwitch from '../../components/ThemedSwitch';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  GPS_AUTO_PAUSE_KEY, GPS_KEEP_SCREEN_ON_KEY, LIVE_WORKOUT_NOTIF_KEY, REST_ALERTS_KEY, REMINDERS_KEY, REMINDER_HOUR_KEY, REMINDER_MIN_KEY,
-} from '../../constants/storageKeys';
-import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
@@ -28,12 +23,6 @@ import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { apiFetch, isNetworkError } from '../../utils/api';
 import { APP_ICONS_ENABLED, HEALTH_SYNC_ENABLED } from '../../constants/featureFlags';
-import {
-  requestNotificationPermission,
-  hasNotificationPermission,
-  scheduleWorkoutReminder,
-  cancelWorkoutReminder,
-} from '../../utils/notifications';
 import { HEALTH_SYNC_KEY, requestHealthKitPermission } from '../../utils/healthKit';
 import { requestHealthConnectPermission } from '../../utils/healthConnect';
 import { GPS_DISTANCE_UNIT_KEY } from '../../utils/units';
@@ -43,9 +32,6 @@ import LinkRow from '../../components/settings/LinkRow';
 import {
   APP_STORE_REVIEW_URL, PRIVACY_URL, TERMS_URL, appVersionLabel, bugReportUrl, openSupportEmail, supportEmailUrl,
 } from '../../utils/support';
-
-// Reads the live app.config.js version so this never drifts out of sync again.
-const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 
 const THEME_OPTIONS = [
   { key: 'system', label: 'System' },
@@ -63,68 +49,24 @@ export default function SettingsScreen({ navigation }: Props) {
   const uid = user?.id;
   const perUserHealthSyncKey   = `${HEALTH_SYNC_KEY}_${uid}`;
   const perUserGpsKey          = `${GPS_DISTANCE_UNIT_KEY}_${uid}`;
-  const perUserAutoPauseKey    = `${GPS_AUTO_PAUSE_KEY}_${uid}`;
-  const perUserKeepScreenKey   = `${GPS_KEEP_SCREEN_ON_KEY}_${uid}`;
-  const perUserRemindersKey    = `${REMINDERS_KEY}_${uid}`;
-  const perUserReminderHourKey = `${REMINDER_HOUR_KEY}_${uid}`;
-  const perUserReminderMinKey  = `${REMINDER_MIN_KEY}_${uid}`;
 
   const [unitIsKg, setUnitIsKg]             = useState(user?.weight_unit === 'kg');
   const [distanceIsKm, setDistanceIsKm]     = useState(false);
   const [savingUnit, setSavingUnit]         = useState(false);
-  const [autoPauseOn, setAutoPauseOn]       = useState(true);
-  const [keepScreenOn, setKeepScreenOn]     = useState(false);
-  // Notification settings
-  const [remindersOn, setRemindersOn]   = useState(false);
-  const [restAlertsOn, setRestAlertsOn] = useState(true);
-  const [liveNotifOn, setLiveNotifOn]   = useState(true);
-  const [reminderHour, setReminderHour] = useState('9');
-  const [reminderMin, setReminderMin]   = useState('00');
 
   const [accentModalVisible, setAccentModalVisible] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
-  const [reminderPickerVisible, setReminderPickerVisible] = useState(false);
-  const [pendingReminderDate, setPendingReminderDate] = useState(() => {
-    const d = new Date(); d.setHours(9, 0, 0, 0); return d;
-  });
 
   // Health sync
   const [healthSyncOn, setHealthSyncOn] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.multiGet([
-      perUserRemindersKey, REST_ALERTS_KEY, LIVE_WORKOUT_NOTIF_KEY,
-      perUserReminderHourKey, perUserReminderMinKey, perUserHealthSyncKey, perUserGpsKey,
-      perUserAutoPauseKey, perUserKeepScreenKey,
-    ]).then(async pairs => {
+    AsyncStorage.multiGet([perUserHealthSyncKey, perUserGpsKey]).then(pairs => {
       const map = Object.fromEntries(pairs.map(([k, v]) => [k, v]));
-      if (map[perUserRemindersKey] === 'true') {
-        // Notifications turned off in the phone's settings mean no reminder
-        // will fire, so the switch shouldn't claim one will
-        if (await hasNotificationPermission()) setRemindersOn(true);
-        else AsyncStorage.setItem(perUserRemindersKey, 'false');
-      }
-      if (map[REST_ALERTS_KEY] !== null) setRestAlertsOn(map[REST_ALERTS_KEY] !== 'false');
-      if (map[LIVE_WORKOUT_NOTIF_KEY] !== null) setLiveNotifOn(map[LIVE_WORKOUT_NOTIF_KEY] !== 'false');
-      if (map[perUserReminderHourKey]) setReminderHour(map[perUserReminderHourKey]!);
-      if (map[perUserReminderMinKey]) setReminderMin(map[perUserReminderMinKey]!);
       if (map[perUserHealthSyncKey] !== null) setHealthSyncOn(map[perUserHealthSyncKey] === 'true');
       if (map[perUserGpsKey]) setDistanceIsKm(map[perUserGpsKey] !== 'mi');
-      setAutoPauseOn(map[perUserAutoPauseKey] !== 'false');
-      setKeepScreenOn(map[perUserKeepScreenKey] === 'true');
     });
   }, []);
-
-  const ensurePermission = async (): Promise<boolean> => {
-    const granted = await requestNotificationPermission();
-    if (!granted) {
-      Alert.alert(
-        'Permission Required',
-        'Allow notifications in your device settings to enable this feature.',
-      );
-    }
-    return granted;
-  };
 
   // The switch rewrites every stored weight, rounded, so a stray tap shouldn't
   // be enough
@@ -164,28 +106,6 @@ export default function SettingsScreen({ navigation }: Props) {
     }
   };
 
-
-  const getReminderDate = () => {
-    const d = new Date();
-    d.setHours(parseInt(reminderHour, 10) || 9, parseInt(reminderMin, 10) || 0, 0, 0);
-    return d;
-  };
-
-  const formatReminderTime = () => {
-    const h = parseInt(reminderHour, 10) || 9;
-    const m = parseInt(reminderMin, 10) || 0;
-    const period = h >= 12 ? 'PM' : 'AM';
-    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${period}`;
-  };
-
-  const applyReminderDate = async (date: Date) => {
-    const h = date.getHours();
-    const m = date.getMinutes();
-    setReminderHour(String(h));
-    setReminderMin(String(m).padStart(2, '0'));
-    await AsyncStorage.multiSet([[perUserReminderHourKey, String(h)], [perUserReminderMinKey, String(m)]]);
-    if (remindersOn) await scheduleWorkoutReminder(h, m);
-  };
 
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -477,52 +397,6 @@ export default function SettingsScreen({ navigation }: Props) {
         </TouchableOpacity>
       </Modal>
 
-      {/* Reminder time picker — iOS bottom sheet */}
-      {Platform.OS === 'ios' && (
-        <Modal
-          visible={reminderPickerVisible}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setReminderPickerVisible(false)}
-        >
-          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setReminderPickerVisible(false)}>
-            <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
-              <Text style={styles.modalTitle}>Reminder Time</Text>
-              <DateTimePicker
-                value={pendingReminderDate}
-                mode="time"
-                display="spinner"
-                onChange={(_: DateTimePickerEvent, date?: Date) => { if (date) setPendingReminderDate(date); }}
-                textColor={colors.textPrimary}
-                style={{ backgroundColor: colors.surface }}
-              />
-              <TouchableOpacity
-                style={[styles.saveBtn, { marginHorizontal: spacing.md, marginTop: spacing.sm }]}
-                onPress={async () => {
-                  await applyReminderDate(pendingReminderDate);
-                  setReminderPickerVisible(false);
-                }}
-              >
-                <Text style={styles.saveBtnText}>Done</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-      )}
-
-      {/* Reminder time picker — Android system dialog */}
-      {Platform.OS === 'android' && reminderPickerVisible && (
-        <DateTimePicker
-          value={getReminderDate()}
-          mode="time"
-          display="default"
-          onChange={async (_: DateTimePickerEvent, date?: Date) => {
-            setReminderPickerVisible(false);
-            if (date) await applyReminderDate(date);
-          }}
-        />
-      )}
-
 
 </>
   );
@@ -639,17 +513,6 @@ const createStyles = (colors: Colors) =>
     unitActive: {
       color: colors.accent,
       fontWeight: '700',
-    },
-    saveBtn: {
-      backgroundColor: colors.accent,
-      borderRadius: 6,
-      paddingHorizontal: spacing.sm,
-      paddingVertical: spacing.xs,
-    },
-    saveBtnText: {
-      color: colors.accentText,
-      fontSize: typography.fontSize.sm,
-      fontWeight: '600',
     },
     modalOverlay: {
       flex: 1,
