@@ -367,6 +367,8 @@ class _AiSaveDaySchema(_Base):
                                validate=validate.Length(max=AI_SAVE_MAX_EXERCISES))
     programming  = fields.List(fields.Dict(), load_default=None, allow_none=True,
                                validate=validate.Length(max=AI_SAVE_MAX_EXERCISES))
+    # One superset key or None per exercise_ids entry (see WorkoutTemplateSchema)
+    superset_groups = fields.Raw(load_default=None)
 
 class AiSaveSchema(_Base):
     type         = fields.Str(required=True, validate=validate.OneOf(['routine', 'template']))
@@ -379,6 +381,7 @@ class AiSaveSchema(_Base):
     programming  = fields.List(fields.Dict(), load_default=None, allow_none=True,
                                validate=validate.Length(max=AI_SAVE_MAX_EXERCISES))
     starter      = fields.Bool(load_default=False)
+    superset_groups = fields.Raw(load_default=None)
 
 class AiInsightsSchema(_Base):
     # Left out, each falls back to the stored coach profile; an empty avoid

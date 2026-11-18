@@ -26,13 +26,15 @@ jest.mock('../components/DraggableList', () => (props: any) => {
   const { View } = require('react-native');
   const key = props.data.map((e: any) => e.id).join(',') || 'empty';
   mockReorder[props.data[0]?.name ?? key] = props.onReorder;
-  return <View testID="exercise-list">{props.data.map((item: any) => <View key={props.keyExtractor(item)}>{props.renderItem(item)}</View>)}</View>;
+  return <View testID="exercise-list">{props.data.map((item: any, i: number) => <View key={props.keyExtractor(item)}>{props.renderItem(item, i)}</View>)}</View>;
 });
 jest.mock('../components/ExerciseEditRow', () => {
   const { Text, TouchableOpacity, View } = require('react-native');
   const Row = (p: any) => (
     <View>
       <Text>{p.name}</Text>
+      {p.supersetLabel ? <Text>{`${p.name} ${p.supersetLabel}`}</Text> : null}
+      {p.onSuperset ? <TouchableOpacity onPress={p.onSuperset}><Text>{`superset ${p.name}`}</Text></TouchableOpacity> : null}
       {p.programming?.sets ? <Text>{`${p.name} ${p.programming.sets}x${p.programming.reps}`}</Text> : null}
       <TouchableOpacity onPress={p.onDelete}><Text>{`remove ${p.name}`}</Text></TouchableOpacity>
       <TouchableOpacity onPress={p.onSwitch}><Text>{`switch ${p.name}`}</Text></TouchableOpacity>
@@ -140,6 +142,7 @@ describe('AIWorkoutPreviewScreen', () => {
         type: 'template',
         name: 'Leg Day',
         exercise_ids: [1, 2, 3],
+        superset_groups: [null, null, null],
         programming: [
           { exercise_template_id: 1, sets: 3, reps: '5', rpe: 8 },
           { exercise_template_id: 3, sets: 4, reps: '8-10', rpe: null },
@@ -230,8 +233,8 @@ describe('AIWorkoutPreviewScreen', () => {
         name: 'Upper/Lower',
         description: 'Two day split',
         days: [
-          { label: 'Upper', exercise_ids: [2, 3], programming: [{ exercise_template_id: 2, sets: 3, reps: '8', rpe: null }] },
-          { label: 'Legs', exercise_ids: [1], programming: [] },
+          { label: 'Upper', exercise_ids: [2, 3], superset_groups: [null, null], programming: [{ exercise_template_id: 2, sets: 3, reps: '8', rpe: null }] },
+          { label: 'Legs', exercise_ids: [1], superset_groups: [null], programming: [] },
         ],
       });
       expect(nav.replace).toHaveBeenCalledWith('RoutineDetail', { routineId: 30, routineName: 'Upper/Lower' });
@@ -336,6 +339,44 @@ describe('AIWorkoutPreviewScreen', () => {
       await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("Couldn't Generate Workout", 'Coach is busy'));
       expect(r.getByDisplayValue('Lower Body Power')).toBeTruthy();
       expect(r.getByText('Bench Press')).toBeTruthy();
+    });
+  });
+
+  describe('supersets from the AI', () => {
+    const paired = () => ({
+      ...routineParams(),
+      days: [
+        { label: 'Upper', superset_note: 'Paired to save time.',
+          exercises: [ex(1), ex(2, { superset_group: 1 }), ex(3, { superset_group: 1 })] },
+        { label: 'Lower', superset_note: null, exercises: [ex(4)] },
+      ],
+    });
+
+    it("shows the AI's pairs and its reason, and saves them", async () => {
+      const r = renderWith(paired());
+      expect(r.getByText('Bench Press A1')).toBeTruthy();
+      expect(r.getByText('Barbell Row A2')).toBeTruthy();
+      expect(r.getByText('Paired to save time.')).toBeTruthy();
+      await act(async () => { fireEvent.press(r.getByText('Save Routine')); });
+      expect(saved().days.map((d: any) => d.superset_groups)).toEqual([[null, 1, 1], [null]]);
+    });
+
+    it('drops the pair and its reason when a partner is removed', async () => {
+      const r = renderWith(paired());
+      fireEvent.press(r.getByText('remove Barbell Row'));
+      expect(r.queryByText('Bench Press A1')).toBeNull();
+      expect(r.queryByText('Paired to save time.')).toBeNull();
+      await act(async () => { fireEvent.press(r.getByText('Save Routine')); });
+      expect(saved().days[0].superset_groups).toEqual([null, null]);
+    });
+
+    it('pairs exercises by hand from the Superset action', async () => {
+      const r = renderWith(routineParams());
+      fireEvent.press(r.getByText('superset Bench Press'));
+      fireEvent.press(r.getByLabelText('Superset with Barbell Row'));
+      expect(r.getByText('Bench Press A1')).toBeTruthy();
+      // A day with one exercise has nothing to pair
+      expect(r.queryByText('superset Squat')).toBeNull();
     });
   });
 });

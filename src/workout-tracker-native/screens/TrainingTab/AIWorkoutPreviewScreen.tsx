@@ -21,6 +21,8 @@ import ExerciseProgrammingModal, { ProgrammingValue } from '../../components/Exe
 import UndoBar from '../../components/UndoBar';
 import { muscleGroups } from '../../constants/muscleGroups';
 import { TrainingStackParamsList, PreviewExercise, PreviewDay } from '../../navigation/types';
+import SupersetPickerModal from '../../components/workout/SupersetPickerModal';
+import { normalizeSupersets, pairExercises, removeFromSuperset, supersetPositions, canJoinSuperset } from '../../utils/supersets';
 
 type Props = NativeStackScreenProps<TrainingStackParamsList, 'AIWorkoutPreview'>;
 type AllExercise = { id: number; name: string; muscle_group: string; equipment?: string; image_url?: string; exercise_type?: string };
@@ -30,6 +32,7 @@ type Scope = 'template' | number;
 type PickerState = { mode: 'add' | 'switch'; scope: Scope; exId?: number } | null;
 type EditState = { scope: Scope; exId: number } | null;
 type RemovedState = { scope: Scope; index: number; exercise: PreviewExercise } | null;
+type SupersetState = { scope: Scope; idx: number } | null;
 
 const BOTTOM_BAR_HEIGHT = 76;
 
@@ -44,6 +47,8 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
   const [description, setDescription] = useState(initDesc ?? '');
   const [exercises, setExercises] = useState<PreviewExercise[]>(route.params.exercises ?? []);
   const [days, setDays] = useState<PreviewDay[]>(route.params.days ?? []);
+  const [supersetNote, setSupersetNote] = useState(route.params.supersetNote ?? null);
+  const [supersetTarget, setSupersetTarget] = useState<SupersetState>(null);
 
   const [allExercises, setAllExercises] = useState<AllExercise[]>([]);
   const [picker, setPicker] = useState<PickerState>(null);
@@ -63,8 +68,9 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
     scope === 'template' ? exercises : days[scope]?.exercises ?? [];
 
   const setList = (scope: Scope, updater: (list: PreviewExercise[]) => PreviewExercise[]) => {
-    if (scope === 'template') setExercises(prev => updater(prev));
-    else setDays(prev => prev.map((d, i) => i === scope ? { ...d, exercises: updater(d.exercises) } : d));
+    const apply = (list: PreviewExercise[]) => normalizeSupersets(updater(list));
+    if (scope === 'template') setExercises(prev => apply(prev));
+    else setDays(prev => prev.map((d, i) => i === scope ? { ...d, exercises: apply(d.exercises) } : d));
   };
 
   const handleRegenerate = async () => {
@@ -91,6 +97,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
       setName(data.name);
       if (generateType === 'template') {
         setExercises(data.exercises ?? []);
+        setSupersetNote(data.superset_note ?? null);
       } else {
         setDescription(data.description ?? '');
         setDays(data.days ?? []);
@@ -121,6 +128,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
             type: 'template',
             name: name.trim(),
             exercise_ids: exercises.map(e => e.id),
+            superset_groups: exercises.map(e => e.superset_group ?? null),
             programming: toProgramming(exercises),
           }
         : {
@@ -130,6 +138,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
             days: days.map(d => ({
               label: d.label,
               exercise_ids: d.exercises.map(e => e.id),
+              superset_groups: d.exercises.map(e => e.superset_group ?? null),
               programming: toProgramming(d.exercises),
             })),
           };
@@ -203,6 +212,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
             prescribed_sets: e.prescribed_sets,
             prescribed_reps: e.prescribed_reps,
             prescribed_rpe: e.prescribed_rpe,
+            superset_group: e.superset_group ?? null,
           }
         : e));
     } else {
@@ -238,7 +248,10 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
     });
   };
 
-  const renderExerciseList = (scope: Scope, data: PreviewExercise[]) => (
+  const renderExerciseList = (scope: Scope, data: PreviewExercise[]) => {
+    const positions = supersetPositions(data);
+    const pairable = data.filter(canJoinSuperset).length >= 2;
+    return (
     <DraggableList
       data={data}
       keyExtractor={e => String(e.id)}
@@ -246,7 +259,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
       gap={spacing.sm}
       onReorder={reorderIn(scope)}
       onDragActiveChange={setListDragging}
-      renderItem={item => (
+      renderItem={(item, index) => (
         <ExerciseEditRow
           name={item.name}
           muscleGroup={item.muscle_group}
@@ -256,10 +269,21 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
           onDelete={() => removeExercise(scope, item.id)}
           onSwitch={() => setPicker({ mode: 'switch', scope, exId: item.id })}
           onEdit={() => setEditTarget({ scope, exId: item.id })}
+          onSuperset={pairable && canJoinSuperset(item) ? () => setSupersetTarget({ scope, idx: index }) : undefined}
+          supersetLabel={positions[index]?.label}
         />
       )}
     />
-  );
+    );
+  };
+
+  const renderSupersetNote = (note: string | null | undefined, data: PreviewExercise[]) =>
+    note && data.some(e => e.superset_group != null) ? (
+      <View style={styles.noteRow}>
+        <Ionicons name="link" size={14} color={colors.accent} />
+        <Text style={styles.noteText}>{note}</Text>
+      </View>
+    ) : null;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -300,6 +324,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
         {generateType === 'template' && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Exercises ({exercises.length})</Text>
+            {renderSupersetNote(supersetNote, exercises)}
             {renderExerciseList('template', exercises)}
             <TouchableOpacity style={styles.addExBtn} onPress={() => setPicker({ mode: 'add', scope: 'template' })}>
               <Ionicons name="add" size={16} color={colors.save} />
@@ -318,6 +343,7 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
               placeholder={`Day ${dayIdx + 1}`}
               placeholderTextColor={colors.placeholder}
             />
+            {renderSupersetNote(day.superset_note, day.exercises)}
             {renderExerciseList(dayIdx, day.exercises)}
             <TouchableOpacity style={styles.addExBtn} onPress={() => setPicker({ mode: 'add', scope: dayIdx })}>
               <Ionicons name="add" size={16} color={colors.save} />
@@ -384,6 +410,20 @@ export default function AIWorkoutPreviewScreen({ route, navigation }: Props) {
           }
         }}
         muscleGroups={muscleGroups}
+      />
+
+      <SupersetPickerModal
+        anchorIdx={supersetTarget?.idx ?? null}
+        exercises={supersetTarget ? getList(supersetTarget.scope) : []}
+        onPick={partnerIdx => {
+          if (supersetTarget) setList(supersetTarget.scope, prev => pairExercises(prev, supersetTarget.idx, partnerIdx));
+          setSupersetTarget(null);
+        }}
+        onRemove={() => {
+          if (supersetTarget) setList(supersetTarget.scope, prev => removeFromSuperset(prev, supersetTarget.idx));
+          setSupersetTarget(null);
+        }}
+        onClose={() => setSupersetTarget(null)}
       />
 
       <ExerciseProgrammingModal
@@ -470,6 +510,8 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
   },
+  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
+  noteText: { flex: 1, fontSize: typography.fontSize.sm, color: colors.textSecondary },
 
   bottomBar: {
     flexDirection: 'row',

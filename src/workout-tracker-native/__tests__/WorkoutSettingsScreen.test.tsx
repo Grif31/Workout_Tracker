@@ -41,4 +41,14 @@ describe('WorkoutSettingsScreen', () => {
     await waitFor(async () => expect(await AsyncStorage.getItem('default_rest_timer_1')).toBe('150'));
     expect(getByLabelText('Default rest timer, 2:30')).toBeTruthy();
   });
+
+  it('sets the rest between superset exercises, off by default', async () => {
+    const { getByLabelText, getByText } = renderScreen();
+    fireEvent.press(getByLabelText('Rest between superset exercises, Off'));
+    fireEvent.press(getByText('20s'));
+    await waitFor(async () => expect(await AsyncStorage.getItem('workout_superset_rest_1')).toBe('20'));
+    expect(getByLabelText('Rest between superset exercises, 20s')).toBeTruthy();
+    // The default rest is untouched
+    expect(await AsyncStorage.getItem('default_rest_timer_1')).toBeNull();
+  });
 });

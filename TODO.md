@@ -1978,8 +1978,10 @@ Leave out anything that rewards skipping rest or training through illness (no "w
 - [ ] Creating a routine with new days (`CreateRoutineScreen`) has no pairing UI: pair in the day's template afterwards. Add it there if people ask
 
 ### Phase 3: Coach and polish
-- [ ] AI-generated routines may emit supersets (prompt + schema in `ai_routes.py`, validated like any other programming field); the Coach's workout context mentions them so it doesn't read A1/A2 as separate unrelated work
-- [ ] Rest between members: optional short "transition" rest (0 by default) in workout settings
+- [x] AI-generated routines and workouts may pair exercises: `_superset_directive` in `ai_routes.py` sets the allowance from goal, experience and session length (none for beginners, 75+ min, or strength unless 45 min or less; 1-2 pairs at 45 min or less; at most one at 60), the model marks pairs with a letter, `_supersets_from_letters` holds them to the normalize rules, and the day's `superset_note` is shown in the preview. Saved through `/api/ai/save` `superset_groups` (preview and onboarding)
+- [ ] Measure: how often generated plans keep their pairs vs unpair them before saving (needs a privacy-policy check before recording anything)
+- [ ] The Coach's workout context mentions supersets, so it doesn't read A1/A2 as separate unrelated work
+- [x] Rest between members: optional short rest (Off by default; 10-60s) in Profile > Workout Settings, `workout_superset_rest_${uid}`. Runs only with auto-start rest on; the full rest still follows the round. Not in the in-workout settings sheet yet
 - [ ] Drag a whole superset as one unit in reorder mode
 - [ ] CHANGELOG + What's New bullet; help/FAQ entry in the new Help & FAQ screen
 

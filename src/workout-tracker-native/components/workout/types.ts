@@ -2,6 +2,8 @@ import { StyleSheet } from 'react-native';
 
 export const REST_TIMER_KEY = 'default_rest_timer';
 export const AUTO_REST_KEY = 'workout_auto_rest';
+// Seconds of rest between a superset's members; 0 or unset = none (straight to the partner)
+export const SUPERSET_REST_KEY = 'workout_superset_rest';
 export const VIBRATE_KEY = 'workout_vibrate';
 export const RPE_KEY = 'workout_show_rpe';
 export const PLATE_CALC_KEY = 'workout_show_plate_calc';

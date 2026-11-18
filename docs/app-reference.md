@@ -113,6 +113,7 @@ A tracked run (`GPSCardioScreen`) lives in `context/GpsRunContext.tsx`, mounted 
 | `workout_weekly_goal_${uid}` | '3' | Weekly workout target (integer string) |
 | `workout_weekly_distance_goal_${uid}` | — | Optional weekly distance target, stored in **km** (display converts to the GPS distance unit, so a mi/km switch never changes it). Absent = no goal. Set in Coach's Weekly Goal modal, shown as a fill line on the Weekly Goal card and as the Distance chart's goal line. Display only: no streak or summary reads it |
 | `workout_auto_rest_${uid}` | true | Auto-start rest timer after a set |
+| `workout_superset_rest_${uid}` | 0 (off) | Seconds of rest between a superset's members (`SUPERSET_REST_KEY`); the full rest still follows each round. Only runs when auto-start rest is on |
 | `workout_vibrate_${uid}` | true | Vibrate when rest timer completes |
 | `workout_show_rpe_${uid}` | false | Show RPE input per set |
 | `workout_show_plate_calc_${uid}` | true | Show plate calculator in workout |

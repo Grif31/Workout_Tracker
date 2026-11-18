@@ -237,3 +237,87 @@ def test_routine_day_keeps_groups(client, auth_token, lib):
     assert res.status_code == 201, res.get_json()
     exercises = res.get_json()['days'][0]['workout_template']['exercises']
     assert [e['superset_group'] for e in exercises] == [1, 1]
+
+
+# ── AI-generated plans ───────────────────────────────────────
+
+import json as _json
+import os as _os
+import sys as _sys
+from unittest.mock import patch as _patch
+
+from routes.ai_routes import _superset_directive
+from tests.test_ai_routes import _make_anthropic_mock
+
+
+def _generate(client, token, ai_json, **payload):
+    body = {'days_per_week': 3, 'goal': 'hypertrophy', 'experience': 'intermediate',
+            'generate_type': 'routine', 'session_length_min': 45, **payload}
+    mock_ant = _make_anthropic_mock(ai_json)
+    with _patch.dict(_sys.modules, {'anthropic': mock_ant}), _patch.dict(_os.environ, {'ANTHROPIC_API_KEY': 'fake-key'}):
+        res = client.post('/api/ai/generate', json=body, headers=hdrs(token))
+    assert res.status_code == 200, res.get_json()
+    prompt = mock_ant.Anthropic.return_value.messages.create.call_args[1]['messages'][0]['content']
+    return res.get_json(), prompt
+
+
+def _ex(name, superset=None):
+    return {'exercise': name, 'sets': 3, 'reps': '10-12', 'rpe': None, 'superset': superset}
+
+
+@pytest.mark.parametrize('goal,experience,minutes,expected', [
+    ('hypertrophy', 'beginner', 30, 'Do NOT use supersets'),
+    ('hypertrophy', 'intermediate', 90, 'Do NOT use supersets'),
+    ('strength', 'intermediate', 60, 'Do NOT use supersets'),
+    ('strength', 'intermediate', 45, 'At most ONE superset pair per day, accessories only'),
+    ('hypertrophy', 'intermediate', 45, '1-2 superset pairs per day'),
+    ('general', 'advanced', 60, 'At most ONE superset pair per day, usually arm isolation'),
+])
+def test_superset_allowance_follows_the_profile(goal, experience, minutes, expected):
+    assert _superset_directive(goal, experience, minutes).startswith(expected)
+
+
+def test_generated_routine_marks_pairs_and_keeps_the_reason(client, auth_token, lib):
+    ai = {'name': 'Split', 'description': 'x', 'days': [{
+        'label': 'Upper',
+        'superset_note': 'Paired to keep this under 45 minutes!',
+        'exercises': [_ex('Bench Press'), _ex('Dips', 'A'), _ex('Pull Up', 'A'), _ex('Squat', 'B'), _ex('Running', 'B')],
+    }, {
+        'label': 'Lower', 'superset_note': 'A reason with no pair left',
+        'exercises': [_ex('Squat', 'A'), _ex('Bench Press'), _ex('Bent Over Row', 'A')],
+    }]}
+    data, prompt = _generate(client, auth_token, ai)
+    assert 'Supersets: 1-2 superset pairs per day' in prompt
+    upper, lower = data['days']
+    # Cardio can't pair, so B dissolves; A is numbered 1
+    assert [(e['name'], e['superset_group']) for e in upper['exercises']] == [
+        ('Bench Press', None), ('Dips', 1), ('Pull Up', 1), ('Squat', None), ('Running', None)]
+    assert upper['superset_note'] == 'Paired to keep this under 45 minutes.'
+    # Not next to each other: no pair, so no note either
+    assert [e['superset_group'] for e in lower['exercises']] == [None, None, None]
+    assert lower['superset_note'] is None
+
+
+def test_generated_template_marks_pairs(client, auth_token, lib):
+    ai = {'name': 'Arms', 'superset_note': None,
+          'exercises': [_ex('Dips', 1), _ex('Pull Up', 1), _ex('Plank', 'nope'), _ex('Squat', True)]}
+    data, _ = _generate(client, auth_token, ai, generate_type='template')
+    assert [e['superset_group'] for e in data['exercises']] == [1, 1, None, None]
+    assert data['superset_note'] is None
+
+
+def test_saving_an_ai_plan_keeps_its_supersets(client, auth_token, lib):
+    dips, pull, squat = lib[('Dips', 'Bodyweight')], lib[('Pull Up', 'Bodyweight')], lib[('Squat', 'Barbell')]
+    res = client.post('/api/ai/save', headers=hdrs(auth_token), json={
+        'type': 'routine', 'name': 'Split',
+        'days': [{'label': 'Upper', 'exercise_ids': [squat, dips, pull], 'superset_groups': [None, 1, 1]}],
+    })
+    assert res.status_code == 201, res.get_json()
+    routine = client.get(f"/api/routines/{res.get_json()['id']}", headers=hdrs(auth_token)).get_json()
+    assert [e['superset_group'] for e in routine['days'][0]['workout_template']['exercises']] == [None, 1, 1]
+
+    res = client.post('/api/ai/save', headers=hdrs(auth_token), json={
+        'type': 'template', 'name': 'Arms', 'exercise_ids': [dips, pull], 'superset_groups': [2, 2],
+    })
+    assert res.status_code == 201
+    assert [g for _, g in _template_groups(client, auth_token, res.get_json()['id'])] == [1, 1]

@@ -27,7 +27,7 @@ jest.mock('../theme/spacing', () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24, 
 jest.mock('../theme/typography', () => ({ typography: { fontSize: { xs: 11, sm: 14, md: 16, lg: 20 }, fontWeight: { regular: '400', bold: 'bold' }, title: {}, body: {}, button: {} } }));
 jest.mock('../components/workout/RestTimer', () => {
   const { View } = require('react-native');
-  return () => <View testID="rest-timer" />;
+  return ({ restTotal }: any) => <View testID="rest-timer" accessibilityLabel={`rest ${restTotal}`} />;
 });
 jest.mock('@react-native-community/netinfo', () => ({
   __esModule: true,
@@ -154,6 +154,26 @@ describe('WorkoutLog supersets: rest once per round', () => {
 
     fireEvent.press(rowSet1);
     expect(utils.queryByTestId('rest-timer')).not.toBeNull();
+  });
+
+  it('runs the short rest between members when one is set, then the full rest after the round', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => {
+      if (key.startsWith('workout_auto_rest')) return 'true';
+      if (key.startsWith('workout_superset_rest')) return '15';
+      if (key.startsWith('default_rest_timer')) return '120';
+      return null;
+    });
+    const utils = render(
+      <WorkoutLog prefill={prefill(strength('Bench Press', 1, 1), strength('Barbell Row', 3, 1)) as any}
+        onSubmit={jest.fn()} onCancel={jest.fn()} />,
+    );
+    await act(async () => {});
+    const [benchSet1, rowSet1] = doneButtons(utils);
+
+    fireEvent.press(benchSet1);
+    expect(utils.getByLabelText('rest 15')).toBeTruthy();
+    fireEvent.press(rowSet1);
+    expect(utils.getByLabelText('rest 120')).toBeTruthy();
   });
 
   it('still rests after every set outside a superset', async () => {

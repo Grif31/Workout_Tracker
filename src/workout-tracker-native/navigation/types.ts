@@ -91,8 +91,11 @@ export type PreviewExercise = {
   prescribed_sets?: number;
   prescribed_reps?: string;
   prescribed_rpe?: number;
+  /** Set when the AI paired it into a superset (utils/supersets.ts) */
+  superset_group?: number | null;
 };
-export type PreviewDay = { label: string; exercises: PreviewExercise[] };
+/** superset_note: the AI's one-line reason for the day's supersets, null without one */
+export type PreviewDay = { label: string; exercises: PreviewExercise[]; superset_note?: string | null };
 
 export type TrainingStackParamsList = {
     TrainingHome: undefined;
@@ -108,6 +111,8 @@ export type TrainingStackParamsList = {
         description?: string;
         exercises?: PreviewExercise[];
         days?: PreviewDay[];
+        /** Template only: the AI's reason for its supersets */
+        supersetNote?: string | null;
         coachDays: number;
         coachGoal: string;
         coachExp: string;

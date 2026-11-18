@@ -368,6 +368,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
           days: (data.days ?? []).map((d: any) => ({
             label: d.label,
             exercise_ids: d.exercises.map((e: any) => e.id),
+            superset_groups: d.exercises.map((e: any) => e.superset_group ?? null),
             programming: toProgramming(d.exercises),
           })),
         }),

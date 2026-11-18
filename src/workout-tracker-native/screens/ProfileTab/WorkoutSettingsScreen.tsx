@@ -10,13 +10,15 @@ import { ProfileStackParamsList } from '../../navigation/types';
 import { spacing, radius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import {
-  REST_TIMER_KEY, AUTO_REST_KEY, VIBRATE_KEY, RPE_KEY, PLATE_CALC_KEY, REPEAT_LAST_SET_KEY, PREFILL_PREVIOUS_KEY,
+  REST_TIMER_KEY, SUPERSET_REST_KEY, AUTO_REST_KEY, VIBRATE_KEY, RPE_KEY, PLATE_CALC_KEY, REPEAT_LAST_SET_KEY, PREFILL_PREVIOUS_KEY,
 } from '../../components/workout/types';
 
 type Props = NativeStackScreenProps<ProfileStackParamsList, 'WorkoutSettings'>;
 
 const REST_TIMER_PRESETS = [30, 45, 60, 90, 120, 150, 180, 240, 300];
 const DEFAULT_REST = 90;
+// 0 = off: straight to the partner, the full rest after the round
+const SUPERSET_REST_PRESETS = [0, 10, 15, 20, 30, 45, 60];
 
 type Toggle = {
   key: string;
@@ -41,6 +43,7 @@ const LOGGING_TOGGLES: Toggle[] = [
 const ALL_TOGGLES = [...REST_TOGGLES, ...LOGGING_TOGGLES];
 
 const formatRestTimer = (secs: number) => {
+  if (secs <= 0) return 'Off';
   if (secs < 60) return `${secs}s`;
   const m = Math.floor(secs / 60);
   const s = secs % 60;
@@ -53,19 +56,23 @@ export default function WorkoutSettingsScreen({ navigation }: Props) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const uid = user?.id;
   const restTimerKey = `${REST_TIMER_KEY}_${uid}`;
+  const supersetRestKey = `${SUPERSET_REST_KEY}_${uid}`;
 
   const [restSeconds, setRestSeconds] = useState(DEFAULT_REST);
-  const [pickerVisible, setPickerVisible] = useState(false);
+  const [supersetRestSeconds, setSupersetRestSeconds] = useState(0);
+  const [picker, setPicker] = useState<'rest' | 'superset' | null>(null);
   const [toggles, setToggles] = useState<Record<string, boolean>>(
     () => Object.fromEntries(ALL_TOGGLES.map(t => [t.key, t.fallback])),
   );
 
   useEffect(() => {
-    AsyncStorage.multiGet([restTimerKey, ...ALL_TOGGLES.map(t => `${t.key}_${uid}`)]).then(pairs => {
+    AsyncStorage.multiGet([restTimerKey, supersetRestKey, ...ALL_TOGGLES.map(t => `${t.key}_${uid}`)]).then(pairs => {
       const rest = parseInt(pairs[0][1] ?? '', 10);
       if (rest > 0) setRestSeconds(rest);
+      const between = parseInt(pairs[1][1] ?? '', 10);
+      if (between > 0) setSupersetRestSeconds(between);
       setToggles(Object.fromEntries(ALL_TOGGLES.map((t, i) => {
-        const v = pairs[i + 1][1];
+        const v = pairs[i + 2][1];
         return [t.key, v === null ? t.fallback : v === 'true'];
       })));
     });
@@ -77,10 +84,17 @@ export default function WorkoutSettingsScreen({ navigation }: Props) {
   };
 
   const pickRest = (secs: number) => {
-    setRestSeconds(secs);
-    AsyncStorage.setItem(restTimerKey, String(secs));
-    setPickerVisible(false);
+    if (picker === 'superset') {
+      setSupersetRestSeconds(secs);
+      AsyncStorage.setItem(supersetRestKey, String(secs));
+    } else {
+      setRestSeconds(secs);
+      AsyncStorage.setItem(restTimerKey, String(secs));
+    }
+    setPicker(null);
   };
+  const pickerPresets = picker === 'superset' ? SUPERSET_REST_PRESETS : REST_TIMER_PRESETS;
+  const pickerValue = picker === 'superset' ? supersetRestSeconds : restSeconds;
 
   // dividerAbove: false for the first row of a group
   const renderToggle = (t: Toggle, dividerAbove = true) => (
@@ -118,7 +132,7 @@ export default function WorkoutSettingsScreen({ navigation }: Props) {
         <View style={styles.group}>
           <TouchableOpacity
             style={styles.row}
-            onPress={() => setPickerVisible(true)}
+            onPress={() => setPicker('rest')}
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel={`Default rest timer, ${formatRestTimer(restSeconds)}`}
@@ -129,6 +143,26 @@ export default function WorkoutSettingsScreen({ navigation }: Props) {
             </View>
             <View style={styles.rowRight}>
               <Text style={styles.rowValue}>{formatRestTimer(restSeconds)}</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+            </View>
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => setPicker('superset')}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`Rest between superset exercises, ${formatRestTimer(supersetRestSeconds)}`}
+          >
+            <View style={styles.rowLeft}>
+              <Ionicons name="link-outline" size={20} color={colors.textSecondary} />
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>Rest Between Superset Exercises</Text>
+                <Text style={styles.rowHint}>A short rest before the next exercise in a round</Text>
+              </View>
+            </View>
+            <View style={styles.rowRight}>
+              <Text style={styles.rowValue}>{formatRestTimer(supersetRestSeconds)}</Text>
               <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
             </View>
           </TouchableOpacity>
@@ -143,13 +177,13 @@ export default function WorkoutSettingsScreen({ navigation }: Props) {
         <Text style={styles.footnote}>These apply from the next workout you open.</Text>
       </ScrollView>
 
-      <Modal visible={pickerVisible} transparent animationType="slide" onRequestClose={() => setPickerVisible(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setPickerVisible(false)}>
+      <Modal visible={picker !== null} transparent animationType="slide" onRequestClose={() => setPicker(null)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setPicker(null)}>
           <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
-            <Text style={styles.modalTitle}>Default Rest Timer</Text>
+            <Text style={styles.modalTitle}>{picker === 'superset' ? 'Rest Between Superset Exercises' : 'Default Rest Timer'}</Text>
             <View style={styles.restGrid}>
-              {REST_TIMER_PRESETS.map(secs => {
-                const selected = restSeconds === secs;
+              {pickerPresets.map(secs => {
+                const selected = pickerValue === secs;
                 return (
                   <TouchableOpacity
                     key={secs}
@@ -166,8 +200,10 @@ export default function WorkoutSettingsScreen({ navigation }: Props) {
               })}
             </View>
             <Text style={styles.restHint}>
-              Longer rest lets you lift more on the next set. A good start: 1-2 min for isolation and
-              accessory work, 2-3 min for compound lifts, 3-5 min for heavy sets of 1-5 reps.
+              {picker === 'superset'
+                ? 'Off goes straight to the next exercise. Your default rest still comes after each round.'
+                : 'Longer rest lets you lift more on the next set. A good start: 1-2 min for isolation and '
+                  + 'accessory work, 2-3 min for compound lifts, 3-5 min for heavy sets of 1-5 reps.'}
             </Text>
           </View>
         </TouchableOpacity>

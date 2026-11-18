@@ -41,6 +41,7 @@ import { currentExerciseName, liveActivityProps, nextSetLines, type LiveRest } f
 
 import {
   REST_TIMER_KEY,
+  SUPERSET_REST_KEY,
   AUTO_REST_KEY,
   VIBRATE_KEY,
   PLATE_CALC_KEY,
@@ -152,6 +153,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const uid = user?.id;
   const restTimerKey       = `${REST_TIMER_KEY}_${uid}`;
   const autoRestKey        = `${AUTO_REST_KEY}_${uid}`;
+  const supersetRestKey    = `${SUPERSET_REST_KEY}_${uid}`;
   const vibrateKey         = `${VIBRATE_KEY}_${uid}`;
   const rpeKey             = `${RPE_KEY}_${uid}`;
   const plateCalcKey       = `${PLATE_CALC_KEY}_${uid}`;
@@ -245,6 +247,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const [liveTick, setLiveTick] = useState(0);
 
   const [autoStartRest, setAutoStartRest] = useState(false);
+  const [supersetRest, setSupersetRest] = useState(0);
   const [vibrateOnComplete, setVibrateOnComplete] = useState(true);
   const [showRpe, setShowRpe] = useState(false);
   const [showPlateCalc, setShowPlateCalc] = useState(true);
@@ -423,7 +426,10 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       AsyncStorage.getItem(plateCalcKey),
       AsyncStorage.getItem(repeatLastSetKey),
       AsyncStorage.getItem(prefillPreviousKey),
-    ]).then(([timerVal, autoRestVal, vibrateVal, rpeVal, plateCalcVal, repeatVal, prefillPrevVal]) => {
+      AsyncStorage.getItem(supersetRestKey),
+    ]).then(([timerVal, autoRestVal, vibrateVal, rpeVal, plateCalcVal, repeatVal, prefillPrevVal, supersetRestVal]) => {
+      const between = supersetRestVal ? parseInt(supersetRestVal, 10) : 0;
+      if (between > 0) setSupersetRest(between);
       const n = timerVal ? parseInt(timerVal, 10) : NaN;
       if (!isNaN(n)) { setDefaultRest(n); setRestRemaining(n); setRestTotal(n); }
       if (autoRestVal !== null) setAutoStartRest(autoRestVal === 'true');
@@ -599,9 +605,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     }
   };
 
-  const startRest = useCallback(async () => {
+  const beginRest = useCallback(async (duration: number) => {
     if (restRef.current) clearInterval(restRef.current);
-    const duration = defaultRest;
     setRestTotal(duration);
     setRestRemaining(duration);
     setRestActive(true);
@@ -611,7 +616,9 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     _runRestInterval();
     const alertsOff = await AsyncStorage.getItem(REST_ALERTS_KEY);
     if (alertsOff !== 'false') scheduleRestTimerAlert(duration);
-  }, [defaultRest, _runRestInterval]);
+  }, [_runRestInterval]);
+
+  const startRest = useCallback(() => beginRest(defaultRest), [beginRest, defaultRest]);
 
   const pauseRest = () => {
     if (restRef.current) clearInterval(restRef.current);
@@ -940,10 +947,12 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
     });
     // A finished cardio bout moves on rather than resting, like a warm-up set
     if (nowDone && set.set_type !== 'W' && ex.exercise_type !== 'cardio') {
-      // In a superset, rest comes once per round; until then, go to the partner
+      // In a superset, the full rest comes once per round; until then, go to
+      // the partner, after the optional short rest between members
       if (completesRound(exercisesRef.current, exIndex, setIndex)) {
         if (autoStartRest) startRest();
       } else {
+        if (autoStartRest && supersetRest > 0) beginRest(supersetRest);
         const next = nextInRound(exercisesRef.current, exIndex, setIndex);
         if (next) revealSet(next.exIdx, next.setIdx);
       }
@@ -1014,7 +1023,7 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
         ));
       }
     }
-  }, [autoStartRest, startRest, showPRBanner, revealSet]);
+  }, [autoStartRest, startRest, beginRest, supersetRest, showPRBanner, revealSet]);
 
   const addSetToExercise = useCallback((exIndex: number) => {
     animateNextRowChange();
