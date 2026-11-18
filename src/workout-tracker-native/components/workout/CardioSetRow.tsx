@@ -1,22 +1,24 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { type WorkoutSet } from './types';
+import { type WorkoutSet, colStyles } from './types';
+import SwipeToDelete from './SwipeToDelete';
 
 type Props = {
   set: WorkoutSet;
   setIndex: number;
   onChangeField: (field: string, value: string) => void;
+  onToggleDone: () => void;
   onDelete: () => void;
 };
 
-function CardioSetRow({ set, setIndex, onChangeField, onDelete }: Props) {
+function CardioSetRow({ set, setIndex, onChangeField, onToggleDone, onDelete }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const isDone = set.done ?? false;
 
   const [running, setRunning] = useState(false);
   const [elapsedSecs, setElapsedSecs] = useState(0);
@@ -40,95 +42,129 @@ function CardioSetRow({ set, setIndex, onChangeField, onDelete }: Props) {
   const stopWatch = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     setRunning(false);
-    onChangeField('cardio_duration', (elapsedSecs / 60).toFixed(2));
+    // Rounded, not toFixed: a 4:00 bout reads "4", not "4.00"
+    onChangeField('cardio_duration', String(Math.round((elapsedSecs / 60) * 100) / 100));
   };
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
+  const unit = set.distance_unit || 'mi';
+
   return (
-    <Swipeable renderRightActions={() => (
-      <TouchableOpacity style={styles.swipeDelete} onPress={onDelete}>
-        <Text style={styles.swipeDeleteText}>Delete</Text>
-      </TouchableOpacity>
-    )}>
-      <View style={styles.cardioSetBlock}>
-        <Text style={[styles.setTypeBadgeNum, { color: colors.textSecondary, width: 20, textAlign: 'center' }]}>
-          {setIndex + 1}
-        </Text>
-        <View style={{ flex: 1, gap: 6 }}>
-          {/* Row 1: Duration + stopwatch */}
+    <SwipeToDelete onDelete={onDelete} deleteLabel={`Delete bout ${setIndex + 1}`}>
+      <View style={[styles.cardioSetBlock, isDone && styles.cardioSetBlockDone]}>
+        <View style={[styles.setBadge, colStyles.setType]}>
+          <Text style={styles.setBadgeNum}>{setIndex + 1}</Text>
+        </View>
+        <View style={styles.cardioFields}>
           <View style={styles.cardioRow}>
             <TextInput
-              style={[styles.setInput, { flex: 1 }]}
+              style={[styles.setInput, styles.flexInput, isDone && styles.setInputDone]}
               placeholder="min"
               placeholderTextColor={colors.placeholder}
               keyboardType="decimal-pad"
-              accessibilityLabel={`Set ${setIndex + 1} duration, minutes`}
+              accessibilityLabel={`Bout ${setIndex + 1} duration, minutes`}
               value={running ? fmtWatch(elapsedSecs) : (set.cardio_duration || '')}
               onChangeText={val => !running && onChangeField('cardio_duration', val)}
-              editable={!running}
+              editable={!running && !isDone}
             />
             <TouchableOpacity
-              style={[styles.cardioTimerBtn, { borderColor: running ? colors.danger : colors.save }]}
+              style={[styles.cardioTimerBtn, { borderColor: running ? colors.danger : colors.save }, isDone && styles.setInputDone]}
               onPress={running ? stopWatch : startWatch}
+              disabled={isDone}
+              accessibilityRole="button"
+              accessibilityLabel={running ? 'Stop stopwatch' : 'Start stopwatch'}
             >
               <Ionicons
                 name={running ? 'stop' : 'play'}
                 size={14}
                 color={running ? colors.danger : colors.save}
               />
-              <Text style={{ fontSize: 12, fontWeight: '600', color: running ? colors.danger : colors.save }}>
+              <Text style={[styles.cardioTimerText, { color: running ? colors.danger : colors.save }]}>
                 {running ? fmtWatch(elapsedSecs) : 'Start'}
               </Text>
             </TouchableOpacity>
           </View>
-          {/* Row 2: Distance + unit toggle + pace */}
           <View style={styles.cardioRow}>
             <TextInput
-              style={[styles.setInput, { flex: 1 }]}
+              style={[styles.setInput, styles.flexInput, isDone && styles.setInputDone]}
               placeholder="dist"
               placeholderTextColor={colors.placeholder}
               keyboardType="decimal-pad"
-              accessibilityLabel={`Set ${setIndex + 1} distance`}
+              accessibilityLabel={`Bout ${setIndex + 1} distance`}
+              editable={!isDone}
               value={set.distance || ''}
               onChangeText={val => onChangeField('distance', val)}
             />
-            <View style={styles.cardioUnitToggle}>
+            <View style={[styles.cardioUnitToggle, isDone && styles.setInputDone]}>
               {['km', 'mi'].map(u => (
                 <TouchableOpacity
                   key={u}
-                  style={[styles.cardioUnitBtn, (set.distance_unit || 'mi') === u && { backgroundColor: colors.accent }]}
+                  style={[styles.cardioUnitBtn, unit === u && { backgroundColor: colors.accent }]}
                   onPress={() => onChangeField('distance_unit', u)}
+                  disabled={isDone}
                   accessibilityRole="button"
                   accessibilityLabel={u === 'km' ? 'Kilometers' : 'Miles'}
-                  accessibilityState={{ selected: (set.distance_unit || 'mi') === u }}
+                  accessibilityState={{ selected: unit === u }}
                 >
-                  <Text style={{ fontSize: typography.fontSize.xs, fontWeight: '700', color: (set.distance_unit || 'mi') === u ? colors.accentText : colors.textSecondary }}>
+                  <Text style={[styles.cardioUnitText, { color: unit === u ? colors.accentText : colors.textSecondary }]}>
                     {u}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
             <TextInput
-              style={[styles.setInput, { width: 64 }]}
+              style={[styles.setInput, styles.paceInput, isDone && styles.setInputDone]}
               placeholder="pace"
               placeholderTextColor={colors.placeholder}
               keyboardType="decimal-pad"
-              accessibilityLabel={`Set ${setIndex + 1} pace`}
+              accessibilityLabel={`Bout ${setIndex + 1} pace`}
+              editable={!isDone}
               value={set.intensity || ''}
               onChangeText={val => onChangeField('intensity', val)}
             />
           </View>
         </View>
+        <TouchableOpacity
+          style={[styles.checkBtn, colStyles.check]}
+          onPress={onToggleDone}
+          // Checking off mid-stopwatch would log the bout before its time is written
+          disabled={running}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: isDone, disabled: running }}
+          accessibilityLabel={`Bout ${setIndex + 1} done`}
+        >
+          <Ionicons
+            name={isDone ? 'checkmark-circle' : 'ellipse-outline'}
+            size={30}
+            color={isDone ? colors.save : colors.textSecondary}
+          />
+        </TouchableOpacity>
       </View>
-    </Swipeable>
+    </SwipeToDelete>
   );
 }
 
 export default React.memo(CardioSetRow);
 
+// The stopwatch spans the unit toggle and pace box below it, so the duration
+// and distance inputs line up in one column.
+const UNIT_TOGGLE_WIDTH = 72;
+const PACE_WIDTH = 64;
+const FIELD_GAP = 6;
+
 const createStyles = (colors: Colors) => StyleSheet.create({
-  setTypeBadgeNum: { fontSize: 12, fontWeight: '700', lineHeight: 14 },
+  // Same bordered badge as a strength set's number, minus the set-type colour:
+  // cardio bouts have no set types.
+  setBadge: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 4,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  setBadgeNum: { fontSize: 12, fontWeight: '700', lineHeight: 14, color: colors.textSecondary },
 
   setInput: {
     borderWidth: 1,
@@ -143,48 +179,51 @@ const createStyles = (colors: Colors) => StyleSheet.create({
     backgroundColor: colors.background,
     height: 44,
   },
+  flexInput: { flex: 1 },
+  paceInput: { width: PACE_WIDTH },
 
-  swipeDelete: {
-    backgroundColor: colors.danger,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    borderRadius: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  swipeDeleteText: { color: colors.accentText, fontWeight: '700' },
-
+  // Bottom margin must stay spacing.sm, the height SwipeToDelete's action expects
   cardioSetBlock: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: spacing.sm,
     marginBottom: spacing.sm,
-    paddingTop: spacing.xs,
+    paddingHorizontal: 2,
   },
+  cardioSetBlockDone: { backgroundColor: colors.save + '14', borderRadius: spacing.xs },
+  setInputDone: { opacity: 0.5 },
+  cardioFields: { flex: 1, gap: FIELD_GAP, marginLeft: spacing.xs },
+  // Centred on both lines of fields, in the same column as a strength set's check
+  checkBtn: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   cardioRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: FIELD_GAP,
   },
   cardioTimerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.xs,
     borderWidth: 1,
     borderRadius: spacing.xs,
-    paddingHorizontal: spacing.sm,
+    width: UNIT_TOGGLE_WIDTH + FIELD_GAP + PACE_WIDTH,
     height: 44,
   },
+  cardioTimerText: { fontSize: typography.fontSize.sm, fontWeight: '600' },
   cardioUnitToggle: {
     flexDirection: 'row',
+    width: UNIT_TOGGLE_WIDTH,
+    height: 44,
     borderRadius: spacing.xs,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.inputBorder,
   },
   cardioUnitBtn: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    backgroundColor: colors.surface,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
   },
+  cardioUnitText: { fontSize: typography.fontSize.xs, fontWeight: '700' },
 });

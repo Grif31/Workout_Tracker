@@ -163,6 +163,7 @@ function ExerciseBlock({
                     set={set}
                     setIndex={setIndex}
                     onChangeField={(field, value) => onUpdateCardioField(exIndex, setIndex, field, value)}
+                    onToggleDone={() => onToggleSetDone(exIndex, setIndex)}
                     onDelete={() => onDeleteSet(exIndex, setIndex)}
                   />
                 ))}

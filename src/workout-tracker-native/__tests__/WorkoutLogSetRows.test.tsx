@@ -63,6 +63,53 @@ describe('WorkoutLog set rows', () => {
     expect(getAllByPlaceholderText('—').map(i => i.props.value)).toEqual(['5', '225', '3', '245']);
   });
 
+  it('deletes a cardio bout from the same swipe action as a strength set', async () => {
+    mockServer();
+    const { getByLabelText, queryByDisplayValue, findByText } = render(
+      <WorkoutLog
+        prefill={{
+          name: 'Warm-up', notes: '',
+          exercises: [{
+            name: 'Cycling', exercise_template_id: 9, exercise_type: 'cardio', equipment: 'Stationary Bike',
+            sets: [{ cardio_duration: 4, distance: 1.2, distance_unit: 'mi' }, { cardio_duration: 6, distance: 2, distance_unit: 'mi' }],
+          }],
+        } as any}
+        onSubmit={jest.fn()}
+        onCancel={jest.fn()}
+      />,
+    );
+
+    fireEvent.press(getByLabelText('Delete bout 1'));
+    expect(queryByDisplayValue('1.2')).toBeNull();
+    expect(queryByDisplayValue('2')).toBeTruthy();
+    expect(await findByText('Bout 1 removed from Cycling')).toBeTruthy();
+  });
+
+  it('checks off a cardio bout once it has a time or distance, so the workout can move past it', () => {
+    mockServer();
+    const { getByLabelText } = render(
+      <WorkoutLog
+        prefill={{
+          name: 'Warm-up', notes: '',
+          exercises: [{
+            name: 'Cycling', exercise_template_id: 9, exercise_type: 'cardio', equipment: 'Stationary Bike',
+            sets: [{ cardio_duration: 4, distance_unit: 'mi' }, { distance_unit: 'mi' }],
+          }],
+        } as any}
+        onSubmit={jest.fn()}
+        onCancel={jest.fn()}
+      />,
+    );
+
+    fireEvent.press(getByLabelText('Bout 1 done'));
+    expect(getByLabelText('Bout 1 done').props.accessibilityState.checked).toBe(true);
+    expect(getByLabelText('Bout 1 duration, minutes').props.editable).toBe(false);
+
+    // An empty bout has nothing to log
+    fireEvent.press(getByLabelText('Bout 2 done'));
+    expect(getByLabelText('Bout 2 done').props.accessibilityState.checked).toBe(false);
+  });
+
   it("fills a set from the Prev column", async () => {
     mockServer([{ reps: '8', weight: '185.0', set_type: 'N' }]);
     const { findByLabelText, getByDisplayValue } = render(

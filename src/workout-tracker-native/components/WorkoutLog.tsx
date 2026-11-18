@@ -126,7 +126,9 @@ const prefillToEntries = (prefill: PrefillWorkoutData): ExerciseEntry[] =>
 
 // Has the data toggleSetDone requires before a set can be checked off
 const isSetFilled = (ex: ExerciseEntry, s: WorkoutSet) =>
-  isDuration(ex)
+  ex.exercise_type === 'cardio'
+    ? parseFloat(s.cardio_duration ?? '') > 0 || parseFloat(s.distance ?? '') > 0
+    : isDuration(ex)
     ? parseFloat(s.cardio_duration ?? '') > 0
     : !!s.reps.trim() && (isBodyweight(ex) || !!s.weight.trim());
 
@@ -936,7 +938,8 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
       next[exIndex] = { ...target, sets: target.sets.map((s, j) => j === setIndex ? { ...s, done: nowDone } : s) };
       return next;
     });
-    if (nowDone && set.set_type !== 'W') {
+    // A finished cardio bout moves on rather than resting, like a warm-up set
+    if (nowDone && set.set_type !== 'W' && ex.exercise_type !== 'cardio') {
       // In a superset, rest comes once per round; until then, go to the partner
       if (completesRound(exercisesRef.current, exIndex, setIndex)) {
         if (autoStartRest) startRest();

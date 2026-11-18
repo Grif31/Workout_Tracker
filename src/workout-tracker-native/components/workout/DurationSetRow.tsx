@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Animated } from 'react-native';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type Colors } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { type WorkoutSet, type PreviousSet, colStyles, fmtHold } from './types';
 import { motionSpring } from '../../utils/motion';
+import SwipeToDelete from './SwipeToDelete';
 
 // Timed-hold sets (planks, wall sits): SET | PREVIOUS | SECONDS | ✓
 // The UI works in seconds; WorkoutLog converts to minutes for the payload.
@@ -49,21 +49,7 @@ function DurationSetRow({
   }, [isDone, checkScale]);
 
   return (
-    <Swipeable
-      renderRightActions={(progress) => {
-        const translateX = progress.interpolate({
-          inputRange: [0, 1],
-          outputRange: [80, 0],
-        });
-        return (
-          <Animated.View style={{ transform: [{ translateX }] }}>
-            <TouchableOpacity style={[styles.swipeDelete, { flex: 1 }]} onPress={onDelete}>
-              <Text style={styles.swipeDeleteText}>Delete</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        );
-      }}
-    >
+    <SwipeToDelete onDelete={onDelete} deleteLabel={`Delete set ${setIndex + 1}`}>
       <View style={[styles.setRow, isDone && styles.setRowDone]}>
         <View style={[styles.setBadge, colStyles.setType]}>
           <Text style={[styles.setBadgeNum, { color: colors.textSecondary }]}>{setIndex + 1}</Text>
@@ -113,7 +99,7 @@ function DurationSetRow({
           </Animated.View>
         </TouchableOpacity>
       </View>
-    </Swipeable>
+    </SwipeToDelete>
   );
 }
 
@@ -159,13 +145,4 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   setInputDone: { borderColor: 'transparent' },
   secondsSuffix: { fontSize: typography.fontSize.xs, fontWeight: '600' },
   checkBtn: { alignItems: 'center', justifyContent: 'center' },
-  swipeDelete: {
-    backgroundColor: colors.danger,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    borderRadius: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  swipeDeleteText: { color: colors.accentText, fontWeight: '700' },
 });
