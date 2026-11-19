@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, AppState, Animated } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Platform, Alert, AppState, Animated } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LIVE_WORKOUT_NOTIF_KEY } from '../constants/storageKeys';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { postLiveWorkoutNotification, cancelLiveWorkoutNotification } from '../utils/notifications';
 import { endLiveActivity, isLiveActivityActive } from '../utils/liveActivity';
 import MiniRunBar from '../components/MiniRunBar';
+import MiniSessionBar from '../components/MiniSessionBar';
 import { useGpsRunStatus } from '../context/GpsRunContext';
 import { fmtElapsed } from '../components/workout/types';
 import { currentExerciseName } from '../utils/liveActivityProps';
@@ -23,8 +24,6 @@ import { useWorkoutSession, sessionElapsedSeconds } from '../context/WorkoutSess
 import { navigationRef } from './navigationRef';
 import { useWidgetLinks } from './useWidgetLinks';
 import WidgetDiagramRenderer from '../components/WidgetDiagramRenderer';
-import { spacing, radius } from '../theme/spacing';
-import { typography } from '../theme/typography';
 import { motionTiming, motionSpring } from '../utils/motion';
 
 const Tab = createBottomTabNavigator<AppStack>();
@@ -50,34 +49,17 @@ const TAB_CONFIG: Array<{ route: string; icon: keyof typeof Ionicons.glyphMap; l
 const ICON_SIZE = 24;
 const ICON_LIFT = 5;
 
+// Screens that take the whole window: the tab area is gone while one is in the stack
+const FULL_SCREEN_ROUTES = ['WorkoutLog', 'GPSCardio'];
+const BAR_SPRING = { damping: 20, stiffness: 180, mass: 0.8 };
 
-
-function MiniWorkoutBar() {
-  const { colors } = useTheme();
+function MiniWorkoutBar({ animateIn }: { animateIn: boolean }) {
   const { session, clearSession, isWorkoutOpen } = useWorkoutSession();
   // Ref so the AppState closure reads the live value without resubscribing
   const workoutOpenRef = useRef(isWorkoutOpen);
   workoutOpenRef.current = isWorkoutOpen;
   const [elapsed, setElapsed] = useState(0);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const entranceAnim = useRef(new Animated.Value(0)).current;
-  const hadSessionRef = useRef(false);
-
-  // Slide-up entrance when a session first appears (fresh minimize or a
-  // crash-restored workout on cold start)
-  useEffect(() => {
-    if (session && !hadSessionRef.current) {
-      entranceAnim.setValue(0);
-      motionSpring(entranceAnim, {
-        toValue: 1,
-        useNativeDriver: true,
-        damping: 18,
-        stiffness: 220,
-        mass: 0.7,
-      }).start();
-    }
-    hadSessionRef.current = !!session;
-  }, [session]);
 
   useEffect(() => {
     if (!session) { if (tickRef.current) clearInterval(tickRef.current); return; }
@@ -130,52 +112,27 @@ function MiniWorkoutBar() {
     }
   };
 
+  const handleDiscard = () => Alert.alert(
+    'Discard Workout?',
+    'Your logged sets will be lost.',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: () => { endLiveActivity(); clearSession(); } },
+    ]
+  );
+
   return (
-    <Animated.View style={{
-      opacity: entranceAnim,
-      transform: [{ translateY: entranceAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }],
-    }}>
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={handleResume}
-        style={[styles.miniBar, {
-          backgroundColor: colors.surface,
-          borderTopWidth: 1,
-          borderTopColor: colors.border,
-        }]}
-      >
-        <View style={[styles.miniProgress, { backgroundColor: colors.accent, width: `${progressPct}%` }]} />
-        <View style={styles.miniLeft}>
-          <Text style={[styles.miniName, { color: colors.textPrimary }]} numberOfLines={1}>
-            {session.workoutName || 'Workout'}
-          </Text>
-          <Text style={[styles.miniSub, { color: colors.textSecondary }]} numberOfLines={1}>
-            {subParts.join(' · ')}
-          </Text>
-        </View>
-        <View style={[styles.miniBtn, { backgroundColor: colors.accent }]}>
-          <Ionicons name="chevron-up" size={14} color={colors.accentText} />
-          <Text style={[styles.miniBtnText, { color: colors.accentText }]}>Open</Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.miniBtn, { borderWidth: 1, borderColor: colors.border }]}
-          onPress={() => {
-            Alert.alert(
-              'Discard Workout?',
-              'Your logged sets will be lost.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Discard', style: 'destructive', onPress: () => { endLiveActivity(); clearSession(); } },
-              ]
-            );
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Discard workout"
-        >
-          <Ionicons name="trash-outline" size={14} color={colors.danger} />
-        </TouchableOpacity>
-      </TouchableOpacity>
-    </Animated.View>
+    <MiniSessionBar
+      title={session.workoutName || 'Workout'}
+      subtitle={subParts.join(' · ')}
+      progressPct={progressPct}
+      actionLabel="Open"
+      actionIcon="chevron-up"
+      onOpen={handleResume}
+      onDiscard={handleDiscard}
+      discardA11yLabel="Discard workout"
+      animateIn={animateIn}
+    />
   );
 }
 
@@ -275,13 +232,10 @@ function AnimatedTabBar({ state, navigation, colors, pendingCount }: {
 
 function CustomTabBar(props: BottomTabBarProps) {
   const { colors } = useTheme();
-  const { isWorkoutOpen } = useWorkoutSession();
-  const { screenOpen: gpsScreenOpen } = useGpsRunStatus();
-  const translateY = useRef(new Animated.Value(0)).current;
-  const opacity    = useRef(new Animated.Value(1)).current;
-  const heightRef  = useRef(0);
-  const prevSubScreen = useRef(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const { bottom } = useSafeAreaInsets();
+  const { session } = useWorkoutSession();
+  const run = useGpsRunStatus();
+  const hasMiniBar = !!session || (run.trackingState !== 'idle' && !run.screenOpen);
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
@@ -296,46 +250,133 @@ function CustomTabBar(props: BottomTabBarProps) {
   const activeRoute = props.state.routes[props.state.index];
   const focusedRoute = getFocusedRouteNameFromRoute(activeRoute);
   const isOnSubScreen = focusedRoute !== undefined && focusedRoute !== ROOT_SCREENS[activeRoute.name];
+  // From navigation state, which changes in the render that starts the push or
+  // pop. The screens' own open flags lag by a whole slide: the bars used to
+  // appear only once a minimized workout had finished sliding away.
+  const stackRoutes = activeRoute.state?.routes.map(r => r.name) ?? (focusedRoute ? [focusedRoute] : []);
+  const fullScreen = stackRoutes.some(name => FULL_SCREEN_ROUTES.includes(name));
+
+  // The bars are an overlay pinned to the bottom edge, and a spacer under them
+  // holds the room the screen gives up. The tab bar is never unmounted, only
+  // moved below the edge, so no animation has to be undone when it ends.
+  const [chromeH, setChromeH] = useState(0);
+  const [tabH, setTabH] = useState(0);
+  // With a mini bar, the tab bar's safe-area strip stays up as the mini bar's home indicator clearance
+  const travel = hasMiniBar ? Math.max(0, tabH - bottom) : tabH;
+
+  const chromeY = useRef(new Animated.Value(0)).current;
+  const chromeOpacity = useRef(new Animated.Value(fullScreen ? 0 : 1)).current;
+  const tabOpacity = useRef(new Animated.Value(isOnSubScreen ? 0 : 1)).current;
+  const prev = useRef({ sub: isOnSubScreen, full: fullScreen });
+  const gen = useRef(0);
+  const animating = useRef(false);
+  const riseOnLayout = useRef(fullScreen);
+  const [holding, setHolding] = useState<'tabs' | 'all' | null>(null);
+
+  // Room is given up at once, so a pushed screen lays out at full height from
+  // its first frame, and taken back only once the bars are up, so the screen
+  // leaving doesn't jump. The render that starts a change, before its effect, holds too.
+  const justShowedTabs = prev.current.sub && !isOnSubScreen && !prev.current.full && !fullScreen;
+  const justLeftFullScreen = prev.current.full && !fullScreen;
+  const hold = holding ?? (justLeftFullScreen ? 'all' : justShowedTabs ? 'tabs' : null);
+  const spacerH = hold === 'all' ? 0
+    : isOnSubScreen || hold === 'tabs' ? Math.max(0, chromeH - travel)
+    : chromeH;
 
   useEffect(() => {
-    if (prevSubScreen.current === isOnSubScreen) return;
-    prevSubScreen.current = isOnSubScreen;
-    if (isOnSubScreen) {
-      Animated.parallel([
-        motionTiming(translateY, { toValue: heightRef.current, duration: 220, useNativeDriver: true }),
-        motionTiming(opacity,    { toValue: 0,                 duration: 160, useNativeDriver: true }),
-      ]).start(() => setCollapsed(true));
-    } else {
-      setCollapsed(false);
-      translateY.setValue(heightRef.current);
-      opacity.setValue(0);
-      Animated.parallel([
-        motionSpring(translateY, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 180, mass: 0.8 }),
-        motionTiming(opacity,    { toValue: 1, duration: 200, useNativeDriver: true }),
-      ]).start();
+    const was = prev.current;
+    prev.current = { sub: isOnSubScreen, full: fullScreen };
+    if (was.sub === isOnSubScreen && was.full === fullScreen) return;
+    if (was.full && !fullScreen) {
+      tabOpacity.setValue(isOnSubScreen ? 0 : 1);
+      // The rise is onChromeLayout's, which may already have run: bumping gen
+      // here would orphan its completion and hold the room forever
+      if (riseOnLayout.current) setHolding('all');
+      return;
     }
-  }, [isOnSubScreen]);
+    const g = ++gen.current;
+    const done = () => {
+      if (g !== gen.current) return;
+      animating.current = false;
+      setHolding(null);
+    };
+    if (fullScreen) {
+      animating.current = false;
+      setHolding(null);
+      chromeOpacity.setValue(0);
+      riseOnLayout.current = true;
+      return;
+    }
+    animating.current = true;
+    if (isOnSubScreen) {
+      setHolding(null);
+      Animated.parallel([
+        motionTiming(chromeY, { toValue: travel, duration: 220, useNativeDriver: true }),
+        motionTiming(tabOpacity, { toValue: 0, duration: 160, useNativeDriver: true }),
+      ]).start(done);
+    } else {
+      setHolding('tabs');
+      Animated.parallel([
+        motionSpring(chromeY, { toValue: 0, useNativeDriver: true, ...BAR_SPRING }),
+        motionTiming(tabOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]).start(done);
+    }
+  }, [isOnSubScreen, fullScreen]);
 
-  // Gone at once rather than collapsing, so it doesn't hang on screen as the map
-  // slides up. The route name comes from navigation state, which changes in the
-  // render that starts the push; the screen's own flag is only set once it has
-  // mounted, a few frames later, and its space lingered until then.
-  if (isWorkoutOpen || gpsScreenOpen || focusedRoute === 'GPSCardio') return null;
+  // A mini bar coming or going on a sub-screen changes how far down the tab bar sits
+  useEffect(() => {
+    if (animating.current || fullScreen) return;
+    chromeY.setValue(isOnSubScreen ? travel : 0);
+  }, [travel]);
+
+  // Back from the workout log or the map: the bars rise from below the edge as
+  // the screen slides down behind them. Started here because the height to rise
+  // from is only known once the bars, now with a mini bar in them, are laid out.
+  const onChromeLayout = (h: number) => {
+    setChromeH(h);
+    if (!riseOnLayout.current) return;
+    riseOnLayout.current = false;
+    const g = ++gen.current;
+    animating.current = true;
+    setHolding('all');
+    chromeY.setValue(h);
+    Animated.parallel([
+      motionSpring(chromeY, { toValue: isOnSubScreen ? travel : 0, useNativeDriver: true, ...BAR_SPRING }),
+      motionTiming(chromeOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+    ]).start(() => {
+      if (g !== gen.current) return;
+      animating.current = false;
+      setHolding(null);
+    });
+  };
+
+  // Gone at once rather than sliding away, so nothing sits over the workout log
+  // or the map as it slides up
+  if (fullScreen) return null;
+  // A mini bar that arrives inside the rise shouldn't slide up a second time
+  const miniAnimateIn = !riseOnLayout.current;
   return (
-    <View style={{ backgroundColor: colors.surface }}>
-      <MiniWorkoutBar />
-      <MiniRunBar />
+    <View style={{ height: spacerH, backgroundColor: colors.surface }}>
       <Animated.View
-        onLayout={e => { heightRef.current = e.nativeEvent.layout.height; }}
-        style={{ opacity, transform: [{ translateY }], display: collapsed ? 'none' : 'flex' }}
-        pointerEvents={isOnSubScreen ? 'none' : 'auto'}
+        onLayout={e => onChromeLayout(e.nativeEvent.layout.height)}
+        style={[styles.chrome, { opacity: chromeOpacity, transform: [{ translateY: chromeY }] }]}
       >
-        <AnimatedTabBar
-          state={props.state}
-          navigation={props.navigation}
-          colors={colors}
-          pendingCount={pendingCount}
-        />
+        <MiniWorkoutBar animateIn={miniAnimateIn} />
+        <MiniRunBar animateIn={miniAnimateIn} />
+        <Animated.View
+          onLayout={e => { const h = e.nativeEvent.layout.height; if (h > 0) setTabH(h); }}
+          style={{ opacity: tabOpacity }}
+          pointerEvents={isOnSubScreen ? 'none' : 'auto'}
+          accessibilityElementsHidden={isOnSubScreen}
+          importantForAccessibility={isOnSubScreen ? 'no-hide-descendants' : 'auto'}
+        >
+          <AnimatedTabBar
+            state={props.state}
+            navigation={props.navigation}
+            colors={colors}
+            pendingCount={pendingCount}
+          />
+        </Animated.View>
       </Animated.View>
     </View>
   );
@@ -361,33 +402,12 @@ export function AppTabs() {
 }
 
 const styles = StyleSheet.create({
-  miniBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    gap: spacing.sm,
-  },
-  miniProgress: {
+  chrome: {
     position: 'absolute',
-    top: 0,
     left: 0,
-    height: 2.5,
-    borderTopRightRadius: 2,
-    borderBottomRightRadius: 2,
+    right: 0,
+    bottom: 0,
   },
-  miniLeft: { flex: 1, justifyContent: 'center' },
-  miniName: { fontSize: typography.fontSize.sm, fontWeight: '700' },
-  miniSub: { fontSize: 12, marginTop: 1 },
-  miniBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: 12,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
-  },
-  miniBtnText: { fontSize: 13, fontWeight: '600' },
   syncDot: {
     position: 'absolute',
     top: 0,

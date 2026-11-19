@@ -29,12 +29,15 @@ describe('the tab bar', () => {
   const tabs = read('navigation/AppTabs.tsx');
 
   it('is gone at once while the map screen is open, as it is for an open workout', () => {
-    expect(tabs).toMatch(/if \(isWorkoutOpen \|\| gpsScreenOpen \|\| focusedRoute === 'GPSCardio'\) return null;/);
+    expect(tabs).toMatch(/const FULL_SCREEN_ROUTES = \['WorkoutLog', 'GPSCardio'\];/);
+    expect(tabs).toMatch(/if \(fullScreen\) return null;/);
   });
 
-  it('goes by the route in navigation state, which is there before the screen mounts', () => {
-    // Waiting for the screen's own flag left the bar's space on screen for the first frames
-    expect(tabs).toContain("focusedRoute === 'GPSCardio'");
-    expect(tabs).toMatch(/const focusedRoute = getFocusedRouteNameFromRoute\(activeRoute\)/);
+  it('goes by the routes in navigation state, which change before the screen mounts or unmounts', () => {
+    // Waiting for the screen's own flag left the bar's space on screen for the
+    // first frames of opening, and kept the bars away until minimizing had finished
+    expect(tabs).toMatch(/const stackRoutes = activeRoute\.state\?\.routes/);
+    expect(tabs).toMatch(/const fullScreen = stackRoutes\.some\(name => FULL_SCREEN_ROUTES\.includes\(name\)\)/);
+    expect(tabs).not.toMatch(/isWorkoutOpen \|\||gpsScreenOpen/);
   });
 });
