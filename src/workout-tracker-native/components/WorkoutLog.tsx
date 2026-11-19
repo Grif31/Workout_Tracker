@@ -569,23 +569,31 @@ export default function WorkoutLog({ prefill, editMode, workoutId, onSubmit, onC
   const restEndsAtRef = useRef<number | null>(null);
 
   // Separated from startRest so resumeRest can restart the tick without resetting restRemaining.
+  // Ticks count down from the wall-clock finish time, and the side effects stay
+  // out of state updaters: React may run an updater during render (it did on
+  // returning from the background), and the toast's setState there throws
+  // "Cannot update a component while rendering a different component".
   const _runRestInterval = useCallback(() => {
     restRef.current = setInterval(() => {
-      setRestRemaining(prev => {
-        if (prev <= 1) {
-          clearInterval(restRef.current!);
-          restEndsAtRef.current = null;
-          setRestActive(false);
-          setRestPaused(false);
-          if (vibrateRef.current) Vibration.vibrate([0, 300, 100, 300]);
-          // This branch only runs while the JS interval is alive, i.e. the app
-          // is foregrounded — the scheduled OS notification (crash/background
-          // insurance) is suppressed in that case, so show an in-app banner instead.
-          showToast('Rest over. Time for your next set.');
-          return 0;
-        }
-        return prev - 1;
-      });
+      const endsAt = restEndsAtRef.current;
+      if (endsAt == null) {
+        clearInterval(restRef.current!);
+        return;
+      }
+      const remaining = Math.ceil((endsAt - Date.now()) / 1000);
+      if (remaining > 0) {
+        setRestRemaining(remaining);
+        return;
+      }
+      clearInterval(restRef.current!);
+      restEndsAtRef.current = null;
+      setRestRemaining(0);
+      setRestActive(false);
+      setRestPaused(false);
+      if (vibrateRef.current) Vibration.vibrate([0, 300, 100, 300]);
+      // Only reached while the JS interval is alive, i.e. the app is
+      // foregrounded, where the scheduled OS notification is suppressed
+      showToast('Rest over. Time for your next set.');
     }, 1000);
   }, []);
 

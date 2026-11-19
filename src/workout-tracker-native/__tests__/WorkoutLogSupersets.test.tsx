@@ -176,6 +176,32 @@ describe('WorkoutLog supersets: rest once per round', () => {
     expect(utils.getByLabelText('rest 120')).toBeTruthy();
   });
 
+  it('ends the rest once, from the wall clock, with the toast outside any state update', async () => {
+    const { showToast } = require('../utils/toast');
+    (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => {
+      if (key.startsWith('workout_auto_rest')) return 'true';
+      if (key.startsWith('default_rest_timer')) return '30';
+      return null;
+    });
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const utils = render(
+      <WorkoutLog prefill={prefill(strength('Bench Press', 1)) as any} onSubmit={jest.fn()} onCancel={jest.fn()} />,
+    );
+    await act(async () => {});
+    fireEvent.press(doneButtons(utils)[0]);
+    expect(utils.getByTestId('rest-timer')).toBeTruthy();
+
+    // A suspended app: the clock jumps past the end, then one late tick fires
+    jest.setSystemTime(Date.now() + 60_000);
+    act(() => { jest.advanceTimersByTime(1000); });
+    act(() => { jest.advanceTimersByTime(5000); });
+
+    expect(utils.queryByTestId('rest-timer')).toBeNull();
+    expect(showToast).toHaveBeenCalledTimes(1);
+    expect(errors.mock.calls.filter(c => String(c[0]).includes('Cannot update a component'))).toEqual([]);
+    errors.mockRestore();
+  });
+
   it('still rests after every set outside a superset', async () => {
     const utils = render(
       <WorkoutLog prefill={prefill(strength('Bench Press', 1), strength('Barbell Row', 3)) as any}
