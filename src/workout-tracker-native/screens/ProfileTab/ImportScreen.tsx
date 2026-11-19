@@ -30,16 +30,14 @@ const SOURCE_KEYS = Object.keys(SOURCES) as Source[];
 
 // The CSV is one row per set, for spreadsheets; the JSON is everything the
 // account holds (body stats, PRs, routines), the GDPR copy. Progress photos are
-// in it as links, not image data, so the copy doesn't promise the photos.
+// in it as links, not image data.
 const EXPORTS = {
   workouts: {
     label: 'Workouts', format: 'CSV', icon: 'document-text-outline', path: '/api/workouts/export',
-    sub: 'Every set you logged, ready for a spreadsheet',
     fileName: 'aretefitnessapp_workouts.csv', mimeType: 'text/csv', title: 'Export Workout Data',
   },
   all: {
     label: 'All My Data', format: 'JSON', icon: 'archive-outline', path: '/api/me/export',
-    sub: 'Workouts, body stats, PRs and routines',
     fileName: 'aretefitnessapp_all_data.json', mimeType: 'application/json', title: 'Export All My Data',
   },
 } as const;
@@ -221,7 +219,7 @@ export default function ImportScreen({ navigation, route }: Props) {
   const renderChoose = () => (
     <Animated.View entering={FadeIn.duration(200)}>
       <Text style={styles.intro}>
-        Bring your training history over from another app. Export a CSV there, then pick the file here.
+        Export a CSV file
       </Text>
 
       <Text style={styles.sectionLabel}>Import from</Text>
@@ -312,7 +310,6 @@ export default function ImportScreen({ navigation, route }: Props) {
                     <Text style={styles.rowLabel}>{e.label}</Text>
                     <View style={styles.formatPill}><Text style={styles.formatText}>{e.format}</Text></View>
                   </View>
-                  <Text style={styles.rowSub}>{e.sub}</Text>
                 </View>
                 {exporting === kind
                   ? <ActivityIndicator size="small" color={colors.textSecondary} />
@@ -322,7 +319,6 @@ export default function ImportScreen({ navigation, route }: Props) {
           );
         })}
       </View>
-      <Text style={styles.footnote}>Opens the share sheet, so you can save to Files or send it anywhere.</Text>
     </Animated.View>
   );
 
