@@ -35,7 +35,7 @@
 
 ### Improved: Settings and help
 - Notifications and GPS have their own screens in Settings.
-- A new Help & FAQ screen answers common questions and gets you to support.
+- A new Help & FAQ screen answers common questions, supersets included, and gets you to support.
 
 ### Improved: Importing from Hevy and Strong
 - A redesigned import screen, with a summary of what's coming in before you save.
@@ -44,6 +44,7 @@
 ### Also New
 - Edit your custom exercises: name, equipment, muscles, and how they're logged until you first log them. A rename carries to your past workouts.
 - The PR Dashboard shows how many PRs you set per week on average.
+- Minimizing a workout or run is smoother: the tab bar and mini bar slide up as the workout slides away, and screens no longer jump when the tab bar hides.
 
 ### Bug Fixes
 - A workout reminder set between 12 and 1 AM no longer fires at 9 AM.
