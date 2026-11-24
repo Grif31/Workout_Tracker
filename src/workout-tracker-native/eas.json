@@ -53,6 +53,7 @@
     "production": {
       "ios": {
         "appleId": "grifvondeben31@gmail.com",
+        "ascAppId": "6771064342",
         "language": "en-US"
       }
     }
