@@ -76,6 +76,14 @@ export const FAQ: FaqItem[] = [
       "Yes. Open an exercise's menu during your workout and tap Add Notes. The notes are saved with the workout.",
   },
   {
+    question: 'How do supersets work?',
+    answer:
+      "During a workout, open an exercise's menu, tap Superset With and pick the exercise to pair it with. "
+      + 'Partners are marked A1, A2 and sit together in your log. Rest starts once you finish a round, one set of each. '
+      + 'For a short rest between partners, go to Settings, Preferences, Workout and set Rest Between Superset Exercises. '
+      + 'Templates and routines keep their supersets.',
+  },
+  {
     question: 'Can I create my own exercises?',
     answer:
       'Yes. Open the Progress tab, choose Exercises and tap Create, or create one while adding exercises to a workout. '
